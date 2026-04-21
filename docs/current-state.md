@@ -2,7 +2,7 @@
 
 ## Summary
 
-This repository now contains a **real student app plus the first monetization and admin backbone**.
+This repository now contains a **real Next.js student app plus the first monetization and admin backbone**.
 
 The app now supports:
 
@@ -13,6 +13,8 @@ The app now supports:
 - ledger-backed credits
 - manual invoice and payment submission
 - admin payment approval and rejection
+- account export and account deletion
+- a cleaned Next.js-only runtime after legacy prototype removal
 
 It is no longer just a learning loop prototype. It now begins to prove the **business and operations loop**, though live-environment validation is still incomplete.
 
@@ -38,6 +40,7 @@ Against the current product goal, we are roughly here:
 - Next.js App Router app structure
 - protected routes through middleware
 - landing, auth, onboarding, chat, notes, revision, billing, and settings pages
+- no remaining Vite or TanStack runtime path in the active application
 
 ### Authentication and onboarding
 
@@ -86,6 +89,7 @@ Against the current product goal, we are roughly here:
 - stricter note API ownership handling
 - middleware-based route gating for guest, onboarded, and admin flows
 - account export and account deletion flows in settings
+- `npm run lint`, `npm test`, and `npm run build` as the default verification baseline
 
 ## What is still missing
 
@@ -116,6 +120,7 @@ Against the current product goal, we are roughly here:
 - advanced citation inspection UI
 - deeper study analytics
 - moderation and answer quality review loops
+- broader knowledge operations UI
 
 ## Reality check
 
@@ -131,6 +136,12 @@ The product now proves an initial end-to-end loop:
 - admin reviews and grants credits
 
 The biggest remaining gap is not feature breadth. It is **runtime confidence** and **broader operator tooling**.
+
+## Repo reality
+
+- the active product code lives in `app/`, `components/`, `lib/`, `supabase/`, and `tests/`
+- the old prototype tree is no longer part of the repository
+- current progress is best described as a launch-readiness baseline rather than a prototype
 
 ## Recommended build focus
 
