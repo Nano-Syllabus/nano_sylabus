@@ -2,15 +2,27 @@
 
 Nano Syllabus is a bilingual AI study companion built for Nepal's curriculum. It is intended to help students from Class 9 through bachelor's level ask questions in English or Roman Nepali, receive syllabus-grounded answers, save useful explanations as revision notes, and prepare for exams with a guided study workflow.
 
-This repository now contains the **real student app through the Phase 3 backbone**. The app is no longer just a frontend prototype or a generic AI wrapper. It now has real auth, real persistence, syllabus grounding, lightweight citations, note-based revision flows, credit enforcement, manual invoice/payment workflows, and a minimal admin finance surface.
+This repository now contains the **real student app through the Phase 4 launch-readiness baseline**. The app is no longer a prototype shell. It now has real auth, real persistence, syllabus grounding, lightweight citations, note-based revision flows, credit enforcement, manual invoice/payment workflows, a minimal admin finance surface, and launch-readiness basics like Google OAuth, password recovery, and chat history management.
 
 ## Source of truth
 
 The project direction in this repo is based on:
 
 - BRD: `/Users/sumangiri/Desktop/Nano_syllabus_BRD_v1.1.pdf`
-- current student app: `app/`, `components/`, `lib/`
-- legacy prototype reference: `src/`
+- current product app: `app/`, `components/`, `lib/`
+- product and planning docs: `docs/`
+
+## Repository structure
+
+```text
+app/         Next.js App Router pages and API routes
+components/  Client and server UI building blocks
+lib/         Auth, data, billing, AI, and Supabase helpers
+scripts/     Developer ingestion utilities
+supabase/    SQL migrations
+tests/       Focused Vitest coverage
+docs/        Product and engineering source-of-truth docs
+```
 
 ## Documentation map
 
@@ -45,6 +57,10 @@ The project direction in this repo is based on:
   - admin payment review pages for approve/reject flow
   - chat history search, rename, delete, and lazy loading
   - account export and account deletion actions in settings
+- Current repo state:
+  - Next.js-only application runtime
+  - App Router pages plus server route handlers
+  - npm-based local workflow (`dev`, `lint`, `test`, `build`)
 - Deferred product areas:
   - payment gateway automation
   - richer knowledge operations and admin upload tooling
@@ -69,6 +85,14 @@ To run the current app end-to-end, the following still need to be configured:
 - environment variables from `.env.example`
 - OpenAI API key
 - `SUPABASE_SERVICE_ROLE_KEY` for developer ingestion
+
+Useful local commands:
+
+- `npm run dev`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+- `npm run ingest:syllabus -- <path-to-documents.json>`
 
 ## Developer ingestion
 
