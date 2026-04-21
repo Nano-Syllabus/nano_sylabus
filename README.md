@@ -93,6 +93,7 @@ Useful local commands:
 - `npm run lint`
 - `npm test`
 - `npm run build`
+- `npm run verify`
 - `npm run ingest:syllabus -- <path-to-documents.json>`
 
 ## Developer ingestion

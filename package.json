@@ -6,6 +6,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "verify": "npm run lint && npm test && npm run build",
     "ingest:syllabus": "node scripts/ingest-syllabus.mjs",
     "test": "vitest run"
   },
