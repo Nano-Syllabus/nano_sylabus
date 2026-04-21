@@ -35,6 +35,7 @@ docs/        Product and engineering source-of-truth docs
 - [Roadmap](./docs/roadmap.md)
 - [Implementation Plan](./docs/implementation-plan.md)
 - [Current State](./docs/current-state.md)
+- [Local Setup](./docs/local-setup.md)
 
 ## Product summary
 
