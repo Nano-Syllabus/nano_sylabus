@@ -21,7 +21,7 @@ The BRD recommends a multi-part platform:
 ## Recommended stack from the BRD
 
 - student frontend: Next.js PWA + Tailwind CSS
-- admin panel: React + Vite + Tailwind CSS
+- admin panel: web admin surface built inside the same Next.js repo for now
 - backend: Node.js with Express or Fastify
 - AI: Anthropic Claude or OpenAI GPT family
 - vector store: Pinecone or pgvector
@@ -65,51 +65,47 @@ The product will need durable storage for:
 
 ## Current state in this repository
 
-The current app is not yet the target architecture. Right now:
+The repository has moved beyond the earlier prototype state. Right now:
 
-- frontend exists as a student prototype
-- auth is mocked in localStorage
-- chat is mocked in localStorage
-- AI responses are mocked
-- notes are stored in localStorage
-- invoices are stored in localStorage
-- there is no backend API
-- there is no real database
-- there is no real payment integration
-- there is no admin panel app yet
-- there is no real RAG pipeline yet
+- the student product runs as a Next.js App Router app
+- server route handlers live inside the same repo under `app/api`
+- auth is wired to Supabase Auth
+- data persistence uses Postgres tables through Supabase
+- chat uses OpenAI plus retrieval grounding
+- notes, billing, and admin payment review are real product flows
+- the admin surface is still thin and finance-focused
+- live-environment validation and broader operator tooling are still incomplete
 
 ## Architecture gap we need to close
 
 ### Current
 
-- single frontend prototype
-- local-only state
-- demo billing flow
-- demo chat responses
+- single Next.js application repo
+- real student product loop
+- thin finance admin surface
+- manual operations for ingestion and payment verification
 
 ### Target
 
-- production student app
-- separate admin app
-- real backend and database
-- real auth and session management
-- real AI orchestration with syllabus grounding
-- real billing, invoices, and analytics
+- production-hardened student app
+- broader admin operations
+- auditable finance tooling
+- scalable knowledge operations
+- observability, analytics, and support workflows
 
 ## Practical implementation direction
 
 Given the current codebase, the best path is:
 
-1. keep the existing student UI as the product shell
-2. add a real backend and database behind it
-3. replace mock auth and mock storage progressively
-4. implement real chat orchestration and RAG
-5. then build the admin panel against the same backend
+1. keep the current Next.js repo as the active product shell
+2. harden live environment behavior before adding more major student features
+3. expand admin operations around finance and knowledge management
+4. automate payment and operational workflows only after manual flows are trusted
+5. split into multiple apps only if product scope or team size makes the single repo a bottleneck
 
 ## Suggested repo-level architecture direction
 
-If we continue building in this repo, a clean future structure would be:
+If this repo keeps growing, a clean future structure could become:
 
 ```text
 apps/
@@ -127,4 +123,4 @@ services/
 docs/
 ```
 
-This is not mandatory today, but it is a good target if the project grows past prototype stage.
+This is not mandatory today. The current repo is already valid as a single-product Next.js codebase, and splitting should happen only when it reduces operational friction.
