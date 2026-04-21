@@ -4,7 +4,7 @@
 
 This document answers the practical question:
 
-What should we build next, now that the real student app, billing backbone, and minimal admin finance flow exist?
+What should we build next, now that the real Next.js student app, billing backbone, minimal admin finance flow, and launch-readiness basics exist?
 
 ## Status snapshot
 
@@ -18,7 +18,7 @@ The following are now implemented in the Next.js app:
 - billing page with invoice creation and manual payment submission
 - admin payment review and approval actions
 
-The next implementation phase should therefore move away from “can we monetize at all?” and toward “can we run this safely in a real environment and broaden operator capability?”
+The next implementation phase should therefore move away from “can we monetize at all?” and toward “can we run this safely in a real environment, broaden operator capability, and finish launch-critical gaps?”
 
 ## Phase A: Live validation and runtime hardening
 
@@ -32,6 +32,7 @@ Make the current Phase 3 backbone trustworthy in a real deployment.
 - apply all migrations cleanly in the target environment
 - confirm RLS for student and admin flows
 - verify that credit deduction, invoice creation, payment submission, and admin approval behave correctly
+- verify Google OAuth and password recovery in the real auth project
 - fix production blockers and silent failures found during validation
 
 ## Phase B: Finance operations expansion
@@ -61,7 +62,19 @@ Expand admin capability beyond finance.
 - source management and ingestion QA
 - basic user support views
 
-## Phase D: Automation and scale
+## Phase D: Product completeness gaps
+
+### Goal
+
+Finish the highest-value deferred product surface only after runtime confidence improves.
+
+### Deliverables
+
+- subject explorer
+- richer citation inspection UX
+- stronger billing visibility for students
+- clearer subscription state and usage messaging
+## Phase E: Automation and scale
 
 ### Goal
 
@@ -81,7 +94,8 @@ Reduce manual work only after the baseline is trusted.
 3. verify that admin approval grants credits exactly once in the real database
 4. add more focused tests around billing and admin actions if runtime issues reveal weak spots
 5. improve the student billing history and admin finance review UX
-6. start knowledge/admin tooling after finance validation is stable
+6. address launch-critical product gaps that block user confidence
+7. start knowledge/admin tooling after finance validation is stable
 
 ## What we should not do first
 
