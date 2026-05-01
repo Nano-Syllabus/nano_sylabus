@@ -1,6 +1,6 @@
 import type { BillingType } from "@/lib/types";
 
-export const STARTER_CREDITS = 10;
+export const STARTER_CREDITS = 20;
 export const CHAT_MESSAGE_CREDIT_COST = 1;
 
 export function computeNextBalance(currentBalance: number, amount: number) {
@@ -27,6 +27,6 @@ export function normalizeCreditBalance(value: number | null | undefined) {
 
 export function getCreditWarning(balance: number) {
   if (balance <= 0) return "No credits left. Buy a plan to continue chatting.";
-  if (balance <= 3) return `Only ${balance} credit${balance === 1 ? "" : "s"} left.`;
+  if (balance < 10) return `Only ${balance} credit${balance === 1 ? "" : "s"} left.`;
   return "";
 }

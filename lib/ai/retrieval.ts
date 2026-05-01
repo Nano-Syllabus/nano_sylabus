@@ -59,9 +59,10 @@ function cosineSimilarity(left: number[], right: number[]) {
   return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
 }
 
-async function fetchCandidateChunks(profile: StudentProfile) {
+async function fetchCandidateChunks(profile: StudentProfile, subjectContext?: string | null) {
   const supabase = await createSupabaseServerClient();
   const subjects = profile.subjects.filter(Boolean).slice(0, 8);
+  const subjectFilter = subjectContext?.trim();
 
   let query = supabase
     .from("knowledge_chunks")
@@ -71,31 +72,23 @@ async function fetchCandidateChunks(profile: StudentProfile) {
     .eq("grade", profile.grade)
     .limit(150);
 
-  if (subjects.length > 0) {
+  if (subjectFilter) {
+    query = query.eq("subject", subjectFilter);
+  } else if (subjects.length > 0) {
     query = query.in("subject", subjects);
   }
 
   const { data, error } = await query;
   if (error) throw error;
-  if (data && data.length > 0) return data as unknown as KnowledgeCandidateRow[];
-
-  const { data: fallbackData, error: fallbackError } = await supabase
-    .from("knowledge_chunks")
-    .select(
-      "id, document_id, board, grade, subject, chapter, topic, content, embedding, knowledge_documents(id, title, source_name, source_type)",
-    )
-    .eq("grade", profile.grade)
-    .limit(200);
-
-  if (fallbackError) throw fallbackError;
-  return (fallbackData ?? []) as unknown as KnowledgeCandidateRow[];
+  return (data ?? []) as unknown as KnowledgeCandidateRow[];
 }
 
 export async function retrieveKnowledgeChunks(
   question: string,
   profile: StudentProfile,
+  options?: { subjectContext?: string | null },
 ): Promise<RetrievalResult> {
-  const candidates = await fetchCandidateChunks(profile);
+  const candidates = await fetchCandidateChunks(profile, options?.subjectContext);
   if (candidates.length === 0) {
     return {
       chunks: [] as RetrievedChunk[],

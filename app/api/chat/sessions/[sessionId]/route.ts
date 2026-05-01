@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { deleteChatSession, renameChatSession } from "@/lib/data/chat";
+import { deleteChatSession, updateChatSession } from "@/lib/data/chat";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-const renameSchema = z.object({
-  title: z.string().trim().min(1).max(120),
-});
+const patchSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120).optional(),
+    subjectContext: z.string().trim().min(1).max(120).nullable().optional(),
+  })
+  .refine((payload) => payload.title !== undefined || payload.subjectContext !== undefined, {
+    message: "At least one field is required.",
+  });
 
 export async function PATCH(
   request: Request,
@@ -22,8 +27,11 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const payload = renameSchema.parse(await request.json());
-    const session = await renameChatSession(sessionId, user.id, payload.title);
+    const payload = patchSchema.parse(await request.json());
+    const session = await updateChatSession(sessionId, user.id, {
+      title: payload.title,
+      subjectContext: payload.subjectContext,
+    });
 
     if (!session) {
       return NextResponse.json({ error: "Chat session not found." }, { status: 404 });

@@ -68,7 +68,7 @@ Reduce manual work and improve resilience.
 
 ## Immediate next priorities
 
-1. test the current app against a live Supabase project and real OpenAI credentials
+1. test the current app against a live Supabase project and real Gemini credentials
 2. verify the finance workflow end to end, including credit grants after approval
 3. fix any live-environment issues
 4. improve finance/admin UX where validation reveals friction

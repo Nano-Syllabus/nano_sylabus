@@ -27,6 +27,7 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [current, setCurrent] = useState(note);
+  const followUpPrompt = `I want to ask a follow-up question about this explanation.\n\nOriginal question: ${current.questionContent}\n\nSaved note title: ${current.title}\n\nMy follow-up: `;
 
   return (
     <>
@@ -103,7 +104,9 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
               ← Back to chat
             </Button>
           </Link>
-          <Link href="/app/chat">
+          <Link
+            href={`/app/chat?subject=${encodeURIComponent(current.subjectTag)}&prompt=${encodeURIComponent(followUpPrompt)}`}
+          >
             <Button size="sm">Ask follow-up →</Button>
           </Link>
           <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>

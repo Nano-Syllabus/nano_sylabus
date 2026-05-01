@@ -55,7 +55,7 @@ Against the current product goal, we are roughly here:
 ### Chat and learning loop
 
 - persistent `chat_sessions` and `chat_messages`
-- OpenAI streaming responses
+- Gemini streaming responses
 - syllabus-grounded retrieval with fallback
 - chat history search
 - chat rename and delete
@@ -95,7 +95,7 @@ Against the current product goal, we are roughly here:
 
 ### Live validation and operational hardening
 
-- full end-to-end validation against a live Supabase project and real OpenAI credentials
+- full end-to-end validation against a live Supabase project and real Gemini credentials
 - production QA for invoice approval and credit grants
 - observability and alerting
 - deeper failure-state polish

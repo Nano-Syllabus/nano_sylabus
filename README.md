@@ -36,6 +36,7 @@ docs/        Product and engineering source-of-truth docs
 - [Implementation Plan](./docs/implementation-plan.md)
 - [Current State](./docs/current-state.md)
 - [Local Setup](./docs/local-setup.md)
+- [Syllabus Ingest Format](./docs/syllabus-ingest-format.md)
 
 ## Product summary
 
@@ -48,7 +49,7 @@ docs/        Product and engineering source-of-truth docs
   - forgot-password and reset-password flow
   - protected app routes with onboarding gate
   - real persistent chat sessions/messages in Postgres
-  - real OpenAI-powered streaming chat
+  - real Gemini-powered streaming chat
   - developer-operated syllabus ingestion
   - retrieval-grounded answers with simple citations
   - save-as-note flow from assistant answers
@@ -84,7 +85,7 @@ To run the current app end-to-end, the following still need to be configured:
 - Supabase project and auth setup
 - Supabase migration from `supabase/migrations/`
 - environment variables from `.env.example`
-- OpenAI API key
+- Gemini API key
 - `SUPABASE_SERVICE_ROLE_KEY` for developer ingestion
 
 Useful local commands:

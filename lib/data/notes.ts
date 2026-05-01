@@ -2,6 +2,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   AssistantCitation,
   ChatMessageRecord,
+  MessageFeedback,
   NoteRevisionLog,
   NoteColor,
   RevisionAction,
@@ -24,6 +25,8 @@ function normalizeMessage(row: any): ChatMessageRecord {
     createdAt: row.created_at,
     grounded: row.grounded ?? false,
     citations: normalizeCitations(row.citations),
+    feedback: row.feedback === "up" || row.feedback === "down" ? (row.feedback as MessageFeedback) : null,
+    followUpSuggestions: Array.isArray(row.follow_up_suggestions) ? row.follow_up_suggestions : [],
     savedNoteId: null,
   };
 }

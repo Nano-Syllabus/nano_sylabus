@@ -1,5 +1,5 @@
-import { createOpenAI } from "@ai-sdk/openai";
-import { streamText } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { generateText, streamText } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { canSpendCredits, CHAT_MESSAGE_CREDIT_COST, computeNextBalance } from "@/lib/billing";
@@ -8,14 +8,21 @@ import {
   retrieveKnowledgeChunks,
   type RetrievalResult,
 } from "@/lib/ai/retrieval";
+import {
+  parseFollowUpSuggestions,
+} from "@/lib/chat-followups";
+import { deriveSubjectTags } from "@/lib/chat-subjects";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
-import { getOpenAIEnv } from "@/lib/env";
+import { getGeminiEnv } from "@/lib/env";
+import { containsDevanagari, needsRomanNepaliRewrite } from "@/lib/roman-nepali";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { deriveSessionTitle } from "@/lib/utils";
 
 const requestSchema = z.object({
   sessionId: z.string().uuid().nullable().optional(),
   language: z.enum(["EN", "RN"]).default("EN"),
+  messageLanguage: z.enum(["EN", "RN"]).optional(),
+  subjectContext: z.string().trim().min(1).max(120).nullable().optional(),
   messages: z
     .array(
       z.object({
@@ -26,6 +33,38 @@ const requestSchema = z.object({
     .min(1),
 });
 
+type AnswerMode = "quick" | "deep";
+
+function selectAutoAnswerMode(question: string): {
+  mode: AnswerMode;
+  reason: string;
+} {
+  const normalized = question.trim().toLowerCase();
+  const tokenCount = normalized.split(/\s+/).filter(Boolean).length;
+
+  const deepHints = [
+    /\b(compare|difference|justify|analyze|analysis|evaluate|critically)\b/,
+    /\bstep[-\s]?by[-\s]?step\b/,
+    /\bprove|deriv(e|ation)|deduce\b/,
+    /\bsolve|numerical|equation|calculate|formula\b/,
+    /\bwhy\b.*\bhow\b/,
+    /\bexplain\b.*\bdetail\b/,
+    /\bpros and cons\b/,
+    /\bcase study\b/,
+  ];
+
+  const hasDeepHint = deepHints.some((pattern) => pattern.test(normalized));
+  if (hasDeepHint) {
+    return { mode: "deep", reason: "complexity-hint" };
+  }
+
+  if (tokenCount >= 18) {
+    return { mode: "deep", reason: "long-question" };
+  }
+
+  return { mode: "quick", reason: "default-fast" };
+}
+
 function buildSystemPrompt({
   fullName,
   college,
@@ -34,6 +73,7 @@ function buildSystemPrompt({
   subjects,
   targetGrade,
   language,
+  subjectContext,
   groundingContext,
 }: {
   fullName: string;
@@ -43,12 +83,18 @@ function buildSystemPrompt({
   subjects: string[];
   targetGrade: string;
   language: "EN" | "RN";
+  subjectContext: string | null;
   groundingContext: string;
 }) {
   const languageInstruction =
     language === "RN"
-      ? "Respond in clear Roman Nepali. Keep the explanation natural and student-friendly."
-      : "Respond in clear English. Keep the explanation student-friendly and structured.";
+      ? [
+          "Respond in Roman Nepali only: Nepali language written with Latin letters.",
+          "Do not use Devanagari Nepali characters at all.",
+          "Keep answers short by default, using simple student-friendly words.",
+          "For numericals, show only the needed formula, substitution, and final answer.",
+        ].join(" ")
+      : "Respond in clear English. Keep the explanation student-friendly, concise, and structured.";
 
   return `
 You are Nano Syllabus, an AI study companion for Nepali students.
@@ -60,6 +106,7 @@ Student context:
 - Previous score: ${boardScore || "Unknown"}
 - Subjects: ${subjects.join(", ") || "Unknown"}
 - Target grade: ${targetGrade || "Unknown"}
+${subjectContext ? `- Subject focus: ${subjectContext}` : ""}
 
 Guidelines:
 - Adjust difficulty to the student's level.
@@ -67,11 +114,133 @@ Guidelines:
 - Prefer exam-helpful explanations over generic theory dumps.
 - If needed, break answers into steps.
 - ${languageInstruction}
+- Do not greet, do not introduce yourself, and do not add filler like "Hello" or "Namaste" unless the student asks.
 - If syllabus grounding is provided, prioritize it and do not invent citations.
+- If the student asks in Roman Nepali, understand the Roman Nepali intent and answer naturally.
+- Avoid long textbook-style paragraphs unless the student explicitly asks for detail.
 
 Grounding context:
 ${groundingContext || "No syllabus context was retrieved for this question."}
 `.trim();
+}
+
+async function suggestFollowUps({
+  gemini,
+  model,
+  question,
+  answer,
+  language,
+  subjectContext,
+  followupMaxOutputTokens,
+  followupThinkingBudget,
+}: {
+  gemini: ReturnType<typeof createGoogleGenerativeAI>;
+  model: string;
+  question: string;
+  answer: string;
+  language: "EN" | "RN";
+  subjectContext: string | null;
+  followupMaxOutputTokens: number;
+  followupThinkingBudget: number;
+}) {
+  const responseLanguage =
+    language === "RN"
+      ? "Roman Nepali written only with Latin letters, never Devanagari"
+      : "English";
+
+  const { text } = await generateText({
+    model: gemini(model),
+    temperature: 0.4,
+    maxTokens: followupMaxOutputTokens,
+    providerOptions: {
+      google: {
+        thinkingConfig: {
+          thinkingBudget: followupThinkingBudget,
+        },
+      },
+    },
+    prompt: `
+You are writing suggested follow-up study questions for a student chat.
+
+Write exactly 3 short follow-up questions in ${responseLanguage}.
+${subjectContext ? `Keep them focused on ${subjectContext}.` : ""}
+They must be natural next questions a student might ask after reading the answer.
+Do not include numbering, bullets, labels, or explanations.
+Return one question per line.
+
+Student question:
+${question}
+
+Assistant answer:
+${answer}
+    `.trim(),
+  });
+
+  return parseFollowUpSuggestions(text);
+}
+
+async function enforceAnswerLanguageContract({
+  gemini,
+  model,
+  question,
+  answer,
+  language,
+  subjectContext,
+  rewriteMaxOutputTokens,
+  rewriteThinkingBudget,
+}: {
+  gemini: ReturnType<typeof createGoogleGenerativeAI>;
+  model: string;
+  question: string;
+  answer: string;
+  language: "EN" | "RN";
+  subjectContext: string | null;
+  rewriteMaxOutputTokens: number;
+  rewriteThinkingBudget: number;
+}) {
+  if (!needsRomanNepaliRewrite(answer, language)) {
+    return answer;
+  }
+
+  const { text } = await generateText({
+    model: gemini(model),
+    temperature: 0.2,
+    maxTokens: rewriteMaxOutputTokens,
+    providerOptions: {
+      google: {
+        thinkingConfig: {
+          thinkingBudget: rewriteThinkingBudget,
+        },
+      },
+    },
+    prompt: `
+Rewrite this assistant answer for Nano Syllabus.
+
+Hard requirements:
+- Output Roman Nepali only: Nepali language written with Latin letters.
+- Never use Devanagari characters.
+- Keep it short and student-friendly.
+- Preserve formulas, numbers, and the meaning of the original answer.
+- Do not add new facts.
+- Return only the rewritten answer.
+${subjectContext ? `- Subject focus: ${subjectContext}.` : ""}
+
+Student question:
+${question}
+
+Original answer:
+${answer}
+    `.trim(),
+  });
+
+  const rewritten = text.trim();
+  if (!rewritten) return answer;
+
+  if (containsDevanagari(rewritten) && !containsDevanagari(answer)) {
+    return answer;
+  }
+
+  return rewritten;
 }
 
 export async function POST(request: Request) {
@@ -86,6 +255,7 @@ export async function POST(request: Request) {
     }
 
     const parsed = requestSchema.parse(await request.json());
+    const resolvedLanguage = parsed.messageLanguage ?? parsed.language;
     const latestUserMessage = [...parsed.messages].reverse().find((message) => message.role === "user");
 
     if (!latestUserMessage?.content.trim()) {
@@ -125,11 +295,13 @@ export async function POST(request: Request) {
     } as const;
 
     let sessionId = parsed.sessionId ?? null;
+    let sessionSubjectTags: string[] = [];
+    let sessionSubjectContext: string | null = parsed.subjectContext?.trim() || null;
 
     if (sessionId) {
       const { data: sessionRow } = await supabase
         .from("chat_sessions")
-        .select("id")
+        .select("id, subject_tags, subject_context")
         .eq("id", sessionId)
         .eq("user_id", user.id)
         .maybeSingle();
@@ -137,14 +309,19 @@ export async function POST(request: Request) {
       if (!sessionRow) {
         return NextResponse.json({ error: "Chat session not found." }, { status: 404 });
       }
+
+      sessionSubjectTags = Array.isArray(sessionRow.subject_tags) ? sessionRow.subject_tags : [];
+      sessionSubjectContext = sessionRow.subject_context ?? sessionSubjectContext;
     } else {
       const { data: insertedSession, error: sessionError } = await supabase
         .from("chat_sessions")
         .insert({
           user_id: user.id,
           title: deriveSessionTitle(latestUserMessage.content),
+          subject_context: sessionSubjectContext,
+          subject_tags: sessionSubjectContext ? [sessionSubjectContext] : [],
         })
-        .select("id")
+        .select("id, subject_tags, subject_context")
         .single();
 
       if (sessionError || !insertedSession) {
@@ -152,6 +329,8 @@ export async function POST(request: Request) {
       }
 
       sessionId = insertedSession.id;
+      sessionSubjectTags = Array.isArray(insertedSession.subject_tags) ? insertedSession.subject_tags : [];
+      sessionSubjectContext = insertedSession.subject_context ?? sessionSubjectContext;
     }
 
     const finalSessionId = sessionId as string;
@@ -160,7 +339,7 @@ export async function POST(request: Request) {
       session_id: finalSessionId,
       role: "user",
       content: latestUserMessage.content,
-      language: parsed.language,
+      language: resolvedLanguage,
     });
 
     if (userMessageError) {
@@ -179,7 +358,9 @@ export async function POST(request: Request) {
     };
 
     try {
-      retrieval = await retrieveKnowledgeChunks(latestUserMessage.content, profile);
+      retrieval = await retrieveKnowledgeChunks(latestUserMessage.content, profile, {
+        subjectContext: sessionSubjectContext,
+      });
     } catch {
       retrieval = {
         chunks: [],
@@ -188,15 +369,83 @@ export async function POST(request: Request) {
       };
     }
 
-    const { apiKey, model } = getOpenAIEnv();
-    const openai = createOpenAI({ apiKey });
+    const resolvedSubjectTags = deriveSubjectTags({
+      existingTags: sessionSubjectTags,
+      subjectContext: sessionSubjectContext,
+      retrieval,
+      question: latestUserMessage.content,
+      profileSubjects: profile.subjects,
+    });
+
+    const {
+      apiKey,
+      model: defaultModel,
+      maxOutputTokens: defaultMaxOutputTokens,
+      thinkingBudget: defaultThinkingBudget,
+      rewriteMaxOutputTokens,
+      rewriteThinkingBudget,
+      followupMaxOutputTokens,
+      followupThinkingBudget,
+    } = getGeminiEnv();
+
+    const autoModeSelection = selectAutoAnswerMode(latestUserMessage.content);
+    const quickModel = process.env.GEMINI_QUICK_MODEL || defaultModel;
+    const deepModel = process.env.GEMINI_DEEP_MODEL || defaultModel;
+    const quickMaxOutputTokens = Number(
+      process.env.GEMINI_QUICK_MAX_OUTPUT_TOKENS || Math.max(300, Math.floor(defaultMaxOutputTokens * 0.7)),
+    );
+    const deepMaxOutputTokens = Number(
+      process.env.GEMINI_DEEP_MAX_OUTPUT_TOKENS || Math.max(defaultMaxOutputTokens, 1000),
+    );
+    const quickThinkingBudget = Number(
+      process.env.GEMINI_QUICK_THINKING_BUDGET || Math.max(0, Math.floor(defaultThinkingBudget * 0.2)),
+    );
+    const deepThinkingBudget = Number(
+      process.env.GEMINI_DEEP_THINKING_BUDGET || Math.max(defaultThinkingBudget, 512),
+    );
+
+    const model = autoModeSelection.mode === "deep" ? deepModel : quickModel;
+    const maxOutputTokens =
+      autoModeSelection.mode === "deep" ? deepMaxOutputTokens : quickMaxOutputTokens;
+    const thinkingBudget =
+      autoModeSelection.mode === "deep" ? deepThinkingBudget : quickThinkingBudget;
+
+    const gemini = createGoogleGenerativeAI({ apiKey });
+
+    const { data: historyRows, error: historyError } = await supabase
+      .from("chat_messages")
+      .select("role, content")
+      .eq("session_id", finalSessionId)
+      .order("created_at", { ascending: false })
+      .limit(24);
+
+    if (historyError) {
+      return NextResponse.json({ error: "Failed to load chat history." }, { status: 500 });
+    }
+
+    const promptMessages = (historyRows ?? [])
+      .slice()
+      .reverse()
+      .map((row) => ({
+        role: row.role as "user" | "assistant",
+        content: row.content as string,
+      }));
 
     const result = streamText({
-      model: openai(model),
-      messages: parsed.messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
+      model: gemini(model),
+      maxTokens: maxOutputTokens,
+      providerOptions: {
+        google: {
+          thinkingConfig: {
+            thinkingBudget,
+          },
+        },
+      },
+      onError: async ({ error }) => {
+        console.error("Chat stream error", error);
+      },
+      // Server-authoritative chat: do not trust client-supplied history.
+      messages: promptMessages,
       system: buildSystemPrompt({
         fullName: profile.fullName,
         college: profile.college,
@@ -204,17 +453,34 @@ export async function POST(request: Request) {
         boardScore: profile.boardScore,
         subjects: profile.subjects,
         targetGrade: profile.targetGrade,
-        language: parsed.language,
+        language: resolvedLanguage,
+        subjectContext: sessionSubjectContext,
         groundingContext: buildGroundingPrompt(retrieval.chunks),
       }),
       onFinish: async ({ text }) => {
+        let persistedAnswer = text;
+        try {
+          persistedAnswer = await enforceAnswerLanguageContract({
+            gemini,
+            model,
+            question: latestUserMessage.content,
+            answer: text,
+            language: resolvedLanguage,
+            subjectContext: sessionSubjectContext,
+            rewriteMaxOutputTokens,
+            rewriteThinkingBudget,
+          });
+        } catch (languageGuardError) {
+          console.error("Failed to enforce response language contract", languageGuardError);
+        }
+
         const { data: assistantMessage, error: assistantError } = await supabase
           .from("chat_messages")
           .insert({
             session_id: finalSessionId,
             role: "assistant",
-            content: text,
-            language: parsed.language,
+            content: persistedAnswer,
+            language: resolvedLanguage,
             grounded: retrieval.grounded,
             citations: retrieval.citations,
           })
@@ -227,8 +493,37 @@ export async function POST(request: Request) {
 
         await supabase
           .from("chat_sessions")
-          .update({ updated_at: new Date().toISOString() })
+          .update({
+            updated_at: new Date().toISOString(),
+            subject_tags: resolvedSubjectTags,
+            subject_context: sessionSubjectContext,
+          })
           .eq("id", finalSessionId);
+
+        try {
+          const followUpSuggestions = await suggestFollowUps({
+            gemini,
+            model,
+            question: latestUserMessage.content,
+            answer: persistedAnswer,
+            language: resolvedLanguage,
+            subjectContext: sessionSubjectContext,
+            followupMaxOutputTokens,
+            followupThinkingBudget,
+          });
+
+          if (followUpSuggestions.length) {
+            await supabase
+              .from("chat_messages")
+              .update({
+                follow_up_suggestions: followUpSuggestions,
+              })
+              .eq("id", assistantMessage.id)
+              .eq("session_id", finalSessionId);
+          }
+        } catch (followUpError) {
+          console.error("Failed to generate follow-up suggestions", followUpError);
+        }
 
         const latestBalance = await getCreditBalanceForUser(user.id);
         const nextBalance = computeNextBalance(latestBalance, -CHAT_MESSAGE_CREDIT_COST);
@@ -252,9 +547,16 @@ export async function POST(request: Request) {
     return result.toDataStreamResponse({
       headers: {
         "x-session-id": finalSessionId,
+        "x-rag-grounded": retrieval.grounded ? "1" : "0",
+        "x-rag-chunks": String(retrieval.chunks.length),
+        "x-subject-context": sessionSubjectContext ?? "",
+        "x-thinking-enabled": thinkingBudget > 0 ? "1" : "0",
+        "x-answer-mode": autoModeSelection.mode,
+        "x-answer-mode-reason": autoModeSelection.reason,
       },
     });
   } catch (error) {
+    console.error("Chat route failed", error);
     const message =
       error instanceof Error ? error.message : "Unexpected server error while processing chat.";
 

@@ -15,6 +15,7 @@ export function LoginForm({
   nextPath?: string;
   initialError?: string;
 }) {
+  const googleAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true";
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -47,6 +48,11 @@ export function LoginForm({
   }
 
   async function continueWithGoogle() {
+    if (!googleAuthEnabled) {
+      setError("Google sign-in is not enabled yet.");
+      return;
+    }
+
     setError("");
     setGoogleLoading(true);
     const supabase = createSupabaseBrowserClient();
@@ -72,17 +78,21 @@ export function LoginForm({
 
   return (
     <AuthShell title="Welcome back" subtitle="Sign in to continue your study sessions.">
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
-        onClick={() => void continueWithGoogle()}
-        disabled={googleLoading || loading}
-      >
-        {googleLoading ? "Redirecting..." : "Continue with Google"}
-      </Button>
+      {googleAuthEnabled ? (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => void continueWithGoogle()}
+            disabled={googleLoading || loading}
+          >
+            {googleLoading ? "Redirecting..." : "Continue with Google"}
+          </Button>
 
-      <DividerOr />
+          <DividerOr />
+        </>
+      ) : null}
 
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Email">

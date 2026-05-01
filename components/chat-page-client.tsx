@@ -11,6 +11,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useChat, type Message } from "ai/react";
+import { Markdown } from "@/components/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
@@ -22,6 +23,7 @@ import type {
   ChatSessionDetail,
   ChatSessionSummary,
   Language,
+  MessageFeedback,
   NoteColor,
 } from "@/lib/types";
 import { cn, deriveSessionTitle, formatDate, groupDateLabel } from "@/lib/utils";
@@ -35,15 +37,21 @@ const COLOR_LABEL: Record<NoteColor, string> = {
 export function ChatPageClient({
   user,
   defaultLanguage,
+  profileSubjects,
   initialSessions,
   initialHasMore,
   initialSession,
+  initialSubjectContext,
+  initialPrompt,
 }: {
   user: AppUser;
   defaultLanguage: Language;
+  profileSubjects: string[];
   initialSessions: ChatSessionSummary[];
   initialHasMore: boolean;
   initialSession: ChatSessionDetail | null;
+  initialSubjectContext: string | null;
+  initialPrompt: string | null;
 }) {
   const [sessions, setSessions] = useState(initialSessions);
   const [hasMoreSessions, setHasMoreSessions] = useState(initialHasMore);
@@ -52,19 +60,29 @@ export function ChatPageClient({
   const [historyError, setHistoryError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(initialSession?.id ?? null);
   const [language, setLanguage] = useState<Language>(defaultLanguage);
+  const [composerLanguage, setComposerLanguage] = useState<Language>(defaultLanguage);
   const [chatError, setChatError] = useState("");
   const [creditBalance, setCreditBalance] = useState(user.creditBalance);
   const [sessionDetail, setSessionDetail] = useState<ChatSessionDetail | null>(initialSession);
+  const [subjectContext, setSubjectContext] = useState<string | null>(
+    initialSession?.subjectContext ?? initialSubjectContext,
+  );
   const [saveState, setSaveState] = useState<{
     message: ChatMessageRecord;
     question: string;
   } | null>(null);
-  const [saveFeedback, setSaveFeedback] = useState("");
+  const [uiFeedback, setUiFeedback] = useState("");
   const [renameState, setRenameState] = useState<ChatSessionSummary | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [copyingMessageId, setCopyingMessageId] = useState<string | null>(null);
+  const [feedbackMessageId, setFeedbackMessageId] = useState<string | null>(null);
+  const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
+  const [thinkingEnabled, setThinkingEnabled] = useState(true);
+  const [answerMode, setAnswerMode] = useState<"quick" | "deep" | null>(null);
   const pendingTitleRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(initialSession?.id ?? null);
   const searchDebounceRef = useRef<number | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const initialMessages: Message[] = useMemo(
     () =>
@@ -79,6 +97,10 @@ export function ChatPageClient({
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
+
+  useEffect(() => {
+    setComposerLanguage(language);
+  }, [language]);
 
   const fetchSessions = useCallback(async function fetchSessions({
     reset,
@@ -152,11 +174,25 @@ export function ChatPageClient({
     if (!response.ok) return;
     const detail = (await response.json()) as ChatSessionDetail;
     setSessionDetail(detail);
+    setMessages(
+      detail.messages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+      })),
+    );
+    setSubjectContext(detail.subjectContext);
     setSessions((prev) =>
       prev
         .map((session) =>
           session.id === sessionId
-            ? { ...session, title: detail.title, updatedAt: detail.updatedAt }
+            ? {
+                ...session,
+                title: detail.title,
+                updatedAt: detail.updatedAt,
+                subjectTags: detail.subjectTags,
+                subjectContext: detail.subjectContext,
+              }
             : session,
         )
         .sort(
@@ -185,10 +221,33 @@ export function ChatPageClient({
     initialMessages,
     body: {
       sessionId: currentSessionId,
-      language,
+      subjectContext,
     },
     onResponse(response) {
       const returnedSessionId = response.headers.get("x-session-id");
+      const ragChunksHeader = response.headers.get("x-rag-chunks");
+      const ragGrounded = response.headers.get("x-rag-grounded") === "1";
+      const responseSubject = response.headers.get("x-subject-context")?.trim() || null;
+      const responseThinkingEnabled = response.headers.get("x-thinking-enabled") === "1";
+      const responseAnswerMode = response.headers.get("x-answer-mode");
+      const ragChunks = Number(ragChunksHeader || "0");
+
+      setThinkingEnabled(responseThinkingEnabled);
+      if (responseAnswerMode === "quick" || responseAnswerMode === "deep") {
+        setAnswerMode(responseAnswerMode);
+      } else {
+        setAnswerMode(null);
+      }
+      if (ragGrounded && ragChunks > 0) {
+        setThinkingStatus(
+          responseSubject
+            ? `Thinking with ${ragChunks} syllabus chunks (${responseSubject})...`
+            : `Thinking with ${ragChunks} syllabus chunks...`,
+        );
+      } else {
+        setThinkingStatus("Thinking and generating answer...");
+      }
+
       if (!returnedSessionId || currentSessionIdRef.current) return;
 
       const title = pendingTitleRef.current || "New chat";
@@ -202,18 +261,23 @@ export function ChatPageClient({
           title,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
+          subjectTags: subjectContext ? [subjectContext] : [],
+          subjectContext,
         },
         ...prev,
       ]);
     },
     async onFinish() {
+      setThinkingStatus("Finalizing response...");
       setChatError("");
       const resolvedSessionId = currentSessionIdRef.current;
       if (!resolvedSessionId) return;
       await refreshSession(resolvedSessionId);
       await refreshCredits();
+      setThinkingStatus(null);
     },
     onError(error) {
+      setThinkingStatus(null);
       setChatError(error.message || "Something went wrong while generating a response.");
     },
   });
@@ -260,8 +324,23 @@ export function ChatPageClient({
           title: sessionDetail.title,
           createdAt: sessionDetail.createdAt,
           updatedAt: sessionDetail.updatedAt,
+          subjectTags: sessionDetail.subjectTags,
+          subjectContext: sessionDetail.subjectContext,
         }
       : null);
+
+  function patchMessage(messageId: string, patch: Partial<ChatMessageRecord>) {
+    setSessionDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            messages: prev.messages.map((message) =>
+              message.id === messageId ? { ...message, ...patch } : message,
+            ),
+          }
+        : prev,
+    );
+  }
 
   async function sendCurrentMessage() {
     const trimmed = input.trim();
@@ -273,6 +352,8 @@ export function ChatPageClient({
 
     pendingTitleRef.current = deriveSessionTitle(trimmed);
     setChatError("");
+    setAnswerMode(null);
+    setThinkingStatus("Retrieving syllabus context...");
     setInput("");
 
     await append(
@@ -284,6 +365,8 @@ export function ChatPageClient({
         body: {
           sessionId: currentSessionId,
           language,
+          messageLanguage: composerLanguage,
+          subjectContext,
         },
       },
     );
@@ -340,11 +423,93 @@ export function ChatPageClient({
     setCurrentSessionId(null);
     currentSessionIdRef.current = null;
     setSessionDetail(null);
+    setSubjectContext(null);
     setMessages([]);
     window.history.replaceState(null, "", "/app/chat");
   }
 
+  async function updateSessionSubjectContext(nextSubjectContext: string | null) {
+    setChatError("");
+    setSubjectContext(nextSubjectContext);
+
+    if (!activeSessionSummary) return;
+
+    const response = await fetch(`/api/chat/sessions/${activeSessionSummary.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ subjectContext: nextSubjectContext }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json()) as { error?: string };
+      setChatError(payload.error || "Failed to update session subject.");
+      return;
+    }
+
+    const updated = (await response.json()) as ChatSessionSummary;
+    setSessions((prev) => prev.map((session) => (session.id === updated.id ? updated : session)));
+    setSessionDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            subjectContext: updated.subjectContext,
+            subjectTags: updated.subjectTags,
+            updatedAt: updated.updatedAt,
+          }
+        : prev,
+    );
+  }
+
+  async function copyAssistantMessage(message: ChatMessageRecord) {
+    setCopyingMessageId(message.id);
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setUiFeedback("Answer copied to clipboard.");
+    } catch {
+      setChatError("Failed to copy the answer.");
+    } finally {
+      setCopyingMessageId(null);
+    }
+  }
+
+  async function sendFeedback(message: ChatMessageRecord, feedback: MessageFeedback) {
+    setFeedbackMessageId(message.id);
+    setChatError("");
+    const response = await fetch(`/api/chat/messages/${message.id}/feedback`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ feedback }),
+    });
+
+    setFeedbackMessageId(null);
+
+    if (!response.ok) {
+      const payload = (await response.json()) as { error?: string };
+      setChatError(payload.error || "Failed to save feedback.");
+      return;
+    }
+
+    patchMessage(message.id, { feedback });
+    setUiFeedback(feedback === "up" ? "Marked as helpful." : "Marked for review.");
+  }
+
+  function applySuggestedPrompt(prompt: string) {
+    setInput(prompt);
+    composerRef.current?.focus();
+    setUiFeedback("Suggested follow-up added to the composer.");
+  }
+
   const creditWarning = getCreditWarning(creditBalance);
+
+  useEffect(() => {
+    if (!initialPrompt?.trim()) return;
+    setInput(initialPrompt.trim());
+    composerRef.current?.focus();
+  }, [initialPrompt, setInput]);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -421,6 +586,29 @@ export function ChatPageClient({
               <p className="text-xs font-mono-ui uppercase text-text-muted">Grounded chat</p>
               <h2 className="font-display text-2xl">{activeSessionTitle}</h2>
               <p className="mt-1 text-xs text-text-muted">{creditBalance} credits available</p>
+              {subjectContext ? (
+                <p className="mt-1 text-xs text-text-secondary">Subject focus: {subjectContext}</p>
+              ) : null}
+              <div className="mt-2 inline-flex items-center gap-2">
+                <label htmlFor="subject-context" className="text-[11px] text-text-muted">
+                  Subject
+                </label>
+                <select
+                  id="subject-context"
+                  value={subjectContext ?? ""}
+                  onChange={(event) =>
+                    void updateSessionSubjectContext(event.target.value.trim() || null)
+                  }
+                  className="h-8 rounded-md border border-border bg-bg-primary px-2 text-xs text-text-primary focus:outline-none"
+                >
+                  <option value="">General</option>
+                  {Array.from(new Set(profileSubjects.filter(Boolean))).map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="inline-flex rounded-full border border-border p-0.5">
               {(["EN", "RN"] as const).map((item) => (
@@ -468,6 +656,11 @@ export function ChatPageClient({
               <p className="mt-3 text-sm text-text-secondary">
                 Ask your first question in English or Roman Nepali. Grounded answers will cite syllabus context when relevant.
               </p>
+              {subjectContext ? (
+                <p className="mt-3 text-xs text-text-muted">
+                  This chat will start with a {subjectContext} focus.
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="mx-auto max-w-3xl space-y-4">
@@ -500,9 +693,13 @@ export function ChatPageClient({
                         <Badge variant="warning">No source context</Badge>
                       ) : null}
                     </div>
-                    <div className="whitespace-pre-wrap text-sm leading-7 text-text-primary">
-                      {message.content}
-                    </div>
+                    {message.role === "assistant" ? (
+                      <Markdown text={message.content} className="text-sm leading-7" />
+                    ) : (
+                      <div className="whitespace-pre-wrap text-sm leading-7 text-text-primary">
+                        {message.content}
+                      </div>
+                    )}
 
                     {persistedAssistant?.citations?.length ? (
                       <div className="mt-4 flex flex-wrap gap-2">
@@ -513,7 +710,62 @@ export function ChatPageClient({
                     ) : null}
 
                     {persistedAssistant ? (
-                      <div className="mt-4 flex items-center gap-2">
+                      <div className="mt-4 space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void copyAssistantMessage(persistedAssistant)}
+                            disabled={copyingMessageId === persistedAssistant.id}
+                            data-testid={`copy-message-${persistedAssistant.id}`}
+                          >
+                            {copyingMessageId === persistedAssistant.id ? "Copying..." : "Copy"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={persistedAssistant.feedback === "up" ? "outline" : "ghost"}
+                            onClick={() => void sendFeedback(persistedAssistant, "up")}
+                            disabled={feedbackMessageId === persistedAssistant.id}
+                            data-testid={`feedback-up-${persistedAssistant.id}`}
+                          >
+                            👍 Helpful
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={persistedAssistant.feedback === "down" ? "outline" : "ghost"}
+                            onClick={() => void sendFeedback(persistedAssistant, "down")}
+                            disabled={feedbackMessageId === persistedAssistant.id}
+                            data-testid={`feedback-down-${persistedAssistant.id}`}
+                          >
+                            👎 Needs work
+                          </Button>
+                        </div>
+
+                        {persistedAssistant.followUpSuggestions.length ? (
+                          <div>
+                            <p className="mb-2 text-[10px] font-mono-ui uppercase text-text-muted">
+                              Suggested follow-ups
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {persistedAssistant.followUpSuggestions.map((suggestion) => (
+                                <button
+                                  key={`${persistedAssistant.id}-${suggestion}`}
+                                  type="button"
+                                  onClick={() => applySuggestedPrompt(suggestion)}
+                                  data-testid={`followup-chip-${persistedAssistant.id}`}
+                                  className="rounded-full border border-border px-3 py-1.5 text-left text-xs text-text-secondary transition hover:bg-bg-primary hover:text-text-primary"
+                                >
+                                  {suggestion}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="flex items-center gap-2">
                         <Button
                           type="button"
                           size="sm"
@@ -524,6 +776,7 @@ export function ChatPageClient({
                               question,
                             })
                           }
+                          data-testid={`save-note-${persistedAssistant.id}`}
                         >
                           {persistedAssistant.savedNoteId ? "Edit note" : "Save as note"}
                         </Button>
@@ -534,6 +787,7 @@ export function ChatPageClient({
                             </Button>
                           </Link>
                         ) : null}
+                        </div>
                       </div>
                     ) : null}
                   </article>
@@ -544,7 +798,15 @@ export function ChatPageClient({
                 <div className="mr-auto max-w-[88%] rounded-2xl border border-border bg-bg-secondary p-4">
                   <div className="mb-2 flex items-center gap-2">
                     <Badge variant="outline">AI</Badge>
-                    <span className="text-[11px] text-text-muted">Generating...</span>
+                    <Badge variant={thinkingEnabled ? "success" : "warning"}>
+                      {thinkingEnabled ? "Thinking ON" : "Thinking OFF"}
+                    </Badge>
+                    {answerMode ? (
+                      <Badge variant="outline">
+                        Auto mode: {answerMode === "deep" ? "Deep" : "Quick"}
+                      </Badge>
+                    ) : null}
+                    <span className="text-[11px] text-text-muted">{thinkingStatus || "Generating..."}</span>
                   </div>
                   <div className="flex items-center">
                     <span className="typing-dot" />
@@ -569,13 +831,14 @@ export function ChatPageClient({
                 {creditWarning}
               </p>
             ) : null}
-            {saveFeedback ? (
+            {uiFeedback ? (
               <p className="mb-3 rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
-                {saveFeedback}
+                {uiFeedback}
               </p>
             ) : null}
             <form onSubmit={submitMessage} className="rounded-2xl border border-border bg-bg-secondary p-3">
               <textarea
+                ref={composerRef}
                 value={input}
                 onChange={(event: ChangeEvent<HTMLTextAreaElement>) => handleInputChange(event)}
                 onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -589,9 +852,21 @@ export function ChatPageClient({
                 className="w-full resize-none bg-transparent px-1 py-1 text-sm text-text-primary outline-none placeholder:text-text-muted"
               />
               <div className="mt-3 flex items-center justify-between gap-3">
-                <p className="text-xs text-text-muted">
-                  Language: {language === "EN" ? "English" : "Roman Nepali"}
-                </p>
+                <div className="inline-flex rounded-full border border-border p-0.5">
+                  {(["EN", "RN"] as const).map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setComposerLanguage(item)}
+                      className={
+                        "rounded-full px-3 py-1 text-[11px] font-mono-ui transition " +
+                        (composerLanguage === item ? "bg-text-primary text-text-inverse" : "text-text-secondary")
+                      }
+                    >
+                      {item === "EN" ? "English" : "Roman Nepali"}
+                    </button>
+                  ))}
+                </div>
                 <Button type="submit" disabled={isLoading || !input.trim() || creditBalance <= 0}>
                   {isLoading ? "Sending..." : "Send →"}
                 </Button>
@@ -607,7 +882,7 @@ export function ChatPageClient({
           initialQuestion={saveState.question}
           onClose={() => setSaveState(null)}
           onSaved={async (text) => {
-            setSaveFeedback(text);
+            setUiFeedback(text);
             setSaveState(null);
             const resolvedSessionId = currentSessionIdRef.current;
             if (resolvedSessionId) {

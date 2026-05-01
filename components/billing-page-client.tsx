@@ -101,54 +101,62 @@ export function BillingPageClient({ overview }: { overview: StudentBillingOvervi
             <h2 className="mt-1 font-display text-3xl">Choose a study pack</h2>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            {overview.plans.map((plan) => (
-              <article key={plan.id} className="rounded-2xl border border-border bg-bg-primary p-5">
-                <p className="font-display text-2xl">{plan.name}</p>
-                <div className="mt-3 flex items-end gap-2">
-                  <span className="font-display text-5xl leading-none">{plan.credits}</span>
-                  <span className="mb-1 text-sm text-text-secondary">credits</span>
-                </div>
-                <p className="mt-2 text-sm text-text-secondary">
-                  NPR {plan.price} · {plan.billingType === "one_time" ? "One-time purchase" : "Monthly"}
-                </p>
-
-                <div className="mt-5">
-                  <p className="mb-2 text-[10px] font-mono-ui uppercase text-text-muted">Payment method</p>
-                  <div className="inline-flex rounded-full border border-border p-0.5">
-                    {(["esewa", "khalti", "bank_transfer"] as const).map((method) => (
-                      <button
-                        key={method}
-                        type="button"
-                        onClick={() =>
-                          setMethodByPlanId((prev) => ({
-                            ...prev,
-                            [plan.id]: method,
-                          }))
-                        }
-                        className={
-                          "rounded-full px-3 py-1.5 text-xs transition " +
-                          ((methodByPlanId[plan.id] ?? "esewa") === method
-                            ? "bg-text-primary text-text-inverse"
-                            : "text-text-secondary")
-                        }
-                      >
-                        {PAYMENT_METHOD_LABEL[method]}
-                      </button>
-                    ))}
+          {overview.plans.length ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {overview.plans.map((plan) => (
+                <article key={plan.id} className="rounded-2xl border border-border bg-bg-primary p-5">
+                  <p className="font-display text-2xl">{plan.name}</p>
+                  <div className="mt-3 flex items-end gap-2">
+                    <span className="font-display text-5xl leading-none">{plan.credits}</span>
+                    <span className="mb-1 text-sm text-text-secondary">credits</span>
                   </div>
-                </div>
+                  <p className="mt-2 text-sm text-text-secondary">
+                    NPR {plan.price} · {plan.billingType === "one_time" ? "One-time purchase" : "Monthly"}
+                  </p>
 
-                <Button
-                  className="mt-5 w-full"
-                  onClick={() => void createInvoice(plan)}
-                  disabled={creatingPlanId === plan.id}
-                >
-                  {creatingPlanId === plan.id ? "Creating invoice..." : "Generate invoice"}
-                </Button>
-              </article>
-            ))}
-          </div>
+                  <div className="mt-5">
+                    <p className="mb-2 text-[10px] font-mono-ui uppercase text-text-muted">Payment method</p>
+                    <div className="inline-flex rounded-full border border-border p-0.5">
+                      {(["esewa", "khalti", "bank_transfer"] as const).map((method) => (
+                        <button
+                          key={method}
+                          type="button"
+                          onClick={() =>
+                            setMethodByPlanId((prev) => ({
+                              ...prev,
+                              [plan.id]: method,
+                            }))
+                          }
+                          className={
+                            "rounded-full px-3 py-1.5 text-xs transition " +
+                            ((methodByPlanId[plan.id] ?? "esewa") === method
+                              ? "bg-text-primary text-text-inverse"
+                              : "text-text-secondary")
+                          }
+                        >
+                          {PAYMENT_METHOD_LABEL[method]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button
+                    className="mt-5 w-full"
+                    onClick={() => void createInvoice(plan)}
+                    disabled={creatingPlanId === plan.id}
+                  >
+                    {creatingPlanId === plan.id ? "Creating invoice..." : "Generate invoice"}
+                  </Button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-border bg-bg-primary p-8 text-center">
+              <p className="text-sm text-text-secondary">
+                No real plans are configured yet. Add active plans in the database before opening billing to students.
+              </p>
+            </div>
+          )}
         </section>
 
         <section className="mt-10">

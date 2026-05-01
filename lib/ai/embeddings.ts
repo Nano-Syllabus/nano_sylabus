@@ -1,20 +1,28 @@
-import { getOpenAIEnv } from "@/lib/env";
+import { getGeminiEmbeddingEnv } from "@/lib/env";
+
+function toGeminiModelPath(model: string) {
+  return model.startsWith("models/") ? model : `models/${model}`;
+}
 
 export async function embedText(input: string) {
-  const { apiKey } = getOpenAIEnv();
-  const model = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+  const { apiKey, model } = getGeminiEmbeddingEnv();
+  const modelPath = toGeminiModelPath(model);
 
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/${modelPath}:embedContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: modelPath,
+        content: {
+          parts: [{ text: input }],
+        },
+      }),
     },
-    body: JSON.stringify({
-      model,
-      input,
-    }),
-  });
+  );
 
   if (!response.ok) {
     const text = await response.text();
@@ -22,10 +30,10 @@ export async function embedText(input: string) {
   }
 
   const payload = (await response.json()) as {
-    data: Array<{ embedding: number[] }>;
+    embedding?: { values?: number[] };
   };
 
-  return payload.data[0]?.embedding ?? [];
+  return payload.embedding?.values ?? [];
 }
 
 export async function embedTexts(inputs: string[]) {

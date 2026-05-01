@@ -6,7 +6,7 @@ import { getChatSessionDetail, listChatSessions } from "@/lib/data/chat";
 export default async function ChatPage({
   searchParams,
 }: {
-  searchParams: Promise<{ session?: string }>;
+  searchParams: Promise<{ session?: string; subject?: string; prompt?: string }>;
 }) {
   const { user, profile } = await requireOnboardedUser();
   const params = await searchParams;
@@ -23,9 +23,12 @@ export default async function ChatPage({
       <ChatPageClient
         user={user}
         defaultLanguage={profile!.languagePref}
+        profileSubjects={profile!.subjects}
         initialSessions={sessionResult.sessions}
         initialHasMore={sessionResult.hasMore}
         initialSession={activeSession}
+        initialSubjectContext={params.subject ? decodeURIComponent(params.subject) : null}
+        initialPrompt={params.prompt ? decodeURIComponent(params.prompt) : null}
       />
     </AppShell>
   );

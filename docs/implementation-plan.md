@@ -28,7 +28,7 @@ Make the current Phase 3 backbone trustworthy in a real deployment.
 
 ### Deliverables
 
-- validate all flows against a live Supabase project and real OpenAI credentials
+- validate all flows against a live Supabase project and real Gemini credentials
 - apply all migrations cleanly in the target environment
 - confirm RLS for student and admin flows
 - verify that credit deduction, invoice creation, payment submission, and admin approval behave correctly
@@ -89,7 +89,7 @@ Reduce manual work only after the baseline is trusted.
 
 ## Suggested immediate backlog
 
-1. run the app against a live Supabase project and real OpenAI key
+1. run the app against a live Supabase project and real Gemini key
 2. fix any runtime issues uncovered in auth, chat, notes, billing, or admin approval
 3. verify that admin approval grants credits exactly once in the real database
 4. add more focused tests around billing and admin actions if runtime issues reveal weak spots
