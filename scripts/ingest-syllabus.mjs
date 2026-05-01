@@ -16,22 +16,24 @@ function chunkText(content, size = 1400, overlap = 250) {
 }
 
 async function createEmbedding(input) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const model = process.env.GEMINI_EMBEDDING_MODEL || "gemini-embedding-001";
+  const modelPath = model.startsWith("models/") ? model : `models/${model}`;
 
   if (!apiKey) {
-    throw new Error("Missing OPENAI_API_KEY for ingestion.");
+    throw new Error("Missing GEMINI_API_KEY for ingestion.");
   }
 
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${modelPath}:embedContent?key=${apiKey}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model,
-      input,
+      model: modelPath,
+      content: {
+        parts: [{ text: input }],
+      },
     }),
   });
 
@@ -40,7 +42,7 @@ async function createEmbedding(input) {
   }
 
   const payload = await response.json();
-  return payload.data[0].embedding;
+  return payload.embedding?.values ?? [];
 }
 
 function validateDocument(document) {

@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
+import { Field, Input, Textarea } from "@/components/ui/field";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { StudentProfile } from "@/lib/types";
-import { COLLEGES, GRADES, SUBJECT_OPTIONS, TARGET_GRADES } from "@/lib/subjects";
 
 export function OnboardingForm({
   userId,
@@ -18,27 +17,26 @@ export function OnboardingForm({
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [fullName, setFullName] = useState(initialProfile?.fullName ?? "");
-  const [collegeQuery, setCollegeQuery] = useState(initialProfile?.college ?? "");
   const [college, setCollege] = useState(initialProfile?.college ?? "");
   const [grade, setGrade] = useState(initialProfile?.grade ?? "");
   const [scoreType, setScoreType] = useState<"%" | "GPA">("%");
   const [score, setScore] = useState(initialProfile?.boardScore?.replace(/[%A-Z]+$/g, "") ?? "");
-  const [subjects, setSubjects] = useState<string[]>(initialProfile?.subjects ?? []);
-  const [targetGrade, setTargetGrade] = useState(initialProfile?.targetGrade ?? "A+");
+  const [subjectsInput, setSubjectsInput] = useState((initialProfile?.subjects ?? []).join(", "));
+  const [targetGrade, setTargetGrade] = useState(initialProfile?.targetGrade ?? "");
   const [languagePref, setLanguagePref] = useState<"EN" | "RN">(initialProfile?.languagePref ?? "EN");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const filteredColleges = useMemo(
-    () => COLLEGES.filter((value) => value.toLowerCase().includes(collegeQuery.toLowerCase())),
-    [collegeQuery],
-  );
-
   const total = 5;
 
   async function finish() {
-    if (!fullName.trim() || !(college || collegeQuery).trim() || !grade.trim() || !targetGrade.trim()) {
-      setError("Please complete your name, college, grade, and target grade.");
+    const subjects = subjectsInput
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (!fullName.trim() || !college.trim() || !grade.trim() || !targetGrade.trim()) {
+      setError("Please complete your name, institution, grade or year, and target goal.");
       return;
     }
 
@@ -49,7 +47,7 @@ export function OnboardingForm({
     const { error: upsertError } = await supabase.from("student_profiles").upsert({
       user_id: userId,
       full_name: fullName,
-      college: (college || collegeQuery).trim(),
+      college: college.trim(),
       grade,
       board_score: score ? `${score}${scoreType}` : null,
       subjects,
@@ -82,70 +80,29 @@ export function OnboardingForm({
 
       <main className="flex flex-1 flex-col py-12">
         {step === 1 ? (
-          <Step title="Where do you study?" subtitle="Pick your college or institution.">
+          <Step title="Where do you study?" subtitle="Enter your current school, college, campus, or university.">
             <Field label="Full name">
               <Input value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name" />
             </Field>
-            <Field label="Search institution">
+            <Field label="Institution">
               <Input
-                value={collegeQuery}
-                onChange={(event) => {
-                  setCollegeQuery(event.target.value);
-                  setCollege("");
-                }}
-                placeholder="Type to search..."
+                value={college}
+                onChange={(event) => setCollege(event.target.value)}
+                placeholder="Eg. St. Xavier's College, Tribhuvan University"
               />
             </Field>
-            <div className="mt-3 max-h-64 overflow-auto rounded-md border border-border">
-              {filteredColleges.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setCollege(collegeQuery)}
-                  className="block w-full px-4 py-3 text-left text-sm hover:bg-bg-secondary"
-                >
-                  Use &quot;{collegeQuery}&quot; as my institution
-                </button>
-              ) : (
-                filteredColleges.map((item) => (
-                  <button
-                    type="button"
-                    key={item}
-                    onClick={() => {
-                      setCollege(item);
-                      setCollegeQuery(item);
-                    }}
-                    className={
-                      "block w-full px-4 py-3 text-left text-sm transition hover:bg-bg-secondary " +
-                      (college === item ? "bg-bg-secondary font-medium" : "")
-                    }
-                  >
-                    {item}
-                  </button>
-                ))
-              )}
-            </div>
           </Step>
         ) : null}
 
         {step === 2 ? (
-          <Step title="Which grade or year?" subtitle="Pick what you are currently in.">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {GRADES.map((item) => (
-                <button
-                  type="button"
-                  key={item}
-                  onClick={() => setGrade(item)}
-                  className={
-                    "rounded-md border px-3 py-3 text-sm transition " +
-                    (grade === item
-                      ? "border-text-primary bg-text-primary text-text-inverse"
-                      : "border-border hover:border-border-strong")
-                  }
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
+          <Step title="Which grade or year?" subtitle="Use the exact level that matches the student.">
+            <Field label="Grade or year">
+              <Input
+                value={grade}
+                onChange={(event) => setGrade(event.target.value)}
+                placeholder="Eg. Class 12, BBS Year 2, BCA Year 1"
+              />
+            </Field>
           </Step>
         ) : null}
 
@@ -178,31 +135,15 @@ export function OnboardingForm({
         ) : null}
 
         {step === 4 ? (
-          <Step title="Pick your subjects" subtitle="Select all that apply.">
-            <div className="flex flex-wrap gap-2">
-              {SUBJECT_OPTIONS.map((subject) => {
-                const active = subjects.includes(subject);
-                return (
-                  <button
-                    type="button"
-                    key={subject}
-                    onClick={() =>
-                      setSubjects((prev) =>
-                        active ? prev.filter((value) => value !== subject) : [...prev, subject],
-                      )
-                    }
-                    className={
-                      "rounded-full border px-4 py-1.5 text-sm transition " +
-                      (active
-                        ? "border-text-primary bg-text-primary text-text-inverse"
-                        : "border-border hover:border-border-strong")
-                    }
-                  >
-                    {subject}
-                  </button>
-                );
-              })}
-            </div>
+          <Step title="Which subjects matter?" subtitle="Add the exact subjects, separated by commas.">
+            <Field label="Subjects" hint="Example: Physics, Chemistry, Mathematics">
+              <Textarea
+                rows={4}
+                value={subjectsInput}
+                onChange={(event) => setSubjectsInput(event.target.value)}
+                placeholder="Physics, Chemistry, Mathematics"
+              />
+            </Field>
           </Step>
         ) : null}
 
@@ -210,24 +151,13 @@ export function OnboardingForm({
           <Step title="Goals & language" subtitle="This makes the AI feel personal from the first answer.">
             <div className="space-y-6">
               <div>
-                <p className="mb-2 text-xs font-mono-ui uppercase text-text-muted">Target grade</p>
-                <div className="flex flex-wrap gap-2">
-                  {TARGET_GRADES.map((item) => (
-                    <button
-                      type="button"
-                      key={item}
-                      onClick={() => setTargetGrade(item)}
-                      className={
-                        "h-10 w-12 rounded-md border text-sm transition " +
-                        (targetGrade === item
-                          ? "border-text-primary bg-text-primary text-text-inverse"
-                          : "border-border hover:border-border-strong")
-                      }
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
+                <Field label="Target result" hint="Keep it human and specific. Example: A+, Distinction, pass all papers">
+                  <Input
+                    value={targetGrade}
+                    onChange={(event) => setTargetGrade(event.target.value)}
+                    placeholder="A+, Distinction, 3.8 GPA"
+                  />
+                </Field>
               </div>
               <div>
                 <p className="mb-2 text-xs font-mono-ui uppercase text-text-muted">Default response language</p>

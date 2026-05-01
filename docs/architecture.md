@@ -23,7 +23,7 @@ The BRD recommends a multi-part platform:
 - student frontend: Next.js PWA + Tailwind CSS
 - admin panel: web admin surface built inside the same Next.js repo for now
 - backend: Node.js with Express or Fastify
-- AI: Anthropic Claude or OpenAI GPT family
+- AI: Google Gemini
 - vector store: Pinecone or pgvector
 - database: PostgreSQL
 - auth: Supabase Auth or Auth0
@@ -71,7 +71,7 @@ The repository has moved beyond the earlier prototype state. Right now:
 - server route handlers live inside the same repo under `app/api`
 - auth is wired to Supabase Auth
 - data persistence uses Postgres tables through Supabase
-- chat uses OpenAI plus retrieval grounding
+- chat uses Gemini plus retrieval grounding
 - notes, billing, and admin payment review are real product flows
 - the admin surface is still thin and finance-focused
 - live-environment validation and broader operator tooling are still incomplete

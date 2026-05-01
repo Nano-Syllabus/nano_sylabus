@@ -2,6 +2,7 @@ export type Language = "EN" | "RN";
 export type NoteColor = "red" | "yellow" | "green";
 export type RevisionAction = "remember" | "review" | "skip";
 export type AppRole = "student" | "admin";
+export type MessageFeedback = "up" | "down";
 export type CreditLedgerType = "grant" | "usage" | "refund" | "adjustment";
 export type ReferenceType =
   | "starter_grant"
@@ -83,6 +84,8 @@ export interface ChatSessionSummary {
   title: string;
   createdAt: string;
   updatedAt: string;
+  subjectTags: string[];
+  subjectContext: string | null;
 }
 
 export interface ChatMessageRecord {
@@ -94,11 +97,26 @@ export interface ChatMessageRecord {
   createdAt: string;
   grounded: boolean;
   citations: AssistantCitation[];
+  feedback: MessageFeedback | null;
+  followUpSuggestions: string[];
   savedNoteId: string | null;
 }
 
 export interface ChatSessionDetail extends ChatSessionSummary {
   messages: ChatMessageRecord[];
+}
+
+export interface SubjectExplorerSummary {
+  subject: string;
+  inProfile: boolean;
+  sessionCount: number;
+  questionCount: number;
+  lastActivityAt: string | null;
+}
+
+export interface SubjectExplorerSessionSummary extends ChatSessionSummary {
+  turnCount: number;
+  language: Language;
 }
 
 export interface RevisionNoteSummary {

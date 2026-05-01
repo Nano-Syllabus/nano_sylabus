@@ -4,6 +4,7 @@ import type {
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionSummary,
+  MessageFeedback,
 } from "@/lib/types";
 
 function normalizeSession(row: any): ChatSessionSummary {
@@ -13,6 +14,8 @@ function normalizeSession(row: any): ChatSessionSummary {
     title: row.title,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    subjectTags: Array.isArray(row.subject_tags) ? row.subject_tags : [],
+    subjectContext: row.subject_context ?? null,
   };
 }
 
@@ -26,6 +29,8 @@ function normalizeMessage(row: any): ChatMessageRecord {
     createdAt: row.created_at,
     grounded: row.grounded ?? false,
     citations: Array.isArray(row.citations) ? (row.citations as AssistantCitation[]) : [],
+    feedback: row.feedback === "up" || row.feedback === "down" ? (row.feedback as MessageFeedback) : null,
+    followUpSuggestions: Array.isArray(row.follow_up_suggestions) ? row.follow_up_suggestions : [],
     savedNoteId: null,
   };
 }
@@ -103,14 +108,30 @@ export async function getChatSessionDetail(sessionId: string, userId: string) {
   } satisfies ChatSessionDetail;
 }
 
-export async function renameChatSession(sessionId: string, userId: string, title: string) {
+export async function updateChatSession(
+  sessionId: string,
+  userId: string,
+  payload: {
+    title?: string;
+    subjectContext?: string | null;
+  },
+) {
   const supabase = await createSupabaseServerClient();
+  const updatePayload: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (typeof payload.title === "string") {
+    updatePayload.title = payload.title;
+  }
+
+  if (payload.subjectContext !== undefined) {
+    updatePayload.subject_context = payload.subjectContext;
+  }
+
   const { data, error } = await supabase
     .from("chat_sessions")
-    .update({
-      title,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", sessionId)
     .eq("user_id", userId)
     .select("*")

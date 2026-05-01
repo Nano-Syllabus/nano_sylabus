@@ -20,6 +20,7 @@ function passwordStrength(password: string) {
 }
 
 export function SignupForm() {
+  const googleAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true";
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -70,6 +71,11 @@ export function SignupForm() {
   }
 
   async function continueWithGoogle() {
+    if (!googleAuthEnabled) {
+      setError("Google sign-in is not enabled yet.");
+      return;
+    }
+
     setError("");
     setNotice("");
     setGoogleLoading(true);
@@ -96,17 +102,21 @@ export function SignupForm() {
 
   return (
     <AuthShell title="Create your account" subtitle="Start with a real AI study workspace.">
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
-        onClick={() => void continueWithGoogle()}
-        disabled={googleLoading || loading}
-      >
-        {googleLoading ? "Redirecting..." : "Continue with Google"}
-      </Button>
+      {googleAuthEnabled ? (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => void continueWithGoogle()}
+            disabled={googleLoading || loading}
+          >
+            {googleLoading ? "Redirecting..." : "Continue with Google"}
+          </Button>
 
-      <DividerOr />
+          <DividerOr />
+        </>
+      ) : null}
 
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Full name">
