@@ -1,0 +1,96 @@
+function compactWhitespace(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function capitalizeWord(word: string) {
+  if (!word) return word;
+  if (/^[A-Z0-9]+$/.test(word)) return word;
+  return `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
+}
+
+const ACRONYM_WORDS = new Set(["NEB", "TU", "PU", "KU", "CTEVT", "BBS", "BCA", "BSC", "BA", "BIM", "BIT"]);
+
+export function normalizeBoard(value: string) {
+  const compact = compactWhitespace(value).toUpperCase();
+  const canonical = ["NEB", "TU", "PU", "KU", "CTEVT"];
+  return canonical.includes(compact) ? compact : compact;
+}
+
+export function normalizeGrade(value: string) {
+  const compact = compactWhitespace(value);
+  if (!compact) return "";
+
+  const classMatch = compact.match(/^class\s*(\d{1,2})$/i) || compact.match(/^(\d{1,2})$/);
+  if (classMatch) {
+    return `Class ${classMatch[1]}`;
+  }
+
+  return compact
+    .split(" ")
+    .map((word) => {
+      if (/^\d+$/.test(word)) return word;
+      if (ACRONYM_WORDS.has(word.toUpperCase())) return word.toUpperCase();
+      return capitalizeWord(word);
+    })
+    .join(" ");
+}
+
+export function normalizeSubjectLabel(value: string) {
+  const compact = compactWhitespace(value);
+  if (!compact) return "";
+
+  return compact
+    .split(" ")
+    .map((word) => {
+      if (/^\d+$/.test(word)) return word;
+      if (word.length <= 4 && /^[a-z]+$/i.test(word)) return word.toUpperCase();
+      return capitalizeWord(word);
+    })
+    .join(" ");
+}
+
+export function normalizeSubjects(values: string[]) {
+  const deduped = new Map<string, string>();
+
+  values.forEach((value) => {
+    const normalized = normalizeSubjectLabel(value);
+    if (!normalized) return;
+    deduped.set(normalized.toLowerCase(), normalized);
+  });
+
+  return Array.from(deduped.values());
+}
+
+export function normalizeTargetGrade(value: string) {
+  return compactWhitespace(value);
+}
+
+export function normalizeFullName(value: string) {
+  return compactWhitespace(value);
+}
+
+export function normalizeCollege(value: string) {
+  return compactWhitespace(value);
+}
+
+export function normalizeBoardScore(value: string) {
+  return compactWhitespace(value);
+}
+
+export function validateBoardScore(value: string, scoreType: "%" | "GPA") {
+  const compact = compactWhitespace(value);
+  if (!compact) return null;
+
+  const numeric = Number(compact);
+  if (Number.isNaN(numeric)) {
+    return scoreType === "%" ? "Score must be a number between 0 and 100." : "GPA must be a number between 0 and 4.0.";
+  }
+
+  if (scoreType === "%") {
+    if (numeric < 0 || numeric > 100) return "Score must be between 0 and 100.";
+  } else if (numeric < 0 || numeric > 4) {
+    return "GPA must be between 0 and 4.0.";
+  }
+
+  return null;
+}

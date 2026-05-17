@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { normalizeSubjectLabel, normalizeSubjects } from "@/lib/profile-normalization";
 import type {
   AssistantCitation,
   ChatMessageRecord,
@@ -14,8 +15,8 @@ function normalizeSession(row: any): ChatSessionSummary {
     title: row.title,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    subjectTags: Array.isArray(row.subject_tags) ? row.subject_tags : [],
-    subjectContext: row.subject_context ?? null,
+    subjectTags: normalizeSubjects(Array.isArray(row.subject_tags) ? row.subject_tags : []),
+    subjectContext: row.subject_context ? normalizeSubjectLabel(row.subject_context) : null,
   };
 }
 
@@ -126,7 +127,11 @@ export async function updateChatSession(
   }
 
   if (payload.subjectContext !== undefined) {
-    updatePayload.subject_context = payload.subjectContext;
+    const normalizedSubjectContext = payload.subjectContext
+      ? normalizeSubjectLabel(payload.subjectContext)
+      : null;
+    updatePayload.subject_context = normalizedSubjectContext;
+    updatePayload.subject_tags = normalizedSubjectContext ? [normalizedSubjectContext] : [];
   }
 
   const { data, error } = await supabase

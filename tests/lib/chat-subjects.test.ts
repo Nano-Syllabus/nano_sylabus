@@ -15,6 +15,7 @@ describe("deriveSubjectTags", () => {
             documentId: "doc-1",
             sourceLabel: "Physics",
             sourceTitle: "Motion",
+            sourceName: "physics.pdf",
             subject: "Physics",
             chapter: "Kinematics",
             topic: null,
@@ -42,5 +43,32 @@ describe("deriveSubjectTags", () => {
     });
 
     expect(tags).toEqual(["General", "Mathematics"]);
+  });
+
+  it("normalizes subject casing from handoff paths", () => {
+    const tags = deriveSubjectTags({
+      existingTags: [" physics "],
+      subjectContext: "physics",
+      retrieval: {
+        chunks: [],
+        grounded: true,
+        citations: [
+          {
+            chunkId: "chunk-1",
+            documentId: "doc-1",
+            sourceLabel: "Physics",
+            sourceTitle: "Motion",
+            sourceName: "physics.pdf",
+            subject: "physics",
+            chapter: null,
+            topic: null,
+          },
+        ],
+      },
+      question: "physics ko law bujhau",
+      profileSubjects: ["physics"],
+    });
+
+    expect(tags).toEqual(["Physics"]);
   });
 });

@@ -41,7 +41,7 @@ export async function updateSession(request: NextRequest) {
   if (user) {
     const { data: profileRow } = await supabase
       .from("student_profiles")
-      .select("full_name, college, grade, target_grade, language_pref, role")
+      .select("full_name, college, board, grade, target_grade, language_pref, role")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -49,6 +49,7 @@ export async function updateSession(request: NextRequest) {
       onboarded = isProfileComplete({
         fullName: profileRow.full_name ?? "",
         college: profileRow.college ?? "",
+        board: profileRow.board ?? "",
         grade: profileRow.grade ?? "",
         targetGrade: profileRow.target_grade ?? "",
         languagePref: profileRow.language_pref ?? "EN",

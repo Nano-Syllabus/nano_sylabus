@@ -1,10 +1,15 @@
 import { getGeminiEmbeddingEnv } from "@/lib/env";
+import { createDeterministicEmbedding, isE2EFakeAIEnabled } from "@/lib/ai/e2e-harness";
 
 function toGeminiModelPath(model: string) {
   return model.startsWith("models/") ? model : `models/${model}`;
 }
 
 export async function embedText(input: string) {
+  if (isE2EFakeAIEnabled()) {
+    return createDeterministicEmbedding(input);
+  }
+
   const { apiKey, model } = getGeminiEmbeddingEnv();
   const modelPath = toGeminiModelPath(model);
 

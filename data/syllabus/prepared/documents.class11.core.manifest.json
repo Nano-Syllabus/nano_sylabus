@@ -1,0 +1,46 @@
+[
+  {
+    "board": "NEB",
+    "grade": "Class 11",
+    "subject": "English",
+    "chapter": "Full Book",
+    "topic": "All Units",
+    "title": "NEB Grade 11 Compulsory English Book",
+    "sourceName": "NEB Grade 11 Compulsory English Book PDF",
+    "sourceType": "pdf",
+    "contentFile": "neb-grade-11-compulsory-english-book.txt"
+  },
+  {
+    "board": "NEB",
+    "grade": "Class 11",
+    "subject": "Physics",
+    "chapter": "Full Book",
+    "topic": "All Units",
+    "title": "NEB Grade 11 Physics Book",
+    "sourceName": "NEB Grade 11 Physics Book PDF",
+    "sourceType": "pdf",
+    "contentFile": "neb-grade-11-physics-book.txt"
+  },
+  {
+    "board": "NEB",
+    "grade": "Class 11",
+    "subject": "Chemistry",
+    "chapter": "Full Book",
+    "topic": "All Units",
+    "title": "NEB Grade 11 Chemistry Book",
+    "sourceName": "NEB Grade 11 Chemistry Book PDF",
+    "sourceType": "pdf",
+    "contentFile": "neb-grade-11-chemistry-book.txt"
+  },
+  {
+    "board": "NEB",
+    "grade": "Class 11",
+    "subject": "Mathematics",
+    "chapter": "Full Book",
+    "topic": "All Units",
+    "title": "NEB Grade 11 Mathematics Book",
+    "sourceName": "NEB Grade 11 Mathematics Book PDF",
+    "sourceType": "pdf",
+    "contentFile": "neb-grade-11-mathematics-book.txt"
+  }
+]

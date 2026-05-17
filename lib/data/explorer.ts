@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { normalizeBoard, normalizeGrade, normalizeSubjectLabel, normalizeSubjects } from "@/lib/profile-normalization";
 import type {
   StudentProfile,
   SubjectExplorerSessionSummary,
@@ -6,28 +7,93 @@ import type {
 } from "@/lib/types";
 
 function uniqueSubjects(values: string[]) {
-  return Array.from(
-    new Set(
-      values
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
-  );
+  return normalizeSubjects(values);
+}
+
+function categorizeSubject(subject: string): SubjectExplorerSummary["category"] {
+  const normalized = subject.toLowerCase();
+  if (
+    [
+      "physics",
+      "chemistry",
+      "biology",
+      "science",
+      "mathematics",
+      "math",
+      "computer",
+      "statistics",
+    ].some((token) => normalized.includes(token))
+  ) {
+    return "Science";
+  }
+
+  if (
+    [
+      "account",
+      "business",
+      "economics",
+      "management",
+      "marketing",
+      "finance",
+      "entrepreneur",
+    ].some((token) => normalized.includes(token))
+  ) {
+    return "Management";
+  }
+
+  if (
+    [
+      "engineering",
+      "technical",
+      "it",
+      "programming",
+      "network",
+      "electronics",
+      "civil",
+      "mechanical",
+    ].some((token) => normalized.includes(token))
+  ) {
+    return "Technical";
+  }
+
+  if (
+    [
+      "english",
+      "nepali",
+      "history",
+      "geography",
+      "sociology",
+      "political",
+      "philosophy",
+      "psychology",
+      "humanities",
+      "civics",
+    ].some((token) => normalized.includes(token))
+  ) {
+    return "Humanities";
+  }
+
+  return "General";
 }
 
 export async function listExplorerSubjects(userId: string, profile: StudentProfile) {
   const supabase = await createSupabaseServerClient();
+  let knowledgeQuery = supabase
+    .from("knowledge_chunks")
+    .select("subject")
+    .eq("grade", normalizeGrade(profile.grade))
+    .limit(500);
+
+  if (normalizeBoard(profile.board)) {
+    knowledgeQuery = knowledgeQuery.eq("board", normalizeBoard(profile.board));
+  }
 
   const [sessionResult, knowledgeResult] = await Promise.all([
     supabase
       .from("chat_sessions")
       .select("id, updated_at, subject_tags")
       .eq("user_id", userId),
-    supabase
-      .from("knowledge_chunks")
-      .select("subject")
-      .eq("grade", profile.grade)
-      .limit(500),
+    knowledgeQuery,
   ]);
 
   if (sessionResult.error) throw sessionResult.error;
@@ -69,6 +135,9 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
 
     return {
       subject,
+      board: normalizeBoard(profile.board),
+      grade: normalizeGrade(profile.grade),
+      category: categorizeSubject(subject),
       inProfile: profileSubjects.includes(subject),
       sessionCount: matchingSessions.length,
       questionCount: matchingSessions.reduce(
@@ -96,11 +165,12 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
 
 export async function listSubjectSessions(userId: string, subject: string) {
   const supabase = await createSupabaseServerClient();
+  const normalizedSubject = normalizeSubjectLabel(subject);
   const { data: sessionRows, error: sessionError } = await supabase
     .from("chat_sessions")
     .select("*")
     .eq("user_id", userId)
-    .contains("subject_tags", [subject])
+    .contains("subject_tags", [normalizedSubject])
     .order("updated_at", { ascending: false });
 
   if (sessionError) throw sessionError;

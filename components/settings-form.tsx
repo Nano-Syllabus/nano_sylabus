@@ -4,6 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
+import {
+  normalizeBoard,
+  normalizeBoardScore,
+  normalizeCollege,
+  normalizeFullName,
+  normalizeGrade,
+  normalizeTargetGrade,
+} from "@/lib/profile-normalization";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { AppUser, StudentProfile } from "@/lib/types";
 
@@ -17,6 +25,7 @@ export function SettingsForm({
   const router = useRouter();
   const [fullName, setFullName] = useState(profile.fullName);
   const [college, setCollege] = useState(profile.college);
+  const [board, setBoard] = useState(profile.board);
   const [grade, setGrade] = useState(profile.grade);
   const [boardScore, setBoardScore] = useState(profile.boardScore ?? "");
   const [targetGrade, setTargetGrade] = useState(profile.targetGrade);
@@ -27,17 +36,29 @@ export function SettingsForm({
   const [deleting, setDeleting] = useState(false);
 
   async function saveProfile() {
+    const normalizedFullName = normalizeFullName(fullName);
+    const normalizedCollege = normalizeCollege(college);
+    const normalizedBoard = normalizeBoard(board);
+    const normalizedGrade = normalizeGrade(grade);
+    const normalizedTargetGrade = normalizeTargetGrade(targetGrade);
+
+    if (!normalizedFullName || !normalizedCollege || !normalizedBoard || !normalizedGrade || !normalizedTargetGrade) {
+      setStatus("Please complete your full name, institution, board, grade or year, and target grade.");
+      return;
+    }
+
     setSaving(true);
     setStatus("");
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.from("student_profiles").upsert({
       user_id: user.id,
-      full_name: fullName,
-      college,
-      grade,
-      board_score: boardScore || null,
+      full_name: normalizedFullName,
+      college: normalizedCollege,
+      board: normalizedBoard,
+      grade: normalizedGrade,
+      board_score: normalizeBoardScore(boardScore) || null,
       subjects: profile.subjects,
-      target_grade: targetGrade,
+      target_grade: normalizedTargetGrade,
       language_pref: languagePref,
     });
 
@@ -113,6 +134,21 @@ export function SettingsForm({
           </Field>
           <Field label="Grade / year">
             <Input value={grade} onChange={(event) => setGrade(event.target.value)} />
+          </Field>
+          <Field label="Board">
+            <Input
+              value={board}
+              onChange={(event) => setBoard(event.target.value)}
+              placeholder="NEB, TU, PU, KU, CTEVT"
+              list="settings-board-options"
+            />
+            <datalist id="settings-board-options">
+              <option value="NEB" />
+              <option value="TU" />
+              <option value="PU" />
+              <option value="KU" />
+              <option value="CTEVT" />
+            </datalist>
           </Field>
           <Field label="Board score">
             <Input value={boardScore} onChange={(event) => setBoardScore(event.target.value)} />

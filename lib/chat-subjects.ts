@@ -1,7 +1,8 @@
 import type { RetrievalResult } from "@/lib/ai/retrieval";
+import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 
 function normalize(value: string) {
-  return value.trim();
+  return normalizeSubjectLabel(value);
 }
 
 export function deriveSubjectTags({

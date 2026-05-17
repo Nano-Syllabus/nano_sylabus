@@ -22,6 +22,7 @@ The input file must be a JSON array.
 
 - `chapter`
 - `topic`
+- `contentFile` (path to UTF-8 text file, relative to the JSON file)
 
 ## Exact JSON shape
 
@@ -46,8 +47,15 @@ The input file must be a JSON array.
 - Use real extracted text only.
 - Keep one document object per syllabus unit or source file.
 - `content` should be plain text, not binary PDF data.
+- You can use either inline `content` or `contentFile`.
 - The ingestion script will chunk the text and generate Gemini embeddings automatically.
 - Because the app now uses Gemini embeddings, old knowledge chunks created with OpenAI embeddings should be replaced by re-ingesting the source content with Gemini.
+
+## Useful flags
+
+- `--validate-only`: validate manifest and source files without writing DB rows.
+- `--replace-scope`: delete existing `knowledge_documents` in each `(board, grade, subject)` scope before ingesting.
+- `--strict-class11-core`: enforce NEB Class 11 has all four subjects: English, Physics, Chemistry, Mathematics.
 
 ## Recommended source prep
 
@@ -55,4 +63,3 @@ The input file must be a JSON array.
 2. Clean headers, page numbers, and repeated footer text.
 3. Preserve academic structure in the text where possible.
 4. Split large sources into meaningful units by subject or chapter.
-

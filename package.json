@@ -9,6 +9,8 @@
     "verify": "npm run lint && npm test && npm run build",
     "prepare:class11:english:units": "node scripts/prepare-class11-english-by-unit.mjs",
     "ingest:syllabus": "node scripts/ingest-syllabus.mjs",
+    "validate:class11:core:manifest": "node scripts/ingest-syllabus.mjs data/syllabus/prepared/documents.class11.core.manifest.json --validate-only --strict-class11-core",
+    "ingest:class11:core": "node scripts/ingest-syllabus.mjs data/syllabus/prepared/documents.class11.core.manifest.json --replace-scope --strict-class11-core",
     "test:rag:class11:english": "node scripts/test-rag-class11-english.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test"

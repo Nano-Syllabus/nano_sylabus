@@ -116,7 +116,7 @@ Against the current product goal, we are roughly here:
 
 ### Product surface still deferred
 
-- subject explorer
+- subject explorer advanced filters and sorting
 - advanced citation inspection UI
 - deeper study analytics
 - moderation and answer quality review loops

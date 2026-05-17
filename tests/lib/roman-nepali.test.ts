@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   containsDevanagari,
   countWords,
+  needsEnglishRewrite,
   needsRomanNepaliRewrite,
 } from "@/lib/roman-nepali";
 
@@ -17,8 +18,14 @@ describe("Roman Nepali guards", () => {
     expect(needsRomanNepaliRewrite("यो is allowed in English mode.", "EN")).toBe(false);
   });
 
+  it("flags non-English answers when English output is required", () => {
+    expect(needsEnglishRewrite("This is already in English.", "EN")).toBe(false);
+    expect(needsEnglishRewrite("yo answer thik cha tara roman nepali ma cha", "EN")).toBe(true);
+    expect(needsEnglishRewrite("यो answer nepali ma cha", "EN")).toBe(true);
+    expect(needsEnglishRewrite("yo answer thik cha", "RN")).toBe(false);
+  });
+
   it("counts words for length guardrails", () => {
     expect(countWords("formula use gara")).toBe(3);
   });
 });
-

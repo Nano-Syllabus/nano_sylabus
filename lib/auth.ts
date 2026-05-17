@@ -2,18 +2,28 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { isProfileComplete } from "@/lib/access";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
+import {
+  normalizeBoard,
+  normalizeBoardScore,
+  normalizeCollege,
+  normalizeFullName,
+  normalizeGrade,
+  normalizeSubjects,
+  normalizeTargetGrade,
+} from "@/lib/profile-normalization";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { AppUser, StudentProfile } from "@/lib/types";
 
 function normalizeProfile(row: any): StudentProfile {
   return {
     userId: row.user_id,
-    fullName: row.full_name ?? "",
-    college: row.college ?? "",
-    grade: row.grade ?? "",
-    boardScore: row.board_score ?? null,
-    subjects: row.subjects ?? [],
-    targetGrade: row.target_grade ?? "",
+    fullName: normalizeFullName(row.full_name ?? ""),
+    college: normalizeCollege(row.college ?? ""),
+    board: normalizeBoard(row.board ?? ""),
+    grade: normalizeGrade(row.grade ?? ""),
+    boardScore: row.board_score ? normalizeBoardScore(row.board_score) : null,
+    subjects: normalizeSubjects(row.subjects ?? []),
+    targetGrade: normalizeTargetGrade(row.target_grade ?? ""),
     languagePref: row.language_pref ?? "EN",
     role: row.role ?? "student",
     createdAt: row.created_at,

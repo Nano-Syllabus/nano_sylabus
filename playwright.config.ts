@@ -12,7 +12,7 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   webServer: {
-    command: "npm run dev",
+    command: "env E2E_FAKE_AI=1 npm run dev",
     url: process.env.E2E_BASE_URL || "http://127.0.0.1:3000",
     reuseExistingServer: true,
     timeout: 120000,
@@ -24,4 +24,3 @@ export default defineConfig({
     },
   ],
 });
-

@@ -14,6 +14,7 @@ create table if not exists public.student_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   full_name text,
   college text not null default '',
+  board text not null default '',
   grade text not null default '',
   board_score text,
   subjects text[] not null default '{}',
