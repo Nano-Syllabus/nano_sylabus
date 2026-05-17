@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { CitationCard } from "@/components/citation-card";
 import { Markdown } from "@/components/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
-import type { AssistantCitation, NoteColor, RevisionNoteDetail } from "@/lib/types";
+import { normalizeSubjectLabel } from "@/lib/profile-normalization";
+import type { NoteColor, RevisionNoteDetail } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
 const COLOR_DOT: Record<NoteColor, string> = {
@@ -58,15 +60,13 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
         </div>
 
         {current.citations.length ? (
-          <div className="mt-6 flex flex-wrap gap-2">
-            {current.citations.map((citation: AssistantCitation) => (
-              <span
-                key={`${citation.chunkId}-${citation.documentId}`}
-                className="inline-flex rounded-full border border-border px-3 py-1 text-[11px] text-text-secondary"
-              >
-                {citation.sourceLabel || citation.sourceTitle}
-              </span>
-            ))}
+          <div className="mt-6">
+            <p className="mb-2 text-[10px] font-mono-ui uppercase text-text-muted">Saved from source</p>
+            <div className="flex flex-wrap gap-2">
+              {current.citations.map((citation) => (
+                <CitationCard key={`${citation.chunkId}-${citation.documentId}`} citation={citation} />
+              ))}
+            </div>
           </div>
         ) : null}
 
@@ -105,7 +105,7 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
             </Button>
           </Link>
           <Link
-            href={`/app/chat?subject=${encodeURIComponent(current.subjectTag)}&prompt=${encodeURIComponent(followUpPrompt)}`}
+            href={`/app/chat?subject=${encodeURIComponent(normalizeSubjectLabel(current.subjectTag))}&prompt=${encodeURIComponent(followUpPrompt)}`}
           >
             <Button size="sm">Ask follow-up →</Button>
           </Link>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getRevisionNoteDetail } from "@/lib/data/notes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const updateSchema = z.object({
@@ -9,6 +10,35 @@ const updateSchema = z.object({
   annotation: z.string().max(500).optional().nullable(),
   colorLabel: z.enum(["red", "yellow", "green"]),
 });
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ noteId: string }> },
+) {
+  try {
+    const { noteId } = await params;
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const note = await getRevisionNoteDetail(noteId, user.id);
+    if (!note) {
+      return NextResponse.json({ error: "Note not found." }, { status: 404 });
+    }
+
+    return NextResponse.json(note);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to load note." },
+      { status: 500 },
+    );
+  }
+}
 
 export async function PATCH(
   request: Request,

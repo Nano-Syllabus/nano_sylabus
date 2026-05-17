@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
+import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type { SubjectExplorerSessionSummary } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
@@ -33,7 +34,7 @@ export function SubjectDetailClient({
             Browse your previous sessions in this subject or start a focused new chat.
           </p>
         </div>
-        <Link href={`/app/chat?subject=${encodeURIComponent(subject)}`}>
+        <Link href={`/app/chat?subject=${encodeURIComponent(normalizeSubjectLabel(subject))}`}>
           <Button>Start new chat</Button>
         </Link>
       </div>

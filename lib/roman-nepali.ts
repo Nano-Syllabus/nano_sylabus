@@ -16,3 +16,29 @@ export function needsRomanNepaliRewrite(text: string, language: Language) {
   return countWords(text) > 180;
 }
 
+const COMMON_ROMAN_NEPALI_WORDS = [
+  "cha",
+  "chha",
+  "ho",
+  "haina",
+  "bhane",
+  "tapai",
+  "timi",
+  "hajur",
+  "yo",
+  "ra",
+  "sikau",
+  "bujhau",
+];
+
+export function needsEnglishRewrite(text: string, language: Language) {
+  if (language !== "EN") return false;
+  if (containsDevanagari(text)) return true;
+
+  const normalized = text.toLowerCase();
+  const romanNepaliHits = COMMON_ROMAN_NEPALI_WORDS.filter((word) =>
+    new RegExp(`\\b${word}\\b`, "i").test(normalized),
+  ).length;
+
+  return romanNepaliHits >= 2;
+}

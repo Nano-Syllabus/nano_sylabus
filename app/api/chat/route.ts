@@ -9,12 +9,20 @@ import {
   type RetrievalResult,
 } from "@/lib/ai/retrieval";
 import {
+  buildE2EFollowUpSuggestions,
+  buildE2EGroundedAnswer,
+  isE2EFakeAIEnabled,
+  toDataStreamPayload,
+} from "@/lib/ai/e2e-harness";
+import {
   parseFollowUpSuggestions,
 } from "@/lib/chat-followups";
+import { inferSessionSubjectContext } from "@/lib/chat-subject-context";
 import { deriveSubjectTags } from "@/lib/chat-subjects";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
 import { getGeminiEnv } from "@/lib/env";
-import { containsDevanagari, needsRomanNepaliRewrite } from "@/lib/roman-nepali";
+import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
+import { containsDevanagari, needsEnglishRewrite, needsRomanNepaliRewrite } from "@/lib/roman-nepali";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { deriveSessionTitle } from "@/lib/utils";
 
@@ -68,6 +76,7 @@ function selectAutoAnswerMode(question: string): {
 function buildSystemPrompt({
   fullName,
   college,
+  board,
   grade,
   boardScore,
   subjects,
@@ -78,6 +87,7 @@ function buildSystemPrompt({
 }: {
   fullName: string;
   college: string;
+  board: string;
   grade: string;
   boardScore: string | null;
   subjects: string[];
@@ -102,6 +112,7 @@ You are Nano Syllabus, an AI study companion for Nepali students.
 Student context:
 - Name: ${fullName || "Student"}
 - Institution: ${college || "Unknown"}
+- Board: ${board || "Unknown"}
 - Grade / Year: ${grade || "Unknown"}
 - Previous score: ${boardScore || "Unknown"}
 - Subjects: ${subjects.join(", ") || "Unknown"}
@@ -116,7 +127,7 @@ Guidelines:
 - ${languageInstruction}
 - Do not greet, do not introduce yourself, and do not add filler like "Hello" or "Namaste" unless the student asks.
 - If syllabus grounding is provided, prioritize it and do not invent citations.
-- If the student asks in Roman Nepali, understand the Roman Nepali intent and answer naturally.
+- If the student asks in Roman Nepali, understand the intent, but always keep the output in the selected response language.
 - Avoid long textbook-style paragraphs unless the student explicitly asks for detail.
 
 Grounding context:
@@ -198,9 +209,22 @@ async function enforceAnswerLanguageContract({
   rewriteMaxOutputTokens: number;
   rewriteThinkingBudget: number;
 }) {
-  if (!needsRomanNepaliRewrite(answer, language)) {
+  if (!needsRomanNepaliRewrite(answer, language) && !needsEnglishRewrite(answer, language)) {
     return answer;
   }
+
+  const rewriteRules =
+    language === "RN"
+      ? [
+          "- Output Roman Nepali only: Nepali language written with Latin letters.",
+          "- Never use Devanagari characters.",
+          "- Keep it short and student-friendly.",
+        ]
+      : [
+          "- Output English only.",
+          "- Do not use Roman Nepali or Devanagari Nepali.",
+          "- Keep it short and student-friendly.",
+        ];
 
   const { text } = await generateText({
     model: gemini(model),
@@ -217,9 +241,7 @@ async function enforceAnswerLanguageContract({
 Rewrite this assistant answer for Nano Syllabus.
 
 Hard requirements:
-- Output Roman Nepali only: Nepali language written with Latin letters.
-- Never use Devanagari characters.
-- Keep it short and student-friendly.
+${rewriteRules.join("\n")}
 - Preserve formulas, numbers, and the meaning of the original answer.
 - Do not add new facts.
 - Return only the rewritten answer.
@@ -241,6 +263,94 @@ ${answer}
   }
 
   return rewritten;
+}
+
+function buildNoGroundingMessage({
+  language,
+  subjectContext,
+}: {
+  language: "EN" | "RN";
+  subjectContext: string | null;
+}) {
+  if (language === "RN") {
+    const subjectHint = subjectContext
+      ? ` "${subjectContext}" ko specific unit/chapter ko question sodhnuhos.`
+      : " specific subject ra chapter mention garnuhos.";
+    return `Yo question ko lagi syllabus source context bhetena, so ma guess garera answer didina.${subjectHint}`;
+  }
+
+  const subjectHint = subjectContext
+    ? ` Try asking a specific unit/chapter within "${subjectContext}".`
+    : " Try adding a specific subject and chapter.";
+  return `I could not find grounded syllabus context for this question, so I will not guess an answer.${subjectHint}`;
+}
+
+async function persistAssistantCompletion({
+  supabase,
+  sessionId,
+  userId,
+  answer,
+  language,
+  retrieval,
+  subjectTags,
+  subjectContext,
+  followUpSuggestions,
+}: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  sessionId: string;
+  userId: string;
+  answer: string;
+  language: "EN" | "RN";
+  retrieval: RetrievalResult;
+  subjectTags: string[];
+  subjectContext: string | null;
+  followUpSuggestions: string[];
+}) {
+  const { data: assistantMessage, error: assistantError } = await supabase
+    .from("chat_messages")
+    .insert({
+      session_id: sessionId,
+      role: "assistant",
+      content: answer,
+      language,
+      grounded: retrieval.grounded,
+      citations: retrieval.citations,
+      follow_up_suggestions: followUpSuggestions,
+    })
+    .select("id")
+    .single();
+
+  if (assistantError || !assistantMessage) {
+    return null;
+  }
+
+  await supabase
+    .from("chat_sessions")
+    .update({
+      updated_at: new Date().toISOString(),
+      subject_tags: subjectTags,
+      subject_context: subjectContext,
+    })
+    .eq("id", sessionId);
+
+  const latestBalance = await getCreditBalanceForUser(userId);
+  const nextBalance = computeNextBalance(latestBalance, -CHAT_MESSAGE_CREDIT_COST);
+
+  const { error: chargeError } = await supabase.from("credits_ledger").insert({
+    user_id: userId,
+    type: "usage",
+    amount: -CHAT_MESSAGE_CREDIT_COST,
+    balance_after: Math.max(nextBalance, 0),
+    reference_type: "chat_message",
+    reference_id: assistantMessage.id,
+    description: "Credit used for successful assistant response",
+  });
+
+  if (chargeError && chargeError.code !== "23505") {
+    console.error("Failed to record credit usage", chargeError);
+  }
+
+  return assistantMessage.id;
 }
 
 export async function POST(request: Request) {
@@ -282,12 +392,13 @@ export async function POST(request: Request) {
 
     const profile = {
       userId: profileRow.user_id,
-      fullName: profileRow.full_name ?? "",
-      college: profileRow.college ?? "",
-      grade: profileRow.grade ?? "",
-      boardScore: profileRow.board_score ?? null,
-      subjects: profileRow.subjects ?? [],
-      targetGrade: profileRow.target_grade ?? "",
+      fullName: normalizeFullName(profileRow.full_name ?? ""),
+      college: normalizeCollege(profileRow.college ?? ""),
+      board: normalizeBoard(profileRow.board ?? ""),
+      grade: normalizeGrade(profileRow.grade ?? ""),
+      boardScore: profileRow.board_score ? normalizeBoardScore(profileRow.board_score) : null,
+      subjects: normalizeSubjects(profileRow.subjects ?? []),
+      targetGrade: normalizeTargetGrade(profileRow.target_grade ?? ""),
       languagePref: profileRow.language_pref ?? "EN",
       role: profileRow.role ?? "student",
       createdAt: profileRow.created_at,
@@ -296,7 +407,9 @@ export async function POST(request: Request) {
 
     let sessionId = parsed.sessionId ?? null;
     let sessionSubjectTags: string[] = [];
-    let sessionSubjectContext: string | null = parsed.subjectContext?.trim() || null;
+    let sessionSubjectContext: string | null = parsed.subjectContext
+      ? normalizeSubjectLabel(parsed.subjectContext)
+      : null;
 
     if (sessionId) {
       const { data: sessionRow } = await supabase
@@ -310,8 +423,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Chat session not found." }, { status: 404 });
       }
 
-      sessionSubjectTags = Array.isArray(sessionRow.subject_tags) ? sessionRow.subject_tags : [];
-      sessionSubjectContext = sessionRow.subject_context ?? sessionSubjectContext;
+      sessionSubjectTags = normalizeSubjects(Array.isArray(sessionRow.subject_tags) ? sessionRow.subject_tags : []);
+      sessionSubjectContext = sessionRow.subject_context
+        ? normalizeSubjectLabel(sessionRow.subject_context)
+        : sessionSubjectContext;
     } else {
       const { data: insertedSession, error: sessionError } = await supabase
         .from("chat_sessions")
@@ -351,22 +466,35 @@ export async function POST(request: Request) {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", finalSessionId);
 
-    let retrieval: RetrievalResult = {
-      chunks: [],
-      citations: [],
-      grounded: false,
-    };
+    let retrieval: RetrievalResult;
 
     try {
       retrieval = await retrieveKnowledgeChunks(latestUserMessage.content, profile, {
         subjectContext: sessionSubjectContext,
       });
-    } catch {
-      retrieval = {
-        chunks: [],
-        citations: [],
-        grounded: false,
-      };
+    } catch (retrievalError) {
+      console.error("RAG retrieval failed", retrievalError);
+      return NextResponse.json(
+        {
+          error:
+            "We could not load syllabus context for this question right now. Please try again in a moment.",
+          code: "RAG_RETRIEVAL_FAILED",
+        },
+        { status: 503 },
+      );
+    }
+
+    if (!retrieval.grounded || retrieval.chunks.length === 0) {
+      return NextResponse.json(
+        {
+          error: buildNoGroundingMessage({
+            language: resolvedLanguage,
+            subjectContext: sessionSubjectContext,
+          }),
+          code: "RAG_NO_GROUNDED_CONTEXT",
+        },
+        { status: 422 },
+      );
     }
 
     const resolvedSubjectTags = deriveSubjectTags({
@@ -376,6 +504,56 @@ export async function POST(request: Request) {
       question: latestUserMessage.content,
       profileSubjects: profile.subjects,
     });
+
+    sessionSubjectContext = inferSessionSubjectContext({
+      existingSubjectContext: sessionSubjectContext,
+      resolvedSubjectTags,
+      citations: retrieval.citations,
+    });
+
+    const autoModeSelection = selectAutoAnswerMode(latestUserMessage.content);
+
+    if (isE2EFakeAIEnabled()) {
+      const answer = buildE2EGroundedAnswer({
+        question: latestUserMessage.content,
+        retrieval,
+        language: resolvedLanguage,
+      });
+      const followUpSuggestions = buildE2EFollowUpSuggestions({
+        question: latestUserMessage.content,
+        language: resolvedLanguage,
+      });
+
+      const assistantMessageId = await persistAssistantCompletion({
+        supabase,
+        sessionId: finalSessionId,
+        userId: user.id,
+        answer,
+        language: resolvedLanguage,
+        retrieval,
+        subjectTags: resolvedSubjectTags,
+        subjectContext: sessionSubjectContext,
+        followUpSuggestions,
+      });
+
+      if (!assistantMessageId) {
+        return NextResponse.json({ error: "Failed to save the assistant message." }, { status: 500 });
+      }
+
+      return new Response(toDataStreamPayload(answer), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "x-session-id": finalSessionId,
+          "x-rag-grounded": retrieval.grounded ? "1" : "0",
+          "x-rag-chunks": String(retrieval.chunks.length),
+          "x-subject-context": sessionSubjectContext ?? "",
+          "x-thinking-enabled": "1",
+          "x-answer-mode": autoModeSelection.mode,
+          "x-answer-mode-reason": autoModeSelection.reason,
+        },
+      });
+    }
 
     const {
       apiKey,
@@ -387,8 +565,6 @@ export async function POST(request: Request) {
       followupMaxOutputTokens,
       followupThinkingBudget,
     } = getGeminiEnv();
-
-    const autoModeSelection = selectAutoAnswerMode(latestUserMessage.content);
     const quickModel = process.env.GEMINI_QUICK_MODEL || defaultModel;
     const deepModel = process.env.GEMINI_DEEP_MODEL || defaultModel;
     const quickMaxOutputTokens = Number(
@@ -449,6 +625,7 @@ export async function POST(request: Request) {
       system: buildSystemPrompt({
         fullName: profile.fullName,
         college: profile.college,
+        board: profile.board,
         grade: profile.grade,
         boardScore: profile.boardScore,
         subjects: profile.subjects,
@@ -474,34 +651,9 @@ export async function POST(request: Request) {
           console.error("Failed to enforce response language contract", languageGuardError);
         }
 
-        const { data: assistantMessage, error: assistantError } = await supabase
-          .from("chat_messages")
-          .insert({
-            session_id: finalSessionId,
-            role: "assistant",
-            content: persistedAnswer,
-            language: resolvedLanguage,
-            grounded: retrieval.grounded,
-            citations: retrieval.citations,
-          })
-          .select("id")
-          .single();
-
-        if (assistantError || !assistantMessage) {
-          return;
-        }
-
-        await supabase
-          .from("chat_sessions")
-          .update({
-            updated_at: new Date().toISOString(),
-            subject_tags: resolvedSubjectTags,
-            subject_context: sessionSubjectContext,
-          })
-          .eq("id", finalSessionId);
-
+        let followUpSuggestions: string[] = [];
         try {
-          const followUpSuggestions = await suggestFollowUps({
+          followUpSuggestions = await suggestFollowUps({
             gemini,
             model,
             question: latestUserMessage.content,
@@ -511,35 +663,24 @@ export async function POST(request: Request) {
             followupMaxOutputTokens,
             followupThinkingBudget,
           });
-
-          if (followUpSuggestions.length) {
-            await supabase
-              .from("chat_messages")
-              .update({
-                follow_up_suggestions: followUpSuggestions,
-              })
-              .eq("id", assistantMessage.id)
-              .eq("session_id", finalSessionId);
-          }
         } catch (followUpError) {
           console.error("Failed to generate follow-up suggestions", followUpError);
         }
 
-        const latestBalance = await getCreditBalanceForUser(user.id);
-        const nextBalance = computeNextBalance(latestBalance, -CHAT_MESSAGE_CREDIT_COST);
-
-        const { error: chargeError } = await supabase.from("credits_ledger").insert({
-          user_id: user.id,
-          type: "usage",
-          amount: -CHAT_MESSAGE_CREDIT_COST,
-          balance_after: Math.max(nextBalance, 0),
-          reference_type: "chat_message",
-          reference_id: assistantMessage.id,
-          description: "Credit used for successful assistant response",
+        const assistantMessageId = await persistAssistantCompletion({
+          supabase,
+          sessionId: finalSessionId,
+          userId: user.id,
+          answer: persistedAnswer,
+          language: resolvedLanguage,
+          retrieval,
+          subjectTags: resolvedSubjectTags,
+          subjectContext: sessionSubjectContext,
+          followUpSuggestions,
         });
 
-        if (chargeError && chargeError.code !== "23505") {
-          console.error("Failed to record credit usage", chargeError);
+        if (!assistantMessageId) {
+          return;
         }
       },
     });

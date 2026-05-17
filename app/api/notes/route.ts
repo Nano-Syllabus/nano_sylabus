@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getNoteAccessPolicy } from "@/lib/data/note-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const noteSchema = z.object({
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
     }
 
     const payload = noteSchema.parse(await request.json());
+    const access = await getNoteAccessPolicy(user.id);
 
     const { data: session } = await supabase
       .from("chat_sessions")
@@ -45,6 +47,34 @@ export async function POST(request: Request) {
 
     if (!message || message.role !== "assistant") {
       return NextResponse.json({ error: "Assistant message not found." }, { status: 404 });
+    }
+
+    const { data: existingNote } = await supabase
+      .from("revision_notes")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("message_id", payload.messageId)
+      .maybeSingle();
+
+    if (!existingNote && Number.isFinite(access.maxNotes)) {
+      const { count, error: countError } = await supabase
+        .from("revision_notes")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+
+      if (countError) {
+        return NextResponse.json({ error: countError.message }, { status: 500 });
+      }
+
+      if ((count ?? 0) >= access.maxNotes) {
+        return NextResponse.json(
+          {
+            error: `You have reached your note limit (${access.maxNotes}) for the ${access.tier} plan.`,
+            code: "NOTE_LIMIT_REACHED",
+          },
+          { status: 403 },
+        );
+      }
     }
 
     const { data, error } = await supabase

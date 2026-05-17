@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { ChatPageClient } from "@/components/chat-page-client";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getChatSessionDetail, listChatSessions } from "@/lib/data/chat";
+import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 
 export default async function ChatPage({
   searchParams,
@@ -27,7 +28,7 @@ export default async function ChatPage({
         initialSessions={sessionResult.sessions}
         initialHasMore={sessionResult.hasMore}
         initialSession={activeSession}
-        initialSubjectContext={params.subject ? decodeURIComponent(params.subject) : null}
+        initialSubjectContext={params.subject ? normalizeSubjectLabel(decodeURIComponent(params.subject)) : null}
         initialPrompt={params.prompt ? decodeURIComponent(params.prompt) : null}
       />
     </AppShell>

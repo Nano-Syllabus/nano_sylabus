@@ -11,14 +11,15 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useChat, type Message } from "ai/react";
+import { CitationCard } from "@/components/citation-card";
 import { Markdown } from "@/components/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { getCreditWarning } from "@/lib/billing";
+import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type {
   AppUser,
-  AssistantCitation,
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionSummary,
@@ -65,7 +66,8 @@ export function ChatPageClient({
   const [creditBalance, setCreditBalance] = useState(user.creditBalance);
   const [sessionDetail, setSessionDetail] = useState<ChatSessionDetail | null>(initialSession);
   const [subjectContext, setSubjectContext] = useState<string | null>(
-    initialSession?.subjectContext ?? initialSubjectContext,
+    initialSession?.subjectContext ??
+      (initialSubjectContext ? normalizeSubjectLabel(initialSubjectContext) : null),
   );
   const [saveState, setSaveState] = useState<{
     message: ChatMessageRecord;
@@ -278,7 +280,23 @@ export function ChatPageClient({
     },
     onError(error) {
       setThinkingStatus(null);
-      setChatError(error.message || "Something went wrong while generating a response.");
+      const rawMessage = error.message || "";
+      if (rawMessage.includes("RAG_NO_GROUNDED_CONTEXT")) {
+        setChatError(
+          "This question is outside the currently indexed textbook context. Please ask by unit/chapter, or switch to the correct subject.",
+        );
+        return;
+      }
+      if (
+        rawMessage.includes("RAG_RETRIEVAL_FAILED") ||
+        rawMessage.toLowerCase().includes("syllabus context")
+      ) {
+        setChatError(
+          "Syllabus context could not be loaded right now, so we paused this answer to avoid ungrounded output. Please retry.",
+        );
+        return;
+      }
+      setChatError(rawMessage || "Something went wrong while generating a response.");
     },
   });
 
@@ -429,8 +447,10 @@ export function ChatPageClient({
   }
 
   async function updateSessionSubjectContext(nextSubjectContext: string | null) {
+    const normalizedSubjectContext = nextSubjectContext ? normalizeSubjectLabel(nextSubjectContext) : null;
+    const previousSubjectContext = subjectContext;
     setChatError("");
-    setSubjectContext(nextSubjectContext);
+    setSubjectContext(normalizedSubjectContext);
 
     if (!activeSessionSummary) return;
 
@@ -439,10 +459,11 @@ export function ChatPageClient({
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ subjectContext: nextSubjectContext }),
+      body: JSON.stringify({ subjectContext: normalizedSubjectContext }),
     });
 
     if (!response.ok) {
+      setSubjectContext(previousSubjectContext);
       const payload = (await response.json()) as { error?: string };
       setChatError(payload.error || "Failed to update session subject.");
       return;
@@ -702,10 +723,18 @@ export function ChatPageClient({
                     )}
 
                     {persistedAssistant?.citations?.length ? (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {persistedAssistant.citations.map((citation) => (
-                          <CitationTag key={`${persistedAssistant.id}-${citation.chunkId}`} citation={citation} />
-                        ))}
+                      <div className="mt-4">
+                        <p className="mb-2 text-[10px] font-mono-ui uppercase text-text-muted">
+                          Textbook source
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {persistedAssistant.citations.map((citation) => (
+                            <CitationCard
+                              key={`${persistedAssistant.id}-${citation.chunkId}`}
+                              citation={citation}
+                            />
+                          ))}
+                        </div>
                       </div>
                     ) : null}
 
@@ -902,14 +931,6 @@ export function ChatPageClient({
   );
 }
 
-function CitationTag({ citation }: { citation: AssistantCitation }) {
-  return (
-    <span className="inline-flex rounded-full border border-border px-3 py-1 text-[11px] text-text-secondary">
-      {citation.sourceLabel || citation.sourceTitle}
-    </span>
-  );
-}
-
 function SaveNoteModal({
   initialMessage,
   initialQuestion,
@@ -932,8 +953,60 @@ function SaveNoteModal({
   const [colorLabel, setColorLabel] = useState<NoteColor>("yellow");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [hydratingExistingNote, setHydratingExistingNote] = useState(Boolean(initialMessage.savedNoteId));
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadExistingNote() {
+      if (!initialMessage.savedNoteId) {
+        setHydratingExistingNote(false);
+        return;
+      }
+
+      setHydratingExistingNote(true);
+      setError("");
+
+      const response = await fetch(`/api/notes/${initialMessage.savedNoteId}`, {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        if (!ignore) {
+          setError(payload.error || "Failed to load note details.");
+          setHydratingExistingNote(false);
+        }
+        return;
+      }
+
+      const note = (await response.json()) as {
+        title: string;
+        subjectTag: string;
+        chapterTag: string | null;
+        annotation: string | null;
+        colorLabel: NoteColor;
+      };
+
+      if (ignore) return;
+
+      setTitle(note.title);
+      setSubjectTag(note.subjectTag);
+      setChapterTag(note.chapterTag ?? "");
+      setAnnotation(note.annotation ?? "");
+      setColorLabel(note.colorLabel);
+      setHydratingExistingNote(false);
+    }
+
+    void loadExistingNote();
+
+    return () => {
+      ignore = true;
+    };
+  }, [initialMessage.savedNoteId]);
 
   async function handleSave() {
+    if (hydratingExistingNote) return;
     setLoading(true);
     setError("");
 
@@ -965,24 +1038,41 @@ function SaveNoteModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+      data-testid="save-note-modal-overlay"
+    >
       <div
         onClick={(event) => event.stopPropagation()}
         className="w-full max-w-lg rounded-xl border border-border bg-bg-primary p-6 animate-slide-up"
+        data-testid="save-note-modal"
       >
-        <h3 className="font-display text-2xl">Save as note</h3>
+        <h3 className="font-display text-2xl">{initialMessage.savedNoteId ? "Edit note" : "Save as note"}</h3>
         <div className="mt-5 space-y-4">
+          {hydratingExistingNote ? (
+            <p className="text-sm text-text-secondary">Loading your saved note details...</p>
+          ) : null}
           <Field label="Title">
             <Input value={title} onChange={(event) => setTitle(event.target.value)} />
           </Field>
           <Field label="Subject">
-            <Input value={subjectTag} onChange={(event) => setSubjectTag(event.target.value)} />
+            <Input
+              data-testid="save-note-subject"
+              value={subjectTag}
+              onChange={(event) => setSubjectTag(event.target.value)}
+            />
           </Field>
           <Field label="Chapter / topic">
             <Input value={chapterTag} onChange={(event) => setChapterTag(event.target.value)} />
           </Field>
           <Field label="Annotation">
-            <Textarea value={annotation} onChange={(event) => setAnnotation(event.target.value)} rows={3} />
+            <Textarea
+              data-testid="save-note-annotation"
+              value={annotation}
+              onChange={(event) => setAnnotation(event.target.value)}
+              rows={3}
+            />
           </Field>
           <div>
             <p className="mb-2 text-[10px] font-mono-ui uppercase text-text-muted">Color label</p>
@@ -1008,8 +1098,8 @@ function SaveNoteModal({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={loading}>
-            {loading ? "Saving..." : "Save note"}
+          <Button onClick={handleSave} disabled={loading || hydratingExistingNote}>
+            {loading ? "Saving..." : initialMessage.savedNoteId ? "Update note" : "Save note"}
           </Button>
         </div>
       </div>

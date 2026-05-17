@@ -21,6 +21,18 @@ Then run ingestion:
 npm run ingest:syllabus -- data/syllabus/prepared/documents.json
 ```
 
+Class 11 core (English + Physics + Chemistry + Mathematics):
+
+1. Put extracted plain-text files in `data/syllabus/prepared/`:
+   - `neb-grade-11-compulsory-english-book.txt`
+   - `neb-grade-11-physics-book.txt`
+   - `neb-grade-11-chemistry-book.txt`
+   - `neb-grade-11-mathematics-book.txt`
+2. Validate the full manifest:
+   - `npm run validate:class11:core:manifest`
+3. Ingest with scope replacement:
+   - `npm run ingest:class11:core`
+
 Rules:
 
 - Use only real official syllabus or textbook material.

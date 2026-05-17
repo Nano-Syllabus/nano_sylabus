@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { normalizeBoard, normalizeGrade, normalizeSubjects } from "@/lib/profile-normalization";
 import type { AssistantCitation, StudentProfile } from "@/lib/types";
 import { embedText } from "@/lib/ai/embeddings";
 
@@ -59,24 +60,42 @@ function cosineSimilarity(left: number[], right: number[]) {
   return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
 }
 
+function buildCitationExcerpt(content: string, limit = 220) {
+  const normalized = content.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= limit) return normalized;
+
+  const clipped = normalized.slice(0, limit);
+  const lastSpace = clipped.lastIndexOf(" ");
+  return `${(lastSpace > 120 ? clipped.slice(0, lastSpace) : clipped).trim()}...`;
+}
+
 async function fetchCandidateChunks(profile: StudentProfile, subjectContext?: string | null) {
   const supabase = await createSupabaseServerClient();
-  const subjects = profile.subjects.filter(Boolean).slice(0, 8);
-  const subjectFilter = subjectContext?.trim();
+  const boardFilter = normalizeBoard(profile.board);
+  const gradeFilter = normalizeGrade(profile.grade);
+  const subjectFilter = normalizeSubjects(subjectContext ? [subjectContext] : [])[0] ?? "";
+  const profileSubjects = normalizeSubjects(profile.subjects).slice(0, 8);
+
+  // Strict retrieval contract: board + grade + subject must all be present.
+  if (!boardFilter || !gradeFilter) {
+    return [];
+  }
+
+  const strictSubjects = subjectFilter ? [subjectFilter] : profileSubjects;
+  if (strictSubjects.length === 0) {
+    return [];
+  }
 
   let query = supabase
     .from("knowledge_chunks")
     .select(
       "id, document_id, board, grade, subject, chapter, topic, content, embedding, knowledge_documents(id, title, source_name, source_type)",
     )
-    .eq("grade", profile.grade)
+    .eq("board", boardFilter)
+    .eq("grade", gradeFilter)
+    .in("subject", strictSubjects)
     .limit(150);
-
-  if (subjectFilter) {
-    query = query.eq("subject", subjectFilter);
-  } else if (subjects.length > 0) {
-    query = query.in("subject", subjects);
-  }
 
   const { data, error } = await query;
   if (error) throw error;
@@ -129,9 +148,11 @@ export async function retrieveKnowledgeChunks(
     documentId: chunk.documentId,
     sourceLabel: [chunk.subject, chunk.chapter || chunk.topic || null].filter(Boolean).join(" · "),
     sourceTitle: chunk.sourceTitle,
+    sourceName: chunk.sourceName,
     subject: chunk.subject,
     chapter: chunk.chapter,
     topic: chunk.topic,
+    excerpt: buildCitationExcerpt(chunk.content),
   }));
 
   return {

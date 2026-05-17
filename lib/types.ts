@@ -25,9 +25,11 @@ export interface AssistantCitation {
   documentId: string;
   sourceLabel: string;
   sourceTitle: string;
+  sourceName: string;
   subject: string;
   chapter: string | null;
   topic: string | null;
+  excerpt?: string;
 }
 
 export interface KnowledgeDocument {
@@ -55,10 +57,18 @@ export interface KnowledgeChunk {
   createdAt: string;
 }
 
+export interface KnowledgeChunkDetail extends KnowledgeChunk {
+  sourceTitle: string;
+  sourceName: string;
+  sourceType: string;
+  uploadedAt: string;
+}
+
 export interface StudentProfile {
   userId: string;
   fullName: string;
   college: string;
+  board: string;
   grade: string;
   boardScore: string | null;
   subjects: string[];
@@ -108,6 +118,9 @@ export interface ChatSessionDetail extends ChatSessionSummary {
 
 export interface SubjectExplorerSummary {
   subject: string;
+  board: string;
+  grade: string;
+  category: "Science" | "Humanities" | "Management" | "Technical" | "General";
   inProfile: boolean;
   sessionCount: number;
   questionCount: number;

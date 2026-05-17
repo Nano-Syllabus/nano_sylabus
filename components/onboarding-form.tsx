@@ -4,6 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
+import {
+  normalizeBoard,
+  normalizeBoardScore,
+  normalizeCollege,
+  normalizeFullName,
+  normalizeGrade,
+  normalizeSubjects,
+  normalizeTargetGrade,
+  validateBoardScore,
+} from "@/lib/profile-normalization";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { StudentProfile } from "@/lib/types";
 
@@ -18,6 +28,7 @@ export function OnboardingForm({
   const [step, setStep] = useState(1);
   const [fullName, setFullName] = useState(initialProfile?.fullName ?? "");
   const [college, setCollege] = useState(initialProfile?.college ?? "");
+  const [board, setBoard] = useState(initialProfile?.board ?? "");
   const [grade, setGrade] = useState(initialProfile?.grade ?? "");
   const [scoreType, setScoreType] = useState<"%" | "GPA">("%");
   const [score, setScore] = useState(initialProfile?.boardScore?.replace(/[%A-Z]+$/g, "") ?? "");
@@ -29,14 +40,76 @@ export function OnboardingForm({
 
   const total = 5;
 
-  async function finish() {
-    const subjects = subjectsInput
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
+  function validateStep(nextStep = step) {
+    if (nextStep === 1) {
+      if (!normalizeFullName(fullName) || !normalizeCollege(college)) {
+        return "Please complete your full name and institution.";
+      }
+    }
 
-    if (!fullName.trim() || !college.trim() || !grade.trim() || !targetGrade.trim()) {
-      setError("Please complete your name, institution, grade or year, and target goal.");
+    if (nextStep === 2) {
+      if (!normalizeBoard(board) || !normalizeGrade(grade)) {
+        return "Please complete your board and grade or year.";
+      }
+    }
+
+    if (nextStep === 3) {
+      return validateBoardScore(score, scoreType);
+    }
+
+    if (nextStep === 4) {
+      if (normalizeSubjects(subjectsInput.split(",")).length === 0) {
+        return "Please add at least one subject.";
+      }
+    }
+
+    if (nextStep === 5) {
+      if (!normalizeTargetGrade(targetGrade)) {
+        return "Please set your target result.";
+      }
+    }
+
+    return null;
+  }
+
+  function goNext() {
+    const nextError = validateStep(step);
+    if (nextError) {
+      setError(nextError);
+      return;
+    }
+
+    setError("");
+    setStep((value) => Math.min(total, value + 1));
+  }
+
+  async function finish() {
+    const subjects = normalizeSubjects(subjectsInput.split(","));
+    const normalizedFullName = normalizeFullName(fullName);
+    const normalizedCollege = normalizeCollege(college);
+    const normalizedBoard = normalizeBoard(board);
+    const normalizedGrade = normalizeGrade(grade);
+    const normalizedTargetGrade = normalizeTargetGrade(targetGrade);
+    const scoreError = validateBoardScore(score, scoreType);
+
+    if (
+      !normalizedFullName ||
+      !normalizedCollege ||
+      !normalizedBoard ||
+      !normalizedGrade ||
+      !normalizedTargetGrade
+    ) {
+      setError("Please complete your name, institution, board, grade or year, and target goal.");
+      return;
+    }
+
+    if (subjects.length === 0) {
+      setError("Please add at least one subject.");
+      return;
+    }
+
+    if (scoreError) {
+      setError(scoreError);
       return;
     }
 
@@ -46,12 +119,13 @@ export function OnboardingForm({
     const supabase = createSupabaseBrowserClient();
     const { error: upsertError } = await supabase.from("student_profiles").upsert({
       user_id: userId,
-      full_name: fullName,
-      college: college.trim(),
-      grade,
-      board_score: score ? `${score}${scoreType}` : null,
+      full_name: normalizedFullName,
+      college: normalizedCollege,
+      board: normalizedBoard,
+      grade: normalizedGrade,
+      board_score: score ? `${normalizeBoardScore(score)}${scoreType}` : null,
       subjects,
-      target_grade: targetGrade,
+      target_grade: normalizedTargetGrade,
       language_pref: languagePref,
     });
 
@@ -95,7 +169,22 @@ export function OnboardingForm({
         ) : null}
 
         {step === 2 ? (
-          <Step title="Which grade or year?" subtitle="Use the exact level that matches the student.">
+          <Step title="Which board and grade?" subtitle="Set the board first, then your exact level.">
+            <Field label="Board">
+              <Input
+                value={board}
+                onChange={(event) => setBoard(event.target.value)}
+                placeholder="Eg. NEB, TU, PU, KU, CTEVT"
+                list="board-options"
+              />
+              <datalist id="board-options">
+                <option value="NEB" />
+                <option value="TU" />
+                <option value="PU" />
+                <option value="KU" />
+                <option value="CTEVT" />
+              </datalist>
+            </Field>
             <Field label="Grade or year">
               <Input
                 value={grade}
@@ -194,7 +283,7 @@ export function OnboardingForm({
             ← Back
           </Button>
           {step < total ? (
-            <Button type="button" onClick={() => setStep((value) => Math.min(total, value + 1))}>
+            <Button type="button" onClick={goNext}>
               Next →
             </Button>
           ) : (

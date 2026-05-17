@@ -2,12 +2,13 @@ import type { AppRole, StudentProfile } from "@/lib/types";
 
 export function isProfileComplete(profile: Pick<
   StudentProfile,
-  "fullName" | "college" | "grade" | "targetGrade" | "languagePref"
+  "fullName" | "college" | "board" | "grade" | "targetGrade" | "languagePref"
 > | null) {
   if (!profile) return false;
   return Boolean(
     profile.fullName.trim() &&
       profile.college.trim() &&
+      profile.board.trim() &&
       profile.grade.trim() &&
       profile.targetGrade.trim() &&
       profile.languagePref,
