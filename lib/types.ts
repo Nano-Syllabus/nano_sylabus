@@ -3,6 +3,17 @@ export type NoteColor = "red" | "yellow" | "green";
 export type RevisionAction = "remember" | "review" | "skip";
 export type AppRole = "student" | "admin";
 export type MessageFeedback = "up" | "down";
+export type AdminAnswerState = "flagged" | "reviewed" | "liked" | "neutral";
+export type KnowledgeDocumentType =
+  | "micro_syllabus"
+  | "question_bank"
+  | "textbook"
+  | "notes"
+  | "curriculum"
+  | "syllabus"
+  | "other";
+export type KnowledgeProcessingStatus = "draft" | "processing" | "ready" | "failed";
+export type PromptPurpose = "system" | "followup" | "rewrite";
 export type CreditLedgerType = "grant" | "usage" | "refund" | "adjustment";
 export type ReferenceType =
   | "starter_grant"
@@ -36,12 +47,24 @@ export interface KnowledgeDocument {
   id: string;
   board: string;
   grade: string;
+  faculty: string;
+  curriculum: string;
   subject: string;
   chapter: string | null;
   title: string;
   sourceName: string;
   sourceType: string;
+  storageBucket: string | null;
+  storagePath: string | null;
+  sourceMimeType: string | null;
+  sourceSizeBytes: number | null;
+  documentType: KnowledgeDocumentType;
+  rawContent: string;
+  chunkCount: number;
+  processingStatus: KnowledgeProcessingStatus;
+  processingError: string | null;
   uploadedAt: string;
+  updatedAt: string;
 }
 
 export interface KnowledgeChunk {
@@ -62,6 +85,26 @@ export interface KnowledgeChunkDetail extends KnowledgeChunk {
   sourceName: string;
   sourceType: string;
   uploadedAt: string;
+}
+
+export interface AdminKnowledgeDocumentSummary extends KnowledgeDocument {}
+
+export interface AdminKnowledgeDocumentDetail extends KnowledgeDocument {
+  chunks: KnowledgeChunk[];
+}
+
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  slug: string;
+  purpose: PromptPurpose;
+  language: Language;
+  description: string | null;
+  content: string;
+  isActive: boolean;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface StudentProfile {
@@ -260,4 +303,76 @@ export interface AdminPaymentSubmissionDetail extends AdminPaymentSubmissionSumm
   note: string | null;
   reviewedAt: string | null;
   reviewedBy: string | null;
+}
+
+export interface AdminUserSummary {
+  userId: string;
+  email: string;
+  fullName: string;
+  college: string;
+  board: string;
+  grade: string;
+  role: AppRole;
+  onboarded: boolean;
+  creditBalance: number;
+  activePlanName: string | null;
+  chatSessionCount: number;
+  noteCount: number;
+  createdAt: string;
+  lastSignInAt: string | null;
+}
+
+export interface AdminUserDetail extends AdminUserSummary {
+  boardScore: string | null;
+  subjects: string[];
+  targetGrade: string;
+  languagePref: Language;
+  recentLedger: CreditsLedgerEntry[];
+  recentSubscriptions: UserSubscription[];
+  recentInvoices: BillingInvoiceSummary[];
+  recentSessions: Array<{
+    id: string;
+    title: string;
+    updatedAt: string;
+  }>;
+}
+
+export interface AdminSubscriptionSummary extends UserSubscription {
+  studentName: string;
+  studentEmail: string;
+  planName: string;
+  planSlug: string;
+  planCredits: number;
+}
+
+export interface AdminAnswerSummary {
+  messageId: string;
+  sessionId: string;
+  userId: string;
+  studentName: string;
+  studentEmail: string;
+  college: string;
+  board: string;
+  grade: string;
+  subjectContext: string | null;
+  sessionTitle: string;
+  answerPreview: string;
+  feedback: MessageFeedback | null;
+  grounded: boolean;
+  citationCount: number;
+  status: AdminAnswerState;
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  adminReviewNote: string | null;
+}
+
+export interface AdminAnswerDetail extends AdminAnswerSummary {
+  content: string;
+  language: Language;
+  citations: AssistantCitation[];
+  subjects: string[];
+  targetGrade: string;
+  languagePref: Language;
+  conversation: ChatMessageRecord[];
 }

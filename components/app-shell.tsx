@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { AppNav } from "@/components/app-nav";
 import { Logo } from "@/components/marketing-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { AppUser } from "@/lib/types";
 
 export function AppShell({
@@ -19,6 +22,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     const onResize = () => {
@@ -27,6 +31,13 @@ export function AppShell({
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  async function handleLogout() {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg-primary text-text-primary">
@@ -76,6 +87,9 @@ export function AppShell({
               {user.creditBalance} credits
             </Badge>
             {actions}
+            <Button variant="outline" size="sm" onClick={handleLogout} className="hidden md:inline-flex">
+              Log out
+            </Button>
             <ThemeToggle />
           </div>
         </header>

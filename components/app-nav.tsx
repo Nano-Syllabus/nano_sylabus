@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import type { AppUser } from "@/lib/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
@@ -45,7 +46,7 @@ export function AppNav({ user }: { user: AppUser }) {
         ))}
         {user.role === "admin" ? (
           <Link
-            href="/admin/payments"
+            href="/admin"
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition",
               pathname.startsWith("/admin")
@@ -71,15 +72,10 @@ export function AppNav({ user }: { user: AppUser }) {
             <div className="truncate text-[11px] text-text-muted">{user.email}</div>
             <div className="mt-1 text-[11px] text-text-muted">{user.creditBalance} credits left</div>
           </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            title="Log out"
-            className="text-xs text-text-muted hover:text-text-primary"
-          >
-            ↪
-          </button>
         </div>
+        <Button className="mt-3 w-full" variant="outline" size="sm" onClick={handleLogout}>
+          Log out
+        </Button>
       </div>
     </div>
   );
