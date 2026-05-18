@@ -24,6 +24,16 @@ export function LoginForm({
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  async function resolveDestination() {
+    const query = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
+    const response = await fetch(`/api/auth/destination${query}`);
+    const payload = (await response.json()) as { destination?: string; error?: string };
+    if (!response.ok || !payload.destination) {
+      throw new Error(payload.error || "Failed to resolve your destination.");
+    }
+    return payload.destination;
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -42,9 +52,13 @@ export function LoginForm({
       return;
     }
 
-    const next = nextPath || "/app/chat";
-    router.replace(next);
-    router.refresh();
+    try {
+      const destination = await resolveDestination();
+      router.replace(destination);
+      router.refresh();
+    } catch (destinationError) {
+      setError(destinationError instanceof Error ? destinationError.message : "Failed to continue after login.");
+    }
   }
 
   async function continueWithGoogle() {
@@ -56,11 +70,13 @@ export function LoginForm({
     setError("");
     setGoogleLoading(true);
     const supabase = createSupabaseBrowserClient();
-    const next = nextPath || "/app/chat";
     const redirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
-        : undefined;
+      typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
+
+    if (typeof document !== "undefined") {
+      const encodedNext = encodeURIComponent(nextPath || "");
+      document.cookie = `oauth_next=${encodedNext}; Path=/; Max-Age=600; SameSite=Lax`;
+    }
 
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",

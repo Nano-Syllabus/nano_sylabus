@@ -3,9 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { createSupabaseServerClient } = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
 }));
+const { createSupabaseAdminClient } = vi.hoisted(() => ({
+  createSupabaseAdminClient: vi.fn(),
+}));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient,
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient,
 }));
 
 import { PATCH } from "@/app/api/chat/messages/[messageId]/feedback/route";
@@ -45,6 +52,8 @@ describe("PATCH /api/chat/messages/[messageId]/feedback", () => {
     const updateEqFirst = vi.fn(() => ({ eq: updateEqSecond }));
     const chatMessagesTable = {
       select: vi.fn(() => messageChain),
+    };
+    const adminChatMessagesTable = {
       update: vi.fn(() => ({ eq: updateEqFirst })),
     };
 
@@ -60,6 +69,13 @@ describe("PATCH /api/chat/messages/[messageId]/feedback", () => {
         if (table === "chat_messages") return chatMessagesTable;
         if (table === "chat_sessions") return sessionChain;
         throw new Error(`Unexpected table access: ${table}`);
+      }),
+    });
+
+    createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "chat_messages") return adminChatMessagesTable;
+        throw new Error(`Unexpected admin table access: ${table}`);
       }),
     });
   });

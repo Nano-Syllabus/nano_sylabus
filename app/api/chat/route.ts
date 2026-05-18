@@ -21,6 +21,12 @@ import { inferSessionSubjectContext } from "@/lib/chat-subject-context";
 import { deriveSubjectTags } from "@/lib/chat-subjects";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
 import { getGeminiEnv } from "@/lib/env";
+import {
+  getActivePromptContent,
+  getActivePromptTemplateMap,
+  renderPromptTemplate,
+  type PromptTemplateMap,
+} from "@/lib/prompt-runtime";
 import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
 import { containsDevanagari, needsEnglishRewrite, needsRomanNepaliRewrite } from "@/lib/roman-nepali";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -135,42 +141,55 @@ ${groundingContext || "No syllabus context was retrieved for this question."}
 `.trim();
 }
 
-async function suggestFollowUps({
-  gemini,
-  model,
+function buildSystemPromptWithTemplate(
+  templates: PromptTemplateMap,
+  input: Parameters<typeof buildSystemPrompt>[0],
+) {
+  const template = getActivePromptContent(templates, "system", input.language);
+  if (!template) {
+    return buildSystemPrompt(input);
+  }
+
+  return renderPromptTemplate(template, {
+    STUDENT_NAME: input.fullName || "Student",
+    STUDENT_COLLEGE: input.college || "Unknown",
+    STUDENT_BOARD: input.board || "Unknown",
+    STUDENT_GRADE: input.grade || "Unknown",
+    STUDENT_SCORE: input.boardScore || "Unknown",
+    STUDENT_SUBJECTS: input.subjects.join(", ") || "Unknown",
+    STUDENT_TARGET_GRADE: input.targetGrade || "Unknown",
+    SUBJECT_CONTEXT: input.subjectContext || "",
+    SUBJECT_CONTEXT_LINE: input.subjectContext ? `Subject focus: ${input.subjectContext}` : "",
+    RESPONSE_LANGUAGE_RULES:
+      input.language === "RN"
+        ? [
+            "Respond in Roman Nepali only: Nepali language written with Latin letters.",
+            "Do not use Devanagari Nepali characters at all.",
+            "Keep answers short by default, using simple student-friendly words.",
+            "For numericals, show only the needed formula, substitution, and final answer.",
+          ].join(" ")
+        : "Respond in clear English. Keep the explanation student-friendly, concise, and structured.",
+    GROUNDING_CONTEXT: input.groundingContext || "No syllabus context was retrieved for this question.",
+  }).trim();
+}
+
+function buildFollowUpPrompt({
   question,
   answer,
   language,
   subjectContext,
-  followupMaxOutputTokens,
-  followupThinkingBudget,
 }: {
-  gemini: ReturnType<typeof createGoogleGenerativeAI>;
-  model: string;
   question: string;
   answer: string;
   language: "EN" | "RN";
   subjectContext: string | null;
-  followupMaxOutputTokens: number;
-  followupThinkingBudget: number;
 }) {
   const responseLanguage =
     language === "RN"
       ? "Roman Nepali written only with Latin letters, never Devanagari"
       : "English";
 
-  const { text } = await generateText({
-    model: gemini(model),
-    temperature: 0.4,
-    maxTokens: followupMaxOutputTokens,
-    providerOptions: {
-      google: {
-        thinkingConfig: {
-          thinkingBudget: followupThinkingBudget,
-        },
-      },
-    },
-    prompt: `
+  return `
 You are writing suggested follow-up study questions for a student chat.
 
 Write exactly 3 short follow-up questions in ${responseLanguage}.
@@ -184,21 +203,19 @@ ${question}
 
 Assistant answer:
 ${answer}
-    `.trim(),
-  });
-
-  return parseFollowUpSuggestions(text);
+  `.trim();
 }
 
-async function enforceAnswerLanguageContract({
+async function suggestFollowUps({
   gemini,
   model,
   question,
   answer,
   language,
   subjectContext,
-  rewriteMaxOutputTokens,
-  rewriteThinkingBudget,
+  templates,
+  followupMaxOutputTokens,
+  followupThinkingBudget,
 }: {
   gemini: ReturnType<typeof createGoogleGenerativeAI>;
   model: string;
@@ -206,13 +223,52 @@ async function enforceAnswerLanguageContract({
   answer: string;
   language: "EN" | "RN";
   subjectContext: string | null;
-  rewriteMaxOutputTokens: number;
-  rewriteThinkingBudget: number;
+  templates: PromptTemplateMap;
+  followupMaxOutputTokens: number;
+  followupThinkingBudget: number;
 }) {
-  if (!needsRomanNepaliRewrite(answer, language) && !needsEnglishRewrite(answer, language)) {
-    return answer;
-  }
+  const template = getActivePromptContent(templates, "followup", language);
+  const prompt = template
+    ? renderPromptTemplate(template, {
+        RESPONSE_LANGUAGE:
+          language === "RN"
+            ? "Roman Nepali written only with Latin letters, never Devanagari"
+            : "English",
+        SUBJECT_CONTEXT: subjectContext || "",
+        SUBJECT_CONTEXT_LINE: subjectContext ? `Keep them focused on ${subjectContext}.` : "",
+        QUESTION: question,
+        ANSWER: answer,
+      }).trim()
+    : buildFollowUpPrompt({ question, answer, language, subjectContext });
 
+  const { text } = await generateText({
+    model: gemini(model),
+    temperature: 0.4,
+    maxTokens: followupMaxOutputTokens,
+    providerOptions: {
+      google: {
+        thinkingConfig: {
+          thinkingBudget: followupThinkingBudget,
+        },
+      },
+    },
+    prompt,
+  });
+
+  return parseFollowUpSuggestions(text);
+}
+
+function buildRewritePrompt({
+  question,
+  answer,
+  language,
+  subjectContext,
+}: {
+  question: string;
+  answer: string;
+  language: "EN" | "RN";
+  subjectContext: string | null;
+}) {
   const rewriteRules =
     language === "RN"
       ? [
@@ -226,18 +282,7 @@ async function enforceAnswerLanguageContract({
           "- Keep it short and student-friendly.",
         ];
 
-  const { text } = await generateText({
-    model: gemini(model),
-    temperature: 0.2,
-    maxTokens: rewriteMaxOutputTokens,
-    providerOptions: {
-      google: {
-        thinkingConfig: {
-          thinkingBudget: rewriteThinkingBudget,
-        },
-      },
-    },
-    prompt: `
+  return `
 Rewrite this assistant answer for Nano Syllabus.
 
 Hard requirements:
@@ -252,7 +297,68 @@ ${question}
 
 Original answer:
 ${answer}
-    `.trim(),
+    `.trim();
+}
+
+async function enforceAnswerLanguageContract({
+  gemini,
+  model,
+  question,
+  answer,
+  language,
+  subjectContext,
+  templates,
+  rewriteMaxOutputTokens,
+  rewriteThinkingBudget,
+}: {
+  gemini: ReturnType<typeof createGoogleGenerativeAI>;
+  model: string;
+  question: string;
+  answer: string;
+  language: "EN" | "RN";
+  subjectContext: string | null;
+  templates: PromptTemplateMap;
+  rewriteMaxOutputTokens: number;
+  rewriteThinkingBudget: number;
+}) {
+  if (!needsRomanNepaliRewrite(answer, language) && !needsEnglishRewrite(answer, language)) {
+    return answer;
+  }
+
+  const template = getActivePromptContent(templates, "rewrite", language);
+  const prompt = template
+    ? renderPromptTemplate(template, {
+        REWRITE_RULES:
+          language === "RN"
+            ? [
+                "- Output Roman Nepali only: Nepali language written with Latin letters.",
+                "- Never use Devanagari characters.",
+                "- Keep it short and student-friendly.",
+              ].join("\n")
+            : [
+                "- Output English only.",
+                "- Do not use Roman Nepali or Devanagari Nepali.",
+                "- Keep it short and student-friendly.",
+              ].join("\n"),
+        SUBJECT_CONTEXT: subjectContext || "",
+        SUBJECT_CONTEXT_LINE: subjectContext ? `- Subject focus: ${subjectContext}.` : "",
+        QUESTION: question,
+        ANSWER: answer,
+      }).trim()
+    : buildRewritePrompt({ question, answer, language, subjectContext });
+
+  const { text } = await generateText({
+    model: gemini(model),
+    temperature: 0.2,
+    maxTokens: rewriteMaxOutputTokens,
+    providerOptions: {
+      google: {
+        thinkingConfig: {
+          thinkingBudget: rewriteThinkingBudget,
+        },
+      },
+    },
+    prompt,
   });
 
   const rewritten = text.trim();
@@ -512,6 +618,7 @@ export async function POST(request: Request) {
     });
 
     const autoModeSelection = selectAutoAnswerMode(latestUserMessage.content);
+    const promptTemplates = await getActivePromptTemplateMap();
 
     if (isE2EFakeAIEnabled()) {
       const answer = buildE2EGroundedAnswer({
@@ -622,7 +729,7 @@ export async function POST(request: Request) {
       },
       // Server-authoritative chat: do not trust client-supplied history.
       messages: promptMessages,
-      system: buildSystemPrompt({
+      system: buildSystemPromptWithTemplate(promptTemplates, {
         fullName: profile.fullName,
         college: profile.college,
         board: profile.board,
@@ -644,6 +751,7 @@ export async function POST(request: Request) {
             answer: text,
             language: resolvedLanguage,
             subjectContext: sessionSubjectContext,
+            templates: promptTemplates,
             rewriteMaxOutputTokens,
             rewriteThinkingBudget,
           });
@@ -660,6 +768,7 @@ export async function POST(request: Request) {
             answer: persistedAnswer,
             language: resolvedLanguage,
             subjectContext: sessionSubjectContext,
+            templates: promptTemplates,
             followupMaxOutputTokens,
             followupThinkingBudget,
           });

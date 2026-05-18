@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const feedbackSchema = z.object({
@@ -44,7 +45,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Chat session not found." }, { status: 404 });
     }
 
-    const { data, error } = await supabase
+    const adminSupabase = createSupabaseAdminClient();
+    const { data, error } = await adminSupabase
       .from("chat_messages")
       .update({ feedback: payload.feedback })
       .eq("id", messageId)
@@ -67,4 +69,3 @@ export async function PATCH(
     );
   }
 }
-
