@@ -10,8 +10,8 @@ export default async function AdminAnswersPage() {
 
   return (
     <AdminShell
-      title="AI Answer Control"
-      subtitle="Inspect student conversations, audit grounded sources, and review flagged assistant answers from one place."
+      title="Answers"
+      subtitle="Check student conversations, source matches, and flagged assistant answers from one place."
     >
       <AdminAnswersManager initialAnswers={answers} initialDetail={initialDetail} />
     </AdminShell>

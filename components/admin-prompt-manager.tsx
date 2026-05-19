@@ -188,7 +188,7 @@ export function AdminPromptManager({ initialPrompts }: { initialPrompts: PromptT
         <div className="rounded-3xl border border-border bg-bg-primary p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="font-display text-2xl">Templates</p>
+              <p className="font-display text-2xl">AI templates</p>
               <p className="mt-1 text-sm text-text-secondary">Live behavior controls</p>
             </div>
             <Button size="sm" onClick={primeNewPrompt}>
@@ -238,7 +238,7 @@ export function AdminPromptManager({ initialPrompts }: { initialPrompts: PromptT
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="font-display text-3xl">
-                {selectedId === "new" ? "Create prompt template" : selectedPrompt?.name ?? "Prompt detail"}
+                {selectedId === "new" ? "Create AI template" : selectedPrompt?.name ?? "Template detail"}
               </p>
               <p className="mt-2 text-sm text-text-secondary">
                 One active prompt per purpose and language. If none is active, the app falls back to its built-in default.

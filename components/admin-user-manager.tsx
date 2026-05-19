@@ -144,7 +144,7 @@ export function AdminUserManager({ initialUsers }: { initialUsers: AdminUserSumm
       <aside className="space-y-4">
         <div className="rounded-3xl border border-border bg-bg-primary p-4">
           <div>
-            <p className="font-display text-2xl">Users</p>
+            <p className="font-display text-2xl">Students</p>
             <p className="mt-1 text-sm text-text-secondary">Student and admin directory</p>
           </div>
           <div className="mt-4">

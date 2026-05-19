@@ -10,13 +10,12 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/admin", label: "Overview", icon: "🧠" },
-  { href: "/admin/users", label: "Users", icon: "👥" },
-  { href: "/admin/answers", label: "AI Answers", icon: "🤖" },
-  { href: "/admin/subscriptions", label: "Subscriptions", icon: "🧾" },
-  { href: "/admin/knowledge", label: "Knowledge Base", icon: "📚" },
-  { href: "/admin/prompts", label: "Prompts", icon: "✍️" },
-  { href: "/admin/payments", label: "Payments", icon: "💸" },
+  { href: "/admin", label: "Home", icon: "🏠" },
+  { href: "/admin/knowledge", label: "Content", icon: "📚" },
+  { href: "/admin/answers", label: "Answers", icon: "🤖" },
+  { href: "/admin/users", label: "Students", icon: "👥" },
+  { href: "/admin/billing", label: "Payments", icon: "🧾" },
+  { href: "/admin/prompts", label: "AI Settings", icon: "✍️" },
 ];
 
 export function AdminShell({
@@ -48,13 +47,8 @@ export function AdminShell({
       <aside className="hidden w-[280px] border-r border-border bg-bg-secondary/50 md:flex md:flex-col">
         <div className="px-4 py-4">
           <div className="rounded-[24px] border border-border bg-bg-primary p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-display text-3xl">Nano Ops</p>
-                <p className="mt-1 text-xs text-text-muted">Knowledge, prompts, and student ops</p>
-              </div>
-              <Badge variant="danger">Live</Badge>
-            </div>
+            <p className="font-display text-3xl">Nano Ops</p>
+            <p className="mt-1 text-xs text-text-muted">Simple control for content, students, payments, and answer quality</p>
           </div>
         </div>
         <nav className="flex flex-col gap-1 px-3 py-2">
@@ -77,9 +71,6 @@ export function AdminShell({
         <div className="mt-auto border-t border-border p-4">
           <div className="rounded-[24px] border border-border bg-bg-primary p-4">
             <p className="text-[11px] font-mono-ui uppercase tracking-[0.24em] text-text-muted">Return</p>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Jump back to the student product when you want to inspect the live learner experience.
-            </p>
             <Link href="/app/chat" className="mt-4 inline-flex text-sm font-medium text-text-primary">
               ← Back to student app
             </Link>
