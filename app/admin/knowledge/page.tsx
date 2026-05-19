@@ -9,7 +9,7 @@ export default async function AdminKnowledgePage() {
 
   return (
     <AdminShell
-      title="Knowledge Notebooks"
+      title="Content"
       subtitle="Create notebooks by board, level, faculty, and subject. Then add syllabus, study material, and question bank resources under each notebook."
     >
       <AdminKnowledgeManager initialNotebooks={notebooks} />

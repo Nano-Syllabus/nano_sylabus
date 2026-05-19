@@ -9,8 +9,8 @@ export default async function AdminUsersPage() {
 
   return (
     <AdminShell
-      title="User Management"
-      subtitle="Search students, inspect profile context, promote admins, and adjust credits from one place."
+      title="Students"
+      subtitle="Search students, check profiles, make admins, and adjust credits from one place."
     >
       <AdminUserManager initialUsers={users} />
     </AdminShell>

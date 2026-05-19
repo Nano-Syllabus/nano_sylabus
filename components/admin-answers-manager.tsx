@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CitationCard } from "@/components/citation-card";
+import { Markdown } from "@/components/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
@@ -152,14 +153,14 @@ export function AdminAnswersManager({
         </div>
       ) : null}
 
-      <div className="mb-6 grid gap-4 md:grid-cols-4">
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Assistant answers" value={answers.length} />
         <SummaryCard label="Flagged" value={flaggedCount} />
         <SummaryCard label="Reviewed" value={reviewedCount} />
         <SummaryCard label="Grounded" value={groundedCount} />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <div className="rounded-3xl border border-border bg-bg-primary p-4">
             <p className="font-display text-2xl">Answer queue</p>
@@ -188,7 +189,7 @@ export function AdminAnswersManager({
               </Field>
             </div>
 
-            <div className="mt-4 space-y-2">
+            <div className="mt-4 space-y-2 xl:max-h-[50rem] xl:overflow-y-auto xl:pr-1">
               {filteredAnswers.length ? (
                 filteredAnswers.map((answer) => (
                   <button
@@ -222,6 +223,31 @@ export function AdminAnswersManager({
               )}
             </div>
           </div>
+          {detail ? (
+            <div className="rounded-3xl border border-border bg-bg-primary p-4">
+              <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Conversation</p>
+              <div className="mt-4 space-y-3 xl:max-h-[52rem] xl:overflow-y-auto xl:pr-1">
+                {detail.conversation.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`rounded-2xl border px-4 py-3 ${
+                      message.role === "assistant" ? "border-border bg-bg-secondary" : "border-border bg-bg-primary"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={message.role === "assistant" ? "default" : "outline"}>{message.role}</Badge>
+                      <span className="text-[11px] text-text-muted">{formatTimestamp(message.createdAt)}</span>
+                      {message.feedback === "down" ? <Badge variant="danger">thumbs down</Badge> : null}
+                      {message.feedback === "up" ? <Badge variant="success">thumbs up</Badge> : null}
+                    </div>
+                    <div className="mt-3">
+                      <Markdown text={message.content} className="text-sm leading-7" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </aside>
 
         <section className="space-y-6">
@@ -250,7 +276,7 @@ export function AdminAnswersManager({
                   </div>
                 </div>
 
-                <div className="mt-6 grid gap-4 md:grid-cols-4">
+                <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <MetricBlock label="College" value={detail.college || "—"} />
                   <MetricBlock label="Subjects" value={detail.subjects.length ? detail.subjects.join(", ") : "—"} />
                   <MetricBlock label="Target" value={detail.targetGrade || "—"} />
@@ -259,52 +285,28 @@ export function AdminAnswersManager({
 
                 <div className="mt-6 rounded-2xl border border-border bg-bg-secondary p-4">
                   <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Assistant answer</p>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-text-primary">{detail.content}</p>
+                  <div className="mt-3">
+                    <Markdown text={detail.content} className="text-sm leading-7" />
+                  </div>
                 </div>
 
-                <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
                   <div className="rounded-2xl border border-border bg-bg-primary p-4">
-                    <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Conversation</p>
+                    <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Source audit</p>
                     <div className="mt-4 space-y-3">
-                      {detail.conversation.map((message) => (
-                        <div
-                          key={message.id}
-                          className={`rounded-2xl border px-4 py-3 ${
-                            message.role === "assistant"
-                              ? "border-border bg-bg-secondary"
-                              : "border-border bg-bg-primary"
-                          }`}
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant={message.role === "assistant" ? "default" : "outline"}>
-                              {message.role}
-                            </Badge>
-                            <span className="text-[11px] text-text-muted">{formatTimestamp(message.createdAt)}</span>
-                            {message.feedback === "down" ? <Badge variant="danger">thumbs down</Badge> : null}
-                            {message.feedback === "up" ? <Badge variant="success">thumbs up</Badge> : null}
-                          </div>
-                          <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-text-primary">{message.content}</p>
+                      {detail.citations.length ? (
+                        detail.citations.map((citation) => (
+                          <CitationCard key={`${detail.messageId}-${citation.chunkId}`} citation={citation} />
+                        ))
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-secondary">
+                          No citations stored for this answer.
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border border-border bg-bg-primary p-4">
-                      <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Source audit</p>
-                      <div className="mt-4 space-y-3">
-                        {detail.citations.length ? (
-                          detail.citations.map((citation) => (
-                            <CitationCard key={`${detail.messageId}-${citation.chunkId}`} citation={citation} />
-                          ))
-                        ) : (
-                          <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-secondary">
-                            No citations stored for this answer.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
+                  <div className="space-y-4 xl:sticky xl:top-24">
                     <div className="rounded-2xl border border-border bg-bg-primary p-4">
                       <Field
                         label="Admin review note"

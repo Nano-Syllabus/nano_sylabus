@@ -476,8 +476,9 @@ export function AdminKnowledgeManager({
   const subtypeOptions = RESOURCE_SUBTYPES[resourceForm.resourceKind];
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-6 px-5 py-8 xl:grid-cols-[300px_minmax(0,1fr)]">
-      <aside className="space-y-4">
+    <div className="mx-auto max-w-7xl px-5 py-8">
+      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <aside className="space-y-6">
         <div className="rounded-3xl border border-border bg-bg-primary p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -495,7 +496,7 @@ export function AdminKnowledgeManager({
               placeholder="Search board, level, subject..."
             />
           </div>
-          <div className="mt-4 space-y-2">
+          <div className="mt-4 space-y-2 xl:max-h-[36rem] xl:overflow-y-auto xl:pr-1">
             {filteredNotebooks.length ? (
               filteredNotebooks.map((notebook) => (
                 <button
@@ -520,6 +521,48 @@ export function AdminKnowledgeManager({
             ) : (
               <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-secondary">
                 No notebooks found.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-border bg-bg-primary p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-display text-2xl">Resources</p>
+              <p className="mt-1 text-sm text-text-secondary">
+                {notebookDetail ? `${notebookDetail.resources.length} linked resources` : "Create a notebook first"}
+              </p>
+            </div>
+            <Button size="sm" onClick={startNewResource} disabled={!notebookDetail}>
+              New
+            </Button>
+          </div>
+          <div className="mt-4 space-y-2 xl:max-h-[34rem] xl:overflow-y-auto xl:pr-1">
+            {notebookDetail?.resources.length ? (
+              notebookDetail.resources.map((resource) => (
+                <button
+                  key={resource.id}
+                  type="button"
+                  onClick={() => setSelectedResourceId(resource.id)}
+                  className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                    selectedResourceId === resource.id
+                      ? "border-border-strong bg-bg-secondary"
+                      : "border-border bg-bg-primary hover:bg-bg-secondary"
+                  }`}
+                >
+                  <p className="text-sm font-medium">{resource.title}</p>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {RESOURCE_KINDS.find((kind) => kind.value === resource.resourceKind)?.label} · {resource.resourceSubtype}
+                  </p>
+                  <p className="mt-1 text-[11px] text-text-muted">
+                    {resource.processingStatus} · {resource.chunkCount} chunks · updated {formatDate(resource.updatedAt)}
+                  </p>
+                </button>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-secondary">
+                No resources yet.
               </div>
             )}
           </div>
@@ -591,50 +634,7 @@ export function AdminKnowledgeManager({
           </div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="rounded-3xl border border-border bg-bg-primary p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-display text-2xl">Resources</p>
-                <p className="mt-1 text-sm text-text-secondary">
-                  {notebookDetail ? `${notebookDetail.resources.length} linked resources` : "Create a notebook first"}
-                </p>
-              </div>
-              <Button size="sm" onClick={startNewResource} disabled={!notebookDetail}>
-                New
-              </Button>
-            </div>
-            <div className="mt-4 space-y-2">
-              {notebookDetail?.resources.length ? (
-                notebookDetail.resources.map((resource) => (
-                  <button
-                    key={resource.id}
-                    type="button"
-                    onClick={() => setSelectedResourceId(resource.id)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                      selectedResourceId === resource.id
-                        ? "border-border-strong bg-bg-secondary"
-                        : "border-border bg-bg-primary hover:bg-bg-secondary"
-                    }`}
-                  >
-                    <p className="text-sm font-medium">{resource.title}</p>
-                    <p className="mt-1 text-xs text-text-secondary">
-                      {RESOURCE_KINDS.find((kind) => kind.value === resource.resourceKind)?.label} · {resource.resourceSubtype}
-                    </p>
-                    <p className="mt-1 text-[11px] text-text-muted">
-                      {resource.processingStatus} · {resource.chunkCount} chunks · updated {formatDate(resource.updatedAt)}
-                    </p>
-                  </button>
-                ))
-              ) : (
-                <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-secondary">
-                  No resources yet.
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-6">
+        <div className="space-y-6">
             <div className="rounded-3xl border border-border bg-bg-primary p-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -728,7 +728,7 @@ export function AdminKnowledgeManager({
               <div className="mt-4">
                 <Field label="Resource content">
                   <Textarea
-                    rows={14}
+                    rows={10}
                     value={resourceForm.rawContent}
                     onChange={(event) => updateResource("rawContent", event.target.value)}
                     placeholder="Paste syllabus, study material, or question bank content here..."
@@ -769,9 +769,9 @@ export function AdminKnowledgeManager({
                 </label>
               </div>
             </div>
-          </div>
         </div>
       </section>
+      </div>
     </div>
   );
 }

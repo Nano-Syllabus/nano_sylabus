@@ -9,8 +9,8 @@ export default async function AdminPromptsPage() {
 
   return (
     <AdminShell
-      title="Prompt Control"
-      subtitle="CRUD the runtime prompt layer. One active template per purpose and language will shape live student responses."
+      title="AI Settings"
+      subtitle="Change the live AI instructions. One active template per purpose and language shapes student answers."
     >
       <AdminPromptManager initialPrompts={prompts} />
     </AdminShell>
