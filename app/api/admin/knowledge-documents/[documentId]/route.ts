@@ -9,24 +9,31 @@ import {
 } from "@/lib/data/admin-knowledge";
 
 const documentSchema = z.object({
+  notebookId: z.string().trim().min(1),
   board: z.string().trim().min(1),
   grade: z.string().trim().min(1),
   faculty: z.string().trim().default(""),
   curriculum: z.string().trim().default(""),
   subject: z.string().trim().min(1),
   chapter: z.string().trim().nullable().optional(),
+  resourceKind: z.enum(["syllabus", "study_material", "question_bank"]),
+  resourceSubtype: z.enum([
+    "micro_syllabus",
+    "curriculum",
+    "syllabus",
+    "learning_outcomes",
+    "textbook",
+    "notes",
+    "solutions",
+    "guides",
+    "question_bank",
+    "past_questions",
+    "example_questions",
+    "other",
+  ]),
   title: z.string().trim().min(1),
   sourceName: z.string().trim().min(1),
   sourceType: z.string().trim().min(1),
-  documentType: z.enum([
-    "micro_syllabus",
-    "question_bank",
-    "textbook",
-    "notes",
-    "curriculum",
-    "syllabus",
-    "other",
-  ]),
   rawContent: z.string().trim().min(1),
 });
 

@@ -6,19 +6,38 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
   AdminKnowledgeDocumentDetail,
   AdminKnowledgeDocumentSummary,
+  AdminKnowledgeNotebookDetail,
+  AdminKnowledgeNotebookSummary,
   KnowledgeChunk,
   KnowledgeDocumentType,
   KnowledgeProcessingStatus,
+  KnowledgeResourceKind,
 } from "@/lib/types";
+
+interface KnowledgeNotebookRow {
+  id: string;
+  title: string;
+  board: string;
+  level: string;
+  faculty: string;
+  subject: string;
+  curriculum: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
 
 interface KnowledgeDocumentRow {
   id: string;
+  notebook_id: string | null;
   board: string;
   grade: string;
   faculty: string;
   curriculum: string;
   subject: string;
   chapter: string | null;
+  resource_kind: KnowledgeResourceKind;
+  resource_subtype: KnowledgeDocumentType;
   title: string;
   source_name: string;
   source_type: string;
@@ -33,6 +52,7 @@ interface KnowledgeDocumentRow {
   processing_error: string | null;
   uploaded_at: string;
   updated_at: string;
+  notebook_title?: string | null;
 }
 
 interface KnowledgeChunkRow {
@@ -48,13 +68,26 @@ interface KnowledgeChunkRow {
   created_at: string;
 }
 
+export interface AdminKnowledgeNotebookInput {
+  title: string;
+  board: string;
+  level: string;
+  faculty: string;
+  subject: string;
+  curriculum: string;
+  description: string;
+}
+
 export interface AdminKnowledgeDocumentInput {
+  notebookId: string;
   board: string;
   grade: string;
   faculty: string;
   curriculum: string;
   subject: string;
   chapter: string | null;
+  resourceKind: KnowledgeResourceKind;
+  resourceSubtype: KnowledgeDocumentType;
   title: string;
   sourceName: string;
   sourceType: string;
@@ -62,19 +95,42 @@ export interface AdminKnowledgeDocumentInput {
   storagePath?: string | null;
   sourceMimeType?: string | null;
   sourceSizeBytes?: number | null;
-  documentType: KnowledgeDocumentType;
   rawContent: string;
+}
+
+function toKnowledgeNotebook(
+  row: KnowledgeNotebookRow,
+  counts?: { resourceCount?: number; readyChunkCount?: number },
+): AdminKnowledgeNotebookSummary {
+  return {
+    id: row.id,
+    title: row.title,
+    board: normalizeBoard(row.board),
+    level: normalizeGrade(row.level),
+    faculty: row.faculty.trim(),
+    subject: normalizeSubjectLabel(row.subject),
+    curriculum: row.curriculum.trim(),
+    description: row.description ?? "",
+    resourceCount: counts?.resourceCount ?? 0,
+    readyChunkCount: counts?.readyChunkCount ?? 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 function toKnowledgeDocument(row: KnowledgeDocumentRow): AdminKnowledgeDocumentSummary {
   return {
     id: row.id,
+    notebookId: row.notebook_id,
+    notebookTitle: row.notebook_title ?? null,
     board: normalizeBoard(row.board),
     grade: normalizeGrade(row.grade),
     faculty: row.faculty.trim(),
     curriculum: row.curriculum.trim(),
     subject: normalizeSubjectLabel(row.subject),
     chapter: row.chapter,
+    resourceKind: row.resource_kind,
+    resourceSubtype: row.resource_subtype ?? row.document_type,
     title: row.title,
     sourceName: row.source_name,
     sourceType: row.source_type,
@@ -107,11 +163,156 @@ function toKnowledgeChunk(row: KnowledgeChunkRow): KnowledgeChunk {
   };
 }
 
-export async function listAdminKnowledgeDocuments(filters?: { q?: string }) {
+async function getNotebookCounts(notebookIds: string[]) {
+  if (!notebookIds.length) return new Map<string, { resourceCount: number; readyChunkCount: number }>();
+
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("knowledge_documents")
+    .select("notebook_id, chunk_count, processing_status")
+    .in("notebook_id", notebookIds);
+
+  if (error) throw error;
+
+  const counts = new Map<string, { resourceCount: number; readyChunkCount: number }>();
+  for (const row of data ?? []) {
+    const notebookId = (row.notebook_id as string | null) ?? "";
+    if (!notebookId) continue;
+    const current = counts.get(notebookId) ?? { resourceCount: 0, readyChunkCount: 0 };
+    current.resourceCount += 1;
+    if (row.processing_status === "ready") {
+      current.readyChunkCount += Number(row.chunk_count ?? 0);
+    }
+    counts.set(notebookId, current);
+  }
+
+  return counts;
+}
+
+export async function listAdminKnowledgeNotebooks(filters?: { q?: string }) {
+  const supabase = createSupabaseAdminClient();
+  let query = supabase
+    .from("knowledge_notebooks")
+    .select("*")
+    .order("updated_at", { ascending: false })
+    .limit(200);
+
+  const q = filters?.q?.trim();
+  if (q) {
+    query = query.or(
+      `title.ilike.%${q}%,board.ilike.%${q}%,level.ilike.%${q}%,faculty.ilike.%${q}%,subject.ilike.%${q}%,curriculum.ilike.%${q}%`,
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const rows = (data ?? []) as KnowledgeNotebookRow[];
+  const counts = await getNotebookCounts(rows.map((row) => row.id));
+  return rows.map((row) => toKnowledgeNotebook(row, counts.get(row.id)));
+}
+
+export async function getAdminKnowledgeNotebook(notebookId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data: notebook, error: notebookError } = await supabase
+    .from("knowledge_notebooks")
+    .select("*")
+    .eq("id", notebookId)
+    .maybeSingle();
+
+  if (notebookError) throw notebookError;
+  if (!notebook) return null;
+
+  const { data: resources, error: resourceError } = await supabase
+    .from("knowledge_documents")
+    .select("*")
+    .eq("notebook_id", notebookId)
+    .order("updated_at", { ascending: false });
+
+  if (resourceError) throw resourceError;
+
+  return {
+    ...toKnowledgeNotebook(notebook as KnowledgeNotebookRow),
+    resources: ((resources ?? []) as KnowledgeDocumentRow[]).map((resource) =>
+      toKnowledgeDocument({
+        ...resource,
+        notebook_title: (notebook as KnowledgeNotebookRow).title,
+      }),
+    ),
+  } satisfies AdminKnowledgeNotebookDetail;
+}
+
+export async function createAdminKnowledgeNotebook(input: AdminKnowledgeNotebookInput) {
+  const supabase = createSupabaseAdminClient();
+  const payload = {
+    title: input.title.trim(),
+    board: normalizeBoard(input.board),
+    level: normalizeGrade(input.level),
+    faculty: input.faculty.trim(),
+    subject: normalizeSubjectLabel(input.subject),
+    curriculum: input.curriculum.trim(),
+    description: input.description.trim(),
+  };
+
+  const { data, error } = await supabase.from("knowledge_notebooks").insert(payload).select("id").single();
+  if (error || !data) throw error || new Error("Failed to create notebook.");
+
+  return getAdminKnowledgeNotebook(data.id);
+}
+
+export async function updateAdminKnowledgeNotebook(notebookId: string, input: AdminKnowledgeNotebookInput) {
+  const supabase = createSupabaseAdminClient();
+  const payload = {
+    title: input.title.trim(),
+    board: normalizeBoard(input.board),
+    level: normalizeGrade(input.level),
+    faculty: input.faculty.trim(),
+    subject: normalizeSubjectLabel(input.subject),
+    curriculum: input.curriculum.trim(),
+    description: input.description.trim(),
+  };
+
+  const { error } = await supabase.from("knowledge_notebooks").update(payload).eq("id", notebookId);
+  if (error) throw error;
+
+  const { error: cascadeError } = await supabase
+    .from("knowledge_documents")
+    .update({
+      board: payload.board,
+      grade: payload.level,
+      faculty: payload.faculty,
+      subject: payload.subject,
+      curriculum: payload.curriculum,
+    })
+    .eq("notebook_id", notebookId);
+
+  if (cascadeError) throw cascadeError;
+
+  return getAdminKnowledgeNotebook(notebookId);
+}
+
+export async function deleteAdminKnowledgeNotebook(notebookId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data: resources, error: resourceError } = await supabase
+    .from("knowledge_documents")
+    .select("storage_path")
+    .eq("notebook_id", notebookId);
+
+  if (resourceError) throw resourceError;
+
+  for (const resource of resources ?? []) {
+    await removeKnowledgeSourceFile((resource.storage_path as string | null) ?? null);
+  }
+
+  const { error } = await supabase.from("knowledge_notebooks").delete().eq("id", notebookId);
+  if (error) throw error;
+}
+
+export async function listAdminKnowledgeDocuments(filters?: { q?: string; notebookId?: string }) {
   const supabase = createSupabaseAdminClient();
   let query = supabase
     .from("knowledge_documents")
-    .select("*")
+    .select("*, knowledge_notebooks(title)")
     .order("updated_at", { ascending: false })
     .limit(200);
 
@@ -122,16 +323,29 @@ export async function listAdminKnowledgeDocuments(filters?: { q?: string }) {
     );
   }
 
+  if (filters?.notebookId) {
+    query = query.eq("notebook_id", filters.notebookId);
+  }
+
   const { data, error } = await query;
   if (error) throw error;
-  return ((data ?? []) as KnowledgeDocumentRow[]).map(toKnowledgeDocument);
+
+  return ((data ?? []) as Array<KnowledgeDocumentRow & { knowledge_notebooks?: { title: string } | { title: string }[] | null }>).map(
+    (row) =>
+      toKnowledgeDocument({
+        ...row,
+        notebook_title: Array.isArray(row.knowledge_notebooks)
+          ? row.knowledge_notebooks[0]?.title ?? null
+          : row.knowledge_notebooks?.title ?? null,
+      }),
+  );
 }
 
 export async function getAdminKnowledgeDocument(documentId: string) {
   const supabase = createSupabaseAdminClient();
   const { data: document, error: documentError } = await supabase
     .from("knowledge_documents")
-    .select("*")
+    .select("*, knowledge_notebooks(title)")
     .eq("id", documentId)
     .maybeSingle();
 
@@ -146,8 +360,15 @@ export async function getAdminKnowledgeDocument(documentId: string) {
 
   if (chunkError) throw chunkError;
 
+  const notebookTitle = Array.isArray((document as { knowledge_notebooks?: { title: string }[] }).knowledge_notebooks)
+    ? (document as { knowledge_notebooks?: { title: string }[] }).knowledge_notebooks?.[0]?.title ?? null
+    : ((document as { knowledge_notebooks?: { title: string } | null }).knowledge_notebooks?.title ?? null);
+
   return {
-    ...toKnowledgeDocument(document as KnowledgeDocumentRow),
+    ...toKnowledgeDocument({
+      ...(document as KnowledgeDocumentRow),
+      notebook_title: notebookTitle,
+    }),
     chunks: ((chunks ?? []) as KnowledgeChunkRow[]).map(toKnowledgeChunk),
   } satisfies AdminKnowledgeDocumentDetail;
 }
@@ -155,12 +376,15 @@ export async function getAdminKnowledgeDocument(documentId: string) {
 export async function createAdminKnowledgeDocument(input: AdminKnowledgeDocumentInput) {
   const supabase = createSupabaseAdminClient();
   const payload = {
+    notebook_id: input.notebookId,
     board: normalizeBoard(input.board),
     grade: normalizeGrade(input.grade),
     faculty: input.faculty.trim(),
     curriculum: input.curriculum.trim(),
     subject: normalizeSubjectLabel(input.subject),
     chapter: input.chapter?.trim() || null,
+    resource_kind: input.resourceKind,
+    resource_subtype: input.resourceSubtype,
     title: input.title.trim(),
     source_name: input.sourceName.trim(),
     source_type: input.sourceType.trim(),
@@ -168,7 +392,7 @@ export async function createAdminKnowledgeDocument(input: AdminKnowledgeDocument
     storage_path: input.storagePath ?? null,
     source_mime_type: input.sourceMimeType ?? null,
     source_size_bytes: input.sourceSizeBytes ?? null,
-    document_type: input.documentType,
+    document_type: input.resourceSubtype,
     raw_content: input.rawContent.trim(),
     processing_status: "draft" as const,
     processing_error: null,
@@ -180,22 +404,22 @@ export async function createAdminKnowledgeDocument(input: AdminKnowledgeDocument
     .select("id")
     .single();
 
-  if (error || !data) throw error || new Error("Failed to create document.");
+  if (error || !data) throw error || new Error("Failed to create resource.");
   return getAdminKnowledgeDocument(data.id);
 }
 
-export async function updateAdminKnowledgeDocument(
-  documentId: string,
-  input: AdminKnowledgeDocumentInput,
-) {
+export async function updateAdminKnowledgeDocument(documentId: string, input: AdminKnowledgeDocumentInput) {
   const supabase = createSupabaseAdminClient();
   const payload = {
+    notebook_id: input.notebookId,
     board: normalizeBoard(input.board),
     grade: normalizeGrade(input.grade),
     faculty: input.faculty.trim(),
     curriculum: input.curriculum.trim(),
     subject: normalizeSubjectLabel(input.subject),
     chapter: input.chapter?.trim() || null,
+    resource_kind: input.resourceKind,
+    resource_subtype: input.resourceSubtype,
     title: input.title.trim(),
     source_name: input.sourceName.trim(),
     source_type: input.sourceType.trim(),
@@ -203,7 +427,7 @@ export async function updateAdminKnowledgeDocument(
     storage_path: input.storagePath ?? null,
     source_mime_type: input.sourceMimeType ?? null,
     source_size_bytes: input.sourceSizeBytes ?? null,
-    document_type: input.documentType,
+    document_type: input.resourceSubtype,
     raw_content: input.rawContent.trim(),
     processing_status: "draft" as const,
     processing_error: null,
@@ -258,12 +482,12 @@ export async function processAdminKnowledgeDocument(documentId: string) {
     .maybeSingle();
 
   if (documentError) throw documentError;
-  if (!document) throw new Error("Document not found.");
+  if (!document) throw new Error("Resource not found.");
 
   const typedDocument = document as KnowledgeDocumentRow;
   const rawContent = typedDocument.raw_content.trim();
   if (!rawContent) {
-    throw new Error("Add document content before processing.");
+    throw new Error("Add resource content before processing.");
   }
 
   await supabase
@@ -277,7 +501,7 @@ export async function processAdminKnowledgeDocument(documentId: string) {
   try {
     const chunks = chunkDocumentContent(rawContent);
     if (!chunks.length) {
-      throw new Error("The document content is too short to chunk.");
+      throw new Error("The resource content is too short to chunk.");
     }
 
     const embeddings = await embedTexts(chunks.map((chunk) => chunk.content));
