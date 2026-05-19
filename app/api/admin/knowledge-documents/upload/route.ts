@@ -16,6 +16,7 @@ export const runtime = "nodejs";
 
 const uploadSchema = z.object({
   documentId: z.string().trim().optional(),
+  notebookId: z.string().trim().min(1),
   board: z.string().trim().min(1),
   grade: z.string().trim().min(1),
   faculty: z.string().trim().default(""),
@@ -24,13 +25,19 @@ const uploadSchema = z.object({
   chapter: z.string().trim().nullable().optional(),
   title: z.string().trim().default(""),
   sourceName: z.string().trim().default(""),
-  documentType: z.enum([
+  resourceKind: z.enum(["syllabus", "study_material", "question_bank"]),
+  resourceSubtype: z.enum([
     "micro_syllabus",
-    "question_bank",
-    "textbook",
-    "notes",
     "curriculum",
     "syllabus",
+    "learning_outcomes",
+    "textbook",
+    "notes",
+    "solutions",
+    "guides",
+    "question_bank",
+    "past_questions",
+    "example_questions",
     "other",
   ]),
   autoProcess: z.enum(["true", "false"]).default("false"),
@@ -52,6 +59,7 @@ export async function POST(request: Request) {
 
     const parsed = uploadSchema.parse({
       documentId: formData.get("documentId"),
+      notebookId: formData.get("notebookId"),
       board: formData.get("board"),
       grade: formData.get("grade"),
       faculty: formData.get("faculty"),
@@ -60,23 +68,26 @@ export async function POST(request: Request) {
       chapter: formData.get("chapter"),
       title: formData.get("title"),
       sourceName: formData.get("sourceName"),
-      documentType: formData.get("documentType"),
+      resourceKind: formData.get("resourceKind"),
+      resourceSubtype: formData.get("resourceSubtype"),
       autoProcess: formData.get("autoProcess") ?? "false",
     });
 
     const extracted = await extractKnowledgeFileContent(file);
 
     const baseInput: AdminKnowledgeDocumentInput = {
+      notebookId: parsed.notebookId,
       board: parsed.board,
       grade: parsed.grade,
       faculty: parsed.faculty,
       curriculum: parsed.curriculum,
       subject: parsed.subject,
       chapter: parsed.chapter?.trim() || null,
+      resourceKind: parsed.resourceKind,
+      resourceSubtype: parsed.resourceSubtype,
       title: parsed.title || extracted.suggestedTitle,
       sourceName: parsed.sourceName || extracted.sourceName,
       sourceType: extracted.sourceType,
-      documentType: parsed.documentType,
       rawContent: extracted.rawContent,
     };
 

@@ -6,12 +6,18 @@ export type MessageFeedback = "up" | "down";
 export type AdminAnswerState = "flagged" | "reviewed" | "liked" | "neutral";
 export type KnowledgeDocumentType =
   | "micro_syllabus"
-  | "question_bank"
-  | "textbook"
-  | "notes"
   | "curriculum"
   | "syllabus"
+  | "learning_outcomes"
+  | "textbook"
+  | "notes"
+  | "solutions"
+  | "guides"
+  | "question_bank"
+  | "past_questions"
+  | "example_questions"
   | "other";
+export type KnowledgeResourceKind = "syllabus" | "study_material" | "question_bank";
 export type KnowledgeProcessingStatus = "draft" | "processing" | "ready" | "failed";
 export type PromptPurpose = "system" | "followup" | "rewrite";
 export type CreditLedgerType = "grant" | "usage" | "refund" | "adjustment";
@@ -45,12 +51,16 @@ export interface AssistantCitation {
 
 export interface KnowledgeDocument {
   id: string;
+  notebookId: string | null;
+  notebookTitle: string | null;
   board: string;
   grade: string;
   faculty: string;
   curriculum: string;
   subject: string;
   chapter: string | null;
+  resourceKind: KnowledgeResourceKind;
+  resourceSubtype: KnowledgeDocumentType;
   title: string;
   sourceName: string;
   sourceType: string;
@@ -91,6 +101,28 @@ export interface AdminKnowledgeDocumentSummary extends KnowledgeDocument {}
 
 export interface AdminKnowledgeDocumentDetail extends KnowledgeDocument {
   chunks: KnowledgeChunk[];
+}
+
+export interface KnowledgeNotebook {
+  id: string;
+  title: string;
+  board: string;
+  level: string;
+  faculty: string;
+  subject: string;
+  curriculum: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminKnowledgeNotebookSummary extends KnowledgeNotebook {
+  resourceCount: number;
+  readyChunkCount: number;
+}
+
+export interface AdminKnowledgeNotebookDetail extends KnowledgeNotebook {
+  resources: AdminKnowledgeDocumentSummary[];
 }
 
 export interface PromptTemplate {
