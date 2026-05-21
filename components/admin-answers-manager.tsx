@@ -1,51 +1,38 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { CitationCard } from "@/components/citation-card";
 import { Markdown } from "@/components/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
-import type { AdminAnswerDetail, AdminAnswerState, AdminAnswerSummary } from "@/lib/types";
+import { ANSWER_COLLECTION } from "@/lib/admin-resource-definitions";
+import type { AdminAnswerDetail, AdminAnswerFilter, AdminAnswerState, AdminAnswerSummary, AdminListPage } from "@/lib/types";
 import { formatDate, formatTimestamp } from "@/lib/utils";
-
-type FilterMode = "all" | "flagged" | "reviewed" | "liked" | "neutral";
 
 export function AdminAnswersManager({
   initialAnswers,
   initialDetail,
+  initialPage,
 }: {
   initialAnswers: AdminAnswerSummary[];
   initialDetail: AdminAnswerDetail | null;
+  initialPage: AdminListPage<AdminAnswerSummary>;
 }) {
   const [answers, setAnswers] = useState(initialAnswers);
   const [selectedId, setSelectedId] = useState<string>(initialDetail?.messageId ?? initialAnswers[0]?.messageId ?? "");
   const [detail, setDetail] = useState<AdminAnswerDetail | null>(initialDetail);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<FilterMode>("flagged");
+  const [filter, setFilter] = useState<AdminAnswerFilter>("flagged");
+  const [page, setPage] = useState(initialPage.page);
+  const [pageSize, setPageSize] = useState(initialPage.pageSize);
+  const [total, setTotal] = useState(initialPage.total);
+  const [totalPages, setTotalPages] = useState(initialPage.totalPages);
+  const [listLoading, setListLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [busy, setBusy] = useState<"idle" | "loading" | "saving-note" | "marking-reviewed" | "marking-open">("idle");
   const [reviewNote, setReviewNote] = useState(initialDetail?.adminReviewNote ?? "");
-
-  const filteredAnswers = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return answers.filter((answer) => {
-      if (filter !== "all" && answer.status !== filter) return false;
-      if (!needle) return true;
-      return [
-        answer.studentName,
-        answer.studentEmail,
-        answer.sessionTitle,
-        answer.subjectContext ?? "",
-        answer.answerPreview,
-        answer.board,
-        answer.grade,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle);
-    });
-  }, [answers, filter, query]);
 
   useEffect(() => {
     let ignore = false;
@@ -89,20 +76,45 @@ export function AdminAnswersManager({
     };
   }, [selectedId, initialDetail]);
 
-  async function refreshAnswers(nextSelectedId?: string) {
-    const response = await fetch("/api/admin/answers");
+  const refreshAnswers = useCallback(async (nextSelectedId?: string, requestedPage?: number) => {
+    const targetPage = requestedPage ?? page;
+    const params = new URLSearchParams();
+    params.set("status", filter);
+    params.set("page", String(targetPage));
+    params.set("pageSize", String(pageSize));
+    if (query.trim()) {
+      params.set("q", query.trim());
+    }
+
+    setListLoading(true);
+    const response = await fetch(`/api/admin/answers?${params.toString()}`);
     const payload = await response.json();
+    setListLoading(false);
     if (!response.ok) {
       throw new Error(payload.error || "Failed to refresh AI answers.");
     }
 
-    setAnswers(payload.answers);
-    if (nextSelectedId) {
-      setSelectedId(nextSelectedId);
-    } else if (!payload.answers.some((answer: AdminAnswerSummary) => answer.messageId === selectedId)) {
-      setSelectedId(payload.answers[0]?.messageId ?? "");
-    }
-  }
+    setAnswers(payload.items);
+    setTotal(payload.total);
+    setPage(payload.page);
+    setPageSize(payload.pageSize);
+    setTotalPages(payload.totalPages);
+
+    setSelectedId((currentSelectedId) => {
+      if (nextSelectedId) return nextSelectedId;
+      return payload.items.some((answer: AdminAnswerSummary) => answer.messageId === currentSelectedId)
+        ? currentSelectedId
+        : (payload.items[0]?.messageId ?? "");
+    });
+  }, [filter, page, pageSize, query]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void refreshAnswers(undefined, 1);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [filter, query, refreshAnswers]);
 
   async function updateReview(action: "save-note" | "mark-reviewed" | "mark-open") {
     if (!detail) return;
@@ -141,65 +153,64 @@ export function AdminAnswersManager({
     }
   }
 
-  const flaggedCount = answers.filter((answer) => answer.status === "flagged").length;
-  const reviewedCount = answers.filter((answer) => answer.status === "reviewed").length;
-  const groundedCount = answers.filter((answer) => answer.grounded).length;
+  const currentPageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const currentPageEnd = Math.min(total, page * pageSize);
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-8">
+    <div className="mx-auto max-w-[1600px] px-5 py-6 md:px-8">
       {feedback ? (
-        <div className="mb-6 rounded-2xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+        <div className="mb-6 border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
           {feedback}
         </div>
       ) : null}
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Assistant answers" value={answers.length} />
-        <SummaryCard label="Flagged" value={flaggedCount} />
-        <SummaryCard label="Reviewed" value={reviewedCount} />
-        <SummaryCard label="Grounded" value={groundedCount} />
+      <div className="mb-6 grid gap-0 overflow-hidden rounded-none border border-border bg-bg-primary sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard label="Results" value={total} />
+        <SummaryCard label="Page" value={page} />
+        <SummaryCard label="Page size" value={pageSize} />
+        <SummaryCard label="Selected" value={selectedId ? 1 : 0} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
         <aside className="space-y-4">
-          <div className="rounded-3xl border border-border bg-bg-primary p-4">
-            <p className="font-display text-2xl">Answer queue</p>
-            <p className="mt-1 text-sm text-text-secondary">
-              Flagged answers, liked replies, and neutral outputs across the whole app.
-            </p>
+          <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+            <div className="border-b border-border px-4 py-3">
+              <p className="font-semibold">{ANSWER_COLLECTION.label}</p>
+              <p className="mt-1 text-xs text-text-secondary">{ANSWER_COLLECTION.subtitle}</p>
+            </div>
 
-            <div className="mt-4 grid gap-3">
+            <div className="grid gap-3 border-b border-border px-4 py-3">
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search student, board, subject..."
+                placeholder={ANSWER_COLLECTION.searchPlaceholder}
               />
               <Field label="Filter">
                 <select
                   value={filter}
-                  onChange={(event) => setFilter(event.target.value as FilterMode)}
+                  onChange={(event) => setFilter(event.target.value as AdminAnswerFilter)}
                   className="block h-11 w-full rounded-md border border-border bg-bg-primary px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-border-strong/40"
                 >
-                  <option value="flagged">flagged</option>
-                  <option value="all">all</option>
-                  <option value="reviewed">reviewed</option>
-                  <option value="liked">liked</option>
-                  <option value="neutral">neutral</option>
+                  {ANSWER_COLLECTION.filters?.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </Field>
             </div>
 
-            <div className="mt-4 space-y-2 xl:max-h-[50rem] xl:overflow-y-auto xl:pr-1">
-              {filteredAnswers.length ? (
-                filteredAnswers.map((answer) => (
+            <div className="xl:max-h-[26rem] xl:overflow-y-auto">
+              {answers.length ? (
+                answers.map((answer) => (
                   <button
                     key={answer.messageId}
                     type="button"
                     onClick={() => setSelectedId(answer.messageId)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                    className={`w-full border-b border-border px-4 py-3 text-left transition last:border-b-0 ${
                       selectedId === answer.messageId
-                        ? "border-border-strong bg-bg-secondary"
-                        : "border-border bg-bg-primary hover:bg-bg-secondary"
+                        ? "bg-[#f7f0b4] text-slate-950"
+                        : "bg-bg-primary hover:bg-bg-secondary"
                     }`}
                   >
                     <div className="flex flex-wrap items-center gap-2">
@@ -207,30 +218,58 @@ export function AdminAnswersManager({
                       <StatusBadge status={answer.status} />
                       {answer.feedback === "down" ? <Badge variant="danger">thumbs down</Badge> : null}
                     </div>
-                    <p className="mt-1 text-xs text-text-secondary">
+                    <p className={`mt-1 text-xs ${selectedId === answer.messageId ? "text-slate-700" : "text-text-secondary"}`}>
                       {answer.board || "No board"} · {answer.grade || "No grade"} · {answer.subjectContext || "General"}
                     </p>
                     <p className="mt-2 text-sm text-text-primary">{answer.answerPreview}</p>
-                    <p className="mt-2 text-[11px] text-text-muted">
+                    <p className={`mt-2 text-[11px] ${selectedId === answer.messageId ? "text-slate-600" : "text-text-muted"}`}>
                       {answer.sessionTitle} · {formatDate(answer.createdAt)}
                     </p>
                   </button>
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-secondary">
-                  No answers match this filter.
+                <div className="px-4 py-8 text-center text-sm text-text-secondary">
+                  {ANSWER_COLLECTION.emptyMessage}
                 </div>
               )}
             </div>
+            <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-text-secondary">
+              <span>
+                {listLoading ? "Loading..." : `Showing ${currentPageStart}-${currentPageEnd} of ${total}`}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void refreshAnswers(undefined, Math.max(1, page - 1))}
+                  disabled={listLoading || page <= 1}
+                >
+                  Prev
+                </Button>
+                <span>
+                  {page}/{Math.max(1, totalPages)}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void refreshAnswers(undefined, Math.min(totalPages, page + 1))}
+                  disabled={listLoading || page >= totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
           </div>
           {detail ? (
-            <div className="rounded-3xl border border-border bg-bg-primary p-4">
+            <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+              <div className="border-b border-border px-4 py-3">
               <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Conversation</p>
-              <div className="mt-4 space-y-3 xl:max-h-[52rem] xl:overflow-y-auto xl:pr-1">
+              </div>
+              <div className="space-y-3 px-4 py-4 xl:max-h-[44rem] xl:overflow-y-auto">
                 {detail.conversation.map((message) => (
                   <div
                     key={message.id}
-                    className={`rounded-2xl border px-4 py-3 ${
+                    className={`border px-4 py-3 ${
                       message.role === "assistant" ? "border-border bg-bg-secondary" : "border-border bg-bg-primary"
                     }`}
                   >
@@ -251,10 +290,10 @@ export function AdminAnswersManager({
         </aside>
 
         <section className="space-y-6">
-          <div className="rounded-3xl border border-border bg-bg-primary p-5">
+          <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
             {detail ? (
               <>
-                <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-display text-3xl">{detail.studentName}</p>
@@ -276,30 +315,32 @@ export function AdminAnswersManager({
                   </div>
                 </div>
 
-                <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-0 border-b border-border md:grid-cols-2 xl:grid-cols-4">
                   <MetricBlock label="College" value={detail.college || "—"} />
                   <MetricBlock label="Subjects" value={detail.subjects.length ? detail.subjects.join(", ") : "—"} />
                   <MetricBlock label="Target" value={detail.targetGrade || "—"} />
                   <MetricBlock label="Language" value={detail.languagePref} />
                 </div>
 
-                <div className="mt-6 rounded-2xl border border-border bg-bg-secondary p-4">
+                <div className="border-b border-border bg-bg-secondary px-5 py-4">
                   <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Assistant answer</p>
                   <div className="mt-3">
                     <Markdown text={detail.content} className="text-sm leading-7" />
                   </div>
                 </div>
 
-                <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-                  <div className="rounded-2xl border border-border bg-bg-primary p-4">
+                <div className="grid gap-6 px-5 py-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+                  <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+                    <div className="border-b border-border px-4 py-3">
                     <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Source audit</p>
-                    <div className="mt-4 space-y-3">
+                    </div>
+                    <div className="space-y-3 px-4 py-4">
                       {detail.citations.length ? (
                         detail.citations.map((citation) => (
                           <CitationCard key={`${detail.messageId}-${citation.chunkId}`} citation={citation} />
                         ))
                       ) : (
-                        <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-secondary">
+                        <div className="px-4 py-8 text-center text-sm text-text-secondary">
                           No citations stored for this answer.
                         </div>
                       )}
@@ -307,7 +348,11 @@ export function AdminAnswersManager({
                   </div>
 
                   <div className="space-y-4 xl:sticky xl:top-24">
-                    <div className="rounded-2xl border border-border bg-bg-primary p-4">
+                    <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+                      <div className="border-b border-border px-4 py-3">
+                        <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Review action</p>
+                      </div>
+                      <div className="px-4 py-4">
                       <Field
                         label="Admin review note"
                         hint="Use this for internal QA notes, source issues, or answer-quality comments."
@@ -330,12 +375,13 @@ export function AdminAnswersManager({
                           {busy === "marking-open" ? "Updating..." : "Move back to open"}
                         </Button>
                       </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="rounded-2xl border border-dashed border-border px-4 py-12 text-center text-sm text-text-secondary">
+              <div className="px-4 py-12 text-center text-sm text-text-secondary">
                 Choose an assistant answer to inspect the conversation and sources.
               </div>
             )}
@@ -348,7 +394,7 @@ export function AdminAnswersManager({
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-border bg-bg-primary p-5">
+    <div className="border-r border-border px-4 py-4 last:border-r-0">
       <p className="text-[11px] font-mono-ui uppercase text-text-muted">{label}</p>
       <p className="mt-2 font-display text-4xl">{value}</p>
     </div>
@@ -357,7 +403,7 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
 
 function MetricBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-bg-secondary p-4">
+    <div className="border-r border-border bg-bg-secondary px-4 py-4 last:border-r-0">
       <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">{label}</p>
       <p className="mt-2 text-sm text-text-primary">{value}</p>
     </div>

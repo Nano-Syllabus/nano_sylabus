@@ -22,8 +22,15 @@ function toInput(payload: z.infer<typeof notebookSchema>): AdminKnowledgeNoteboo
   return payload;
 }
 
+function parsePositiveInt(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return undefined;
+  return parsed;
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ notebookId: string }> },
 ) {
   const access = await assertAdminRequest();
@@ -33,7 +40,12 @@ export async function GET(
 
   try {
     const { notebookId } = await params;
-    const notebook = await getAdminKnowledgeNotebook(notebookId);
+    const { searchParams } = new URL(request.url);
+    const notebook = await getAdminKnowledgeNotebook(notebookId, {
+      resourceQ: searchParams.get("resourceQ") ?? undefined,
+      resourcePage: parsePositiveInt(searchParams.get("resourcePage")),
+      resourcePageSize: parsePositiveInt(searchParams.get("resourcePageSize")),
+    });
     if (!notebook) {
       return NextResponse.json({ error: "Notebook not found." }, { status: 404 });
     }

@@ -4,19 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ADMIN_SURFACES } from "@/lib/admin-registry";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
-
-const NAV = [
-  { href: "/admin", label: "Home", icon: "🏠" },
-  { href: "/admin/knowledge", label: "Notebooks", icon: "📚" },
-  { href: "/admin/answers", label: "Answers", icon: "🤖" },
-  { href: "/admin/users", label: "Students", icon: "👥" },
-  { href: "/admin/billing", label: "Payments", icon: "🧾" },
-  { href: "/admin/prompts", label: "AI Instructions", icon: "✍️" },
-];
 
 export function AdminShell({
   title,
@@ -29,6 +20,23 @@ export function AdminShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  const crumbs = pathname
+    .split("/")
+    .filter(Boolean)
+    .slice(0)
+    .map((segment, index, array) => {
+      const href = `/${array.slice(0, index + 1).join("/")}`;
+      return {
+        href,
+        label:
+          segment === "admin"
+            ? "Admin"
+            : segment
+                .replace(/-/g, " ")
+                .replace(/\b\w/g, (letter) => letter.toUpperCase()),
+      };
+    });
 
   function isActive(href: string) {
     if (href === "/admin") return pathname === "/admin";
@@ -43,59 +51,83 @@ export function AdminShell({
   }
 
   return (
-    <div className="flex min-h-screen bg-bg-primary text-text-primary">
-      <aside className="hidden w-[280px] border-r border-border bg-bg-secondary/50 md:flex md:flex-col">
-        <div className="px-4 py-4">
-          <div className="rounded-[24px] border border-border bg-bg-primary p-4">
-            <p className="font-display text-3xl">Nano Ops</p>
-            <p className="mt-1 text-xs text-text-muted">Simple control for notebooks, students, payments, and answer quality</p>
+    <div className="min-h-screen bg-bg-primary text-text-primary">
+      <div className="border-b border-border bg-bg-secondary text-text-primary">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-5 py-4 md:px-8">
+          <div className="flex items-center gap-4">
+            <p className="font-display text-4xl leading-none">Nano Syllabus administration</p>
+            <span className="hidden text-sm text-text-secondary lg:inline">Manage notebooks, students, billing, and AI quality</span>
           </div>
-        </div>
-        <nav className="flex flex-col gap-1 px-3 py-2">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex min-h-11 items-center gap-3 rounded-2xl px-4 py-3 text-sm transition-colors",
-                isActive(item.href)
-                  ? "border border-border bg-bg-primary text-text-primary font-medium shadow-[0_10px_30px_rgba(0,0,0,0.08)]"
-                  : "text-text-secondary hover:bg-bg-primary hover:text-text-primary",
-              )}
-            >
-              <span className="w-5 text-center text-base">{item.icon}</span>
-              {item.label}
+          <div className="flex items-center gap-3 text-sm text-text-secondary">
+            <span className="hidden md:inline">Welcome, admin</span>
+            <Link href="/app/chat" className="hover:text-text-primary">
+              View site
             </Link>
-          ))}
-        </nav>
-        <div className="mt-auto border-t border-border p-4">
-          <div className="rounded-[24px] border border-border bg-bg-primary p-4">
-            <p className="text-[11px] font-mono-ui uppercase tracking-[0.24em] text-text-muted">Return</p>
-            <Link href="/app/chat" className="mt-4 inline-flex text-sm font-medium text-text-primary">
-              ← Back to student app
-            </Link>
-          </div>
-        </div>
-      </aside>
-
-      <main className="flex flex-1 flex-col bg-bg-primary">
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border/80 bg-bg-primary/92 px-5 py-4 backdrop-blur md:px-8">
-          <div>
-            <div className="flex items-center gap-2">
-              <Badge variant="danger">Admin</Badge>
-              <div className="font-display text-3xl">{title}</div>
-            </div>
-            {subtitle ? <p className="mt-2 text-sm text-text-secondary">{subtitle}</p> : null}
-          </div>
-          <div className="flex items-center gap-2">
             <ThemeToggle />
             <Button variant="outline" size="sm" onClick={handleLogout}>
               Log out
             </Button>
           </div>
-        </header>
-        <div className="flex-1">{children}</div>
-      </main>
+        </div>
+      </div>
+
+      <div className="mx-auto flex min-h-[calc(100vh-73px)] max-w-[1600px]">
+        <aside className="hidden w-[280px] border-r border-border bg-bg-primary md:flex md:flex-col">
+          <div className="border-b border-border px-5 py-4">
+            <input
+              readOnly
+              value=""
+              placeholder="Start typing to filter..."
+              className="h-10 w-full rounded-none border border-border bg-bg-secondary px-3 text-sm text-text-primary placeholder:text-text-muted"
+            />
+          </div>
+          <div className="border-b border-border bg-bg-tertiary px-5 py-2">
+            <p className="text-[11px] font-mono-ui uppercase tracking-[0.18em] text-text-secondary">Admin sections</p>
+          </div>
+          <nav className="flex flex-col">
+          {ADMIN_SURFACES.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex min-h-11 items-center gap-3 border-b border-border px-5 py-3 text-sm transition-colors",
+                isActive(item.href)
+                  ? "bg-bg-tertiary text-text-primary"
+                  : "text-text-secondary hover:bg-bg-primary hover:text-text-primary",
+              )}
+            >
+              <span className="w-5 text-center text-base opacity-80">{item.icon}</span>
+              <span>{item.navLabel}</span>
+            </Link>
+          ))}
+          </nav>
+          <div className="mt-auto border-t border-border px-5 py-4">
+            <Link href="/app/chat" className="text-sm text-text-secondary hover:text-text-primary">
+              ← Back to student app
+            </Link>
+          </div>
+        </aside>
+
+        <main className="flex min-w-0 flex-1 flex-col bg-bg-primary">
+          <div className="border-b border-border bg-bg-secondary px-5 py-3 md:px-8">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-text-secondary">
+              {crumbs.map((crumb, index) => (
+                <div key={crumb.href} className="flex items-center gap-2">
+                  {index > 0 ? <span className="text-text-muted">›</span> : null}
+                  <Link href={crumb.href} className={cn(index === crumbs.length - 1 ? "text-text-primary" : "hover:text-text-primary")}>
+                    {crumb.label}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+          <header className="border-b border-border bg-bg-primary px-5 py-5 md:px-8">
+            <h1 className="font-display text-4xl">{title}</h1>
+            {subtitle ? <p className="mt-2 max-w-4xl text-sm text-text-secondary">{subtitle}</p> : null}
+          </header>
+          <div className="flex-1">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

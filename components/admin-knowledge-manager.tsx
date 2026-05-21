@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  NOTEBOOK_COLLECTION,
+  RESOURCE_COLLECTION,
+  RESOURCE_KIND_OPTIONS,
+  RESOURCE_SUBTYPE_OPTIONS,
+} from "@/lib/admin-resource-definitions";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import type {
+  AdminListPage,
   AdminKnowledgeDocumentSummary,
   AdminKnowledgeNotebookDetail,
   AdminKnowledgeNotebookSummary,
@@ -11,34 +18,6 @@ import type {
   KnowledgeResourceKind,
 } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
-
-const RESOURCE_KINDS: Array<{ value: KnowledgeResourceKind; label: string }> = [
-  { value: "syllabus", label: "Syllabus" },
-  { value: "study_material", label: "Study material" },
-  { value: "question_bank", label: "Question bank" },
-];
-
-const RESOURCE_SUBTYPES: Record<KnowledgeResourceKind, Array<{ value: KnowledgeDocumentType; label: string }>> = {
-  syllabus: [
-    { value: "curriculum", label: "Curriculum" },
-    { value: "syllabus", label: "Syllabus" },
-    { value: "micro_syllabus", label: "Micro-syllabus" },
-    { value: "learning_outcomes", label: "Learning outcomes" },
-  ],
-  study_material: [
-    { value: "textbook", label: "Textbook" },
-    { value: "notes", label: "Notes" },
-    { value: "solutions", label: "Solutions" },
-    { value: "guides", label: "Guides" },
-    { value: "other", label: "Other" },
-  ],
-  question_bank: [
-    { value: "question_bank", label: "Question bank" },
-    { value: "past_questions", label: "Past questions" },
-    { value: "example_questions", label: "Example questions" },
-    { value: "other", label: "Other" },
-  ],
-};
 
 type NotebookFormState = {
   title: string;
@@ -106,33 +85,34 @@ function toResourceFormState(resource: AdminKnowledgeDocumentSummary): ResourceF
 
 export function AdminKnowledgeManager({
   initialNotebooks,
+  initialNotebookPage,
 }: {
   initialNotebooks: AdminKnowledgeNotebookSummary[];
+  initialNotebookPage: AdminListPage<AdminKnowledgeNotebookSummary>;
 }) {
   const [notebooks, setNotebooks] = useState(initialNotebooks);
+  const [notebookPage, setNotebookPage] = useState(initialNotebookPage.page);
+  const [notebookPageSize, setNotebookPageSize] = useState(initialNotebookPage.pageSize);
+  const [notebookTotal, setNotebookTotal] = useState(initialNotebookPage.total);
+  const [notebookTotalPages, setNotebookTotalPages] = useState(initialNotebookPage.totalPages);
+  const [notebookListLoading, setNotebookListLoading] = useState(false);
   const [selectedNotebookId, setSelectedNotebookId] = useState<string>(initialNotebooks[0]?.id ?? "new");
   const [notebookDetail, setNotebookDetail] = useState<AdminKnowledgeNotebookDetail | null>(null);
   const [notebookForm, setNotebookForm] = useState<NotebookFormState>(EMPTY_NOTEBOOK);
   const [selectedResourceId, setSelectedResourceId] = useState<string>("new");
   const [resourceForm, setResourceForm] = useState<ResourceFormState>(EMPTY_RESOURCE);
   const [query, setQuery] = useState("");
+  const [resourceQuery, setResourceQuery] = useState("");
+  const [resourcePage, setResourcePage] = useState(1);
+  const [resourcePageSize, setResourcePageSize] = useState(20);
+  const [resourceTotal, setResourceTotal] = useState(0);
+  const [resourceTotalPages, setResourceTotalPages] = useState(1);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [busy, setBusy] = useState<
     "idle" | "loading" | "savingNotebook" | "deletingNotebook" | "savingResource" | "processing" | "deletingResource" | "uploading"
   >("idle");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadAutoProcess, setUploadAutoProcess] = useState(true);
-
-  const filteredNotebooks = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return notebooks;
-    return notebooks.filter((notebook) =>
-      [notebook.title, notebook.board, notebook.level, notebook.faculty, notebook.subject, notebook.curriculum]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle),
-    );
-  }, [notebooks, query]);
 
   const selectedResource =
     selectedResourceId === "new"
@@ -148,13 +128,22 @@ export function AdminKnowledgeManager({
         setNotebookForm(EMPTY_NOTEBOOK);
         setSelectedResourceId("new");
         setResourceForm(EMPTY_RESOURCE);
+        setResourceTotal(0);
+        setResourceTotalPages(1);
         return;
       }
 
       setBusy("loading");
       setFeedback(null);
       try {
-        const response = await fetch(`/api/admin/notebooks/${notebookId}`);
+        const params = new URLSearchParams();
+        params.set("resourcePage", String(resourcePage));
+        params.set("resourcePageSize", String(resourcePageSize));
+        if (resourceQuery.trim()) {
+          params.set("resourceQ", resourceQuery.trim());
+        }
+
+        const response = await fetch(`/api/admin/notebooks/${notebookId}?${params.toString()}`);
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(payload.error || "Failed to load notebook.");
@@ -162,10 +151,22 @@ export function AdminKnowledgeManager({
         if (ignore) return;
         const notebook = payload.notebook as AdminKnowledgeNotebookDetail;
         setNotebookDetail(notebook);
+        setResourcePage(notebook.resourcePage);
+        setResourcePageSize(notebook.resourcePageSize);
+        setResourceTotal(notebook.resourceTotal);
+        setResourceTotalPages(notebook.resourceTotalPages);
         setNotebookForm(toNotebookFormState(notebook));
         const firstResource = notebook.resources[0] ?? null;
-        setSelectedResourceId(firstResource?.id ?? "new");
-        setResourceForm(firstResource ? toResourceFormState(firstResource) : EMPTY_RESOURCE);
+        setSelectedResourceId((currentSelectedResourceId) => {
+          const nextSelectedResourceId =
+            notebook.resources.find((resource) => resource.id === currentSelectedResourceId)?.id ??
+            firstResource?.id ??
+            "new";
+          const nextSelectedResource =
+            notebook.resources.find((resource) => resource.id === nextSelectedResourceId) ?? null;
+          setResourceForm(nextSelectedResource ? toResourceFormState(nextSelectedResource) : EMPTY_RESOURCE);
+          return nextSelectedResourceId;
+        });
       } catch (error) {
         if (!ignore) {
           setFeedback(error instanceof Error ? error.message : "Failed to load notebook.");
@@ -180,7 +181,7 @@ export function AdminKnowledgeManager({
     return () => {
       ignore = true;
     };
-  }, [selectedNotebookId]);
+  }, [selectedNotebookId, resourcePage, resourcePageSize, resourceQuery]);
 
   useEffect(() => {
     if (!notebookDetail) return;
@@ -208,6 +209,10 @@ export function AdminKnowledgeManager({
     setNotebookForm(EMPTY_NOTEBOOK);
     setSelectedResourceId("new");
     setResourceForm(EMPTY_RESOURCE);
+    setResourceQuery("");
+    setResourcePage(1);
+    setResourceTotal(0);
+    setResourceTotalPages(1);
     setUploadFile(null);
     setFeedback(null);
   }
@@ -220,42 +225,76 @@ export function AdminKnowledgeManager({
   }
 
   function handleResourceKindChange(nextKind: KnowledgeResourceKind) {
-    const fallbackSubtype = RESOURCE_SUBTYPES[nextKind][0]?.value ?? "other";
+    const fallbackSubtype = RESOURCE_SUBTYPE_OPTIONS[nextKind][0]?.value ?? "other";
     setResourceForm((current) => ({
       ...current,
       resourceKind: nextKind,
-      resourceSubtype: RESOURCE_SUBTYPES[nextKind].some((option) => option.value === current.resourceSubtype)
+      resourceSubtype: RESOURCE_SUBTYPE_OPTIONS[nextKind].some((option) => option.value === current.resourceSubtype)
         ? current.resourceSubtype
         : fallbackSubtype,
     }));
   }
 
-  async function refreshNotebooks(nextNotebookId?: string) {
-    const response = await fetch("/api/admin/notebooks");
+  const refreshNotebooks = useCallback(async (nextNotebookId?: string, requestedPage?: number) => {
+    const targetPage = requestedPage ?? 1;
+    const params = new URLSearchParams();
+    params.set("page", String(targetPage));
+    params.set("pageSize", String(notebookPageSize));
+    if (query.trim()) {
+      params.set("q", query.trim());
+    }
+
+    setNotebookListLoading(true);
+    const response = await fetch(`/api/admin/notebooks?${params.toString()}`);
     const payload = await response.json();
+    setNotebookListLoading(false);
     if (!response.ok) {
       throw new Error(payload.error || "Failed to refresh notebooks.");
     }
 
-    setNotebooks(payload.notebooks);
-    if (nextNotebookId) {
-      setSelectedNotebookId(nextNotebookId);
-    } else if (!payload.notebooks.some((notebook: AdminKnowledgeNotebookSummary) => notebook.id === selectedNotebookId)) {
-      setSelectedNotebookId(payload.notebooks[0]?.id ?? "new");
-    }
-  }
+    setNotebooks(payload.items);
+    setNotebookPage(payload.page);
+    setNotebookPageSize(payload.pageSize);
+    setNotebookTotal(payload.total);
+    setNotebookTotalPages(payload.totalPages);
+    setSelectedNotebookId((currentSelectedNotebookId) => {
+      if (nextNotebookId) return nextNotebookId;
+      return payload.items.some((notebook: AdminKnowledgeNotebookSummary) => notebook.id === currentSelectedNotebookId)
+        ? currentSelectedNotebookId
+        : (payload.items[0]?.id ?? "new");
+    });
+  }, [notebookPageSize, query]);
 
-  async function refreshNotebookDetail(notebookId: string) {
-    const response = await fetch(`/api/admin/notebooks/${notebookId}`);
+  async function refreshNotebookDetail(notebookId: string, options?: { resourcePage?: number; resourceQ?: string }) {
+    const params = new URLSearchParams();
+    params.set("resourcePage", String(options?.resourcePage ?? resourcePage));
+    params.set("resourcePageSize", String(resourcePageSize));
+    const nextResourceQ = options?.resourceQ ?? resourceQuery;
+    if (nextResourceQ.trim()) {
+      params.set("resourceQ", nextResourceQ.trim());
+    }
+    const response = await fetch(`/api/admin/notebooks/${notebookId}?${params.toString()}`);
     const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Failed to refresh notebook detail.");
     }
     const notebook = payload.notebook as AdminKnowledgeNotebookDetail;
     setNotebookDetail(notebook);
+    setResourcePage(notebook.resourcePage);
+    setResourcePageSize(notebook.resourcePageSize);
+    setResourceTotal(notebook.resourceTotal);
+    setResourceTotalPages(notebook.resourceTotalPages);
     setNotebookForm(toNotebookFormState(notebook));
     return notebook;
   }
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void refreshNotebooks(undefined, 1);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [query, refreshNotebooks]);
 
   async function saveNotebook() {
     setBusy("savingNotebook");
@@ -274,9 +313,12 @@ export function AdminKnowledgeManager({
         throw new Error(payload.error || "Failed to save notebook.");
       }
       const notebook = payload.notebook as AdminKnowledgeNotebookDetail;
-      await refreshNotebooks(notebook.id);
-      setNotebookDetail(notebook);
-      setNotebookForm(toNotebookFormState(notebook));
+      setResourceQuery("");
+      setResourcePage(1);
+      await refreshNotebooks(notebook.id, 1);
+      const freshNotebook = await refreshNotebookDetail(notebook.id, { resourcePage: 1, resourceQ: "" });
+      setNotebookDetail(freshNotebook);
+      setNotebookForm(toNotebookFormState(freshNotebook));
       setFeedback(selectedNotebookId === "new" ? "Notebook created." : "Notebook updated.");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Failed to save notebook.");
@@ -300,7 +342,7 @@ export function AdminKnowledgeManager({
       if (!response.ok) {
         throw new Error(payload.error || "Failed to delete notebook.");
       }
-      await refreshNotebooks();
+      await refreshNotebooks(undefined, 1);
       resetNotebook();
       setFeedback("Notebook deleted.");
     } catch (error) {
@@ -349,8 +391,11 @@ export function AdminKnowledgeManager({
         throw new Error(payload.error || "Failed to save resource.");
       }
 
-      await refreshNotebooks(notebookId);
-      const notebook = await refreshNotebookDetail(notebookId);
+      await refreshNotebooks(notebookId, notebookPage);
+      const notebook = await refreshNotebookDetail(notebookId, {
+        resourcePage: 1,
+        resourceQ: "",
+      });
       const savedResource = notebook.resources.find((resource) => resource.id === payload.document.id) ?? null;
       setSelectedResourceId(savedResource?.id ?? "new");
       setResourceForm(savedResource ? toResourceFormState(savedResource) : EMPTY_RESOURCE);
@@ -374,8 +419,10 @@ export function AdminKnowledgeManager({
       if (!response.ok) {
         throw new Error(payload.error || "Failed to process resource.");
       }
-      await refreshNotebooks(selectedNotebookId);
-      const notebook = await refreshNotebookDetail(selectedNotebookId);
+      await refreshNotebooks(selectedNotebookId, notebookPage);
+      const notebook = await refreshNotebookDetail(selectedNotebookId, {
+        resourcePage,
+      });
       const refreshedResource = notebook.resources.find((resource) => resource.id === selectedResource.id) ?? null;
       setSelectedResourceId(refreshedResource?.id ?? "new");
       setResourceForm(refreshedResource ? toResourceFormState(refreshedResource) : EMPTY_RESOURCE);
@@ -403,8 +450,10 @@ export function AdminKnowledgeManager({
         throw new Error(payload.error || "Failed to delete resource.");
       }
 
-      await refreshNotebooks(selectedNotebookId);
-      const notebook = await refreshNotebookDetail(selectedNotebookId);
+      await refreshNotebooks(selectedNotebookId, notebookPage);
+      const notebook = await refreshNotebookDetail(selectedNotebookId, {
+        resourcePage,
+      });
       const firstResource = notebook.resources[0] ?? null;
       setSelectedResourceId(firstResource?.id ?? "new");
       setResourceForm(firstResource ? toResourceFormState(firstResource) : EMPTY_RESOURCE);
@@ -455,8 +504,11 @@ export function AdminKnowledgeManager({
         throw new Error(uploadResult.error || "Failed to upload resource file.");
       }
 
-      await refreshNotebooks(notebookId);
-      const notebook = await refreshNotebookDetail(notebookId);
+      await refreshNotebooks(notebookId, notebookPage);
+      const notebook = await refreshNotebookDetail(notebookId, {
+        resourcePage: 1,
+        resourceQ: "",
+      });
       const savedResource = notebook.resources.find((resource) => resource.id === uploadResult.document.id) ?? null;
       setSelectedResourceId(savedResource?.id ?? "new");
       setResourceForm(savedResource ? toResourceFormState(savedResource) : EMPTY_RESOURCE);
@@ -473,105 +525,180 @@ export function AdminKnowledgeManager({
     }
   }
 
-  const subtypeOptions = RESOURCE_SUBTYPES[resourceForm.resourceKind];
+  const subtypeOptions = RESOURCE_SUBTYPE_OPTIONS[resourceForm.resourceKind];
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-8">
+    <div className="mx-auto max-w-[1600px] px-5 py-6 md:px-8">
       <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
       <aside className="space-y-6">
-        <div className="rounded-3xl border border-border bg-bg-primary p-4">
-          <div className="flex items-center justify-between gap-3">
+        <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div>
-              <p className="font-display text-2xl">Notebooks</p>
-              <p className="mt-1 text-sm text-text-secondary">Board, level, faculty, subject containers</p>
+              <p className="font-semibold">{NOTEBOOK_COLLECTION.label}</p>
+              <p className="mt-1 text-xs text-text-secondary">{NOTEBOOK_COLLECTION.subtitle}</p>
             </div>
             <Button size="sm" onClick={resetNotebook}>
               New
             </Button>
           </div>
-          <div className="mt-4">
+          <div className="border-b border-border px-4 py-3">
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search board, level, subject..."
+              placeholder={NOTEBOOK_COLLECTION.searchPlaceholder}
             />
           </div>
-          <div className="mt-4 space-y-2 xl:max-h-[36rem] xl:overflow-y-auto xl:pr-1">
-            {filteredNotebooks.length ? (
-              filteredNotebooks.map((notebook) => (
+          <div className="xl:max-h-[36rem] xl:overflow-y-auto">
+            {notebooks.length ? (
+              notebooks.map((notebook) => (
                 <button
                   key={notebook.id}
                   type="button"
-                  onClick={() => setSelectedNotebookId(notebook.id)}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                  onClick={() => {
+                    setResourceQuery("");
+                    setResourcePage(1);
+                    setSelectedNotebookId(notebook.id);
+                  }}
+                  className={`w-full border-b border-border px-4 py-3 text-left transition last:border-b-0 ${
                     selectedNotebookId === notebook.id
-                      ? "border-border-strong bg-bg-secondary"
-                      : "border-border bg-bg-primary hover:bg-bg-secondary"
+                      ? "bg-[#f7f0b4] text-slate-950"
+                      : "bg-bg-primary hover:bg-bg-secondary"
                   }`}
                 >
                   <p className="text-sm font-medium">{notebook.title}</p>
-                  <p className="mt-1 text-xs text-text-secondary">
+                  <p className={`mt-1 text-xs ${selectedNotebookId === notebook.id ? "text-slate-700" : "text-text-secondary"}`}>
                     {notebook.board} · {notebook.level} · {notebook.subject}
                   </p>
-                  <p className="mt-1 text-[11px] text-text-muted">
+                  <p className={`mt-1 text-[11px] ${selectedNotebookId === notebook.id ? "text-slate-600" : "text-text-muted"}`}>
                     {notebook.resourceCount} resources · {notebook.readyChunkCount} ready chunks
                   </p>
                 </button>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-secondary">
-                No notebooks found.
+              <div className="px-4 py-8 text-center text-sm text-text-secondary">
+                {NOTEBOOK_COLLECTION.emptyMessage}
               </div>
             )}
           </div>
+          <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-text-secondary">
+            <span>
+              {notebookListLoading
+                ? "Loading..."
+                : `Showing ${notebookTotal === 0 ? 0 : (notebookPage - 1) * notebookPageSize + 1}-${Math.min(
+                    notebookTotal,
+                    notebookPage * notebookPageSize,
+                  )} of ${notebookTotal}`}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void refreshNotebooks(undefined, Math.max(1, notebookPage - 1))}
+                disabled={notebookListLoading || notebookPage <= 1}
+              >
+                Prev
+              </Button>
+              <span>
+                {notebookPage}/{Math.max(1, notebookTotalPages)}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void refreshNotebooks(undefined, Math.min(notebookTotalPages, notebookPage + 1))}
+                disabled={notebookListLoading || notebookPage >= notebookTotalPages}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         </div>
 
-        <div className="rounded-3xl border border-border bg-bg-primary p-4">
-          <div className="flex items-center justify-between gap-3">
+        <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div>
-              <p className="font-display text-2xl">Resources</p>
-              <p className="mt-1 text-sm text-text-secondary">
-                {notebookDetail ? `${notebookDetail.resources.length} linked resources` : "Create a notebook first"}
+              <p className="font-semibold">{RESOURCE_COLLECTION.label}</p>
+              <p className="mt-1 text-xs text-text-secondary">
+                {notebookDetail ? `${resourceTotal} linked resources` : "Create a notebook first"}
               </p>
             </div>
             <Button size="sm" onClick={startNewResource} disabled={!notebookDetail}>
               New
             </Button>
           </div>
-          <div className="mt-4 space-y-2 xl:max-h-[34rem] xl:overflow-y-auto xl:pr-1">
+          <div className="border-b border-border px-4 py-3">
+            <Input
+              value={resourceQuery}
+              onChange={(event) => {
+                setResourceQuery(event.target.value);
+                setResourcePage(1);
+              }}
+              placeholder={RESOURCE_COLLECTION.searchPlaceholder || "Search title, chapter, subtype..."}
+              disabled={!notebookDetail}
+            />
+          </div>
+          <div className="xl:max-h-[34rem] xl:overflow-y-auto">
             {notebookDetail?.resources.length ? (
               notebookDetail.resources.map((resource) => (
                 <button
                   key={resource.id}
                   type="button"
                   onClick={() => setSelectedResourceId(resource.id)}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                  className={`w-full border-b border-border px-4 py-3 text-left transition last:border-b-0 ${
                     selectedResourceId === resource.id
-                      ? "border-border-strong bg-bg-secondary"
-                      : "border-border bg-bg-primary hover:bg-bg-secondary"
+                      ? "bg-[#f7f0b4] text-slate-950"
+                      : "bg-bg-primary hover:bg-bg-secondary"
                   }`}
                 >
                   <p className="text-sm font-medium">{resource.title}</p>
-                  <p className="mt-1 text-xs text-text-secondary">
-                    {RESOURCE_KINDS.find((kind) => kind.value === resource.resourceKind)?.label} · {resource.resourceSubtype}
+                  <p className={`mt-1 text-xs ${selectedResourceId === resource.id ? "text-slate-700" : "text-text-secondary"}`}>
+                    {RESOURCE_KIND_OPTIONS.find((kind) => kind.value === resource.resourceKind)?.label} · {resource.resourceSubtype}
                   </p>
-                  <p className="mt-1 text-[11px] text-text-muted">
+                  <p className={`mt-1 text-[11px] ${selectedResourceId === resource.id ? "text-slate-600" : "text-text-muted"}`}>
                     {resource.processingStatus} · {resource.chunkCount} chunks · updated {formatDate(resource.updatedAt)}
                   </p>
                 </button>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-secondary">
-                No resources yet.
+              <div className="px-4 py-8 text-center text-sm text-text-secondary">
+                {RESOURCE_COLLECTION.emptyMessage}
               </div>
             )}
           </div>
+          {notebookDetail ? (
+            <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-text-secondary">
+              <span>
+                Showing {resourceTotal === 0 ? 0 : (resourcePage - 1) * resourcePageSize + 1}-
+                {Math.min(resourceTotal, resourcePage * resourcePageSize)} of {resourceTotal}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setResourcePage((current) => Math.max(1, current - 1))}
+                  disabled={resourcePage <= 1}
+                >
+                  Prev
+                </Button>
+                <span>
+                  {resourcePage}/{Math.max(1, resourceTotalPages)}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setResourcePage((current) => Math.min(resourceTotalPages, current + 1))}
+                  disabled={resourcePage >= resourceTotalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </aside>
 
       <section className="space-y-6">
-        <div className="rounded-3xl border border-border bg-bg-primary p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div>
               <p className="font-display text-3xl">
                 {selectedNotebookId === "new" ? "Create notebook" : notebookDetail?.title ?? "Notebook detail"}
@@ -581,7 +708,7 @@ export function AdminKnowledgeManager({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => void refreshNotebooks()} disabled={busy !== "idle"}>
+              <Button variant="outline" onClick={() => void refreshNotebooks(undefined, notebookPage)} disabled={busy !== "idle"}>
                 Refresh
               </Button>
               <Button onClick={saveNotebook} disabled={busy !== "idle"}>
@@ -596,12 +723,12 @@ export function AdminKnowledgeManager({
           </div>
 
           {feedback ? (
-            <div className="mt-4 rounded-2xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+            <div className="mx-5 mt-4 border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
               {feedback}
             </div>
           ) : null}
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-3">
             <Field label="Notebook title">
               <Input value={notebookForm.title} onChange={(event) => updateNotebook("title", event.target.value)} />
             </Field>
@@ -622,7 +749,7 @@ export function AdminKnowledgeManager({
             </Field>
           </div>
 
-          <div className="mt-4">
+          <div className="px-5 pb-5">
             <Field label="Description">
               <Textarea
                 rows={3}
@@ -635,8 +762,8 @@ export function AdminKnowledgeManager({
         </div>
 
         <div className="space-y-6">
-            <div className="rounded-3xl border border-border bg-bg-primary p-5">
-              <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
                 <div>
                   <p className="font-display text-3xl">
                     {selectedResourceId === "new" ? "Create resource" : selectedResource?.title ?? "Resource detail"}
@@ -684,14 +811,14 @@ export function AdminKnowledgeManager({
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-3">
                 <Field label="Resource bucket">
                   <select
                     value={resourceForm.resourceKind}
                     onChange={(event) => handleResourceKindChange(event.target.value as KnowledgeResourceKind)}
                     className="block h-11 w-full rounded-md border border-border bg-bg-primary px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-border-strong/40"
                   >
-                    {RESOURCE_KINDS.map((kind) => (
+                    {RESOURCE_KIND_OPTIONS.map((kind) => (
                       <option key={kind.value} value={kind.value}>
                         {kind.label}
                       </option>
@@ -725,7 +852,7 @@ export function AdminKnowledgeManager({
                 </Field>
               </div>
 
-              <div className="mt-4">
+              <div className="px-5 pb-5">
                 <Field label="Resource content">
                   <Textarea
                     rows={10}
@@ -737,8 +864,8 @@ export function AdminKnowledgeManager({
               </div>
             </div>
 
-            <div className="rounded-3xl border border-border bg-bg-primary p-5">
-              <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
                 <div>
                   <p className="font-display text-2xl">Upload into this resource</p>
                   <p className="mt-1 text-sm text-text-secondary">
@@ -750,7 +877,7 @@ export function AdminKnowledgeManager({
                 </Button>
               </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+              <div className="grid gap-4 px-5 py-5 md:grid-cols-[minmax(0,1fr)_220px]">
                 <Field label="Choose file">
                   <input
                     type="file"

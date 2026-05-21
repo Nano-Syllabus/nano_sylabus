@@ -11,7 +11,9 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
   AdminAnswerDetail,
+  AdminAnswerFilter,
   AdminAnswerSummary,
+  AdminListPage,
   AssistantCitation,
   ChatMessageRecord,
   Language,
@@ -139,22 +141,76 @@ async function loadAuthUsersById(userIds: string[]) {
   );
 }
 
-export async function listAdminAnswers() {
+const DEFAULT_ADMIN_PAGE_SIZE = 50;
+const MAX_ADMIN_PAGE_SIZE = 100;
+
+function normalizePage(value: number | undefined) {
+  if (!value || Number.isNaN(value) || value < 1) return 1;
+  return Math.floor(value);
+}
+
+function normalizePageSize(value: number | undefined) {
+  if (!value || Number.isNaN(value) || value < 1) return DEFAULT_ADMIN_PAGE_SIZE;
+  return Math.min(MAX_ADMIN_PAGE_SIZE, Math.floor(value));
+}
+
+type AdminAnswerListFilters = {
+  q?: string;
+  status?: AdminAnswerFilter;
+  page?: number;
+  pageSize?: number;
+};
+
+export async function listAdminAnswers(filters?: AdminAnswerListFilters): Promise<AdminListPage<AdminAnswerSummary>> {
   const supabase = createSupabaseAdminClient();
-  const { data: messageRows, error: messageError } = await supabase
+  const page = normalizePage(filters?.page);
+  const pageSize = normalizePageSize(filters?.pageSize);
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = supabase
     .from("chat_messages")
     .select(
       "id, session_id, role, content, language, created_at, grounded, citations, feedback, follow_up_suggestions, admin_review_note, admin_reviewed_at, admin_reviewed_by",
+      { count: "exact" },
     )
-    .eq("role", "assistant")
+    .eq("role", "assistant");
+
+  const status = filters?.status ?? "all";
+  if (status === "reviewed") {
+    query = query.not("admin_reviewed_at", "is", null);
+  } else if (status === "flagged") {
+    query = query.is("admin_reviewed_at", null).eq("feedback", "down");
+  } else if (status === "liked") {
+    query = query.is("admin_reviewed_at", null).eq("feedback", "up");
+  } else if (status === "neutral") {
+    query = query.is("admin_reviewed_at", null).is("feedback", null);
+  }
+
+  const q = filters?.q?.trim();
+  if (q) {
+    const escaped = q.replace(/[%_]/g, "\\$&");
+    query = query.ilike("content", `%${escaped}%`);
+  }
+
+  const { data: messageRows, error: messageError, count } = await query
     .order("created_at", { ascending: false })
-    .limit(200);
+    .range(from, to);
 
   if (messageError) throw messageError;
 
   const answers = (messageRows ?? []) as AdminAnswerMessageRow[];
   const sessionIds = [...new Set(answers.map((row) => row.session_id))];
-  if (!sessionIds.length) return [] satisfies AdminAnswerSummary[];
+  if (!sessionIds.length) {
+    const total = count ?? 0;
+    return {
+      items: [],
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
+  }
 
   const { data: sessionRows, error: sessionError } = await supabase
     .from("chat_sessions")
@@ -181,12 +237,21 @@ export async function listAdminAnswers() {
     ((profileRows ?? []) as StudentProfileRow[]).map((profile) => [profile.user_id, profile]),
   );
 
-  return answers.map((message) => {
+  const items = answers.map((message) => {
     const session = sessionsById.get(message.session_id) ?? null;
     const profile = session ? profilesByUserId.get(session.user_id) ?? null : null;
     const authLookup = session ? authUsersById.get(session.user_id) ?? null : null;
     return buildSummary(message, session, profile, authLookup);
   });
+
+  const total = count ?? items.length;
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }
 
 export async function getAdminAnswerDetail(messageId: string) {

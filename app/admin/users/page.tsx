@@ -5,14 +5,14 @@ import { listAdminUsers } from "@/lib/data/admin-users";
 
 export default async function AdminUsersPage() {
   await requireAdminUser();
-  const users = await listAdminUsers();
+  const userPage = await listAdminUsers({ page: 1, pageSize: 50 });
 
   return (
     <AdminShell
       title="Students"
       subtitle="Search students, check profiles, make admins, and adjust credits from one place."
     >
-      <AdminUserManager initialUsers={users} />
+      <AdminUserManager initialUsers={userPage.items} initialPage={userPage} />
     </AdminShell>
   );
 }

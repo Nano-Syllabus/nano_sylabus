@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PROMPT_COLLECTION } from "@/lib/admin-resource-definitions";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import type { Language, PromptPurpose, PromptTemplate } from "@/lib/types";
@@ -183,50 +184,50 @@ export function AdminPromptManager({ initialPrompts }: { initialPrompts: PromptT
   const placeholders = placeholdersForPurpose(form.purpose);
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-6 px-5 py-8 xl:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="mx-auto grid max-w-[1600px] gap-6 px-5 py-6 md:px-8 xl:grid-cols-[320px_minmax(0,1fr)]">
       <aside className="space-y-4">
-        <div className="rounded-3xl border border-border bg-bg-primary p-4">
-          <div className="flex items-center justify-between gap-3">
+        <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div>
-              <p className="font-display text-2xl">AI templates</p>
-              <p className="mt-1 text-sm text-text-secondary">Live behavior controls</p>
+              <p className="font-semibold">{PROMPT_COLLECTION.label}</p>
+              <p className="mt-1 text-xs text-text-secondary">{PROMPT_COLLECTION.subtitle}</p>
             </div>
             <Button size="sm" onClick={primeNewPrompt}>
               New
             </Button>
           </div>
-          <div className="mt-4">
+          <div className="border-b border-border px-4 py-3">
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, slug, purpose..."
+              placeholder={PROMPT_COLLECTION.searchPlaceholder}
             />
           </div>
-          <div className="mt-4 space-y-2">
+          <div className="divide-y divide-border">
             {filteredPrompts.length ? (
               filteredPrompts.map((prompt) => (
                 <button
                   key={prompt.id}
                   type="button"
                   onClick={() => selectPrompt(prompt)}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                  className={`w-full px-4 py-3 text-left transition ${
                     selectedId === prompt.id
-                      ? "border-border-strong bg-bg-secondary"
-                      : "border-border bg-bg-primary hover:bg-bg-secondary"
+                      ? "bg-[#f7f0b4] text-slate-950"
+                      : "bg-bg-primary hover:bg-bg-secondary"
                   }`}
                 >
                   <p className="text-sm font-medium">{prompt.name}</p>
-                  <p className="mt-1 text-xs text-text-secondary">
+                  <p className={`mt-1 text-xs ${selectedId === prompt.id ? "text-slate-700" : "text-text-secondary"}`}>
                     {prompt.purpose} · {prompt.language} · {prompt.slug}
                   </p>
-                  <p className="mt-1 text-[11px] text-text-muted">
+                  <p className={`mt-1 text-[11px] ${selectedId === prompt.id ? "text-slate-600" : "text-text-muted"}`}>
                     {prompt.isActive ? "Active" : "Inactive"} · updated {formatDate(prompt.updatedAt)}
                   </p>
                 </button>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-secondary">
-                No prompt templates found.
+              <div className="px-4 py-8 text-center text-sm text-text-secondary">
+                {PROMPT_COLLECTION.emptyMessage}
               </div>
             )}
           </div>
@@ -234,8 +235,8 @@ export function AdminPromptManager({ initialPrompts }: { initialPrompts: PromptT
       </aside>
 
       <section className="space-y-6">
-        <div className="rounded-3xl border border-border bg-bg-primary p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div>
               <p className="font-display text-3xl">
                 {selectedId === "new" ? "Create AI template" : selectedPrompt?.name ?? "Template detail"}
@@ -260,12 +261,12 @@ export function AdminPromptManager({ initialPrompts }: { initialPrompts: PromptT
           </div>
 
           {feedback ? (
-            <div className="mt-4 rounded-2xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+            <div className="mx-5 mt-4 border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
               {feedback}
             </div>
           ) : null}
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-3">
             <Field label="Name">
               <Input value={form.name} onChange={(event) => updateForm("name", event.target.value)} />
             </Field>
@@ -296,7 +297,7 @@ export function AdminPromptManager({ initialPrompts }: { initialPrompts: PromptT
             <Field label="Description">
               <Input value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
             </Field>
-            <label className="flex items-center gap-3 rounded-2xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+            <label className="flex items-center gap-3 border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
               <input
                 type="checkbox"
                 checked={form.isActive}
@@ -306,7 +307,7 @@ export function AdminPromptManager({ initialPrompts }: { initialPrompts: PromptT
             </label>
           </div>
 
-          <div className="mt-4">
+          <div className="px-5 pb-5">
             <Field
               label="Prompt content"
               hint="Use placeholder tokens below. The runtime will replace them with live student, retrieval, and language context."
@@ -322,18 +323,22 @@ export function AdminPromptManager({ initialPrompts }: { initialPrompts: PromptT
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <div className="rounded-3xl border border-border bg-bg-primary p-5">
-            <p className="font-display text-2xl">Supported placeholders</p>
-            <div className="mt-4 space-y-2 text-sm text-text-secondary">
+          <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+            <div className="border-b border-border px-4 py-3">
+            <p className="font-semibold">Supported placeholders</p>
+            </div>
+            <div className="space-y-2 px-4 py-4 text-sm text-text-secondary">
               {placeholders.map((placeholder) => (
                 <div key={placeholder}>• {placeholder}</div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-3xl border border-border bg-bg-primary p-5">
-            <p className="font-display text-2xl">Usage notes</p>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-text-secondary">
+          <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+            <div className="border-b border-border px-4 py-3">
+            <p className="font-semibold">Usage notes</p>
+            </div>
+            <div className="space-y-3 px-4 py-4 text-sm leading-6 text-text-secondary">
               <p>• `system` prompts shape the main grounded answer.</p>
               <p>• `followup` prompts generate the suggested next questions after each answer.</p>
               <p>• `rewrite` prompts are the safety layer that forces final answer language back into EN or RN.</p>
