@@ -4,6 +4,7 @@ export type RevisionAction = "remember" | "review" | "skip";
 export type AppRole = "student" | "admin";
 export type MessageFeedback = "up" | "down";
 export type AdminAnswerState = "flagged" | "reviewed" | "liked" | "neutral";
+export type AdminAnswerFilter = AdminAnswerState | "all";
 export type KnowledgeDocumentType =
   | "micro_syllabus"
   | "curriculum"
@@ -123,6 +124,10 @@ export interface AdminKnowledgeNotebookSummary extends KnowledgeNotebook {
 
 export interface AdminKnowledgeNotebookDetail extends KnowledgeNotebook {
   resources: AdminKnowledgeDocumentSummary[];
+  resourceTotal: number;
+  resourcePage: number;
+  resourcePageSize: number;
+  resourceTotalPages: number;
 }
 
 export interface PromptTemplate {
@@ -407,4 +412,12 @@ export interface AdminAnswerDetail extends AdminAnswerSummary {
   targetGrade: string;
   languagePref: Language;
   conversation: ChatMessageRecord[];
+}
+
+export interface AdminListPage<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }

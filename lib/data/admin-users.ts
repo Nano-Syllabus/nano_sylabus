@@ -10,6 +10,7 @@ import {
 } from "@/lib/profile-normalization";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
+  AdminListPage,
   AdminUserDetail,
   AdminUserSummary,
   AppRole,
@@ -129,16 +130,48 @@ function computeAdjustedBalance(currentBalance: number, delta: number) {
   return nextBalance;
 }
 
-async function loadAdminUserBase() {
-  const supabase = createSupabaseAdminClient();
-  const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
-  if (authError) throw authError;
+const DEFAULT_ADMIN_PAGE_SIZE = 50;
+const MAX_ADMIN_PAGE_SIZE = 100;
 
-  const users = authData.users ?? [];
-  const userIds = users.map((user) => user.id);
+function normalizePage(value: number | undefined) {
+  if (!value || Number.isNaN(value) || value < 1) return 1;
+  return Math.floor(value);
+}
+
+function normalizePageSize(value: number | undefined) {
+  if (!value || Number.isNaN(value) || value < 1) return DEFAULT_ADMIN_PAGE_SIZE;
+  return Math.min(MAX_ADMIN_PAGE_SIZE, Math.floor(value));
+}
+
+function sortUsersByRecent(a: AdminUserSummary, b: AdminUserSummary) {
+  return (b.lastSignInAt ?? b.createdAt).localeCompare(a.lastSignInAt ?? a.createdAt);
+}
+
+async function listAllAuthUsers() {
+  const supabase = createSupabaseAdminClient();
+  const users: any[] = [];
+  let page = 1;
+  const perPage = 200;
+
+  while (true) {
+    const { data: authData, error: authError } = await supabase.auth.admin.listUsers({
+      page,
+      perPage,
+    });
+    if (authError) throw authError;
+
+    const batch = authData.users ?? [];
+    users.push(...batch);
+    if (batch.length < perPage) break;
+    page += 1;
+  }
+
+  return users;
+}
+
+async function loadAdminUserAggregates(userIds: string[]) {
   if (!userIds.length) {
     return {
-      users,
       profilesByUserId: new Map<string, StudentProfile>(),
       latestLedgerByUserId: new Map<string, CreditsLedgerEntry>(),
       activePlanByUserId: new Map<string, string>(),
@@ -146,6 +179,8 @@ async function loadAdminUserBase() {
       noteCountByUserId: new Map<string, number>(),
     };
   }
+
+  const supabase = createSupabaseAdminClient();
 
   const [
     { data: profileRows, error: profileError },
@@ -213,27 +248,28 @@ async function loadAdminUserBase() {
     noteCountByUserId.set(row.user_id, (noteCountByUserId.get(row.user_id) ?? 0) + 1);
   }
 
-  return {
-    users,
-    profilesByUserId,
-    latestLedgerByUserId,
-    activePlanByUserId,
-    sessionCountByUserId,
-    noteCountByUserId,
-  };
+  return { profilesByUserId, latestLedgerByUserId, activePlanByUserId, sessionCountByUserId, noteCountByUserId };
 }
 
-export async function listAdminUsers(filters?: { q?: string }) {
+function buildUserSummaries(
+  users: any[],
+  aggregates: {
+    profilesByUserId: Map<string, StudentProfile>;
+    latestLedgerByUserId: Map<string, CreditsLedgerEntry>;
+    activePlanByUserId: Map<string, string>;
+    sessionCountByUserId: Map<string, number>;
+    noteCountByUserId: Map<string, number>;
+  },
+) {
   const {
-    users,
     profilesByUserId,
     latestLedgerByUserId,
     activePlanByUserId,
     sessionCountByUserId,
     noteCountByUserId,
-  } = await loadAdminUserBase();
+  } = aggregates;
 
-  const summaries = users.map((user) => {
+  return users.map((user) => {
     const profile = profilesByUserId.get(user.id) ?? null;
     const balance = latestLedgerByUserId.get(user.id)?.balanceAfter ?? 0;
 
@@ -257,26 +293,74 @@ export async function listAdminUsers(filters?: { q?: string }) {
       lastSignInAt: user.last_sign_in_at ?? null,
     } satisfies AdminUserSummary;
   });
+}
 
+export async function listAdminUsers(filters?: {
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<AdminListPage<AdminUserSummary>> {
+  const page = normalizePage(filters?.page);
+  const pageSize = normalizePageSize(filters?.pageSize);
   const q = filters?.q?.trim().toLowerCase();
-  if (!q) {
-    return summaries.sort((a, b) => (b.lastSignInAt ?? b.createdAt).localeCompare(a.lastSignInAt ?? a.createdAt));
+
+  if (q) {
+    const users = await listAllAuthUsers();
+    const aggregates = await loadAdminUserAggregates(users.map((user) => user.id));
+    const filtered = buildUserSummaries(users, aggregates)
+      .filter((user) =>
+        [user.email, user.fullName, user.college, user.board, user.grade, user.activePlanName ?? ""]
+          .join(" ")
+          .toLowerCase()
+          .includes(q),
+      )
+      .sort(sortUsersByRecent);
+
+    const total = filtered.length;
+    const from = (page - 1) * pageSize;
+    const items = filtered.slice(from, from + pageSize);
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
   }
 
-  return summaries
-    .filter((user) =>
-      [user.email, user.fullName, user.college, user.board, user.grade, user.activePlanName ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(q),
-    )
-    .sort((a, b) => (b.lastSignInAt ?? b.createdAt).localeCompare(a.lastSignInAt ?? a.createdAt));
+  const supabase = createSupabaseAdminClient();
+  const { data: authData, error: authError } = await supabase.auth.admin.listUsers({
+    page,
+    perPage: pageSize,
+  });
+  if (authError) throw authError;
+
+  const users = authData.users ?? [];
+  const totalFromApi = (authData as { total?: unknown }).total;
+  const total = typeof totalFromApi === "number" ? totalFromApi : users.length;
+  const aggregates = await loadAdminUserAggregates(users.map((user) => user.id));
+  const items = buildUserSummaries(users, aggregates).sort(sortUsersByRecent);
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
+
+async function getAdminUserSummary(userId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data: authData, error: authError } = await supabase.auth.admin.getUserById(userId);
+  if (authError || !authData.user) return null;
+  const user = authData.user;
+  const aggregates = await loadAdminUserAggregates([user.id]);
+  return buildUserSummaries([user], aggregates)[0] ?? null;
 }
 
 export async function getAdminUserDetail(userId: string) {
   const supabase = createSupabaseAdminClient();
-  const summaries = await listAdminUsers();
-  const summary = summaries.find((user) => user.userId === userId);
+  const summary = await getAdminUserSummary(userId);
   if (!summary) return null;
 
   const [

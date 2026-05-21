@@ -43,6 +43,13 @@ function toInput(payload: z.infer<typeof documentSchema>): AdminKnowledgeDocumen
   };
 }
 
+function parsePositiveInt(value: string | null, fallback: number) {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return parsed;
+}
+
 export async function GET(request: Request) {
   const access = await assertAdminRequest();
   if ("error" in access) {
@@ -51,11 +58,13 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const documents = await listAdminKnowledgeDocuments({
+    const result = await listAdminKnowledgeDocuments({
       q: searchParams.get("q") ?? undefined,
       notebookId: searchParams.get("notebookId") ?? undefined,
+      page: parsePositiveInt(searchParams.get("page"), 1),
+      pageSize: parsePositiveInt(searchParams.get("pageSize"), 50),
     });
-    return NextResponse.json({ documents });
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load knowledge documents." },

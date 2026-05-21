@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PLAN_COLLECTION } from "@/lib/admin-resource-definitions";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import type { AdminSubscriptionSummary, AdminUserSummary, BillingType, SubscriptionPlan } from "@/lib/types";
@@ -211,42 +212,42 @@ export function AdminSubscriptionManager({
   }
 
   return (
-    <div className="mx-auto space-y-6 px-5 py-8">
+    <div className="mx-auto space-y-6">
       {feedback ? (
-        <div className="rounded-2xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+        <div className="border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
           {feedback}
         </div>
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className="rounded-3xl border border-border bg-bg-primary p-4">
-          <div className="flex items-center justify-between gap-3">
+        <aside className="overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div>
-              <p className="font-display text-2xl">Plans</p>
-              <p className="mt-1 text-sm text-text-secondary">Create and edit sellable packs</p>
+              <p className="font-semibold">{PLAN_COLLECTION.label}</p>
+              <p className="mt-1 text-xs text-text-secondary">{PLAN_COLLECTION.subtitle}</p>
             </div>
             <Button size="sm" onClick={primeNewPlan}>
               New
             </Button>
           </div>
 
-          <div className="mt-4 space-y-2">
+          <div className="divide-y divide-border">
             {plans.map((plan) => (
               <button
                 key={plan.id}
                 type="button"
                 onClick={() => selectPlan(plan)}
-                className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                className={`w-full px-4 py-3 text-left transition ${
                   selectedPlanId === plan.id
-                    ? "border-border-strong bg-bg-secondary"
-                    : "border-border bg-bg-primary hover:bg-bg-secondary"
+                    ? "bg-[#f7f0b4] text-slate-950"
+                    : "bg-bg-primary hover:bg-bg-secondary"
                 }`}
               >
                 <p className="text-sm font-medium">{plan.name}</p>
-                <p className="mt-1 text-xs text-text-secondary">
+                <p className={`mt-1 text-xs ${selectedPlanId === plan.id ? "text-slate-700" : "text-text-secondary"}`}>
                   {plan.credits} credits · {plan.currency} {plan.price}
                 </p>
-                <p className="mt-1 text-[11px] text-text-muted">
+                <p className={`mt-1 text-[11px] ${selectedPlanId === plan.id ? "text-slate-600" : "text-text-muted"}`}>
                   {plan.billingType} · {plan.isActive ? "active" : "inactive"}
                 </p>
               </button>
@@ -254,8 +255,8 @@ export function AdminSubscriptionManager({
           </div>
         </aside>
 
-        <section className="rounded-3xl border border-border bg-bg-primary p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <section className="overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div>
               <p className="font-display text-3xl">
                 {selectedPlanId === "new" ? "Create subscription plan" : selectedPlan?.name ?? "Plan detail"}
@@ -269,7 +270,7 @@ export function AdminSubscriptionManager({
             </Button>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-3">
             <Field label="Name">
               <Input value={planForm.name} onChange={(event) => updatePlanForm("name", event.target.value)} />
             </Field>
@@ -295,7 +296,7 @@ export function AdminSubscriptionManager({
                 <option value="monthly">monthly</option>
               </select>
             </Field>
-            <label className="flex items-center gap-3 rounded-2xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+            <label className="flex items-center gap-3 border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
               <input
                 type="checkbox"
                 checked={planForm.isActive}
@@ -308,12 +309,14 @@ export function AdminSubscriptionManager({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <section className="rounded-3xl border border-border bg-bg-primary p-5">
+        <section className="overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="border-b border-border px-5 py-4">
           <p className="font-display text-3xl">Grant subscription</p>
           <p className="mt-2 text-sm text-text-secondary">
             Give a student direct access without waiting for an invoice flow.
           </p>
-          <div className="mt-6 space-y-4">
+          </div>
+          <div className="space-y-4 px-5 py-5">
             <Field label="Student">
               <select
                 value={grantUserId}
@@ -355,22 +358,22 @@ export function AdminSubscriptionManager({
           </div>
         </section>
 
-        <section className="rounded-3xl border border-border bg-bg-primary p-5">
-          <div className="flex items-center justify-between gap-4">
+        <section className="overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
             <div>
               <p className="font-display text-3xl">Active subscriptions</p>
               <p className="mt-2 text-sm text-text-secondary">
                 Extend or cancel live access windows.
               </p>
             </div>
-            <div className="rounded-full border border-border px-4 py-2 text-sm text-text-secondary">
+            <div className="border border-border px-4 py-2 text-sm text-text-secondary">
               {activeSubscriptions.length} active
             </div>
           </div>
-          <div className="mt-6 space-y-3">
+          <div className="divide-y divide-border">
             {subscriptions.length ? (
               subscriptions.map((subscription) => (
-                <div key={subscription.id} className="rounded-2xl border border-border bg-bg-secondary p-4">
+                <div key={subscription.id} className="bg-bg-primary px-5 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-medium">
@@ -414,7 +417,7 @@ export function AdminSubscriptionManager({
                 </div>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-text-secondary">
+              <div className="px-4 py-10 text-center text-sm text-text-secondary">
                 No subscriptions found.
               </div>
             )}

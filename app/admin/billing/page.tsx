@@ -10,11 +10,11 @@ import { formatDate } from "@/lib/utils";
 
 export default async function AdminBillingPage() {
   await requireAdminUser();
-  const [plans, submissions, subscriptions, users] = await Promise.all([
+  const [plans, submissions, subscriptions, usersPage] = await Promise.all([
     listAdminSubscriptionPlans(),
     listAdminPaymentSubmissions(),
     listAdminSubscriptions(),
-    listAdminUsers(),
+    listAdminUsers({ page: 1, pageSize: 100 }),
   ]);
 
   const pendingPayments = submissions.filter((submission) => submission.status === "submitted");
@@ -26,16 +26,16 @@ export default async function AdminBillingPage() {
       title="Payments"
       subtitle="Review manual payments, manage plans, and control active student subscriptions from one place."
     >
-      <div className="mx-auto max-w-7xl px-5 py-8 md:px-8">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mx-auto max-w-[1600px] px-5 py-6 md:px-8">
+        <div className="grid gap-0 overflow-hidden rounded-none border border-border bg-bg-primary sm:grid-cols-2 xl:grid-cols-4">
           <BillingStat label="Pending payments" value={pendingPayments.length} />
           <BillingStat label="Approved payments" value={approvedPayments} />
           <BillingStat label="Plans" value={plans.length} />
           <BillingStat label="Active subscriptions" value={activeSubscriptions} />
         </div>
 
-        <section className="mt-8 rounded-[28px] border border-border bg-bg-primary p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <section className="mt-6 overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div>
               <p className="text-[11px] font-mono-ui uppercase tracking-[0.24em] text-text-muted">Payment queue</p>
               <h2 className="mt-2 font-display text-3xl">Manual payment review</h2>
@@ -45,19 +45,19 @@ export default async function AdminBillingPage() {
             </div>
             <Link
               href="/admin/payments"
-              className="inline-flex h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-text-primary transition hover:bg-bg-secondary"
+              className="inline-flex h-11 items-center border border-border px-5 text-sm font-medium text-text-primary transition hover:bg-bg-secondary"
             >
               Open full queue
             </Link>
           </div>
 
-          <div className="mt-5 space-y-3">
+          <div className="divide-y divide-border">
             {submissions.length ? (
               submissions.slice(0, 6).map((submission) => (
                 <Link
                   key={submission.id}
                   href={`/admin/payments/${submission.id}`}
-                  className="block rounded-2xl border border-border bg-bg-secondary px-4 py-4 transition hover:border-border-strong hover:bg-bg-primary"
+                  className="block bg-bg-primary px-5 py-4 transition hover:bg-bg-secondary"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
@@ -87,18 +87,18 @@ export default async function AdminBillingPage() {
                 </Link>
               ))
             ) : (
-              <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-text-secondary">
+              <div className="px-4 py-10 text-center text-sm text-text-secondary">
                 No payment submissions yet.
               </div>
             )}
           </div>
         </section>
 
-        <section className="mt-8">
+        <section className="mt-6">
           <AdminSubscriptionManager
             initialPlans={plans}
             initialSubscriptions={subscriptions}
-            users={users}
+            users={usersPage.items}
           />
         </section>
       </div>
@@ -108,7 +108,7 @@ export default async function AdminBillingPage() {
 
 function BillingStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-border bg-bg-primary p-5">
+    <div className="border-r border-border px-4 py-4 last:border-r-0">
       <p className="text-[11px] font-mono-ui uppercase tracking-[0.22em] text-text-muted">{label}</p>
       <p className="mt-2 font-display text-4xl">{value}</p>
     </div>

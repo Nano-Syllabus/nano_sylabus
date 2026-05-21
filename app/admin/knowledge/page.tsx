@@ -5,14 +5,14 @@ import { listAdminKnowledgeNotebooks } from "@/lib/data/admin-knowledge";
 
 export default async function AdminKnowledgePage() {
   await requireAdminUser();
-  const notebooks = await listAdminKnowledgeNotebooks();
+  const notebookPage = await listAdminKnowledgeNotebooks({ page: 1, pageSize: 50 });
 
   return (
     <AdminShell
       title="Notebooks"
       subtitle="Create notebooks by board, level, faculty, and subject. Then add syllabus, study material, and question bank resources under each notebook."
     >
-      <AdminKnowledgeManager initialNotebooks={notebooks} />
+      <AdminKnowledgeManager initialNotebooks={notebookPage.items} initialNotebookPage={notebookPage} />
     </AdminShell>
   );
 }

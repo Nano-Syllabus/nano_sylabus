@@ -39,11 +39,13 @@ export function AdminPaymentDetailClient({
   const isFinalized = submission.status !== "submitted";
 
   return (
-    <div className="mx-auto max-w-4xl px-5 py-8">
+    <div className="mx-auto max-w-[1200px] px-5 py-6 md:px-8">
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-2xl border border-border bg-bg-primary p-6">
+        <section className="overflow-hidden rounded-none border border-border bg-bg-primary">
+          <div className="border-b border-border px-5 py-4">
           <p className="text-[11px] font-mono-ui uppercase text-text-muted">Payment proof</p>
-          <div className="mt-5 space-y-4">
+          </div>
+          <div className="space-y-4 px-5 py-5">
             <DetailRow label="Student" value={submission.studentName} />
             <DetailRow label="Reference" value={submission.reference} />
             <DetailRow label="Payer name" value={submission.payerName || "Not provided"} />
@@ -56,9 +58,11 @@ export function AdminPaymentDetailClient({
           </div>
         </section>
 
-        <section className="rounded-2xl border border-border bg-bg-secondary p-6">
+        <section className="overflow-hidden rounded-none border border-border bg-bg-secondary">
+          <div className="border-b border-border px-5 py-4">
           <p className="text-[11px] font-mono-ui uppercase text-text-muted">Invoice summary</p>
-          <div className="mt-5 space-y-4">
+          </div>
+          <div className="space-y-4 px-5 py-5">
             <DetailRow label="Plan" value={submission.planName} />
             <DetailRow label="Credits" value={`${submission.planCredits}`} />
             <DetailRow label="Amount" value={`${submission.currency} ${submission.amount}`} />
@@ -66,9 +70,9 @@ export function AdminPaymentDetailClient({
             <DetailRow label="Submission status" value={submission.status} />
           </div>
 
-          {error ? <p className="mt-5 text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="px-5 text-sm text-destructive">{error}</p> : null}
 
-          <div className="mt-6 flex flex-col gap-2">
+          <div className="flex flex-col gap-2 px-5 pb-5">
             <Button
               onClick={() => void runAction("approve")}
               disabled={isFinalized || loadingAction !== null}

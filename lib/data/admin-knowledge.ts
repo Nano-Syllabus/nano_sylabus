@@ -4,6 +4,7 @@ import { createKnowledgeSourceSignedUrl, removeKnowledgeSourceFile } from "@/lib
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/profile-normalization";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
+  AdminListPage,
   AdminKnowledgeDocumentDetail,
   AdminKnowledgeDocumentSummary,
   AdminKnowledgeNotebookDetail,
@@ -66,6 +67,19 @@ interface KnowledgeChunkRow {
   content: string;
   chunk_index: number;
   created_at: string;
+}
+
+const DEFAULT_ADMIN_PAGE_SIZE = 50;
+const MAX_ADMIN_PAGE_SIZE = 100;
+
+function normalizePage(value: number | undefined) {
+  if (!value || Number.isNaN(value) || value < 1) return 1;
+  return Math.floor(value);
+}
+
+function normalizePageSize(value: number | undefined) {
+  if (!value || Number.isNaN(value) || value < 1) return DEFAULT_ADMIN_PAGE_SIZE;
+  return Math.min(MAX_ADMIN_PAGE_SIZE, Math.floor(value));
 }
 
 export interface AdminKnowledgeNotebookInput {
@@ -189,13 +203,21 @@ async function getNotebookCounts(notebookIds: string[]) {
   return counts;
 }
 
-export async function listAdminKnowledgeNotebooks(filters?: { q?: string }) {
+export async function listAdminKnowledgeNotebooks(filters?: {
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<AdminListPage<AdminKnowledgeNotebookSummary>> {
   const supabase = createSupabaseAdminClient();
+  const page = normalizePage(filters?.page);
+  const pageSize = normalizePageSize(filters?.pageSize);
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
   let query = supabase
     .from("knowledge_notebooks")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("updated_at", { ascending: false })
-    .limit(200);
+    .range(from, to);
 
   const q = filters?.q?.trim();
   if (q) {
@@ -204,15 +226,26 @@ export async function listAdminKnowledgeNotebooks(filters?: { q?: string }) {
     );
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) throw error;
 
   const rows = (data ?? []) as KnowledgeNotebookRow[];
   const counts = await getNotebookCounts(rows.map((row) => row.id));
-  return rows.map((row) => toKnowledgeNotebook(row, counts.get(row.id)));
+  const items = rows.map((row) => toKnowledgeNotebook(row, counts.get(row.id)));
+  const total = count ?? items.length;
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }
 
-export async function getAdminKnowledgeNotebook(notebookId: string) {
+export async function getAdminKnowledgeNotebook(
+  notebookId: string,
+  options?: { resourceQ?: string; resourcePage?: number; resourcePageSize?: number },
+) {
   const supabase = createSupabaseAdminClient();
   const { data: notebook, error: notebookError } = await supabase
     .from("knowledge_notebooks")
@@ -223,13 +256,30 @@ export async function getAdminKnowledgeNotebook(notebookId: string) {
   if (notebookError) throw notebookError;
   if (!notebook) return null;
 
-  const { data: resources, error: resourceError } = await supabase
+  const resourcePage = normalizePage(options?.resourcePage);
+  const resourcePageSize = normalizePageSize(options?.resourcePageSize);
+  const resourceFrom = (resourcePage - 1) * resourcePageSize;
+  const resourceTo = resourceFrom + resourcePageSize - 1;
+
+  let resourceQuery = supabase
     .from("knowledge_documents")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("notebook_id", notebookId)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .range(resourceFrom, resourceTo);
+
+  const resourceQ = options?.resourceQ?.trim();
+  if (resourceQ) {
+    resourceQuery = resourceQuery.or(
+      `title.ilike.%${resourceQ}%,subject.ilike.%${resourceQ}%,chapter.ilike.%${resourceQ}%,curriculum.ilike.%${resourceQ}%,faculty.ilike.%${resourceQ}%,resource_subtype.ilike.%${resourceQ}%`,
+    );
+  }
+
+  const { data: resources, error: resourceError, count: resourceCount } = await resourceQuery;
 
   if (resourceError) throw resourceError;
+
+  const resourceTotal = resourceCount ?? (resources ?? []).length;
 
   return {
     ...toKnowledgeNotebook(notebook as KnowledgeNotebookRow),
@@ -239,6 +289,10 @@ export async function getAdminKnowledgeNotebook(notebookId: string) {
         notebook_title: (notebook as KnowledgeNotebookRow).title,
       }),
     ),
+    resourceTotal,
+    resourcePage,
+    resourcePageSize,
+    resourceTotalPages: Math.max(1, Math.ceil(resourceTotal / resourcePageSize)),
   } satisfies AdminKnowledgeNotebookDetail;
 }
 
@@ -308,13 +362,22 @@ export async function deleteAdminKnowledgeNotebook(notebookId: string) {
   if (error) throw error;
 }
 
-export async function listAdminKnowledgeDocuments(filters?: { q?: string; notebookId?: string }) {
+export async function listAdminKnowledgeDocuments(filters?: {
+  q?: string;
+  notebookId?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<AdminListPage<AdminKnowledgeDocumentSummary>> {
   const supabase = createSupabaseAdminClient();
+  const page = normalizePage(filters?.page);
+  const pageSize = normalizePageSize(filters?.pageSize);
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
   let query = supabase
     .from("knowledge_documents")
-    .select("*, knowledge_notebooks(title)")
+    .select("*, knowledge_notebooks(title)", { count: "exact" })
     .order("updated_at", { ascending: false })
-    .limit(200);
+    .range(from, to);
 
   const q = filters?.q?.trim();
   if (q) {
@@ -327,10 +390,10 @@ export async function listAdminKnowledgeDocuments(filters?: { q?: string; notebo
     query = query.eq("notebook_id", filters.notebookId);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) throw error;
 
-  return ((data ?? []) as Array<KnowledgeDocumentRow & { knowledge_notebooks?: { title: string } | { title: string }[] | null }>).map(
+  const items = ((data ?? []) as Array<KnowledgeDocumentRow & { knowledge_notebooks?: { title: string } | { title: string }[] | null }>).map(
     (row) =>
       toKnowledgeDocument({
         ...row,
@@ -339,6 +402,14 @@ export async function listAdminKnowledgeDocuments(filters?: { q?: string; notebo
           : row.knowledge_notebooks?.title ?? null,
       }),
   );
+  const total = count ?? items.length;
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }
 
 export async function getAdminKnowledgeDocument(documentId: string) {
