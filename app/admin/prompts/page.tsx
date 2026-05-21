@@ -9,7 +9,7 @@ export default async function AdminPromptsPage() {
 
   return (
     <AdminShell
-      title="AI Settings"
+      title="AI Instructions"
       subtitle="Change the live AI instructions. One active template per purpose and language shapes student answers."
     >
       <AdminPromptManager initialPrompts={prompts} />

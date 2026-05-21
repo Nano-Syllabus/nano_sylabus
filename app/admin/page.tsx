@@ -34,7 +34,7 @@ export default async function AdminIndexPage() {
   return (
     <AdminShell
       title="Home"
-      subtitle="Only the main controls you need every day: students, answers, content, payments, and AI settings."
+      subtitle="Only the main controls you need every day: students, answers, notebooks, payments, and AI instructions."
     >
       <div className="mx-auto max-w-7xl px-5 py-8 md:px-8">
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
@@ -43,7 +43,7 @@ export default async function AdminIndexPage() {
           <OverviewStat label="Notebooks" value={notebooks.length} note={`${totalResources} resources`} />
           <OverviewStat label="Ready chunks" value={totalReadyChunks} note="Grounded retrieval inventory" />
           <OverviewStat label="Payments" value={pendingPayments} note={`${activeSubscriptions} active subs`} />
-          <OverviewStat label="AI settings" value={activePrompts} note={`${prompts.length} total templates`} />
+          <OverviewStat label="AI instructions" value={activePrompts} note={`${prompts.length} total templates`} />
         </section>
 
         <section className="mt-8 grid gap-4 xl:grid-cols-2">
@@ -72,10 +72,10 @@ export default async function AdminIndexPage() {
             <p className="text-[11px] font-mono-ui uppercase tracking-[0.24em] text-text-muted">Quick actions</p>
             <h2 className="mt-2 font-display text-3xl">Open the important sections fast</h2>
             <div className="mt-5 grid gap-3 md:grid-cols-2">
-              <ActionLink href="/admin/knowledge" title="Content" note="Create notebooks, upload files, and process resources." />
+              <ActionLink href="/admin/knowledge" title="Notebooks" note="Create notebooks, add resources, upload files, and process them." />
               <ActionLink href="/admin/users" title="Students" note="Search students, change roles, and adjust credits." />
               <ActionLink href="/admin/billing" title="Payments" note="Manage plans, subscriptions, and payment review." />
-              <ActionLink href="/admin/prompts" title="AI settings" note="Change answer behavior through active templates." />
+              <ActionLink href="/admin/prompts" title="AI instructions" note="Change answer behavior through active templates." />
             </div>
           </div>
         </section>
@@ -83,8 +83,8 @@ export default async function AdminIndexPage() {
         <section className="mt-8 grid gap-4 xl:grid-cols-3">
           <SurfaceCard
             href="/admin/knowledge"
-            eyebrow="Content"
-            title="Notebook-based content control"
+            eyebrow="Notebooks"
+            title="Notebook-based resource control"
             summary="Board, level, faculty, notebook resources, upload flow, and chunk/vector processing."
             footer={`${notebooks.length} notebooks • ${totalResources} resources`}
           />

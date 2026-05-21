@@ -11,11 +11,11 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/admin", label: "Home", icon: "🏠" },
-  { href: "/admin/knowledge", label: "Content", icon: "📚" },
+  { href: "/admin/knowledge", label: "Notebooks", icon: "📚" },
   { href: "/admin/answers", label: "Answers", icon: "🤖" },
   { href: "/admin/users", label: "Students", icon: "👥" },
   { href: "/admin/billing", label: "Payments", icon: "🧾" },
-  { href: "/admin/prompts", label: "AI Settings", icon: "✍️" },
+  { href: "/admin/prompts", label: "AI Instructions", icon: "✍️" },
 ];
 
 export function AdminShell({
@@ -48,7 +48,7 @@ export function AdminShell({
         <div className="px-4 py-4">
           <div className="rounded-[24px] border border-border bg-bg-primary p-4">
             <p className="font-display text-3xl">Nano Ops</p>
-            <p className="mt-1 text-xs text-text-muted">Simple control for content, students, payments, and answer quality</p>
+            <p className="mt-1 text-xs text-text-muted">Simple control for notebooks, students, payments, and answer quality</p>
           </div>
         </div>
         <nav className="flex flex-col gap-1 px-3 py-2">
