@@ -354,3 +354,42 @@ export async function updateAdminAnswerReview(
   if (!data) return null;
   return getAdminAnswerDetail(messageId);
 }
+
+export async function bulkUpdateAdminAnswerReview(
+  messageIds: string[],
+  payload: {
+    adminUserId: string;
+    reviewed: boolean;
+    adminReviewNote?: string | null;
+  },
+) {
+  const normalizedMessageIds = [...new Set(messageIds.map((id) => id.trim()).filter(Boolean))];
+  if (!normalizedMessageIds.length) {
+    throw new Error("No answer ids were provided for bulk review update.");
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    admin_reviewed_at: payload.reviewed ? new Date().toISOString() : null,
+    admin_reviewed_by: payload.reviewed ? payload.adminUserId : null,
+  };
+
+  if (payload.adminReviewNote !== undefined) {
+    const note = payload.adminReviewNote?.trim() ?? "";
+    updatePayload.admin_review_note = note ? note : null;
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .update(updatePayload)
+    .eq("role", "assistant")
+    .in("id", normalizedMessageIds)
+    .select("id");
+
+  if (error) throw error;
+
+  return {
+    updatedCount: data?.length ?? 0,
+    messageIds: (data ?? []).map((row) => row.id as string),
+  };
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AdminEntityListPanel } from "@/components/admin/entity-list-panel";
 import {
   NOTEBOOK_COLLECTION,
   RESOURCE_COLLECTION,
@@ -97,9 +98,11 @@ export function AdminKnowledgeManager({
   const [notebookTotalPages, setNotebookTotalPages] = useState(initialNotebookPage.totalPages);
   const [notebookListLoading, setNotebookListLoading] = useState(false);
   const [selectedNotebookId, setSelectedNotebookId] = useState<string>(initialNotebooks[0]?.id ?? "new");
+  const [selectedNotebookIds, setSelectedNotebookIds] = useState<string[]>([]);
   const [notebookDetail, setNotebookDetail] = useState<AdminKnowledgeNotebookDetail | null>(null);
   const [notebookForm, setNotebookForm] = useState<NotebookFormState>(EMPTY_NOTEBOOK);
   const [selectedResourceId, setSelectedResourceId] = useState<string>("new");
+  const [selectedResourceIds, setSelectedResourceIds] = useState<string[]>([]);
   const [resourceForm, setResourceForm] = useState<ResourceFormState>(EMPTY_RESOURCE);
   const [query, setQuery] = useState("");
   const [resourceQuery, setResourceQuery] = useState("");
@@ -109,7 +112,15 @@ export function AdminKnowledgeManager({
   const [resourceTotalPages, setResourceTotalPages] = useState(1);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [busy, setBusy] = useState<
-    "idle" | "loading" | "savingNotebook" | "deletingNotebook" | "savingResource" | "processing" | "deletingResource" | "uploading"
+    | "idle"
+    | "loading"
+    | "savingNotebook"
+    | "deletingNotebook"
+    | "savingResource"
+    | "processing"
+    | "deletingResource"
+    | "uploading"
+    | "bulkProcessing"
   >("idle");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadAutoProcess, setUploadAutoProcess] = useState(true);
@@ -194,6 +205,22 @@ export function AdminKnowledgeManager({
     }
     setResourceForm(toResourceFormState(resource));
   }, [notebookDetail, selectedResourceId]);
+
+  useEffect(() => {
+    if (!notebookDetail) {
+      setSelectedResourceIds([]);
+      return;
+    }
+    setSelectedResourceIds((current) =>
+      current.filter((resourceId) => notebookDetail.resources.some((resource) => resource.id === resourceId)),
+    );
+  }, [notebookDetail]);
+
+  useEffect(() => {
+    setSelectedNotebookIds((current) =>
+      current.filter((notebookId) => notebooks.some((notebook) => notebook.id === notebookId)),
+    );
+  }, [notebooks]);
 
   function updateNotebook<K extends keyof NotebookFormState>(key: K, value: NotebookFormState[K]) {
     setNotebookForm((current) => ({ ...current, [key]: value }));
@@ -434,6 +461,43 @@ export function AdminKnowledgeManager({
     }
   }
 
+  async function bulkProcessResources() {
+    if (!selectedResourceIds.length) {
+      setFeedback("Select at least one resource first.");
+      return;
+    }
+
+    setBusy("bulkProcessing");
+    setFeedback(null);
+    try {
+      const response = await fetch("/api/admin/knowledge-documents/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "process",
+          documentIds: selectedResourceIds,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to run bulk resource process.");
+      }
+
+      await refreshNotebooks(selectedNotebookId, notebookPage);
+      await refreshNotebookDetail(selectedNotebookId, { resourcePage });
+      setSelectedResourceIds([]);
+      setFeedback(
+        `Bulk processing completed: ${payload.succeeded}/${payload.total} succeeded${
+          payload.failed ? `, ${payload.failed} failed` : ""
+        }.`,
+      );
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Failed to run bulk resource process.");
+    } finally {
+      setBusy("idle");
+    }
+  }
+
   async function deleteResource() {
     if (!selectedResource) return;
     const confirmed = window.confirm(`Delete resource "${selectedResource.title}"? This also removes its chunks.`);
@@ -531,169 +595,88 @@ export function AdminKnowledgeManager({
     <div className="mx-auto max-w-[1600px] px-5 py-6 md:px-8">
       <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
       <aside className="space-y-6">
-        <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
-          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-            <div>
-              <p className="font-semibold">{NOTEBOOK_COLLECTION.label}</p>
-              <p className="mt-1 text-xs text-text-secondary">{NOTEBOOK_COLLECTION.subtitle}</p>
-            </div>
-            <Button size="sm" onClick={resetNotebook}>
+        <AdminEntityListPanel
+          title={NOTEBOOK_COLLECTION.label}
+          subtitle={NOTEBOOK_COLLECTION.subtitle}
+          searchPlaceholder={NOTEBOOK_COLLECTION.searchPlaceholder}
+          emptyMessage={NOTEBOOK_COLLECTION.emptyMessage}
+          query={query}
+          onQueryChange={setQuery}
+          listLoading={notebookListLoading}
+          items={notebooks}
+          getId={(notebook) => notebook.id}
+          getItemView={(notebook) => ({
+            title: notebook.title,
+            subtitle: `${notebook.board} · ${notebook.level} · ${notebook.subject}`,
+            meta: `${notebook.resourceCount} resources · ${notebook.readyChunkCount} ready chunks`,
+          })}
+          selectedId={selectedNotebookId}
+          onSelect={(id) => {
+            setResourceQuery("");
+            setResourcePage(1);
+            setSelectedNotebookId(id);
+          }}
+          selectedIds={selectedNotebookIds}
+          onSelectedIdsChange={setSelectedNotebookIds}
+          page={notebookPage}
+          totalPages={notebookTotalPages}
+          total={notebookTotal}
+          pageSize={notebookPageSize}
+          onPrevPage={() => void refreshNotebooks(undefined, Math.max(1, notebookPage - 1))}
+          onNextPage={() => void refreshNotebooks(undefined, Math.min(notebookTotalPages, notebookPage + 1))}
+          disabled={busy !== "idle"}
+          maxListHeightClassName="xl:max-h-[36rem]"
+          headerAction={
+            <Button size="sm" onClick={resetNotebook} disabled={busy !== "idle"}>
               New
             </Button>
-          </div>
-          <div className="border-b border-border px-4 py-3">
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={NOTEBOOK_COLLECTION.searchPlaceholder}
-            />
-          </div>
-          <div className="xl:max-h-[36rem] xl:overflow-y-auto">
-            {notebooks.length ? (
-              notebooks.map((notebook) => (
-                <button
-                  key={notebook.id}
-                  type="button"
-                  onClick={() => {
-                    setResourceQuery("");
-                    setResourcePage(1);
-                    setSelectedNotebookId(notebook.id);
-                  }}
-                  className={`w-full border-b border-border px-4 py-3 text-left transition last:border-b-0 ${
-                    selectedNotebookId === notebook.id
-                      ? "bg-[#f7f0b4] text-slate-950"
-                      : "bg-bg-primary hover:bg-bg-secondary"
-                  }`}
-                >
-                  <p className="text-sm font-medium">{notebook.title}</p>
-                  <p className={`mt-1 text-xs ${selectedNotebookId === notebook.id ? "text-slate-700" : "text-text-secondary"}`}>
-                    {notebook.board} · {notebook.level} · {notebook.subject}
-                  </p>
-                  <p className={`mt-1 text-[11px] ${selectedNotebookId === notebook.id ? "text-slate-600" : "text-text-muted"}`}>
-                    {notebook.resourceCount} resources · {notebook.readyChunkCount} ready chunks
-                  </p>
-                </button>
-              ))
-            ) : (
-              <div className="px-4 py-8 text-center text-sm text-text-secondary">
-                {NOTEBOOK_COLLECTION.emptyMessage}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-text-secondary">
-            <span>
-              {notebookListLoading
-                ? "Loading..."
-                : `Showing ${notebookTotal === 0 ? 0 : (notebookPage - 1) * notebookPageSize + 1}-${Math.min(
-                    notebookTotal,
-                    notebookPage * notebookPageSize,
-                  )} of ${notebookTotal}`}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void refreshNotebooks(undefined, Math.max(1, notebookPage - 1))}
-                disabled={notebookListLoading || notebookPage <= 1}
-              >
-                Prev
-              </Button>
-              <span>
-                {notebookPage}/{Math.max(1, notebookTotalPages)}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void refreshNotebooks(undefined, Math.min(notebookTotalPages, notebookPage + 1))}
-                disabled={notebookListLoading || notebookPage >= notebookTotalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        </div>
+          }
+        />
 
-        <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
-          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-            <div>
-              <p className="font-semibold">{RESOURCE_COLLECTION.label}</p>
-              <p className="mt-1 text-xs text-text-secondary">
-                {notebookDetail ? `${resourceTotal} linked resources` : "Create a notebook first"}
-              </p>
-            </div>
-            <Button size="sm" onClick={startNewResource} disabled={!notebookDetail}>
+        <AdminEntityListPanel
+          title={RESOURCE_COLLECTION.label}
+          subtitle={notebookDetail ? `${resourceTotal} linked resources` : "Create a notebook first"}
+          searchPlaceholder={RESOURCE_COLLECTION.searchPlaceholder || "Search title, chapter, subtype..."}
+          emptyMessage={RESOURCE_COLLECTION.emptyMessage}
+          query={resourceQuery}
+          onQueryChange={(value) => {
+            setResourceQuery(value);
+            setResourcePage(1);
+          }}
+          listLoading={busy === "loading" || busy === "bulkProcessing"}
+          items={notebookDetail?.resources ?? []}
+          getId={(resource) => resource.id}
+          getItemView={(resource) => ({
+            title: resource.title,
+            subtitle: `${RESOURCE_KIND_OPTIONS.find((kind) => kind.value === resource.resourceKind)?.label} · ${resource.resourceSubtype}`,
+            meta: `${resource.processingStatus} · ${resource.chunkCount} chunks · updated ${formatDate(resource.updatedAt)}`,
+          })}
+          selectedId={selectedResourceId}
+          onSelect={setSelectedResourceId}
+          selectedIds={selectedResourceIds}
+          onSelectedIdsChange={setSelectedResourceIds}
+          page={resourcePage}
+          totalPages={resourceTotalPages}
+          total={resourceTotal}
+          pageSize={resourcePageSize}
+          onPrevPage={() => setResourcePage((current) => Math.max(1, current - 1))}
+          onNextPage={() => setResourcePage((current) => Math.min(resourceTotalPages, current + 1))}
+          disabled={!notebookDetail || busy !== "idle"}
+          maxListHeightClassName="xl:max-h-[34rem]"
+          headerAction={
+            <Button size="sm" onClick={startNewResource} disabled={!notebookDetail || busy !== "idle"}>
               New
             </Button>
-          </div>
-          <div className="border-b border-border px-4 py-3">
-            <Input
-              value={resourceQuery}
-              onChange={(event) => {
-                setResourceQuery(event.target.value);
-                setResourcePage(1);
-              }}
-              placeholder={RESOURCE_COLLECTION.searchPlaceholder || "Search title, chapter, subtype..."}
-              disabled={!notebookDetail}
-            />
-          </div>
-          <div className="xl:max-h-[34rem] xl:overflow-y-auto">
-            {notebookDetail?.resources.length ? (
-              notebookDetail.resources.map((resource) => (
-                <button
-                  key={resource.id}
-                  type="button"
-                  onClick={() => setSelectedResourceId(resource.id)}
-                  className={`w-full border-b border-border px-4 py-3 text-left transition last:border-b-0 ${
-                    selectedResourceId === resource.id
-                      ? "bg-[#f7f0b4] text-slate-950"
-                      : "bg-bg-primary hover:bg-bg-secondary"
-                  }`}
-                >
-                  <p className="text-sm font-medium">{resource.title}</p>
-                  <p className={`mt-1 text-xs ${selectedResourceId === resource.id ? "text-slate-700" : "text-text-secondary"}`}>
-                    {RESOURCE_KIND_OPTIONS.find((kind) => kind.value === resource.resourceKind)?.label} · {resource.resourceSubtype}
-                  </p>
-                  <p className={`mt-1 text-[11px] ${selectedResourceId === resource.id ? "text-slate-600" : "text-text-muted"}`}>
-                    {resource.processingStatus} · {resource.chunkCount} chunks · updated {formatDate(resource.updatedAt)}
-                  </p>
-                </button>
-              ))
-            ) : (
-              <div className="px-4 py-8 text-center text-sm text-text-secondary">
-                {RESOURCE_COLLECTION.emptyMessage}
-              </div>
-            )}
-          </div>
-          {notebookDetail ? (
-            <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-text-secondary">
-              <span>
-                Showing {resourceTotal === 0 ? 0 : (resourcePage - 1) * resourcePageSize + 1}-
-                {Math.min(resourceTotal, resourcePage * resourcePageSize)} of {resourceTotal}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setResourcePage((current) => Math.max(1, current - 1))}
-                  disabled={resourcePage <= 1}
-                >
-                  Prev
-                </Button>
-                <span>
-                  {resourcePage}/{Math.max(1, resourceTotalPages)}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setResourcePage((current) => Math.min(resourceTotalPages, current + 1))}
-                  disabled={resourcePage >= resourceTotalPages}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </div>
+          }
+          bulkActions={[
+            {
+              key: "bulk-process",
+              label: busy === "bulkProcessing" ? "Bulk processing..." : "Bulk process selected",
+              onRun: () => bulkProcessResources(),
+              disabled: !notebookDetail || busy !== "idle",
+            },
+          ]}
+        />
       </aside>
 
       <section className="space-y-6">

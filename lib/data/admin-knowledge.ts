@@ -616,3 +616,33 @@ export async function processAdminKnowledgeDocument(documentId: string) {
 
   return getAdminKnowledgeDocument(documentId);
 }
+
+export async function bulkProcessAdminKnowledgeDocuments(documentIds: string[]) {
+  const normalizedDocumentIds = [...new Set(documentIds.map((id) => id.trim()).filter(Boolean))];
+  if (!normalizedDocumentIds.length) {
+    throw new Error("No resource ids were provided for bulk processing.");
+  }
+
+  const successes: string[] = [];
+  const failures: Array<{ documentId: string; error: string }> = [];
+
+  for (const documentId of normalizedDocumentIds) {
+    try {
+      await processAdminKnowledgeDocument(documentId);
+      successes.push(documentId);
+    } catch (error) {
+      failures.push({
+        documentId,
+        error: error instanceof Error ? error.message : "Unknown processing failure",
+      });
+    }
+  }
+
+  return {
+    total: normalizedDocumentIds.length,
+    succeeded: successes.length,
+    failed: failures.length,
+    successes,
+    failures,
+  };
+}

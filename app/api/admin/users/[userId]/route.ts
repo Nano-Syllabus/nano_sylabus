@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { userRoleUpdateSchema } from "@/lib/admin/schemas";
 import { getAdminUserDetail, updateAdminUserRole } from "@/lib/data/admin-users";
-
-const patchSchema = z.object({
-  role: z.enum(["student", "admin"]),
-});
 
 export async function GET(
   _request: Request,
@@ -42,7 +38,7 @@ export async function PATCH(
 
   try {
     const { userId } = await params;
-    const payload = patchSchema.parse(await request.json());
+    const payload = userRoleUpdateSchema.parse(await request.json());
     const user = await updateAdminUserRole(userId, payload.role);
     return NextResponse.json({ user });
   } catch (error) {

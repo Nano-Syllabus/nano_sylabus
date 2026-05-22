@@ -430,6 +430,30 @@ export async function updateAdminUserRole(userId: string, role: AppRole) {
   return getAdminUserDetail(userId);
 }
 
+export async function bulkUpdateAdminUserRoles(input: {
+  userIds: string[];
+  role: AppRole;
+}) {
+  const userIds = [...new Set(input.userIds.map((id) => id.trim()).filter(Boolean))];
+  if (!userIds.length) {
+    throw new Error("No user ids were provided for bulk role update.");
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const payload = userIds.map((userId) => ({
+    user_id: userId,
+    role: input.role,
+  }));
+
+  const { error } = await supabase.from("student_profiles").upsert(payload, { onConflict: "user_id" });
+  if (error) throw error;
+
+  return {
+    updatedCount: userIds.length,
+    userIds,
+  };
+}
+
 export async function adjustAdminUserCredits(input: {
   userId: string;
   amount: number;
