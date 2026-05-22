@@ -1,43 +1,13 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { knowledgeDocumentInputSchema } from "@/lib/admin/schemas";
 import {
   deleteAdminKnowledgeDocument,
   getAdminKnowledgeDocument,
   updateAdminKnowledgeDocument,
-  type AdminKnowledgeDocumentInput,
 } from "@/lib/data/admin-knowledge";
 
-const documentSchema = z.object({
-  notebookId: z.string().trim().min(1),
-  board: z.string().trim().min(1),
-  grade: z.string().trim().min(1),
-  faculty: z.string().trim().default(""),
-  curriculum: z.string().trim().default(""),
-  subject: z.string().trim().min(1),
-  chapter: z.string().trim().nullable().optional(),
-  resourceKind: z.enum(["syllabus", "study_material", "question_bank"]),
-  resourceSubtype: z.enum([
-    "micro_syllabus",
-    "curriculum",
-    "syllabus",
-    "learning_outcomes",
-    "textbook",
-    "notes",
-    "solutions",
-    "guides",
-    "question_bank",
-    "past_questions",
-    "example_questions",
-    "other",
-  ]),
-  title: z.string().trim().min(1),
-  sourceName: z.string().trim().min(1),
-  sourceType: z.string().trim().min(1),
-  rawContent: z.string().trim().min(1),
-});
-
-function toInput(payload: z.infer<typeof documentSchema>): AdminKnowledgeDocumentInput {
+function toInput(payload: ReturnType<typeof knowledgeDocumentInputSchema.parse>) {
   return {
     ...payload,
     chapter: payload.chapter?.trim() || null,
@@ -79,7 +49,7 @@ export async function PATCH(
 
   try {
     const { documentId } = await params;
-    const payload = documentSchema.parse(await request.json());
+    const payload = knowledgeDocumentInputSchema.parse(await request.json());
     const document = await updateAdminKnowledgeDocument(documentId, toInput(payload));
     return NextResponse.json({ document });
   } catch (error) {

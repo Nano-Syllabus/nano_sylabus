@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { answerReviewUpdateSchema } from "@/lib/admin/schemas";
 import { getAdminAnswerDetail, updateAdminAnswerReview } from "@/lib/data/admin-answers";
-
-const answerReviewSchema = z.object({
-  reviewed: z.boolean().optional(),
-  adminReviewNote: z.string().trim().max(4000).nullable().optional(),
-});
 
 export async function GET(
   _request: Request,
@@ -42,7 +37,7 @@ export async function PATCH(
   }
 
   try {
-    const payload = answerReviewSchema.parse(await request.json());
+    const payload = answerReviewUpdateSchema.parse(await request.json());
     const { messageId } = await params;
     const answer = await updateAdminAnswerReview(messageId, {
       adminUserId: access.userId,

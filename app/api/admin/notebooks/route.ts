@@ -1,31 +1,11 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { assertAdminRequest } from "@/lib/admin-access";
-import {
-  createAdminKnowledgeNotebook,
-  listAdminKnowledgeNotebooks,
-  type AdminKnowledgeNotebookInput,
-} from "@/lib/data/admin-knowledge";
+import { parseAdminListQuery } from "@/lib/admin/list-query";
+import { notebookInputSchema } from "@/lib/admin/schemas";
+import { createAdminKnowledgeNotebook, listAdminKnowledgeNotebooks } from "@/lib/data/admin-knowledge";
 
-const notebookSchema = z.object({
-  title: z.string().trim().min(1),
-  board: z.string().trim().min(1),
-  level: z.string().trim().min(1),
-  faculty: z.string().trim().default(""),
-  subject: z.string().trim().min(1),
-  curriculum: z.string().trim().default(""),
-  description: z.string().trim().default(""),
-});
-
-function toInput(payload: z.infer<typeof notebookSchema>): AdminKnowledgeNotebookInput {
+function toInput(payload: ReturnType<typeof notebookInputSchema.parse>) {
   return payload;
-}
-
-function parsePositiveInt(value: string | null, fallback: number) {
-  if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
-  return parsed;
 }
 
 export async function GET(request: Request) {
@@ -36,10 +16,11 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
+    const query = parseAdminListQuery(searchParams);
     const result = await listAdminKnowledgeNotebooks({
-      q: searchParams.get("q") ?? undefined,
-      page: parsePositiveInt(searchParams.get("page"), 1),
-      pageSize: parsePositiveInt(searchParams.get("pageSize"), 50),
+      q: query.q,
+      page: query.page,
+      pageSize: query.pageSize,
     });
     return NextResponse.json(result);
   } catch (error) {
@@ -57,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const payload = notebookSchema.parse(await request.json());
+    const payload = notebookInputSchema.parse(await request.json());
     const notebook = await createAdminKnowledgeNotebook(toInput(payload));
     return NextResponse.json({ notebook }, { status: 201 });
   } catch (error) {

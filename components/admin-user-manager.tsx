@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
+import { AdminEntityListPanel } from "@/components/admin/entity-list-panel";
 import { USER_COLLECTION } from "@/lib/admin-resource-definitions";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
@@ -17,6 +18,7 @@ export function AdminUserManager({
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [selectedId, setSelectedId] = useState<string>(initialUsers[0]?.userId ?? "");
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(initialPage.page);
@@ -29,6 +31,7 @@ export function AdminUserManager({
   const [nextRole, setNextRole] = useState<AppRole>("student");
   const [creditAmount, setCreditAmount] = useState("20");
   const [creditReason, setCreditReason] = useState("Manual admin adjustment");
+  const [bulkRole, setBulkRole] = useState<AppRole>("student");
 
   useEffect(() => {
     let ignore = false;
@@ -104,6 +107,53 @@ export function AdminUserManager({
     return () => clearTimeout(timer);
   }, [query, refreshUsers]);
 
+  useEffect(() => {
+    setSelectedUserIds((current) =>
+      current.filter((userId) => users.some((user) => user.userId === userId)),
+    );
+  }, [users]);
+
+  async function handleBulkRoleSave() {
+    if (!selectedUserIds.length) {
+      setFeedback("Select at least one student first.");
+      return;
+    }
+
+    setBusy("saving-role");
+    setFeedback(null);
+    try {
+      const response = await fetch("/api/admin/users/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "set_role",
+          role: bulkRole,
+          userIds: selectedUserIds,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to update selected user roles.");
+      }
+
+      await refreshUsers(selectedId, page);
+      setSelectedUserIds([]);
+      if (detail && selectedUserIds.includes(detail.userId)) {
+        const refreshedDetail = await fetch(`/api/admin/users/${detail.userId}`);
+        const detailPayload = await refreshedDetail.json();
+        if (refreshedDetail.ok) {
+          setDetail(detailPayload.user);
+          setNextRole(detailPayload.user.role);
+        }
+      }
+      setFeedback(`${payload.updatedCount} users updated to role "${bulkRole}".`);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Failed to update selected user roles.");
+    } finally {
+      setBusy("idle");
+    }
+  }
+
   async function handleRoleSave() {
     if (!detail) return;
     setBusy("saving-role");
@@ -163,75 +213,51 @@ export function AdminUserManager({
     }
   }
 
-  const currentPageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const currentPageEnd = Math.min(total, page * pageSize);
-
   return (
     <div className="mx-auto grid max-w-[1600px] gap-6 px-5 py-6 md:px-8 xl:grid-cols-[320px_minmax(0,1fr)]">
       <aside className="space-y-4">
-        <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
-          <div className="border-b border-border px-4 py-3">
-            <p className="font-semibold">{USER_COLLECTION.label}</p>
-            <p className="mt-1 text-xs text-text-secondary">{USER_COLLECTION.subtitle}</p>
-          </div>
-          <div className="border-b border-border px-4 py-3">
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={USER_COLLECTION.searchPlaceholder}
-            />
-          </div>
-          <div className="xl:max-h-[72vh] xl:overflow-y-auto">
-            {users.length ? (
-              users.map((user) => (
-                <button
-                  key={user.userId}
-                  type="button"
-                  onClick={() => setSelectedId(user.userId)}
-                  className={`w-full border-b border-border px-4 py-3 text-left transition last:border-b-0 ${
-                    selectedId === user.userId
-                      ? "bg-[#f7f0b4] text-slate-950"
-                      : "bg-bg-primary hover:bg-bg-secondary"
-                  }`}
-                >
-                  <p className="text-sm font-medium">{user.fullName}</p>
-                  <p className={`mt-1 text-xs ${selectedId === user.userId ? "text-slate-700" : "text-text-secondary"}`}>{user.email}</p>
-                  <p className={`mt-1 text-[11px] ${selectedId === user.userId ? "text-slate-600" : "text-text-muted"}`}>
-                    {user.role} · {user.creditBalance} credits · {user.grade || "Not onboarded"}
-                  </p>
-                </button>
-              ))
-            ) : (
-              <div className="px-4 py-8 text-center text-sm text-text-secondary">
-                {USER_COLLECTION.emptyMessage}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-text-secondary">
-            <span>{listLoading ? "Loading..." : `Showing ${currentPageStart}-${currentPageEnd} of ${total}`}</span>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void refreshUsers(undefined, Math.max(1, page - 1))}
-                disabled={listLoading || page <= 1}
+        <AdminEntityListPanel
+          title={USER_COLLECTION.label}
+          subtitle={USER_COLLECTION.subtitle}
+          searchPlaceholder={USER_COLLECTION.searchPlaceholder}
+          emptyMessage={USER_COLLECTION.emptyMessage}
+          query={query}
+          onQueryChange={setQuery}
+          listLoading={listLoading}
+          items={users}
+          getId={(user) => user.userId}
+          getItemView={(user) => ({
+            title: user.fullName,
+            subtitle: user.email,
+            meta: `${user.role} · ${user.creditBalance} credits · ${user.grade || "Not onboarded"}`,
+          })}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          selectedIds={selectedUserIds}
+          onSelectedIdsChange={setSelectedUserIds}
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          pageSize={pageSize}
+          onPrevPage={() => void refreshUsers(undefined, Math.max(1, page - 1))}
+          onNextPage={() => void refreshUsers(undefined, Math.min(totalPages, page + 1))}
+          disabled={busy !== "idle"}
+          secondaryControls={
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <select
+                value={bulkRole}
+                onChange={(event) => setBulkRole(event.target.value as AppRole)}
+                className="h-9 rounded-md border border-border bg-bg-primary px-2 text-sm text-text-primary"
               >
-                Prev
-              </Button>
-              <span>
-                {page}/{Math.max(1, totalPages)}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void refreshUsers(undefined, Math.min(totalPages, page + 1))}
-                disabled={listLoading || page >= totalPages}
-              >
-                Next
+                <option value="student">student</option>
+                <option value="admin">admin</option>
+              </select>
+              <Button size="sm" onClick={handleBulkRoleSave} disabled={!selectedUserIds.length || busy !== "idle"}>
+                Apply role
               </Button>
             </div>
-          </div>
-        </div>
+          }
+        />
       </aside>
 
       <section className="space-y-6">

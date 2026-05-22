@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useCallback } from "react";
+import { AdminEntityListPanel } from "@/components/admin/entity-list-panel";
 import { CitationCard } from "@/components/citation-card";
 import { Markdown } from "@/components/markdown";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ export function AdminAnswersManager({
   const [detail, setDetail] = useState<AdminAnswerDetail | null>(initialDetail);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AdminAnswerFilter>("flagged");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(initialPage.page);
   const [pageSize, setPageSize] = useState(initialPage.pageSize);
   const [total, setTotal] = useState(initialPage.total);
@@ -116,6 +118,48 @@ export function AdminAnswersManager({
     return () => clearTimeout(timer);
   }, [filter, query, refreshAnswers]);
 
+  useEffect(() => {
+    setSelectedIds((current) =>
+      current.filter((messageId) => answers.some((answer) => answer.messageId === messageId)),
+    );
+  }, [answers]);
+
+  async function runBulkAction(action: "mark_reviewed" | "mark_open") {
+    if (!selectedIds.length) {
+      setFeedback("Select at least one answer first.");
+      return;
+    }
+
+    setBusy(action === "mark_reviewed" ? "marking-reviewed" : "marking-open");
+    setFeedback(null);
+    try {
+      const response = await fetch("/api/admin/answers/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          messageIds: selectedIds,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to run bulk action.");
+      }
+
+      await refreshAnswers(selectedId, page);
+      setSelectedIds([]);
+      setFeedback(
+        action === "mark_reviewed"
+          ? `${payload.updatedCount} answers marked reviewed.`
+          : `${payload.updatedCount} answers moved back to open.`,
+      );
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Failed to run bulk action.");
+    } finally {
+      setBusy("idle");
+    }
+  }
+
   async function updateReview(action: "save-note" | "mark-reviewed" | "mark-open") {
     if (!detail) return;
 
@@ -153,9 +197,6 @@ export function AdminAnswersManager({
     }
   }
 
-  const currentPageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const currentPageEnd = Math.min(total, page * pageSize);
-
   return (
     <div className="mx-auto max-w-[1600px] px-5 py-6 md:px-8">
       {feedback ? (
@@ -173,18 +214,40 @@ export function AdminAnswersManager({
 
       <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
         <aside className="space-y-4">
-          <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
-            <div className="border-b border-border px-4 py-3">
-              <p className="font-semibold">{ANSWER_COLLECTION.label}</p>
-              <p className="mt-1 text-xs text-text-secondary">{ANSWER_COLLECTION.subtitle}</p>
-            </div>
-
-            <div className="grid gap-3 border-b border-border px-4 py-3">
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={ANSWER_COLLECTION.searchPlaceholder}
-              />
+          <AdminEntityListPanel
+            title={ANSWER_COLLECTION.label}
+            subtitle={ANSWER_COLLECTION.subtitle}
+            searchPlaceholder={ANSWER_COLLECTION.searchPlaceholder}
+            emptyMessage={ANSWER_COLLECTION.emptyMessage}
+            query={query}
+            onQueryChange={setQuery}
+            listLoading={listLoading}
+            items={answers}
+            getId={(answer) => answer.messageId}
+            getItemView={(answer) => ({
+              title: answer.studentName,
+              badges: (
+                <>
+                  <StatusBadge status={answer.status} />
+                  {answer.feedback === "down" ? <Badge variant="danger">thumbs down</Badge> : null}
+                </>
+              ),
+              subtitle: `${answer.board || "No board"} · ${answer.grade || "No grade"} · ${answer.subjectContext || "General"}`,
+              meta: `${answer.sessionTitle} · ${formatDate(answer.createdAt)}`,
+            })}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            selectedIds={selectedIds}
+            onSelectedIdsChange={setSelectedIds}
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            pageSize={pageSize}
+            onPrevPage={() => void refreshAnswers(undefined, Math.max(1, page - 1))}
+            onNextPage={() => void refreshAnswers(undefined, Math.min(totalPages, page + 1))}
+            disabled={busy !== "idle"}
+            maxListHeightClassName="xl:max-h-[26rem]"
+            secondaryControls={
               <Field label="Filter">
                 <select
                   value={filter}
@@ -198,68 +261,23 @@ export function AdminAnswersManager({
                   ))}
                 </select>
               </Field>
-            </div>
-
-            <div className="xl:max-h-[26rem] xl:overflow-y-auto">
-              {answers.length ? (
-                answers.map((answer) => (
-                  <button
-                    key={answer.messageId}
-                    type="button"
-                    onClick={() => setSelectedId(answer.messageId)}
-                    className={`w-full border-b border-border px-4 py-3 text-left transition last:border-b-0 ${
-                      selectedId === answer.messageId
-                        ? "bg-[#f7f0b4] text-slate-950"
-                        : "bg-bg-primary hover:bg-bg-secondary"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium">{answer.studentName}</p>
-                      <StatusBadge status={answer.status} />
-                      {answer.feedback === "down" ? <Badge variant="danger">thumbs down</Badge> : null}
-                    </div>
-                    <p className={`mt-1 text-xs ${selectedId === answer.messageId ? "text-slate-700" : "text-text-secondary"}`}>
-                      {answer.board || "No board"} · {answer.grade || "No grade"} · {answer.subjectContext || "General"}
-                    </p>
-                    <p className="mt-2 text-sm text-text-primary">{answer.answerPreview}</p>
-                    <p className={`mt-2 text-[11px] ${selectedId === answer.messageId ? "text-slate-600" : "text-text-muted"}`}>
-                      {answer.sessionTitle} · {formatDate(answer.createdAt)}
-                    </p>
-                  </button>
-                ))
-              ) : (
-                <div className="px-4 py-8 text-center text-sm text-text-secondary">
-                  {ANSWER_COLLECTION.emptyMessage}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-text-secondary">
-              <span>
-                {listLoading ? "Loading..." : `Showing ${currentPageStart}-${currentPageEnd} of ${total}`}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void refreshAnswers(undefined, Math.max(1, page - 1))}
-                  disabled={listLoading || page <= 1}
-                >
-                  Prev
-                </Button>
-                <span>
-                  {page}/{Math.max(1, totalPages)}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void refreshAnswers(undefined, Math.min(totalPages, page + 1))}
-                  disabled={listLoading || page >= totalPages}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          </div>
+            }
+            bulkActions={[
+              {
+                key: "mark-reviewed",
+                label: "Bulk reviewed",
+                onRun: () => runBulkAction("mark_reviewed"),
+                disabled: busy !== "idle",
+              },
+              {
+                key: "mark-open",
+                label: "Bulk open",
+                variant: "outline",
+                onRun: () => runBulkAction("mark_open"),
+                disabled: busy !== "idle",
+              },
+            ]}
+          />
           {detail ? (
             <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
               <div className="border-b border-border px-4 py-3">

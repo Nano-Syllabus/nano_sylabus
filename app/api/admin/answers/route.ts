@@ -1,21 +1,8 @@
 import { NextResponse } from "next/server";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { parseAdminListQuery } from "@/lib/admin/list-query";
+import { parseAnswerFilter } from "@/lib/admin/schemas";
 import { listAdminAnswers } from "@/lib/data/admin-answers";
-import type { AdminAnswerFilter } from "@/lib/types";
-
-function parsePositiveInt(value: string | null, fallback: number) {
-  if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
-  return parsed;
-}
-
-function parseStatus(value: string | null): AdminAnswerFilter {
-  if (value === "flagged" || value === "reviewed" || value === "liked" || value === "neutral" || value === "all") {
-    return value;
-  }
-  return "flagged";
-}
 
 export async function GET(request: Request) {
   const access = await assertAdminRequest();
@@ -25,11 +12,12 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
+    const query = parseAdminListQuery(searchParams);
     const result = await listAdminAnswers({
-      q: searchParams.get("q") ?? undefined,
-      status: parseStatus(searchParams.get("status")),
-      page: parsePositiveInt(searchParams.get("page"), 1),
-      pageSize: parsePositiveInt(searchParams.get("pageSize"), 50),
+      q: query.q,
+      status: parseAnswerFilter(searchParams.get("status")),
+      page: query.page,
+      pageSize: query.pageSize,
     });
     return NextResponse.json(result);
   } catch (error) {

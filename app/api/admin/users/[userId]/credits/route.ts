@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { userCreditAdjustmentSchema } from "@/lib/admin/schemas";
 import { adjustAdminUserCredits } from "@/lib/data/admin-users";
-
-const adjustmentSchema = z.object({
-  amount: z.number().int().min(-5000).max(5000),
-  description: z.string().trim().min(1).max(180),
-});
 
 export async function POST(
   request: Request,
@@ -19,7 +14,7 @@ export async function POST(
 
   try {
     const { userId } = await params;
-    const payload = adjustmentSchema.parse(await request.json());
+    const payload = userCreditAdjustmentSchema.parse(await request.json());
     const user = await adjustAdminUserCredits({
       userId,
       amount: payload.amount,
