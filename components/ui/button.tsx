@@ -35,8 +35,10 @@ export function Button({
   return (
     <button
       {...props}
+      data-size={size}
+      data-variant={variant}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-full font-medium transition",
+        "admin-btn inline-flex items-center justify-center gap-2 rounded-full font-medium transition",
         variants[variant],
         sizes[size],
         className,

@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Textarea } from "@/components/ui/field";
+import { Field, Input, Select } from "@/components/ui/field";
+import {
+  defaultBoardOptions,
+  defaultGradeOptions,
+  mergeDropdownOptions,
+} from "@/lib/onboarding-options";
 import {
   normalizeBoard,
   normalizeBoardScore,
@@ -25,6 +30,8 @@ export function OnboardingForm({
   initialProfile: StudentProfile | null;
 }) {
   const router = useRouter();
+  const draftKey = useMemo(() => `nano:onboarding:draft:${userId}`, [userId]);
+  const hasHydratedDraft = useRef(false);
   const [step, setStep] = useState(1);
   const [fullName, setFullName] = useState(initialProfile?.fullName ?? "");
   const [college, setCollege] = useState(initialProfile?.college ?? "");
@@ -32,13 +39,145 @@ export function OnboardingForm({
   const [grade, setGrade] = useState(initialProfile?.grade ?? "");
   const [scoreType, setScoreType] = useState<"%" | "GPA">("%");
   const [score, setScore] = useState(initialProfile?.boardScore?.replace(/[%A-Z]+$/g, "") ?? "");
-  const [subjectsInput, setSubjectsInput] = useState((initialProfile?.subjects ?? []).join(", "));
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>(
+    normalizeSubjects(initialProfile?.subjects ?? []),
+  );
   const [targetGrade, setTargetGrade] = useState(initialProfile?.targetGrade ?? "");
   const [languagePref, setLanguagePref] = useState<"EN" | "RN">(initialProfile?.languagePref ?? "EN");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [catalogBoards, setCatalogBoards] = useState<string[]>([]);
+  const [catalogGradesByBoard, setCatalogGradesByBoard] = useState<Record<string, string[]>>({});
+  const [catalogSubjectsByBoardGrade, setCatalogSubjectsByBoardGrade] = useState<Record<string, string[]>>({});
 
   const total = 5;
+  const normalizedBoard = normalizeBoard(board);
+  const normalizedGrade = normalizeGrade(grade);
+  const suggestedGrades = useMemo(
+    () => catalogGradesByBoard[normalizedBoard] ?? [],
+    [catalogGradesByBoard, normalizedBoard],
+  );
+  const boardOptions = useMemo(
+    () =>
+      mergeDropdownOptions({
+        catalogValues: catalogBoards,
+        fallbackValues: catalogBoards.length ? [] : defaultBoardOptions(),
+        includeValue: board,
+      }),
+    [board, catalogBoards],
+  );
+  const gradeOptions = useMemo(
+    () =>
+      mergeDropdownOptions({
+        catalogValues: suggestedGrades,
+        fallbackValues: catalogBoards.length ? [] : defaultGradeOptions(),
+        includeValue: grade,
+      }),
+    [catalogBoards.length, grade, suggestedGrades],
+  );
+  const suggestedSubjects = useMemo(
+    () => catalogSubjectsByBoardGrade[`${normalizedBoard}::${normalizedGrade}`] ?? [],
+    [catalogSubjectsByBoardGrade, normalizedBoard, normalizedGrade],
+  );
+
+  useEffect(() => {
+    if (initialProfile || hasHydratedDraft.current) return;
+    hasHydratedDraft.current = true;
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as {
+        step?: number;
+        fullName?: string;
+        college?: string;
+        board?: string;
+        grade?: string;
+        scoreType?: "%" | "GPA";
+        score?: string;
+        selectedSubjects?: string[];
+        targetGrade?: string;
+        languagePref?: "EN" | "RN";
+      };
+      if (typeof draft.step === "number" && Number.isFinite(draft.step)) {
+        setStep(Math.min(total, Math.max(1, Math.trunc(draft.step))));
+      }
+      if (typeof draft.fullName === "string") setFullName(draft.fullName);
+      if (typeof draft.college === "string") setCollege(draft.college);
+      if (typeof draft.board === "string") setBoard(draft.board);
+      if (typeof draft.grade === "string") setGrade(draft.grade);
+      if (draft.scoreType === "%" || draft.scoreType === "GPA") setScoreType(draft.scoreType);
+      if (typeof draft.score === "string") setScore(draft.score);
+      if (Array.isArray(draft.selectedSubjects)) {
+        setSelectedSubjects(
+          normalizeSubjects(
+            draft.selectedSubjects.filter((item): item is string => typeof item === "string"),
+          ),
+        );
+      }
+      if (typeof draft.targetGrade === "string") setTargetGrade(draft.targetGrade);
+      if (draft.languagePref === "EN" || draft.languagePref === "RN") setLanguagePref(draft.languagePref);
+    } catch {
+      // Ignore malformed local draft.
+    }
+  }, [draftKey, initialProfile, total]);
+
+  useEffect(() => {
+    if (initialProfile) return;
+    try {
+      window.localStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          step,
+          fullName,
+          college,
+          board,
+          grade,
+          scoreType,
+          score,
+          selectedSubjects,
+          targetGrade,
+          languagePref,
+        }),
+      );
+    } catch {
+      // Ignore storage write failures.
+    }
+  }, [
+    board,
+    college,
+    draftKey,
+    fullName,
+    grade,
+    initialProfile,
+    languagePref,
+    score,
+    scoreType,
+    selectedSubjects,
+    step,
+    targetGrade,
+  ]);
+
+  useEffect(() => {
+    let active = true;
+    const loadCatalog = async () => {
+      const response = await fetch("/api/knowledge/options", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as {
+        boards?: string[];
+        gradesByBoard?: Record<string, string[]>;
+        subjectsByBoardGrade?: Record<string, string[]>;
+      };
+      if (!active) return;
+      setCatalogBoards(Array.isArray(payload.boards) ? payload.boards : []);
+      setCatalogGradesByBoard(payload.gradesByBoard ?? {});
+      setCatalogSubjectsByBoardGrade(payload.subjectsByBoardGrade ?? {});
+    };
+
+    void loadCatalog();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function validateStep(nextStep = step) {
     if (nextStep === 1) {
@@ -58,8 +197,8 @@ export function OnboardingForm({
     }
 
     if (nextStep === 4) {
-      if (normalizeSubjects(subjectsInput.split(",")).length === 0) {
-        return "Please add at least one subject.";
+      if (selectedSubjects.length === 0) {
+        return "Please select at least one subject.";
       }
     }
 
@@ -83,8 +222,16 @@ export function OnboardingForm({
     setStep((value) => Math.min(total, value + 1));
   }
 
+  function toggleSubject(subject: string) {
+    setSelectedSubjects((current) => {
+      const exists = current.some((item) => item.toLowerCase() === subject.toLowerCase());
+      if (exists) return current.filter((item) => item.toLowerCase() !== subject.toLowerCase());
+      return [...current, subject];
+    });
+  }
+
   async function finish() {
-    const subjects = normalizeSubjects(subjectsInput.split(","));
+    const subjects = normalizeSubjects(selectedSubjects);
     const normalizedFullName = normalizeFullName(fullName);
     const normalizedCollege = normalizeCollege(college);
     const normalizedBoard = normalizeBoard(board);
@@ -104,7 +251,7 @@ export function OnboardingForm({
     }
 
     if (subjects.length === 0) {
-      setError("Please add at least one subject.");
+      setError("Please select at least one subject.");
       return;
     }
 
@@ -134,6 +281,12 @@ export function OnboardingForm({
     if (upsertError) {
       setError(upsertError.message);
       return;
+    }
+
+    try {
+      window.localStorage.removeItem(draftKey);
+    } catch {
+      // Ignore storage delete failures.
     }
 
     router.replace("/app/chat");
@@ -171,26 +324,39 @@ export function OnboardingForm({
         {step === 2 ? (
           <Step title="Which board and grade?" subtitle="Set the board first, then your exact level.">
             <Field label="Board">
-              <Input
+              <Select
                 value={board}
-                onChange={(event) => setBoard(event.target.value)}
-                placeholder="Eg. NEB, TU, PU, KU, CTEVT"
-                list="board-options"
-              />
-              <datalist id="board-options">
-                <option value="NEB" />
-                <option value="TU" />
-                <option value="PU" />
-                <option value="KU" />
-                <option value="CTEVT" />
-              </datalist>
+                onChange={(event) => {
+                  const nextBoard = event.target.value;
+                  if (nextBoard !== board) {
+                    setGrade("");
+                  }
+                  setBoard(nextBoard);
+                }}
+              >
+                <option value="">Select board</option>
+                {boardOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field label="Grade or year">
-              <Input
+              <Select
                 value={grade}
-                onChange={(event) => setGrade(event.target.value)}
-                placeholder="Eg. Class 12, BBS Year 2, BCA Year 1"
-              />
+                onChange={(event) => {
+                  setGrade(event.target.value);
+                }}
+                disabled={!board}
+              >
+                <option value="">{board ? "Select grade/year" : "Select board first"}</option>
+                {gradeOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </Select>
             </Field>
           </Step>
         ) : null}
@@ -224,15 +390,49 @@ export function OnboardingForm({
         ) : null}
 
         {step === 4 ? (
-          <Step title="Which subjects matter?" subtitle="Add the exact subjects, separated by commas.">
-            <Field label="Subjects" hint="Example: Physics, Chemistry, Mathematics">
-              <Textarea
-                rows={4}
-                value={subjectsInput}
-                onChange={(event) => setSubjectsInput(event.target.value)}
-                placeholder="Physics, Chemistry, Mathematics"
-              />
-            </Field>
+          <Step title="Which subjects matter?" subtitle="Pick from subjects available in your indexed books.">
+            {suggestedSubjects.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-mono-ui uppercase text-text-muted">Available subjects</p>
+                  <p className="text-xs text-text-muted">{selectedSubjects.length} selected</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedSubjects.map((subject) => {
+                    const isSelected = selectedSubjects.some(
+                      (item) => item.toLowerCase() === subject.toLowerCase(),
+                    );
+                    return (
+                      <Button
+                        key={subject}
+                        type="button"
+                        size="sm"
+                        variant={isSelected ? "filled" : "outline"}
+                        onClick={() => toggleSubject(subject)}
+                      >
+                        {subject}
+                      </Button>
+                    );
+                  })}
+                </div>
+                {selectedSubjects.length > 0 ? (
+                  <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
+                    Selected: {selectedSubjects.join(", ")}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  No indexed subjects available for this board and grade yet.
+                </div>
+                {selectedSubjects.length > 0 ? (
+                  <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
+                    Current selection: {selectedSubjects.join(", ")}
+                  </div>
+                ) : null}
+              </div>
+            )}
           </Step>
         ) : null}
 

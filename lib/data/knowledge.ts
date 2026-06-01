@@ -22,7 +22,26 @@ interface KnowledgeDocumentRow {
   uploaded_at: string;
 }
 
+function sanitizeSourceValue(value: string | null | undefined) {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const normalized = trimmed.toLowerCase();
+  if (
+    normalized === "unknown-source" ||
+    normalized === "source-file" ||
+    normalized === "untitled source" ||
+    normalized === "untitled" ||
+    normalized === "n/a"
+  ) {
+    return "";
+  }
+  return trimmed;
+}
+
 function toKnowledgeChunkDetail(row: KnowledgeChunkDetailRow, document: KnowledgeDocumentRow | null): KnowledgeChunkDetail {
+  const sourceTitle = sanitizeSourceValue(document?.title) || row.chapter || row.topic || `${normalizeSubjectLabel(row.subject)} source`;
+  const sourceName = sanitizeSourceValue(document?.source_name) || sourceTitle;
 
   return {
     id: row.id,
@@ -35,8 +54,8 @@ function toKnowledgeChunkDetail(row: KnowledgeChunkDetailRow, document: Knowledg
     content: row.content,
     chunkIndex: row.chunk_index,
     createdAt: row.created_at,
-    sourceTitle: document?.title ?? "Untitled source",
-    sourceName: document?.source_name ?? "unknown-source",
+    sourceTitle,
+    sourceName,
     sourceType: document?.source_type ?? "unknown",
     uploadedAt: document?.uploaded_at ?? row.created_at,
   };

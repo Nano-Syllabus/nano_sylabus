@@ -1,0 +1,142 @@
+CURRICULUM - BE DEGREE IN ELECTRONICS AND COMMUNICATION ENGINEERING
+
+Course: Instrumentation
+Year: II
+Part: I
+Lecture: 4
+Tutorial: 1
+Practical: 3
+
+Course objective:
+To provide the basic concept of instrumentation and knowledge of microprocessor-based instrumentation systems for interfacing peripherals, circuit design techniques, and instruments for a wide range of measurement problems.
+
+Syllabus units:
+
+1) Instrumentation System (2 hours)
+- Analog and digital signals and systems
+- Instrumentation system: definition, block diagram, component descriptions
+- Need of electrical, electronic, pneumatic, and hydraulic working media systems and conversion devices
+
+2) Theory of Measurement (6 hours)
+- Static performance parameters: accuracy, precision, sensitivity, resolution, linearity
+- Dynamic performance parameters: frequency response, bandwidth, response time
+- Errors in measurement and statistical analysis
+- Measurement of voltage and current (moving coil and moving iron instruments)
+- Measurement of resistance (low, medium, and high)
+- AC bridges: Wheatstone bridge, Maxwell's bridge, Schering bridge
+
+3) Transducer (8 hours)
+- Introduction and classification
+- Applications of transducers:
+  - Mechanical variables: displacement, strain, velocity, acceleration, vibration
+  - Process variables: temperature, pressure, level, fluid
+  - Bio-physical variables: blood pressure, myoelectric potential
+
+4) Microprocessor Base System (2 hours)
+- Basic features, advantages, and disadvantages of microprocessor-based instrumentation systems
+- Types: open-loop and closed-loop
+- PC interfacing techniques
+- Review of address decoding, mapping I/O, and interfacing of I/O ports and memories
+
+5) Parallel Interfacing with Microprocessor Based System (6 hours)
+- Methods of parallel data transfer: simple I/O, simple strobe I/O, single and double handshake I/O
+- 8255 as a general-purpose programmable peripheral device: block diagram, modes of operation, control words
+- Interfacing examples: I/O ports, keyboard, printer, seven-segment display
+- Introduction to ISA and PCI bus
+
+6) Serial Interfacing with Microprocessor Based System (6 hours)
+- Advantages and disadvantages of serial transfer over parallel
+- Basic concepts in serial I/O:
+  - Interfacing requirements
+  - Alphanumeric codes
+  - Transmission formats: synchronous/asynchronous, simplex/duplex, transmission rate
+  - Error and error checks in data communication
+  - Data communication over telephone lines
+  - Standards: RS-232, RS-422, RS-423
+  - Interfacing examples
+- USB: standards, signals, throughput, protocols, wireless USB, and on-the-go
+
+7) Interfacing ADC and DAC (5 hours)
+- DAC: characteristics, weighted resistor type, R-2R ladder type
+- ADC: characteristics, successive approximation, ramp, dual-slope, flash
+- Interfacing ADC and DAC to microprocessor
+- Errors in ADC and DAC
+
+8) Data Acquisition System (2 hours)
+- Data acquisition system
+- Data loggers
+- Data archiving and storage
+- Bluetooth devices and characteristics
+
+9) Grounding and Shielding (4 hours)
+- Outline for grounding, shielding, and safety
+- Noise: sources, coupling mechanisms, prevention
+- Grounding: single-point grounding, ground plane, ground loop
+- Filtering: bandwidth minimization, ferrite beads, decoupling capacitors, line filters, isolators, transient suppressors
+- Shielding: definition and types
+- Protection against electrostatic discharge
+- General design rules
+
+10) Circuit Design (3 hours)
+- Converting requirements into design
+- Reliability and fault tolerance
+- High-speed design: bandwidth, decoupling, ground bounce, crosstalk, impedance matching, timing
+- Low-power design
+- Reset and power-failure detection
+
+11) Circuit Layout (3 hours)
+- Circuit boards and PCBs
+- Component placement
+- Routing signal traces: trace density, common impedance, signal/return distribution, transmission line concerns, impedance matching, crosstalk avoidance
+- Grounds, returns, and shields
+- Connectors and cables
+- Testing and maintenance
+
+12) Software for Instrumentation System (3 hours)
+- Types of software, selection, and purchase
+- Software models with metrics, advantages, and limitations
+- Risk abatement and failure prevention: development plan, safety, reliability, fault tolerance
+- Software bugs and testing
+- Good programming practice
+
+13) Electrical Equipments (4 hours)
+- Wattmeter: types and working principle
+- Energy meter: types and working principle
+- Frequency meter: types and working principle
+- Power factor meter: types and working principle
+
+14) Case Study (6 hours)
+- Local industrial case studies with attention to:
+  - measurement requirements and accuracy
+  - hardware employed
+  - environmental operating conditions
+  - signal processing and transmission
+  - output devices
+- Example areas:
+  - instrumentation for power stations (electrical and non-electrical parameters)
+  - instrumentation for wire and cable manufacturing and bottling plants
+  - instrumentation for beverage manufacturing and bottling plants
+  - instrumentation for biomedical applications (clinic/hospital)
+  - other industries as approved by subject teacher
+
+Total theory hours: 60
+
+Practical:
+1. Use of resistive, inductive, and other types of transducers.
+2. Review of assembly programming and simple I/O interfacing with 8255.
+3. Interfacing of LEDs and seven-segment display.
+4. Interfacing of motors.
+5. Interfacing of different types of ADC.
+6. Interfacing of different types of DAC.
+7. Small group project: design of a simple microprocessor-based instrumentation system.
+
+References:
+1. D. V. Hall, Microprocessor and Interfacing, Programming and Hardware, Tata McGraw Hill.
+2. Ramesh S. Gaonkar, Microprocessor Architecture, Programming and Application with 8085, Prentice Hall.
+3. K. R. Fowler, Electronic Instrument Design: Architecting for the Life Cycle, Oxford University Press.
+4. Jan Axelson, USB Complete, Penram International Publishing.
+5. A. K. Sawhney, A Course in Electronic Measurement and Instrumentation, Dhanpat Rai and Sons.
+6. J. B. Gupta, A Course in Electrical and Electronics Measurement and Instrumentation, Kataria and Sons.
+
+Source file:
+- /Users/sumangiri/Desktop/Instrumentation.pdf

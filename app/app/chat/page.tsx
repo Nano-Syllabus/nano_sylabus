@@ -24,6 +24,8 @@ export default async function ChatPage({
       <ChatPageClient
         user={user}
         defaultLanguage={profile!.languagePref}
+        profileBoard={profile!.board}
+        profileGrade={profile!.grade}
         profileSubjects={profile!.subjects}
         initialSessions={sessionResult.sessions}
         initialHasMore={sessionResult.hasMore}

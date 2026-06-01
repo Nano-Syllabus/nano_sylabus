@@ -15,12 +15,42 @@ vi.mock("@/lib/ai/embeddings", () => ({
 
 import { retrieveKnowledgeChunks } from "@/lib/ai/retrieval";
 
+function makeSupabaseQueryMock(responses: Array<unknown[]>) {
+  const eq = vi.fn();
+  const inFn = vi.fn();
+  const ilike = vi.fn();
+  let callIndex = 0;
+
+  const chain = {
+    eq: (...args: unknown[]) => {
+      eq(...args);
+      return chain;
+    },
+    in: (...args: unknown[]) => {
+      inFn(...args);
+      return chain;
+    },
+    ilike: (...args: unknown[]) => {
+      ilike(...args);
+      return chain;
+    },
+    limit: vi.fn(async () => ({
+      data: responses[callIndex++] ?? [],
+      error: null,
+    })),
+  };
+
+  const select = vi.fn(() => chain);
+  const from = vi.fn(() => ({ select }));
+  return { from, eq, inFn, ilike };
+}
+
 describe("retrieveKnowledgeChunks", () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
-  it("fails closed when board is missing", async () => {
+  it("fails closed when profile and subject context are both missing", async () => {
     const from = vi.fn();
     createSupabaseServerClient.mockResolvedValue({ from });
 
@@ -31,16 +61,16 @@ describe("retrieveKnowledgeChunks", () => {
         fullName: "Student",
         college: "Campus",
         board: "",
-        grade: "Class 11",
+        grade: "",
         boardScore: null,
-        subjects: ["Physics"],
+        subjects: [],
         targetGrade: "A+",
         languagePref: "EN",
         role: "student",
         createdAt: "",
         updatedAt: "",
       },
-      { subjectContext: "Physics" },
+      { subjectContext: null },
     );
 
     expect(result.grounded).toBe(false);
@@ -50,10 +80,8 @@ describe("retrieveKnowledgeChunks", () => {
   });
 
   it("queries strict board+grade+subject scope", async () => {
-    const eq = vi.fn();
-    const inFn = vi.fn();
-    const limit = vi.fn(async () => ({
-      data: [
+    const { from, eq, inFn } = makeSupabaseQueryMock([
+      [
         {
           id: "chunk-1",
           document_id: "doc-1",
@@ -74,27 +102,7 @@ describe("retrieveKnowledgeChunks", () => {
           ],
         },
       ],
-      error: null,
-    }));
-
-    const select = vi.fn(() => ({
-      eq: (...args: unknown[]) => {
-        eq(...args);
-        return {
-          eq: (...args2: unknown[]) => {
-            eq(...args2);
-            return {
-              in: (...args3: unknown[]) => {
-                inFn(...args3);
-                return { limit };
-              },
-            };
-          },
-        };
-      },
-    }));
-
-    const from = vi.fn(() => ({ select }));
+    ]);
     createSupabaseServerClient.mockResolvedValue({ from });
     embedText.mockResolvedValue([1, 0, 0]);
 
@@ -128,13 +136,65 @@ describe("retrieveKnowledgeChunks", () => {
     expect(result.citations[0]?.excerpt).toBe("Force equals mass times acceleration.");
   });
 
+  it("falls back to subject-like matching when strict subject is unavailable", async () => {
+    const { from, ilike } = makeSupabaseQueryMock([
+      [],
+      [
+        {
+          id: "chunk-eng-1",
+          document_id: "doc-eng-1",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "Kinematics",
+          topic: "Motion",
+          content: "In engineering physics, velocity and acceleration describe motion.",
+          embedding: [1, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-eng-1",
+              title: "Fundamentals of Engineering Physics",
+              source_name: "ENGG. PHYSICS BhadraPokhrel.pdf",
+              source_type: "pdf",
+            },
+          ],
+        },
+      ],
+    ]);
+    createSupabaseServerClient.mockResolvedValue({ from });
+    embedText.mockResolvedValue([1, 0, 0]);
+
+    const result = await retrieveKnowledgeChunks(
+      "Explain acceleration in simple terms",
+      {
+        userId: "u1",
+        fullName: "Student",
+        college: "Campus",
+        board: "NEB",
+        grade: "Class 11",
+        boardScore: null,
+        subjects: ["Physics"],
+        targetGrade: "A+",
+        languagePref: "EN",
+        role: "student",
+        createdAt: "",
+        updatedAt: "",
+      },
+      { subjectContext: "Physics" },
+    );
+
+    expect(ilike).toHaveBeenCalledWith("subject", "%physics%");
+    expect(result.grounded).toBe(true);
+    expect(result.chunks[0]?.subject).toBe("Engineering Physics");
+  });
+
   it("builds a trimmed excerpt for long grounded chunks", async () => {
     const longContent =
       "This lesson explains how force, mass, and acceleration relate in practical classroom numericals, " +
       "including how students should identify known values, convert units carefully, and write the final " +
       "equation in a board-exam friendly way before solving the answer step by step with clear working.";
-    const limit = vi.fn(async () => ({
-      data: [
+    const { from } = makeSupabaseQueryMock([
+      [
         {
           id: "chunk-1",
           document_id: "doc-1",
@@ -155,18 +215,7 @@ describe("retrieveKnowledgeChunks", () => {
           ],
         },
       ],
-      error: null,
-    }));
-
-    const select = vi.fn(() => ({
-      eq: () => ({
-        eq: () => ({
-          in: () => ({ limit }),
-        }),
-      }),
-    }));
-
-    const from = vi.fn(() => ({ select }));
+    ]);
     createSupabaseServerClient.mockResolvedValue({ from });
     embedText.mockResolvedValue([1, 0, 0]);
 
@@ -192,5 +241,255 @@ describe("retrieveKnowledgeChunks", () => {
     expect(result.grounded).toBe(true);
     expect(result.citations[0]?.excerpt?.length).toBeLessThanOrEqual(223);
     expect(result.citations[0]?.excerpt).toMatch(/\.\.\.$/);
+  });
+
+  it("maps syllabus chunks to syllabus citation source type", async () => {
+    const { from } = makeSupabaseQueryMock([
+      [
+        {
+          id: "chunk-syl-1",
+          document_id: "doc-syl-1",
+          board: "Engineering",
+          grade: "Bachelor Year I",
+          subject: "Engineering Physics",
+          chapter: "Unit 1 Oscillation",
+          topic: "Free oscillation",
+          content: "Course objective and chapter breakdown for Engineering Physics SH402.",
+          embedding: [1, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-syl-1",
+              title: "Engineering Physics SH402 Syllabus",
+              source_name: "engineering-physics-sh402-syllabus.txt",
+              source_type: "text",
+              resource_kind: "syllabus",
+            },
+          ],
+        },
+      ],
+    ]);
+
+    createSupabaseServerClient.mockResolvedValue({ from });
+    embedText.mockResolvedValue([1, 0, 0]);
+
+    const result = await retrieveKnowledgeChunks(
+      "Show me SH402 syllabus chapters",
+      {
+        userId: "u1",
+        fullName: "Student",
+        college: "Campus",
+        board: "Engineering",
+        grade: "Bachelor Year I",
+        boardScore: null,
+        subjects: ["Engineering Physics"],
+        targetGrade: "A+",
+        languagePref: "EN",
+        role: "student",
+        createdAt: "",
+        updatedAt: "",
+      },
+      { subjectContext: "Engineering Physics" },
+    );
+
+    expect(result.grounded).toBe(true);
+    expect(result.citations[0]?.sourceType).toBe("syllabus");
+  });
+
+  it("maps question bank chunks to question_bank citation source type", async () => {
+    const { from } = makeSupabaseQueryMock([
+      [
+        {
+          id: "chunk-qb-1",
+          document_id: "doc-qb-1",
+          board: "Engineering",
+          grade: "Bachelor Year I",
+          subject: "Engineering Electronics",
+          chapter: "PN Junction",
+          topic: "Practice questions",
+          content: "Q1. Explain PN junction diode characteristics.",
+          embedding: [1, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-qb-1",
+              title: "Electronics Question Bank",
+              source_name: "electronics-qb.pdf",
+              source_type: "pdf",
+              resource_kind: "question_bank",
+            },
+          ],
+        },
+      ],
+    ]);
+
+    createSupabaseServerClient.mockResolvedValue({ from });
+    embedText.mockResolvedValue([1, 0, 0]);
+
+    const result = await retrieveKnowledgeChunks(
+      "Give me important diode practice questions",
+      {
+        userId: "u1",
+        fullName: "Student",
+        college: "Campus",
+        board: "Engineering",
+        grade: "Bachelor Year I",
+        boardScore: null,
+        subjects: ["Engineering Electronics"],
+        targetGrade: "A+",
+        languagePref: "EN",
+        role: "student",
+        createdAt: "",
+        updatedAt: "",
+      },
+      { subjectContext: "Engineering Electronics" },
+    );
+
+    expect(result.grounded).toBe(true);
+    expect(result.citations[0]?.sourceType).toBe("question_bank");
+  });
+
+  it("prefers syllabus chunks for chapter-number lookup questions", async () => {
+    const { from } = makeSupabaseQueryMock([
+      [
+        {
+          id: "chunk-study-1",
+          document_id: "doc-study-1",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "Physical optics",
+          topic: "Interference",
+          content: "Chapter 2 discusses optics topics like interference and diffraction.",
+          embedding: [1, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-study-1",
+              title: "Fundamentals of Engineering Physics",
+              source_name: "engg-physics-textbook.pdf",
+              source_type: "pdf",
+              resource_kind: "study_material",
+            },
+          ],
+        },
+        {
+          id: "chunk-syl-2",
+          document_id: "doc-syl-2",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "SH 402 Syllabus",
+          topic: "Syllabus units",
+          content:
+            "Syllabus units: 1) Oscillation, 2) Wave motion, 3) Acoustics, 4) Physical optics.",
+          embedding: [1, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-syl-2",
+              title: "Engineering Physics SH 402 Syllabus",
+              source_name: "engineering-physics-sh402-syllabus.txt",
+              source_type: "text",
+              resource_kind: "syllabus",
+            },
+          ],
+        },
+      ],
+    ]);
+    createSupabaseServerClient.mockResolvedValue({ from });
+    embedText.mockResolvedValue([1, 0, 0]);
+
+    const result = await retrieveKnowledgeChunks(
+      "what our second chapter talks about",
+      {
+        userId: "u1",
+        fullName: "Student",
+        college: "Campus",
+        board: "Engineering",
+        grade: "Bachelor",
+        boardScore: null,
+        subjects: ["Engineering Physics"],
+        targetGrade: "A+",
+        languagePref: "EN",
+        role: "student",
+        createdAt: "",
+        updatedAt: "",
+      },
+      { subjectContext: "Engineering Physics" },
+    );
+
+    expect(result.grounded).toBe(true);
+    expect(result.citations[0]?.sourceType).toBe("syllabus");
+    expect(result.chunks[0]?.sourceTitle).toContain("SH 402 Syllabus");
+  });
+
+  it("treats ordinal numeric chapter questions as syllabus-structure intent", async () => {
+    const { from } = makeSupabaseQueryMock([
+      [
+        {
+          id: "chunk-study-3",
+          document_id: "doc-study-3",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "Physical optics",
+          topic: "Interference",
+          content: "Some textbooks place optics early.",
+          embedding: [1, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-study-3",
+              title: "Fundamentals of Engineering Physics",
+              source_name: "engg-physics-textbook.pdf",
+              source_type: "pdf",
+              resource_kind: "study_material",
+            },
+          ],
+        },
+        {
+          id: "chunk-syl-3",
+          document_id: "doc-syl-3",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "SH 402 Syllabus",
+          topic: "Syllabus units",
+          content:
+            "Syllabus units: 1) Oscillation, 2) Wave motion, 3) Acoustics, 4) Physical optics.",
+          embedding: [1, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-syl-3",
+              title: "Engineering Physics SH 402 Syllabus",
+              source_name: "engineering-physics-sh402-syllabus.txt",
+              source_type: "text",
+              resource_kind: "syllabus",
+            },
+          ],
+        },
+      ],
+    ]);
+    createSupabaseServerClient.mockResolvedValue({ from });
+    embedText.mockResolvedValue([1, 0, 0]);
+
+    const result = await retrieveKnowledgeChunks(
+      "what is our 3rd chapter?",
+      {
+        userId: "u1",
+        fullName: "Student",
+        college: "Campus",
+        board: "Engineering",
+        grade: "Bachelor",
+        boardScore: null,
+        subjects: ["Engineering Physics"],
+        targetGrade: "A+",
+        languagePref: "EN",
+        role: "student",
+        createdAt: "",
+        updatedAt: "",
+      },
+      { subjectContext: "Engineering Physics" },
+    );
+
+    expect(result.grounded).toBe(true);
+    expect(result.citations[0]?.sourceType).toBe("syllabus");
+    expect(result.chunks[0]?.sourceTitle).toContain("SH 402 Syllabus");
   });
 });

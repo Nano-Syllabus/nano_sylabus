@@ -1,0 +1,126 @@
+CURRICULUM - BE DEGREE IN ELECTRONICS AND COMMUNICATION ENGINEERING
+
+Course: ENGINEERING PHYSICS (SH 402)
+Year: I
+Part: I
+Lecture: 4
+Tutorial: 1
+Practical: 2
+
+Course objective:
+To provide the concept and knowledge of physics with emphasis on present day applications.
+
+Syllabus units:
+
+1) Oscillation (7 hours)
+- Mechanical oscillation: introduction
+- Free oscillation
+- Damped oscillation
+- Forced mechanical oscillation
+- EM oscillation: free, damped, and forced electromagnetic oscillation
+
+2) Wave motion (2 hours)
+- Waves and particles
+- Progressive wave
+- Energy, power, and intensity of progressive wave
+
+3) Acoustics (3 hours)
+- Reverberation
+- Sabine's law
+- Ultrasound and its applications
+
+4) Physical optics (12 hours)
+- Interference
+  - Intensity in double slit interference
+  - Interference in thin films
+  - Newton's rings
+  - Haidinger fringes
+- Diffraction
+  - Fresnel and Fraunhofer diffraction
+  - Intensity due to a single slit
+  - Diffraction grating
+  - X-ray diffraction and x-ray for material test
+- Polarization
+  - Double refraction
+  - Nicol prism and wave plates
+  - Optical activity and specific rotation
+
+5) Geometrical optics (3 hours)
+- Lenses and combination of lenses
+- Cardinal points
+- Chromatic aberration
+
+6) Laser and fiber optics (4 hours)
+- Laser production
+  - He-Ne laser
+  - Uses of laser
+- Fiber optics
+  - Self focusing
+  - Applications of optical fiber
+
+7) Electrostatics (8 hours)
+- Electric charge and force
+- Electric field and potential
+- Electrostatic potential energy
+- Capacitors and capacitor with dielectric
+- Charging and discharging of a capacitor
+
+8) Electromagnetism (11 hours)
+- Direct current
+  - Electric current
+  - Ohm's law, resistance and resistivity
+  - Semiconductor and superconductor
+- Magnetic fields
+  - Magnetic force and torque
+  - Hall effect
+  - Cyclotron and synchrotron
+  - Biot-Savart law
+  - Ampere's circuit law, magnetic fields around straight conductors
+  - Faraday's laws, induction and energy transformation, induced field
+  - LR circuit and induced magnetic field
+  - Displacement current
+
+9) Electromagnetic waves (5 hours)
+- Maxwell's equations
+- Wave equations and speed
+- E and B fields
+- Continuity equation
+- Energy transfer
+
+10) Photon and matter waves (5 hours)
+- Quantization of energy
+- Electrons and matter waves
+- Schrodinger wave equation
+- Probability distribution
+- One dimensional potential well
+- Uncertainty principle
+- Barrier tunneling
+
+Total theory hours: 60
+
+Practical list:
+1. Determine acceleration due to gravity and radius of gyration of a bar about an axis through its center of gravity.
+2. Determine modulus of elasticity of given materials and moment of inertia of a circular disc using torsion pendulum.
+3. Determine angle of prism and dispersive power of prism materials using spectrometer.
+4. Determine wavelength of sodium light by Newton's rings.
+5. Determine wavelength of He-Ne laser and use it to measure thickness of a thin wire by diffraction of light.
+6. Study variation of angle of rotation of plane of polarization using concentration of cane sugar solution.
+7. Determine specific rotation of cane sugar solution using polarimeter.
+8. Determine low resistance of a wire by Carey Foster bridge and resistance per unit length.
+9. Determine capacitance of a capacitor by charging and discharging through resistor.
+10. Plot graph between current and frequency in an LRC series circuit and find resonant frequency and quality factor.
+11. Determine dielectric constant of a substance and study variation with frequency by resonance method.
+12. Determine susceptibility of a solution by Quinke's method.
+13. Study electric field mapping.
+
+References:
+1. Halliday, Resnick, Walker, Fundamentals of Physics, John Wiley & Sons.
+2. Sapkota, Pokharel, Bhattarai, Fundamentals of Engineering Physics, Benchmark Publication.
+3. Brij Lal and Subrahmanyam, A Text Book of Optics, S. Chand.
+4. A. S. Basudeva, Modern Engineering Physics, S. Chand.
+5. R. K. Gaur and S. L. Gupta, Engineering Physics, Dhanpat Publisher.
+6. Brij Lal and Subrahmanyam, Waves and Oscillation, S. Chand.
+
+Source images:
+- /Users/sumangiri/Desktop/Document 29 Dec 2020 10.05 am_6.jpg
+- /Users/sumangiri/Desktop/Document 29 Dec 2020 10.05 am_7.jpg

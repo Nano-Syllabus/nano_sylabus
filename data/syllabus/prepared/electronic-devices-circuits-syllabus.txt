@@ -1,0 +1,87 @@
+CURRICULUM - BE DEGREE IN ELECTRONICS AND COMMUNICATION ENGINEERING
+
+Course: Electronic Devices and Circuits (EX 501)
+Year: II
+Part: I
+Lecture: 3
+Tutorial: 1
+Practical: 3/2
+
+Course objective:
+To introduce fundamentals of electronic circuit analysis and provide basic understanding of semiconductor devices and analog integrated circuits.
+
+Syllabus units:
+
+1) Diodes (5 hours)
+- The ideal diode
+- Terminal characteristics of junction diodes
+- Physical operation of diodes
+- Analysis of diode circuits
+- Small-signal model and applications
+- Operation in reverse breakdown region (Zener diodes)
+
+2) Bipolar Junction Transistor (10 hours)
+- Operation of npn transistor in active mode
+- Graphical representation of transistor characteristics
+- DC analysis of transistor circuits
+- Transistor as amplifier
+- Small-signal equivalent circuit models
+- Graphical load line analysis
+- Biasing BJT for discrete-circuit design
+- Basic single-stage BJT amplifier configurations (C-B, C-E, C-C)
+- Transistor as switch (cutoff and saturation)
+- Ebers-Moll large-signal BJT model
+
+3) Field-Effect Transistor (9 hours)
+- Structure and physical operation of enhancement-type MOSFET
+- Current-voltage characteristics of enhancement-type MOSFET
+- Depletion-type MOSFET
+- MOSFET circuits at DC
+- MOSFET as amplifier
+- Biasing in MOS amplifier circuits
+- Junction field-effect transistor (JFET)
+
+4) Output Stages and Power Amplifiers (9 hours)
+- Classification of output stages
+- Class A output stage
+- Class B output stage
+- Class AB output stage
+- Biasing class AB stage
+- Power BJTs
+- Transformer-coupled push-pull stages
+- Tuned amplifiers
+
+5) Signal Generator and Waveform-Shaping Circuits (6 hours)
+- Basic principles of sinusoidal oscillator
+- Op-amp RC oscillator circuits
+- LC and crystal oscillators
+- Square and triangular waveform generation using astable multivibrators
+- Integrated circuit timers
+- Precision rectifier circuits
+
+6) Power Supplies, Breakdown Diodes, and Voltage Regulators (6 hours)
+- Unregulated power supply
+- Bandgap voltage reference and constant current diodes
+- Transistor series regulators
+- Improving regulator performance
+- Current limiting
+- Integrated circuit voltage regulator
+
+Practical:
+1. Bipolar junction transistor characteristics and single-stage amplifier
+2. Field-effect transistor characteristics and single-stage amplifier
+3. Power amplifiers
+4. Relaxation oscillator and sinusoidal oscillator
+5. Series and shunt voltage regulators
+
+References:
+1. A. S. Sedra and K. C. Smith, Microelectronic Circuits, Oxford University Press.
+2. David A. Bell, Electronics Device and Circuits, PHI.
+3. Robert Boylestad and Louis Nashelsky, Electronic Device and Circuit Theory, PHI.
+4. Thomas L. Floyd, Electronic Devices, Pearson Education.
+5. Mark N. Horenstein, Microelectronic Circuits and Devices, PHI.
+6. Paul Horowitz and Winfield Hill, The Art of Electronics, Cambridge.
+7. Jacob Millman, Christos C. Halkias, and Satyabrata Jit, Millman's Electronic Devices and Circuits, Tata McGraw-Hill.
+
+Source file:
+- /Users/sumangiri/Desktop/Electronic Devices and Circuits.pdf

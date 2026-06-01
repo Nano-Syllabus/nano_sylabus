@@ -15,34 +15,106 @@ function chunkText(content, size = 1400, overlap = 250) {
   return chunks.filter(Boolean);
 }
 
-async function createEmbedding(input) {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  const model = process.env.GEMINI_EMBEDDING_MODEL || "gemini-embedding-001";
-  const modelPath = model.startsWith("models/") ? model : `models/${model}`;
+function getChunkConfig() {
+  const size = Number.parseInt(process.env.INGEST_CHUNK_SIZE || "1400", 10);
+  const overlap = Number.parseInt(process.env.INGEST_CHUNK_OVERLAP || "250", 10);
 
-  if (!apiKey) {
+  const safeSize = Number.isFinite(size) && size > 300 ? size : 1400;
+  const safeOverlap =
+    Number.isFinite(overlap) && overlap >= 0 && overlap < safeSize
+      ? overlap
+      : Math.min(250, Math.floor(safeSize / 4));
+
+  return { size: safeSize, overlap: safeOverlap };
+}
+
+async function createEmbedding(input) {
+  const provider = (process.env.EMBEDDING_PROVIDER || "gemini").trim().toLowerCase();
+  const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const geminiModel = process.env.GEMINI_EMBEDDING_MODEL || "gemini-embedding-001";
+  const geminiModelPath = geminiModel.startsWith("models/") ? geminiModel : `models/${geminiModel}`;
+  const openrouterApiKey = process.env.OPENROUTER_API_KEY;
+  const openrouterModel = process.env.OPENROUTER_EMBEDDING_MODEL || "openai/text-embedding-3-small";
+  const openrouterBaseUrl = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
+
+  if (provider === "openrouter" && !openrouterApiKey) {
+    throw new Error("Missing OPENROUTER_API_KEY for ingestion with EMBEDDING_PROVIDER=openrouter.");
+  }
+
+  if (provider !== "openrouter" && !geminiApiKey) {
     throw new Error("Missing GEMINI_API_KEY for ingestion.");
   }
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${modelPath}:embedContent?key=${apiKey}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: modelPath,
-      content: {
-        parts: [{ text: input }],
-      },
-    }),
-  });
+  const maxRetries = Number.parseInt(process.env.GEMINI_EMBED_RETRIES || "6", 10);
+  const baseDelayMs = Number.parseInt(process.env.GEMINI_EMBED_RETRY_DELAY_MS || "1000", 10);
 
-  if (!response.ok) {
-    throw new Error(`Embedding request failed: ${await response.text()}`);
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt += 1) {
+    try {
+      const response = await fetch(
+        provider === "openrouter"
+          ? `${openrouterBaseUrl}/embeddings`
+          : `https://generativelanguage.googleapis.com/v1beta/${geminiModelPath}:embedContent?key=${geminiApiKey}`,
+        provider === "openrouter"
+          ? {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${openrouterApiKey}`,
+              },
+              body: JSON.stringify({
+                model: openrouterModel,
+                input,
+              }),
+            }
+          : {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: geminiModelPath,
+                content: {
+                  parts: [{ text: input }],
+                },
+              }),
+            },
+      );
+
+      if (response.ok) {
+        const payload = await response.json();
+        return payload.embedding?.values ?? payload.data?.[0]?.embedding ?? [];
+      }
+
+      const errorText = await response.text();
+      const retryable = [429, 500, 502, 503, 504].includes(response.status);
+      const quotaExceeded = errorText.toLowerCase().includes("quota exceeded");
+
+      if ((retryable || quotaExceeded) && attempt <= maxRetries) {
+        const delay = baseDelayMs * 2 ** (attempt - 1);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      throw new Error(`Embedding request failed: ${errorText}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const retryableNetwork =
+        message.toLowerCase().includes("fetch failed") ||
+        message.toLowerCase().includes("timeout") ||
+        message.toLowerCase().includes("connect timeout") ||
+        message.toLowerCase().includes("network");
+
+      if (retryableNetwork && attempt <= maxRetries) {
+        const delay = baseDelayMs * 2 ** (attempt - 1);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      throw error;
+    }
   }
 
-  const payload = await response.json();
-  return payload.embedding?.values ?? [];
+  throw new Error("Embedding request failed after retries.");
 }
 
 function validateDocument(document) {
@@ -60,6 +132,39 @@ function validateDocument(document) {
   }
 }
 
+function normalizeResourceKind(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return "study_material";
+  const allowed = new Set(["syllabus", "study_material", "question_bank"]);
+  if (!allowed.has(normalized)) {
+    throw new Error(`Invalid resourceKind "${value}". Allowed: syllabus, study_material, question_bank.`);
+  }
+  return normalized;
+}
+
+function normalizeResourceSubtype(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return "textbook";
+  const allowed = new Set([
+    "micro_syllabus",
+    "curriculum",
+    "syllabus",
+    "learning_outcomes",
+    "textbook",
+    "notes",
+    "solutions",
+    "guides",
+    "question_bank",
+    "past_questions",
+    "example_questions",
+    "other",
+  ]);
+  if (!allowed.has(normalized)) {
+    throw new Error(`Invalid resourceSubtype "${value}".`);
+  }
+  return normalized;
+}
+
 function parseArgs(argv) {
   const flags = new Set(argv.filter((value) => value.startsWith("--")));
   const inputPath = argv.find((value) => !value.startsWith("--")) ?? null;
@@ -72,7 +177,24 @@ function parseArgs(argv) {
 }
 
 function normalizeContent(value) {
-  return value.replace(/\r\n/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  const markerPatterns = [
+    /^--\s*\d+\s*of\s*\d+\s*--$/i,
+    /^original pdf page\s+\d+$/i,
+    /^full text-only ocr conversion of the uploaded scanned pdf\.?$/i,
+    /^ocr is machine-generated and may contain recognition errors.*$/i,
+    /^original pdf pages processed:\s*\d+\.?$/i,
+  ];
+
+  const cleanedLines = value
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/\t+/g, " ").trim())
+    .filter((line) => {
+      if (!line) return false;
+      return !markerPatterns.some((pattern) => pattern.test(line));
+    });
+
+  return cleanedLines.join("\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function ensureStrictClass11Core(normalizedDocuments) {
@@ -116,6 +238,9 @@ async function normalizeDocument(document, inputBaseDir) {
     title: String(document.title).trim(),
     sourceName: String(document.sourceName).trim(),
     sourceType: String(document.sourceType).trim(),
+    resourceKind: normalizeResourceKind(document.resourceKind),
+    resourceSubtype: normalizeResourceSubtype(document.resourceSubtype),
+    metadata: document.metadata && typeof document.metadata === "object" ? document.metadata : {},
     content: normalizedContent,
   };
 }
@@ -226,6 +351,12 @@ async function main() {
         title: document.title,
         source_name: document.sourceName,
         source_type: document.sourceType,
+        resource_kind: document.resourceKind,
+        resource_subtype: document.resourceSubtype,
+        metadata: document.metadata ?? {},
+        raw_content: document.content,
+        processing_status: "processing",
+        chunk_count: 0,
       })
       .select("id")
       .single();
@@ -234,7 +365,9 @@ async function main() {
       throw new Error(`Failed to insert knowledge document: ${documentError?.message ?? "unknown error"}`);
     }
 
-    const chunks = chunkText(document.content);
+    const chunkConfig = getChunkConfig();
+    const chunks = chunkText(document.content, chunkConfig.size, chunkConfig.overlap);
+    const embedDelayMs = Number.parseInt(process.env.GEMINI_EMBED_DELAY_MS || "800", 10);
     for (let index = 0; index < chunks.length; index += 1) {
       const content = chunks[index];
       const embedding = await createEmbedding(content);
@@ -253,6 +386,25 @@ async function main() {
       if (chunkError) {
         throw new Error(`Failed to insert chunk ${index}: ${chunkError.message}`);
       }
+
+      if (embedDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, embedDelayMs));
+      }
+    }
+
+    const { error: finalizeError } = await supabase
+      .from("knowledge_documents")
+      .update({
+        raw_content: document.content,
+        chunk_count: chunks.length,
+        processing_status: "ready",
+        processing_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", insertedDocument.id);
+
+    if (finalizeError) {
+      throw new Error(`Failed to finalize knowledge document ${insertedDocument.id}: ${finalizeError.message}`);
     }
 
     console.log(`Ingested ${document.title} with ${chunks.length} chunks.`);

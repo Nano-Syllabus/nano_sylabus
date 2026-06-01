@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { ANSWER_COLLECTION } from "@/lib/admin-resource-definitions";
+import { dedupeCitationsForDisplay } from "@/lib/citations";
 import type { AdminAnswerDetail, AdminAnswerFilter, AdminAnswerState, AdminAnswerSummary, AdminListPage } from "@/lib/types";
 import { formatDate, formatTimestamp } from "@/lib/utils";
 
@@ -354,7 +355,7 @@ export function AdminAnswersManager({
                     </div>
                     <div className="space-y-3 px-4 py-4">
                       {detail.citations.length ? (
-                        detail.citations.map((citation) => (
+                        dedupeCitationsForDisplay(detail.citations).map((citation) => (
                           <CitationCard key={`${detail.messageId}-${citation.chunkId}`} citation={citation} />
                         ))
                       ) : (

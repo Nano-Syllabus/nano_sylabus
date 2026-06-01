@@ -1,3 +1,23 @@
+function collectGeminiApiKeys() {
+  const directKeys = [
+    process.env.GEMINI_API_KEY,
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+  ];
+
+  const listKeys = (process.env.GEMINI_API_KEYS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const numberedKeys = Object.entries(process.env)
+    .filter(([key, value]) => /^GEMINI_API_KEY_\d+$/.test(key) && value)
+    .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+    .map(([, value]) => String(value).trim())
+    .filter(Boolean);
+
+  return Array.from(new Set([...directKeys, ...listKeys, ...numberedKeys].filter(Boolean) as string[]));
+}
+
 export function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -25,7 +45,8 @@ export function getSupabaseServiceRoleEnv() {
 }
 
 export function getGeminiEnv() {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const apiKeys = collectGeminiApiKeys();
+  const apiKey = apiKeys[0];
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const maxOutputTokens = Number(process.env.GEMINI_MAX_OUTPUT_TOKENS || 900);
   const thinkingBudget = Number(process.env.GEMINI_THINKING_BUDGET || 256);
@@ -40,6 +61,7 @@ export function getGeminiEnv() {
 
   return {
     apiKey,
+    apiKeys,
     model,
     maxOutputTokens,
     thinkingBudget,
@@ -51,12 +73,52 @@ export function getGeminiEnv() {
 }
 
 export function getGeminiEmbeddingEnv() {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const apiKeys = collectGeminiApiKeys();
+  const apiKey = apiKeys[0];
   const model = process.env.GEMINI_EMBEDDING_MODEL || "gemini-embedding-001";
 
   if (!apiKey) {
     throw new Error("Missing GEMINI_API_KEY.");
   }
 
-  return { apiKey, model };
+  return { apiKey, apiKeys, model };
+}
+
+export function getEmbeddingEnv() {
+  const provider = (process.env.EMBEDDING_PROVIDER || "gemini").trim().toLowerCase();
+
+  if (provider === "openrouter") {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const model = process.env.OPENROUTER_EMBEDDING_MODEL || "openai/text-embedding-3-small";
+    const baseUrl = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
+
+    if (!apiKey) {
+      throw new Error("Missing OPENROUTER_API_KEY.");
+    }
+
+    return { provider: "openrouter" as const, apiKey, model, baseUrl };
+  }
+
+  const { apiKey, model } = getGeminiEmbeddingEnv();
+  return { provider: "gemini" as const, apiKey, model };
+}
+
+export function getOpenRouterEnv() {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  const model = process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-flash:free";
+  const maxOutputTokens = Number(process.env.OPENROUTER_MAX_OUTPUT_TOKENS || 900);
+  const rewriteMaxOutputTokens = Number(process.env.OPENROUTER_REWRITE_MAX_OUTPUT_TOKENS || 320);
+  const followupMaxOutputTokens = Number(process.env.OPENROUTER_FOLLOWUP_MAX_OUTPUT_TOKENS || 220);
+
+  if (!apiKey) {
+    throw new Error("Missing OPENROUTER_API_KEY.");
+  }
+
+  return {
+    apiKey,
+    model,
+    maxOutputTokens,
+    rewriteMaxOutputTokens,
+    followupMaxOutputTokens,
+  };
 }

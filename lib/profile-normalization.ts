@@ -4,16 +4,25 @@ function compactWhitespace(value: string) {
 
 function capitalizeWord(word: string) {
   if (!word) return word;
-  if (/^[A-Z0-9]+$/.test(word)) return word;
+  if (/^[A-Z0-9]+$/.test(word) && ACRONYM_WORDS.has(word)) {
+    return word;
+  }
   return `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
 }
 
 const ACRONYM_WORDS = new Set(["NEB", "TU", "PU", "KU", "CTEVT", "BBS", "BCA", "BSC", "BA", "BIM", "BIT"]);
 
 export function normalizeBoard(value: string) {
-  const compact = compactWhitespace(value).toUpperCase();
-  const canonical = ["NEB", "TU", "PU", "KU", "CTEVT"];
-  return canonical.includes(compact) ? compact : compact;
+  const compact = compactWhitespace(value);
+  if (!compact) return "";
+  const upper = compact.toUpperCase();
+  const acronyms = ["NEB", "TU", "PU", "KU", "CTEVT"];
+  if (acronyms.includes(upper)) return upper;
+  // Non-acronym boards (e.g., "Engineering") — preserve Title Case to match DB values.
+  return compact
+    .split(" ")
+    .map((word) => capitalizeWord(word))
+    .join(" ");
 }
 
 export function normalizeGrade(value: string) {

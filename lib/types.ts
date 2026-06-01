@@ -1,4 +1,5 @@
 export type Language = "EN" | "RN";
+export type AnswerStyle = "simple" | "balanced" | "detailed";
 export type NoteColor = "red" | "yellow" | "green";
 export type RevisionAction = "remember" | "review" | "skip";
 export type AppRole = "student" | "admin";
@@ -21,6 +22,7 @@ export type KnowledgeDocumentType =
 export type KnowledgeResourceKind = "syllabus" | "study_material" | "question_bank";
 export type KnowledgeProcessingStatus = "draft" | "processing" | "ready" | "failed";
 export type PromptPurpose = "system" | "followup" | "rewrite";
+export type CitationSourceType = "syllabus" | "textbook" | "question_bank" | "general";
 export type CreditLedgerType = "grant" | "usage" | "refund" | "adjustment";
 export type ReferenceType =
   | "starter_grant"
@@ -41,6 +43,7 @@ export type UserSubscriptionStatus = "pending" | "active" | "expired" | "cancell
 export interface AssistantCitation {
   chunkId: string;
   documentId: string;
+  sourceType?: CitationSourceType;
   sourceLabel: string;
   sourceTitle: string;
   sourceName: string;
