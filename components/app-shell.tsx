@@ -43,11 +43,11 @@ export function AppShell({
     <div className="flex h-screen overflow-hidden bg-bg-primary text-text-primary">
       <aside
         className={
-          "fixed inset-y-0 left-0 z-30 flex w-[280px] flex-col border-r border-border bg-bg-primary transition-transform md:static md:translate-x-0 " +
+          "fixed inset-y-0 left-0 z-30 flex w-[136px] flex-col border-r border-border bg-bg-primary transition-transform md:static md:translate-x-0 xl:w-[144px] " +
           (open ? "translate-x-0" : "-translate-x-full")
         }
       >
-        <div className="flex items-center justify-between px-4 py-4">
+        <div className="flex items-center justify-between px-3.5 py-3.5">
           <Logo />
           <button
             type="button"
@@ -71,7 +71,7 @@ export function AppShell({
       ) : null}
 
       <main className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 md:px-6">
+        <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 md:px-5 xl:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -80,9 +80,9 @@ export function AppShell({
             >
               ☰
             </button>
-            <div className="min-w-0 truncate font-display text-2xl">{title}</div>
+            <div className="min-w-0 truncate font-display text-xl md:text-[26px]">{title}</div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2">
             <Badge variant={user.creditBalance > 0 ? "success" : "warning"}>
               {user.creditBalance} credits
             </Badge>

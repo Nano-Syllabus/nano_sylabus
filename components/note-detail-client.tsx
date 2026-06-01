@@ -8,6 +8,7 @@ import { Markdown } from "@/components/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
+import { dedupeCitationsForDisplay } from "@/lib/citations";
 import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type { NoteColor, RevisionNoteDetail } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -63,7 +64,7 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
           <div className="mt-6">
             <p className="mb-2 text-[10px] font-mono-ui uppercase text-text-muted">Saved from source</p>
             <div className="flex flex-wrap gap-2">
-              {current.citations.map((citation) => (
+              {dedupeCitationsForDisplay(current.citations).map((citation) => (
                 <CitationCard key={`${citation.chunkId}-${citation.documentId}`} citation={citation} />
               ))}
             </div>

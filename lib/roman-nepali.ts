@@ -13,7 +13,13 @@ export function countWords(text: string) {
 export function needsRomanNepaliRewrite(text: string, language: Language) {
   if (language !== "RN") return false;
   if (containsDevanagari(text)) return true;
-  return countWords(text) > 180;
+  const normalized = text.toLowerCase();
+  const romanNepaliHits = COMMON_ROMAN_NEPALI_WORDS.filter((word) =>
+    new RegExp(`\\b${word}\\b`, "i").test(normalized),
+  ).length;
+
+  if (romanNepaliHits < 2) return true;
+  return false;
 }
 
 const COMMON_ROMAN_NEPALI_WORDS = [
@@ -27,6 +33,13 @@ const COMMON_ROMAN_NEPALI_WORDS = [
   "hajur",
   "yo",
   "ra",
+  "ko",
+  "ma",
+  "lai",
+  "pani",
+  "garnu",
+  "bujha",
+  "sajilo",
   "sikau",
   "bujhau",
 ];

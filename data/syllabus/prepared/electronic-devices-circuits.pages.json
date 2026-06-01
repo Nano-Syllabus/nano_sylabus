@@ -1,0 +1,23 @@
+[
+  {
+    "pageNumber": 1,
+    "text": "CURRICULUM - BE DEGREE IN ELECTRONICS & COMMUNICATION ENGINEERING | 63\n\nELECTRONIC DEVICES AND CIRCUITS\nEX 501\n\nLecture : 3\nTutorial : 1\nPractical : 3/2\n\nYear : II\nPart : I\n\nCourse Objectives:\nTo introduce the fundamentals of analysis of electronic circuits and to provide\nbasic understanding of semiconductor devices and analog integrated circuits\n\n1. Diodes (5 hours)\n1.1 The Ideal Diode\n1.2 Terminal Characteristics of Junction Diodes\n1.3 Physical Operation of Diodes\n1.4 Analysis of Diode Circuits\n1.5 Small Signal Model and Its Application\n1.6 Operation in the Reverse Breakdown Region - Zener Diodes\n\n2. The Bipolar Junction Transistor (10 hours)\n2.1 Operation of the npn transistor in the Active Mode\n2.2 Graphical Representation of Transistor Characteristics\n2.3 Analysis of Transistor Circuits at DC\n2.4 Transistor as an Amplifier\n2.5 Small Signal Equivalent Circuit Models\n2.6 Graphical Load Line Analysis\n2.7 Biasing BJT for Discrete-Circuit Design\n2.8 Basic Single-Stage BJT Amplifier Configurations (C-B, C-E, C-C)\n2.9 Transistor as a Switch -- Cutoff and Saturation\n2.10 A General Large-Signal Model for the BJT: The Ebers-Moll Model\n\n3. Field-Effect Transistor (9 hours)\n3.1 Structure and Physical Operation of Enhancement-Type MOSFET\n3.2 Current-Voltage Characteristics of Enhancement-Type MOSFET\n3.3 The Depletion-Type MOSFET\n3.4 MOSFET Circuits at DC\n3.5 MOSFET as an Amplifier\n3.6 Biasing in MOS Amplifier Circuits\n3.7 Junction Field-Effect Transistor\n\n4. Output Stages and Power Amplifiers (9 hours)\n4.1 Classification of Output Stages",
+    "textLength": 1555,
+    "model": "models/gemini-3.1-flash-lite",
+    "updatedAt": "2026-05-31T06:49:40.862Z"
+  },
+  {
+    "pageNumber": 2,
+    "text": "64 | CURRICULUM – BE DEGREE IN ELECTRONICS & COMMUNICATION ENGINEERING\n\n4.2 Class A Output Stage\n4.3 Class B Output Stage\n4.4 Class AB Output Stage\n4.5 Biasing the Class AB Stage\n4.6 Power BJTs\n4.7 Transformer-Coupled Push-Pull Stages\n4.8 Tuned Amplifiers\n\n5. Signal Generator and Waveform-Shaping Circuits (6 hours)\n5.1 Basic Principles of Sinusoidal Oscillator\n5.2 Op Amp-RC Oscillator Circuits\n5.3 LC and Crystal Oscillators\n5.4 Generation of Square and Triangular Waveforms Using Astable Multivibrators\n5.5 Integrated Circuit Timers\n5.6 Precision Rectifier Circuits\n\n6. Power Supplies, Breakdown Diodes, and Voltage Regulators (6 hours)\n6.1 Unregulated Power Supply\n6.2 Bandgap Voltage Reference, a Constant Current Diodes\n6.3 Transistor Series Regulators\n6.4 Improving Regulator Performance\n6.5 Current Limiting\n6.6 Integrated Circuit Voltage Regulator\n\nPractical:\n1. Bipolar Junction Transistor Characteristics and Single Stage Amplifier\n2. Field-Effect Transistor Characteristics and Single Stage Amplifier\n3. Power Amplifiers\n4. Relaxation Oscillator and Sinusoidal Oscillator\n5. Series and Shunt Voltage Regulators\n\nReferences:\n1. A.S. Sedra and K.C. Smith, “Microelectronic Circuits”, Oxford University Press,.\n2. David A. Bell, “ Electronics Device and Circuits ”, PHI.\n3. Robert Boylestad and Louis Nashelsky, “ Electronic Device and Circuit Theory”, PHI\n4. Thomas L. Floyd, “Electronic Devices”, Pearson Education Inc.",
+    "textLength": 1431,
+    "model": "models/gemini-3.1-flash-lite",
+    "updatedAt": "2026-05-31T06:49:47.508Z"
+  },
+  {
+    "pageNumber": 3,
+    "text": "5. Mark N. Horenstein, \"Microelectronic Circuits and Devices\", PHI\n6. Paul Horowitz and Winfield Fill, \"The Art of Electornics\", Cambridge\nPublication\n7. Jacob Millman and Christos C. Halkias, and SatyabrataJit \"Millman's Electronic\nDevice and Circuits\", Tata McGraw-Hill",
+    "textLength": 271,
+    "model": "models/gemini-3.1-flash-lite",
+    "updatedAt": "2026-05-31T06:49:50.832Z"
+  }
+]

@@ -21,7 +21,7 @@ export default async function SourceDetailPage({
     notFound();
   }
 
-  const followUpPrompt = `I am studying ${source.subject}${source.chapter ? `, ${source.chapter}` : ""}. Please answer my follow-up using this textbook source carefully.\n\nMy question: `;
+  const followUpPrompt = `I am studying ${source.subject}${source.chapter ? `, ${source.chapter}` : ""}. Please answer my follow-up using this grounded source carefully.\n\nMy question: `;
 
   return (
     <AppShell
@@ -43,7 +43,7 @@ export default async function SourceDetailPage({
 
         <h1 className="mt-5 font-display text-4xl leading-[1.1] sm:text-5xl">{source.sourceTitle}</h1>
         <p className="mt-3 max-w-2xl text-sm text-text-secondary">
-          This is the exact grounded textbook chunk the AI used for part of your answer. Use it to verify the source,
+          This is the exact grounded chunk the AI used for part of your answer. Use it to verify the source,
           review the chapter context, or ask a tighter follow-up.
         </p>
 

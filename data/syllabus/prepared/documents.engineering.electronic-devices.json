@@ -1,0 +1,13 @@
+[
+  {
+    "board": "Engineering",
+    "grade": "Bachelor",
+    "subject": "Engineering Electronics",
+    "chapter": "Electronic Devices and Circuit Theory",
+    "topic": "Full Textbook",
+    "title": "Electronic Devices and Circuit Theory (Boylestad, Nashelsky)",
+    "sourceName": "Electronic Devices and Circuit Theory.pdf",
+    "sourceType": "pdf",
+    "contentFile": "electronic-devices-circuit-theory.txt"
+  }
+]

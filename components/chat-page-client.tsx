@@ -13,18 +13,18 @@ import {
 import { useChat, type Message } from "ai/react";
 import { CitationCard } from "@/components/citation-card";
 import { Markdown } from "@/components/markdown";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { getCreditWarning } from "@/lib/billing";
-import { normalizeSubjectLabel } from "@/lib/profile-normalization";
+import { dedupeCitationsForDisplay } from "@/lib/citations";
+import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type {
+  AnswerStyle,
   AppUser,
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionSummary,
   Language,
-  MessageFeedback,
   NoteColor,
 } from "@/lib/types";
 import { cn, deriveSessionTitle, formatDate, groupDateLabel } from "@/lib/utils";
@@ -35,9 +35,74 @@ const COLOR_LABEL: Record<NoteColor, string> = {
   green: "Got it",
 };
 
+const ANSWER_STYLE_STORAGE_KEY = "nano-answer-style";
+const ANSWER_STYLE_LABELS: Record<AnswerStyle, string> = {
+  simple: "Simple",
+  balanced: "Balanced",
+  detailed: "Detailed",
+};
+
+type ThinkingTrace = {
+  grounded: boolean;
+  ragChunks: number;
+  subjectContext: string | null;
+  answerMode: "quick" | "deep" | null;
+  answerModeReason: string | null;
+  answerModel: string | null;
+  usedFallback: boolean;
+  usedQualityRescue: boolean;
+  fallbackReason: string | null;
+  matchedScope: string | null;
+  ragMs: number | null;
+  generationMs: number | null;
+  rewriteMs: number | null;
+  totalMs: number | null;
+};
+
+function formatMs(ms: number | null) {
+  if (!ms || ms <= 0) return "0s";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function buildThoughtSummary(trace: ThinkingTrace) {
+  const lines: string[] = [];
+  if (trace.grounded) {
+    lines.push(
+      `Retrieved ${trace.ragChunks} grounded chunk${trace.ragChunks === 1 ? "" : "s"} from your indexed study sources.`,
+    );
+  } else {
+    lines.push("Grounded retrieval was weak, so fallback/general context path was used for this response.");
+  }
+
+  if (trace.subjectContext) {
+    lines.push(`Focused scope: ${trace.subjectContext}.`);
+  }
+  if (trace.matchedScope) {
+    lines.push(`Best matched source path: ${trace.matchedScope}.`);
+  }
+  if (trace.answerMode) {
+    lines.push(
+      `Answer mode: ${trace.answerMode}${trace.answerModeReason ? ` (${trace.answerModeReason})` : ""}.`,
+    );
+  }
+  if (trace.answerModel) {
+    lines.push(`Model used: ${trace.answerModel}${trace.usedFallback ? " (fallback triggered)" : ""}.`);
+  }
+  if (trace.usedFallback) {
+    lines.push(`Fallback reason: ${trace.fallbackReason || "provider-side primary failure"}.`);
+  }
+  if (trace.usedQualityRescue) {
+    lines.push("Quality rescue: quick draft was upgraded to a stronger pass for better explanation quality.");
+  }
+  return lines;
+}
+
 export function ChatPageClient({
   user,
   defaultLanguage,
+  profileBoard,
+  profileGrade,
   profileSubjects,
   initialSessions,
   initialHasMore,
@@ -47,6 +112,8 @@ export function ChatPageClient({
 }: {
   user: AppUser;
   defaultLanguage: Language;
+  profileBoard: string;
+  profileGrade: string;
   profileSubjects: string[];
   initialSessions: ChatSessionSummary[];
   initialHasMore: boolean;
@@ -60,7 +127,7 @@ export function ChatPageClient({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(initialSession?.id ?? null);
-  const [language, setLanguage] = useState<Language>(defaultLanguage);
+  const chatLanguage = defaultLanguage;
   const [composerLanguage, setComposerLanguage] = useState<Language>(defaultLanguage);
   const [chatError, setChatError] = useState("");
   const [creditBalance, setCreditBalance] = useState(user.creditBalance);
@@ -69,6 +136,7 @@ export function ChatPageClient({
     initialSession?.subjectContext ??
       (initialSubjectContext ? normalizeSubjectLabel(initialSubjectContext) : null),
   );
+  const [answerStyle, setAnswerStyle] = useState<AnswerStyle>("detailed");
   const [saveState, setSaveState] = useState<{
     message: ChatMessageRecord;
     question: string;
@@ -77,14 +145,16 @@ export function ChatPageClient({
   const [renameState, setRenameState] = useState<ChatSessionSummary | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [copyingMessageId, setCopyingMessageId] = useState<string | null>(null);
-  const [feedbackMessageId, setFeedbackMessageId] = useState<string | null>(null);
   const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
-  const [thinkingEnabled, setThinkingEnabled] = useState(true);
-  const [answerMode, setAnswerMode] = useState<"quick" | "deep" | null>(null);
+  const [matchedScope, setMatchedScope] = useState<string | null>(null);
+  const [catalogSubjects, setCatalogSubjects] = useState<string[]>([]);
+  const [latestThinkingTrace, setLatestThinkingTrace] = useState<ThinkingTrace | null>(null);
+  const [showThinkingTrace, setShowThinkingTrace] = useState(true);
   const pendingTitleRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(initialSession?.id ?? null);
   const searchDebounceRef = useRef<number | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const requestWatchdogRef = useRef<number | null>(null);
 
   const initialMessages: Message[] = useMemo(
     () =>
@@ -95,14 +165,68 @@ export function ChatPageClient({
       })),
     [initialSession],
   );
+  const availableSubjects = useMemo(() => {
+    const all = [...profileSubjects, ...catalogSubjects].map((item) => item.trim()).filter(Boolean);
+    return Array.from(new Set(all)).sort((left, right) =>
+      left.localeCompare(right, undefined, { sensitivity: "base", numeric: true }),
+    );
+  }, [profileSubjects, catalogSubjects]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(ANSWER_STYLE_STORAGE_KEY);
+      if (stored === "simple" || stored === "balanced" || stored === "detailed") {
+        setAnswerStyle(stored);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ANSWER_STYLE_STORAGE_KEY, answerStyle);
+    } catch {}
+  }, [answerStyle]);
+
+  useEffect(() => {
+    let active = true;
+    const board = normalizeBoard(profileBoard);
+    const grade = normalizeGrade(profileGrade);
+    if (!board || !grade) return;
+
+    const query = new URLSearchParams({
+      board,
+      grade,
+    });
+    const loadCatalogSubjects = async () => {
+      const response = await fetch(`/api/knowledge/options?${query.toString()}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as { subjects?: string[] };
+      if (!active) return;
+      setCatalogSubjects(Array.isArray(payload.subjects) ? payload.subjects : []);
+    };
+
+    void loadCatalogSubjects();
+    return () => {
+      active = false;
+    };
+  }, [profileBoard, profileGrade]);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
 
   useEffect(() => {
-    setComposerLanguage(language);
-  }, [language]);
+    setMatchedScope(null);
+  }, [currentSessionId]);
+
+  useEffect(() => {
+    return () => {
+      if (requestWatchdogRef.current) {
+        window.clearTimeout(requestWatchdogRef.current);
+        requestWatchdogRef.current = null;
+      }
+    };
+  }, []);
 
   const fetchSessions = useCallback(async function fetchSessions({
     reset,
@@ -214,6 +338,7 @@ export function ChatPageClient({
     input,
     handleInputChange,
     append,
+    stop,
     isLoading,
     setInput,
     setMessages,
@@ -224,30 +349,49 @@ export function ChatPageClient({
     body: {
       sessionId: currentSessionId,
       subjectContext,
+      answerStyle,
     },
     onResponse(response) {
       const returnedSessionId = response.headers.get("x-session-id");
-      const ragChunksHeader = response.headers.get("x-rag-chunks");
-      const ragGrounded = response.headers.get("x-rag-grounded") === "1";
-      const responseSubject = response.headers.get("x-subject-context")?.trim() || null;
-      const responseThinkingEnabled = response.headers.get("x-thinking-enabled") === "1";
-      const responseAnswerMode = response.headers.get("x-answer-mode");
-      const ragChunks = Number(ragChunksHeader || "0");
+      const responseMatchedScope = response.headers.get("x-matched-scope")?.trim() || null;
+      const ragChunks = Number(response.headers.get("x-rag-chunks") || "0");
+      const grounded = response.headers.get("x-rag-grounded") === "1";
+      const responseSubjectContext = response.headers.get("x-subject-context")?.trim() || null;
+      const answerModeHeader = response.headers.get("x-answer-mode");
+      const answerMode =
+        answerModeHeader === "quick" || answerModeHeader === "deep" ? answerModeHeader : null;
+      const answerModeReason = response.headers.get("x-answer-mode-reason")?.trim() || null;
+      const answerModel = response.headers.get("x-answer-model")?.trim() || null;
+      const usedFallback = response.headers.get("x-answer-fallback") === "1";
+      const usedQualityRescue = response.headers.get("x-answer-quality-rescue") === "1";
+      const fallbackReason = response.headers.get("x-answer-fallback-reason")?.trim() || null;
+      const ragMsRaw = Number(response.headers.get("x-rag-ms") || "");
+      const generationMsRaw = Number(response.headers.get("x-generation-ms") || "");
+      const rewriteMsRaw = Number(response.headers.get("x-rewrite-ms") || "");
+      const totalMsRaw = Number(response.headers.get("x-total-ms") || "");
 
-      setThinkingEnabled(responseThinkingEnabled);
-      if (responseAnswerMode === "quick" || responseAnswerMode === "deep") {
-        setAnswerMode(responseAnswerMode);
+      setLatestThinkingTrace({
+        grounded,
+        ragChunks,
+        subjectContext: responseSubjectContext,
+        answerMode,
+        answerModeReason,
+        answerModel,
+        usedFallback,
+        usedQualityRescue,
+        fallbackReason,
+        matchedScope: responseMatchedScope,
+        ragMs: Number.isFinite(ragMsRaw) ? ragMsRaw : null,
+        generationMs: Number.isFinite(generationMsRaw) ? generationMsRaw : null,
+        rewriteMs: Number.isFinite(rewriteMsRaw) ? rewriteMsRaw : null,
+        totalMs: Number.isFinite(totalMsRaw) ? totalMsRaw : null,
+      });
+
+      if (responseMatchedScope) setMatchedScope(responseMatchedScope);
+      if (grounded && ragChunks > 0) {
+        setThinkingStatus(`Thinking with ${ragChunks} grounded chunks...`);
       } else {
-        setAnswerMode(null);
-      }
-      if (ragGrounded && ragChunks > 0) {
-        setThinkingStatus(
-          responseSubject
-            ? `Thinking with ${ragChunks} syllabus chunks (${responseSubject})...`
-            : `Thinking with ${ragChunks} syllabus chunks...`,
-        );
-      } else {
-        setThinkingStatus("Thinking and generating answer...");
+        setThinkingStatus("Building the answer...");
       }
 
       if (!returnedSessionId || currentSessionIdRef.current) return;
@@ -270,7 +414,11 @@ export function ChatPageClient({
       ]);
     },
     async onFinish() {
-      setThinkingStatus("Finalizing response...");
+      if (requestWatchdogRef.current) {
+        window.clearTimeout(requestWatchdogRef.current);
+        requestWatchdogRef.current = null;
+      }
+      setThinkingStatus("Saving the response...");
       setChatError("");
       const resolvedSessionId = currentSessionIdRef.current;
       if (!resolvedSessionId) return;
@@ -279,11 +427,22 @@ export function ChatPageClient({
       setThinkingStatus(null);
     },
     onError(error) {
+      if (requestWatchdogRef.current) {
+        window.clearTimeout(requestWatchdogRef.current);
+        requestWatchdogRef.current = null;
+      }
       setThinkingStatus(null);
       const rawMessage = error.message || "";
-      if (rawMessage.includes("RAG_NO_GROUNDED_CONTEXT")) {
+      if (rawMessage.trim() === "An error occurred.") {
         setChatError(
-          "This question is outside the currently indexed textbook context. Please ask by unit/chapter, or switch to the correct subject.",
+          "Answer model yo try मा fail bhayo. Feri send gara; simple questions ko lagi lighter model use garne banाइएको छ.",
+        );
+        return;
+      }
+      if (rawMessage.includes("MODEL_GENERATION_FAILED")) {
+        setChatError(
+          rawMessage.replace(/^.*MODEL_GENERATION_FAILED[:\s-]*/i, "").trim() ||
+            "The answer model failed for this question. Please retry.",
         );
         return;
       }
@@ -347,19 +506,6 @@ export function ChatPageClient({
         }
       : null);
 
-  function patchMessage(messageId: string, patch: Partial<ChatMessageRecord>) {
-    setSessionDetail((prev) =>
-      prev
-        ? {
-            ...prev,
-            messages: prev.messages.map((message) =>
-              message.id === messageId ? { ...message, ...patch } : message,
-            ),
-          }
-        : prev,
-    );
-  }
-
   async function sendCurrentMessage() {
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
@@ -368,11 +514,22 @@ export function ChatPageClient({
       return;
     }
 
+    if (requestWatchdogRef.current) {
+      window.clearTimeout(requestWatchdogRef.current);
+      requestWatchdogRef.current = null;
+    }
+
     pendingTitleRef.current = deriveSessionTitle(trimmed);
     setChatError("");
-    setAnswerMode(null);
     setThinkingStatus("Retrieving syllabus context...");
     setInput("");
+    requestWatchdogRef.current = window.setTimeout(() => {
+      setThinkingStatus("This question is taking longer than expected...");
+      setChatError(
+        "Answer generation is taking too long right now. We stopped this try so you are not stuck; please retry once.",
+      );
+      stop();
+    }, 45000);
 
     await append(
       {
@@ -382,9 +539,10 @@ export function ChatPageClient({
       {
         body: {
           sessionId: currentSessionId,
-          language,
+          language: chatLanguage,
           messageLanguage: composerLanguage,
           subjectContext,
+          answerStyle,
         },
       },
     );
@@ -495,33 +653,15 @@ export function ChatPageClient({
     }
   }
 
-  async function sendFeedback(message: ChatMessageRecord, feedback: MessageFeedback) {
-    setFeedbackMessageId(message.id);
-    setChatError("");
-    const response = await fetch(`/api/chat/messages/${message.id}/feedback`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ feedback }),
-    });
-
-    setFeedbackMessageId(null);
-
-    if (!response.ok) {
-      const payload = (await response.json()) as { error?: string };
-      setChatError(payload.error || "Failed to save feedback.");
-      return;
-    }
-
-    patchMessage(message.id, { feedback });
-    setUiFeedback(feedback === "up" ? "Marked as helpful." : "Marked for review.");
-  }
-
   function applySuggestedPrompt(prompt: string) {
     setInput(prompt);
     composerRef.current?.focus();
     setUiFeedback("Suggested follow-up added to the composer.");
+  }
+
+  function applyAnswerStyle(style: AnswerStyle) {
+    setAnswerStyle(style);
+    setUiFeedback(`${ANSWER_STYLE_LABELS[style]} answers will be preferred from now on.`);
   }
 
   const creditWarning = getCreditWarning(creditBalance);
@@ -532,46 +672,51 @@ export function ChatPageClient({
     composerRef.current?.focus();
   }, [initialPrompt, setInput]);
 
+  const hasMessages = messages.length > 0;
+
   return (
-    <div className="flex h-full overflow-hidden">
-      <aside className="hidden w-[300px] border-r border-border bg-bg-primary lg:flex lg:flex-col">
-        <div className="border-b border-border p-3">
-          <Link href="/app/chat">
-            <Button variant="outline" className="w-full">
-              + New chat
-            </Button>
-          </Link>
-          <div className="mt-3">
-            <Input
-              value={historySearch}
-              onChange={(event) => setHistorySearch(event.target.value)}
-              placeholder="Search chat titles..."
-            />
+    <div className="grid h-full min-h-0 grid-cols-1 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--bg-secondary)_62%,transparent),transparent_28%)] lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[224px_minmax(0,1fr)]">
+      <aside className="hidden min-h-0 border-r border-border bg-bg-primary/96 lg:flex lg:flex-col">
+        <div className="border-b border-border p-2.5">
+          <div className="rounded-[20px] border border-border bg-bg-secondary p-2 shadow-sm">
+            <Link href="/app/chat">
+              <Button variant="outline" className="h-10 w-full rounded-full text-sm">
+                + New chat
+              </Button>
+            </Link>
+            <div className="mt-2">
+              <Input
+                value={historySearch}
+                onChange={(event) => setHistorySearch(event.target.value)}
+                placeholder="Search chat titles..."
+                className="h-10 rounded-xl text-sm"
+              />
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-4">
-          <div className="space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2.5">
+          <div className="space-y-3">
             {groupedSessions.map(({ group, items }) =>
               items.length ? (
                 <div key={group}>
-                  <p className="mb-1 px-1 text-[10px] font-mono-ui uppercase text-text-muted">
+                  <p className="mb-2 px-1 text-[10px] font-mono-ui uppercase tracking-[0.2em] text-text-muted">
                     {group}
                   </p>
-                  <ul className="space-y-0.5">
+                  <ul className="space-y-1.5">
                     {items.map((session) => (
                       <li key={session.id}>
                         <Link
                           href={`/app/chat?session=${session.id}`}
                           className={cn(
-                            "block rounded-md border-l-2 px-2 py-2 text-left text-xs transition",
+                            "block rounded-xl border px-2.5 py-2 text-left transition",
                             currentSessionId === session.id
-                              ? "border-text-primary bg-bg-secondary"
-                              : "border-transparent hover:bg-bg-secondary",
+                              ? "border-border-strong bg-bg-secondary shadow-sm"
+                              : "border-transparent hover:border-border hover:bg-bg-secondary/80",
                           )}
                         >
-                          <div className="truncate">{session.title}</div>
-                          <div className="mt-0.5 text-[10px] text-text-muted">
+                          <div className="line-clamp-2 text-[12px] font-medium leading-5">{session.title}</div>
+                          <div className="mt-1 text-[10px] text-text-muted">
                             {formatDate(session.updatedAt)}
                           </div>
                         </Link>
@@ -582,14 +727,16 @@ export function ChatPageClient({
               ) : null,
             )}
             {sessions.length === 0 ? (
-              <p className="text-xs text-text-muted">No chat history yet.</p>
+              <div className="rounded-2xl border border-dashed border-border bg-bg-secondary/70 p-4 text-sm text-text-muted">
+                No chat history yet.
+              </div>
             ) : null}
             {historyError ? <p className="text-xs text-destructive">{historyError}</p> : null}
             {hasMoreSessions ? (
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full"
+                className="w-full rounded-xl"
                 onClick={() => void fetchSessions({ reset: false, offset: sessions.length })}
                 disabled={historyLoading}
               >
@@ -600,58 +747,135 @@ export function ChatPageClient({
         </div>
       </aside>
 
-      <section className="flex min-w-0 flex-1 flex-col">
-        <div className="border-b border-border bg-bg-secondary px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-mono-ui uppercase text-text-muted">Grounded chat</p>
-              <h2 className="font-display text-2xl">{activeSessionTitle}</h2>
-              <p className="mt-1 text-xs text-text-muted">{creditBalance} credits available</p>
-              {subjectContext ? (
-                <p className="mt-1 text-xs text-text-secondary">Subject focus: {subjectContext}</p>
-              ) : null}
-              <div className="mt-2 inline-flex items-center gap-2">
-                <label htmlFor="subject-context" className="text-[11px] text-text-muted">
-                  Subject
-                </label>
-                <select
-                  id="subject-context"
-                  value={subjectContext ?? ""}
-                  onChange={(event) =>
-                    void updateSessionSubjectContext(event.target.value.trim() || null)
-                  }
-                  className="h-8 rounded-md border border-border bg-bg-primary px-2 text-xs text-text-primary focus:outline-none"
-                >
-                  <option value="">General</option>
-                  {Array.from(new Set(profileSubjects.filter(Boolean))).map((subject) => (
-                    <option key={subject} value={subject}>
-                      {subject}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="inline-flex rounded-full border border-border p-0.5">
-              {(["EN", "RN"] as const).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setLanguage(item)}
-                  className={
-                    "rounded-full px-4 py-1.5 text-xs font-mono-ui transition " +
-                    (language === item ? "bg-text-primary text-text-inverse" : "text-text-secondary")
-                  }
-                >
-                  {item === "EN" ? "English" : "Roman Nepali"}
-                </button>
-              ))}
+      <section className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
+        <div
+          className={cn(
+            "border-b border-border bg-bg-primary/92 backdrop-blur",
+            hasMessages ? "px-4 py-2 md:px-5 xl:px-6" : "px-4 py-4 md:px-6 xl:px-8",
+          )}
+        >
+          <div
+            className={cn(
+              "mx-auto flex w-full flex-wrap items-start justify-between",
+              hasMessages ? "max-w-5xl gap-3" : "max-w-6xl gap-4",
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              {hasMessages ? (
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h2 className="min-w-0 truncate font-display text-xl leading-none sm:text-2xl">
+                    {activeSessionTitle}
+                  </h2>
+                  <label
+                    htmlFor="subject-context"
+                    className="text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted"
+                  >
+                    Focus
+                  </label>
+                  <select
+                    id="subject-context"
+                    value={subjectContext ?? ""}
+                    onChange={(event) =>
+                      void updateSessionSubjectContext(event.target.value.trim() || null)
+                    }
+                    className="h-8 rounded-full border border-border bg-bg-primary px-3 text-[13px] text-text-primary outline-none transition focus:border-border-strong"
+                  >
+                    <option value="">General</option>
+                    {availableSubjects.map((subject) => (
+                      <option key={subject} value={subject}>
+                        {subject}
+                      </option>
+                    ))}
+                  </select>
+                  <label
+                    htmlFor="answer-style"
+                    className="text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted"
+                  >
+                    Style
+                  </label>
+                  <select
+                    id="answer-style"
+                    value={answerStyle}
+                    onChange={(event) => setAnswerStyle(event.target.value as AnswerStyle)}
+                    className="h-8 rounded-full border border-border bg-bg-primary px-3 text-[13px] text-text-primary outline-none transition focus:border-border-strong"
+                  >
+                    {Object.entries(ANSWER_STYLE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  {matchedScope ? (
+                    <span className="max-w-full truncate rounded-full border border-border bg-bg-secondary px-2.5 py-1 text-[10px] text-text-muted">
+                      {matchedScope}
+                    </span>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-border bg-bg-secondary px-3 py-1 text-[10px] font-mono-ui uppercase tracking-[0.22em] text-text-muted">
+                      Study chat
+                    </span>
+                    {subjectContext ? (
+                      <span className="rounded-full border border-border bg-bg-secondary px-3 py-1 text-xs text-text-secondary">
+                        {subjectContext}
+                      </span>
+                    ) : null}
+                  </div>
+                  <h2 className="mt-3 line-clamp-2 font-display text-4xl leading-none sm:text-5xl">
+                    {activeSessionTitle}
+                  </h2>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-text-secondary">
+                    <div className="inline-flex items-center gap-2">
+                      <label htmlFor="subject-context" className="text-[11px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
+                        Focus
+                      </label>
+                      <select
+                        id="subject-context"
+                        value={subjectContext ?? ""}
+                        onChange={(event) =>
+                          void updateSessionSubjectContext(event.target.value.trim() || null)
+                        }
+                        className="h-11 rounded-full border border-border bg-bg-primary px-4 text-sm text-text-primary outline-none transition focus:border-border-strong"
+                      >
+                        <option value="">General</option>
+                        {availableSubjects.map((subject) => (
+                          <option key={subject} value={subject}>
+                            {subject}
+                          </option>
+                        ))}
+                      </select>
+                      <label htmlFor="answer-style" className="text-[11px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
+                        Style
+                      </label>
+                      <select
+                        id="answer-style"
+                        value={answerStyle}
+                        onChange={(event) => setAnswerStyle(event.target.value as AnswerStyle)}
+                        className="h-11 rounded-full border border-border bg-bg-primary px-4 text-sm text-text-primary outline-none transition focus:border-border-strong"
+                      >
+                        {Object.entries(ANSWER_STYLE_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <span className="text-xs text-text-muted">
+                      Focus narrows the sources. Style controls how short or detailed the answer feels.
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
             {activeSessionSummary ? (
-              <div className="flex gap-2">
+              <div className="flex shrink-0 flex-wrap gap-2">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
+                  className="rounded-full"
                   onClick={() => setRenameState(activeSessionSummary)}
                 >
                   Rename
@@ -660,6 +884,7 @@ export function ChatPageClient({
                   type="button"
                   size="sm"
                   variant="ghost"
+                  className="rounded-full"
                   onClick={() => void deleteCurrentSession()}
                   disabled={deletingSessionId === activeSessionSummary.id}
                 >
@@ -670,202 +895,248 @@ export function ChatPageClient({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-6 md:px-6">
-          {messages.length === 0 ? (
-            <div className="mx-auto max-w-3xl rounded-xl border border-dashed border-border p-10 text-center">
-              <p className="font-display text-4xl">Let&apos;s begin.</p>
-              <p className="mt-3 text-sm text-text-secondary">
-                Ask your first question in English or Roman Nepali. Grounded answers will cite syllabus context when relevant.
-              </p>
-              {subjectContext ? (
-                <p className="mt-3 text-xs text-text-muted">
-                  This chat will start with a {subjectContext} focus.
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-5xl flex-col px-4 pb-24 pt-5 md:px-5 xl:px-6">
+            {messages.length === 0 ? (
+              <div className="mx-auto mt-8 flex min-h-[42vh] w-full max-w-4xl flex-col items-center justify-center rounded-[28px] border border-border bg-bg-primary/92 px-8 py-12 text-center shadow-[0_16px_60px_rgba(0,0,0,0.05)]">
+                <p className="text-[11px] font-mono-ui uppercase tracking-[0.22em] text-text-muted">
+                  Nano Syllabus
                 </p>
-              ) : null}
-            </div>
-          ) : (
-            <div className="mx-auto max-w-3xl space-y-4">
-              {messages.map((message, index) => {
-                const assistantOrdinal =
-                  message.role === "assistant"
-                    ? messages.slice(0, index + 1).filter((item) => item.role === "assistant").length - 1
-                    : -1;
-                const persistedAssistant =
-                  assistantOrdinal >= 0 ? persistedAssistantMessages[assistantOrdinal] ?? null : null;
-                const question = assistantOrdinal >= 0 ? assistantQuestions[assistantOrdinal] ?? activeSessionTitle : "";
+                <p className="mt-4 font-display text-5xl leading-none sm:text-6xl">
+                  Ready when you are.
+                </p>
+                <p className="mt-4 max-w-2xl text-base text-text-secondary">
+                  Ask one clear study question and we&apos;ll ground the answer in your syllabus, notes, and indexed books.
+                </p>
+                <div className="mt-8 flex flex-wrap justify-center gap-2">
+                  {(subjectContext
+                    ? [
+                        `Explain ${subjectContext} in simple terms`,
+                        `Give me likely exam questions from ${subjectContext}`,
+                        `Summarize the important formulas in ${subjectContext}`,
+                      ]
+                    : [
+                        "Explain this chapter in simple terms",
+                        "Give me likely exam questions",
+                        "Summarize the important formulas",
+                      ]).map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => applySuggestedPrompt(prompt)}
+                      className="rounded-full border border-border bg-bg-secondary px-4 py-2 text-sm text-text-secondary transition hover:border-border-strong hover:bg-bg-primary hover:text-text-primary"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {messages.map((message, index) => {
+                  const assistantOrdinal =
+                    message.role === "assistant"
+                      ? messages.slice(0, index + 1).filter((item) => item.role === "assistant").length - 1
+                      : -1;
+                  const persistedAssistant =
+                    assistantOrdinal >= 0 ? persistedAssistantMessages[assistantOrdinal] ?? null : null;
+                  const displayCitations = persistedAssistant?.citations
+                    ? dedupeCitationsForDisplay(persistedAssistant.citations)
+                    : [];
+                  const question = assistantOrdinal >= 0 ? assistantQuestions[assistantOrdinal] ?? activeSessionTitle : "";
 
-                return (
-                  <article
-                    key={message.id}
-                    className={cn(
-                      "rounded-2xl border p-4 shadow-sm animate-fade-in",
-                      message.role === "user"
-                        ? "ml-auto max-w-[80%] border-border-strong bg-bg-primary"
-                        : "mr-auto max-w-[88%] border-border bg-bg-secondary",
-                    )}
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      <Badge variant={message.role === "user" ? "mono" : "outline"}>
-                        {message.role === "user" ? "You" : "AI"}
-                      </Badge>
-                      {persistedAssistant?.grounded ? (
-                        <Badge variant="success">Grounded</Badge>
-                      ) : message.role === "assistant" && persistedAssistant ? (
-                        <Badge variant="warning">No source context</Badge>
-                      ) : null}
-                    </div>
-                    {message.role === "assistant" ? (
-                      <Markdown text={message.content} className="text-sm leading-7" />
-                    ) : (
-                      <div className="whitespace-pre-wrap text-sm leading-7 text-text-primary">
-                        {message.content}
-                      </div>
-                    )}
+                  return (
+                    <article
+                      key={message.id}
+                      className={cn(
+                        "animate-fade-in",
+                        message.role === "user" ? "ml-auto w-full max-w-[min(900px,92%)]" : "mr-auto w-full max-w-[1020px]",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "rounded-[30px] border px-5 py-4 shadow-sm",
+                          message.role === "user"
+                            ? "border-border-strong bg-text-primary text-text-inverse"
+                            : "border-border bg-bg-primary/96",
+                        )}
+                      >
+                        {message.role === "assistant" ? (
+                          <Markdown text={message.content} className="text-[15px] leading-8" />
+                        ) : (
+                          <div className="whitespace-pre-wrap text-[15px] leading-8 text-text-inverse">
+                            {message.content}
+                          </div>
+                        )}
 
-                    {persistedAssistant?.citations?.length ? (
-                      <div className="mt-4">
-                        <p className="mb-2 text-[10px] font-mono-ui uppercase text-text-muted">
-                          Textbook source
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {persistedAssistant.citations.map((citation) => (
-                            <CitationCard
-                              key={`${persistedAssistant.id}-${citation.chunkId}`}
-                              citation={citation}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {persistedAssistant ? (
-                      <div className="mt-4 space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => void copyAssistantMessage(persistedAssistant)}
-                            disabled={copyingMessageId === persistedAssistant.id}
-                            data-testid={`copy-message-${persistedAssistant.id}`}
-                          >
-                            {copyingMessageId === persistedAssistant.id ? "Copying..." : "Copy"}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={persistedAssistant.feedback === "up" ? "outline" : "ghost"}
-                            onClick={() => void sendFeedback(persistedAssistant, "up")}
-                            disabled={feedbackMessageId === persistedAssistant.id}
-                            data-testid={`feedback-up-${persistedAssistant.id}`}
-                          >
-                            👍 Helpful
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={persistedAssistant.feedback === "down" ? "outline" : "ghost"}
-                            onClick={() => void sendFeedback(persistedAssistant, "down")}
-                            disabled={feedbackMessageId === persistedAssistant.id}
-                            data-testid={`feedback-down-${persistedAssistant.id}`}
-                          >
-                            👎 Needs work
-                          </Button>
-                        </div>
-
-                        {persistedAssistant.followUpSuggestions.length ? (
-                          <div>
-                            <p className="mb-2 text-[10px] font-mono-ui uppercase text-text-muted">
-                              Suggested follow-ups
+                        {displayCitations.length ? (
+                          <div className="mt-5">
+                            <p className="mb-3 text-[10px] font-mono-ui uppercase tracking-[0.2em] text-text-muted">
+                              Sources
                             </p>
-                            <div className="flex flex-wrap gap-2">
-                              {persistedAssistant.followUpSuggestions.map((suggestion) => (
-                                <button
-                                  key={`${persistedAssistant.id}-${suggestion}`}
-                                  type="button"
-                                  onClick={() => applySuggestedPrompt(suggestion)}
-                                  data-testid={`followup-chip-${persistedAssistant.id}`}
-                                  className="rounded-full border border-border px-3 py-1.5 text-left text-xs text-text-secondary transition hover:bg-bg-primary hover:text-text-primary"
-                                >
-                                  {suggestion}
-                                </button>
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                              {displayCitations.map((citation) => (
+                                <CitationCard
+                                  key={`${message.id}-${citation.documentId}-${citation.chunkId}`}
+                                  citation={citation}
+                                />
                               ))}
                             </div>
                           </div>
                         ) : null}
 
-                        <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={persistedAssistant.savedNoteId ? "outline" : "filled"}
-                          onClick={() =>
-                            setSaveState({
-                              message: persistedAssistant,
-                              question,
-                            })
-                          }
-                          data-testid={`save-note-${persistedAssistant.id}`}
-                        >
-                          {persistedAssistant.savedNoteId ? "Edit note" : "Save as note"}
-                        </Button>
-                        {persistedAssistant.savedNoteId ? (
-                          <Link href={`/app/notes/${persistedAssistant.savedNoteId}`}>
-                            <Button size="sm" variant="ghost">
-                              Open note →
-                            </Button>
-                          </Link>
-                        ) : null}
-                        </div>
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })}
+                        {persistedAssistant ? (
+                          <div className="mt-5 space-y-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => void copyAssistantMessage(persistedAssistant)}
+                                disabled={copyingMessageId === persistedAssistant.id}
+                                data-testid={`copy-message-${persistedAssistant.id}`}
+                                className="rounded-full"
+                              >
+                                {copyingMessageId === persistedAssistant.id ? "Copying..." : "Copy"}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={persistedAssistant.savedNoteId ? "outline" : "filled"}
+                                className="rounded-full"
+                                onClick={() =>
+                                  setSaveState({
+                                    message: persistedAssistant,
+                                    question,
+                                  })
+                                }
+                                data-testid={`save-note-${persistedAssistant.id}`}
+                              >
+                                {persistedAssistant.savedNoteId ? "Edit note" : "Save as note"}
+                              </Button>
+                              {persistedAssistant.savedNoteId ? (
+                                <Link href={`/app/notes/${persistedAssistant.savedNoteId}`}>
+                                  <Button size="sm" variant="ghost" className="rounded-full">
+                                    Open note →
+                                  </Button>
+                                </Link>
+                              ) : null}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={answerStyle === "detailed" ? "outline" : "ghost"}
+                                className="rounded-full"
+                                onClick={() => applyAnswerStyle("detailed")}
+                              >
+                                Detailed next
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={answerStyle === "simple" ? "outline" : "ghost"}
+                                className="rounded-full"
+                                onClick={() => applyAnswerStyle("simple")}
+                              >
+                                Simple next
+                              </Button>
+                            </div>
 
-              {isLoading ? (
-                <div className="mr-auto max-w-[88%] rounded-2xl border border-border bg-bg-secondary p-4">
-                  <div className="mb-2 flex items-center gap-2">
-                    <Badge variant="outline">AI</Badge>
-                    <Badge variant={thinkingEnabled ? "success" : "warning"}>
-                      {thinkingEnabled ? "Thinking ON" : "Thinking OFF"}
-                    </Badge>
-                    {answerMode ? (
-                      <Badge variant="outline">
-                        Auto mode: {answerMode === "deep" ? "Deep" : "Quick"}
-                      </Badge>
-                    ) : null}
-                    <span className="text-[11px] text-text-muted">{thinkingStatus || "Generating..."}</span>
+                            {persistedAssistant.followUpSuggestions.length ? (
+                              <div>
+                                <p className="mb-2 text-[10px] font-mono-ui uppercase tracking-[0.2em] text-text-muted">
+                                  Try next
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {persistedAssistant.followUpSuggestions.map((suggestion) => (
+                                    <button
+                                      key={`${persistedAssistant.id}-${suggestion}`}
+                                      type="button"
+                                      onClick={() => applySuggestedPrompt(suggestion)}
+                                      data-testid={`followup-chip-${persistedAssistant.id}`}
+                                      className="rounded-full border border-border px-3 py-2 text-left text-xs text-text-secondary transition hover:border-border-strong hover:bg-bg-secondary hover:text-text-primary"
+                                    >
+                                      {suggestion}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })}
+
+                {isLoading ? (
+                  <div className="mr-auto w-full max-w-[1020px] rounded-[30px] border border-border bg-bg-primary/96 px-5 py-4 shadow-sm">
+                    <p className="mb-2 text-[11px] text-text-muted">{thinkingStatus || "Generating..."}</p>
+                    <div className="flex items-center">
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                    </div>
                   </div>
-                  <div className="flex items-center">
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          )}
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="border-t border-border bg-bg-primary px-4 py-4 md:px-6">
-          <div className="mx-auto max-w-3xl">
+        <div className="border-t border-border bg-[linear-gradient(180deg,color-mix(in_oklab,var(--bg-primary)_60%,transparent),var(--bg-primary))] px-4 pb-4 pt-3 backdrop-blur md:px-5 xl:px-6">
+          <div className="mx-auto max-w-5xl">
             {chatError ? (
-              <p className="mb-3 rounded-md border border-destructive/40 bg-[color:var(--note-red)] px-3 py-2 text-sm text-destructive">
+              <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
                 {chatError}
               </p>
             ) : null}
             {!chatError && creditWarning ? (
-              <p className="mb-3 rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
+              <p className="mb-3 rounded-2xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
                 {creditWarning}
               </p>
             ) : null}
+            {latestThinkingTrace ? (
+              <div className="mb-3 rounded-2xl border border-border bg-bg-secondary/60 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => setShowThinkingTrace((value) => !value)}
+                  className="flex w-full items-center justify-between gap-3 text-left"
+                >
+                  <div>
+                    <p className="text-xs font-mono-ui uppercase tracking-[0.18em] text-text-muted">
+                      Thought for {formatMs(latestThinkingTrace.totalMs)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-text-muted">
+                      Process summary for transparency (not raw private chain-of-thought)
+                    </p>
+                  </div>
+                  <span className="text-xs text-text-secondary">{showThinkingTrace ? "Hide" : "Show"}</span>
+                </button>
+                {showThinkingTrace ? (
+                  <div className="mt-2 space-y-2">
+                    <ul className="space-y-1 text-xs text-text-secondary">
+                      {buildThoughtSummary(latestThinkingTrace).map((line) => (
+                        <li key={line} className="leading-5">
+                          • {line}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="grid gap-1 text-xs text-text-muted md:grid-cols-2">
+                      <p>Retrieval: {formatMs(latestThinkingTrace.ragMs)}</p>
+                      <p>Generation: {formatMs(latestThinkingTrace.generationMs)}</p>
+                      <p>Rewrite: {formatMs(latestThinkingTrace.rewriteMs)}</p>
+                      <p>Total: {formatMs(latestThinkingTrace.totalMs)}</p>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {uiFeedback ? (
-              <p className="mb-3 rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
+              <p className="mb-3 rounded-2xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
                 {uiFeedback}
               </p>
             ) : null}
-            <form onSubmit={submitMessage} className="rounded-2xl border border-border bg-bg-secondary p-3">
+            <form onSubmit={submitMessage} className="rounded-[28px] border border-border bg-bg-primary p-3 shadow-[0_16px_46px_rgba(0,0,0,0.05)]">
               <textarea
                 ref={composerRef}
                 value={input}
@@ -876,27 +1147,36 @@ export function ChatPageClient({
                     void sendCurrentMessage();
                   }
                 }}
-                rows={3}
+                rows={2}
                 placeholder="Ask a question about your studies..."
-                className="w-full resize-none bg-transparent px-1 py-1 text-sm text-text-primary outline-none placeholder:text-text-muted"
+                className="min-h-[72px] w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted"
               />
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <div className="inline-flex rounded-full border border-border p-0.5">
-                  {(["EN", "RN"] as const).map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => setComposerLanguage(item)}
-                      className={
-                        "rounded-full px-3 py-1 text-[11px] font-mono-ui transition " +
-                        (composerLanguage === item ? "bg-text-primary text-text-inverse" : "text-text-secondary")
-                      }
-                    >
-                      {item === "EN" ? "English" : "Roman Nepali"}
-                    </button>
-                  ))}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2.5">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="inline-flex rounded-full border border-border bg-bg-secondary p-1">
+                    {(["EN", "RN"] as const).map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setComposerLanguage(item)}
+                        className={
+                          "rounded-full px-4 py-1.5 text-[11px] font-mono-ui transition " +
+                          (composerLanguage === item ? "bg-text-primary text-text-inverse" : "text-text-secondary")
+                        }
+                      >
+                        {item === "EN" ? "English" : "Roman Nepali"}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="hidden text-xs text-text-muted md:inline">
+                    Enter to send, Shift + Enter for a new line
+                  </span>
                 </div>
-                <Button type="submit" disabled={isLoading || !input.trim() || creditBalance <= 0}>
+                <Button
+                  type="submit"
+                  disabled={isLoading || !input.trim() || creditBalance <= 0}
+                  className="h-11 min-w-[116px] rounded-full px-5 text-base"
+                >
                   {isLoading ? "Sending..." : "Send →"}
                 </Button>
               </div>

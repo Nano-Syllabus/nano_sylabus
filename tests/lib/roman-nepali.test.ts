@@ -15,6 +15,7 @@ describe("Roman Nepali guards", () => {
   it("requires rewrite only for Roman Nepali responses that violate the contract", () => {
     expect(needsRomanNepaliRewrite("Yo answer thik cha.", "RN")).toBe(false);
     expect(needsRomanNepaliRewrite("यो answer thik chaina.", "RN")).toBe(true);
+    expect(needsRomanNepaliRewrite("This answer is fully in English.", "RN")).toBe(true);
     expect(needsRomanNepaliRewrite("यो is allowed in English mode.", "EN")).toBe(false);
   });
 

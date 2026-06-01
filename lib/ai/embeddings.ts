@@ -1,4 +1,4 @@
-import { getGeminiEmbeddingEnv } from "@/lib/env";
+import { getEmbeddingEnv } from "@/lib/env";
 import { createDeterministicEmbedding, isE2EFakeAIEnabled } from "@/lib/ai/e2e-harness";
 
 function toGeminiModelPath(model: string) {
@@ -10,24 +10,39 @@ export async function embedText(input: string) {
     return createDeterministicEmbedding(input);
   }
 
-  const { apiKey, model } = getGeminiEmbeddingEnv();
-  const modelPath = toGeminiModelPath(model);
+  const env = getEmbeddingEnv();
+  let response: Response;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/${modelPath}:embedContent?key=${apiKey}`,
-    {
+  if (env.provider === "openrouter") {
+    response = await fetch(`${env.baseUrl}/embeddings`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${env.apiKey}`,
       },
       body: JSON.stringify({
-        model: modelPath,
-        content: {
-          parts: [{ text: input }],
-        },
+        model: env.model,
+        input,
       }),
-    },
-  );
+    });
+  } else {
+    const modelPath = toGeminiModelPath(env.model);
+    response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${modelPath}:embedContent?key=${env.apiKey}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: modelPath,
+          content: {
+            parts: [{ text: input }],
+          },
+        }),
+      },
+    );
+  }
 
   if (!response.ok) {
     const text = await response.text();
@@ -36,9 +51,10 @@ export async function embedText(input: string) {
 
   const payload = (await response.json()) as {
     embedding?: { values?: number[] };
+    data?: Array<{ embedding?: number[] }>;
   };
 
-  return payload.embedding?.values ?? [];
+  return payload.embedding?.values ?? payload.data?.[0]?.embedding ?? [];
 }
 
 export async function embedTexts(inputs: string[]) {

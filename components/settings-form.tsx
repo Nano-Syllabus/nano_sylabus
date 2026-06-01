@@ -1,15 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
+import { Field, Input, Select } from "@/components/ui/field";
+import {
+  defaultBoardOptions,
+  defaultGradeOptions,
+  mergeDropdownOptions,
+} from "@/lib/onboarding-options";
 import {
   normalizeBoard,
   normalizeBoardScore,
   normalizeCollege,
   normalizeFullName,
   normalizeGrade,
+  normalizeSubjects,
   normalizeTargetGrade,
 } from "@/lib/profile-normalization";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -28,12 +34,76 @@ export function SettingsForm({
   const [board, setBoard] = useState(profile.board);
   const [grade, setGrade] = useState(profile.grade);
   const [boardScore, setBoardScore] = useState(profile.boardScore ?? "");
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>(
+    normalizeSubjects(profile.subjects),
+  );
   const [targetGrade, setTargetGrade] = useState(profile.targetGrade);
   const [languagePref, setLanguagePref] = useState<"EN" | "RN">(profile.languagePref);
   const [status, setStatus] = useState("");
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [catalogBoards, setCatalogBoards] = useState<string[]>([]);
+  const [catalogGradesByBoard, setCatalogGradesByBoard] = useState<Record<string, string[]>>({});
+  const [catalogSubjectsByBoardGrade, setCatalogSubjectsByBoardGrade] = useState<Record<string, string[]>>({});
+
+  const normalizedBoard = normalizeBoard(board);
+  const normalizedGrade = normalizeGrade(grade);
+  const suggestedGrades = useMemo(
+    () => catalogGradesByBoard[normalizedBoard] ?? [],
+    [catalogGradesByBoard, normalizedBoard],
+  );
+  const boardOptions = useMemo(
+    () =>
+      mergeDropdownOptions({
+        catalogValues: catalogBoards,
+        fallbackValues: catalogBoards.length ? [] : defaultBoardOptions(),
+        includeValue: board,
+      }),
+    [board, catalogBoards],
+  );
+  const gradeOptions = useMemo(
+    () =>
+      mergeDropdownOptions({
+        catalogValues: suggestedGrades,
+        fallbackValues: catalogBoards.length ? [] : defaultGradeOptions(),
+        includeValue: grade,
+      }),
+    [catalogBoards.length, grade, suggestedGrades],
+  );
+  const suggestedSubjects = useMemo(
+    () => catalogSubjectsByBoardGrade[`${normalizedBoard}::${normalizedGrade}`] ?? [],
+    [catalogSubjectsByBoardGrade, normalizedBoard, normalizedGrade],
+  );
+
+  useEffect(() => {
+    let active = true;
+    const loadCatalog = async () => {
+      const response = await fetch("/api/knowledge/options", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as {
+        boards?: string[];
+        gradesByBoard?: Record<string, string[]>;
+        subjectsByBoardGrade?: Record<string, string[]>;
+      };
+      if (!active) return;
+      setCatalogBoards(Array.isArray(payload.boards) ? payload.boards : []);
+      setCatalogGradesByBoard(payload.gradesByBoard ?? {});
+      setCatalogSubjectsByBoardGrade(payload.subjectsByBoardGrade ?? {});
+    };
+    void loadCatalog();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  function toggleSubject(subject: string) {
+    setSelectedSubjects((current) => {
+      const exists = current.some((item) => item.toLowerCase() === subject.toLowerCase());
+      if (exists) return current.filter((item) => item.toLowerCase() !== subject.toLowerCase());
+      return [...current, subject];
+    });
+  }
 
   async function saveProfile() {
     const normalizedFullName = normalizeFullName(fullName);
@@ -41,9 +111,14 @@ export function SettingsForm({
     const normalizedBoard = normalizeBoard(board);
     const normalizedGrade = normalizeGrade(grade);
     const normalizedTargetGrade = normalizeTargetGrade(targetGrade);
+    const normalizedSubjects = normalizeSubjects(selectedSubjects);
 
     if (!normalizedFullName || !normalizedCollege || !normalizedBoard || !normalizedGrade || !normalizedTargetGrade) {
       setStatus("Please complete your full name, institution, board, grade or year, and target grade.");
+      return;
+    }
+    if (normalizedSubjects.length === 0) {
+      setStatus("Please select at least one subject.");
       return;
     }
 
@@ -57,7 +132,7 @@ export function SettingsForm({
       board: normalizedBoard,
       grade: normalizedGrade,
       board_score: normalizeBoardScore(boardScore) || null,
-      subjects: profile.subjects,
+      subjects: normalizedSubjects,
       target_grade: normalizedTargetGrade,
       language_pref: languagePref,
     });
@@ -132,23 +207,40 @@ export function SettingsForm({
           <Field label="College / institution">
             <Input value={college} onChange={(event) => setCollege(event.target.value)} />
           </Field>
-          <Field label="Grade / year">
-            <Input value={grade} onChange={(event) => setGrade(event.target.value)} />
-          </Field>
           <Field label="Board">
-            <Input
+            <Select
               value={board}
-              onChange={(event) => setBoard(event.target.value)}
-              placeholder="NEB, TU, PU, KU, CTEVT"
-              list="settings-board-options"
-            />
-            <datalist id="settings-board-options">
-              <option value="NEB" />
-              <option value="TU" />
-              <option value="PU" />
-              <option value="KU" />
-              <option value="CTEVT" />
-            </datalist>
+              onChange={(event) => {
+                const nextBoard = event.target.value;
+                if (nextBoard !== board) {
+                  setGrade("");
+                }
+                setBoard(nextBoard);
+              }}
+            >
+              <option value="">Select board</option>
+              {boardOptions.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Grade / year">
+            <Select
+              value={grade}
+              onChange={(event) => {
+                setGrade(event.target.value);
+              }}
+              disabled={!board}
+            >
+              <option value="">{board ? "Select grade/year" : "Select board first"}</option>
+              {gradeOptions.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label="Board score">
             <Input value={boardScore} onChange={(event) => setBoardScore(event.target.value)} />
@@ -174,12 +266,50 @@ export function SettingsForm({
               ))}
             </div>
           </div>
-          <div>
-            <p className="mb-2 text-xs font-mono-ui uppercase text-text-muted">Subjects</p>
-            <p className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
-              {profile.subjects.join(", ") || "No subjects saved yet."}
-            </p>
-          </div>
+          <Field label="Subjects" hint="Select subjects available in your indexed books.">
+            {suggestedSubjects.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-mono-ui uppercase text-text-muted">Available subjects</p>
+                  <p className="text-xs text-text-muted">{selectedSubjects.length} selected</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedSubjects.map((subject) => {
+                    const isSelected = selectedSubjects.some(
+                      (item) => item.toLowerCase() === subject.toLowerCase(),
+                    );
+                    return (
+                      <Button
+                        key={subject}
+                        type="button"
+                        size="sm"
+                        variant={isSelected ? "filled" : "outline"}
+                        onClick={() => toggleSubject(subject)}
+                      >
+                        {subject}
+                      </Button>
+                    );
+                  })}
+                </div>
+                {selectedSubjects.length > 0 ? (
+                  <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
+                    Selected: {selectedSubjects.join(", ")}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  No indexed subjects available for this board and grade.
+                </div>
+                {selectedSubjects.length > 0 ? (
+                  <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
+                    Current selection: {selectedSubjects.join(", ")}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </Field>
           {status ? <p className="text-sm text-text-secondary">{status}</p> : null}
         </div>
         <div className="flex justify-end border-t border-border bg-bg-secondary px-5 py-3">
