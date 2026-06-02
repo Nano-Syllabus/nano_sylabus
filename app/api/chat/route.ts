@@ -665,9 +665,15 @@ async function buildDeterministicChapterAnswer({
       chunks: filteredChunks,
       grounded: true,
       citations: filteredChunks.map((c) => ({
-        documentId: c.documentId,
         chunkId: c.id,
-        title: c.sourceTitle,
+        documentId: c.documentId,
+        sourceType: "syllabus" as const,
+        sourceLabel: c.sourceTitle,
+        sourceTitle: c.sourceTitle,
+        sourceName: c.sourceName,
+        subject: c.subject,
+        chapter: c.chapter,
+        topic: c.topic,
       })),
     },
   };
