@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   useCallback,
@@ -15,7 +16,6 @@ import { CitationCard } from "@/components/citation-card";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
-import { getCreditWarning } from "@/lib/billing";
 import { dedupeCitationsForDisplay } from "@/lib/citations";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type {
@@ -121,6 +121,7 @@ export function ChatPageClient({
   initialSubjectContext: string | null;
   initialPrompt: string | null;
 }) {
+  const router = useRouter();
   const [sessions, setSessions] = useState(initialSessions);
   const [hasMoreSessions, setHasMoreSessions] = useState(initialHasMore);
   const [historySearch, setHistorySearch] = useState("");
@@ -290,6 +291,7 @@ export function ChatPageClient({
     if (!response.ok) return;
     const payload = (await response.json()) as { balance: number };
     setCreditBalance(payload.balance);
+    router.refresh();
   }
 
   async function refreshSession(sessionId: string) {
@@ -656,15 +658,12 @@ export function ChatPageClient({
   function applySuggestedPrompt(prompt: string) {
     setInput(prompt);
     composerRef.current?.focus();
-    setUiFeedback("Suggested follow-up added to the composer.");
   }
 
   function applyAnswerStyle(style: AnswerStyle) {
     setAnswerStyle(style);
     setUiFeedback(`${ANSWER_STYLE_LABELS[style]} answers will be preferred from now on.`);
   }
-
-  const creditWarning = getCreditWarning(creditBalance);
 
   useEffect(() => {
     if (!initialPrompt?.trim()) return;
@@ -1090,11 +1089,6 @@ export function ChatPageClient({
                 {chatError}
               </p>
             ) : null}
-            {!chatError && creditWarning ? (
-              <p className="mb-3 rounded-2xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
-                {creditWarning}
-              </p>
-            ) : null}
             {latestThinkingTrace ? (
               <div className="mb-3 rounded-2xl border border-border bg-bg-secondary/60 px-4 py-3">
                 <button
@@ -1130,11 +1124,6 @@ export function ChatPageClient({
                   </div>
                 ) : null}
               </div>
-            ) : null}
-            {uiFeedback ? (
-              <p className="mb-3 rounded-2xl border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
-                {uiFeedback}
-              </p>
             ) : null}
             <form onSubmit={submitMessage} className="rounded-[28px] border border-border bg-bg-primary p-3 shadow-[0_16px_46px_rgba(0,0,0,0.05)]">
               <textarea
