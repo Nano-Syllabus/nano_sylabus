@@ -436,33 +436,7 @@ function buildSystemPromptWithTemplate(
   }).trim();
 }
 
-function detectSH402Unit(question: string, sourceText: string) {
-  const text = `${question}\n${sourceText}`.toLowerCase();
-  const unitRules: Array<{ unit: string; patterns: RegExp[] }> = [
-    { unit: "Unit 1 Oscillation", patterns: [/\boscillation\b/, /\bdamped\b/, /\bforced\b/, /\bem oscillation\b/] },
-    { unit: "Unit 2 Wave Motion", patterns: [/\bwave motion\b/, /\bprogressive wave\b/, /\bwaves and particles\b/] },
-    { unit: "Unit 3 Acoustics", patterns: [/\bacoustics?\b/, /\breverberation\b/, /\bsabine\b/, /\bultrasound\b/] },
-    { unit: "Unit 4 Physical Optics", patterns: [/\binterference\b/, /\bdiffraction\b/, /\bnewton'?s rings\b/, /\bpolarization\b/] },
-    { unit: "Unit 5 Geometrical Optics", patterns: [/\bgeometrical optics\b/, /\blenses\b/, /\bcardinal points\b/, /\bchromatic aberration\b/] },
-    { unit: "Unit 6 Laser and Fiber Optics", patterns: [/\blaser\b/, /\bhe-ne\b/, /\bfiber optics?\b/, /\boptical fiber\b/] },
-    { unit: "Unit 7 Electrostatics", patterns: [/\belectrostatics?\b/, /\belectric field\b/, /\bcapacitor\b/, /\bdielectric\b/] },
-    { unit: "Unit 8 Electromagnetism", patterns: [/\belectromagnetism\b/, /\bohm'?s law\b/, /\bhall effect\b/, /\bfaraday\b/, /\bampere\b/] },
-    { unit: "Unit 9 Electromagnetic Waves", patterns: [/\bmaxwell\b/, /\bcontinuity equation\b/, /\belectromagnetic waves?\b/, /\benergy transfer\b/] },
-    { unit: "Unit 10 Photon and Matter Waves", patterns: [/\bphoton\b/, /\bmatter waves?\b/, /\bschrodinger\b/, /\buncertainty principle\b/, /\bbarrier tunneling\b/] },
-    { unit: "Practical", patterns: [/\bpractical\b/, /\bexperiment\b/, /\bspectrometer\b/, /\bpolarimeter\b/, /\blrc\b/] },
-    { unit: "References", patterns: [/\breferences?\b/, /\bhalliday\b/, /\bresnick\b/, /\bwalker\b/, /\bbrij lal\b/] },
-  ];
 
-  let best: { unit: string; score: number } | null = null;
-  for (const rule of unitRules) {
-    const score = rule.patterns.reduce((sum, pattern) => sum + (pattern.test(text) ? 1 : 0), 0);
-    if (score <= 0) continue;
-    if (!best || score > best.score) {
-      best = { unit: rule.unit, score };
-    }
-  }
-  return best?.unit ?? null;
-}
 
 const CHAPTER_WORD_TO_INDEX: Record<string, number> = {
   first: 1,
@@ -681,9 +655,21 @@ async function buildDeterministicChapterAnswer({
           .trim();
 
   const matchedScope = `${profile.board || "Unknown"} > ${profile.grade || "Unknown"} > SH402 > ${unitName}`;
+  const filteredChunks = retrieval.chunks.filter((chunk) => chunk.resourceKind === "syllabus");
+  
   return {
     answer: sanitizeAnswerPresentation(answer),
     matchedScope,
+    filteredRetrieval: {
+      ...retrieval,
+      chunks: filteredChunks,
+      grounded: true,
+      citations: filteredChunks.map((c) => ({
+        documentId: c.documentId,
+        chunkId: c.id,
+        title: c.documentTitle,
+      })),
+    },
   };
 }
 
@@ -726,7 +712,7 @@ async function resolveMatchedScope({
       ? syllabusDoc.subject.trim()
       : retrieval.chunks[0]?.subject || profile.subjects[0] || "General";
   const sourceText = retrieval.chunks.map((chunk) => chunk.content).join("\n");
-  const unit = detectSH402Unit(question, sourceText);
+  const unit = retrieval.chunks[0]?.chapter || null;
 
   const scopeParts = [
     profile.board || "Unknown",
@@ -1462,6 +1448,9 @@ export async function POST(request: Request) {
     if (deterministicChapterAnswer) {
       if (deterministicChapterAnswer.matchedScope) {
         matchedScope = deterministicChapterAnswer.matchedScope;
+      }
+      if (deterministicChapterAnswer.filteredRetrieval) {
+        retrieval = deterministicChapterAnswer.filteredRetrieval;
       }
       const answer = deterministicChapterAnswer.answer;
       const followUpSuggestions = buildE2EFollowUpSuggestions({
