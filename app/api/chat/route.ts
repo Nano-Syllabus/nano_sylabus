@@ -667,7 +667,7 @@ async function buildDeterministicChapterAnswer({
       citations: filteredChunks.map((c) => ({
         documentId: c.documentId,
         chunkId: c.id,
-        title: c.documentTitle,
+        title: c.sourceTitle,
       })),
     },
   };
