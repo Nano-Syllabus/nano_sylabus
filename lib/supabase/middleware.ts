@@ -55,6 +55,8 @@ export async function updateSession(request: NextRequest) {
         languagePref: profileRow.language_pref ?? "EN",
       });
       role = profileRow.role ?? "student";
+    } else {
+      onboarded = true;
     }
   }
 
