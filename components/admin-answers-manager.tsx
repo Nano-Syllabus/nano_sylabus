@@ -10,17 +10,28 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { ANSWER_COLLECTION } from "@/lib/admin-resource-definitions";
 import { dedupeCitationsForDisplay } from "@/lib/citations";
-import type { AdminAnswerDetail, AdminAnswerFilter, AdminAnswerState, AdminAnswerSummary, AdminListPage } from "@/lib/types";
+import type {
+  AdminAnswerDetail,
+  AdminAnswerFilter,
+  AdminAnswerHealthBreakdownItem,
+  AdminAnswerHealthSnapshot,
+  AdminAnswerState,
+  AdminAnswerSummary,
+  AdminListPage,
+  AssistantAnswerTrace,
+} from "@/lib/types";
 import { formatDate, formatTimestamp } from "@/lib/utils";
 
 export function AdminAnswersManager({
   initialAnswers,
   initialDetail,
   initialPage,
+  initialSnapshot,
 }: {
   initialAnswers: AdminAnswerSummary[];
   initialDetail: AdminAnswerDetail | null;
   initialPage: AdminListPage<AdminAnswerSummary>;
+  initialSnapshot: AdminAnswerHealthSnapshot;
 }) {
   const [answers, setAnswers] = useState(initialAnswers);
   const [selectedId, setSelectedId] = useState<string>(initialDetail?.messageId ?? initialAnswers[0]?.messageId ?? "");
@@ -32,6 +43,7 @@ export function AdminAnswersManager({
   const [pageSize, setPageSize] = useState(initialPage.pageSize);
   const [total, setTotal] = useState(initialPage.total);
   const [totalPages, setTotalPages] = useState(initialPage.totalPages);
+  const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [listLoading, setListLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [busy, setBusy] = useState<"idle" | "loading" | "saving-note" | "marking-reviewed" | "marking-open">("idle");
@@ -102,6 +114,7 @@ export function AdminAnswersManager({
     setPage(payload.page);
     setPageSize(payload.pageSize);
     setTotalPages(payload.totalPages);
+    setSnapshot(payload.snapshot);
 
     setSelectedId((currentSelectedId) => {
       if (nextSelectedId) return nextSelectedId;
@@ -211,6 +224,34 @@ export function AdminAnswersManager({
         <SummaryCard label="Page" value={page} />
         <SummaryCard label="Page size" value={pageSize} />
         <SummaryCard label="Selected" value={selectedId ? 1 : 0} />
+      </div>
+
+      <div className="mb-6 overflow-hidden rounded-none border border-border bg-bg-primary">
+        <div className="border-b border-border px-4 py-3">
+          <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Quality dashboard</p>
+        </div>
+        <div className="grid gap-0 border-b border-border bg-bg-secondary sm:grid-cols-2 xl:grid-cols-6">
+          <HealthMetric label="Sample" value={snapshot.sampleSize} />
+          <HealthMetric label="Grounded" value={`${snapshot.groundedRate}%`} />
+          <HealthMetric label="Fallback" value={`${snapshot.fallbackRate}%`} />
+          <HealthMetric label="Topic cards" value={`${snapshot.topicCardRate}%`} />
+          <HealthMetric label="Question bank" value={`${snapshot.questionBankRate}%`} />
+          <HealthMetric label="Avg total" value={`${snapshot.avgTotalMs}ms`} />
+        </div>
+        <div className="grid gap-0 md:grid-cols-2">
+          <BreakdownPanel
+            title="Top routes"
+            items={snapshot.routeBreakdown}
+            emptyLabel="No route trace captured yet."
+            footer={snapshot.latestCapturedAt ? `Latest sample: ${formatTimestamp(snapshot.latestCapturedAt)}` : "No sample yet"}
+          />
+          <BreakdownPanel
+            title="Top models"
+            items={snapshot.modelBreakdown}
+            emptyLabel="No model trace captured yet."
+            footer={`Reviewed ${snapshot.reviewedRate}% · Avg generation ${snapshot.avgGenerationMs}ms`}
+          />
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -369,6 +410,21 @@ export function AdminAnswersManager({
                   <div className="space-y-4 xl:sticky xl:top-24">
                     <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
                       <div className="border-b border-border px-4 py-3">
+                        <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Retrieval trace</p>
+                      </div>
+                      <div className="px-4 py-4">
+                        {detail.answerTrace ? (
+                          <AnswerTracePanel trace={detail.answerTrace} />
+                        ) : (
+                          <p className="text-sm text-text-secondary">
+                            No persisted answer trace yet for this response.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+                      <div className="border-b border-border px-4 py-3">
                         <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Review action</p>
                       </div>
                       <div className="px-4 py-4">
@@ -420,11 +476,53 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
   );
 }
 
+function HealthMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="border-r border-border px-4 py-4 last:border-r-0">
+      <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">{label}</p>
+      <p className="mt-2 font-display text-3xl">{value}</p>
+    </div>
+  );
+}
+
 function MetricBlock({ label, value }: { label: string; value: string }) {
   return (
     <div className="border-r border-border bg-bg-secondary px-4 py-4 last:border-r-0">
       <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">{label}</p>
       <p className="mt-2 text-sm text-text-primary">{value}</p>
+    </div>
+  );
+}
+
+function BreakdownPanel({
+  title,
+  items,
+  emptyLabel,
+  footer,
+}: {
+  title: string;
+  items: AdminAnswerHealthBreakdownItem[];
+  emptyLabel: string;
+  footer: string;
+}) {
+  return (
+    <div className="border-r border-border last:border-r-0">
+      <div className="border-b border-border px-4 py-3">
+        <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">{title}</p>
+      </div>
+      <div className="space-y-3 px-4 py-4">
+        {items.length ? (
+          items.map((item) => (
+            <div key={item.label} className="flex items-center justify-between gap-4 text-sm">
+              <span className="truncate text-text-primary">{item.label}</span>
+              <Badge variant="outline">{item.count}</Badge>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-text-secondary">{emptyLabel}</p>
+        )}
+      </div>
+      <div className="border-t border-border px-4 py-3 text-xs text-text-muted">{footer}</div>
     </div>
   );
 }
@@ -438,4 +536,60 @@ function StatusBadge({ status }: { status: AdminAnswerState }) {
   };
 
   return <Badge variant={config[status].variant}>{config[status].label}</Badge>;
+}
+
+function AnswerTracePanel({ trace }: { trace: AssistantAnswerTrace }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="outline">{trace.routePath}</Badge>
+        <Badge variant={trace.grounded ? "success" : "warning"}>
+          {trace.grounded ? "grounded" : "ungrounded"}
+        </Badge>
+        {trace.topicCardUsed ? <Badge variant="default">topic card</Badge> : null}
+        {trace.questionBankUsed ? <Badge variant="default">question bank</Badge> : null}
+        {trace.usedFallback ? <Badge variant="warning">fallback</Badge> : null}
+        {trace.usedQualityRescue ? <Badge variant="warning">quality rescue</Badge> : null}
+      </div>
+
+      <div className="grid gap-0 overflow-hidden rounded-none border border-border bg-bg-secondary sm:grid-cols-2">
+        <TraceMetric label="Answer mode" value={trace.answerMode || "—"} />
+        <TraceMetric label="Reason" value={trace.answerModeReason || "—"} />
+        <TraceMetric label="Retrieval mode" value={trace.retrievalMode || "—"} />
+        <TraceMetric label="Matched scope" value={trace.matchedScope || "—"} />
+        <TraceMetric label="Topic card title" value={trace.topicCardTitle || "—"} />
+        <TraceMetric label="Topic card source" value={trace.topicCardSource || "—"} />
+        <TraceMetric label="Model" value={trace.answerModel || "—"} />
+      </div>
+
+      <div className="rounded-none border border-border bg-bg-secondary px-3 py-3">
+        <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">Scope debug</p>
+        <p className="mt-2 text-sm text-text-primary">{trace.routeScopeDebug || "—"}</p>
+      </div>
+
+      <div className="grid gap-0 overflow-hidden rounded-none border border-border bg-bg-secondary sm:grid-cols-2">
+        <TraceMetric label="RAG chunks" value={String(trace.ragChunks)} />
+        <TraceMetric label="RAG ms" value={`${trace.ragMs}ms`} />
+        <TraceMetric label="Generation ms" value={`${trace.generationMs}ms`} />
+        <TraceMetric label="Rewrite ms" value={`${trace.rewriteMs}ms`} />
+        <TraceMetric label="Follow-up ms" value={`${trace.followupMs}ms`} />
+        <TraceMetric label="Total ms" value={`${trace.totalMs}ms`} />
+      </div>
+
+      {trace.fallbackReason ? (
+        <div className="rounded-none border border-border px-3 py-3 text-sm text-text-secondary">
+          <span className="font-medium text-text-primary">Fallback reason:</span> {trace.fallbackReason}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TraceMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="border-b border-r border-border px-3 py-3 odd:border-r last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0">
+      <p className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">{label}</p>
+      <p className="mt-1 text-sm text-text-primary">{value}</p>
+    </div>
+  );
 }

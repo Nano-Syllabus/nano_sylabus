@@ -21,9 +21,25 @@ export function inferSessionSubjectContext(input: {
   citations: AssistantCitation[];
 }) {
   const existing = normalizeSubjectLabel(input.existingSubjectContext ?? "");
-  if (existing) return existing;
 
+  // If existing context already has chapter info (contains ">"), keep it as-is
+  if (existing && existing.includes(">")) return existing;
+
+  // Derive subject + chapter from citations
   const citedSubjects = uniqueNormalized(input.citations.map((citation) => citation.subject ?? ""));
+  const citedChapters = input.citations
+    .map((citation) => citation.chapter ?? "")
+    .filter(Boolean);
+  const uniqueChapters = Array.from(new Set(citedChapters));
+
+  // If all citations point to a single subject and a single chapter,
+  // build a "Subject > Chapter" context so follow-ups scope to that chapter.
+  if (citedSubjects.length === 1 && uniqueChapters.length === 1) {
+    return `${citedSubjects[0]} > ${uniqueChapters[0]}`;
+  }
+
+  // If we have a subject but multiple/no chapters, return subject only
+  if (existing) return existing;
   if (citedSubjects.length === 1) return citedSubjects[0];
   if (citedSubjects.length > 1) return null;
 

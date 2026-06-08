@@ -1,12 +1,47 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { normalizeSubjectLabel, normalizeSubjects } from "@/lib/profile-normalization";
 import type {
+  AssistantAnswerTrace,
   AssistantCitation,
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionSummary,
   MessageFeedback,
 } from "@/lib/types";
+
+function normalizeAnswerTrace(input: unknown): AssistantAnswerTrace | null {
+  if (!input || typeof input !== "object") return null;
+
+  const trace = input as Record<string, unknown>;
+  if (typeof trace.routePath !== "string" || typeof trace.retrievalMode !== "string") return null;
+
+  return {
+    routePath: trace.routePath,
+    routeScopeDebug: typeof trace.routeScopeDebug === "string" ? trace.routeScopeDebug : null,
+    retrievalMode: trace.retrievalMode === "chapter" ? "chapter" : "default",
+    answerMode: typeof trace.answerMode === "string" ? trace.answerMode : null,
+    answerModeReason: typeof trace.answerModeReason === "string" ? trace.answerModeReason : null,
+    matchedScope: typeof trace.matchedScope === "string" ? trace.matchedScope : null,
+    topicCardUsed: Boolean(trace.topicCardUsed),
+    topicCardTitle: typeof trace.topicCardTitle === "string" ? trace.topicCardTitle : null,
+    topicCardSource:
+      trace.topicCardSource === "persisted" || trace.topicCardSource === "derived"
+        ? trace.topicCardSource
+        : null,
+    questionBankUsed: Boolean(trace.questionBankUsed),
+    answerModel: typeof trace.answerModel === "string" ? trace.answerModel : null,
+    usedFallback: Boolean(trace.usedFallback),
+    usedQualityRescue: Boolean(trace.usedQualityRescue),
+    fallbackReason: typeof trace.fallbackReason === "string" ? trace.fallbackReason : null,
+    grounded: Boolean(trace.grounded),
+    ragChunks: typeof trace.ragChunks === "number" ? trace.ragChunks : 0,
+    ragMs: typeof trace.ragMs === "number" ? trace.ragMs : 0,
+    generationMs: typeof trace.generationMs === "number" ? trace.generationMs : 0,
+    rewriteMs: typeof trace.rewriteMs === "number" ? trace.rewriteMs : 0,
+    followupMs: typeof trace.followupMs === "number" ? trace.followupMs : 0,
+    totalMs: typeof trace.totalMs === "number" ? trace.totalMs : 0,
+  };
+}
 
 function normalizeSession(row: any): ChatSessionSummary {
   return {
@@ -33,6 +68,7 @@ function normalizeMessage(row: any): ChatMessageRecord {
     feedback: row.feedback === "up" || row.feedback === "down" ? (row.feedback as MessageFeedback) : null,
     followUpSuggestions: Array.isArray(row.follow_up_suggestions) ? row.follow_up_suggestions : [],
     savedNoteId: null,
+    answerTrace: normalizeAnswerTrace(row.metadata?.answer_trace),
   };
 }
 

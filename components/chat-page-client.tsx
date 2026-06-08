@@ -36,19 +36,38 @@ const COLOR_LABEL: Record<NoteColor, string> = {
 };
 
 const ANSWER_STYLE_STORAGE_KEY = "nano-answer-style";
+const RETRIEVAL_MODE_STORAGE_KEY = "nano-retrieval-mode";
 const ANSWER_STYLE_LABELS: Record<AnswerStyle, string> = {
   simple: "Simple",
   balanced: "Balanced",
   detailed: "Detailed",
+};
+type RetrievalMode = "default" | "chapter";
+const RETRIEVAL_MODE_LABELS: Record<RetrievalMode, string> = {
+  default: "Quick QA",
+  chapter: "Chapter mode",
 };
 
 type ThinkingTrace = {
   grounded: boolean;
   ragChunks: number;
   subjectContext: string | null;
-  answerMode: "quick" | "deep" | null;
+  retrievalMode: RetrievalMode;
+  answerMode:
+    | "quick"
+    | "deep"
+    | "deterministic_structure_lookup"
+    | "deterministic_catalog_lookup"
+    | "deterministic_exam_lookup"
+    | null;
   answerModeReason: string | null;
   answerModel: string | null;
+  routePath: string | null;
+  routeScopeDebug: string | null;
+  topicCardUsed: boolean;
+  topicCardSource: "persisted" | "derived" | null;
+  topicCardTitle: string | null;
+  questionBankUsed: boolean;
   usedFallback: boolean;
   usedQualityRescue: boolean;
   fallbackReason: string | null;
@@ -72,7 +91,7 @@ function buildThoughtSummary(trace: ThinkingTrace) {
       `Retrieved ${trace.ragChunks} grounded chunk${trace.ragChunks === 1 ? "" : "s"} from your indexed study sources.`,
     );
   } else {
-    lines.push("Grounded retrieval was weak, so fallback/general context path was used for this response.");
+    lines.push("Grounded study evidence was not available for this response path.");
   }
 
   if (trace.subjectContext) {
@@ -80,6 +99,22 @@ function buildThoughtSummary(trace: ThinkingTrace) {
   }
   if (trace.matchedScope) {
     lines.push(`Best matched source path: ${trace.matchedScope}.`);
+  }
+  if (trace.routePath) {
+    lines.push(`Route path: ${trace.routePath}.`);
+  }
+  if (trace.routeScopeDebug && trace.routeScopeDebug !== trace.matchedScope) {
+    lines.push(`Resolved scope: ${trace.routeScopeDebug}.`);
+  }
+  if (trace.topicCardUsed) {
+    lines.push(
+      trace.topicCardSource === "persisted"
+        ? `Topic card used: ${trace.topicCardTitle || "stored academic card"} (stored academic card).`
+        : `Topic card used: ${trace.topicCardTitle || "derived teaching context"} (derived from grounded chunks).`,
+    );
+  }
+  if (trace.questionBankUsed) {
+    lines.push("Question bank evidence was prioritized for this response.");
   }
   if (trace.answerMode) {
     lines.push(
@@ -96,6 +131,30 @@ function buildThoughtSummary(trace: ThinkingTrace) {
     lines.push("Quality rescue: quick draft was upgraded to a stronger pass for better explanation quality.");
   }
   return lines;
+}
+
+function buildTracePills(trace: ThinkingTrace) {
+  return [
+    trace.grounded ? "Grounded" : "Ungrounded",
+    RETRIEVAL_MODE_LABELS[trace.retrievalMode],
+    trace.answerMode === "deterministic_structure_lookup"
+      ? "Chapter lookup"
+      : trace.answerMode === "deterministic_catalog_lookup"
+        ? "Catalog lookup"
+      : trace.answerMode === "deterministic_exam_lookup"
+        ? "Exam lookup"
+      : trace.answerMode
+        ? `${trace.answerMode} answer`
+        : null,
+    trace.topicCardUsed
+      ? trace.topicCardSource === "persisted"
+        ? "Stored topic card"
+        : "Topic card"
+      : null,
+    trace.questionBankUsed ? "Question bank" : null,
+    trace.usedQualityRescue ? "Quality rescue" : null,
+    trace.usedFallback ? "Backup model" : null,
+  ].filter(Boolean) as string[];
 }
 
 export function ChatPageClient({
@@ -138,6 +197,7 @@ export function ChatPageClient({
       (initialSubjectContext ? normalizeSubjectLabel(initialSubjectContext) : null),
   );
   const [answerStyle, setAnswerStyle] = useState<AnswerStyle>("detailed");
+  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("default");
   const [saveState, setSaveState] = useState<{
     message: ChatMessageRecord;
     question: string;
@@ -150,7 +210,7 @@ export function ChatPageClient({
   const [matchedScope, setMatchedScope] = useState<string | null>(null);
   const [catalogSubjects, setCatalogSubjects] = useState<string[]>([]);
   const [latestThinkingTrace, setLatestThinkingTrace] = useState<ThinkingTrace | null>(null);
-  const [showThinkingTrace, setShowThinkingTrace] = useState(true);
+  const [showThinkingTrace, setShowThinkingTrace] = useState(false);
   const pendingTitleRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(initialSession?.id ?? null);
   const searchDebounceRef = useRef<number | null>(null);
@@ -167,11 +227,13 @@ export function ChatPageClient({
     [initialSession],
   );
   const availableSubjects = useMemo(() => {
-    const all = [...profileSubjects, ...catalogSubjects].map((item) => item.trim()).filter(Boolean);
+    const all = [...profileSubjects, ...catalogSubjects, subjectContext]
+      .map((item) => item?.trim())
+      .filter(Boolean) as string[];
     return Array.from(new Set(all)).sort((left, right) =>
       left.localeCompare(right, undefined, { sensitivity: "base", numeric: true }),
     );
-  }, [profileSubjects, catalogSubjects]);
+  }, [profileSubjects, catalogSubjects, subjectContext]);
 
   useEffect(() => {
     try {
@@ -184,9 +246,24 @@ export function ChatPageClient({
 
   useEffect(() => {
     try {
+      const stored = window.localStorage.getItem(RETRIEVAL_MODE_STORAGE_KEY);
+      if (stored === "default" || stored === "chapter") {
+        setRetrievalMode(stored);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
       window.localStorage.setItem(ANSWER_STYLE_STORAGE_KEY, answerStyle);
     } catch {}
   }, [answerStyle]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(RETRIEVAL_MODE_STORAGE_KEY, retrievalMode);
+    } catch {}
+  }, [retrievalMode]);
 
   useEffect(() => {
     let active = true;
@@ -352,18 +429,49 @@ export function ChatPageClient({
       sessionId: currentSessionId,
       subjectContext,
       answerStyle,
+      retrievalMode,
     },
     onResponse(response) {
+      // Backend has started responding — reset the watchdog with a generous
+      // streaming budget so a slow-but-active stream is not killed.
+      if (requestWatchdogRef.current) {
+        window.clearTimeout(requestWatchdogRef.current);
+        requestWatchdogRef.current = window.setTimeout(() => {
+          setThinkingStatus("This question is taking longer than expected...");
+          setChatError(
+            "Answer generation is taking too long right now. We stopped this try so you are not stuck; please retry once.",
+          );
+          stop();
+        }, 90_000);
+      }
       const returnedSessionId = response.headers.get("x-session-id");
       const responseMatchedScope = response.headers.get("x-matched-scope")?.trim() || null;
       const ragChunks = Number(response.headers.get("x-rag-chunks") || "0");
       const grounded = response.headers.get("x-rag-grounded") === "1";
+      const responseRetrievalMode =
+        response.headers.get("x-retrieval-mode") === "chapter" ? "chapter" : "default";
       const responseSubjectContext = response.headers.get("x-subject-context")?.trim() || null;
       const answerModeHeader = response.headers.get("x-answer-mode");
       const answerMode =
-        answerModeHeader === "quick" || answerModeHeader === "deep" ? answerModeHeader : null;
+        answerModeHeader === "quick" ||
+        answerModeHeader === "deep" ||
+        answerModeHeader === "deterministic_structure_lookup" ||
+        answerModeHeader === "deterministic_catalog_lookup" ||
+        answerModeHeader === "deterministic_exam_lookup"
+          ? answerModeHeader
+          : null;
       const answerModeReason = response.headers.get("x-answer-mode-reason")?.trim() || null;
       const answerModel = response.headers.get("x-answer-model")?.trim() || null;
+      const routePath = response.headers.get("x-route-path")?.trim() || null;
+      const routeScopeDebug = response.headers.get("x-route-scope-debug")?.trim() || null;
+      const topicCardUsed = response.headers.get("x-topic-card-used") === "1";
+      const topicCardSourceHeader = response.headers.get("x-topic-card-source");
+      const topicCardSource =
+        topicCardSourceHeader === "persisted" || topicCardSourceHeader === "derived"
+          ? topicCardSourceHeader
+          : null;
+      const topicCardTitle = response.headers.get("x-topic-card-title")?.trim() || null;
+      const questionBankUsed = response.headers.get("x-question-bank-used") === "1";
       const usedFallback = response.headers.get("x-answer-fallback") === "1";
       const usedQualityRescue = response.headers.get("x-answer-quality-rescue") === "1";
       const fallbackReason = response.headers.get("x-answer-fallback-reason")?.trim() || null;
@@ -375,10 +483,17 @@ export function ChatPageClient({
       setLatestThinkingTrace({
         grounded,
         ragChunks,
+        retrievalMode: responseRetrievalMode,
         subjectContext: responseSubjectContext,
         answerMode,
         answerModeReason,
         answerModel,
+        routePath,
+        routeScopeDebug,
+        topicCardUsed,
+        topicCardSource,
+        topicCardTitle,
+        questionBankUsed,
         usedFallback,
         usedQualityRescue,
         fallbackReason,
@@ -435,19 +550,37 @@ export function ChatPageClient({
       }
       setThinkingStatus(null);
       const rawMessage = error.message || "";
+      let parsedError = "";
+      let parsedCode = "";
+      
+      try {
+        const parsed = JSON.parse(rawMessage);
+        if (parsed && typeof parsed.error === "string") {
+          parsedError = parsed.error;
+        }
+        if (parsed && typeof parsed.code === "string") {
+          parsedCode = parsed.code;
+        }
+      } catch (e) {
+        // Not a JSON string
+      }
+
+      if (parsedCode === "MODEL_GENERATION_FAILED" || rawMessage.includes("MODEL_GENERATION_FAILED")) {
+        setChatError(
+          parsedError ||
+          rawMessage.replace(/^.*MODEL_GENERATION_FAILED[:\s-]*("})?/i, "").replace(/["}]+$/, "").trim() ||
+          "The answer model failed for this question. Please retry."
+        );
+        return;
+      }
+
       if (rawMessage.trim() === "An error occurred.") {
         setChatError(
           "Answer model yo try मा fail bhayo. Feri send gara; simple questions ko lagi lighter model use garne banाइएको छ.",
         );
         return;
       }
-      if (rawMessage.includes("MODEL_GENERATION_FAILED")) {
-        setChatError(
-          rawMessage.replace(/^.*MODEL_GENERATION_FAILED[:\s-]*/i, "").trim() ||
-            "The answer model failed for this question. Please retry.",
-        );
-        return;
-      }
+
       if (
         rawMessage.includes("RAG_RETRIEVAL_FAILED") ||
         rawMessage.toLowerCase().includes("syllabus context")
@@ -457,7 +590,8 @@ export function ChatPageClient({
         );
         return;
       }
-      setChatError(rawMessage || "Something went wrong while generating a response.");
+
+      setChatError(parsedError || rawMessage || "Something went wrong while generating a response.");
     },
   });
 
@@ -523,6 +657,7 @@ export function ChatPageClient({
 
     pendingTitleRef.current = deriveSessionTitle(trimmed);
     setChatError("");
+    setShowThinkingTrace(false);
     setThinkingStatus("Retrieving syllabus context...");
     setInput("");
     requestWatchdogRef.current = window.setTimeout(() => {
@@ -531,7 +666,7 @@ export function ChatPageClient({
         "Answer generation is taking too long right now. We stopped this try so you are not stuck; please retry once.",
       );
       stop();
-    }, 45000);
+    }, 60_000);
 
     await append(
       {
@@ -545,6 +680,7 @@ export function ChatPageClient({
           messageLanguage: composerLanguage,
           subjectContext,
           answerStyle,
+          retrievalMode,
         },
       },
     );
@@ -674,7 +810,7 @@ export function ChatPageClient({
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--bg-secondary)_62%,transparent),transparent_28%)] lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[224px_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 grid-cols-1 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--bg-secondary)_62%,transparent),transparent_28%)] lg:grid-cols-[188px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
       <aside className="hidden min-h-0 border-r border-border bg-bg-primary/96 lg:flex lg:flex-col">
         <div className="border-b border-border p-2.5">
           <div className="rounded-[20px] border border-border bg-bg-secondary p-2 shadow-sm">
@@ -761,54 +897,78 @@ export function ChatPageClient({
           >
             <div className="min-w-0 flex-1">
               {hasMessages ? (
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <h2 className="min-w-0 truncate font-display text-xl leading-none sm:text-2xl">
-                    {activeSessionTitle}
-                  </h2>
-                  <label
-                    htmlFor="subject-context"
-                    className="text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted"
-                  >
-                    Focus
-                  </label>
-                  <select
-                    id="subject-context"
-                    value={subjectContext ?? ""}
-                    onChange={(event) =>
-                      void updateSessionSubjectContext(event.target.value.trim() || null)
-                    }
-                    className="h-8 rounded-full border border-border bg-bg-primary px-3 text-[13px] text-text-primary outline-none transition focus:border-border-strong"
-                  >
-                    <option value="">General</option>
-                    {availableSubjects.map((subject) => (
-                      <option key={subject} value={subject}>
-                        {subject}
-                      </option>
-                    ))}
-                  </select>
-                  <label
-                    htmlFor="answer-style"
-                    className="text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted"
-                  >
-                    Style
-                  </label>
-                  <select
-                    id="answer-style"
-                    value={answerStyle}
-                    onChange={(event) => setAnswerStyle(event.target.value as AnswerStyle)}
-                    className="h-8 rounded-full border border-border bg-bg-primary px-3 text-[13px] text-text-primary outline-none transition focus:border-border-strong"
-                  >
-                    {Object.entries(ANSWER_STYLE_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                  {matchedScope ? (
-                    <span className="max-w-full truncate rounded-full border border-border bg-bg-secondary px-2.5 py-1 text-[10px] text-text-muted">
-                      {matchedScope}
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="min-w-0 truncate font-display text-lg leading-none sm:text-xl">
+                      {activeSessionTitle}
+                    </h2>
+                    {matchedScope ? (
+                      <span className="max-w-full truncate rounded-full border border-border bg-bg-secondary px-2 py-0.5 text-[10px] text-text-muted">
+                        {matchedScope}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label
+                      htmlFor="subject-context"
+                      className="text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted"
+                    >
+                      Focus
+                    </label>
+                    <select
+                      id="subject-context"
+                      value={subjectContext ?? ""}
+                      onChange={(event) =>
+                        void updateSessionSubjectContext(event.target.value.trim() || null)
+                      }
+                      className="h-8 rounded-full border border-border bg-bg-primary px-3 text-[13px] text-text-primary outline-none transition focus:border-border-strong"
+                    >
+                      <option value="">General</option>
+                      {availableSubjects.map((subject) => (
+                        <option key={subject} value={subject}>
+                          {subject}
+                        </option>
+                      ))}
+                    </select>
+                    <label
+                      htmlFor="answer-style"
+                      className="text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted"
+                    >
+                      Style
+                    </label>
+                    <select
+                      id="answer-style"
+                      value={answerStyle}
+                      onChange={(event) => setAnswerStyle(event.target.value as AnswerStyle)}
+                      className="h-8 rounded-full border border-border bg-bg-primary px-3 text-[13px] text-text-primary outline-none transition focus:border-border-strong"
+                    >
+                      {Object.entries(ANSWER_STYLE_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
+                      Retrieval
                     </span>
-                  ) : null}
+                    <div className="inline-flex rounded-full border border-border bg-bg-secondary p-1">
+                      {(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setRetrievalMode(mode)}
+                          className={cn(
+                            "rounded-full px-3 py-1 text-[11px] transition",
+                            retrievalMode === mode
+                              ? "bg-text-primary text-text-inverse"
+                              : "text-text-secondary",
+                          )}
+                        >
+                          {RETRIEVAL_MODE_LABELS[mode]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -826,7 +986,7 @@ export function ChatPageClient({
                     {activeSessionTitle}
                   </h2>
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-text-secondary">
-                    <div className="inline-flex items-center gap-2">
+                    <div className="inline-flex flex-wrap items-center gap-2">
                       <label htmlFor="subject-context" className="text-[11px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
                         Focus
                       </label>
@@ -860,9 +1020,29 @@ export function ChatPageClient({
                           </option>
                         ))}
                       </select>
+                      <span className="text-[11px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
+                        Retrieval
+                      </span>
+                      <div className="inline-flex rounded-full border border-border bg-bg-secondary p-1">
+                        {(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setRetrievalMode(mode)}
+                            className={cn(
+                              "rounded-full px-3 py-2 text-[12px] transition",
+                              retrievalMode === mode
+                                ? "bg-text-primary text-text-inverse"
+                                : "text-text-secondary",
+                            )}
+                          >
+                            {RETRIEVAL_MODE_LABELS[mode]}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <span className="text-xs text-text-muted">
-                      Focus narrows the sources. Style controls how short or detailed the answer feels.
+                      Focus narrows sources. {RETRIEVAL_MODE_LABELS[retrievalMode]} controls whether we answer directly or pull sequential textbook sections first.
                     </span>
                   </div>
                 </>
@@ -908,17 +1088,31 @@ export function ChatPageClient({
                   Ask one clear study question and we&apos;ll ground the answer in your syllabus, notes, and indexed books.
                 </p>
                 <div className="mt-8 flex flex-wrap justify-center gap-2">
-                  {(subjectContext
-                    ? [
-                        `Explain ${subjectContext} in simple terms`,
-                        `Give me likely exam questions from ${subjectContext}`,
-                        `Summarize the important formulas in ${subjectContext}`,
-                      ]
-                    : [
-                        "Explain this chapter in simple terms",
-                        "Give me likely exam questions",
-                        "Summarize the important formulas",
-                      ]).map((prompt) => (
+                  {(
+                    retrievalMode === "chapter"
+                      ? subjectContext
+                        ? [
+                            `Give me the full chapter on ${subjectContext}`,
+                            `Walk me through ${subjectContext} unit by unit`,
+                            `Explain the whole textbook chapter for ${subjectContext}`,
+                          ]
+                        : [
+                            "Give me the full chapter in detail",
+                            "Walk me through this unit step by step",
+                            "Explain the whole textbook chapter",
+                          ]
+                      : subjectContext
+                        ? [
+                            `Explain ${subjectContext} in simple terms`,
+                            `Give me likely exam questions from ${subjectContext}`,
+                            `Summarize the important formulas in ${subjectContext}`,
+                          ]
+                        : [
+                            "Explain this chapter in simple terms",
+                            "Give me likely exam questions",
+                            "Summarize the important formulas",
+                          ]
+                  ).map((prompt) => (
                     <button
                       key={prompt}
                       type="button"
@@ -1100,14 +1294,24 @@ export function ChatPageClient({
                     <p className="text-xs font-mono-ui uppercase tracking-[0.18em] text-text-muted">
                       Thought for {formatMs(latestThinkingTrace.totalMs)}
                     </p>
-                    <p className="mt-0.5 text-xs text-text-muted">
-                      Process summary for transparency (not raw private chain-of-thought)
-                    </p>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {buildTracePills(latestThinkingTrace).map((pill) => (
+                        <span
+                          key={pill}
+                          className="rounded-full border border-border bg-bg-primary px-2 py-0.5 text-[10px] text-text-secondary"
+                        >
+                          {pill}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                   <span className="text-xs text-text-secondary">{showThinkingTrace ? "Hide" : "Show"}</span>
                 </button>
                 {showThinkingTrace ? (
                   <div className="mt-2 space-y-2">
+                    <p className="text-xs text-text-muted">
+                      Process summary for transparency, not raw private chain-of-thought.
+                    </p>
                     <ul className="space-y-1 text-xs text-text-secondary">
                       {buildThoughtSummary(latestThinkingTrace).map((line) => (
                         <li key={line} className="leading-5">
@@ -1126,6 +1330,16 @@ export function ChatPageClient({
               </div>
             ) : null}
             <form onSubmit={submitMessage} className="rounded-[28px] border border-border bg-bg-primary p-3 shadow-[0_16px_46px_rgba(0,0,0,0.05)]">
+              <div className="mb-2 flex flex-wrap items-center gap-2 px-2">
+                <span className="rounded-full border border-border bg-bg-secondary px-2.5 py-1 text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
+                  {RETRIEVAL_MODE_LABELS[retrievalMode]}
+                </span>
+                <span className="text-xs text-text-muted">
+                  {retrievalMode === "chapter"
+                    ? "Sequential textbook retrieval is preferred before answer synthesis."
+                    : "Fast question-answer retrieval is preferred for this turn."}
+                </span>
+              </div>
               <textarea
                 ref={composerRef}
                 value={input}

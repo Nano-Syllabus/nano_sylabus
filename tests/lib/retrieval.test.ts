@@ -13,7 +13,7 @@ vi.mock("@/lib/ai/embeddings", () => ({
   embedText,
 }));
 
-import { retrieveKnowledgeChunks } from "@/lib/ai/retrieval";
+import { buildGroundingPrompt, retrieveKnowledgeChunks } from "@/lib/ai/retrieval";
 
 function makeSupabaseQueryMock(responses: Array<unknown[]>) {
   const eq = vi.fn();
@@ -125,11 +125,11 @@ describe("retrieveKnowledgeChunks", () => {
       { subjectContext: "Physics" },
     );
 
-    expect(eq).toHaveBeenCalledWith("board", "NEB");
-    expect(eq).toHaveBeenCalledWith("grade", "Class 11");
     expect(inFn).toHaveBeenCalledWith("subject", ["Physics"]);
     expect(result.grounded).toBe(true);
     expect(result.chunks).toHaveLength(1);
+    expect(result.chunks[0]?.board).toBe("NEB");
+    expect(result.chunks[0]?.grade).toBe("Class 11");
     expect(result.citations[0]?.subject).toBe("Physics");
     expect(result.citations[0]?.sourceTitle).toBe("Class 11 Physics");
     expect(result.citations[0]?.sourceName).toBe("official.pdf");
@@ -137,7 +137,7 @@ describe("retrieveKnowledgeChunks", () => {
   });
 
   it("falls back to subject-like matching when strict subject is unavailable", async () => {
-    const { from, ilike } = makeSupabaseQueryMock([
+    const { from, ilike, inFn } = makeSupabaseQueryMock([
       [],
       [
         {
@@ -183,7 +183,9 @@ describe("retrieveKnowledgeChunks", () => {
       { subjectContext: "Physics" },
     );
 
-    expect(ilike).toHaveBeenCalledWith("subject", "%physics%");
+    expect(inFn).toHaveBeenCalledWith("subject", ["Physics"]);
+    expect(ilike).toHaveBeenCalledWith("board", "NEB");
+    expect(ilike).toHaveBeenCalledWith("grade", "Class 11");
     expect(result.grounded).toBe(true);
     expect(result.chunks[0]?.subject).toBe("Engineering Physics");
   });
@@ -491,5 +493,420 @@ describe("retrieveKnowledgeChunks", () => {
     expect(result.grounded).toBe(true);
     expect(result.citations[0]?.sourceType).toBe("syllabus");
     expect(result.chunks[0]?.sourceTitle).toContain("SH 402 Syllabus");
+  });
+
+  it("reranks chapter-exact grounded chunks above noisy generic candidates", async () => {
+    const { from } = makeSupabaseQueryMock([
+      [
+        {
+          id: "chunk-generic-1",
+          document_id: "doc-generic-1",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "General formula sheet",
+          topic: "Overview",
+          content:
+            "Physics uses many formulas including work, power, energy, momentum, heat, light, sound, electricity and many other concepts in engineering.",
+          embedding: [1, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-generic-1",
+              title: "Engineering Physics handbook",
+              source_name: "handbook.pdf",
+              source_type: "pdf",
+              resource_kind: "study_material",
+            },
+          ],
+        },
+        {
+          id: "chunk-target-1",
+          document_id: "doc-target-1",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "Unit 2 Wave Motion",
+          topic: "Important formulas",
+          content:
+            "Wave motion important formulas include v = f lambda, phase velocity relations, angular frequency, wave number, and displacement equation.",
+          embedding: [0.7, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-target-1",
+              title: "Engineering Physics Unit 2 Wave Motion",
+              source_name: "wave-motion.pdf",
+              source_type: "pdf",
+              resource_kind: "study_material",
+            },
+          ],
+        },
+      ],
+    ]);
+    createSupabaseServerClient.mockResolvedValue({ from });
+    embedText.mockResolvedValue([1, 0, 0]);
+
+    const result = await retrieveKnowledgeChunks(
+      "Summarize the important formulas in Unit 2 Wave Motion",
+      {
+        userId: "u1",
+        fullName: "Student",
+        college: "Campus",
+        board: "Engineering",
+        grade: "Bachelor",
+        boardScore: null,
+        subjects: ["Engineering Physics"],
+        targetGrade: "A+",
+        languagePref: "EN",
+        role: "student",
+        createdAt: "",
+        updatedAt: "",
+      },
+      { subjectContext: "Engineering Physics" },
+    );
+
+    expect(result.grounded).toBe(true);
+    expect(result.chunks[0]?.documentId).toBe("doc-target-1");
+    expect(result.citations[0]?.chapter).toBe("Unit 2 Wave Motion");
+  });
+
+  it("narrows retrieval search space with chapter hints before broad ranking", async () => {
+    const { from, ilike } = makeSupabaseQueryMock([
+      [
+        {
+          id: "chunk-target-2",
+          document_id: "doc-target-2",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "Unit 2 Wave Motion",
+          topic: "Important formulas",
+          content: "Unit 2 covers phase velocity, wavelength, and wave equation formulas.",
+          embedding: [1, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-target-2",
+              title: "Engineering Physics Unit 2 Wave Motion",
+              source_name: "wave-motion.pdf",
+              source_type: "pdf",
+              resource_kind: "study_material",
+            },
+          ],
+        },
+      ],
+    ]);
+    createSupabaseServerClient.mockResolvedValue({ from });
+    embedText.mockResolvedValue([1, 0, 0]);
+
+    const result = await retrieveKnowledgeChunks(
+      "Summarize the important formulas in Unit 2 Wave Motion",
+      {
+        userId: "u1",
+        fullName: "Student",
+        college: "Campus",
+        board: "Engineering",
+        grade: "Bachelor",
+        boardScore: null,
+        subjects: ["Engineering Physics"],
+        targetGrade: "A+",
+        languagePref: "EN",
+        role: "student",
+        createdAt: "",
+        updatedAt: "",
+      },
+      { subjectContext: "Engineering Physics" },
+    );
+
+    expect(ilike).toHaveBeenCalledWith("chapter", "%unit 2%");
+    expect(result.grounded).toBe(true);
+    expect(result.chunks[0]?.chapter).toBe("Unit 2 Wave Motion");
+  });
+
+  it("builds cleaner grouped citations for repeated chunks from the same source", async () => {
+    const { from } = makeSupabaseQueryMock([
+      [
+        {
+          id: "chunk-dup-1",
+          document_id: "doc-dup-1",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "Unit 2 Wave Motion",
+          topic: "Wave equation",
+          content:
+            "The standard wave equation connects displacement, angular frequency, and wave number for travelling waves.",
+          chunk_index: 0,
+          embedding: [1, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-dup-1",
+              title: "Untitled source",
+              source_name: "unknown-source",
+              source_type: "pdf",
+              resource_kind: "study_material",
+            },
+          ],
+        },
+        {
+          id: "chunk-dup-2",
+          document_id: "doc-dup-1",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "Unit 2 Wave Motion",
+          topic: "Wave equation",
+          content:
+            "Phase velocity and frequency stay linked through v = f lambda, which is one of the most reused wave relations.",
+          chunk_index: 1,
+          embedding: [0.95, 0, 0],
+          knowledge_documents: [
+            {
+              id: "doc-dup-1",
+              title: "Untitled source",
+              source_name: "unknown-source",
+              source_type: "pdf",
+              resource_kind: "study_material",
+            },
+          ],
+        },
+      ],
+    ]);
+    createSupabaseServerClient.mockResolvedValue({ from });
+    embedText.mockResolvedValue([1, 0, 0]);
+
+    const result = await retrieveKnowledgeChunks(
+      "Explain the wave equation and formulas in Unit 2 Wave Motion",
+      {
+        userId: "u1",
+        fullName: "Student",
+        college: "Campus",
+        board: "Engineering",
+        grade: "Bachelor",
+        boardScore: null,
+        subjects: ["Engineering Physics"],
+        targetGrade: "A+",
+        languagePref: "EN",
+        role: "student",
+        createdAt: "",
+        updatedAt: "",
+      },
+      { subjectContext: "Engineering Physics" },
+    );
+
+    expect(result.grounded).toBe(true);
+    expect(result.citations).toHaveLength(1);
+    expect(result.citations[0]?.sourceTitle).toBe("Unit 2 Wave Motion");
+    expect(result.citations[0]?.sourceName).toBe("");
+    expect(result.citations[0]?.sourceLabel).toBe("Engineering Physics · Unit 2 Wave Motion · Wave equation");
+  });
+
+  it("uses vectorless full-chapter retrieval and returns sequential chunks from one document", async () => {
+    const { from } = makeSupabaseQueryMock([
+      [
+        {
+          id: "chunk-full-2",
+          document_id: "doc-full-1",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "Unit 2 Wave Motion",
+          topic: "Part 2",
+          content: "Wave motion section two explains wave equation and phase velocity.",
+          chunk_index: 1,
+          embedding: [0.2, 0.2, 0.1],
+          knowledge_documents: [
+            {
+              id: "doc-full-1",
+              title: "Engineering Physics Unit 2",
+              source_name: "wave-motion.pdf",
+              source_type: "pdf",
+              resource_kind: "study_material",
+            },
+          ],
+        },
+        {
+          id: "chunk-full-1",
+          document_id: "doc-full-1",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "Unit 2 Wave Motion",
+          topic: "Part 1",
+          content: "Wave motion section one introduces travelling waves and terminology.",
+          chunk_index: 0,
+          embedding: [0.2, 0.2, 0.1],
+          knowledge_documents: [
+            {
+              id: "doc-full-1",
+              title: "Engineering Physics Unit 2",
+              source_name: "wave-motion.pdf",
+              source_type: "pdf",
+              resource_kind: "study_material",
+            },
+          ],
+        },
+        {
+          id: "chunk-other-1",
+          document_id: "doc-other-1",
+          board: "Engineering",
+          grade: "Bachelor",
+          subject: "Engineering Physics",
+          chapter: "Unit 3 Acoustics",
+          topic: "Noise",
+          content: "Acoustics discusses sound intensity and loudness.",
+          chunk_index: 0,
+          embedding: [0.9, 0.9, 0.9],
+          knowledge_documents: [
+            {
+              id: "doc-other-1",
+              title: "Engineering Physics Unit 3",
+              source_name: "acoustics.pdf",
+              source_type: "pdf",
+              resource_kind: "study_material",
+            },
+          ],
+        },
+      ],
+    ]);
+    createSupabaseServerClient.mockResolvedValue({ from });
+
+    const result = await retrieveKnowledgeChunks(
+      "Give me the full chapter on wave motion",
+      {
+        userId: "u1",
+        fullName: "Student",
+        college: "Campus",
+        board: "Engineering",
+        grade: "Bachelor",
+        boardScore: null,
+        subjects: ["Engineering Physics"],
+        targetGrade: "A+",
+        languagePref: "EN",
+        role: "student",
+        createdAt: "",
+        updatedAt: "",
+      },
+      { subjectContext: "Engineering Physics" },
+    );
+
+    expect(embedText).not.toHaveBeenCalled();
+    expect(result.grounded).toBe(true);
+    expect(result.chunks).toHaveLength(2);
+    expect(result.chunks[0]?.documentId).toBe("doc-full-1");
+    expect(result.chunks[1]?.documentId).toBe("doc-full-1");
+    expect(result.chunks[0]?.chunkIndex).toBe(0);
+    expect(result.chunks[1]?.chunkIndex).toBe(1);
+  });
+
+  it("compresses grounding context for normal answers", () => {
+    const prompt = buildGroundingPrompt([
+      {
+        id: "chunk-1",
+        documentId: "doc-1",
+        board: "Engineering",
+        grade: "Bachelor",
+        subject: "Engineering Physics",
+        chapter: "Unit 2 Wave Motion",
+        topic: "Important formulas",
+        content:
+          "Wave motion important formulas include v = f lambda. ".repeat(40),
+        sourceTitle: "Engineering Physics Unit 2 Wave Motion",
+        sourceName: "wave-motion.pdf",
+        resourceKind: "study_material",
+        score: 0.91,
+        chunkIndex: 0,
+      },
+      {
+        id: "chunk-2",
+        documentId: "doc-2",
+        board: "Engineering",
+        grade: "Bachelor",
+        subject: "Engineering Physics",
+        chapter: "Unit 2 Wave Motion",
+        topic: "Phase velocity",
+        content:
+          "Phase velocity links angular frequency and wave number. ".repeat(40),
+        sourceTitle: "Engineering Physics Unit 2 Wave Motion",
+        sourceName: "wave-motion.pdf",
+        resourceKind: "study_material",
+        score: 0.88,
+        chunkIndex: 1,
+      },
+      {
+        id: "chunk-3",
+        documentId: "doc-3",
+        board: "Engineering",
+        grade: "Bachelor",
+        subject: "Engineering Physics",
+        chapter: "Unit 2 Wave Motion",
+        topic: "Wave equation",
+        content:
+          "The wave equation describes propagation in a medium. ".repeat(40),
+        sourceTitle: "Engineering Physics Unit 2 Wave Motion",
+        sourceName: "wave-motion.pdf",
+        resourceKind: "study_material",
+        score: 0.84,
+        chunkIndex: 2,
+      },
+      {
+        id: "chunk-4",
+        documentId: "doc-4",
+        board: "Engineering",
+        grade: "Bachelor",
+        subject: "Engineering Physics",
+        chapter: "Unit 2 Wave Motion",
+        topic: "Intensity",
+        content: "Wave intensity and energy transport. ".repeat(40),
+        sourceTitle: "Engineering Physics Unit 2 Wave Motion",
+        sourceName: "wave-motion.pdf",
+        resourceKind: "study_material",
+        score: 0.8,
+        chunkIndex: 3,
+      },
+      {
+        id: "chunk-5",
+        documentId: "doc-5",
+        board: "Engineering",
+        grade: "Bachelor",
+        subject: "Engineering Physics",
+        chapter: "Unit 2 Wave Motion",
+        topic: "Boundary behavior",
+        content: "Reflection and transmission at boundaries. ".repeat(40),
+        sourceTitle: "Engineering Physics Unit 2 Wave Motion",
+        sourceName: "wave-motion.pdf",
+        resourceKind: "study_material",
+        score: 0.76,
+        chunkIndex: 4,
+      },
+    ]);
+
+    expect(prompt).toContain("[Source 1]");
+    expect(prompt).toContain("Type: study_material | Title:");
+    expect(prompt).not.toContain("Resource type:");
+    expect(prompt).not.toContain("[Source 5]");
+    expect(prompt.length).toBeLessThan(2600);
+  });
+
+  it("allows a wider but still compact grounding prompt for chapter-mode answers", () => {
+    const chunks = Array.from({ length: 7 }, (_, index) => ({
+      id: `chunk-${index + 1}`,
+      documentId: `doc-${index + 1}`,
+      board: "Engineering",
+      grade: "Bachelor",
+      subject: "Engineering Physics",
+      chapter: "Unit 2 Wave Motion",
+      topic: `Section ${index + 1}`,
+      content: `Section ${index + 1} content `.repeat(60),
+      sourceTitle: "Engineering Physics Unit 2 Wave Motion",
+      sourceName: "wave-motion.pdf",
+      resourceKind: "study_material" as const,
+      score: 0.9 - index * 0.05,
+      chunkIndex: index,
+    }));
+
+    const prompt = buildGroundingPrompt(chunks);
+
+    expect(prompt).toContain("[Source 6]");
+    expect(prompt).not.toContain("[Source 7]");
+    expect(prompt.length).toBeLessThan(5200);
   });
 });

@@ -1,5 +1,6 @@
 import { embedTexts } from "@/lib/ai/embeddings";
 import { chunkDocumentContent } from "@/lib/ai/chunking";
+import { normalizeTopicCardRow } from "@/lib/data/topic-cards";
 import { createKnowledgeSourceSignedUrl, removeKnowledgeSourceFile } from "@/lib/knowledge-storage";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/profile-normalization";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -13,6 +14,7 @@ import type {
   KnowledgeDocumentType,
   KnowledgeProcessingStatus,
   KnowledgeResourceKind,
+  TopicCard,
 } from "@/lib/types";
 
 interface KnowledgeNotebookRow {
@@ -69,6 +71,26 @@ interface KnowledgeChunkRow {
   created_at: string;
 }
 
+interface TopicCardRow {
+  id: string;
+  document_id: string | null;
+  board: string;
+  grade: string;
+  subject: string;
+  chapter: string | null;
+  topic: string;
+  title: string;
+  key_terms: unknown;
+  core_explanation: unknown;
+  formula_sheet: unknown;
+  example_line: string | null;
+  common_mistake: string | null;
+  exam_angle: string | null;
+  status: "draft" | "reviewed" | "published";
+  created_at: string;
+  updated_at: string;
+}
+
 const DEFAULT_ADMIN_PAGE_SIZE = 50;
 const MAX_ADMIN_PAGE_SIZE = 100;
 
@@ -110,6 +132,23 @@ export interface AdminKnowledgeDocumentInput {
   sourceMimeType?: string | null;
   sourceSizeBytes?: number | null;
   rawContent: string;
+}
+
+export interface AdminTopicCardInput {
+  documentId: string;
+  board: string;
+  grade: string;
+  subject: string;
+  chapter: string | null;
+  topic: string;
+  title: string;
+  keyTerms: string[];
+  coreExplanation: string[];
+  formulaSheet: string[];
+  exampleLine?: string | null;
+  commonMistake?: string | null;
+  examAngle?: string | null;
+  status: "draft" | "reviewed" | "published";
 }
 
 function toKnowledgeNotebook(
@@ -175,6 +214,80 @@ function toKnowledgeChunk(row: KnowledgeChunkRow): KnowledgeChunk {
     chunkIndex: row.chunk_index,
     createdAt: row.created_at,
   };
+}
+
+function toTopicCard(row: TopicCardRow): TopicCard {
+  return normalizeTopicCardRow(row as unknown as Record<string, unknown>);
+}
+
+function normalizeStringArray(values: string[]) {
+  return values.map((value) => value.trim()).filter(Boolean);
+}
+
+function normalizeTopicCardPayload(input: AdminTopicCardInput) {
+  return {
+    document_id: input.documentId,
+    board: normalizeBoard(input.board),
+    grade: normalizeGrade(input.grade),
+    subject: normalizeSubjectLabel(input.subject),
+    chapter: input.chapter?.trim() || null,
+    topic: input.topic.trim(),
+    title: input.title.trim(),
+    key_terms: normalizeStringArray(input.keyTerms),
+    core_explanation: normalizeStringArray(input.coreExplanation),
+    formula_sheet: normalizeStringArray(input.formulaSheet),
+    example_line: input.exampleLine?.trim() || null,
+    common_mistake: input.commonMistake?.trim() || null,
+    exam_angle: input.examAngle?.trim() || null,
+    status: input.status,
+  };
+}
+
+function buildDraftTopicCardsForDocument(document: KnowledgeDocumentRow, chunks: Array<{ content: string; chunkIndex: number }>) {
+  const grouped = new Map<string, string[]>();
+  for (const chunk of chunks) {
+    const topic = (document.title || document.chapter || "Core topic").trim();
+    const current = grouped.get(topic) ?? [];
+    current.push(chunk.content.trim());
+    grouped.set(topic, current);
+  }
+
+  return [...grouped.entries()].map(([topic, contents]) => {
+    const preview = contents
+      .flatMap((content) => content.split(/\n+/))
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+
+    return normalizeTopicCardPayload({
+      documentId: document.id,
+      board: document.board,
+      grade: document.grade,
+      subject: document.subject,
+      chapter: document.chapter,
+      topic,
+      title: topic,
+      keyTerms: [],
+      coreExplanation: preview,
+      formulaSheet: [],
+      exampleLine: null,
+      commonMistake: null,
+      examAngle: document.resource_kind === "question_bank" ? "Use this topic for likely exam-style practice." : null,
+      status: "draft",
+    });
+  });
+}
+
+export async function listAdminTopicCardsForDocument(documentId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("topic_cards")
+    .select("*")
+    .eq("document_id", documentId)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return ((data ?? []) as TopicCardRow[]).map(toTopicCard);
 }
 
 async function getNotebookCounts(notebookIds: string[]) {
@@ -431,6 +544,14 @@ export async function getAdminKnowledgeDocument(documentId: string) {
 
   if (chunkError) throw chunkError;
 
+  const { data: topicCards, error: topicCardError } = await supabase
+    .from("topic_cards")
+    .select("*")
+    .eq("document_id", documentId)
+    .order("updated_at", { ascending: false });
+
+  if (topicCardError) throw topicCardError;
+
   const notebookTitle = Array.isArray((document as { knowledge_notebooks?: { title: string }[] }).knowledge_notebooks)
     ? (document as { knowledge_notebooks?: { title: string }[] }).knowledge_notebooks?.[0]?.title ?? null
     : ((document as { knowledge_notebooks?: { title: string } | null }).knowledge_notebooks?.title ?? null);
@@ -441,7 +562,75 @@ export async function getAdminKnowledgeDocument(documentId: string) {
       notebook_title: notebookTitle,
     }),
     chunks: ((chunks ?? []) as KnowledgeChunkRow[]).map(toKnowledgeChunk),
+    topicCards: ((topicCards ?? []) as TopicCardRow[]).map(toTopicCard),
   } satisfies AdminKnowledgeDocumentDetail;
+}
+
+export async function createAdminTopicCard(input: AdminTopicCardInput) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase.from("topic_cards").insert(normalizeTopicCardPayload(input)).select("*").single();
+  if (error || !data) throw error || new Error("Failed to create topic card.");
+  return toTopicCard(data as TopicCardRow);
+}
+
+export async function updateAdminTopicCard(topicCardId: string, input: AdminTopicCardInput) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("topic_cards")
+    .update(normalizeTopicCardPayload(input))
+    .eq("id", topicCardId)
+    .select("*")
+    .single();
+  if (error || !data) throw error || new Error("Failed to update topic card.");
+  return toTopicCard(data as TopicCardRow);
+}
+
+export async function deleteAdminTopicCard(topicCardId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase.from("topic_cards").delete().eq("id", topicCardId);
+  if (error) throw error;
+}
+
+export async function seedAdminTopicCardsForDocument(documentId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data: document, error: documentError } = await supabase
+    .from("knowledge_documents")
+    .select("*")
+    .eq("id", documentId)
+    .maybeSingle();
+
+  if (documentError) throw documentError;
+  if (!document) throw new Error("Resource not found.");
+
+  const { data: existingCards, error: existingCardsError } = await supabase
+    .from("topic_cards")
+    .select("id")
+    .eq("document_id", documentId);
+
+  if (existingCardsError) throw existingCardsError;
+  if ((existingCards ?? []).length > 0) {
+    return listAdminTopicCardsForDocument(documentId);
+  }
+
+  const { data: chunkRows, error: chunkError } = await supabase
+    .from("knowledge_chunks")
+    .select("content, chunk_index")
+    .eq("document_id", documentId)
+    .order("chunk_index", { ascending: true });
+
+  if (chunkError) throw chunkError;
+
+  const draftCards = buildDraftTopicCardsForDocument(document as KnowledgeDocumentRow, ((chunkRows ?? []) as Array<{content: string; chunk_index: number}>).map((row) => ({
+    content: row.content,
+    chunkIndex: row.chunk_index,
+  })));
+
+  if (!draftCards.length) return [];
+
+  const { error: insertError } = await supabase.from("topic_cards").insert(draftCards);
+  if (insertError) throw insertError;
+
+  return listAdminTopicCardsForDocument(documentId);
 }
 
 export async function createAdminKnowledgeDocument(input: AdminKnowledgeDocumentInput) {
@@ -602,6 +791,8 @@ export async function processAdminKnowledgeDocument(documentId: string) {
         processing_error: null,
       })
       .eq("id", documentId);
+
+    await seedAdminTopicCardsForDocument(documentId);
   } catch (error) {
     await supabase
       .from("knowledge_documents")
