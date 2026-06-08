@@ -886,7 +886,7 @@ export function ChatPageClient({
         <div
           className={cn(
             "border-b border-border bg-bg-primary/92 backdrop-blur",
-            hasMessages ? "px-4 py-2 md:px-5 xl:px-6" : "px-4 py-4 md:px-6 xl:px-8",
+            hasMessages ? "px-4 py-2 md:px-5 xl:px-6" : "px-4 py-3 md:px-5 xl:px-6",
           )}
         >
           <div
@@ -982,10 +982,10 @@ export function ChatPageClient({
                       </span>
                     ) : null}
                   </div>
-                  <h2 className="mt-3 line-clamp-2 font-display text-4xl leading-none sm:text-5xl">
+                  <h2 className="mt-1.5 line-clamp-2 font-display text-2xl font-medium leading-none sm:text-3xl">
                     {activeSessionTitle}
                   </h2>
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-text-secondary">
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-text-secondary">
                     <div className="inline-flex flex-wrap items-center gap-2">
                       <label htmlFor="subject-context" className="text-[11px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
                         Focus
@@ -996,7 +996,7 @@ export function ChatPageClient({
                         onChange={(event) =>
                           void updateSessionSubjectContext(event.target.value.trim() || null)
                         }
-                        className="h-11 rounded-full border border-border bg-bg-primary px-4 text-sm text-text-primary outline-none transition focus:border-border-strong"
+                        className="h-9 rounded-full border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none transition focus:border-border-strong"
                       >
                         <option value="">General</option>
                         {availableSubjects.map((subject) => (
@@ -1012,7 +1012,7 @@ export function ChatPageClient({
                         id="answer-style"
                         value={answerStyle}
                         onChange={(event) => setAnswerStyle(event.target.value as AnswerStyle)}
-                        className="h-11 rounded-full border border-border bg-bg-primary px-4 text-sm text-text-primary outline-none transition focus:border-border-strong"
+                        className="h-9 rounded-full border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none transition focus:border-border-strong"
                       >
                         {Object.entries(ANSWER_STYLE_LABELS).map(([value, label]) => (
                           <option key={value} value={value}>
@@ -1023,14 +1023,14 @@ export function ChatPageClient({
                       <span className="text-[11px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
                         Retrieval
                       </span>
-                      <div className="inline-flex rounded-full border border-border bg-bg-secondary p-1">
+                      <div className="inline-flex rounded-full border border-border bg-bg-secondary p-0.5">
                         {(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map((mode) => (
                           <button
                             key={mode}
                             type="button"
                             onClick={() => setRetrievalMode(mode)}
                             className={cn(
-                              "rounded-full px-3 py-2 text-[12px] transition",
+                              "rounded-full px-3 py-1 text-[12px] transition",
                               retrievalMode === mode
                                 ? "bg-text-primary text-text-inverse"
                                 : "text-text-secondary",
@@ -1350,20 +1350,20 @@ export function ChatPageClient({
                     void sendCurrentMessage();
                   }
                 }}
-                rows={2}
+                rows={1}
                 placeholder="Ask a question about your studies..."
-                className="min-h-[72px] w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted"
+                className="min-h-[44px] w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted"
               />
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2.5">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <div className="inline-flex rounded-full border border-border bg-bg-secondary p-1">
+                  <div className="inline-flex rounded-full border border-border bg-bg-secondary p-0.5">
                     {(["EN", "RN"] as const).map((item) => (
                       <button
                         key={item}
                         type="button"
                         onClick={() => setComposerLanguage(item)}
                         className={
-                          "rounded-full px-4 py-1.5 text-[11px] font-mono-ui transition " +
+                          "rounded-full px-3 py-1 text-[11px] font-mono-ui transition " +
                           (composerLanguage === item ? "bg-text-primary text-text-inverse" : "text-text-secondary")
                         }
                       >
@@ -1378,7 +1378,7 @@ export function ChatPageClient({
                 <Button
                   type="submit"
                   disabled={isLoading || !input.trim() || creditBalance <= 0}
-                  className="h-11 min-w-[116px] rounded-full px-5 text-base"
+                  className="h-9 min-w-[100px] rounded-full px-4 text-sm"
                 >
                   {isLoading ? "Sending..." : "Send →"}
                 </Button>
