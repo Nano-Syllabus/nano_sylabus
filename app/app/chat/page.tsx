@@ -4,6 +4,8 @@ import { requireOnboardedUser } from "@/lib/auth";
 import { getChatSessionDetail, listChatSessions } from "@/lib/data/chat";
 import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 
+export const dynamic = "force-dynamic";
+
 export default async function ChatPage({
   searchParams,
 }: {
@@ -22,6 +24,7 @@ export default async function ChatPage({
   return (
     <AppShell user={user} title="Chat">
       <ChatPageClient
+        key={activeSession?.id ?? "new"}
         user={user}
         defaultLanguage={profile!.languagePref}
         profileBoard={profile!.board}

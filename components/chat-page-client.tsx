@@ -8,10 +8,12 @@ import {
   useMemo,
   useRef,
   useState,
+  useContext,
   type ChangeEvent,
   type KeyboardEvent,
 } from "react";
 import { useChat, type Message } from "ai/react";
+import { AppShellContext } from "@/components/app-shell-context";
 import { CitationCard } from "@/components/citation-card";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
@@ -44,8 +46,8 @@ const ANSWER_STYLE_LABELS: Record<AnswerStyle, string> = {
 };
 type RetrievalMode = "default" | "chapter";
 const RETRIEVAL_MODE_LABELS: Record<RetrievalMode, string> = {
-  default: "Quick QA",
-  chapter: "Chapter mode",
+  default: "Internet",
+  chapter: "Syllabus",
 };
 
 type ThinkingTrace = {
@@ -157,6 +159,83 @@ function buildTracePills(trace: ThinkingTrace) {
   ].filter(Boolean) as string[];
 }
 
+function TopHeaderTitle({ 
+  activeSessionTitle, 
+  currentSessionId, 
+  activeSessionSummary, 
+  onRename, 
+  onDelete 
+}: { 
+  activeSessionTitle: string; 
+  currentSessionId: string | null; 
+  activeSessionSummary: ChatSessionSummary | null; 
+  onRename: () => void; 
+  onDelete: () => void; 
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [isOpen]);
+
+  return (
+    <div className="relative flex items-center gap-1.5" ref={menuRef}>
+      <span className="truncate">{activeSessionTitle}</span>
+      
+      {currentSessionId && (
+        <button 
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          className={cn(
+            "flex items-center justify-center w-6 h-6 rounded-md transition text-text-muted hover:text-text-primary hover:bg-bg-secondary",
+            isOpen ? "bg-bg-secondary text-text-primary" : ""
+          )}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      )}
+
+      {isOpen && currentSessionId && activeSessionSummary && (
+        <div className="absolute left-0 top-full mt-2 w-48 rounded-xl border border-border bg-bg-primary shadow-xl z-[100] flex flex-col p-1.5 animate-in fade-in zoom-in-95 duration-100">
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsOpen(false);
+              onRename();
+            }}
+            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            Rename
+          </button>
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsOpen(false);
+              onDelete();
+            }}
+            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-destructive hover:bg-destructive/10 transition"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChatPageClient({
   user,
   defaultLanguage,
@@ -192,10 +271,8 @@ export function ChatPageClient({
   const [chatError, setChatError] = useState("");
   const [creditBalance, setCreditBalance] = useState(user.creditBalance);
   const [sessionDetail, setSessionDetail] = useState<ChatSessionDetail | null>(initialSession);
-  const [subjectContext, setSubjectContext] = useState<string | null>(
-    initialSession?.subjectContext ??
-      (initialSubjectContext ? normalizeSubjectLabel(initialSubjectContext) : null),
-  );
+  const shell = useContext(AppShellContext);
+  const [subjectContext, setSubjectContext] = useState<string | null>("Engineering Physics");
   const [answerStyle, setAnswerStyle] = useState<AnswerStyle>("detailed");
   const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("default");
   const [saveState, setSaveState] = useState<{
@@ -211,6 +288,7 @@ export function ChatPageClient({
   const [catalogSubjects, setCatalogSubjects] = useState<string[]>([]);
   const [latestThinkingTrace, setLatestThinkingTrace] = useState<ThinkingTrace | null>(null);
   const [showThinkingTrace, setShowThinkingTrace] = useState(false);
+  const [deleteConfirmSession, setDeleteConfirmSession] = useState<ChatSessionSummary | null>(null);
   const pendingTitleRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(initialSession?.id ?? null);
   const searchDebounceRef = useRef<number | null>(null);
@@ -298,6 +376,18 @@ export function ChatPageClient({
   }, [currentSessionId]);
 
   useEffect(() => {
+    const handleNewChat = () => {
+      setCurrentSessionId(null);
+      currentSessionIdRef.current = null;
+      setSessionDetail(null);
+      setMessages([]);
+      window.history.replaceState(null, "", "/app/chat");
+    };
+    window.addEventListener("app:new-chat", handleNewChat);
+    return () => window.removeEventListener("app:new-chat", handleNewChat);
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (requestWatchdogRef.current) {
         window.clearTimeout(requestWatchdogRef.current);
@@ -362,6 +452,59 @@ export function ChatPageClient({
       }
     };
   }, [historySearch, fetchSessions]);
+
+  // Listen for fast client-side session switching from sidebar
+  useEffect(() => {
+    const handleSwitch = async (event: Event) => {
+      const sessionId = (event as CustomEvent).detail?.sessionId;
+      if (!sessionId || sessionId === currentSessionIdRef.current) return;
+
+      // Update ref immediately so subsequent clicks are ignored
+      currentSessionIdRef.current = sessionId;
+
+      // Fetch data FIRST, then update all state at once (no intermediate empty flash)
+      const response = await fetch(`/api/chat/session?session=${sessionId}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      const detail = (await response.json()) as ChatSessionDetail;
+
+      // Batch all state updates — React batches these into a single render
+      setCurrentSessionId(sessionId);
+      setChatError("");
+      setMatchedScope(null);
+      setLatestThinkingTrace(null);
+      setSessionDetail(detail);
+      setSubjectContext(detail.subjectContext);
+      setMessages(
+        detail.messages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+        })),
+      );
+      setSessions((prev) =>
+        prev
+          .map((session) =>
+            session.id === sessionId
+              ? {
+                  ...session,
+                  title: detail.title,
+                  updatedAt: detail.updatedAt,
+                  subjectTags: detail.subjectTags,
+                  subjectContext: detail.subjectContext,
+                }
+              : session,
+          )
+          .sort(
+            (left, right) =>
+              new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+          ),
+      );
+    };
+    window.addEventListener("chat-switch-session", handleSwitch);
+    return () => window.removeEventListener("chat-switch-session", handleSwitch);
+  }, []);
 
   async function refreshCredits() {
     const response = await fetch("/api/billing/credits", { cache: "no-store" });
@@ -529,6 +672,7 @@ export function ChatPageClient({
         },
         ...prev,
       ]);
+      window.dispatchEvent(new CustomEvent("chat-session-updated"));
     },
     async onFinish() {
       if (requestWatchdogRef.current) {
@@ -710,8 +854,9 @@ export function ChatPageClient({
 
     const updated = (await response.json()) as ChatSessionSummary;
     setSessions((prev) =>
-      prev.map((session) => (session.id === updated.id ? updated : session)),
+      prev.map((s) => (s.id === activeSessionSummary.id ? { ...s, title } : s)),
     );
+    window.dispatchEvent(new CustomEvent("chat-session-updated"));
     setSessionDetail((prev) => (prev ? { ...prev, title: updated.title, updatedAt: updated.updatedAt } : prev));
     setRenameState(null);
   }
@@ -807,277 +952,71 @@ export function ChatPageClient({
     composerRef.current?.focus();
   }, [initialPrompt, setInput]);
 
+  useEffect(() => {
+    shell.setTitle(
+      <TopHeaderTitle 
+        activeSessionTitle={activeSessionTitle}
+        currentSessionId={currentSessionIdRef.current}
+        activeSessionSummary={activeSessionSummary}
+        onRename={() => {
+          if (currentSessionIdRef.current) {
+            setRenameState({ id: currentSessionIdRef.current, title: activeSessionTitle } as ChatSessionSummary);
+          }
+        }}
+        onDelete={() => {
+          if (activeSessionSummary) setDeleteConfirmSession(activeSessionSummary);
+        }}
+      />
+    );
+    return () => shell.setTitle(null);
+  }, [activeSessionTitle, shell, activeSessionSummary]);
+
+  useEffect(() => {
+    shell.setActions(
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 bg-bg-secondary rounded-full border border-border py-1 px-3">
+          <span className="hidden sm:inline text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
+            Subject:
+          </span>
+          <span className="text-[12px] font-medium text-text-primary">
+            Engineering Physics
+          </span>
+        </div>
+      </div>
+    );
+    return () => shell.setActions(null);
+  }, [shell]);
+
+
+
+
+
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--bg-secondary)_62%,transparent),transparent_28%)] lg:grid-cols-[188px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
-      <aside className="hidden min-h-0 border-r border-border bg-bg-primary/96 lg:flex lg:flex-col">
-        <div className="border-b border-border p-2.5">
-          <div className="rounded-[20px] border border-border bg-bg-secondary p-2 shadow-sm">
-            <Link href="/app/chat">
-              <Button variant="outline" className="h-10 w-full rounded-full text-sm">
-                + New chat
-              </Button>
-            </Link>
-            <div className="mt-2">
-              <Input
-                value={historySearch}
-                onChange={(event) => setHistorySearch(event.target.value)}
-                placeholder="Search chat titles..."
-                className="h-10 rounded-xl text-sm"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2.5">
-          <div className="space-y-3">
-            {groupedSessions.map(({ group, items }) =>
-              items.length ? (
-                <div key={group}>
-                  <p className="mb-2 px-1 text-[10px] font-mono-ui uppercase tracking-[0.2em] text-text-muted">
-                    {group}
-                  </p>
-                  <ul className="space-y-1.5">
-                    {items.map((session) => (
-                      <li key={session.id}>
-                        <Link
-                          href={`/app/chat?session=${session.id}`}
-                          className={cn(
-                            "block rounded-xl border px-2.5 py-2 text-left transition",
-                            currentSessionId === session.id
-                              ? "border-border-strong bg-bg-secondary shadow-sm"
-                              : "border-transparent hover:border-border hover:bg-bg-secondary/80",
-                          )}
-                        >
-                          <div className="line-clamp-2 text-[12px] font-medium leading-5">{session.title}</div>
-                          <div className="mt-1 text-[10px] text-text-muted">
-                            {formatDate(session.updatedAt)}
-                          </div>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null,
-            )}
-            {sessions.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border bg-bg-secondary/70 p-4 text-sm text-text-muted">
-                No chat history yet.
-              </div>
-            ) : null}
-            {historyError ? <p className="text-xs text-destructive">{historyError}</p> : null}
-            {hasMoreSessions ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full rounded-xl"
-                onClick={() => void fetchSessions({ reset: false, offset: sessions.length })}
-                disabled={historyLoading}
-              >
-                {historyLoading ? "Loading..." : "Load more"}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </aside>
-
-      <section className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
-        <div
-          className={cn(
-            "border-b border-border bg-bg-primary/92 backdrop-blur",
-            hasMessages ? "px-4 py-2 md:px-5 xl:px-6" : "px-4 py-3 md:px-5 xl:px-6",
-          )}
-        >
-          <div
-            className={cn(
-              "mx-auto flex w-full flex-wrap items-start justify-between",
-              hasMessages ? "max-w-5xl gap-3" : "max-w-6xl gap-4",
-            )}
-          >
-            <div className="min-w-0 flex-1">
-              {hasMessages ? (
+    <div className="flex h-full min-h-0 flex-col bg-[linear-gradient(180deg,color-mix(in_oklab,var(--bg-secondary)_62%,transparent),transparent_28%)]">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {hasMessages && matchedScope ? (
+          <div className="bg-bg-primary/92 backdrop-blur px-4 py-2 md:px-5 xl:px-6">
+            <div className="mx-auto flex w-full flex-wrap items-start justify-between max-w-5xl gap-3">
+              <div className="min-w-0 flex-1">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="min-w-0 truncate font-display text-lg leading-none sm:text-xl">
-                      {activeSessionTitle}
-                    </h2>
-                    {matchedScope ? (
-                      <span className="max-w-full truncate rounded-full border border-border bg-bg-secondary px-2 py-0.5 text-[10px] text-text-muted">
-                        {matchedScope}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label
-                      htmlFor="subject-context"
-                      className="text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted"
-                    >
-                      Focus
-                    </label>
-                    <select
-                      id="subject-context"
-                      value={subjectContext ?? ""}
-                      onChange={(event) =>
-                        void updateSessionSubjectContext(event.target.value.trim() || null)
-                      }
-                      className="h-8 rounded-full border border-border bg-bg-primary px-3 text-[13px] text-text-primary outline-none transition focus:border-border-strong"
-                    >
-                      <option value="">General</option>
-                      {availableSubjects.map((subject) => (
-                        <option key={subject} value={subject}>
-                          {subject}
-                        </option>
-                      ))}
-                    </select>
-                    <label
-                      htmlFor="answer-style"
-                      className="text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted"
-                    >
-                      Style
-                    </label>
-                    <select
-                      id="answer-style"
-                      value={answerStyle}
-                      onChange={(event) => setAnswerStyle(event.target.value as AnswerStyle)}
-                      className="h-8 rounded-full border border-border bg-bg-primary px-3 text-[13px] text-text-primary outline-none transition focus:border-border-strong"
-                    >
-                      {Object.entries(ANSWER_STYLE_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
-                      Retrieval
+                    <span className="max-w-full truncate rounded-full border border-border bg-bg-secondary px-2 py-0.5 text-[10px] text-text-muted">
+                      {matchedScope}
                     </span>
-                    <div className="inline-flex rounded-full border border-border bg-bg-secondary p-1">
-                      {(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map((mode) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => setRetrievalMode(mode)}
-                          className={cn(
-                            "rounded-full px-3 py-1 text-[11px] transition",
-                            retrievalMode === mode
-                              ? "bg-text-primary text-text-inverse"
-                              : "text-text-secondary",
-                          )}
-                        >
-                          {RETRIEVAL_MODE_LABELS[mode]}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 </div>
-              ) : (
-                <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-border bg-bg-secondary px-3 py-1 text-[10px] font-mono-ui uppercase tracking-[0.22em] text-text-muted">
-                      Study chat
-                    </span>
-                    {subjectContext ? (
-                      <span className="rounded-full border border-border bg-bg-secondary px-3 py-1 text-xs text-text-secondary">
-                        {subjectContext}
-                      </span>
-                    ) : null}
-                  </div>
-                  <h2 className="mt-1.5 line-clamp-2 font-display text-2xl font-medium leading-none sm:text-3xl">
-                    {activeSessionTitle}
-                  </h2>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-text-secondary">
-                    <div className="inline-flex flex-wrap items-center gap-2">
-                      <label htmlFor="subject-context" className="text-[11px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
-                        Focus
-                      </label>
-                      <select
-                        id="subject-context"
-                        value={subjectContext ?? ""}
-                        onChange={(event) =>
-                          void updateSessionSubjectContext(event.target.value.trim() || null)
-                        }
-                        className="h-9 rounded-full border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none transition focus:border-border-strong"
-                      >
-                        <option value="">General</option>
-                        {availableSubjects.map((subject) => (
-                          <option key={subject} value={subject}>
-                            {subject}
-                          </option>
-                        ))}
-                      </select>
-                      <label htmlFor="answer-style" className="text-[11px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
-                        Style
-                      </label>
-                      <select
-                        id="answer-style"
-                        value={answerStyle}
-                        onChange={(event) => setAnswerStyle(event.target.value as AnswerStyle)}
-                        className="h-9 rounded-full border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none transition focus:border-border-strong"
-                      >
-                        {Object.entries(ANSWER_STYLE_LABELS).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="text-[11px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
-                        Retrieval
-                      </span>
-                      <div className="inline-flex rounded-full border border-border bg-bg-secondary p-0.5">
-                        {(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map((mode) => (
-                          <button
-                            key={mode}
-                            type="button"
-                            onClick={() => setRetrievalMode(mode)}
-                            className={cn(
-                              "rounded-full px-3 py-1 text-[12px] transition",
-                              retrievalMode === mode
-                                ? "bg-text-primary text-text-inverse"
-                                : "text-text-secondary",
-                            )}
-                          >
-                            {RETRIEVAL_MODE_LABELS[mode]}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <span className="text-xs text-text-muted">
-                      Focus narrows sources. {RETRIEVAL_MODE_LABELS[retrievalMode]} controls whether we answer directly or pull sequential textbook sections first.
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-            {activeSessionSummary ? (
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={() => setRenameState(activeSessionSummary)}
-                >
-                  Rename
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="rounded-full"
-                  onClick={() => void deleteCurrentSession()}
-                  disabled={deletingSessionId === activeSessionSummary.id}
-                >
-                  {deletingSessionId === activeSessionSummary.id ? "Deleting..." : "Delete"}
-                </Button>
               </div>
-            ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
+
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-5xl flex-col px-4 pb-24 pt-5 md:px-5 xl:px-6">
             {messages.length === 0 ? (
-              <div className="mx-auto mt-8 flex min-h-[42vh] w-full max-w-4xl flex-col items-center justify-center rounded-[28px] border border-border bg-bg-primary/92 px-8 py-12 text-center shadow-[0_16px_60px_rgba(0,0,0,0.05)]">
+              <div className="mx-auto mt-24 flex min-h-[42vh] w-full max-w-4xl flex-col items-center justify-center rounded-[28px] border border-border bg-bg-primary/92 px-8 py-12 text-center shadow-[0_16px_60px_rgba(0,0,0,0.05)]">
                 <p className="text-[11px] font-mono-ui uppercase tracking-[0.22em] text-text-muted">
                   Nano Syllabus
                 </p>
@@ -1330,16 +1269,7 @@ export function ChatPageClient({
               </div>
             ) : null}
             <form onSubmit={submitMessage} className="rounded-[28px] border border-border bg-bg-primary p-3 shadow-[0_16px_46px_rgba(0,0,0,0.05)]">
-              <div className="mb-2 flex flex-wrap items-center gap-2 px-2">
-                <span className="rounded-full border border-border bg-bg-secondary px-2.5 py-1 text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
-                  {RETRIEVAL_MODE_LABELS[retrievalMode]}
-                </span>
-                <span className="text-xs text-text-muted">
-                  {retrievalMode === "chapter"
-                    ? "Sequential textbook retrieval is preferred before answer synthesis."
-                    : "Fast question-answer retrieval is preferred for this turn."}
-                </span>
-              </div>
+
               <textarea
                 ref={composerRef}
                 value={input}
@@ -1368,6 +1298,23 @@ export function ChatPageClient({
                         }
                       >
                         {item === "EN" ? "English" : "Roman Nepali"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="inline-flex rounded-full border border-border bg-bg-secondary p-0.5">
+                    {(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setRetrievalMode(mode)}
+                        className={cn(
+                          "rounded-full px-3 py-1 text-[11px] font-mono-ui transition",
+                          retrievalMode === mode
+                            ? "bg-text-primary text-text-inverse"
+                            : "text-text-secondary",
+                        )}
+                      >
+                        {RETRIEVAL_MODE_LABELS[mode]}
                       </button>
                     ))}
                   </div>
@@ -1409,6 +1356,28 @@ export function ChatPageClient({
           onClose={() => setRenameState(null)}
           onSave={(title) => void renameCurrentSession(title)}
         />
+      ) : null}
+
+      {deleteConfirmSession ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => !deletingSessionId && setDeleteConfirmSession(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-xl border border-border bg-bg-primary p-6 animate-in slide-in-from-bottom-4 duration-200">
+            <h3 className="font-display text-xl mb-2 text-text-primary">Delete chat?</h3>
+            <p className="text-sm text-text-secondary mb-6">This action cannot be undone. All messages in this chat will be permanently removed.</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setDeleteConfirmSession(null)} disabled={!!deletingSessionId}>Cancel</Button>
+              <Button 
+                variant="danger" 
+                onClick={async () => {
+                  await deleteCurrentSession();
+                  setDeleteConfirmSession(null);
+                }} 
+                disabled={!!deletingSessionId}
+              >
+                {deletingSessionId ? "Deleting..." : "Delete chat"}
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

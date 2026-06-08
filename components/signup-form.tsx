@@ -62,7 +62,7 @@ export function SignupForm() {
     }
 
     if (data.session) {
-      router.replace("/onboarding");
+      router.replace("/app/chat");
       router.refresh();
       return;
     }
@@ -83,7 +83,7 @@ export function SignupForm() {
     const supabase = createSupabaseBrowserClient();
     const redirectTo =
       typeof window !== "undefined"
-        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent("/onboarding")}`
+        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent("/app/chat")}`
         : undefined;
 
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
