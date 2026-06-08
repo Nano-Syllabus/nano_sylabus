@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { MarketingNav } from "@/components/marketing-nav";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const features = [
@@ -34,13 +33,10 @@ export default function HomePage() {
       <section className="relative overflow-hidden border-b border-border">
         <div className="absolute inset-0 bg-dotgrid opacity-60 animate-drift" aria-hidden />
         <div className="relative mx-auto max-w-5xl px-5 pb-24 pt-20 text-center sm:pb-32 sm:pt-28">
-          <div className="mb-6 flex justify-center">
-            <Badge variant="mono">Phase 1 · real foundation</Badge>
-          </div>
-          <h1 className="font-display text-5xl leading-[1.05] tracking-tight sm:text-7xl">
-            Your AI study companion,
+          <h1 className="font-display text-5xl font-bold leading-[1.1] tracking-tighter sm:text-7xl">
+            Your AI Study Companion,
             <br />
-            <em className="italic">built for Nepal.</em>
+            <span className="bg-gradient-to-r from-neutral-600 to-neutral-900 bg-clip-text text-transparent dark:from-neutral-300 dark:to-neutral-50">Built For Nepal.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-base font-light text-text-secondary sm:text-lg">
             Ask in English or Roman Nepali. Get personalized AI support that feels closer to how Nepali students actually study.
@@ -60,9 +56,8 @@ export default function HomePage() {
 
       <section id="features" className="border-b border-border">
         <div className="mx-auto max-w-6xl px-5 py-20">
-          <div className="mb-12 max-w-2xl">
-            <p className="text-xs font-mono-ui uppercase text-text-muted">01 · features</p>
-            <h2 className="mt-2 font-display text-4xl sm:text-5xl">
+          <div className="mx-auto mb-16 max-w-3xl text-center">
+            <h2 className="mt-2 font-display text-4xl font-bold tracking-tight sm:text-5xl">
               A clearer path from doubt to understanding.
             </h2>
           </div>
@@ -79,9 +74,8 @@ export default function HomePage() {
       </section>
 
       <section id="faq" className="border-b border-border bg-bg-secondary">
-        <div className="mx-auto max-w-3xl px-5 py-20">
-          <p className="text-xs font-mono-ui uppercase text-text-muted">02 · phase 1</p>
-          <h2 className="mt-2 font-display text-4xl sm:text-5xl">What ships first?</h2>
+        <div className="mx-auto max-w-3xl px-5 py-20 text-center">
+          <h2 className="mt-2 font-display text-4xl font-bold tracking-tight sm:text-5xl">What ships first?</h2>
           <div className="mt-8 space-y-4 text-sm text-text-secondary">
             <p>Real auth, real onboarding, real persistent chat, and real AI responses.</p>
             <p>
