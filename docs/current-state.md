@@ -1,160 +1,147 @@
 # Current State
 
-## Summary
+## Executive summary
 
-This repository now contains a **real Next.js student app plus the first monetization and admin backbone**.
+Nano Syllabus already has a real product shell.
 
-The app now supports:
+We are not at “idea only” stage anymore.
 
-- real auth and onboarding
-- Google OAuth plus password recovery basics
-- grounded chat with citations
-- saved notes and revision logging
-- ledger-backed credits
-- manual invoice and payment submission
-- admin payment approval and rejection
-- account export and account deletion
-- a cleaned Next.js-only runtime after legacy prototype removal
+We already have:
 
-It is no longer just a learning loop prototype. It now begins to prove the **business and operations loop**, though live-environment validation is still incomplete.
+- a running student app
+- a running admin surface
+- real auth
+- real persistence
+- billing and credits
+- textbook ingestion
+- grounded answer infrastructure
 
-## Where we are against the goal
+The product is functional.
 
-Against the current product goal, we are roughly here:
+The main weakness is that the AI system is still only partially academic-aware.
 
-- real student foundation: implemented
-- real auth and onboarding: implemented
-- real persistent grounded chat: implemented
-- notes and revision persistence: implemented
-- credits enforcement: implemented
-- manual billing workflow: implemented
-- finance-focused admin surface: implemented
-- live production validation: partially complete
-- broader admin operations: not started
-- automated payment gateway integration: not started
+## What is real right now
 
-## What is already present
+### Student product
 
-### Student app
-
-- Next.js App Router app structure
-- protected routes through middleware
-- landing, auth, onboarding, chat, notes, revision, billing, and settings pages
-- no remaining Vite or TanStack runtime path in the active application
-
-### Authentication and onboarding
-
-- Supabase Auth integration
+- landing and marketing pages
 - signup, login, logout
-- Google OAuth callback flow
-- forgot-password and reset-password flow
-- onboarding gate
-- profile persistence in `student_profiles`
-- role support through `student_profiles.role`
+- Google OAuth
+- password reset flow
+- onboarding flow
+- chat sessions and chat history
+- notes and revision flows
+- billing page
+- settings page
 
-### Chat and learning loop
+### Admin product
 
-- persistent `chat_sessions` and `chat_messages`
-- Gemini streaming responses
-- syllabus-grounded retrieval with fallback
-- chat history search
-- chat rename and delete
-- lazy loading for older sessions
-- simple source labels in chat and notes
-- note save/edit/delete
-- revision logging
+- auth users and student profiles
+- chat sessions and chat messages views
+- revision notes and revision logs views
+- knowledge notebooks
+- knowledge documents
+- knowledge chunks
+- payment submissions
+- invoices
+- subscription plans
+- user subscriptions
+- credits ledger
+- prompt templates
 
-### Monetization backbone
+### Data and platform
 
-- `credits_ledger`
-- `subscription_plans`
-- `user_subscriptions`
-- `invoices`
-- `payment_submissions`
-- starter credits for newly onboarded users
-- credit deduction only after successful assistant persistence
-- student billing page with manual payment submission flow
+- Supabase Auth
+- Supabase Postgres
+- storage-backed academic document handling
+- knowledge chunk persistence
+- retrieval logs and test coverage
 
-### Admin finance surface
+### AI layer
 
-- admin role checks
-- protected `/admin/*` routes
-- pending payment list
-- payment detail view
-- approve/reject actions through server-side interfaces
+- Gemini-powered answers
+- retrieval-aware chat route
+- chapter-mode retrieval path
+- grounded-context guard for key study routes
+- retrieval mode in chat UI
+- deterministic subject/chapter/topic/full-syllabus answer paths
+- first-pass topic-card and question-bank routing
 
-### Test and hardening baseline
+## Where the quality problem still is
 
-- focused automated tests for access rules, credits helpers, and core API behaviors
-- stricter note API ownership handling
-- middleware-based route gating for guest, onboarded, and admin flows
-- account export and account deletion flows in settings
-- `npm run lint`, `npm test`, and `npm run build` as the default verification baseline
+The product shell is real, but answer quality is still uneven.
 
-## What is still missing
+Main causes:
 
-### Live validation and operational hardening
+- not all question types are routed differently yet
+- catalog/syllabus logic is not fully separated from deep retrieval
+- topic-card layer is not fully mature
+- question-bank route is not fully mature
+- engineering-level answers still need stronger real-world hardening
 
-- full end-to-end validation against a live Supabase project and real Gemini credentials
-- production QA for invoice approval and credit grants
-- observability and alerting
-- deeper failure-state polish
+So the problem is not:
 
-### Broader business system
+- “we do not have an app”
 
-- automated payment gateway integration
-- richer subscription lifecycle behavior
-- invoice exports or PDF generation
-- support tooling for finance exceptions and refunds
+The problem is:
 
-### Broader admin operations
+- “the AI brain is not fully structured yet”
 
-- knowledge upload and curation UI
-- user management
-- prompt and quality controls
-- analytics dashboard
+## Current strengths
 
-### Product surface still deferred
+- real end-to-end user loop exists
+- admin already manages many tables
+- knowledge-base operations are present
+- retrieval architecture is improving
+- tests and builds are running
+- the repo is capable of evolving into a proper academic system
 
-- subject explorer advanced filters and sorting
-- advanced citation inspection UI
-- deeper study analytics
-- moderation and answer quality review loops
-- broader knowledge operations UI
+## Current weaknesses
 
-## Reality check
+### AI and retrieval
 
-The product now proves an initial end-to-end loop:
+- broad academic questions can still retrieve too narrowly
+- list/syllabus questions should be more deterministic
+- deep textbook answers still need stronger chapter/topic control
+- grounding failures still need better UX and stricter handling
 
-- student signs up
-- asks grounded questions
-- saves notes
-- revises later
-- runs down credits
-- creates an invoice
-- submits payment proof
-- admin reviews and grants credits
+### Content operations
 
-The biggest remaining gap is not feature breadth. It is **runtime confidence** and **broader operator tooling**.
+- ingestion quality review needs to be stronger
+- topic-card generation/review is still incomplete
+- question-bank path is not fully first-class
 
-## Repo reality
+### Observability
 
-- the active product code lives in `app/`, `components/`, `lib/`, `supabase/`, and `tests/`
-- the old prototype tree is no longer part of the repository
-- current progress is best described as a launch-readiness baseline rather than a prototype
+- quality dashboard has started, but is not fully operational yet
+- golden benchmark evaluation loop has started, but is not fully operational yet
+- admin retrieval debugging can grow more powerful
 
-## Recommended build focus
+### UX
 
-### Keep and strengthen
+- chat space still needs polishing
+- citation/source presentation can become clearer
+- long-answer mode and chapter-mode UX can become more explicit
 
-- grounded chat architecture
-- note and revision workflow
-- credit ledger model
-- manual payment verification baseline
+## Honest status label
 
-### Build next
+If we describe the project honestly:
 
-- live-environment validation and fixes
-- richer finance/admin tooling
-- payment gateway automation only after the manual flow is trusted
-- knowledge/admin operations beyond finance
+- product shell: strong
+- admin operations: good baseline
+- knowledge system: promising but unfinished
+- AI quality consistency: improving, but not locked yet
+- architecture direction: now much clearer
+
+## What “done enough for current stage” means
+
+At this stage, success is:
+
+- correct syllabus lists from SQL
+- stronger chapter/topic scoping
+- cleaner evidence retrieval
+- grounded answers for textbook questions
+- safer fallback behavior
+- measurable quality logs
+
+That is the next true checkpoint.

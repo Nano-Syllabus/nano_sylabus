@@ -22,7 +22,7 @@ function hashToken(token: string) {
 }
 
 export function isE2EFakeAIEnabled() {
-  return process.env.E2E_FAKE_AI === "1";
+  return process.env.E2E_FAKE_AI === "1" && process.env.NODE_ENV === "test";
 }
 
 export function createDeterministicEmbedding(input: string, dimensions = DETERMINISTIC_EMBEDDING_DIMENSIONS) {
@@ -142,5 +142,5 @@ export function buildE2EFollowUpSuggestions({
 }
 
 export function toDataStreamPayload(text: string) {
-  return `0:${JSON.stringify(text)}\n`;
+  return `0:${JSON.stringify(text)}\ne:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0},"isContinued":false}\n`;
 }

@@ -12,11 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import type {
   AdminListPage,
+  AdminKnowledgeDocumentDetail,
   AdminKnowledgeDocumentSummary,
   AdminKnowledgeNotebookDetail,
   AdminKnowledgeNotebookSummary,
   KnowledgeDocumentType,
   KnowledgeResourceKind,
+  TopicCard,
 } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
@@ -40,6 +42,18 @@ type ResourceFormState = {
   rawContent: string;
 };
 
+type TopicCardFormState = {
+  title: string;
+  topic: string;
+  keyTerms: string;
+  coreExplanation: string;
+  formulaSheet: string;
+  exampleLine: string;
+  commonMistake: string;
+  examAngle: string;
+  status: "draft" | "reviewed" | "published";
+};
+
 const EMPTY_NOTEBOOK: NotebookFormState = {
   title: "",
   board: "NEB",
@@ -58,6 +72,18 @@ const EMPTY_RESOURCE: ResourceFormState = {
   sourceName: "",
   sourceType: "manual_text",
   rawContent: "",
+};
+
+const EMPTY_TOPIC_CARD: TopicCardFormState = {
+  title: "",
+  topic: "",
+  keyTerms: "",
+  coreExplanation: "",
+  formulaSheet: "",
+  exampleLine: "",
+  commonMistake: "",
+  examAngle: "",
+  status: "draft",
 };
 
 function toNotebookFormState(notebook: AdminKnowledgeNotebookDetail): NotebookFormState {
@@ -84,6 +110,27 @@ function toResourceFormState(resource: AdminKnowledgeDocumentSummary): ResourceF
   };
 }
 
+function toTopicCardFormState(topicCard: TopicCard): TopicCardFormState {
+  return {
+    title: topicCard.title,
+    topic: topicCard.topic,
+    keyTerms: topicCard.keyTerms.join(", "),
+    coreExplanation: topicCard.coreExplanation.join("\n"),
+    formulaSheet: topicCard.formulaSheet.join("\n"),
+    exampleLine: topicCard.exampleLine ?? "",
+    commonMistake: topicCard.commonMistake ?? "",
+    examAngle: topicCard.examAngle ?? "",
+    status: topicCard.status,
+  };
+}
+
+function normalizeListField(value: string, separator: RegExp | string = /[\n,]+/) {
+  return value
+    .split(separator)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 export function AdminKnowledgeManager({
   initialNotebooks,
   initialNotebookPage,
@@ -102,8 +149,11 @@ export function AdminKnowledgeManager({
   const [notebookDetail, setNotebookDetail] = useState<AdminKnowledgeNotebookDetail | null>(null);
   const [notebookForm, setNotebookForm] = useState<NotebookFormState>(EMPTY_NOTEBOOK);
   const [selectedResourceId, setSelectedResourceId] = useState<string>("new");
+  const [selectedResourceDetail, setSelectedResourceDetail] = useState<AdminKnowledgeDocumentDetail | null>(null);
   const [selectedResourceIds, setSelectedResourceIds] = useState<string[]>([]);
   const [resourceForm, setResourceForm] = useState<ResourceFormState>(EMPTY_RESOURCE);
+  const [selectedTopicCardId, setSelectedTopicCardId] = useState<string>("new");
+  const [topicCardForm, setTopicCardForm] = useState<TopicCardFormState>(EMPTY_TOPIC_CARD);
   const [query, setQuery] = useState("");
   const [resourceQuery, setResourceQuery] = useState("");
   const [resourcePage, setResourcePage] = useState(1);
@@ -121,6 +171,9 @@ export function AdminKnowledgeManager({
     | "deletingResource"
     | "uploading"
     | "bulkProcessing"
+    | "savingTopicCard"
+    | "deletingTopicCard"
+    | "seedingTopicCards"
   >("idle");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadAutoProcess, setUploadAutoProcess] = useState(true);
@@ -129,6 +182,10 @@ export function AdminKnowledgeManager({
     selectedResourceId === "new"
       ? null
       : notebookDetail?.resources.find((resource) => resource.id === selectedResourceId) ?? null;
+  const selectedTopicCard =
+    selectedTopicCardId === "new"
+      ? null
+      : selectedResourceDetail?.topicCards.find((topicCard) => topicCard.id === selectedTopicCardId) ?? null;
 
   useEffect(() => {
     let ignore = false;
@@ -207,6 +264,55 @@ export function AdminKnowledgeManager({
   }, [notebookDetail, selectedResourceId]);
 
   useEffect(() => {
+    let ignore = false;
+
+    async function loadSelectedResourceDetail(resourceId: string) {
+      if (resourceId === "new") {
+        setSelectedResourceDetail(null);
+        setSelectedTopicCardId("new");
+        setTopicCardForm(EMPTY_TOPIC_CARD);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/admin/knowledge-documents/${resourceId}`);
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Failed to load resource detail.");
+        }
+        if (ignore) return;
+        const document = payload.document as AdminKnowledgeDocumentDetail;
+        setSelectedResourceDetail(document);
+        const nextTopicCard = document.topicCards[0] ?? null;
+        setSelectedTopicCardId(nextTopicCard?.id ?? "new");
+        setTopicCardForm(nextTopicCard ? toTopicCardFormState(nextTopicCard) : EMPTY_TOPIC_CARD);
+      } catch (error) {
+        if (!ignore) {
+          setFeedback(error instanceof Error ? error.message : "Failed to load resource detail.");
+        }
+      }
+    }
+
+    void loadSelectedResourceDetail(selectedResourceId);
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedResourceId]);
+
+  useEffect(() => {
+    if (!selectedResourceDetail) return;
+    if (selectedTopicCardId === "new") return;
+    const topicCard = selectedResourceDetail.topicCards.find((item) => item.id === selectedTopicCardId);
+    if (!topicCard) {
+      setSelectedTopicCardId("new");
+      setTopicCardForm(EMPTY_TOPIC_CARD);
+      return;
+    }
+    setTopicCardForm(toTopicCardFormState(topicCard));
+  }, [selectedResourceDetail, selectedTopicCardId]);
+
+  useEffect(() => {
     if (!notebookDetail) {
       setSelectedResourceIds([]);
       return;
@@ -230,12 +336,19 @@ export function AdminKnowledgeManager({
     setResourceForm((current) => ({ ...current, [key]: value }));
   }
 
+  function updateTopicCard<K extends keyof TopicCardFormState>(key: K, value: TopicCardFormState[K]) {
+    setTopicCardForm((current) => ({ ...current, [key]: value }));
+  }
+
   function resetNotebook() {
     setSelectedNotebookId("new");
     setNotebookDetail(null);
     setNotebookForm(EMPTY_NOTEBOOK);
     setSelectedResourceId("new");
+    setSelectedResourceDetail(null);
     setResourceForm(EMPTY_RESOURCE);
+    setSelectedTopicCardId("new");
+    setTopicCardForm(EMPTY_TOPIC_CARD);
     setResourceQuery("");
     setResourcePage(1);
     setResourceTotal(0);
@@ -246,8 +359,22 @@ export function AdminKnowledgeManager({
 
   function startNewResource() {
     setSelectedResourceId("new");
+    setSelectedResourceDetail(null);
     setResourceForm(EMPTY_RESOURCE);
+    setSelectedTopicCardId("new");
+    setTopicCardForm(EMPTY_TOPIC_CARD);
     setUploadFile(null);
+    setFeedback(null);
+  }
+
+  function startNewTopicCard() {
+    if (!selectedResourceDetail) return;
+    setSelectedTopicCardId("new");
+    setTopicCardForm({
+      ...EMPTY_TOPIC_CARD,
+      title: selectedResourceDetail.title,
+      topic: selectedResourceDetail.chapter || selectedResourceDetail.title,
+    });
     setFeedback(null);
   }
 
@@ -313,6 +440,27 @@ export function AdminKnowledgeManager({
     setResourceTotalPages(notebook.resourceTotalPages);
     setNotebookForm(toNotebookFormState(notebook));
     return notebook;
+  }
+
+  async function refreshSelectedResourceDetail(resourceId: string) {
+    const response = await fetch(`/api/admin/knowledge-documents/${resourceId}`);
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Failed to load resource detail.");
+    }
+    const document = payload.document as AdminKnowledgeDocumentDetail;
+    setSelectedResourceDetail(document);
+    setSelectedTopicCardId((currentSelectedTopicCardId) => {
+      const nextSelectedTopicCardId =
+        document.topicCards.find((topicCard) => topicCard.id === currentSelectedTopicCardId)?.id ??
+        document.topicCards[0]?.id ??
+        "new";
+      const nextTopicCard =
+        document.topicCards.find((topicCard) => topicCard.id === nextSelectedTopicCardId) ?? null;
+      setTopicCardForm(nextTopicCard ? toTopicCardFormState(nextTopicCard) : EMPTY_TOPIC_CARD);
+      return nextSelectedTopicCardId;
+    });
+    return document;
   }
 
   useEffect(() => {
@@ -426,6 +574,9 @@ export function AdminKnowledgeManager({
       const savedResource = notebook.resources.find((resource) => resource.id === payload.document.id) ?? null;
       setSelectedResourceId(savedResource?.id ?? "new");
       setResourceForm(savedResource ? toResourceFormState(savedResource) : EMPTY_RESOURCE);
+      if (savedResource) {
+        await refreshSelectedResourceDetail(savedResource.id);
+      }
       setFeedback(selectedResourceId === "new" ? "Resource created." : "Resource updated.");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Failed to save resource.");
@@ -453,7 +604,14 @@ export function AdminKnowledgeManager({
       const refreshedResource = notebook.resources.find((resource) => resource.id === selectedResource.id) ?? null;
       setSelectedResourceId(refreshedResource?.id ?? "new");
       setResourceForm(refreshedResource ? toResourceFormState(refreshedResource) : EMPTY_RESOURCE);
-      setFeedback(`Processed successfully. ${payload.document.chunkCount} chunks ready.`);
+      if (refreshedResource) {
+        await refreshSelectedResourceDetail(refreshedResource.id);
+      }
+      setFeedback(
+        `Processed successfully. ${payload.document.chunkCount} chunks ready. ${
+          payload.document.topicCards?.length ? `${payload.document.topicCards.length} topic cards ready.` : ""
+        }`.trim(),
+      );
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Failed to process resource.");
     } finally {
@@ -485,6 +643,9 @@ export function AdminKnowledgeManager({
 
       await refreshNotebooks(selectedNotebookId, notebookPage);
       await refreshNotebookDetail(selectedNotebookId, { resourcePage });
+      if (selectedResourceId !== "new") {
+        await refreshSelectedResourceDetail(selectedResourceId);
+      }
       setSelectedResourceIds([]);
       setFeedback(
         `Bulk processing completed: ${payload.succeeded}/${payload.total} succeeded${
@@ -520,6 +681,7 @@ export function AdminKnowledgeManager({
       });
       const firstResource = notebook.resources[0] ?? null;
       setSelectedResourceId(firstResource?.id ?? "new");
+      setSelectedResourceDetail(null);
       setResourceForm(firstResource ? toResourceFormState(firstResource) : EMPTY_RESOURCE);
       setFeedback("Resource deleted.");
     } catch (error) {
@@ -576,6 +738,9 @@ export function AdminKnowledgeManager({
       const savedResource = notebook.resources.find((resource) => resource.id === uploadResult.document.id) ?? null;
       setSelectedResourceId(savedResource?.id ?? "new");
       setResourceForm(savedResource ? toResourceFormState(savedResource) : EMPTY_RESOURCE);
+      if (savedResource) {
+        await refreshSelectedResourceDetail(savedResource.id);
+      }
       setUploadFile(null);
       setFeedback(
         uploadAutoProcess
@@ -584,6 +749,142 @@ export function AdminKnowledgeManager({
       );
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Failed to upload resource file.");
+    } finally {
+      setBusy("idle");
+    }
+  }
+
+  async function generateTopicCards() {
+    if (!selectedResourceDetail) return;
+    setBusy("seedingTopicCards");
+    setFeedback(null);
+    try {
+      const response = await fetch(`/api/admin/knowledge-documents/${selectedResourceDetail.id}/topic-cards/seed`, {
+        method: "POST",
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to generate topic cards.");
+      }
+      const document = await refreshSelectedResourceDetail(selectedResourceDetail.id);
+      setSelectedTopicCardId(document.topicCards[0]?.id ?? "new");
+      setFeedback(`${document.topicCards.length} topic cards ready for review.`);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Failed to generate topic cards.");
+    } finally {
+      setBusy("idle");
+    }
+  }
+
+  async function saveTopicCard() {
+    if (!selectedResourceDetail) return;
+    setBusy("savingTopicCard");
+    setFeedback(null);
+    try {
+      const response = await fetch(
+        selectedTopicCardId === "new" ? "/api/admin/topic-cards" : `/api/admin/topic-cards/${selectedTopicCardId}`,
+        {
+          method: selectedTopicCardId === "new" ? "POST" : "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            documentId: selectedResourceDetail.id,
+            board: selectedResourceDetail.board,
+            grade: selectedResourceDetail.grade,
+            subject: selectedResourceDetail.subject,
+            chapter: selectedResourceDetail.chapter,
+            topic: topicCardForm.topic,
+            title: topicCardForm.title,
+            keyTerms: normalizeListField(topicCardForm.keyTerms, /[,]+/),
+            coreExplanation: normalizeListField(topicCardForm.coreExplanation),
+            formulaSheet: normalizeListField(topicCardForm.formulaSheet),
+            exampleLine: topicCardForm.exampleLine || null,
+            commonMistake: topicCardForm.commonMistake || null,
+            examAngle: topicCardForm.examAngle || null,
+            status: topicCardForm.status,
+          }),
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to save topic card.");
+      }
+      const document = await refreshSelectedResourceDetail(selectedResourceDetail.id);
+      setSelectedTopicCardId(payload.topicCard.id);
+      const savedTopicCard = document.topicCards.find((topicCard) => topicCard.id === payload.topicCard.id) ?? null;
+      setTopicCardForm(savedTopicCard ? toTopicCardFormState(savedTopicCard) : EMPTY_TOPIC_CARD);
+      setFeedback(selectedTopicCardId === "new" ? "Topic card created." : "Topic card updated.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Failed to save topic card.");
+    } finally {
+      setBusy("idle");
+    }
+  }
+
+  async function setTopicCardStatus(status: TopicCardFormState["status"]) {
+    if (!selectedResourceDetail) return;
+    if (selectedTopicCardId === "new") {
+      setTopicCardForm((current) => ({ ...current, status }));
+      return;
+    }
+    setBusy("savingTopicCard");
+    setFeedback(null);
+    try {
+      const response = await fetch(`/api/admin/topic-cards/${selectedTopicCardId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          documentId: selectedResourceDetail.id,
+          board: selectedResourceDetail.board,
+          grade: selectedResourceDetail.grade,
+          subject: selectedResourceDetail.subject,
+          chapter: selectedResourceDetail.chapter,
+          topic: topicCardForm.topic,
+          title: topicCardForm.title,
+          keyTerms: normalizeListField(topicCardForm.keyTerms, /[,]+/),
+          coreExplanation: normalizeListField(topicCardForm.coreExplanation),
+          formulaSheet: normalizeListField(topicCardForm.formulaSheet),
+          exampleLine: topicCardForm.exampleLine || null,
+          commonMistake: topicCardForm.commonMistake || null,
+          examAngle: topicCardForm.examAngle || null,
+          status,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to update topic card status.");
+      }
+      await refreshSelectedResourceDetail(selectedResourceDetail.id);
+      setTopicCardForm((current) => ({ ...current, status }));
+      setFeedback(`Topic card marked ${status}.`);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Failed to update topic card status.");
+    } finally {
+      setBusy("idle");
+    }
+  }
+
+  async function deleteTopicCard() {
+    if (!selectedResourceDetail || !selectedTopicCard) return;
+    const confirmed = window.confirm(`Delete topic card "${selectedTopicCard.title}"?`);
+    if (!confirmed) return;
+
+    setBusy("deletingTopicCard");
+    setFeedback(null);
+    try {
+      const response = await fetch(`/api/admin/topic-cards/${selectedTopicCard.id}`, {
+        method: "DELETE",
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to delete topic card.");
+      }
+      const document = await refreshSelectedResourceDetail(selectedResourceDetail.id);
+      const firstTopicCard = document.topicCards[0] ?? null;
+      setSelectedTopicCardId(firstTopicCard?.id ?? "new");
+      setTopicCardForm(firstTopicCard ? toTopicCardFormState(firstTopicCard) : EMPTY_TOPIC_CARD);
+      setFeedback("Topic card deleted.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Failed to delete topic card.");
     } finally {
       setBusy("idle");
     }
@@ -878,6 +1179,137 @@ export function AdminKnowledgeManager({
                   Auto process after upload
                 </label>
               </div>
+            </div>
+
+            <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
+                <div>
+                  <p className="font-display text-2xl">Topic cards</p>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    Review and publish teaching-ready cards so concept answers use cleaner academic context.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={generateTopicCards} disabled={busy !== "idle" || !selectedResourceDetail}>
+                    {busy === "seedingTopicCards" ? "Generating..." : "Generate draft cards"}
+                  </Button>
+                  <Button variant="outline" onClick={startNewTopicCard} disabled={busy !== "idle" || !selectedResourceDetail}>
+                    New topic card
+                  </Button>
+                  <Button onClick={saveTopicCard} disabled={busy !== "idle" || !selectedResourceDetail}>
+                    {busy === "savingTopicCard" ? "Saving..." : "Save topic card"}
+                  </Button>
+                  <Button variant="outline" onClick={() => void setTopicCardStatus("reviewed")} disabled={busy !== "idle" || !selectedResourceDetail}>
+                    Mark reviewed
+                  </Button>
+                  <Button variant="outline" onClick={() => void setTopicCardStatus("published")} disabled={busy !== "idle" || !selectedResourceDetail}>
+                    Publish
+                  </Button>
+                  {selectedTopicCard ? (
+                    <Button variant="danger" onClick={deleteTopicCard} disabled={busy !== "idle"}>
+                      Delete topic card
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+
+              {!selectedResourceDetail ? (
+                <div className="px-5 py-8 text-sm text-text-secondary">
+                  Select a resource first. After chunking a resource, draft topic cards can be generated here.
+                </div>
+              ) : (
+                <div className="grid gap-6 px-5 py-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+                  <div className="space-y-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-text-tertiary">
+                      {selectedResourceDetail.topicCards.length} topic cards
+                    </p>
+                    <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
+                      {selectedResourceDetail.topicCards.map((topicCard) => (
+                        <button
+                          key={topicCard.id}
+                          type="button"
+                          onClick={() => setSelectedTopicCardId(topicCard.id)}
+                          className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                            selectedTopicCardId === topicCard.id
+                              ? "border-border-strong bg-bg-secondary"
+                              : "border-border bg-bg-primary hover:bg-bg-secondary"
+                          }`}
+                        >
+                          <p className="text-sm font-medium text-text-primary">{topicCard.title}</p>
+                          <p className="mt-1 text-xs text-text-secondary">{topicCard.topic}</p>
+                          <p className="mt-2 text-xs uppercase tracking-[0.18em] text-text-tertiary">
+                            {topicCard.status}
+                          </p>
+                        </button>
+                      ))}
+                      {!selectedResourceDetail.topicCards.length ? (
+                        <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-text-secondary">
+                          No topic cards yet. Process the resource, then generate draft cards.
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label="Card title">
+                        <Input value={topicCardForm.title} onChange={(event) => updateTopicCard("title", event.target.value)} />
+                      </Field>
+                      <Field label="Topic">
+                        <Input value={topicCardForm.topic} onChange={(event) => updateTopicCard("topic", event.target.value)} />
+                      </Field>
+                    </div>
+
+                    <Field label="Key terms (comma separated)">
+                      <Input value={topicCardForm.keyTerms} onChange={(event) => updateTopicCard("keyTerms", event.target.value)} />
+                    </Field>
+
+                    <Field label="Core explanation (one idea per line)">
+                      <Textarea
+                        rows={6}
+                        value={topicCardForm.coreExplanation}
+                        onChange={(event) => updateTopicCard("coreExplanation", event.target.value)}
+                        placeholder="Explain the concept clearly in short teaching lines..."
+                      />
+                    </Field>
+
+                    <Field label="Formula sheet (one formula per line)">
+                      <Textarea
+                        rows={4}
+                        value={topicCardForm.formulaSheet}
+                        onChange={(event) => updateTopicCard("formulaSheet", event.target.value)}
+                        placeholder="I = V / R"
+                      />
+                    </Field>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label="Example line">
+                        <Textarea rows={3} value={topicCardForm.exampleLine} onChange={(event) => updateTopicCard("exampleLine", event.target.value)} />
+                      </Field>
+                      <Field label="Common mistake">
+                        <Textarea rows={3} value={topicCardForm.commonMistake} onChange={(event) => updateTopicCard("commonMistake", event.target.value)} />
+                      </Field>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+                      <Field label="Exam angle">
+                        <Textarea rows={3} value={topicCardForm.examAngle} onChange={(event) => updateTopicCard("examAngle", event.target.value)} />
+                      </Field>
+                      <Field label="Status">
+                        <select
+                          value={topicCardForm.status}
+                          onChange={(event) => updateTopicCard("status", event.target.value as TopicCardFormState["status"])}
+                          className="block h-11 w-full rounded-md border border-border bg-bg-primary px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-border-strong/40"
+                        >
+                          <option value="draft">Draft</option>
+                          <option value="reviewed">Reviewed</option>
+                          <option value="published">Published</option>
+                        </select>
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
         </div>
       </section>

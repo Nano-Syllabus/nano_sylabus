@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createSupabaseServerClient, ensureStarterCreditsForUser, retrieveKnowledgeChunks } =
+const { createSupabaseServerClient, ensureStarterCreditsForUser, retrieveKnowledgeChunks, getActivePromptTemplateMap } =
   vi.hoisted(() => ({
     createSupabaseServerClient: vi.fn(),
     ensureStarterCreditsForUser: vi.fn(),
     retrieveKnowledgeChunks: vi.fn(),
+    getActivePromptTemplateMap: vi.fn(),
   }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -24,10 +25,21 @@ vi.mock("@/lib/ai/retrieval", async () => {
   };
 });
 
+vi.mock("@/lib/prompt-runtime", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/prompt-runtime")>("@/lib/prompt-runtime");
+  return {
+    ...actual,
+    getActivePromptTemplateMap,
+  };
+});
+
 import { POST } from "@/app/api/chat/route";
 
 describe("POST /api/chat (ungrounded no-context path)", () => {
   beforeEach(() => {
+    vi.resetAllMocks();
+    getActivePromptTemplateMap.mockResolvedValue({});
+
     const profileChain = {
       select: vi.fn(),
       eq: vi.fn(),
@@ -117,7 +129,7 @@ describe("POST /api/chat (ungrounded no-context path)", () => {
     expect(response.status).toBe(422);
     await expect(response.json()).resolves.toEqual({
       error:
-        'I could not find grounded syllabus context for this question, so I will not guess an answer. Try asking a specific unit/chapter within "Physics".',
+        'I could not find grounded syllabus or textbook context for this question, so I will not guess an answer. Try asking a specific unit, chapter, or topic within "Physics".',
       code: "RAG_NO_GROUNDED_CONTEXT",
     });
   });

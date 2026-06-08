@@ -74,6 +74,23 @@ export const bulkKnowledgeActionSchema = z.object({
   documentIds: z.array(z.string().uuid()).min(1).max(100),
 });
 
+export const topicCardInputSchema = z.object({
+  documentId: z.string().uuid(),
+  board: z.string().trim().min(1),
+  grade: z.string().trim().min(1),
+  subject: z.string().trim().min(1),
+  chapter: z.string().trim().nullable().optional(),
+  topic: z.string().trim().min(1),
+  title: z.string().trim().min(1),
+  keyTerms: z.array(z.string().trim()).default([]),
+  coreExplanation: z.array(z.string().trim()).default([]),
+  formulaSheet: z.array(z.string().trim()).default([]),
+  exampleLine: z.string().trim().nullable().optional(),
+  commonMistake: z.string().trim().nullable().optional(),
+  examAngle: z.string().trim().nullable().optional(),
+  status: z.enum(["draft", "reviewed", "published"]).default("draft"),
+});
+
 export function parseAnswerFilter(value: string | null): AdminAnswerFilter {
   if (value === "flagged" || value === "reviewed" || value === "liked" || value === "neutral" || value === "all") {
     return value;

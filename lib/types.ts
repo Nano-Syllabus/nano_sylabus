@@ -23,6 +23,7 @@ export type KnowledgeResourceKind = "syllabus" | "study_material" | "question_ba
 export type KnowledgeProcessingStatus = "draft" | "processing" | "ready" | "failed";
 export type PromptPurpose = "system" | "followup" | "rewrite";
 export type CitationSourceType = "syllabus" | "textbook" | "question_bank" | "general";
+export type TopicCardSource = "persisted" | "derived";
 export type CreditLedgerType = "grant" | "usage" | "refund" | "adjustment";
 export type ReferenceType =
   | "starter_grant"
@@ -51,6 +52,30 @@ export interface AssistantCitation {
   chapter: string | null;
   topic: string | null;
   excerpt?: string;
+}
+
+export interface AssistantAnswerTrace {
+  routePath: string;
+  routeScopeDebug: string | null;
+  retrievalMode: "default" | "chapter";
+  answerMode: string | null;
+  answerModeReason: string | null;
+  matchedScope: string | null;
+  topicCardUsed: boolean;
+  topicCardTitle: string | null;
+  topicCardSource: TopicCardSource | null;
+  questionBankUsed: boolean;
+  answerModel: string | null;
+  usedFallback: boolean;
+  usedQualityRescue: boolean;
+  fallbackReason: string | null;
+  grounded: boolean;
+  ragChunks: number;
+  ragMs: number;
+  generationMs: number;
+  rewriteMs: number;
+  followupMs: number;
+  totalMs: number;
 }
 
 export interface KnowledgeDocument {
@@ -101,10 +126,31 @@ export interface KnowledgeChunkDetail extends KnowledgeChunk {
   uploadedAt: string;
 }
 
+export interface TopicCard {
+  id: string;
+  documentId: string | null;
+  board: string;
+  grade: string;
+  subject: string;
+  chapter: string | null;
+  topic: string;
+  title: string;
+  keyTerms: string[];
+  coreExplanation: string[];
+  formulaSheet: string[];
+  exampleLine: string | null;
+  commonMistake: string | null;
+  examAngle: string | null;
+  status: "draft" | "reviewed" | "published";
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AdminKnowledgeDocumentSummary extends KnowledgeDocument {}
 
 export interface AdminKnowledgeDocumentDetail extends KnowledgeDocument {
   chunks: KnowledgeChunk[];
+  topicCards: TopicCard[];
 }
 
 export interface KnowledgeNotebook {
@@ -193,6 +239,7 @@ export interface ChatMessageRecord {
   feedback: MessageFeedback | null;
   followUpSuggestions: string[];
   savedNoteId: string | null;
+  answerTrace: AssistantAnswerTrace | null;
 }
 
 export interface ChatSessionDetail extends ChatSessionSummary {
@@ -415,6 +462,26 @@ export interface AdminAnswerDetail extends AdminAnswerSummary {
   targetGrade: string;
   languagePref: Language;
   conversation: ChatMessageRecord[];
+  answerTrace: AssistantAnswerTrace | null;
+}
+
+export interface AdminAnswerHealthBreakdownItem {
+  label: string;
+  count: number;
+}
+
+export interface AdminAnswerHealthSnapshot {
+  sampleSize: number;
+  groundedRate: number;
+  fallbackRate: number;
+  reviewedRate: number;
+  topicCardRate: number;
+  questionBankRate: number;
+  avgTotalMs: number;
+  avgGenerationMs: number;
+  latestCapturedAt: string | null;
+  routeBreakdown: AdminAnswerHealthBreakdownItem[];
+  modelBreakdown: AdminAnswerHealthBreakdownItem[];
 }
 
 export interface AdminListPage<T> {

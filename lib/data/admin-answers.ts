@@ -11,9 +11,12 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
   AdminAnswerDetail,
+  AdminAnswerHealthBreakdownItem,
+  AdminAnswerHealthSnapshot,
   AdminAnswerFilter,
   AdminAnswerSummary,
   AdminListPage,
+  AssistantAnswerTrace,
   AssistantCitation,
   ChatMessageRecord,
   Language,
@@ -34,6 +37,16 @@ interface AdminAnswerMessageRow {
   admin_review_note: string | null;
   admin_reviewed_at: string | null;
   admin_reviewed_by: string | null;
+  metadata: unknown | null;
+}
+
+interface AdminAnswerHealthRow {
+  id: string;
+  created_at: string;
+  grounded: boolean | null;
+  feedback: MessageFeedback | null;
+  admin_reviewed_at: string | null;
+  metadata: unknown | null;
 }
 
 interface ChatSessionRow {
@@ -59,6 +72,51 @@ interface AuthLookup {
   fullName: string;
 }
 
+const BASE_CHAT_MESSAGE_SELECT =
+  "id, session_id, role, content, language, created_at, grounded, citations, feedback, follow_up_suggestions, admin_review_note, admin_reviewed_at, admin_reviewed_by";
+
+function withMetadataSelect(includeMetadata: boolean) {
+  return includeMetadata ? `${BASE_CHAT_MESSAGE_SELECT}, metadata` : BASE_CHAT_MESSAGE_SELECT;
+}
+
+function isMissingMetadataColumnError(error: { message?: string; details?: string } | null) {
+  const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
+  return message.includes("metadata") && message.includes("column");
+}
+
+function normalizeAnswerTrace(input: unknown): AssistantAnswerTrace | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const value = input as Record<string, unknown>;
+  if (typeof value.routePath !== "string" || typeof value.answerMode !== "string") return null;
+
+  return {
+    routePath: value.routePath,
+    routeScopeDebug: typeof value.routeScopeDebug === "string" ? value.routeScopeDebug : "",
+    retrievalMode: value.retrievalMode === "chapter" ? "chapter" : "default",
+    answerMode: value.answerMode,
+    answerModeReason: typeof value.answerModeReason === "string" ? value.answerModeReason : "",
+    matchedScope: typeof value.matchedScope === "string" ? value.matchedScope : null,
+    topicCardUsed: Boolean(value.topicCardUsed),
+    topicCardTitle: typeof value.topicCardTitle === "string" ? value.topicCardTitle : null,
+    topicCardSource:
+      value.topicCardSource === "persisted" || value.topicCardSource === "derived"
+        ? value.topicCardSource
+        : null,
+    questionBankUsed: Boolean(value.questionBankUsed),
+    answerModel: typeof value.answerModel === "string" ? value.answerModel : null,
+    usedFallback: Boolean(value.usedFallback),
+    usedQualityRescue: Boolean(value.usedQualityRescue),
+    fallbackReason: typeof value.fallbackReason === "string" ? value.fallbackReason : null,
+    grounded: Boolean(value.grounded),
+    ragChunks: typeof value.ragChunks === "number" ? value.ragChunks : 0,
+    ragMs: typeof value.ragMs === "number" ? value.ragMs : 0,
+    generationMs: typeof value.generationMs === "number" ? value.generationMs : 0,
+    rewriteMs: typeof value.rewriteMs === "number" ? value.rewriteMs : 0,
+    followupMs: typeof value.followupMs === "number" ? value.followupMs : 0,
+    totalMs: typeof value.totalMs === "number" ? value.totalMs : 0,
+  };
+}
+
 function normalizeConversationMessage(row: AdminAnswerMessageRow): ChatMessageRecord {
   return {
     id: row.id,
@@ -72,6 +130,10 @@ function normalizeConversationMessage(row: AdminAnswerMessageRow): ChatMessageRe
     feedback: row.feedback === "up" || row.feedback === "down" ? row.feedback : null,
     followUpSuggestions: Array.isArray(row.follow_up_suggestions) ? row.follow_up_suggestions : [],
     savedNoteId: null,
+    answerTrace:
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? normalizeAnswerTrace((row.metadata as Record<string, unknown>).answer_trace)
+        : null,
   };
 }
 
@@ -161,6 +223,92 @@ type AdminAnswerListFilters = {
   pageSize?: number;
 };
 
+function roundMetric(value: number) {
+  return Number(value.toFixed(1));
+}
+
+function sortBreakdownDescending(items: Map<string, number>): AdminAnswerHealthBreakdownItem[] {
+  return [...items.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 5)
+    .map(([label, count]) => ({ label, count }));
+}
+
+export function buildAdminAnswerHealthSnapshot(rows: AdminAnswerHealthRow[]): AdminAnswerHealthSnapshot {
+  const sampleSize = rows.length;
+  if (!sampleSize) {
+    return {
+      sampleSize: 0,
+      groundedRate: 0,
+      fallbackRate: 0,
+      reviewedRate: 0,
+      topicCardRate: 0,
+      questionBankRate: 0,
+      avgTotalMs: 0,
+      avgGenerationMs: 0,
+      latestCapturedAt: null,
+      routeBreakdown: [],
+      modelBreakdown: [],
+    };
+  }
+
+  let groundedCount = 0;
+  let fallbackCount = 0;
+  let reviewedCount = 0;
+  let topicCardCount = 0;
+  let questionBankCount = 0;
+  let totalMsSum = 0;
+  let generationMsSum = 0;
+  let totalMsCount = 0;
+  let generationMsCount = 0;
+  const routeCounts = new Map<string, number>();
+  const modelCounts = new Map<string, number>();
+
+  for (const row of rows) {
+    if (row.grounded) groundedCount += 1;
+    if (row.admin_reviewed_at) reviewedCount += 1;
+
+    const trace =
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? normalizeAnswerTrace((row.metadata as Record<string, unknown>).answer_trace)
+        : null;
+
+    if (!trace) continue;
+
+    if (trace.usedFallback) fallbackCount += 1;
+    if (trace.topicCardUsed) topicCardCount += 1;
+    if (trace.questionBankUsed) questionBankCount += 1;
+    if (trace.totalMs > 0) {
+      totalMsSum += trace.totalMs;
+      totalMsCount += 1;
+    }
+    if (trace.generationMs > 0) {
+      generationMsSum += trace.generationMs;
+      generationMsCount += 1;
+    }
+
+    const routeKey = trace.routePath || "unknown";
+    routeCounts.set(routeKey, (routeCounts.get(routeKey) ?? 0) + 1);
+
+    const modelKey = trace.answerModel || "unknown";
+    modelCounts.set(modelKey, (modelCounts.get(modelKey) ?? 0) + 1);
+  }
+
+  return {
+    sampleSize,
+    groundedRate: roundMetric((groundedCount / sampleSize) * 100),
+    fallbackRate: roundMetric((fallbackCount / sampleSize) * 100),
+    reviewedRate: roundMetric((reviewedCount / sampleSize) * 100),
+    topicCardRate: roundMetric((topicCardCount / sampleSize) * 100),
+    questionBankRate: roundMetric((questionBankCount / sampleSize) * 100),
+    avgTotalMs: totalMsCount ? roundMetric(totalMsSum / totalMsCount) : 0,
+    avgGenerationMs: generationMsCount ? roundMetric(generationMsSum / generationMsCount) : 0,
+    latestCapturedAt: rows[0]?.created_at ?? null,
+    routeBreakdown: sortBreakdownDescending(routeCounts),
+    modelBreakdown: sortBreakdownDescending(modelCounts),
+  };
+}
+
 export async function listAdminAnswers(filters?: AdminAnswerListFilters): Promise<AdminListPage<AdminAnswerSummary>> {
   const supabase = createSupabaseAdminClient();
   const page = normalizePage(filters?.page);
@@ -168,38 +316,40 @@ export async function listAdminAnswers(filters?: AdminAnswerListFilters): Promis
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  let query = supabase
-    .from("chat_messages")
-    .select(
-      "id, session_id, role, content, language, created_at, grounded, citations, feedback, follow_up_suggestions, admin_review_note, admin_reviewed_at, admin_reviewed_by",
-      { count: "exact" },
-    )
-    .eq("role", "assistant");
-
   const status = filters?.status ?? "all";
-  if (status === "reviewed") {
-    query = query.not("admin_reviewed_at", "is", null);
-  } else if (status === "flagged") {
-    query = query.is("admin_reviewed_at", null).eq("feedback", "down");
-  } else if (status === "liked") {
-    query = query.is("admin_reviewed_at", null).eq("feedback", "up");
-  } else if (status === "neutral") {
-    query = query.is("admin_reviewed_at", null).is("feedback", null);
-  }
-
   const q = filters?.q?.trim();
-  if (q) {
-    const escaped = q.replace(/[%_]/g, "\\$&");
-    query = query.ilike("content", `%${escaped}%`);
-  }
+  const runListQuery = async (includeMetadata: boolean) => {
+    let query = supabase
+      .from("chat_messages")
+      .select(withMetadataSelect(includeMetadata), { count: "exact" })
+      .eq("role", "assistant");
 
-  const { data: messageRows, error: messageError, count } = await query
-    .order("created_at", { ascending: false })
-    .range(from, to);
+    if (status === "reviewed") {
+      query = query.not("admin_reviewed_at", "is", null);
+    } else if (status === "flagged") {
+      query = query.is("admin_reviewed_at", null).eq("feedback", "down");
+    } else if (status === "liked") {
+      query = query.is("admin_reviewed_at", null).eq("feedback", "up");
+    } else if (status === "neutral") {
+      query = query.is("admin_reviewed_at", null).is("feedback", null);
+    }
+
+    if (q) {
+      const escaped = q.replace(/[%_]/g, "\\$&");
+      query = query.ilike("content", `%${escaped}%`);
+    }
+
+    return query.order("created_at", { ascending: false }).range(from, to);
+  };
+
+  let { data: messageRows, error: messageError, count } = await runListQuery(true);
+  if (messageError && isMissingMetadataColumnError(messageError)) {
+    ({ data: messageRows, error: messageError, count } = await runListQuery(false));
+  }
 
   if (messageError) throw messageError;
 
-  const answers = (messageRows ?? []) as AdminAnswerMessageRow[];
+  const answers = (messageRows ?? []) as unknown as AdminAnswerMessageRow[];
   const sessionIds = [...new Set(answers.map((row) => row.session_id))];
   if (!sessionIds.length) {
     const total = count ?? 0;
@@ -254,21 +404,66 @@ export async function listAdminAnswers(filters?: AdminAnswerListFilters): Promis
   };
 }
 
+export async function getAdminAnswerHealthSnapshot(
+  filters?: Pick<AdminAnswerListFilters, "q" | "status"> & { sampleSize?: number },
+) {
+  const supabase = createSupabaseAdminClient();
+  const status = filters?.status ?? "all";
+  const q = filters?.q?.trim();
+  const sampleSize = Math.max(25, Math.min(200, Math.floor(filters?.sampleSize ?? 120)));
+
+  const runSnapshotQuery = async (includeMetadata: boolean) => {
+    let query = supabase
+      .from("chat_messages")
+      .select(includeMetadata ? "id, created_at, grounded, feedback, admin_reviewed_at, metadata" : "id, created_at, grounded, feedback, admin_reviewed_at")
+      .eq("role", "assistant");
+
+    if (status === "reviewed") {
+      query = query.not("admin_reviewed_at", "is", null);
+    } else if (status === "flagged") {
+      query = query.is("admin_reviewed_at", null).eq("feedback", "down");
+    } else if (status === "liked") {
+      query = query.is("admin_reviewed_at", null).eq("feedback", "up");
+    } else if (status === "neutral") {
+      query = query.is("admin_reviewed_at", null).is("feedback", null);
+    }
+
+    if (q) {
+      const escaped = q.replace(/[%_]/g, "\\$&");
+      query = query.ilike("content", `%${escaped}%`);
+    }
+
+    return query.order("created_at", { ascending: false }).limit(sampleSize);
+  };
+
+  let { data, error } = await runSnapshotQuery(true);
+  if (error && isMissingMetadataColumnError(error)) {
+    ({ data, error } = await runSnapshotQuery(false));
+  }
+
+  if (error) throw error;
+  return buildAdminAnswerHealthSnapshot((data ?? []) as unknown as AdminAnswerHealthRow[]);
+}
+
 export async function getAdminAnswerDetail(messageId: string) {
   const supabase = createSupabaseAdminClient();
-  const { data: messageRow, error: messageError } = await supabase
-    .from("chat_messages")
-    .select(
-      "id, session_id, role, content, language, created_at, grounded, citations, feedback, follow_up_suggestions, admin_review_note, admin_reviewed_at, admin_reviewed_by",
-    )
-    .eq("id", messageId)
-    .eq("role", "assistant")
-    .maybeSingle();
+  const runDetailQuery = async (includeMetadata: boolean) =>
+    supabase
+      .from("chat_messages")
+      .select(withMetadataSelect(includeMetadata))
+      .eq("id", messageId)
+      .eq("role", "assistant")
+      .maybeSingle();
+
+  let { data: messageRow, error: messageError } = await runDetailQuery(true);
+  if (messageError && isMissingMetadataColumnError(messageError)) {
+    ({ data: messageRow, error: messageError } = await runDetailQuery(false));
+  }
 
   if (messageError) throw messageError;
   if (!messageRow) return null;
 
-  const message = messageRow as AdminAnswerMessageRow;
+  const message = messageRow as unknown as AdminAnswerMessageRow;
 
   const { data: sessionRow, error: sessionError } = await supabase
     .from("chat_sessions")
@@ -289,13 +484,20 @@ export async function getAdminAnswerDetail(messageId: string) {
         .eq("user_id", session.user_id)
         .maybeSingle(),
       loadAuthUsersById([session.user_id]),
-      supabase
-        .from("chat_messages")
-        .select(
-          "id, session_id, role, content, language, created_at, grounded, citations, feedback, follow_up_suggestions, admin_review_note, admin_reviewed_at, admin_reviewed_by",
-        )
-        .eq("session_id", session.id)
-        .order("created_at", { ascending: true }),
+      (async () => {
+        const runConversationQuery = async (includeMetadata: boolean) =>
+          supabase
+            .from("chat_messages")
+            .select(withMetadataSelect(includeMetadata))
+            .eq("session_id", session.id)
+            .order("created_at", { ascending: true });
+
+        let result = await runConversationQuery(true);
+        if (result.error && isMissingMetadataColumnError(result.error)) {
+          result = await runConversationQuery(false);
+        }
+        return result;
+      })(),
     ]);
 
   if (profileError) throw profileError;
@@ -313,7 +515,13 @@ export async function getAdminAnswerDetail(messageId: string) {
     subjects: normalizeSubjects(profile?.subjects ?? []),
     targetGrade: normalizeTargetGrade(profile?.target_grade ?? ""),
     languagePref: profile?.language_pref ?? "EN",
-    conversation: ((conversationRows ?? []) as AdminAnswerMessageRow[]).map(normalizeConversationMessage),
+    answerTrace:
+      message.metadata && typeof message.metadata === "object" && !Array.isArray(message.metadata)
+        ? normalizeAnswerTrace((message.metadata as Record<string, unknown>).answer_trace)
+        : null,
+    conversation: ((conversationRows ?? []) as unknown as AdminAnswerMessageRow[]).map(
+      normalizeConversationMessage,
+    ),
   } satisfies AdminAnswerDetail;
 }
 

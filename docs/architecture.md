@@ -1,126 +1,269 @@
 # Architecture
 
-## Target architecture
+## Locked architecture goal
 
-The BRD recommends a multi-part platform:
+Nano Syllabus must behave like an academic system, not a blind PDF-search chatbot.
 
-| Layer | Recommended role |
-| --- | --- |
-| Student frontend | PWA for chat, profile, notes, billing |
-| Admin frontend | Separate admin web app |
-| Backend API | auth, chat orchestration, credits, billing, persistence |
-| AI gateway | LLM inference with profile-aware prompting |
-| Knowledge base | RAG retrieval over syllabus content |
-| Database | users, chat, credits, plans, invoices, notes |
-| Auth service | JWT and OAuth handling |
-| Payments | eSewa, Khalti, Stripe |
-| Storage | documents, invoices, uploads |
-| Email | OTP, receipts, system emails |
-| Analytics | product and revenue instrumentation |
+The AI should:
 
-## Recommended stack from the BRD
+1. understand what kind of academic question the student is asking
+2. resolve the correct scope
+3. choose the correct retrieval path
+4. gather clean evidence
+5. generate a tutor-style answer with citations
 
-- student frontend: Next.js PWA + Tailwind CSS
-- admin panel: web admin surface built inside the same Next.js repo for now
-- backend: Node.js with Express or Fastify
-- AI: Google Gemini
-- vector store: Pinecone or pgvector
-- database: PostgreSQL
-- auth: Supabase Auth or Auth0
-- payments: eSewa, Khalti, Stripe
-- object storage: S3 or Cloudflare R2
-- email: Resend or SendGrid
-- CDN/security: Cloudflare
+## The main architectural mistake we are leaving behind
 
-## AI response flow
+This is the old weak pattern:
 
-The intended production flow is:
+`PDF -> chunks -> top-k vector search -> LLM guess`
 
-1. Student sends a question.
-2. Backend loads student profile context.
-3. System prompt is composed using academic context.
-4. Relevant syllabus chunks are retrieved from the knowledge base.
-5. Prompt, retrieval context, chat history, and user message are assembled.
-6. LLM generates the answer in the requested language.
-7. Response streams back to the frontend.
-8. Credit is deducted after successful completion.
-9. Conversation is persisted.
+Why it fails:
 
-## Key data entities
+- syllabus/list questions are not chunk-search problems
+- top-4 retrieval is too small and too random for broad academic questions
+- the model gets noisy or incomplete evidence
+- chapter/topic/source discipline becomes weak
+- quality problems become hard to debug
 
-The product will need durable storage for:
+## Locked architecture direction
 
-- users
-- student profiles
-- chat sessions
-- chat messages
-- credits ledger
-- subscriptions
-- invoices
-- knowledge chunks
-- prompt templates
-- revision notes
-- subject tags
-- note revision logs
+### 1. Academic catalog layer
 
-## Current state in this repository
+Use SQL-backed academic structure for:
 
-The repository has moved beyond the earlier prototype state. Right now:
+- boards
+- programs
+- grades/years
+- subjects
+- chapters
+- topics
 
-- the student product runs as a Next.js App Router app
-- server route handlers live inside the same repo under `app/api`
-- auth is wired to Supabase Auth
-- data persistence uses Postgres tables through Supabase
-- chat uses Gemini plus retrieval grounding
-- notes, billing, and admin payment review are real product flows
-- the admin surface is still thin and finance-focused
-- live-environment validation and broader operator tooling are still incomplete
+Purpose:
 
-## Architecture gap we need to close
+- complete syllabus answers
+- deterministic chapter/topic listing
+- fast scope resolution
+- no blind vector dependency for structural questions
 
-### Current
+### 2. Content layer
 
-- single Next.js application repo
-- real student product loop
-- thin finance admin surface
-- manual operations for ingestion and payment verification
+Store academic source material as:
 
-### Target
+- source documents
+- document pages
+- metadata-rich knowledge chunks
+- topic cards
+- question-bank items
 
-- production-hardened student app
-- broader admin operations
-- auditable finance tooling
-- scalable knowledge operations
-- observability, analytics, and support workflows
+Purpose:
 
-## Practical implementation direction
+- textbook-grounded retrieval
+- page-aware citations
+- chunk types by academic meaning
 
-Given the current codebase, the best path is:
+### 3. Retrieval layer
 
-1. keep the current Next.js repo as the active product shell
-2. harden live environment behavior before adding more major student features
-3. expand admin operations around finance and knowledge management
-4. automate payment and operational workflows only after manual flows are trusted
-5. split into multiple apps only if product scope or team size makes the single repo a bottleneck
+The system must not use one retrieval path for every question.
 
-## Suggested repo-level architecture direction
+We should route questions into the right mode:
 
-If this repo keeps growing, a clean future structure could become:
+- `catalog_list`
+- `topic_list`
+- `concept`
+- `numerical`
+- `derivation`
+- `exam_answer`
+- `comparison`
+- `chapter_mode`
 
-```text
-apps/
-  student-web/
-  admin-web/
-packages/
-  ui/
-  config/
-  types/
-  prompting/
-  syllabus-ingestion/
-services/
-  api/
-  workers/
-docs/
-```
+### 4. AI orchestration layer
 
-This is not mandatory today. The current repo is already valid as a single-product Next.js codebase, and splitting should happen only when it reduces operational friction.
+The orchestrator should do:
+
+1. intent routing
+2. scope resolution
+3. route selection
+4. evidence building
+5. answer prompt construction
+
+It should not behave like a generic open-domain bot.
+
+### 5. Citation layer
+
+Every strong answer should be able to say:
+
+- which source was used
+- which chapter/topic was matched
+- which page or page range the content came from
+
+### 6. Admin and evaluation layer
+
+We need:
+
+- retrieval debugger
+- prompt testing
+- golden benchmark questions
+- quality and latency logs
+- failure inspection
+
+Without this, quality tuning becomes guesswork.
+
+## Runtime routing model
+
+### Route A. Catalog SQL
+
+Use for:
+
+- full syllabus
+- chapter lists
+- topic lists
+- subject structure
+
+Characteristics:
+
+- no vector search
+- no top-k
+- deterministic rows from SQL
+
+### Route B. Topic card
+
+Use for:
+
+- fast concept teaching
+- stable formula summaries
+- common mistakes
+- exam angle
+
+Characteristics:
+
+- fast
+- cached
+- low-latency
+- stable for repeated topics
+
+### Route C. Hybrid retrieval
+
+Use for:
+
+- deep textbook explanations
+- numericals
+- derivations
+- solved examples
+- chapter-aware long answers
+
+Pattern:
+
+- metadata filter first
+- vector + keyword search
+- retrieve wide
+- rerank narrow
+- compress context
+- send only clean evidence to the final model
+
+## Grounding guard
+
+This must be a hard rule.
+
+If the system does not have good grounded evidence:
+
+- it should not confidently hallucinate
+- it should ask for clarification, narrow scope, or return a grounded failure state
+
+This is especially important for:
+
+- chapter identification
+- exact syllabus questions
+- textbook-derived engineering explanations
+
+## Chunking philosophy
+
+Do not chunk only by page size.
+
+Chunk by academic meaning, such as:
+
+- concept
+- formula
+- derivation
+- solved example
+- exam question
+- summary
+- common mistake
+
+Each chunk should carry metadata such as:
+
+- board
+- program
+- grade/year
+- subject
+- chapter
+- topic
+- page_start
+- page_end
+- source document
+- chunk type
+
+## Topic cards
+
+Topic cards are a key quality + speed layer.
+
+They should hold:
+
+- core explanation
+- simple explanation
+- formula sheet
+- key terms
+- common mistakes
+- exam angle
+- example problem
+
+They are useful because they:
+
+- reduce retrieval cost
+- improve consistency
+- give the model cleaner teaching context
+
+## Model role
+
+The model is important, but it is not the main fix by itself.
+
+Model responsibilities:
+
+- routing help
+- reranking help
+- answer generation
+- style control
+
+Quality should come mainly from:
+
+- correct scope
+- correct evidence
+- correct answer template
+
+Not just “use a better model”.
+
+## Speed principles
+
+- use SQL for lists
+- cache stable academic structures
+- reduce search space before retrieval
+- rerank only a small candidate set
+- compress context before final generation
+- stream first useful tokens quickly
+
+## Current repository alignment
+
+The current repo already has pieces of this architecture:
+
+- student app
+- admin app
+- Supabase persistence
+- knowledge documents/chunks
+- chat route
+- hybrid retrieval work
+- chapter-mode retrieval work
+- tests and build verification
+
+But it is not fully aligned yet.
+
+The main next step is to make the routing and academic data model explicit and deterministic.

@@ -28,7 +28,7 @@ export function CitationCard({ citation }: { citation: AssistantCitation }) {
       : sourceType === "question_bank"
         ? "Question bank source"
         : sourceType === "general"
-          ? "General AI source"
+          ? "Ungrounded source"
           : "Textbook source";
   const hasSourceDetail = sourceType !== "general" && Boolean(citation.chunkId);
   const sourceTitle = sanitizeSourceValue(citation.sourceTitle);

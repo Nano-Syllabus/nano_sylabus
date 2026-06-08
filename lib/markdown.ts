@@ -85,6 +85,14 @@ function renderMd(source: string): string {
       continue;
     }
 
+    const headingMatch = raw.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      flush();
+      const level = headingMatch[1].length;
+      output += `<h${level}>${applyInlineStyles(headingMatch[2])}</h${level}>`;
+      continue;
+    }
+
     if (/^\s*\d+\.\s+/.test(raw)) {
       if (listType !== "ol") {
         flush();

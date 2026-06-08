@@ -2,125 +2,213 @@
 
 ## Purpose
 
-This document answers the practical question:
+This document answers:
 
-What should we build next, now that the real Next.js student app, billing backbone, minimal admin finance flow, and launch-readiness basics exist?
+What should we build next, in what order, so the AI quality becomes trustworthy without breaking the product?
 
-## Status snapshot
+## North star
 
-The following are now implemented in the Next.js app:
+We are building toward:
 
-- real auth and onboarding persistence
-- grounded chat with retrieval fallback
-- notes and revision persistence
-- focused automated tests
-- ledger-backed credits
-- billing page with invoice creation and manual payment submission
-- admin payment review and approval actions
+- textbook-grounded answers
+- syllabus-aware routing
+- engineering-level explanations
+- fast enough chat latency
+- clear citations
+- measurable quality
 
-The next implementation phase should therefore move away from “can we monetize at all?” and toward “can we run this safely in a real environment, broaden operator capability, and finish launch-critical gaps?”
+## First build sequence
 
-## Phase A: Live validation and runtime hardening
+This is the practical order we should follow.
 
-### Goal
+### Step 1. Lock syllabus catalog structure
 
-Make the current Phase 3 backbone trustworthy in a real deployment.
+Build or normalize catalog data for:
 
-### Deliverables
+- boards
+- programs
+- grades/years
+- subjects
+- chapters
+- topics
 
-- validate all flows against a live Supabase project and real Gemini credentials
-- apply all migrations cleanly in the target environment
-- confirm RLS for student and admin flows
-- verify that credit deduction, invoice creation, payment submission, and admin approval behave correctly
-- verify Google OAuth and password recovery in the real auth project
-- fix production blockers and silent failures found during validation
+Reason:
 
-## Phase B: Finance operations expansion
+- full syllabus and chapter questions should come from SQL, not vector search
 
-### Goal
+### Step 2. Seed one subject completely
 
-Turn the finance backbone into an actually operable internal system.
+Preferably start with one academically important path such as:
 
-### Deliverables
+- Engineering Physics
 
-- richer invoice and payment status handling
-- admin support for refunds or manual adjustments
-- better payment evidence handling
-- clearer student billing history and status explanations
-- audit-friendly finance event views
+Reason:
 
-## Phase C: Knowledge and content operations
+- better to make one subject excellent than many subjects weak
 
-### Goal
+### Step 3. Route catalog/list questions to SQL
 
-Expand admin capability beyond finance.
+Question examples:
 
-### Deliverables
+- Physics ko chapters deu
+- chapter 2 ko topics deu
+- full syllabus deu
 
-- admin auth and navigation refinement
-- knowledge upload and curation UI
-- source management and ingestion QA
-- basic user support views
+These should not hit ordinary RAG.
 
-## Phase D: Product completeness gaps
+### Step 4. Enrich chunk metadata
 
-### Goal
+Every chunk should become more explicit about:
 
-Finish the highest-value deferred product surface only after runtime confidence improves.
+- subject
+- chapter
+- topic
+- page range
+- source document
+- chunk type
 
-### Deliverables
+### Step 5. Implement router and scope resolver fully
 
-- subject explorer
-- richer citation inspection UX
-- stronger billing visibility for students
-- clearer subscription state and usage messaging
-## Phase E: Automation and scale
+Required question classes:
 
-### Goal
+- catalog_list
+- topic_list
+- concept
+- numerical
+- derivation
+- exam_answer
+- comparison
+- chapter_mode
 
-Reduce manual work only after the baseline is trusted.
+### Step 6. Implement stronger hybrid retrieval and reranking
 
-### Deliverables
+Pattern:
 
-- payment gateway automation
-- richer subscription lifecycle behavior
-- observability and alerts
-- broader analytics
+- metadata filter first
+- vector + keyword retrieval
+- retrieve wide
+- rerank narrow
+- compress context
 
-## Suggested immediate backlog
+### Step 7. Add citation builder
 
-1. run the app against a live Supabase project and real Gemini key
-2. fix any runtime issues uncovered in auth, chat, notes, billing, or admin approval
-3. verify that admin approval grants credits exactly once in the real database
-4. add more focused tests around billing and admin actions if runtime issues reveal weak spots
-5. improve the student billing history and admin finance review UX
-6. address launch-critical product gaps that block user confidence
-7. start knowledge/admin tooling after finance validation is stable
+Every strong answer should resolve to:
 
-## What we should not do first
+- source document
+- chapter
+- topic
+- page range
 
-- rebuild the student app foundation again
-- add more learning features before the live payment flow is validated
-- automate payment gateways before the manual verification flow is trusted
-- build a huge admin surface before finance and knowledge workflows are clearer
+### Step 8. Add topic cards
 
-## Definition of done for the next phase
+For repeated high-frequency topics, use precomputed:
 
-- the current Phase 3 flows work in a real environment
-- finance and credit actions are explainable and auditable
-- admin approval is safe against accidental double-grants
-- docs stay in sync with implementation changes
+- core explanation
+- formula sheet
+- common mistakes
+- exam angle
 
-## Next implementation focus
+### Step 9. Add admin retrieval debugger
 
-If we choose one next objective, it should be:
+Admin should be able to see:
 
-### Live validation + finance hardening
+- detected route
+- detected scope
+- retrieved chunks
+- reranked chunks
+- final evidence
+- latency
+- quality outcome
 
-That moves the product from:
+### Step 10. Add golden test questions and evaluation dashboard
 
-- implemented in code
+We need a benchmark set for:
 
-to:
+- accuracy
+- clarity
+- citation trust
+- latency
 
-- reliable in operation
+## Immediate execution phases
+
+### Phase 1. Deterministic academic structure
+
+Goal:
+
+- stop blind retrieval for syllabus and chapter list questions
+
+Deliverables:
+
+- catalog tables or equivalent normalized structure
+- SQL-backed syllabus endpoints
+- chapter/topic deterministic answers
+
+### Phase 2. Quality-first retrieval
+
+Goal:
+
+- improve grounded answer quality for deep academic questions
+
+Deliverables:
+
+- richer metadata
+- reranking
+- chapter-aware retrieval
+- grounding guard
+
+### Phase 3. Speed without collapse
+
+Goal:
+
+- keep quality while reducing wait time
+
+Deliverables:
+
+- cache stable academic data
+- smaller search spaces
+- context compressor
+- better streaming timing
+
+### Phase 4. Observability and operator control
+
+Goal:
+
+- make AI quality debuggable and measurable
+
+Deliverables:
+
+- retrieval debugger
+- benchmark suite
+- quality logs
+- admin test flows
+
+## Do not do
+
+- Do not use top-4 vector search for full chapter or full syllabus answers.
+- Do not send the full textbook to the model.
+- Do not rely on model upgrade as the main quality strategy.
+- Do not publish unreviewed academic content directly to students.
+- Do not mix every question type into one retrieval path.
+
+## What success looks like
+
+We should be able to say:
+
+- chapter and topic questions are deterministic
+- deep answers are grounded in the right textbook area
+- sources are explainable
+- answers are clearer and less generic
+- latency is acceptable for chat
+- admins can debug failures without guessing
+
+## Repository-level next work
+
+In this repo, the next practical work should be:
+
+1. finish the academic routing split
+2. strengthen catalog-backed answers
+3. formalize topic-card usage
+4. improve admin retrieval debugging
+5. add benchmark-quality checks
+
+That is the shortest path to a meaningfully better Nano Syllabus.
