@@ -65,7 +65,20 @@ export async function getCurrentAuth() {
     .eq("user_id", user.id)
       .maybeSingle();
 
-  const profile = profileRow ? normalizeProfile(profileRow) : null;
+  const profile: StudentProfile = profileRow ? normalizeProfile(profileRow) : {
+    userId: user.id,
+    fullName: user.user_metadata?.full_name || (user.email?.split("@")[0] ?? "Student"),
+    college: "IOE",
+    board: "IOE",
+    grade: "Undergraduate",
+    boardScore: null,
+    subjects: ["Engineering Physics"],
+    targetGrade: "A",
+    languagePref: "EN",
+    role: "student",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
   const onboarded = isProfileComplete(profile);
   const creditBalance = onboarded
     ? await ensureStarterCreditsForUser(user.id)

@@ -2598,9 +2598,7 @@ export async function POST(request: Request) {
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (!profileRow) {
-      return NextResponse.json({ error: "Onboarding required." }, { status: 400 });
-    }
+
 
     const currentBalance = await ensureStarterCreditsForUser(user.id);
     if (!canSpendCredits(currentBalance)) {
@@ -2610,7 +2608,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const profile = {
+    const profile = profileRow ? {
       userId: profileRow.user_id,
       fullName: normalizeFullName(profileRow.full_name ?? ""),
       college: normalizeCollege(profileRow.college ?? ""),
@@ -2623,7 +2621,20 @@ export async function POST(request: Request) {
       role: profileRow.role ?? "student",
       createdAt: profileRow.created_at,
       updatedAt: profileRow.updated_at,
-    } as const;
+    } : {
+      userId: user.id,
+      fullName: user.user_metadata?.full_name || (user.email?.split("@")[0] ?? "Student"),
+      college: "IOE",
+      board: "IOE",
+      grade: "Undergraduate",
+      boardScore: null,
+      subjects: ["Engineering Physics"],
+      targetGrade: "A",
+      languagePref: "EN" as const,
+      role: "student" as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
     const requestHadExistingSession = Boolean(parsed.sessionId);
     let sessionId = parsed.sessionId ?? null;

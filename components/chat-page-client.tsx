@@ -996,21 +996,7 @@ export function ChatPageClient({
   return (
     <div className="flex h-full min-h-0 flex-col bg-[linear-gradient(180deg,color-mix(in_oklab,var(--bg-secondary)_62%,transparent),transparent_28%)]">
       <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {hasMessages && matchedScope ? (
-          <div className="bg-bg-primary/92 backdrop-blur px-4 py-2 md:px-5 xl:px-6">
-            <div className="mx-auto flex w-full flex-wrap items-start justify-between max-w-5xl gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="max-w-full truncate rounded-full border border-border bg-bg-secondary px-2 py-0.5 text-[10px] text-text-muted">
-                      {matchedScope}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
+        {/* matchedScope banner hidden temporarily */}
 
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1222,52 +1208,12 @@ export function ChatPageClient({
                 {chatError}
               </p>
             ) : null}
-            {latestThinkingTrace ? (
-              <div className="mb-3 rounded-2xl border border-border bg-bg-secondary/60 px-4 py-3">
-                <button
-                  type="button"
-                  onClick={() => setShowThinkingTrace((value) => !value)}
-                  className="flex w-full items-center justify-between gap-3 text-left"
-                >
-                  <div>
-                    <p className="text-xs font-mono-ui uppercase tracking-[0.18em] text-text-muted">
-                      Thought for {formatMs(latestThinkingTrace.totalMs)}
-                    </p>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      {buildTracePills(latestThinkingTrace).map((pill) => (
-                        <span
-                          key={pill}
-                          className="rounded-full border border-border bg-bg-primary px-2 py-0.5 text-[10px] text-text-secondary"
-                        >
-                          {pill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <span className="text-xs text-text-secondary">{showThinkingTrace ? "Hide" : "Show"}</span>
-                </button>
-                {showThinkingTrace ? (
-                  <div className="mt-2 space-y-2">
-                    <p className="text-xs text-text-muted">
-                      Process summary for transparency, not raw private chain-of-thought.
-                    </p>
-                    <ul className="space-y-1 text-xs text-text-secondary">
-                      {buildThoughtSummary(latestThinkingTrace).map((line) => (
-                        <li key={line} className="leading-5">
-                          • {line}
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="grid gap-1 text-xs text-text-muted md:grid-cols-2">
-                      <p>Retrieval: {formatMs(latestThinkingTrace.ragMs)}</p>
-                      <p>Generation: {formatMs(latestThinkingTrace.generationMs)}</p>
-                      <p>Rewrite: {formatMs(latestThinkingTrace.rewriteMs)}</p>
-                      <p>Total: {formatMs(latestThinkingTrace.totalMs)}</p>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
+            {/* 
+              latestThinkingTrace block hidden temporarily as per user request 
+              {latestThinkingTrace ? (
+                ...
+              ) : null}
+            */}
             <form onSubmit={submitMessage} className="rounded-[28px] border border-border bg-bg-primary p-3 shadow-[0_16px_46px_rgba(0,0,0,0.05)]">
 
               <textarea
