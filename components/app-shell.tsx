@@ -44,7 +44,7 @@ export function AppShell({
           className={
             "fixed inset-y-0 left-0 z-30 flex flex-col border-r border-border transition-all duration-300 md:static md:translate-x-0 " +
             (open ? "translate-x-0 " : "-translate-x-full ") +
-            (isCollapsed ? "w-[68px]" : "w-[300px]")
+            (isCollapsed ? "w-[68px]" : "w-[240px]")
           }
         >
           <AppSidebar 

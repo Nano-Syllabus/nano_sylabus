@@ -7,8 +7,9 @@ const patchSchema = z
   .object({
     title: z.string().trim().min(1).max(120).optional(),
     subjectContext: z.string().trim().min(1).max(120).nullable().optional(),
+    isPinned: z.boolean().optional(),
   })
-  .refine((payload) => payload.title !== undefined || payload.subjectContext !== undefined, {
+  .refine((payload) => payload.title !== undefined || payload.subjectContext !== undefined || payload.isPinned !== undefined, {
     message: "At least one field is required.",
   });
 
@@ -31,6 +32,7 @@ export async function PATCH(
     const session = await updateChatSession(sessionId, user.id, {
       title: payload.title,
       subjectContext: payload.subjectContext,
+      isPinned: payload.isPinned,
     });
 
     if (!session) {

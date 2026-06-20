@@ -209,6 +209,7 @@ export async function listSubjectSessions(userId: string, subject: string) {
       updatedAt: session.updated_at,
       subjectTags: Array.isArray(session.subject_tags) ? session.subject_tags : [],
       subjectContext: session.subject_context ?? null,
+      isPinned: Boolean(session.is_pinned),
       turnCount: rows.length,
       language,
     } satisfies SubjectExplorerSessionSummary;

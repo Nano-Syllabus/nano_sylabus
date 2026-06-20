@@ -294,15 +294,18 @@ export function ChatPageClient({
   const searchDebounceRef = useRef<number | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const requestWatchdogRef = useRef<number | null>(null);
+  const stopChatRef = useRef<(() => void) | null>(null);
 
   const initialMessages: Message[] = useMemo(
     () =>
-      (initialSession?.messages ?? []).map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-      })),
-    [initialSession],
+      currentSessionId === initialSession?.id
+        ? (initialSession?.messages ?? []).map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+          }))
+        : [],
+    [initialSession, currentSessionId],
   );
   const availableSubjects = useMemo(() => {
     const all = [...profileSubjects, ...catalogSubjects, subjectContext]
@@ -381,6 +384,12 @@ export function ChatPageClient({
       currentSessionIdRef.current = null;
       setSessionDetail(null);
       setMessages([]);
+      stopChatRef.current?.();
+      if (requestWatchdogRef.current) {
+        window.clearTimeout(requestWatchdogRef.current);
+        requestWatchdogRef.current = null;
+      }
+      setThinkingStatus(null);
       window.history.replaceState(null, "", "/app/chat");
     };
     window.addEventListener("app:new-chat", handleNewChat);
@@ -461,6 +470,13 @@ export function ChatPageClient({
 
       // Update ref immediately so subsequent clicks are ignored
       currentSessionIdRef.current = sessionId;
+
+      stopChatRef.current?.();
+      if (requestWatchdogRef.current) {
+        window.clearTimeout(requestWatchdogRef.current);
+        requestWatchdogRef.current = null;
+      }
+      setThinkingStatus(null);
 
       // Fetch data FIRST, then update all state at once (no intermediate empty flash)
       const response = await fetch(`/api/chat/session?session=${sessionId}`, {
@@ -669,6 +685,7 @@ export function ChatPageClient({
           updatedAt: new Date().toISOString(),
           subjectTags: subjectContext ? [subjectContext] : [],
           subjectContext,
+          isPinned: false,
         },
         ...prev,
       ]);
@@ -780,10 +797,11 @@ export function ChatPageClient({
           userId: sessionDetail.userId,
           title: sessionDetail.title,
           createdAt: sessionDetail.createdAt,
-          updatedAt: sessionDetail.updatedAt,
-          subjectTags: sessionDetail.subjectTags,
-          subjectContext: sessionDetail.subjectContext,
-        }
+	          updatedAt: sessionDetail.updatedAt,
+	          subjectTags: sessionDetail.subjectTags,
+	          subjectContext: sessionDetail.subjectContext,
+	          isPinned: sessionDetail.isPinned,
+	        }
       : null);
 
   async function sendCurrentMessage() {
@@ -799,7 +817,7 @@ export function ChatPageClient({
       requestWatchdogRef.current = null;
     }
 
-    pendingTitleRef.current = deriveSessionTitle(trimmed);
+    pendingTitleRef.current = deriveSessionTitle(trimmed, subjectContext);
     setChatError("");
     setShowThinkingTrace(false);
     setThinkingStatus("Retrieving syllabus context...");
@@ -987,6 +1005,10 @@ export function ChatPageClient({
     return () => shell.setActions(null);
   }, [shell]);
 
+  useEffect(() => {
+    stopChatRef.current = stop;
+  }, [stop]);
+
 
 
 
@@ -994,7 +1016,7 @@ export function ChatPageClient({
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[linear-gradient(180deg,color-mix(in_oklab,var(--bg-secondary)_62%,transparent),transparent_28%)]">
+    <div className="flex h-full min-h-0 flex-col bg-bg-primary">
       <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* matchedScope banner hidden temporarily */}
 
@@ -1002,7 +1024,7 @@ export function ChatPageClient({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-5xl flex-col px-4 pb-24 pt-5 md:px-5 xl:px-6">
             {messages.length === 0 ? (
-              <div className="mx-auto mt-24 flex min-h-[42vh] w-full max-w-4xl flex-col items-center justify-center rounded-[28px] border border-border bg-bg-primary/92 px-8 py-12 text-center shadow-[0_16px_60px_rgba(0,0,0,0.05)]">
+              <div className="mx-auto mt-24 flex min-h-[42vh] w-full max-w-4xl flex-col items-center justify-center rounded-[28px] border border-border bg-bg-secondary/80 px-8 py-12 text-center shadow-[0_24px_90px_rgba(0,0,0,0.42)]">
                 <p className="text-[11px] font-mono-ui uppercase tracking-[0.22em] text-text-muted">
                   Nano Syllabus
                 </p>
@@ -1042,7 +1064,7 @@ export function ChatPageClient({
                       key={prompt}
                       type="button"
                       onClick={() => applySuggestedPrompt(prompt)}
-                      className="rounded-full border border-border bg-bg-secondary px-4 py-2 text-sm text-text-secondary transition hover:border-border-strong hover:bg-bg-primary hover:text-text-primary"
+                      className="rounded-full border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-secondary transition hover:border-border-strong hover:bg-bg-secondary hover:text-text-primary"
                     >
                       {prompt}
                     </button>
@@ -1073,16 +1095,16 @@ export function ChatPageClient({
                     >
                       <div
                         className={cn(
-                          "rounded-[30px] border px-5 py-4 shadow-sm",
+                          "rounded-[30px] border px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.24)]",
                           message.role === "user"
-                            ? "border-border-strong bg-text-primary text-text-inverse"
-                            : "border-border bg-bg-primary/96",
+                            ? "border-border bg-bg-tertiary text-text-primary"
+                            : "border-border bg-bg-secondary/86",
                         )}
                       >
                         {message.role === "assistant" ? (
                           <Markdown text={message.content} className="text-[15px] leading-8" />
                         ) : (
-                          <div className="whitespace-pre-wrap text-[15px] leading-8 text-text-inverse">
+                          <div className="whitespace-pre-wrap text-[15px] leading-8 text-text-primary">
                             {message.content}
                           </div>
                         )}
@@ -1187,7 +1209,7 @@ export function ChatPageClient({
                 })}
 
                 {isLoading ? (
-                  <div className="mr-auto w-full max-w-[1020px] rounded-[30px] border border-border bg-bg-primary/96 px-5 py-4 shadow-sm">
+                  <div className="mr-auto w-full max-w-[1020px] rounded-[30px] border border-border bg-bg-secondary/86 px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.24)]">
                     <p className="mb-2 text-[11px] text-text-muted">{thinkingStatus || "Generating..."}</p>
                     <div className="flex items-center">
                       <span className="typing-dot" />
@@ -1201,7 +1223,7 @@ export function ChatPageClient({
           </div>
         </div>
 
-        <div className="border-t border-border bg-[linear-gradient(180deg,color-mix(in_oklab,var(--bg-primary)_60%,transparent),var(--bg-primary))] px-4 pb-4 pt-3 backdrop-blur md:px-5 xl:px-6">
+        <div className="border-t border-border bg-bg-primary px-4 pb-4 pt-3 md:px-5 xl:px-6">
           <div className="mx-auto max-w-5xl">
             {chatError ? (
               <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
@@ -1214,7 +1236,7 @@ export function ChatPageClient({
                 ...
               ) : null}
             */}
-            <form onSubmit={submitMessage} className="rounded-[28px] border border-border bg-bg-primary p-3 shadow-[0_16px_46px_rgba(0,0,0,0.05)]">
+            <form onSubmit={submitMessage} className="rounded-[28px] border border-border bg-bg-secondary p-3 shadow-[0_24px_70px_rgba(0,0,0,0.38)]">
 
               <textarea
                 ref={composerRef}

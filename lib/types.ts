@@ -225,6 +225,7 @@ export interface ChatSessionSummary {
   updatedAt: string;
   subjectTags: string[];
   subjectContext: string | null;
+  isPinned: boolean;
 }
 
 export interface ChatMessageRecord {

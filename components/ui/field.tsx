@@ -18,7 +18,7 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <label className="block space-y-1.5">
+    <label className="block" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
       {label ? (
         <span className="text-xs font-medium uppercase tracking-wider text-text-secondary">
           {label}
