@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { normalizeSubjectLabel, normalizeSubjects } from "@/lib/profile-normalization";
 import type {
   AssistantAnswerTrace,
@@ -52,6 +53,7 @@ function normalizeSession(row: any): ChatSessionSummary {
     updatedAt: row.updated_at,
     subjectTags: normalizeSubjects(Array.isArray(row.subject_tags) ? row.subject_tags : []),
     subjectContext: row.subject_context ? normalizeSubjectLabel(row.subject_context) : null,
+    isPinned: Boolean(row.is_pinned),
   };
 }
 
@@ -88,6 +90,7 @@ export async function listChatSessions(
     .from("chat_sessions")
     .select("*", { count: "exact" })
     .eq("user_id", userId)
+    .order("is_pinned", { ascending: false })
     .order("updated_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -151,6 +154,7 @@ export async function updateChatSession(
   payload: {
     title?: string;
     subjectContext?: string | null;
+    isPinned?: boolean;
   },
 ) {
   const supabase = await createSupabaseServerClient();
@@ -170,6 +174,10 @@ export async function updateChatSession(
     updatePayload.subject_tags = normalizedSubjectContext ? [normalizedSubjectContext] : [];
   }
 
+  if (typeof payload.isPinned === "boolean") {
+    updatePayload.is_pinned = payload.isPinned;
+  }
+
   const { data, error } = await supabase
     .from("chat_sessions")
     .update(updatePayload)
@@ -183,7 +191,7 @@ export async function updateChatSession(
 }
 
 export async function deleteChatSession(sessionId: string, userId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("chat_sessions")
     .delete()

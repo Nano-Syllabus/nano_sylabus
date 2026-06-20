@@ -56,7 +56,7 @@ export async function updateSession(request: NextRequest) {
       });
       role = profileRow.role ?? "student";
     } else {
-      onboarded = true;
+      onboarded = false;
     }
   }
 

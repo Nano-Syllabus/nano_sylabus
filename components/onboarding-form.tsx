@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
@@ -294,7 +294,17 @@ export function OnboardingForm({
   }
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-5 py-10">
+    <form
+      className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-5 py-10"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (step < total) {
+          goNext();
+        } else {
+          void finish();
+        }
+      }}
+    >
       <div className="border-b border-border bg-bg-secondary px-5 py-3">
         <div className="flex items-center justify-between text-xs font-mono-ui text-text-muted">
           <span>Step {step} of {total}</span>
@@ -309,15 +319,17 @@ export function OnboardingForm({
         {step === 1 ? (
           <Step title="Where do you study?" subtitle="Enter your current school, college, campus, or university.">
             <Field label="Full name">
-              <Input value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name" />
+              <Input enterKeyHint="next" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name" />
             </Field>
             <Field label="Institution">
               <Input
+                enterKeyHint="done"
                 value={college}
                 onChange={(event) => setCollege(event.target.value)}
                 placeholder="Eg. St. Xavier's College, Tribhuvan University"
               />
             </Field>
+            <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />
           </Step>
         ) : null}
 
@@ -358,13 +370,14 @@ export function OnboardingForm({
                 ))}
               </Select>
             </Field>
+            <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />
           </Step>
         ) : null}
 
         {step === 3 ? (
           <Step title="Last board score" subtitle="We use this to calibrate explanation level. You can skip it.">
             <div className="mb-3 inline-flex rounded-full border border-border p-1">
-              {(["%", "GPA"] as const).map((item) => (
+              {(["%" , "GPA"] as const).map((item) => (
                 <button
                   type="button"
                   key={item}
@@ -380,12 +393,17 @@ export function OnboardingForm({
             </div>
             <Field label={scoreType === "%" ? "Score (0-100)" : "GPA (0-4.0)"}>
               <Input
+                enterKeyHint="done"
                 type="number"
+                min="0"
+                max={scoreType === "%" ? "100" : "4"}
+                step={scoreType === "%" ? "1" : "0.01"}
                 value={score}
                 onChange={(event) => setScore(event.target.value)}
-                placeholder={scoreType === "%" ? "82" : "3.4"}
+                placeholder={scoreType === "%" ? "82" : "3.40"}
               />
             </Field>
+            <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />
           </Step>
         ) : null}
 
@@ -433,6 +451,7 @@ export function OnboardingForm({
                 ) : null}
               </div>
             )}
+            <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />
           </Step>
         ) : null}
 
@@ -440,12 +459,27 @@ export function OnboardingForm({
           <Step title="Goals & language" subtitle="This makes the AI feel personal from the first answer.">
             <div className="space-y-6">
               <div>
-                <Field label="Target result" hint="Keep it human and specific. Example: A+, Distinction, pass all papers">
-                  <Input
+                <Field label="Target result">
+                  <Select
                     value={targetGrade}
                     onChange={(event) => setTargetGrade(event.target.value)}
-                    placeholder="A+, Distinction, 3.8 GPA"
-                  />
+                  >
+                    <option value="">Select your target</option>
+                    <option value="A+">A+</option>
+                    <option value="A">A</option>
+                    <option value="B+">B+</option>
+                    <option value="B">B</option>
+                    <option value="C+">C+</option>
+                    <option value="C">C</option>
+                    <option value="Distinction">Distinction</option>
+                    <option value="First Division">First Division</option>
+                    <option value="Second Division">Second Division</option>
+                    <option value="Pass">Pass</option>
+                    <option value="4.0 GPA">4.0 GPA</option>
+                    <option value="3.8 GPA">3.8 GPA</option>
+                    <option value="3.5 GPA">3.5 GPA</option>
+                    <option value="3.0 GPA">3.0 GPA</option>
+                  </Select>
                 </Field>
               </div>
               <div>
@@ -483,17 +517,17 @@ export function OnboardingForm({
             ← Back
           </Button>
           {step < total ? (
-            <Button type="button" onClick={goNext}>
+            <Button type="submit">
               Next →
             </Button>
           ) : (
-            <Button type="button" onClick={finish} disabled={loading}>
+            <Button type="submit" disabled={loading}>
               {loading ? "Saving..." : "Start learning →"}
             </Button>
           )}
         </div>
       </main>
-    </div>
+    </form>
   );
 }
 
@@ -511,7 +545,30 @@ function Step({
       <p className="text-xs font-mono-ui uppercase text-text-muted">Onboarding</p>
       <h1 className="mt-2 font-display text-4xl">{title}</h1>
       <p className="mt-2 text-sm text-text-secondary">{subtitle}</p>
-      <div className="mt-8">{children}</div>
+      <div className="mt-8 space-y-6">{children}</div>
     </div>
+  );
+}
+
+/** Hidden focusable element placed after the last field in each step.
+ *  When the mobile keyboard "Next" arrow navigates past the last input,
+ *  this trap catches focus and auto-advances to the next step.
+ *  Similarly for "Previous" arrow → goes back. */
+function StepTrap({
+  onFocusForward,
+  onFocusBack,
+}: {
+  onFocusForward: () => void;
+  onFocusBack: () => void;
+}) {
+  return (
+    <>
+      <input
+        aria-hidden
+        tabIndex={0}
+        onFocus={onFocusForward}
+        className="pointer-events-none absolute h-0 w-0 opacity-0"
+      />
+    </>
   );
 }

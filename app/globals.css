@@ -47,7 +47,7 @@
   --text-secondary: #4a4a4a;
   --text-muted: #888888;
   --text-inverse: #ffffff;
-  --border: #d4d4d4;
+  --border: rgba(0, 0, 0, 0.1);
   --border-strong: #0a0a0a;
   --red: #e53e3e;
   --green: #38a169;
@@ -58,18 +58,21 @@
 }
 
 [data-theme="dark"] {
-  --bg-primary: #121212;
-  --bg-secondary: #27272a;
-  --bg-tertiary: #3f3f46;
-  --text-primary: #f4f4f5;
-  --text-secondary: #d4d4d8;
-  --text-muted: #a1a1aa;
-  --text-inverse: #09090b;
-  --border: #333333;
-  --border-strong: #52525b;
+  --bg-primary: #000000;
+  --bg-secondary: #101010;
+  --bg-tertiary: #1c1c1f;
+  --text-primary: #f7f7f8;
+  --text-secondary: #c9c9cf;
+  --text-muted: #8f9099;
+  --text-inverse: #000000;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: #f7f7f8;
   --red: #f87171;
   --green: #4ade80;
   --yellow: #fbbf24;
+  --note-red: rgba(248, 113, 113, 0.14);
+  --note-yellow: rgba(251, 191, 36, 0.14);
+  --note-green: rgba(74, 222, 128, 0.13);
 }
 
 @layer base {
@@ -104,6 +107,28 @@
 
 @utility font-mono-ui {
   font-family: var(--font-mono);
+}
+
+@utility font-sidebar-ui {
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Helvetica Neue",
+    Arial,
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+  letter-spacing: -0.01em;
+}
+
+@utility text-sidebar-crisp {
+  color: #f5f5f7;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: auto;
 }
 
 @utility bg-dotgrid {

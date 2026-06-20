@@ -2598,7 +2598,9 @@ export async function POST(request: Request) {
       .eq("user_id", user.id)
       .maybeSingle();
 
-
+    if (!profileRow) {
+      return NextResponse.json({ error: "Onboarding required." }, { status: 400 });
+    }
 
     const currentBalance = await ensureStarterCreditsForUser(user.id);
     if (!canSpendCredits(currentBalance)) {
@@ -2608,7 +2610,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const profile = profileRow ? {
+    const profile = {
       userId: profileRow.user_id,
       fullName: normalizeFullName(profileRow.full_name ?? ""),
       college: normalizeCollege(profileRow.college ?? ""),
@@ -2621,20 +2623,7 @@ export async function POST(request: Request) {
       role: profileRow.role ?? "student",
       createdAt: profileRow.created_at,
       updatedAt: profileRow.updated_at,
-    } : {
-      userId: user.id,
-      fullName: user.user_metadata?.full_name || (user.email?.split("@")[0] ?? "Student"),
-      college: "IOE",
-      board: "IOE",
-      grade: "Undergraduate",
-      boardScore: null,
-      subjects: ["Engineering Physics"],
-      targetGrade: "A",
-      languagePref: "EN" as const,
-      role: "student" as const,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    } as const;
 
     const requestHadExistingSession = Boolean(parsed.sessionId);
     let sessionId = parsed.sessionId ?? null;
@@ -2664,7 +2653,7 @@ export async function POST(request: Request) {
         .from("chat_sessions")
         .insert({
           user_id: user.id,
-          title: deriveSessionTitle(latestUserMessage.content),
+          title: deriveSessionTitle(latestUserMessage.content, sessionSubjectContext),
           subject_context: sessionSubjectContext,
           subject_tags: sessionSubjectContext ? [sessionSubjectContext] : [],
         })
@@ -3677,6 +3666,32 @@ export async function POST(request: Request) {
       } catch (dbError) {
         console.error("Failed to persist assistant completion in background", dbError);
       }
+
+      try {
+        if (!requestHadExistingSession) {
+          const google = createGoogleGenerativeAI({
+            apiKey: getGeminiEnv().apiKey,
+          });
+          generateText({
+            model: google("gemini-1.5-flash"),
+            system: "You are a title generator for an educational AI chatbot. Generate a concise, catchy 3-5 word title summarizing the user's prompt. Do NOT use quotes around the title.",
+            prompt: latestUserMessage.content,
+            maxTokens: 15,
+          })
+            .then(async (result) => {
+              if (result.text) {
+                const aiTitle = result.text.trim().replace(/^["']|["']$/g, "");
+                await supabase
+                  .from("chat_sessions")
+                  .update({ title: aiTitle })
+                  .eq("id", finalSessionId);
+              }
+            })
+            .catch((err) => console.error("Failed to generate AI title", err));
+        }
+      } catch (titleError) {
+        console.error("Error setting up title generation", titleError);
+      }
     };
 
     const persistDirectAnswer = async (persistedAnswer: string, persistedRoutePath: string) => {
@@ -3742,6 +3757,31 @@ export async function POST(request: Request) {
           totalMs,
         }),
       });
+      try {
+        if (!requestHadExistingSession) {
+          const google = createGoogleGenerativeAI({
+            apiKey: getGeminiEnv().apiKey,
+          });
+          generateText({
+            model: google("gemini-1.5-flash"),
+            system: "You are a title generator for an educational AI chatbot. Generate a concise, catchy 3-5 word title summarizing the user's prompt. Do NOT use quotes around the title.",
+            prompt: latestUserMessage.content,
+            maxTokens: 15,
+          })
+            .then(async (result) => {
+              if (result.text) {
+                const aiTitle = result.text.trim().replace(/^["']|["']$/g, "");
+                await supabase
+                  .from("chat_sessions")
+                  .update({ title: aiTitle })
+                  .eq("id", finalSessionId);
+              }
+            })
+            .catch((err) => console.error("Failed to generate AI title", err));
+        }
+      } catch (titleError) {
+        console.error("Error setting up title generation", titleError);
+      }
 
       return { generationMs, totalMs };
     };

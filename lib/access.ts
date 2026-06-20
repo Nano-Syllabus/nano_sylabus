@@ -4,7 +4,15 @@ export function isProfileComplete(profile: Pick<
   StudentProfile,
   "fullName" | "college" | "board" | "grade" | "targetGrade" | "languagePref"
 > | null) {
-  return true;
+  if (!profile) return false;
+  return Boolean(
+    profile.fullName &&
+    profile.college &&
+    profile.board &&
+    profile.grade &&
+    profile.targetGrade &&
+    profile.languagePref,
+  );
 }
 
 export function resolveAccess(input: {
