@@ -14,9 +14,10 @@ import {
 } from "react";
 import { useChat, type Message } from "ai/react";
 import { AppShellContext } from "@/components/app-shell-context";
-import { CitationCard } from "@/components/citation-card";
+
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { CompactSelect } from "@/components/ui/compact-select";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { dedupeCitationsForDisplay } from "@/lib/citations";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/profile-normalization";
@@ -46,7 +47,7 @@ const ANSWER_STYLE_LABELS: Record<AnswerStyle, string> = {
 };
 type RetrievalMode = "default" | "chapter";
 const RETRIEVAL_MODE_LABELS: Record<RetrievalMode, string> = {
-  default: "Internet",
+  default: "Web Search",
   chapter: "Syllabus",
 };
 
@@ -161,77 +162,15 @@ function buildTracePills(trace: ThinkingTrace) {
 
 function TopHeaderTitle({ 
   activeSessionTitle, 
-  currentSessionId, 
-  activeSessionSummary, 
-  onRename, 
-  onDelete 
 }: { 
   activeSessionTitle: string; 
   currentSessionId: string | null; 
-  activeSessionSummary: ChatSessionSummary | null; 
   onRename: () => void; 
   onDelete: () => void; 
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener("mousedown", handleOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, [isOpen]);
-
   return (
-    <div className="relative flex items-center gap-1.5" ref={menuRef}>
+    <div className="relative flex items-center gap-1.5">
       <span className="truncate">{activeSessionTitle}</span>
-      
-      {currentSessionId && (
-        <button 
-          type="button"
-          onClick={() => setIsOpen((prev) => !prev)}
-          className={cn(
-            "flex items-center justify-center w-6 h-6 rounded-md transition text-text-muted hover:text-text-primary hover:bg-bg-secondary",
-            isOpen ? "bg-bg-secondary text-text-primary" : ""
-          )}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-      )}
-
-      {isOpen && currentSessionId && activeSessionSummary && (
-        <div className="absolute left-0 top-full mt-2 w-48 rounded-xl border border-border bg-bg-primary shadow-xl z-[100] flex flex-col p-1.5 animate-in fade-in zoom-in-95 duration-100">
-          <button
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsOpen(false);
-              onRename();
-            }}
-            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-            Rename
-          </button>
-          <button
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsOpen(false);
-              onDelete();
-            }}
-            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-destructive hover:bg-destructive/10 transition"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-            Delete
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -582,7 +521,6 @@ export function ChatPageClient({
     setMessages,
   } = useChat({
     api: "/api/chat",
-    id: currentSessionId ?? "draft",
     initialMessages,
     body: {
       sessionId: currentSessionId,
@@ -854,9 +792,10 @@ export function ChatPageClient({
   }
 
   async function renameCurrentSession(title: string) {
-    if (!activeSessionSummary) return;
+    const targetSession = renameState ?? activeSessionSummary;
+    if (!targetSession?.id) return;
 
-    const response = await fetch(`/api/chat/sessions/${activeSessionSummary.id}`, {
+    const response = await fetch(`/api/chat/sessions/${targetSession.id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -872,7 +811,7 @@ export function ChatPageClient({
 
     const updated = (await response.json()) as ChatSessionSummary;
     setSessions((prev) =>
-      prev.map((s) => (s.id === activeSessionSummary.id ? { ...s, title } : s)),
+      prev.map((s) => (s.id === targetSession.id ? { ...s, title } : s)),
     );
     window.dispatchEvent(new CustomEvent("chat-session-updated"));
     setSessionDetail((prev) => (prev ? { ...prev, title: updated.title, updatedAt: updated.updatedAt } : prev));
@@ -880,11 +819,12 @@ export function ChatPageClient({
   }
 
   async function deleteCurrentSession() {
-    if (!activeSessionSummary) return;
-    setDeletingSessionId(activeSessionSummary.id);
+    const targetSession = deleteConfirmSession ?? activeSessionSummary;
+    if (!targetSession?.id) return;
+    setDeletingSessionId(targetSession.id);
     setChatError("");
 
-    const response = await fetch(`/api/chat/sessions/${activeSessionSummary.id}`, {
+    const response = await fetch(`/api/chat/sessions/${targetSession.id}`, {
       method: "DELETE",
     });
 
@@ -896,13 +836,15 @@ export function ChatPageClient({
       return;
     }
 
-    setSessions((prev) => prev.filter((session) => session.id !== activeSessionSummary.id));
-    setCurrentSessionId(null);
-    currentSessionIdRef.current = null;
-    setSessionDetail(null);
-    setSubjectContext(null);
-    setMessages([]);
-    window.history.replaceState(null, "", "/app/chat");
+    setSessions((prev) => prev.filter((session) => session.id !== targetSession.id));
+    if (currentSessionIdRef.current === targetSession.id) {
+      setCurrentSessionId(null);
+      currentSessionIdRef.current = null;
+      setSessionDetail(null);
+      setSubjectContext(null);
+      setMessages([]);
+      window.history.replaceState(null, "", "/app/chat");
+    }
   }
 
   async function updateSessionSubjectContext(nextSubjectContext: string | null) {
@@ -974,36 +916,62 @@ export function ChatPageClient({
     shell.setTitle(
       <TopHeaderTitle 
         activeSessionTitle={activeSessionTitle}
-        currentSessionId={currentSessionIdRef.current}
-        activeSessionSummary={activeSessionSummary}
+        currentSessionId={currentSessionId}
         onRename={() => {
-          if (currentSessionIdRef.current) {
-            setRenameState({ id: currentSessionIdRef.current, title: activeSessionTitle } as ChatSessionSummary);
+          if (currentSessionId) {
+            setRenameState(
+              activeSessionSummary ?? {
+                id: currentSessionId,
+                userId: user.id,
+                title: activeSessionTitle,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                subjectTags: [],
+                subjectContext,
+                isPinned: false,
+              },
+            );
           }
         }}
         onDelete={() => {
-          if (activeSessionSummary) setDeleteConfirmSession(activeSessionSummary);
+          if (currentSessionId) {
+            setDeleteConfirmSession(
+              activeSessionSummary ?? {
+                id: currentSessionId,
+                userId: user.id,
+                title: activeSessionTitle,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                subjectTags: [],
+                subjectContext,
+                isPinned: false,
+              },
+            );
+          }
         }}
       />
     );
     return () => shell.setTitle(null);
-  }, [activeSessionTitle, shell, activeSessionSummary]);
+  }, [activeSessionTitle, currentSessionId, shell, activeSessionSummary, user.id, subjectContext]);
 
   useEffect(() => {
     shell.setActions(
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 bg-bg-secondary rounded-full border border-border py-1 px-3">
-          <span className="hidden sm:inline text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
-            Subject:
-          </span>
-          <span className="text-[12px] font-medium text-text-primary">
-            Engineering Physics
+      <div className="flex items-center">
+        <div className="group flex cursor-pointer items-center gap-2.5 rounded-full border border-black/5 dark:border-white/5 bg-bg-secondary/40 px-3 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-md transition-all hover:bg-bg-secondary/80 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
+          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-blue-500 transition-colors group-hover:bg-blue-500/20">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+          </div>
+          <span className="text-[13px] font-medium tracking-tight text-text-primary">
+            {subjectContext || "All Subjects"}
           </span>
         </div>
       </div>
     );
     return () => shell.setActions(null);
-  }, [shell]);
+  }, [shell, subjectContext]);
 
   useEffect(() => {
     stopChatRef.current = stop;
@@ -1012,8 +980,61 @@ export function ChatPageClient({
 
 
 
-
   const hasMessages = messages.length > 0;
+  
+  const firstName = user?.fullName?.split(" ")[0] || "Student";
+  const capitalizedFirstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
+
+  const renderInputForm = () => (
+    <form onSubmit={submitMessage} className="w-full rounded-[16px] border border-black/5 dark:border-white/5 bg-bg-secondary p-2.5 px-3.5 shadow-[0_4px_24px_rgba(0,0,0,0.15)] flex flex-col justify-between">
+      <textarea
+        ref={composerRef}
+        value={input}
+        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => handleInputChange(event)}
+        onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            void sendCurrentMessage();
+          }
+        }}
+        rows={1}
+        placeholder="How can I help you today?"
+        className="min-h-[44px] w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted"
+      />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1 md:gap-3">
+          <button type="button" className="text-text-muted hover:text-text-primary p-1.5 ml-1 hidden md:block">
+             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <CompactSelect
+            value={composerLanguage}
+            onChange={(v) => setComposerLanguage(v as "EN" | "RN")}
+            options={[
+              { label: "English", value: "EN" },
+              { label: "Roman Nepali", value: "RN" }
+            ]}
+            direction="up"
+          />
+          <CompactSelect
+            value={retrievalMode}
+            onChange={(v) => setRetrievalMode(v as RetrievalMode)}
+            options={(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map(mode => ({
+              label: RETRIEVAL_MODE_LABELS[mode],
+              value: mode
+            }))}
+            direction="up"
+          />
+        </div>
+        <Button
+          type="submit"
+          disabled={isLoading || !input.trim() || creditBalance <= 0}
+          className="h-10 min-w-[90px] rounded-full px-4 text-[15px] font-medium bg-black dark:bg-white text-white dark:text-black hover:opacity-80 disabled:opacity-50 transition"
+        >
+          {isLoading ? "Sending..." : "Send →"}
+        </Button>
+      </div>
+    </form>
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-bg-primary">
@@ -1024,52 +1045,32 @@ export function ChatPageClient({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-5xl flex-col px-4 pb-24 pt-5 md:px-5 xl:px-6">
             {messages.length === 0 ? (
-              <div className="mx-auto mt-24 flex min-h-[42vh] w-full max-w-4xl flex-col items-center justify-center rounded-[28px] border border-border bg-bg-secondary/80 px-8 py-12 text-center shadow-[0_24px_90px_rgba(0,0,0,0.42)]">
-                <p className="text-[11px] font-mono-ui uppercase tracking-[0.22em] text-text-muted">
-                  Nano Syllabus
-                </p>
-                <p className="mt-4 font-display text-5xl leading-none sm:text-6xl">
-                  Ready when you are.
-                </p>
-                <p className="mt-4 max-w-2xl text-base text-text-secondary">
-                  Ask one clear study question and we&apos;ll ground the answer in your syllabus, notes, and indexed books.
-                </p>
-                <div className="mt-8 flex flex-wrap justify-center gap-2">
-                  {(
-                    retrievalMode === "chapter"
-                      ? subjectContext
-                        ? [
-                            `Give me the full chapter on ${subjectContext}`,
-                            `Walk me through ${subjectContext} unit by unit`,
-                            `Explain the whole textbook chapter for ${subjectContext}`,
-                          ]
-                        : [
-                            "Give me the full chapter in detail",
-                            "Walk me through this unit step by step",
-                            "Explain the whole textbook chapter",
-                          ]
-                      : subjectContext
-                        ? [
-                            `Explain ${subjectContext} in simple terms`,
-                            `Give me likely exam questions from ${subjectContext}`,
-                            `Summarize the important formulas in ${subjectContext}`,
-                          ]
-                        : [
-                            "Explain this chapter in simple terms",
-                            "Give me likely exam questions",
-                            "Summarize the important formulas",
-                          ]
-                  ).map((prompt) => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => applySuggestedPrompt(prompt)}
-                      className="rounded-full border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-secondary transition hover:border-border-strong hover:bg-bg-secondary hover:text-text-primary"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
+              <div className="mx-auto flex min-h-[75vh] w-full max-w-3xl flex-col items-center justify-center text-center">
+                <div className="flex flex-row items-center justify-center gap-4 sm:gap-5 text-text-primary mb-8 text-center">
+                  <h1 className="font-display text-3xl sm:text-[40px] leading-tight font-normal tracking-tight">
+                    <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="url(#premium-blue)" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" className="inline-block align-text-bottom mr-3 sm:mr-4 drop-shadow-[0_0_10px_rgba(96,165,250,0.65)]">
+                      <defs>
+                        <linearGradient id="premium-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#60A5FA" />
+                          <stop offset="100%" stopColor="#2563EB" />
+                        </linearGradient>
+                      </defs>
+                      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                    </svg>
+                    One step closer to your dreams, {capitalizedFirstName}.
+                  </h1>
                 </div>
+                
+                <div className="w-full text-left">
+                  {chatError ? (
+                    <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
+                      {chatError}
+                    </p>
+                  ) : null}
+                  {renderInputForm()}
+                </div>
+
               </div>
             ) : (
               <div className="space-y-5">
@@ -1089,41 +1090,26 @@ export function ChatPageClient({
                     <article
                       key={message.id}
                       className={cn(
-                        "animate-fade-in",
-                        message.role === "user" ? "ml-auto w-full max-w-[min(900px,92%)]" : "mr-auto w-full max-w-[1020px]",
+                        "animate-fade-in flex flex-col",
+                        message.role === "user" ? "ml-auto w-fit max-w-[min(900px,92%)]" : "mr-auto w-full max-w-[1020px]",
                       )}
                     >
                       <div
                         className={cn(
-                          "rounded-[30px] border px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.24)]",
                           message.role === "user"
-                            ? "border-border bg-bg-tertiary text-text-primary"
-                            : "border-border bg-bg-secondary/86",
+                            ? "rounded-[24px] px-4 py-2.5 bg-bg-tertiary text-text-primary shadow-sm"
+                            : "py-2 text-text-primary w-full",
                         )}
                       >
                         {message.role === "assistant" ? (
-                          <Markdown text={message.content} className="text-[15px] leading-8" />
+                          <Markdown text={message.content} className="text-[16px] leading-[28px] font-medium" />
                         ) : (
-                          <div className="whitespace-pre-wrap text-[15px] leading-8 text-text-primary">
+                          <div className="whitespace-pre-wrap text-[16px] leading-[24px] text-text-primary font-medium">
                             {message.content}
                           </div>
                         )}
 
-                        {displayCitations.length ? (
-                          <div className="mt-5">
-                            <p className="mb-3 text-[10px] font-mono-ui uppercase tracking-[0.2em] text-text-muted">
-                              Sources
-                            </p>
-                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                              {displayCitations.map((citation) => (
-                                <CitationCard
-                                  key={`${message.id}-${citation.documentId}-${citation.chunkId}`}
-                                  citation={citation}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
+
 
                         {persistedAssistant ? (
                           <div className="mt-5 space-y-4">
@@ -1161,46 +1147,9 @@ export function ChatPageClient({
                                   </Button>
                                 </Link>
                               ) : null}
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant={answerStyle === "detailed" ? "outline" : "ghost"}
-                                className="rounded-full"
-                                onClick={() => applyAnswerStyle("detailed")}
-                              >
-                                Detailed next
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant={answerStyle === "simple" ? "outline" : "ghost"}
-                                className="rounded-full"
-                                onClick={() => applyAnswerStyle("simple")}
-                              >
-                                Simple next
-                              </Button>
                             </div>
 
-                            {persistedAssistant.followUpSuggestions.length ? (
-                              <div>
-                                <p className="mb-2 text-[10px] font-mono-ui uppercase tracking-[0.2em] text-text-muted">
-                                  Try next
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                  {persistedAssistant.followUpSuggestions.map((suggestion) => (
-                                    <button
-                                      key={`${persistedAssistant.id}-${suggestion}`}
-                                      type="button"
-                                      onClick={() => applySuggestedPrompt(suggestion)}
-                                      data-testid={`followup-chip-${persistedAssistant.id}`}
-                                      className="rounded-full border border-border px-3 py-2 text-left text-xs text-text-secondary transition hover:border-border-strong hover:bg-bg-secondary hover:text-text-primary"
-                                    >
-                                      {suggestion}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : null}
+
                           </div>
                         ) : null}
                       </div>
@@ -1223,84 +1172,18 @@ export function ChatPageClient({
           </div>
         </div>
 
-        <div className="border-t border-border bg-bg-primary px-4 pb-4 pt-3 md:px-5 xl:px-6">
-          <div className="mx-auto max-w-5xl">
-            {chatError ? (
-              <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
-                {chatError}
-              </p>
-            ) : null}
-            {/* 
-              latestThinkingTrace block hidden temporarily as per user request 
-              {latestThinkingTrace ? (
-                ...
+        {messages.length > 0 ? (
+          <div className="bg-bg-primary px-4 pb-4 pt-3 md:px-5 xl:px-6">
+            <div className="mx-auto max-w-3xl">
+              {chatError ? (
+                <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
+                  {chatError}
+                </p>
               ) : null}
-            */}
-            <form onSubmit={submitMessage} className="rounded-[28px] border border-border bg-bg-secondary p-3 shadow-[0_24px_70px_rgba(0,0,0,0.38)]">
-
-              <textarea
-                ref={composerRef}
-                value={input}
-                onChange={(event: ChangeEvent<HTMLTextAreaElement>) => handleInputChange(event)}
-                onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void sendCurrentMessage();
-                  }
-                }}
-                rows={1}
-                placeholder="Ask a question about your studies..."
-                className="min-h-[44px] w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted"
-              />
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <div className="inline-flex rounded-full border border-border bg-bg-secondary p-0.5">
-                    {(["EN", "RN"] as const).map((item) => (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => setComposerLanguage(item)}
-                        className={
-                          "rounded-full px-3 py-1 text-[11px] font-mono-ui transition " +
-                          (composerLanguage === item ? "bg-text-primary text-text-inverse" : "text-text-secondary")
-                        }
-                      >
-                        {item === "EN" ? "English" : "Roman Nepali"}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="inline-flex rounded-full border border-border bg-bg-secondary p-0.5">
-                    {(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setRetrievalMode(mode)}
-                        className={cn(
-                          "rounded-full px-3 py-1 text-[11px] font-mono-ui transition",
-                          retrievalMode === mode
-                            ? "bg-text-primary text-text-inverse"
-                            : "text-text-secondary",
-                        )}
-                      >
-                        {RETRIEVAL_MODE_LABELS[mode]}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="hidden text-xs text-text-muted md:inline">
-                    Enter to send, Shift + Enter for a new line
-                  </span>
-                </div>
-                <Button
-                  type="submit"
-                  disabled={isLoading || !input.trim() || creditBalance <= 0}
-                  className="h-9 min-w-[100px] rounded-full px-4 text-sm"
-                >
-                  {isLoading ? "Sending..." : "Send →"}
-                </Button>
-              </div>
-            </form>
+              {renderInputForm()}
+            </div>
           </div>
-        </div>
+        ) : null}
       </section>
 
       {saveState ? (

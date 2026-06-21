@@ -41,8 +41,8 @@ export function CitationCard({ citation }: { citation: AssistantCitation }) {
 
   return (
     <div className="w-full rounded-xl border border-border bg-bg-primary px-3 py-2 text-left sm:max-w-sm">
-      <p className="text-[10px] font-mono-ui uppercase tracking-wider text-text-muted">{sourceTypeLabel}</p>
-      <p className="mt-1 text-xs font-medium text-text-primary">
+      <p className="text-[10px] font-mono-ui uppercase tracking-wider font-bold text-text-secondary">{sourceTypeLabel}</p>
+      <p className="mt-1 text-[13px] font-semibold text-text-primary">
         {fallbackTitle}
       </p>
       {metadata ? <p className="mt-1 text-[11px] text-text-secondary">{metadata}</p> : null}

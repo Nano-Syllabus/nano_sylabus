@@ -1,0 +1,81 @@
+import { useState, useRef, useEffect } from "react";
+
+export function CompactSelect({ 
+  value, 
+  onChange, 
+  options,
+  direction = "down"
+}: { 
+  value: string; 
+  onChange: (v: string) => void; 
+  options: { label: string; value: string }[];
+  direction?: "up" | "down";
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedLabel = options.find(o => o.value === value)?.label || value;
+
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex h-7 items-center gap-1.5 rounded-full bg-bg-tertiary px-3 py-1 text-[12px] font-medium text-text-primary transition hover:bg-bg-tertiary/80 outline-none border border-transparent focus:border-border"
+      >
+        {selectedLabel}
+        <svg 
+          width="12" 
+          height="12" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2.5" 
+          strokeLinecap="round" 
+          strokeLinejoin="round" 
+          className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+        >
+          <path d="m6 9 6 6 6-6"/>
+        </svg>
+      </button>
+      
+      {isOpen && (
+        <div 
+          className={`absolute left-0 w-max min-w-full rounded-xl border border-black/5 dark:border-white/5 bg-bg-secondary p-1 shadow-[0_4px_20px_rgba(0,0,0,0.1)] z-50 animate-in fade-in zoom-in-95 duration-100 ${
+            direction === "up" 
+              ? "bottom-full mb-1.5 origin-bottom-left" 
+              : "top-full mt-1.5 origin-top-left"
+          }`}
+        >
+          {options.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { 
+                onChange(opt.value); 
+                setIsOpen(false); 
+              }}
+              className={`w-full rounded-md px-3 py-1.5 text-left text-[12px] transition ${
+                value === opt.value 
+                  ? "bg-bg-tertiary font-medium text-text-primary" 
+                  : "text-text-muted hover:bg-bg-tertiary/50 hover:text-text-primary"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

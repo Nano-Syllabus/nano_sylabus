@@ -46,22 +46,7 @@ export function AppNav({ user }: { user: AppUser }) {
             <span className="leading-tight">{item.label}</span>
           </Link>
         ))}
-        {user.role === "admin" ? (
-          <Link
-            href="/admin"
-            className={cn(
-              "flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3 text-center text-[11px] transition",
-              pathname.startsWith("/admin")
-                ? "bg-bg-secondary text-text-primary font-medium shadow-sm"
-                : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary",
-            )}
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full text-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
-            </span>
-            <span className="leading-tight">Admin</span>
-          </Link>
-        ) : null}
+
       </nav>
 
       <div className="flex-1" />
