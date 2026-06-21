@@ -15,19 +15,15 @@ export function resolvePostAuthDestination(input: {
   const safeNext = sanitizeNextPath(input.nextPath);
 
   if (!safeNext) {
-    return input.role === "admin" ? "/admin" : input.onboarded ? "/app/chat" : "/onboarding";
-  }
-
-  if (safeNext.startsWith("/admin")) {
-    return input.role === "admin" ? safeNext : input.onboarded ? "/app/chat" : "/onboarding";
+    return input.onboarded ? "/app/chat" : "/onboarding";
   }
 
   if (safeNext === "/login" || safeNext === "/signup") {
-    return input.role === "admin" ? "/admin" : input.onboarded ? "/app/chat" : "/onboarding";
+    return input.onboarded ? "/app/chat" : "/onboarding";
   }
 
-  if (safeNext === "/onboarding" && (input.onboarded || input.role === "admin")) {
-    return input.role === "admin" ? "/admin" : "/app/chat";
+  if (safeNext === "/onboarding" && input.onboarded) {
+    return "/app/chat";
   }
 
   return safeNext;

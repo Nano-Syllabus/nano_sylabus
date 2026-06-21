@@ -289,7 +289,7 @@ export function AppSidebar({
       </div>
 
       {/* ── Nav Links ── */}
-      <nav className={cn("mt-3 space-y-1", isCollapsed ? "px-2" : "px-1")}>
+      <nav className={cn("mt-3 space-y-1", isCollapsed ? "px-2" : "px-3")}>
         <Link
           href="/app/chat"
           onClick={(e) => {
@@ -302,7 +302,7 @@ export function AppSidebar({
             "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
             isCollapsed
               ? "mx-auto mb-3 h-10 w-10 justify-center rounded-full bg-bg-secondary p-2 text-text-primary hover:opacity-80"
-              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5 hover:bg-bg-secondary hover:text-white"
+              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5 hover:bg-bg-secondary hover:text-text-primary"
           )}
         >
           {isCollapsed ? (
@@ -334,7 +334,7 @@ export function AppSidebar({
                   : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
                 isActive
                   ? "bg-bg-secondary text-text-primary"
-                  : "hover:bg-bg-secondary hover:text-white",
+                  : "hover:bg-bg-secondary hover:text-text-primary",
               )}
               title={isCollapsed ? item.label : undefined}
             >
@@ -343,24 +343,7 @@ export function AppSidebar({
             </Link>
           );
         })}
-        {user.role === "admin" ? (
-          <Link
-            href="/admin"
-            className={cn(
-              "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
-              isCollapsed
-                ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
-                : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
-              pathname.startsWith("/admin")
-                ? "bg-bg-secondary text-text-primary"
-                : "hover:bg-bg-secondary hover:text-white",
-            )}
-            title={isCollapsed ? "Admin" : undefined}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
-            {!isCollapsed && "Admin"}
-          </Link>
-        ) : null}
+
       </nav>
 
       {/* ── Chat History ── */}
@@ -379,7 +362,7 @@ export function AppSidebar({
         </div>
 
         {/* ── Recent Chats ── */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2 mt-1">
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 mt-1">
           <div className="space-y-0.5">
             {groupedSessions.map(({ group, items }) =>
               items.length ? (
@@ -388,7 +371,7 @@ export function AppSidebar({
                     onClick={() =>
                       setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }))
                     }
-                    className="flex w-full items-center mb-1 mt-2 px-2 text-[14px] font-semibold text-white first:mt-0 hover:text-white/80 transition group/header"
+                    className="flex w-full items-center mb-1 mt-2 px-2 text-[14px] font-semibold text-text-primary first:mt-0 hover:text-text-primary/80 transition group/header"
                   >
                     <span>{group}</span>
                     <svg
@@ -428,8 +411,8 @@ export function AppSidebar({
                             className={cn(
                               "group flex items-center gap-2.5 w-full rounded-xl px-2 py-2 text-left text-[14px] leading-5 transition",
                               currentSessionId === session.id
-                                ? "bg-bg-secondary font-semibold text-white"
-                                : "font-medium text-white/90 hover:bg-bg-secondary hover:text-white",
+                                ? "bg-bg-secondary font-semibold text-text-primary"
+                                : "font-medium text-text-primary hover:bg-bg-secondary hover:text-text-primary",
                             )}
                           >
                             {session.isPinned && (
@@ -555,10 +538,10 @@ export function AppSidebar({
             <div className="px-2.5 py-2 flex items-center justify-between hover:bg-bg-secondary rounded-lg transition cursor-pointer mb-1">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-bg-primary text-[13px] font-semibold text-text-primary shadow-sm">
-                  {(user.fullName || user.email || "U").charAt(0).toUpperCase()}
+                  {(user.fullName?.trim() || user.email?.trim() || "U").charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1 text-left pl-1">
-                  <p className="truncate text-[15px] font-medium leading-[22px] text-white">
+                  <p className="truncate text-[15px] font-medium leading-[22px] text-white capitalize">
                     {user.fullName || user.email?.split("@")[0] || "User"}
                   </p>
                   <p className="truncate text-[13px] text-text-muted mt-0.5">
@@ -611,12 +594,12 @@ export function AppSidebar({
           )}
         >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-bg-primary text-[13px] font-semibold text-text-primary shadow-sm">
-            {(user.fullName || user.email || "U").charAt(0).toUpperCase()}
+            {(user.fullName?.trim() || user.email?.trim() || "U").charAt(0).toUpperCase()}
           </div>
           {!isCollapsed && (
             <>
               <div className="min-w-0 flex-1 text-left pl-1">
-                <p className="truncate text-[15px] font-medium leading-[22px] text-white">
+                <p className="truncate text-[15px] font-medium leading-[22px] text-white capitalize">
                   {user.fullName || user.email?.split("@")[0] || "User"}
                 </p>
                 <p className="truncate text-[13px] text-text-muted mt-0.5">

@@ -46,7 +46,7 @@ export function resolveAccess(input: {
   if (hasUser && isGuestPage) {
     return {
       allow: false as const,
-      redirectTo: role === "admin" ? "/admin" : onboarded ? "/app/chat" : "/onboarding",
+      redirectTo: onboarded ? "/app/chat" : "/onboarding",
       includeNext: false,
     };
   }
@@ -55,10 +55,10 @@ export function resolveAccess(input: {
     return { allow: false as const, redirectTo: "/onboarding", includeNext: false };
   }
 
-  if (hasUser && isOnboarding && (onboarded || role === "admin")) {
+  if (hasUser && isOnboarding && onboarded) {
     return {
       allow: false as const,
-      redirectTo: role === "admin" ? "/admin" : "/app/chat",
+      redirectTo: "/app/chat",
       includeNext: false,
     };
   }

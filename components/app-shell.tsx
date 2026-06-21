@@ -44,7 +44,7 @@ export function AppShell({
           className={
             "fixed inset-y-0 left-0 z-30 flex flex-col border-r border-border transition-all duration-300 md:static md:translate-x-0 " +
             (open ? "translate-x-0 " : "-translate-x-full ") +
-            (isCollapsed ? "w-[68px]" : "w-[240px]")
+            (isCollapsed ? "w-[68px]" : "w-[260px]")
           }
         >
           <AppSidebar 
@@ -64,7 +64,7 @@ export function AppShell({
         ) : null}
 
         <main className="flex flex-1 flex-col overflow-hidden">
-          <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 md:px-5 xl:px-6">
+          <header className="flex h-12 items-center justify-between gap-3 px-4 md:px-8">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
@@ -73,7 +73,7 @@ export function AppShell({
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
               </button>
-              <div className="min-w-0 truncate font-display text-xl md:text-[22px] font-medium">
+              <div className="min-w-0 truncate font-sans text-[15px] font-semibold text-text-primary">
                 {dynamicTitle ?? title}
               </div>
             </div>
