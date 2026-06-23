@@ -24,14 +24,20 @@ export function CompactSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedLabel = options.find(o => o.value === value)?.label || value;
+  const selectedLabel = options.find((option) => option.value === value)?.label || options[0]?.label || value;
 
   return (
-    <div className="relative inline-block" ref={ref}>
+    <div
+      className="relative inline-block"
+      ref={ref}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") setIsOpen(false);
+      }}
+    >
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex h-7 items-center gap-1.5 rounded-full bg-bg-tertiary px-3 py-1 text-[12px] font-medium text-text-primary transition hover:bg-bg-tertiary/80 outline-none border border-transparent focus:border-border"
+        className="flex h-7 items-center gap-1.5 rounded-full border border-transparent bg-bg-tertiary px-3 py-1 text-[12px] font-medium text-text-primary outline-none transition hover:bg-bg-tertiary/80 focus-visible:ring-2 focus-visible:ring-white/35"
       >
         {selectedLabel}
         <svg 
@@ -57,7 +63,7 @@ export function CompactSelect({
               : "top-full mt-1.5 origin-top-left"
           }`}
         >
-          {options.map(opt => (
+          {options.map((opt) => (
             <button
               key={opt.value}
               type="button"

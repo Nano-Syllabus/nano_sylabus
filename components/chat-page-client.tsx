@@ -32,6 +32,15 @@ import type {
 } from "@/lib/types";
 import { cn, deriveSessionTitle, formatDate, groupDateLabel } from "@/lib/utils";
 
+/** Strip chapter enrichment from subject context for UI display.
+ * e.g. "Instrumentation > Measurement Systems" → "Instrumentation" */
+function stripSubjectChapter(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.includes(">") ? trimmed.split(">")[0].trim() : trimmed;
+}
+
 const COLOR_LABEL: Record<NoteColor, string> = {
   red: "Must revise",
   yellow: "Review later",
@@ -211,7 +220,25 @@ export function ChatPageClient({
   const [creditBalance, setCreditBalance] = useState(user.creditBalance);
   const [sessionDetail, setSessionDetail] = useState<ChatSessionDetail | null>(initialSession);
   const shell = useContext(AppShellContext);
-  const [subjectContext, setSubjectContext] = useState<string | null>("Engineering Physics");
+  const normalizedProfileSubjects = useMemo(
+    () =>
+      profileSubjects
+        .map((subject) => normalizeSubjectLabel(subject))
+        .filter(Boolean),
+    [profileSubjects],
+  );
+  const defaultSubjectContext = useMemo(() => {
+    const fromInitial = initialSubjectContext ? stripSubjectChapter(normalizeSubjectLabel(initialSubjectContext)) : "";
+    if (fromInitial) return fromInitial;
+
+    const fromSession = initialSession?.subjectContext
+      ? stripSubjectChapter(normalizeSubjectLabel(initialSession.subjectContext))
+      : "";
+    if (fromSession) return fromSession;
+
+    return normalizedProfileSubjects[0] ?? null;
+  }, [initialSubjectContext, initialSession?.subjectContext, normalizedProfileSubjects]);
+  const [subjectContext, setSubjectContext] = useState<string | null>(defaultSubjectContext);
   const [answerStyle, setAnswerStyle] = useState<AnswerStyle>("detailed");
   const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("default");
   const [saveState, setSaveState] = useState<{
@@ -247,13 +274,20 @@ export function ChatPageClient({
     [initialSession, currentSessionId],
   );
   const availableSubjects = useMemo(() => {
-    const all = [...profileSubjects, ...catalogSubjects, subjectContext]
-      .map((item) => item?.trim())
+    const all = [...normalizedProfileSubjects, ...catalogSubjects, stripSubjectChapter(subjectContext)]
+      .map((item) => (item ? normalizeSubjectLabel(item) : ""))
       .filter(Boolean) as string[];
     return Array.from(new Set(all)).sort((left, right) =>
       left.localeCompare(right, undefined, { sensitivity: "base", numeric: true }),
     );
-  }, [profileSubjects, catalogSubjects, subjectContext]);
+  }, [normalizedProfileSubjects, catalogSubjects, subjectContext]);
+  const subjectActionOptions = useMemo(
+    () =>
+      availableSubjects.length > 0
+        ? availableSubjects.map((subject) => ({ label: subject, value: subject }))
+        : [{ label: "All Subjects", value: "" }],
+    [availableSubjects],
+  );
 
   useEffect(() => {
     try {
@@ -430,7 +464,7 @@ export function ChatPageClient({
       setMatchedScope(null);
       setLatestThinkingTrace(null);
       setSessionDetail(detail);
-      setSubjectContext(detail.subjectContext);
+      setSubjectContext(stripSubjectChapter(detail.subjectContext) || defaultSubjectContext);
       setMessages(
         detail.messages.map((message) => ({
           id: message.id,
@@ -459,7 +493,7 @@ export function ChatPageClient({
     };
     window.addEventListener("chat-switch-session", handleSwitch);
     return () => window.removeEventListener("chat-switch-session", handleSwitch);
-  }, []);
+  }, [defaultSubjectContext]);
 
   async function refreshCredits() {
     const response = await fetch("/api/billing/credits", { cache: "no-store" });
@@ -484,7 +518,7 @@ export function ChatPageClient({
         content: message.content,
       })),
     );
-    setSubjectContext(detail.subjectContext);
+    setSubjectContext(stripSubjectChapter(detail.subjectContext) || defaultSubjectContext);
     setSessions((prev) =>
       prev
         .map((session) =>
@@ -727,20 +761,22 @@ export function ChatPageClient({
     return questions;
   }, [sessionDetail, activeSessionTitle]);
 
-  const activeSessionSummary =
-    sessions.find((session) => session.id === currentSessionId) ??
-    (sessionDetail
-      ? {
-          id: sessionDetail.id,
-          userId: sessionDetail.userId,
-          title: sessionDetail.title,
-          createdAt: sessionDetail.createdAt,
-	          updatedAt: sessionDetail.updatedAt,
-	          subjectTags: sessionDetail.subjectTags,
-	          subjectContext: sessionDetail.subjectContext,
-	          isPinned: sessionDetail.isPinned,
-	        }
-      : null);
+  const activeSessionSummary = useMemo<ChatSessionSummary | null>(() => {
+    const foundSession = sessions.find((session) => session.id === currentSessionId);
+    if (foundSession) return foundSession;
+    if (!sessionDetail) return null;
+
+    return {
+      id: sessionDetail.id,
+      userId: sessionDetail.userId,
+      title: sessionDetail.title,
+      createdAt: sessionDetail.createdAt,
+      updatedAt: sessionDetail.updatedAt,
+      subjectTags: sessionDetail.subjectTags,
+      subjectContext: sessionDetail.subjectContext,
+      isPinned: sessionDetail.isPinned,
+    };
+  }, [currentSessionId, sessionDetail, sessions]);
 
   async function sendCurrentMessage() {
     const trimmed = input.trim();
@@ -841,13 +877,13 @@ export function ChatPageClient({
       setCurrentSessionId(null);
       currentSessionIdRef.current = null;
       setSessionDetail(null);
-      setSubjectContext(null);
+      setSubjectContext(defaultSubjectContext);
       setMessages([]);
       window.history.replaceState(null, "", "/app/chat");
     }
   }
 
-  async function updateSessionSubjectContext(nextSubjectContext: string | null) {
+  const updateSessionSubjectContext = useCallback(async (nextSubjectContext: string | null) => {
     const normalizedSubjectContext = nextSubjectContext ? normalizeSubjectLabel(nextSubjectContext) : null;
     const previousSubjectContext = subjectContext;
     setChatError("");
@@ -882,7 +918,7 @@ export function ChatPageClient({
           }
         : prev,
     );
-  }
+  }, [activeSessionSummary, subjectContext]);
 
   async function copyAssistantMessage(message: ChatMessageRecord) {
     setCopyingMessageId(message.id);
@@ -957,21 +993,15 @@ export function ChatPageClient({
   useEffect(() => {
     shell.setActions(
       <div className="flex items-center">
-        <div className="group flex cursor-pointer items-center gap-2.5 rounded-full border border-black/5 dark:border-white/5 bg-bg-secondary/40 px-3 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-md transition-all hover:bg-bg-secondary/80 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
-          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-blue-500 transition-colors group-hover:bg-blue-500/20">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-            </svg>
-          </div>
-          <span className="text-[13px] font-medium tracking-tight text-text-primary">
-            {subjectContext || "All Subjects"}
-          </span>
-        </div>
+        <CompactSelect
+          value={stripSubjectChapter(subjectContext) ?? subjectActionOptions[0]?.value ?? ""}
+          onChange={(value) => void updateSessionSubjectContext(value || null)}
+          options={subjectActionOptions}
+        />
       </div>
     );
     return () => shell.setActions(null);
-  }, [shell, subjectContext]);
+  }, [shell, subjectActionOptions, subjectContext, updateSessionSubjectContext]);
 
   useEffect(() => {
     stopChatRef.current = stop;
@@ -1158,8 +1188,8 @@ export function ChatPageClient({
                 })}
 
                 {isLoading ? (
-                  <div className="mr-auto w-full max-w-[1020px] rounded-[30px] border border-border bg-bg-secondary/86 px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.24)]">
-                    <p className="mb-2 text-[11px] text-text-muted">{thinkingStatus || "Generating..."}</p>
+                  <div className="mr-auto w-full max-w-[1020px] px-2 py-4">
+                    <p className="mb-2 text-[13px] text-text-muted">{thinkingStatus || "Generating..."}</p>
                     <div className="flex items-center">
                       <span className="typing-dot" />
                       <span className="typing-dot" />

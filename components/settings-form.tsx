@@ -33,6 +33,8 @@ export function SettingsForm({
   const [college, setCollege] = useState(profile.college);
   const [board, setBoard] = useState(profile.board);
   const [grade, setGrade] = useState(profile.grade);
+  const [semester, setSemester] = useState<string>("");
+  const isBachelor = grade.toLowerCase().includes("bachelor");
   const [boardScore, setBoardScore] = useState(profile.boardScore ?? "");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(
     normalizeSubjects(profile.subjects),
@@ -66,10 +68,10 @@ export function SettingsForm({
     () =>
       mergeDropdownOptions({
         catalogValues: suggestedGrades,
-        fallbackValues: catalogBoards.length ? [] : defaultGradeOptions(),
+        fallbackValues: catalogBoards.length ? [] : defaultGradeOptions(board),
         includeValue: grade,
       }),
-    [catalogBoards.length, grade, suggestedGrades],
+    [board, catalogBoards.length, grade, suggestedGrades],
   );
   const suggestedSubjects = useMemo(
     () => catalogSubjectsByBoardGrade[`${normalizedBoard}::${normalizedGrade}`] ?? [],
@@ -230,7 +232,11 @@ export function SettingsForm({
             <Select
               value={grade}
               onChange={(event) => {
-                setGrade(event.target.value);
+                const nextGrade = event.target.value;
+                if (!nextGrade.toLowerCase().includes("bachelor")) {
+                  setSemester("");
+                }
+                setGrade(nextGrade);
               }}
               disabled={!board}
             >
@@ -242,6 +248,21 @@ export function SettingsForm({
               ))}
             </Select>
           </Field>
+          {isBachelor && (
+            <Field label="Semester">
+              <Select
+                value={semester}
+                onChange={(event) => setSemester(event.target.value)}
+              >
+                <option value="">Select semester</option>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                  <option key={sem} value={String(sem)}>
+                    Semester {sem}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           <Field label="Board score">
             <Input value={boardScore} onChange={(event) => setBoardScore(event.target.value)} />
           </Field>

@@ -58,6 +58,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg-primary: #000000;
   --bg-secondary: #101010;
   --bg-tertiary: #1c1c1f;
@@ -96,6 +97,12 @@
   ::selection {
     background-color: var(--text-primary);
     color: var(--bg-primary);
+  }
+
+  select,
+  select option {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
   }
 }
 
