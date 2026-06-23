@@ -37,6 +37,8 @@ export function OnboardingForm({
   const [college, setCollege] = useState(initialProfile?.college ?? "");
   const [board, setBoard] = useState(initialProfile?.board ?? "");
   const [grade, setGrade] = useState(initialProfile?.grade ?? "");
+  const [semester, setSemester] = useState<string>("");
+  const isBachelor = grade.toLowerCase().includes("bachelor");
   const [scoreType, setScoreType] = useState<"%" | "GPA">("%");
   const [score, setScore] = useState(initialProfile?.boardScore?.replace(/[%A-Z]+$/g, "") ?? "");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(
@@ -70,10 +72,10 @@ export function OnboardingForm({
     () =>
       mergeDropdownOptions({
         catalogValues: suggestedGrades,
-        fallbackValues: catalogBoards.length ? [] : defaultGradeOptions(),
+        fallbackValues: catalogBoards.length ? [] : defaultGradeOptions(board),
         includeValue: grade,
       }),
-    [catalogBoards.length, grade, suggestedGrades],
+    [board, catalogBoards.length, grade, suggestedGrades],
   );
   const suggestedSubjects = useMemo(
     () => catalogSubjectsByBoardGrade[`${normalizedBoard}::${normalizedGrade}`] ?? [],
@@ -92,6 +94,7 @@ export function OnboardingForm({
         college?: string;
         board?: string;
         grade?: string;
+        semester?: string;
         scoreType?: "%" | "GPA";
         score?: string;
         selectedSubjects?: string[];
@@ -105,6 +108,7 @@ export function OnboardingForm({
       if (typeof draft.college === "string") setCollege(draft.college);
       if (typeof draft.board === "string") setBoard(draft.board);
       if (typeof draft.grade === "string") setGrade(draft.grade);
+      if (typeof draft.semester === "string") setSemester(draft.semester);
       if (draft.scoreType === "%" || draft.scoreType === "GPA") setScoreType(draft.scoreType);
       if (typeof draft.score === "string") setScore(draft.score);
       if (Array.isArray(draft.selectedSubjects)) {
@@ -132,6 +136,7 @@ export function OnboardingForm({
           college,
           board,
           grade,
+          semester,
           scoreType,
           score,
           selectedSubjects,
@@ -148,6 +153,7 @@ export function OnboardingForm({
     draftKey,
     fullName,
     grade,
+    semester,
     initialProfile,
     languagePref,
     score,
@@ -358,7 +364,11 @@ export function OnboardingForm({
               <Select
                 value={grade}
                 onChange={(event) => {
-                  setGrade(event.target.value);
+                  const nextGrade = event.target.value;
+                  if (!nextGrade.toLowerCase().includes("bachelor")) {
+                    setSemester("");
+                  }
+                  setGrade(nextGrade);
                 }}
                 disabled={!board}
               >
@@ -370,6 +380,21 @@ export function OnboardingForm({
                 ))}
               </Select>
             </Field>
+            {isBachelor && (
+              <Field label="Semester">
+                <Select
+                  value={semester}
+                  onChange={(event) => setSemester(event.target.value)}
+                >
+                  <option value="">Select semester</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                    <option key={sem} value={String(sem)}>
+                      Semester {sem}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
             <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />
           </Step>
         ) : null}
@@ -408,12 +433,26 @@ export function OnboardingForm({
         ) : null}
 
         {step === 4 ? (
-          <Step title="Which subjects matter?" subtitle="Pick from subjects available in your indexed books.">
+          <Step title="Which subjects do you want to focus on?" subtitle="Select the subjects you're currently studying or want help with.">
             {suggestedSubjects.length > 0 ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-mono-ui uppercase text-text-muted">Available subjects</p>
-                  <p className="text-xs text-text-muted">{selectedSubjects.length} selected</p>
+                  <p className="text-xs font-mono-ui uppercase text-text-muted">{selectedSubjects.length} selected</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      const allSelected = suggestedSubjects.every((s) => selectedSubjects.some((sel) => sel.toLowerCase() === s.toLowerCase()));
+                      if (allSelected) {
+                        setSelectedSubjects([]);
+                      } else {
+                        setSelectedSubjects([...suggestedSubjects]);
+                      }
+                    }}
+                  >
+                    {suggestedSubjects.every((s) => selectedSubjects.some((sel) => sel.toLowerCase() === s.toLowerCase())) ? "Deselect all" : "Select all"}
+                  </Button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {suggestedSubjects.map((subject) => {
@@ -440,15 +479,8 @@ export function OnboardingForm({
                 ) : null}
               </div>
             ) : (
-              <div className="space-y-2">
-                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  No indexed subjects available for this board and grade yet.
-                </div>
-                {selectedSubjects.length > 0 ? (
-                  <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
-                    Current selection: {selectedSubjects.join(", ")}
-                  </div>
-                ) : null}
+              <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
+                No subjects available for this board and grade yet.
               </div>
             )}
             <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />

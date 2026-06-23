@@ -1,4 +1,15 @@
-const DEFAULT_BOARD_OPTIONS = ["Engineering", "NEB", "TU", "KU", "PU", "CTEVT"];
+const DEFAULT_BOARD_OPTIONS = ["Engineering", "NEB"];
+
+const GRADE_OPTIONS_BY_BOARD: Record<string, string[]> = {
+  engineering: [
+    "Bachelor Year I",
+    "Bachelor Year II",
+    "Bachelor Year III",
+    "Bachelor Year IV",
+  ],
+  neb: ["Class 11", "Class 12"],
+};
+
 const DEFAULT_GRADE_OPTIONS = [
   "Class 11",
   "Class 12",
@@ -47,6 +58,12 @@ export function defaultBoardOptions() {
   return DEFAULT_BOARD_OPTIONS;
 }
 
-export function defaultGradeOptions() {
+export function defaultGradeOptions(board?: string) {
+  if (board) {
+    const key = board.trim().toLowerCase();
+    if (GRADE_OPTIONS_BY_BOARD[key]) {
+      return GRADE_OPTIONS_BY_BOARD[key];
+    }
+  }
   return DEFAULT_GRADE_OPTIONS;
 }

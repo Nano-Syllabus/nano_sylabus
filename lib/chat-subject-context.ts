@@ -35,6 +35,18 @@ export function inferSessionSubjectContext(input: {
   // If all citations point to a single subject and a single chapter,
   // build a "Subject > Chapter" context so follow-ups scope to that chapter.
   if (citedSubjects.length === 1 && uniqueChapters.length === 1) {
+    // If the user explicitly selected a subject, only enrich with chapter info
+    // when the cited subject matches. Never override the user's choice with a
+    // different subject pulled from RAG citations.
+    if (existing) {
+      const citedNormalized = citedSubjects[0].toLowerCase();
+      const existingNormalized = existing.toLowerCase();
+      if (citedNormalized === existingNormalized) {
+        return `${citedSubjects[0]} > ${uniqueChapters[0]}`;
+      }
+      // Cited subject differs from user's selection — keep user's choice
+      return existing;
+    }
     return `${citedSubjects[0]} > ${uniqueChapters[0]}`;
   }
 
