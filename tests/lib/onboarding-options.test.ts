@@ -8,7 +8,9 @@ import {
 describe("onboarding options", () => {
   it("provides stable board and grade fallbacks", () => {
     expect(defaultBoardOptions()).toContain("Engineering");
-    expect(defaultGradeOptions()).toContain("Bachelor Year I");
+    expect(defaultBoardOptions()).toContain("CTEVT");
+    expect(defaultGradeOptions()).toContain("Bachelor");
+    expect(defaultGradeOptions("Engineering")).toEqual(["Bachelor"]);
   });
 
   it("merges catalog + fallback + current value without duplicates", () => {

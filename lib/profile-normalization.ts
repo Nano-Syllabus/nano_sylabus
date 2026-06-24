@@ -34,6 +34,14 @@ export function normalizeGrade(value: string) {
     return `Class ${classMatch[1]}`;
   }
 
+  const bachelorMatch =
+    compact.match(/^bachelor$/i) ||
+    compact.match(/^bachelor\s+year\s*(?:[1-4]|i{1,3}|iv)$/i) ||
+    compact.match(/^bachelor\s*(?:[1-4]|i{1,3}|iv)$/i);
+  if (bachelorMatch) {
+    return "Bachelor";
+  }
+
   return compact
     .split(" ")
     .map((word) => {

@@ -1,22 +1,14 @@
-const DEFAULT_BOARD_OPTIONS = ["Engineering", "NEB"];
+const DEFAULT_BOARD_OPTIONS = ["Engineering", "NEB", "TU", "KU", "PU", "CTEVT"];
 
 const GRADE_OPTIONS_BY_BOARD: Record<string, string[]> = {
-  engineering: [
-    "Bachelor Year I",
-    "Bachelor Year II",
-    "Bachelor Year III",
-    "Bachelor Year IV",
-  ],
+  engineering: ["Bachelor"],
   neb: ["Class 11", "Class 12"],
 };
 
 const DEFAULT_GRADE_OPTIONS = [
   "Class 11",
   "Class 12",
-  "Bachelor Year I",
-  "Bachelor Year II",
-  "Bachelor Year III",
-  "Bachelor Year IV",
+  "Bachelor",
 ];
 
 function sortValues(values: string[]) {
