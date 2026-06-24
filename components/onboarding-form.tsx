@@ -107,7 +107,7 @@ export function OnboardingForm({
       if (typeof draft.fullName === "string") setFullName(draft.fullName);
       if (typeof draft.college === "string") setCollege(draft.college);
       if (typeof draft.board === "string") setBoard(draft.board);
-      if (typeof draft.grade === "string") setGrade(draft.grade);
+      if (typeof draft.grade === "string") setGrade(normalizeGrade(draft.grade));
       if (typeof draft.semester === "string") setSemester(draft.semester);
       if (draft.scoreType === "%" || draft.scoreType === "GPA") setScoreType(draft.scoreType);
       if (typeof draft.score === "string") setScore(draft.score);

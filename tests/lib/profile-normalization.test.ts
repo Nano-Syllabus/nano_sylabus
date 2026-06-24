@@ -12,6 +12,8 @@ describe("profile normalization", () => {
     expect(normalizeBoard(" neb ")).toBe("NEB");
     expect(normalizeGrade("11")).toBe("Class 11");
     expect(normalizeGrade(" class   12 ")).toBe("Class 12");
+    expect(normalizeGrade("Bachelor Year I")).toBe("Bachelor");
+    expect(normalizeGrade("bachelor 2")).toBe("Bachelor");
     expect(normalizeGrade("bbs year 1")).toBe("BBS Year 1");
   });
 
