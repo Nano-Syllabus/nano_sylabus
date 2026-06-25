@@ -22,7 +22,10 @@ function normalizeAnswerTrace(input: unknown): AssistantAnswerTrace | null {
   return {
     routePath: typeof trace.routePath === "string" ? trace.routePath : "unknown",
     routeScopeDebug: typeof trace.routeScopeDebug === "string" ? trace.routeScopeDebug : "",
-    retrievalMode: trace.retrievalMode === "chapter" ? "chapter" : "default",
+    retrievalMode:
+      trace.retrievalMode === "chapter" || trace.retrievalMode === "web"
+        ? trace.retrievalMode
+        : "default",
     answerMode: typeof trace.answerMode === "string" ? trace.answerMode : null,
     answerModeReason: typeof trace.answerModeReason === "string" ? trace.answerModeReason : null,
     matchedScope: typeof trace.matchedScope === "string" ? trace.matchedScope : null,

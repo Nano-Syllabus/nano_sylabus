@@ -54,9 +54,10 @@ const ANSWER_STYLE_LABELS: Record<AnswerStyle, string> = {
   balanced: "Balanced",
   detailed: "Detailed",
 };
-type RetrievalMode = "default" | "chapter";
+type RetrievalMode = "default" | "web" | "chapter";
 const RETRIEVAL_MODE_LABELS: Record<RetrievalMode, string> = {
   default: "Syllabus",
+  web: "Web Search",
   chapter: "Chapter",
 };
 
@@ -304,7 +305,7 @@ export function ChatPageClient({
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(RETRIEVAL_MODE_STORAGE_KEY);
-      if (stored === "default" || stored === "chapter") {
+      if (stored === "default" || stored === "web" || stored === "chapter") {
         setRetrievalMode(stored);
       }
     } catch {}
@@ -582,8 +583,11 @@ export function ChatPageClient({
       const responseMatchedScope = response.headers.get("x-matched-scope")?.trim() || null;
       const ragChunks = Number(response.headers.get("x-rag-chunks") || "0");
       const grounded = response.headers.get("x-rag-grounded") === "1";
+      const responseRetrievalModeHeader = response.headers.get("x-retrieval-mode");
       const responseRetrievalMode =
-        response.headers.get("x-retrieval-mode") === "chapter" ? "chapter" : "default";
+        responseRetrievalModeHeader === "chapter" || responseRetrievalModeHeader === "web"
+          ? responseRetrievalModeHeader
+          : "default";
       const responseSubjectContext = response.headers.get("x-subject-context")?.trim() || null;
       const answerModeHeader = response.headers.get("x-answer-mode");
       const answerMode =

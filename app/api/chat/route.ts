@@ -47,7 +47,7 @@ const requestSchema = z.object({
   language: z.enum(["EN", "RN"]).default("EN"),
   messageLanguage: z.enum(["EN", "RN"]).optional(),
   answerStyle: z.enum(["simple", "balanced", "detailed"]).optional(),
-  retrievalMode: z.enum(["default", "chapter"]).optional(),
+  retrievalMode: z.enum(["default", "web", "chapter"]).optional(),
   subjectContext: z.string().trim().min(1).max(120).nullable().optional(),
   messages: z
     .array(
@@ -60,6 +60,7 @@ const requestSchema = z.object({
 });
 
 type AnswerMode = "quick" | "deep";
+type RetrievalMode = "default" | "web" | "chapter";
 type ProviderOptions = Parameters<typeof generateText>[0]["providerOptions"];
 type QuestionStyle = "concept" | "numerical" | "derivation" | "compare";
 type TopicCardContext = {
@@ -86,9 +87,10 @@ function resolvePromptHistoryLimit({
   retrievalMode,
   answerStyle,
 }: {
-  retrievalMode: "default" | "chapter";
+  retrievalMode: RetrievalMode;
   answerStyle: AnswerStyle;
 }) {
+  if (retrievalMode === "web") return 8;
   if (retrievalMode === "chapter") return 14;
   if (answerStyle === "detailed") return 12;
   if (answerStyle === "balanced") return 10;
@@ -921,7 +923,7 @@ function buildRouteScopeDebug(scope: {
 function buildAnswerTrace(input: {
   routePath: string;
   routeScopeDebug: string;
-  retrievalMode: "default" | "chapter";
+  retrievalMode: RetrievalMode;
   answerMode: string;
   answerModeReason: string;
   matchedScope: string | null;
@@ -2439,7 +2441,7 @@ function shouldPreferDirectGeneration({
   questionStyle,
   subjectContext,
 }: {
-  retrievalMode: "default" | "chapter";
+  retrievalMode: RetrievalMode;
   questionStyle: QuestionStyle;
   subjectContext: string | null;
 }) {
@@ -2582,6 +2584,7 @@ export async function POST(request: Request) {
     const parsed = requestSchema.parse(await request.json());
     const answerStyle: AnswerStyle = parsed.answerStyle ?? "detailed";
     const retrievalMode = parsed.retrievalMode ?? "default";
+    const isWebMode = retrievalMode === "web";
     const resolvedLanguage = resolveResponseLanguage({
       chatLanguage: parsed.language,
       messageLanguage: parsed.messageLanguage,
@@ -2701,17 +2704,19 @@ export async function POST(request: Request) {
     let retrieval: RetrievalResult;
 
     const retrievalStartedAt = Date.now();
-    const deterministicCatalogAnswer = await buildDeterministicCatalogAnswer({
-      supabase,
-      question: latestUserMessage.content,
-      language: resolvedLanguage,
-      subjectContext: sessionSubjectContext,
-      profile: {
-        board: profile.board,
-        grade: profile.grade,
-        subjects: profile.subjects,
-      },
-    });
+    const deterministicCatalogAnswer = isWebMode
+      ? null
+      : await buildDeterministicCatalogAnswer({
+          supabase,
+          question: latestUserMessage.content,
+          language: resolvedLanguage,
+          subjectContext: sessionSubjectContext,
+          profile: {
+            board: profile.board,
+            grade: profile.grade,
+            subjects: profile.subjects,
+          },
+        });
 
     if (deterministicCatalogAnswer) {
       retrievalMs = Date.now() - retrievalStartedAt;
@@ -2810,17 +2815,19 @@ export async function POST(request: Request) {
       });
     }
 
-    const deterministicExamBankCatalogAnswer = await buildDeterministicExamBankAnswerFromCatalog({
-      supabase,
-      question: latestUserMessage.content,
-      language: resolvedLanguage,
-      subjectContext: sessionSubjectContext,
-      profile: {
-        board: profile.board,
-        grade: profile.grade,
-        subjects: profile.subjects,
-      },
-    });
+    const deterministicExamBankCatalogAnswer = isWebMode
+      ? null
+      : await buildDeterministicExamBankAnswerFromCatalog({
+          supabase,
+          question: latestUserMessage.content,
+          language: resolvedLanguage,
+          subjectContext: sessionSubjectContext,
+          profile: {
+            board: profile.board,
+            grade: profile.grade,
+            subjects: profile.subjects,
+          },
+        });
 
     if (deterministicExamBankCatalogAnswer) {
       retrievalMs = Date.now() - retrievalStartedAt;
@@ -2917,15 +2924,21 @@ export async function POST(request: Request) {
     }
 
     try {
-      retrieval = await withTimeout(
-        retrieveKnowledgeChunks(retrievalQuestion, profile, {
-          subjectContext: sessionSubjectContext,
-        }),
-        Math.max(1000, ragTimeoutMs),
-        "RAG retrieval",
-      );
+      retrieval = isWebMode
+        ? {
+            grounded: false,
+            chunks: [],
+            citations: [],
+          }
+        : await withTimeout(
+            retrieveKnowledgeChunks(retrievalQuestion, profile, {
+              subjectContext: sessionSubjectContext,
+            }),
+            Math.max(1000, ragTimeoutMs),
+            "RAG retrieval",
+          );
     } catch (retrievalError) {
-      console.error("RAG retrieval failed; refusing ungrounded answer", retrievalError);
+      console.error("RAG retrieval failed; continuing without grounded chunks", retrievalError);
       retrieval = {
         grounded: false,
         chunks: [],
@@ -2957,18 +2970,20 @@ export async function POST(request: Request) {
       profile,
     });
 
-    const deterministicChapterAnswer = await buildDeterministicChapterAnswer({
-      supabase,
-      question: latestUserMessage.content,
-      language: resolvedLanguage,
-      subjectContext: sessionSubjectContext,
-      profile: {
-        board: profile.board,
-        grade: profile.grade,
-        subjects: profile.subjects,
-      },
-      retrieval,
-    });
+    const deterministicChapterAnswer = isWebMode
+      ? null
+      : await buildDeterministicChapterAnswer({
+          supabase,
+          question: latestUserMessage.content,
+          language: resolvedLanguage,
+          subjectContext: sessionSubjectContext,
+          profile: {
+            board: profile.board,
+            grade: profile.grade,
+            subjects: profile.subjects,
+          },
+          retrieval,
+        });
     if (deterministicChapterAnswer) {
       if (deterministicChapterAnswer.matchedScope) {
         matchedScope = deterministicChapterAnswer.matchedScope;
@@ -3050,12 +3065,14 @@ export async function POST(request: Request) {
       });
     }
 
-    const deterministicExamBankAnswer = await buildDeterministicExamBankAnswer({
-      question: latestUserMessage.content,
-      language: resolvedLanguage,
-      subjectContext: sessionSubjectContext,
-      retrieval,
-    });
+    const deterministicExamBankAnswer = isWebMode
+      ? null
+      : await buildDeterministicExamBankAnswer({
+          question: latestUserMessage.content,
+          language: resolvedLanguage,
+          subjectContext: sessionSubjectContext,
+          retrieval,
+        });
     if (deterministicExamBankAnswer) {
       const answer = deterministicExamBankAnswer.answer;
       const followUpSuggestions = buildE2EFollowUpSuggestions({
@@ -3554,12 +3571,26 @@ export async function POST(request: Request) {
             topicCard,
           })
         : null;
+    const webModeGuidance =
+      retrievalMode === "web"
+        ? [
+            "Web Search mode:",
+            "- This mode overrides any syllabus-grounding requirement above.",
+            "- Answer directly using your own general knowledge and reasoning.",
+            "- Do not require syllabus, RAG, citations, or indexed textbook chunks.",
+            "- Do not say the provided scan/context was missing.",
+            "- Do not claim you searched the internet or opened live web pages.",
+            "- If the question asks for very recent/current facts and you are not certain, say that it may need verification.",
+            "- Keep the answer helpful for the student's level, but do not force it to stay inside the syllabus.",
+          ].join("\n")
+        : null;
 
     const systemPrompt =
       rewriteRules +
       "\n\n" +
       baseSystemPrompt +
-      (chapterModeGuidance ? `\n\n${chapterModeGuidance}` : "");
+      (chapterModeGuidance ? `\n\n${chapterModeGuidance}` : "") +
+      (webModeGuidance ? `\n\n${webModeGuidance}` : "");
 
     let answerText = "";
     let generationModel = activeModel;
@@ -3571,21 +3602,23 @@ export async function POST(request: Request) {
 
     const generationStartedAt = Date.now();
     let streamResult;
-    const routePath = retrievalMode === "chapter"
-      ? topicCard
-        ? topicCardSource === "persisted"
-          ? "chapter_persisted_topic_card_hybrid"
-          : "chapter_topic_card_hybrid"
-        : retrieval.chunks.some((chunk) => chunk.resourceKind === "question_bank")
-          ? "chapter_question_bank_hybrid"
-          : "rag_answer_chapter"
-      : topicCard
-        ? topicCardSource === "persisted"
-          ? "persisted_topic_card_hybrid"
-          : "topic_card_hybrid"
-        : retrieval.chunks.some((chunk) => chunk.resourceKind === "question_bank")
-          ? "question_bank_hybrid"
-          : "rag_answer";
+    const routePath = retrievalMode === "web"
+      ? "web_general_answer"
+      : retrievalMode === "chapter"
+        ? topicCard
+          ? topicCardSource === "persisted"
+            ? "chapter_persisted_topic_card_hybrid"
+            : "chapter_topic_card_hybrid"
+          : retrieval.chunks.some((chunk) => chunk.resourceKind === "question_bank")
+            ? "chapter_question_bank_hybrid"
+            : "rag_answer_chapter"
+        : topicCard
+          ? topicCardSource === "persisted"
+            ? "persisted_topic_card_hybrid"
+            : "topic_card_hybrid"
+          : retrieval.chunks.some((chunk) => chunk.resourceKind === "question_bank")
+            ? "question_bank_hybrid"
+            : "rag_answer";
     const routeScopeDebug = buildRouteScopeDebug({
       board: profile.board,
       grade: profile.grade,
@@ -3594,11 +3627,13 @@ export async function POST(request: Request) {
       mode: retrievalMode,
     });
     const questionBankUsed = retrieval.chunks.some((chunk) => chunk.resourceKind === "question_bank");
-    const preferDirectGeneration = shouldPreferDirectGeneration({
-      retrievalMode,
-      questionStyle,
-      subjectContext: sessionSubjectContext,
-    });
+    const preferDirectGeneration =
+      isWebMode ||
+      shouldPreferDirectGeneration({
+        retrievalMode,
+        questionStyle,
+        subjectContext: sessionSubjectContext,
+      });
 
     const handleStreamFinish = async ({ text }: { text: string }) => {
       const persistedAnswer = text;
