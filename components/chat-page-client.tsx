@@ -55,10 +55,9 @@ const ANSWER_STYLE_LABELS: Record<AnswerStyle, string> = {
   detailed: "Detailed",
 };
 type RetrievalMode = "default" | "web" | "chapter";
-const RETRIEVAL_MODE_LABELS: Record<RetrievalMode, string> = {
+const RETRIEVAL_MODE_LABELS: Record<Exclude<RetrievalMode, "chapter">, string> = {
   default: "Syllabus",
   web: "Web Search",
-  chapter: "Chapter",
 };
 
 type ThinkingTrace = {
@@ -149,7 +148,7 @@ function buildThoughtSummary(trace: ThinkingTrace) {
 function buildTracePills(trace: ThinkingTrace) {
   return [
     trace.grounded ? "Grounded" : "Ungrounded",
-    RETRIEVAL_MODE_LABELS[trace.retrievalMode],
+    trace.retrievalMode === "chapter" ? "Chapter" : RETRIEVAL_MODE_LABELS[trace.retrievalMode],
     trace.answerMode === "deterministic_structure_lookup"
       ? "Chapter lookup"
       : trace.answerMode === "deterministic_catalog_lookup"
@@ -1055,7 +1054,7 @@ export function ChatPageClient({
           <CompactSelect
             value={retrievalMode}
             onChange={(v) => setRetrievalMode(v as RetrievalMode)}
-            options={(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map(mode => ({
+            options={(Object.keys(RETRIEVAL_MODE_LABELS) as Array<Exclude<RetrievalMode, "chapter">>).map(mode => ({
               label: RETRIEVAL_MODE_LABELS[mode],
               value: mode
             }))}
