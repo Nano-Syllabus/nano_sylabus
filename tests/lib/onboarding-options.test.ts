@@ -2,24 +2,27 @@ import { describe, expect, it } from "vitest";
 import {
   defaultBoardOptions,
   defaultGradeOptions,
+  defaultProgramOptions,
   mergeDropdownOptions,
 } from "@/lib/onboarding-options";
 
 describe("onboarding options", () => {
   it("provides stable board and grade fallbacks", () => {
-    expect(defaultBoardOptions()).toContain("Engineering");
-    expect(defaultBoardOptions()).toContain("CTEVT");
+    expect(defaultBoardOptions()).toEqual(["IOE"]);
     expect(defaultGradeOptions()).toContain("Bachelor");
-    expect(defaultGradeOptions("Engineering")).toEqual(["Bachelor"]);
+    expect(defaultGradeOptions("IOE")).toEqual(["Bachelor"]);
+    expect(defaultProgramOptions("IOE", "Bachelor")).toEqual([
+      "BE Electronics and Communication Engineering",
+    ]);
   });
 
   it("merges catalog + fallback + current value without duplicates", () => {
     const options = mergeDropdownOptions({
-      catalogValues: ["Engineering", "NEB", "Engineering"],
-      fallbackValues: ["TU", "NEB"],
+      catalogValues: ["IOE", "KU", "IOE"],
+      fallbackValues: ["TU", "KU"],
       includeValue: "Custom Board",
     });
 
-    expect(options).toEqual(["Custom Board", "Engineering", "NEB", "TU"]);
+    expect(options).toEqual(["Custom Board", "IOE", "KU", "TU"]);
   });
 });

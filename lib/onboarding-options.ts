@@ -1,15 +1,16 @@
-const DEFAULT_BOARD_OPTIONS = ["Engineering", "NEB", "TU", "KU", "PU", "CTEVT"];
+const DEFAULT_BOARD_OPTIONS = ["IOE"];
 
 const GRADE_OPTIONS_BY_BOARD: Record<string, string[]> = {
-  engineering: ["Bachelor"],
-  neb: ["Class 11", "Class 12"],
+  ioe: ["Bachelor"],
 };
 
-const DEFAULT_GRADE_OPTIONS = [
-  "Class 11",
-  "Class 12",
-  "Bachelor",
-];
+const DEFAULT_GRADE_OPTIONS = ["Bachelor"];
+
+const PROGRAM_OPTIONS_BY_BOARD_LEVEL: Record<string, string[]> = {
+  "ioe::bachelor": [
+    "BE Electronics and Communication Engineering",
+  ],
+};
 
 function sortValues(values: string[]) {
   return values.sort((left, right) =>
@@ -31,6 +32,7 @@ export function mergeDropdownOptions({
     const trimmed = value.trim();
     if (!trimmed) return;
     const key = trimmed.toLowerCase();
+    if (key === "engineering") return; // Force removal of Engineering
     if (!unique.has(key)) unique.set(key, trimmed);
   };
 
@@ -58,4 +60,9 @@ export function defaultGradeOptions(board?: string) {
     }
   }
   return DEFAULT_GRADE_OPTIONS;
+}
+
+export function defaultProgramOptions(board?: string, level?: string) {
+  const key = `${(board ?? "").trim().toLowerCase()}::${(level ?? "").trim().toLowerCase()}`;
+  return PROGRAM_OPTIONS_BY_BOARD_LEVEL[key] ?? [];
 }

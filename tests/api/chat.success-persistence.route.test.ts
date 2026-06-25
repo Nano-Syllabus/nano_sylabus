@@ -303,7 +303,7 @@ describe("POST /api/chat (successful persistence path)", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("x-subject-context")).toBe("Physics");
+    expect(response.headers.get("x-subject-context")).toBe("Physics > Unit 1");
     expect(response.headers.get("x-route-path")).toBe("topic_card_hybrid");
     expect(response.headers.get("x-topic-card-used")).toBe("1");
     expect(response.headers.get("x-topic-card-source")).toBe("derived");

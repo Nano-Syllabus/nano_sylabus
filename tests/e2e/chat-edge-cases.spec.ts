@@ -60,7 +60,7 @@ test.describe("Nano Syllabus chat edge cases", () => {
         await page.getByRole("button", { name: "Next →" }).click();
 
         await page.getByLabel("Board").fill("neb");
-        await page.getByLabel("Grade or year").fill("11");
+        await page.getByLabel("Faculty").fill("11");
         await page.getByRole("button", { name: "Next →" }).click();
 
         await page.getByLabel(/Score/).fill("82");
@@ -284,7 +284,7 @@ test.describe("Nano Syllabus chat edge cases", () => {
         await page.getByRole("button", { name: "Next →" }).click();
 
         await page.getByLabel("Board").fill("neb");
-        await page.getByLabel("Grade or year").fill("11");
+        await page.getByLabel("Faculty").fill("11");
         await page.getByRole("button", { name: "Next →" }).click();
 
         await page.getByLabel(/Score/).fill("82");
