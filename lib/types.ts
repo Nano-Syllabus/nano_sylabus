@@ -57,7 +57,7 @@ export interface AssistantCitation {
 export interface AssistantAnswerTrace {
   routePath: string;
   routeScopeDebug: string | null;
-  retrievalMode: "default" | "chapter";
+  retrievalMode: "default" | "web" | "chapter";
   answerMode: string | null;
   answerModeReason: string | null;
   matchedScope: string | null;

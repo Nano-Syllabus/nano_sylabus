@@ -92,7 +92,10 @@ function normalizeAnswerTrace(input: unknown): AssistantAnswerTrace | null {
   return {
     routePath: value.routePath,
     routeScopeDebug: typeof value.routeScopeDebug === "string" ? value.routeScopeDebug : "",
-    retrievalMode: value.retrievalMode === "chapter" ? "chapter" : "default",
+    retrievalMode:
+      value.retrievalMode === "chapter" || value.retrievalMode === "web"
+        ? value.retrievalMode
+        : "default",
     answerMode: value.answerMode,
     answerModeReason: typeof value.answerModeReason === "string" ? value.answerModeReason : "",
     matchedScope: typeof value.matchedScope === "string" ? value.matchedScope : null,
