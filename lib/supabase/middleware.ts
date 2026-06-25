@@ -52,7 +52,7 @@ export async function updateSession(request: NextRequest) {
         board: profileRow.board ?? "",
         grade: profileRow.grade ?? "",
         targetGrade: profileRow.target_grade ?? "",
-        languagePref: profileRow.language_pref ?? "EN",
+        languagePref: profileRow.language_pref ?? "RN",
       });
       role = profileRow.role ?? "student";
     } else {

@@ -24,7 +24,7 @@ function normalizeProfile(row: any): StudentProfile {
     boardScore: row.board_score ? normalizeBoardScore(row.board_score) : null,
     subjects: normalizeSubjects(row.subjects ?? []),
     targetGrade: normalizeTargetGrade(row.target_grade ?? ""),
-    languagePref: row.language_pref ?? "EN",
+    languagePref: row.language_pref ?? "RN",
     role: row.role ?? "student",
     createdAt: row.created_at,
     updatedAt: row.updated_at,

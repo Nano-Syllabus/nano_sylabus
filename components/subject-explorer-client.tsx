@@ -1,105 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/field";
 import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type { SubjectExplorerSummary } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
 
 export function SubjectExplorerClient({ subjects }: { subjects: SubjectExplorerSummary[] }) {
-  const [query, setQuery] = useState("");
-  const [boardFilter, setBoardFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<"recent" | "questions" | "sessions" | "az">("recent");
-
-  const boards = useMemo(() => {
-    return Array.from(new Set(subjects.map((subject) => subject.board.trim()).filter(Boolean))).sort();
-  }, [subjects]);
-
-  const categories = useMemo(() => {
-    return Array.from(new Set(subjects.map((subject) => subject.category))).sort();
-  }, [subjects]);
-
-  const filtered = useMemo(() => {
-    const lowered = query.trim().toLowerCase();
-    const next = subjects.filter((subject) => {
-      if (lowered && !subject.subject.toLowerCase().includes(lowered)) return false;
-      if (boardFilter !== "all" && subject.board !== boardFilter) return false;
-      if (categoryFilter !== "all" && subject.category !== categoryFilter) return false;
-      return true;
-    });
-
-    return next.sort((left, right) => {
-      if (left.inProfile !== right.inProfile) return left.inProfile ? -1 : 1;
-
-      if (sortBy === "questions") {
-        if (left.questionCount !== right.questionCount) return right.questionCount - left.questionCount;
-      } else if (sortBy === "sessions") {
-        if (left.sessionCount !== right.sessionCount) return right.sessionCount - left.sessionCount;
-      } else if (sortBy === "az") {
-        return left.subject.localeCompare(right.subject);
-      } else {
-        const leftTime = left.lastActivityAt ? new Date(left.lastActivityAt).getTime() : 0;
-        const rightTime = right.lastActivityAt ? new Date(right.lastActivityAt).getTime() : 0;
-        if (leftTime !== rightTime) return rightTime - leftTime;
-      }
-
-      if (left.questionCount !== right.questionCount) return right.questionCount - left.questionCount;
-      return left.subject.localeCompare(right.subject);
-    });
-  }, [boardFilter, categoryFilter, query, sortBy, subjects]);
-
   return (
     <div className="mx-auto max-w-6xl px-5 py-8">
-      <div className="mb-6 grid gap-3 lg:grid-cols-4">
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search subjects..."
-        />
-        <select
-          value={boardFilter}
-          onChange={(event) => setBoardFilter(event.target.value)}
-          className="h-12 rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="all">All Boards</option>
-          {boards.map((board) => (
-            <option key={board} value={board}>
-              {board}
-            </option>
-          ))}
-        </select>
-        <select
-          value={categoryFilter}
-          onChange={(event) => setCategoryFilter(event.target.value)}
-          className="h-12 rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="all">All Categories</option>
-          {categories.map((category) => (
-            <option key={category} value={category}>
-              {category}
-            </option>
-          ))}
-        </select>
-        <select
-          value={sortBy}
-          onChange={(event) =>
-            setSortBy(event.target.value as "recent" | "questions" | "sessions" | "az")
-          }
-          className="h-12 rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="recent">Sort: Recent activity</option>
-          <option value="questions">Sort: Most questions</option>
-          <option value="sessions">Sort: Most sessions</option>
-          <option value="az">Sort: A to Z</option>
-        </select>
-      </div>
-
-      {filtered.length ? (
+      {subjects.length ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((subject) => (
+          {subjects.map((subject) => (
             <article key={subject.subject} className="flex h-full flex-col rounded-2xl border border-border bg-bg-primary p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
