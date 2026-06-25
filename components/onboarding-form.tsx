@@ -7,6 +7,7 @@ import { Field, Input, Select } from "@/components/ui/field";
 import {
   defaultBoardOptions,
   defaultGradeOptions,
+  defaultProgramOptions,
   mergeDropdownOptions,
 } from "@/lib/onboarding-options";
 import {
@@ -22,6 +23,14 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { StudentProfile } from "@/lib/types";
 
+function engineeringBoard(value: string) {
+  return normalizeBoard(value) === "IOE" ? "IOE" : "IOE";
+}
+
+function engineeringLevel(value: string) {
+  return normalizeGrade(value) === "Bachelor" ? "Bachelor" : "Bachelor";
+}
+
 export function OnboardingForm({
   userId,
   initialProfile,
@@ -35,8 +44,9 @@ export function OnboardingForm({
   const [step, setStep] = useState(1);
   const [fullName, setFullName] = useState(initialProfile?.fullName ?? "");
   const [college, setCollege] = useState(initialProfile?.college ?? "");
-  const [board, setBoard] = useState(initialProfile?.board ?? "");
-  const [grade, setGrade] = useState(initialProfile?.grade ?? "");
+  const [board, setBoard] = useState(engineeringBoard(initialProfile?.board ?? ""));
+  const [grade, setGrade] = useState(engineeringLevel(initialProfile?.grade ?? ""));
+  const [program, setProgram] = useState("");
   const [semester, setSemester] = useState<string>("");
   const isBachelor = grade.toLowerCase().includes("bachelor");
   const [scoreType, setScoreType] = useState<"%" | "GPA">("%");
@@ -55,6 +65,7 @@ export function OnboardingForm({
   const total = 5;
   const normalizedBoard = normalizeBoard(board);
   const normalizedGrade = normalizeGrade(grade);
+  const isIoeBachelor = normalizedBoard === "IOE" && normalizedGrade === "Bachelor";
   const suggestedGrades = useMemo(
     () => catalogGradesByBoard[normalizedBoard] ?? [],
     [catalogGradesByBoard, normalizedBoard],
@@ -62,8 +73,8 @@ export function OnboardingForm({
   const boardOptions = useMemo(
     () =>
       mergeDropdownOptions({
-        catalogValues: catalogBoards,
-        fallbackValues: catalogBoards.length ? [] : defaultBoardOptions(),
+        catalogValues: catalogBoards.filter((item) => normalizeBoard(item) === "IOE"),
+        fallbackValues: defaultBoardOptions(),
         includeValue: board,
       }),
     [board, catalogBoards],
@@ -81,6 +92,17 @@ export function OnboardingForm({
     () => catalogSubjectsByBoardGrade[`${normalizedBoard}::${normalizedGrade}`] ?? [],
     [catalogSubjectsByBoardGrade, normalizedBoard, normalizedGrade],
   );
+  const programOptions = useMemo(
+    () => defaultProgramOptions(normalizedBoard, normalizedGrade),
+    [normalizedBoard, normalizedGrade],
+  );
+  const showBranchField = programOptions.length > 0;
+
+  useEffect(() => {
+    if (programOptions.length === 1 && program !== programOptions[0]) {
+      setProgram(programOptions[0]);
+    }
+  }, [program, programOptions]);
 
   useEffect(() => {
     if (initialProfile || hasHydratedDraft.current) return;
@@ -94,6 +116,7 @@ export function OnboardingForm({
         college?: string;
         board?: string;
         grade?: string;
+        program?: string;
         semester?: string;
         scoreType?: "%" | "GPA";
         score?: string;
@@ -106,8 +129,9 @@ export function OnboardingForm({
       }
       if (typeof draft.fullName === "string") setFullName(draft.fullName);
       if (typeof draft.college === "string") setCollege(draft.college);
-      if (typeof draft.board === "string") setBoard(draft.board);
-      if (typeof draft.grade === "string") setGrade(normalizeGrade(draft.grade));
+      if (typeof draft.board === "string") setBoard(engineeringBoard(draft.board));
+      if (typeof draft.grade === "string") setGrade(engineeringLevel(draft.grade));
+      if (typeof draft.program === "string") setProgram(draft.program);
       if (typeof draft.semester === "string") setSemester(draft.semester);
       if (draft.scoreType === "%" || draft.scoreType === "GPA") setScoreType(draft.scoreType);
       if (typeof draft.score === "string") setScore(draft.score);
@@ -136,6 +160,7 @@ export function OnboardingForm({
           college,
           board,
           grade,
+          program,
           semester,
           scoreType,
           score,
@@ -153,6 +178,7 @@ export function OnboardingForm({
     draftKey,
     fullName,
     grade,
+    program,
     semester,
     initialProfile,
     languagePref,
@@ -194,7 +220,10 @@ export function OnboardingForm({
 
     if (nextStep === 2) {
       if (!normalizeBoard(board) || !normalizeGrade(grade)) {
-        return "Please complete your board and grade or year.";
+        return "Please complete your IOE Bachelor path.";
+      }
+      if (isIoeBachelor && !program) {
+        return "Please select your branch.";
       }
     }
 
@@ -252,7 +281,7 @@ export function OnboardingForm({
       !normalizedGrade ||
       !normalizedTargetGrade
     ) {
-      setError("Please complete your name, institution, board, grade or year, and target goal.");
+      setError("Please complete your name, institution, IOE Bachelor path, and target goal.");
       return;
     }
 
@@ -282,9 +311,8 @@ export function OnboardingForm({
       language_pref: languagePref,
     });
 
-    setLoading(false);
-
     if (upsertError) {
+      setLoading(false);
       setError(upsertError.message);
       return;
     }
@@ -297,6 +325,16 @@ export function OnboardingForm({
 
     router.replace("/app/chat");
     router.refresh();
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center animate-fade-in">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-text-primary"></div>
+        <h2 className="mt-6 text-lg font-medium">Setting up your profile...</h2>
+        <p className="mt-2 text-sm text-text-muted">Personalizing your learning experience</p>
+      </div>
+    );
   }
 
   return (
@@ -340,19 +378,28 @@ export function OnboardingForm({
         ) : null}
 
         {step === 2 ? (
-          <Step title="Which board and grade?" subtitle="Set the board first, then your exact level.">
-            <Field label="Board">
+          <Step title="Select your academic path" subtitle="Set your TU IOE Bachelor context before choosing subjects.">
+            {/*
+            <Field label="University / academic authority">
+              <Select value="Tribhuvan University" disabled>
+                <option value="Tribhuvan University">Tribhuvan University</option>
+              </Select>
+            </Field>
+            */}
+            <Field label="Faculty">
               <Select
                 value={board}
                 onChange={(event) => {
                   const nextBoard = event.target.value;
                   if (nextBoard !== board) {
                     setGrade("");
+                    setProgram("");
+                    setSemester("");
                   }
                   setBoard(nextBoard);
                 }}
               >
-                <option value="">Select board</option>
+                <option value="">Select faculty</option>
                 {boardOptions.map((item) => (
                   <option key={item} value={item}>
                     {item}
@@ -360,19 +407,20 @@ export function OnboardingForm({
                 ))}
               </Select>
             </Field>
-            <Field label="Grade or year">
+            <Field label="Level">
               <Select
                 value={grade}
                 onChange={(event) => {
                   const nextGrade = event.target.value;
                   if (!nextGrade.toLowerCase().includes("bachelor")) {
                     setSemester("");
+                    setProgram("");
                   }
                   setGrade(nextGrade);
                 }}
                 disabled={!board}
               >
-                <option value="">{board ? "Select grade/year" : "Select board first"}</option>
+                <option value="">{board ? "Select level" : "Select faculty first"}</option>
                 {gradeOptions.map((item) => (
                   <option key={item} value={item}>
                     {item}
@@ -380,6 +428,21 @@ export function OnboardingForm({
                 ))}
               </Select>
             </Field>
+            {isIoeBachelor && showBranchField ? (
+              <Field label="Branch">
+                <Select
+                  value={program}
+                  onChange={(event) => setProgram(event.target.value)}
+                >
+                  <option value="">Select branch</option>
+                  {programOptions.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : null}
             {isBachelor && (
               <Field label="Semester">
                 <Select
@@ -389,7 +452,7 @@ export function OnboardingForm({
                   <option value="">Select semester</option>
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                     <option key={sem} value={String(sem)}>
-                      Semester {sem}
+                      {sem === 1 ? "1st" : sem === 2 ? "2nd" : sem === 3 ? "3rd" : `${sem}th`} Semester
                     </option>
                   ))}
                 </Select>
@@ -400,7 +463,7 @@ export function OnboardingForm({
         ) : null}
 
         {step === 3 ? (
-          <Step title="Last board score" subtitle="We use this to calibrate explanation level. You can skip it.">
+          <Step title="Last published Board Result" subtitle="We use this to calibrate explanation level. You can skip it.">
             <div className="mb-3 inline-flex rounded-full border border-border p-1">
               {(["%" , "GPA"] as const).map((item) => (
                 <button
@@ -480,7 +543,7 @@ export function OnboardingForm({
               </div>
             ) : (
               <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
-                No subjects available for this board and grade yet.
+                No subjects available for this IOE Bachelor scope yet.
               </div>
             )}
             <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />

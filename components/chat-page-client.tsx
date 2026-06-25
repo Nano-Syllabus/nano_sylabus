@@ -56,8 +56,8 @@ const ANSWER_STYLE_LABELS: Record<AnswerStyle, string> = {
 };
 type RetrievalMode = "default" | "chapter";
 const RETRIEVAL_MODE_LABELS: Record<RetrievalMode, string> = {
-  default: "Web Search",
-  chapter: "Syllabus",
+  default: "Syllabus",
+  chapter: "Chapter",
 };
 
 type ThinkingTrace = {
@@ -236,8 +236,8 @@ export function ChatPageClient({
       : "";
     if (fromSession) return fromSession;
 
-    return normalizedProfileSubjects[0] ?? null;
-  }, [initialSubjectContext, initialSession?.subjectContext, normalizedProfileSubjects]);
+    return null;
+  }, [initialSubjectContext, initialSession?.subjectContext]);
   const [subjectContext, setSubjectContext] = useState<string | null>(defaultSubjectContext);
   const [answerStyle, setAnswerStyle] = useState<AnswerStyle>("detailed");
   const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("default");
@@ -284,8 +284,11 @@ export function ChatPageClient({
   const subjectActionOptions = useMemo(
     () =>
       availableSubjects.length > 0
-        ? availableSubjects.map((subject) => ({ label: subject, value: subject }))
-        : [{ label: "All Subjects", value: "" }],
+        ? [
+            { label: "Subjects", value: "" },
+            ...availableSubjects.map((subject) => ({ label: subject, value: subject })),
+          ]
+        : [{ label: "Subjects", value: "" }],
     [availableSubjects],
   );
 
@@ -994,14 +997,17 @@ export function ChatPageClient({
     shell.setActions(
       <div className="flex items-center">
         <CompactSelect
-          value={stripSubjectChapter(subjectContext) ?? subjectActionOptions[0]?.value ?? ""}
-          onChange={(value) => void updateSessionSubjectContext(value || null)}
-          options={subjectActionOptions}
+          value={composerLanguage}
+          onChange={(v) => setComposerLanguage(v as "EN" | "RN")}
+          options={[
+            { label: "English", value: "EN" },
+            { label: "Roman Nepali", value: "RN" }
+          ]}
         />
       </div>
     );
     return () => shell.setActions(null);
-  }, [shell, subjectActionOptions, subjectContext, updateSessionSubjectContext]);
+  }, [shell, composerLanguage, setComposerLanguage]);
 
   useEffect(() => {
     stopChatRef.current = stop;
@@ -1037,12 +1043,9 @@ export function ChatPageClient({
              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
           <CompactSelect
-            value={composerLanguage}
-            onChange={(v) => setComposerLanguage(v as "EN" | "RN")}
-            options={[
-              { label: "English", value: "EN" },
-              { label: "Roman Nepali", value: "RN" }
-            ]}
+            value={stripSubjectChapter(subjectContext) ?? subjectActionOptions[0]?.value ?? ""}
+            onChange={(value) => void updateSessionSubjectContext(value || null)}
+            options={subjectActionOptions}
             direction="up"
           />
           <CompactSelect

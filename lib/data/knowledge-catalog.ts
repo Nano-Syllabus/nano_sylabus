@@ -123,7 +123,7 @@ function sortChapterLabels<T extends { chapter: string }>(rows: T[]) {
 }
 
 export async function listKnowledgeCatalogOptions(): Promise<KnowledgeCatalogOptions> {
-  const cacheKey = buildCacheKey("catalog_options", []);
+  const cacheKey = buildCacheKey("catalog_options_v2", []);
   const cached = readCatalogCache<KnowledgeCatalogOptions>(cacheKey);
   if (cached) return cached;
 

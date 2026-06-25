@@ -7,6 +7,7 @@ import { Field, Input, Select } from "@/components/ui/field";
 import {
   defaultBoardOptions,
   defaultGradeOptions,
+  defaultProgramOptions,
   mergeDropdownOptions,
 } from "@/lib/onboarding-options";
 import {
@@ -21,6 +22,14 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { AppUser, StudentProfile } from "@/lib/types";
 
+function engineeringBoard(value: string) {
+  return normalizeBoard(value) === "IOE" ? "IOE" : "IOE";
+}
+
+function engineeringLevel(value: string) {
+  return normalizeGrade(value) === "Bachelor" ? "Bachelor" : "Bachelor";
+}
+
 export function SettingsForm({
   user,
   profile,
@@ -31,8 +40,9 @@ export function SettingsForm({
   const router = useRouter();
   const [fullName, setFullName] = useState(profile.fullName);
   const [college, setCollege] = useState(profile.college);
-  const [board, setBoard] = useState(profile.board);
-  const [grade, setGrade] = useState(profile.grade);
+  const [board, setBoard] = useState(engineeringBoard(profile.board));
+  const [grade, setGrade] = useState(engineeringLevel(profile.grade));
+  const [program, setProgram] = useState("");
   const [semester, setSemester] = useState<string>("");
   const isBachelor = grade.toLowerCase().includes("bachelor");
   const [boardScore, setBoardScore] = useState(profile.boardScore ?? "");
@@ -51,6 +61,7 @@ export function SettingsForm({
 
   const normalizedBoard = normalizeBoard(board);
   const normalizedGrade = normalizeGrade(grade);
+  const isIoeBachelor = normalizedBoard === "IOE" && normalizedGrade === "Bachelor";
   const suggestedGrades = useMemo(
     () => catalogGradesByBoard[normalizedBoard] ?? [],
     [catalogGradesByBoard, normalizedBoard],
@@ -58,8 +69,8 @@ export function SettingsForm({
   const boardOptions = useMemo(
     () =>
       mergeDropdownOptions({
-        catalogValues: catalogBoards,
-        fallbackValues: catalogBoards.length ? [] : defaultBoardOptions(),
+        catalogValues: catalogBoards.filter((item) => normalizeBoard(item) === "IOE"),
+        fallbackValues: defaultBoardOptions(),
         includeValue: board,
       }),
     [board, catalogBoards],
@@ -77,6 +88,17 @@ export function SettingsForm({
     () => catalogSubjectsByBoardGrade[`${normalizedBoard}::${normalizedGrade}`] ?? [],
     [catalogSubjectsByBoardGrade, normalizedBoard, normalizedGrade],
   );
+  const programOptions = useMemo(
+    () => defaultProgramOptions(normalizedBoard, normalizedGrade),
+    [normalizedBoard, normalizedGrade],
+  );
+  const showBranchField = programOptions.length > 0;
+
+  useEffect(() => {
+    if (programOptions.length === 1 && program !== programOptions[0]) {
+      setProgram(programOptions[0]);
+    }
+  }, [program, programOptions]);
 
   useEffect(() => {
     let active = true;
@@ -116,7 +138,11 @@ export function SettingsForm({
     const normalizedSubjects = normalizeSubjects(selectedSubjects);
 
     if (!normalizedFullName || !normalizedCollege || !normalizedBoard || !normalizedGrade || !normalizedTargetGrade) {
-      setStatus("Please complete your full name, institution, board, grade or year, and target grade.");
+      setStatus("Please complete your full name, institution, IOE Bachelor path, and target grade.");
+      return;
+    }
+    if (isIoeBachelor && !program) {
+      setStatus("Please select your branch.");
       return;
     }
     if (normalizedSubjects.length === 0) {
@@ -209,18 +235,27 @@ export function SettingsForm({
           <Field label="College / institution">
             <Input value={college} onChange={(event) => setCollege(event.target.value)} />
           </Field>
-          <Field label="Board">
+          {/*
+          <Field label="University / academic authority">
+            <Select value="Tribhuvan University" disabled>
+              <option value="Tribhuvan University">Tribhuvan University</option>
+            </Select>
+          </Field>
+          */}
+          <Field label="Faculty">
             <Select
               value={board}
               onChange={(event) => {
                 const nextBoard = event.target.value;
                 if (nextBoard !== board) {
                   setGrade("");
+                  setProgram("");
+                  setSemester("");
                 }
                 setBoard(nextBoard);
               }}
             >
-              <option value="">Select board</option>
+              <option value="">Select faculty</option>
               {boardOptions.map((item) => (
                 <option key={item} value={item}>
                   {item}
@@ -228,19 +263,20 @@ export function SettingsForm({
               ))}
             </Select>
           </Field>
-          <Field label="Grade / year">
+          <Field label="Level">
             <Select
               value={grade}
               onChange={(event) => {
                 const nextGrade = event.target.value;
                 if (!nextGrade.toLowerCase().includes("bachelor")) {
                   setSemester("");
+                  setProgram("");
                 }
                 setGrade(nextGrade);
               }}
               disabled={!board}
             >
-              <option value="">{board ? "Select grade/year" : "Select board first"}</option>
+              <option value="">{board ? "Select level" : "Select faculty first"}</option>
               {gradeOptions.map((item) => (
                 <option key={item} value={item}>
                   {item}
@@ -248,6 +284,21 @@ export function SettingsForm({
               ))}
             </Select>
           </Field>
+          {isIoeBachelor && showBranchField ? (
+            <Field label="Branch">
+              <Select
+                value={program}
+                onChange={(event) => setProgram(event.target.value)}
+              >
+                <option value="">Select branch</option>
+                {programOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
           {isBachelor && (
             <Field label="Semester">
               <Select
@@ -257,13 +308,13 @@ export function SettingsForm({
                 <option value="">Select semester</option>
                 {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                   <option key={sem} value={String(sem)}>
-                    Semester {sem}
+                    {sem === 1 ? "1st" : sem === 2 ? "2nd" : sem === 3 ? "3rd" : `${sem}th`} Semester
                   </option>
                 ))}
               </Select>
             </Field>
           )}
-          <Field label="Board score">
+          <Field label="Last published Board Result">
             <Input value={boardScore} onChange={(event) => setBoardScore(event.target.value)} />
           </Field>
           <Field label="Target grade">
@@ -321,7 +372,7 @@ export function SettingsForm({
             ) : (
               <div className="space-y-2">
                 <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  No indexed subjects available for this board and grade.
+                  No indexed subjects available for this IOE Bachelor scope.
                 </div>
                 {selectedSubjects.length > 0 ? (
                   <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">

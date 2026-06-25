@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { listKnowledgeCatalogOptions } from "@/lib/data/knowledge-catalog";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel, normalizeSubjects } from "@/lib/profile-normalization";
 import type {
   StudentProfile,
@@ -49,6 +50,8 @@ function categorizeSubject(subject: string): SubjectExplorerSummary["category"] 
       "programming",
       "network",
       "electronics",
+      "instrumentation",
+      "circuit",
       "civil",
       "mechanical",
     ].some((token) => normalized.includes(token))
@@ -78,26 +81,19 @@ function categorizeSubject(subject: string): SubjectExplorerSummary["category"] 
 
 export async function listExplorerSubjects(userId: string, profile: StudentProfile) {
   const supabase = await createSupabaseServerClient();
-  let knowledgeQuery = supabase
-    .from("knowledge_chunks")
-    .select("subject")
-    .eq("grade", normalizeGrade(profile.grade))
-    .limit(500);
+  const normalizedBoard = normalizeBoard(profile.board);
+  const normalizedGrade = normalizeGrade(profile.grade);
+  const catalogKey = `${normalizedBoard}::${normalizedGrade}`;
 
-  if (normalizeBoard(profile.board)) {
-    knowledgeQuery = knowledgeQuery.eq("board", normalizeBoard(profile.board));
-  }
-
-  const [sessionResult, knowledgeResult] = await Promise.all([
+  const [sessionResult, catalog] = await Promise.all([
     supabase
       .from("chat_sessions")
       .select("id, updated_at, subject_tags")
       .eq("user_id", userId),
-    knowledgeQuery,
+    listKnowledgeCatalogOptions(),
   ]);
 
   if (sessionResult.error) throw sessionResult.error;
-  if (knowledgeResult.error) throw knowledgeResult.error;
 
   const sessions = sessionResult.data ?? [];
   const sessionIds = sessions.map((session) => session.id);
@@ -121,7 +117,7 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
   });
 
   const profileSubjects = uniqueSubjects(profile.subjects);
-  const knowledgeSubjects = uniqueSubjects((knowledgeResult.data ?? []).map((row) => row.subject ?? ""));
+  const knowledgeSubjects = uniqueSubjects(catalog.subjectsByBoardGrade[catalogKey] ?? []);
   const sessionSubjects = uniqueSubjects(
     sessions.flatMap((session) => (Array.isArray(session.subject_tags) ? session.subject_tags : [])),
   );
@@ -135,8 +131,8 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
 
     return {
       subject,
-      board: normalizeBoard(profile.board),
-      grade: normalizeGrade(profile.grade),
+      board: normalizedBoard,
+      grade: normalizedGrade,
       category: categorizeSubject(subject),
       inProfile: profileSubjects.includes(subject),
       sessionCount: matchingSessions.length,

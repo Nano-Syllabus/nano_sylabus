@@ -10,15 +10,16 @@ function capitalizeWord(word: string) {
   return `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
 }
 
-const ACRONYM_WORDS = new Set(["NEB", "TU", "PU", "KU", "CTEVT", "BBS", "BCA", "BSC", "BA", "BIM", "BIT"]);
+const ACRONYM_WORDS = new Set(["NEB", "TU", "PU", "KU", "CTEVT", "IOE", "BBS", "BCA", "BSC", "BA", "BIM", "BIT"]);
 
 export function normalizeBoard(value: string) {
   const compact = compactWhitespace(value);
   if (!compact) return "";
   const upper = compact.toUpperCase();
-  const acronyms = ["NEB", "TU", "PU", "KU", "CTEVT"];
+  const acronyms = ["NEB", "TU", "PU", "KU", "CTEVT", "IOE"];
   if (acronyms.includes(upper)) return upper;
-  // Non-acronym boards (e.g., "Engineering") — preserve Title Case to match DB values.
+  if (upper === "ENGINEERING") return "IOE";
+  // Non-acronym boards (e.g., "IOE") — preserve Title Case to match DB values.
   return compact
     .split(" ")
     .map((word) => capitalizeWord(word))

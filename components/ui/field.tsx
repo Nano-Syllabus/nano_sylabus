@@ -83,6 +83,7 @@ export function Select(
   } = props;
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<"top" | "bottom">("bottom");
   const selectedValue = String(value ?? defaultValue ?? "");
 
   const options = useMemo(() => {
@@ -110,6 +111,17 @@ export function Select(
 
   useEffect(() => {
     if (!open) return;
+
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      if (spaceBelow < 250 && spaceAbove > spaceBelow) {
+        setPlacement("top");
+      } else {
+        setPlacement("bottom");
+      }
+    }
 
     const closeOnOutsideClick = (event: globalThis.MouseEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) {
@@ -171,7 +183,12 @@ export function Select(
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-[calc(100%+4px)] z-50 max-h-80 w-full overflow-y-auto rounded-md border border-border bg-[#050505] py-1.5 shadow-2xl">
+        <div 
+          className={cn(
+            "absolute left-0 z-50 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-[#050505] p-1 shadow-2xl sm:max-h-64",
+            placement === "top" ? "bottom-[calc(100%+4px)]" : "top-[calc(100%+4px)]"
+          )}
+        >
           {options.map((option) => {
             const selected = option.value === selectedValue;
             return (
@@ -181,8 +198,10 @@ export function Select(
                 disabled={option.disabled}
                 onClick={() => selectValue(option.value)}
                 className={cn(
-                  "flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors",
-                  selected ? "bg-blue-700 text-white" : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
+                  "flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm transition-colors",
+                  selected
+                    ? "bg-bg-tertiary text-text-primary font-medium"
+                    : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
                   option.disabled && "cursor-not-allowed opacity-60",
                 )}
               >

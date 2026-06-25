@@ -28,7 +28,7 @@ async function loginAndCompleteOnboardingIfNeeded(
   await page.getByRole("button", { name: "Next →" }).click();
 
   await page.getByLabel("Board").fill("NEB");
-  await page.getByLabel("Grade or year").fill("Class 11");
+  await page.getByLabel("Faculty").fill("Class 11");
   await page.getByRole("button", { name: "Next →" }).click();
 
   await page.getByLabel(/Score/).fill("82");
