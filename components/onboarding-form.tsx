@@ -55,7 +55,7 @@ export function OnboardingForm({
     normalizeSubjects(initialProfile?.subjects ?? []),
   );
   const [targetGrade, setTargetGrade] = useState(initialProfile?.targetGrade ?? "");
-  const [languagePref, setLanguagePref] = useState<"EN" | "RN">(initialProfile?.languagePref ?? "EN");
+  const [languagePref, setLanguagePref] = useState<"EN" | "RN">(initialProfile?.languagePref ?? "RN");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [catalogBoards, setCatalogBoards] = useState<string[]>([]);

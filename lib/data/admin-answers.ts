@@ -514,7 +514,7 @@ export async function getAdminAnswerDetail(messageId: string) {
     citations: Array.isArray(message.citations) ? message.citations : [],
     subjects: normalizeSubjects(profile?.subjects ?? []),
     targetGrade: normalizeTargetGrade(profile?.target_grade ?? ""),
-    languagePref: profile?.language_pref ?? "EN",
+    languagePref: profile?.language_pref ?? "RN",
     answerTrace:
       message.metadata && typeof message.metadata === "object" && !Array.isArray(message.metadata)
         ? normalizeAnswerTrace((message.metadata as Record<string, unknown>).answer_trace)
