@@ -991,11 +991,18 @@ function logTenantChatDebug(
   details: Record<string, unknown>,
   error?: unknown,
 ) {
-  console.error("[TENANT_CHAT]", {
+  const payload = {
     stage,
     ...details,
     ...(error ? { error: errorToDebugMessage(error) } : {}),
-  });
+  };
+
+  if (error || stage.includes("failed") || stage.includes("not_matched") || stage.includes("empty_answer")) {
+    console.error("[TENANT_CHAT]", payload);
+    return;
+  }
+
+  console.log("[TENANT_CHAT]", payload);
 }
 
 function shouldRetryAssistantInsertWithoutMetadata(error: { message?: string; details?: string } | null) {
