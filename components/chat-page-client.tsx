@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   useCallback,
@@ -60,6 +59,36 @@ const RETRIEVAL_MODE_LABELS: Record<Exclude<RetrievalMode, "chapter">, string> =
   web: "Web Search",
 };
 
+type TenantChatSubject = {
+  name: string;
+  slug: string;
+  namespaceSlug: string;
+  folderPath: string;
+};
+
+type TenantCatalogPayload = {
+  subjects?: TenantChatSubject[];
+};
+
+let tenantSubjectMetadataPromise: Promise<TenantCatalogPayload> | null = null;
+
+function loadTenantSubjectMetadata(): Promise<TenantCatalogPayload> {
+  if (!tenantSubjectMetadataPromise) {
+    tenantSubjectMetadataPromise = fetch("/api/tenant/subjects", { cache: "no-store" }).then(
+      async (response): Promise<TenantCatalogPayload> => {
+      if (!response.ok) {
+        tenantSubjectMetadataPromise = null;
+        return {};
+      }
+
+      return (await response.json()) as TenantCatalogPayload;
+      },
+    );
+  }
+
+  return tenantSubjectMetadataPromise;
+}
+
 type ThinkingTrace = {
   grounded: boolean;
   ragChunks: number;
@@ -68,6 +97,7 @@ type ThinkingTrace = {
   answerMode:
     | "quick"
     | "deep"
+    | "tenant_prompt"
     | "deterministic_structure_lookup"
     | "deterministic_catalog_lookup"
     | "deterministic_exam_lookup"
@@ -98,7 +128,9 @@ function formatMs(ms: number | null) {
 
 function buildThoughtSummary(trace: ThinkingTrace) {
   const lines: string[] = [];
-  if (trace.grounded) {
+  if (trace.routePath === "tenant_prompt") {
+    lines.push("Answer came from the tenant subject API using your selected subject scope.");
+  } else if (trace.grounded) {
     lines.push(
       `Retrieved ${trace.ragChunks} grounded chunk${trace.ragChunks === 1 ? "" : "s"} from your indexed study sources.`,
     );
@@ -207,7 +239,6 @@ export function ChatPageClient({
   initialSubjectContext: string | null;
   initialPrompt: string | null;
 }) {
-  const router = useRouter();
   const [sessions, setSessions] = useState(initialSessions);
   const [hasMoreSessions, setHasMoreSessions] = useState(initialHasMore);
   const [historySearch, setHistorySearch] = useState("");
@@ -251,10 +282,10 @@ export function ChatPageClient({
   const [copyingMessageId, setCopyingMessageId] = useState<string | null>(null);
   const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
   const [matchedScope, setMatchedScope] = useState<string | null>(null);
-  const [catalogSubjects, setCatalogSubjects] = useState<string[]>([]);
   const [latestThinkingTrace, setLatestThinkingTrace] = useState<ThinkingTrace | null>(null);
   const [showThinkingTrace, setShowThinkingTrace] = useState(false);
   const [deleteConfirmSession, setDeleteConfirmSession] = useState<ChatSessionSummary | null>(null);
+  const [tenantSubjectsByName, setTenantSubjectsByName] = useState<Record<string, TenantChatSubject>>({});
   const pendingTitleRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(initialSession?.id ?? null);
   const searchDebounceRef = useRef<number | null>(null);
@@ -274,13 +305,13 @@ export function ChatPageClient({
     [initialSession, currentSessionId],
   );
   const availableSubjects = useMemo(() => {
-    const all = [...normalizedProfileSubjects, ...catalogSubjects, stripSubjectChapter(subjectContext)]
+    const all = [...normalizedProfileSubjects, stripSubjectChapter(subjectContext)]
       .map((item) => (item ? normalizeSubjectLabel(item) : ""))
       .filter(Boolean) as string[];
     return Array.from(new Set(all)).sort((left, right) =>
       left.localeCompare(right, undefined, { sensitivity: "base", numeric: true }),
     );
-  }, [normalizedProfileSubjects, catalogSubjects, subjectContext]);
+  }, [normalizedProfileSubjects, subjectContext]);
   const subjectActionOptions = useMemo(
     () =>
       availableSubjects.length > 0
@@ -291,6 +322,11 @@ export function ChatPageClient({
         : [{ label: "Subjects", value: "" }],
     [availableSubjects],
   );
+  const selectedTenantSubject = useMemo(() => {
+    const normalizedSubjectContext = normalizeSubjectLabel(stripSubjectChapter(subjectContext) ?? "");
+    if (!normalizedSubjectContext) return null;
+    return tenantSubjectsByName[normalizedSubjectContext] ?? null;
+  }, [subjectContext, tenantSubjectsByName]);
 
   useEffect(() => {
     try {
@@ -311,6 +347,37 @@ export function ChatPageClient({
   }, []);
 
   useEffect(() => {
+    let active = true;
+
+    const hydrateTenantSubjectMetadata = async () => {
+      try {
+        const payload = await loadTenantSubjectMetadata();
+        if (!active) return;
+
+        const profileSubjectSet = new Set(normalizedProfileSubjects);
+        const nextSubjectsByName: Record<string, TenantChatSubject> = {};
+
+        for (const subject of payload.subjects ?? []) {
+          const normalizedName = normalizeSubjectLabel(subject.name);
+          if (!normalizedName || !profileSubjectSet.has(normalizedName)) continue;
+          if (!subject.slug || !subject.folderPath || !subject.namespaceSlug) continue;
+          nextSubjectsByName[normalizedName] = subject;
+        }
+
+        setTenantSubjectsByName(nextSubjectsByName);
+      } catch {
+        // Chat still works through the server-side subject lookup if metadata is not ready yet.
+      }
+    };
+
+    void hydrateTenantSubjectMetadata();
+
+    return () => {
+      active = false;
+    };
+  }, [normalizedProfileSubjects]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(ANSWER_STYLE_STORAGE_KEY, answerStyle);
     } catch {}
@@ -321,30 +388,6 @@ export function ChatPageClient({
       window.localStorage.setItem(RETRIEVAL_MODE_STORAGE_KEY, retrievalMode);
     } catch {}
   }, [retrievalMode]);
-
-  useEffect(() => {
-    let active = true;
-    const board = normalizeBoard(profileBoard);
-    const grade = normalizeGrade(profileGrade);
-    if (!board || !grade) return;
-
-    const query = new URLSearchParams({
-      board,
-      grade,
-    });
-    const loadCatalogSubjects = async () => {
-      const response = await fetch(`/api/knowledge/options?${query.toString()}`, { cache: "no-store" });
-      if (!response.ok) return;
-      const payload = (await response.json()) as { subjects?: string[] };
-      if (!active) return;
-      setCatalogSubjects(Array.isArray(payload.subjects) ? payload.subjects : []);
-    };
-
-    void loadCatalogSubjects();
-    return () => {
-      active = false;
-    };
-  }, [profileBoard, profileGrade]);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -503,7 +546,6 @@ export function ChatPageClient({
     if (!response.ok) return;
     const payload = (await response.json()) as { balance: number };
     setCreditBalance(payload.balance);
-    router.refresh();
   }
 
   async function refreshSession(sessionId: string) {
@@ -562,6 +604,7 @@ export function ChatPageClient({
     body: {
       sessionId: currentSessionId,
       subjectContext,
+      tenantSubject: selectedTenantSubject,
       answerStyle,
       retrievalMode,
     },
@@ -592,6 +635,7 @@ export function ChatPageClient({
       const answerMode =
         answerModeHeader === "quick" ||
         answerModeHeader === "deep" ||
+        answerModeHeader === "tenant_prompt" ||
         answerModeHeader === "deterministic_structure_lookup" ||
         answerModeHeader === "deterministic_catalog_lookup" ||
         answerModeHeader === "deterministic_exam_lookup"
@@ -678,8 +722,7 @@ export function ChatPageClient({
       setChatError("");
       const resolvedSessionId = currentSessionIdRef.current;
       if (!resolvedSessionId) return;
-      await refreshSession(resolvedSessionId);
-      await refreshCredits();
+      await Promise.all([refreshSession(resolvedSessionId), refreshCredits()]);
       setThinkingStatus(null);
     },
     onError(error) {
@@ -821,6 +864,7 @@ export function ChatPageClient({
           language: chatLanguage,
           messageLanguage: composerLanguage,
           subjectContext,
+          tenantSubject: selectedTenantSubject,
           answerStyle,
           retrievalMode,
         },
