@@ -127,7 +127,7 @@ export function getTenantApiEnv() {
   const baseUrl = process.env.TENANT_API_BASE_URL;
   const token = process.env.TENANT_API_TOKEN;
   const rejectUnauthorized = (process.env.TENANT_API_REJECT_UNAUTHORIZED || "0").trim() === "1";
-  const timeoutMs = Number(process.env.TENANT_API_TIMEOUT_MS || 20000);
+  const timeoutMs = Number(process.env.TENANT_API_TIMEOUT_MS || 30000);
 
   if (!baseUrl || !token) {
     throw new Error(
@@ -139,6 +139,6 @@ export function getTenantApiEnv() {
     baseUrl,
     token,
     rejectUnauthorized,
-    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 20000,
+    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.max(timeoutMs, 30000) : 30000,
   };
 }
