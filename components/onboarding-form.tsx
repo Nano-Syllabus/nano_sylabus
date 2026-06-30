@@ -23,6 +23,26 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { StudentProfile } from "@/lib/types";
 
+type TenantCatalogPayload = {
+  faculties?: string[];
+  levelsByFaculty?: Record<string, string[]>;
+  branchesByPath?: Record<string, string[]>;
+  semestersByPath?: Record<string, Array<{ value: string; label: string; code: string }>>;
+  subjectsByPath?: Record<
+    string,
+    Array<{
+      name: string;
+      slug: string;
+      namespaceSlug: string;
+      folderPath: string;
+      semesterValue: string;
+      semesterLabel: string;
+      semesterCode: string;
+      branch: string;
+    }>
+  >;
+};
+
 function engineeringBoard(value: string) {
   return normalizeBoard(value) === "IOE" ? "IOE" : "IOE";
 }
@@ -58,43 +78,60 @@ export function OnboardingForm({
   const [languagePref, setLanguagePref] = useState<"EN" | "RN">(initialProfile?.languagePref ?? "RN");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [catalogBoards, setCatalogBoards] = useState<string[]>([]);
-  const [catalogGradesByBoard, setCatalogGradesByBoard] = useState<Record<string, string[]>>({});
-  const [catalogSubjectsByBoardGrade, setCatalogSubjectsByBoardGrade] = useState<Record<string, string[]>>({});
+  const [catalogFaculties, setCatalogFaculties] = useState<string[]>([]);
+  const [catalogLevelsByFaculty, setCatalogLevelsByFaculty] = useState<Record<string, string[]>>({});
+  const [catalogBranchesByPath, setCatalogBranchesByPath] = useState<Record<string, string[]>>({});
+  const [catalogSemestersByPath, setCatalogSemestersByPath] = useState<
+    Record<string, Array<{ value: string; label: string; code: string }>>
+  >({});
+  const [catalogSubjectsByPath, setCatalogSubjectsByPath] = useState<Record<string, Array<{ name: string }>>>({});
 
   const total = 5;
   const normalizedBoard = normalizeBoard(board);
   const normalizedGrade = normalizeGrade(grade);
   const isIoeBachelor = normalizedBoard === "IOE" && normalizedGrade === "Bachelor";
   const suggestedGrades = useMemo(
-    () => catalogGradesByBoard[normalizedBoard] ?? [],
-    [catalogGradesByBoard, normalizedBoard],
+    () => catalogLevelsByFaculty[normalizedBoard] ?? [],
+    [catalogLevelsByFaculty, normalizedBoard],
   );
   const boardOptions = useMemo(
     () =>
       mergeDropdownOptions({
-        catalogValues: catalogBoards.filter((item) => normalizeBoard(item) === "IOE"),
+        catalogValues: catalogFaculties.filter((item) => normalizeBoard(item) === "IOE"),
         fallbackValues: defaultBoardOptions(),
         includeValue: board,
       }),
-    [board, catalogBoards],
+    [board, catalogFaculties],
   );
   const gradeOptions = useMemo(
     () =>
       mergeDropdownOptions({
         catalogValues: suggestedGrades,
-        fallbackValues: catalogBoards.length ? [] : defaultGradeOptions(board),
+        fallbackValues: catalogFaculties.length ? [] : defaultGradeOptions(board),
         includeValue: grade,
       }),
-    [board, catalogBoards.length, grade, suggestedGrades],
+    [board, catalogFaculties.length, grade, suggestedGrades],
   );
+  const branchCatalogKey = `${normalizedBoard}::${normalizedGrade}`;
   const suggestedSubjects = useMemo(
-    () => catalogSubjectsByBoardGrade[`${normalizedBoard}::${normalizedGrade}`] ?? [],
-    [catalogSubjectsByBoardGrade, normalizedBoard, normalizedGrade],
+    () =>
+      (catalogSubjectsByPath[`${normalizedBoard}::${normalizedGrade}::${program}::${semester}`] ?? []).map(
+        (subject) => subject.name,
+      ),
+    [catalogSubjectsByPath, normalizedBoard, normalizedGrade, program, semester],
   );
   const programOptions = useMemo(
-    () => defaultProgramOptions(normalizedBoard, normalizedGrade),
-    [normalizedBoard, normalizedGrade],
+    () =>
+      mergeDropdownOptions({
+        catalogValues: catalogBranchesByPath[branchCatalogKey] ?? [],
+        fallbackValues: catalogFaculties.length ? [] : defaultProgramOptions(normalizedBoard, normalizedGrade),
+        includeValue: program,
+      }),
+    [branchCatalogKey, catalogBranchesByPath, catalogFaculties.length, normalizedBoard, normalizedGrade, program],
+  );
+  const semesterOptions = useMemo(
+    () => catalogSemestersByPath[`${normalizedBoard}::${normalizedGrade}::${program}`] ?? [],
+    [catalogSemestersByPath, normalizedBoard, normalizedGrade, program],
   );
   const showBranchField = programOptions.length > 0;
 
@@ -103,6 +140,27 @@ export function OnboardingForm({
       setProgram(programOptions[0]);
     }
   }, [program, programOptions]);
+
+  useEffect(() => {
+    if (semesterOptions.length === 1 && semester !== semesterOptions[0]?.value) {
+      setSemester(semesterOptions[0].value);
+    }
+  }, [semester, semesterOptions]);
+
+  useEffect(() => {
+    if (semester && semesterOptions.length > 0 && !semesterOptions.some((option) => option.value === semester)) {
+      setSemester("");
+    }
+  }, [semester, semesterOptions]);
+
+  useEffect(() => {
+    if (!program || !semester) return;
+    setSelectedSubjects((current) =>
+      current.filter((item) =>
+        suggestedSubjects.some((subject) => subject.toLowerCase() === item.toLowerCase()),
+      ),
+    );
+  }, [program, semester, suggestedSubjects]);
 
   useEffect(() => {
     if (initialProfile || hasHydratedDraft.current) return;
@@ -192,17 +250,15 @@ export function OnboardingForm({
   useEffect(() => {
     let active = true;
     const loadCatalog = async () => {
-      const response = await fetch("/api/knowledge/options", { cache: "no-store" });
+      const response = await fetch("/api/tenant/catalog", { cache: "no-store" });
       if (!response.ok) return;
-      const payload = (await response.json()) as {
-        boards?: string[];
-        gradesByBoard?: Record<string, string[]>;
-        subjectsByBoardGrade?: Record<string, string[]>;
-      };
+      const payload = (await response.json()) as TenantCatalogPayload;
       if (!active) return;
-      setCatalogBoards(Array.isArray(payload.boards) ? payload.boards : []);
-      setCatalogGradesByBoard(payload.gradesByBoard ?? {});
-      setCatalogSubjectsByBoardGrade(payload.subjectsByBoardGrade ?? {});
+      setCatalogFaculties(Array.isArray(payload.faculties) ? payload.faculties : []);
+      setCatalogLevelsByFaculty(payload.levelsByFaculty ?? {});
+      setCatalogBranchesByPath(payload.branchesByPath ?? {});
+      setCatalogSemestersByPath(payload.semestersByPath ?? {});
+      setCatalogSubjectsByPath(payload.subjectsByPath ?? {});
     };
 
     void loadCatalog();
@@ -224,6 +280,9 @@ export function OnboardingForm({
       }
       if (isIoeBachelor && !program) {
         return "Please select your branch.";
+      }
+      if (isIoeBachelor && semesterOptions.length > 0 && !semester) {
+        return "Please select your semester.";
       }
     }
 
@@ -266,7 +325,9 @@ export function OnboardingForm({
   }
 
   async function finish() {
-    const subjects = normalizeSubjects(selectedSubjects);
+    const selectedSubjectSet = normalizeSubjects(selectedSubjects);
+    const semesterSubjectSet = normalizeSubjects(suggestedSubjects);
+    const subjects = semesterSubjectSet.length > 0 ? semesterSubjectSet : selectedSubjectSet;
     const normalizedFullName = normalizeFullName(fullName);
     const normalizedCollege = normalizeCollege(college);
     const normalizedBoard = normalizeBoard(board);
@@ -286,7 +347,7 @@ export function OnboardingForm({
     }
 
     if (subjects.length === 0) {
-      setError("Please select at least one subject.");
+      setError("No subjects were found for this semester yet.");
       return;
     }
 
@@ -450,9 +511,9 @@ export function OnboardingForm({
                   onChange={(event) => setSemester(event.target.value)}
                 >
                   <option value="">Select semester</option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                    <option key={sem} value={String(sem)}>
-                      {sem === 1 ? "1st" : sem === 2 ? "2nd" : sem === 3 ? "3rd" : `${sem}th`} Semester
+                  {semesterOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </Select>
@@ -496,7 +557,7 @@ export function OnboardingForm({
         ) : null}
 
         {step === 4 ? (
-          <Step title="Which subjects do you want to focus on?" subtitle="Select the subjects you're currently studying or want help with.">
+          <Step title="Which subjects do you want to focus on?" subtitle="Pick the subjects you personally care about most. Your semester chat scope will still include all subjects in this semester.">
             {suggestedSubjects.length > 0 ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">

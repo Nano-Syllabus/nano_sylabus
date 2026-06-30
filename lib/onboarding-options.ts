@@ -8,7 +8,7 @@ const DEFAULT_GRADE_OPTIONS = ["Bachelor"];
 
 const PROGRAM_OPTIONS_BY_BOARD_LEVEL: Record<string, string[]> = {
   "ioe::bachelor": [
-    "BE Electronics and Communication Engineering",
+    "Electronics (NEW 075-079)",
   ],
 };
 

@@ -2,9 +2,9 @@
   "name": "nano-syllabus",
   "private": true,
   "scripts": {
-    "dev": "rm -rf .next-dev && next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "rm -rf .next-dev && node node_modules/next/dist/bin/next dev",
+    "build": "node node_modules/next/dist/bin/next build",
+    "start": "node node_modules/next/dist/bin/next start",
     "lint": "eslint .",
     "verify": "npm run lint && npm test && npm run build",
     "prepare:class11:english:units": "node scripts/prepare-class11-english-by-unit.mjs",
@@ -16,6 +16,10 @@
     "test:language-mode": "vitest run tests/lib/chat-language-mode.test.ts tests/lib/e2e-harness-language-mode.test.ts",
     "test:gemini:local": "node scripts/test-gemini-local-quality.mjs",
     "test": "vitest run",
+    "test:tenant-api": "vitest run tests/integration/tenant-api.smoke.test.ts",
+    "test:tenant-full": "vitest run tests/integration/tenant-api.full-integration.test.ts",
+    "test:tenant-prompt": "vitest run tests/integration/tenant-prompt.indexed-sample.test.ts",
+    "test:tenant-subject-pairs": "vitest run tests/integration/tenant-prompt.subject-pairs.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -25,6 +29,7 @@
     "@supabase/supabase-js": "^2.56.0",
     "ai": "^4.3.16",
     "clsx": "^2.1.1",
+    "cookie": "^0.7.0",
     "mammoth": "^1.12.0",
     "next": "^15.3.1",
     "pdf-parse": "^2.4.5",

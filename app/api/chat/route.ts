@@ -39,6 +39,7 @@ import {
 import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
 import { containsDevanagari, needsEnglishRewrite, needsRomanNepaliRewrite } from "@/lib/roman-nepali";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { listTenantSubjects, promptTenant, type TenantSubject } from "@/lib/tenant/client";
 import { deriveSessionTitle } from "@/lib/utils";
 import type { AnswerStyle, AssistantAnswerTrace } from "@/lib/types";
 
@@ -49,6 +50,15 @@ const requestSchema = z.object({
   answerStyle: z.enum(["simple", "balanced", "detailed"]).optional(),
   retrievalMode: z.enum(["default", "web", "chapter"]).optional(),
   subjectContext: z.string().trim().min(1).max(120).nullable().optional(),
+  tenantSubject: z
+    .object({
+      name: z.string().trim().min(1).max(160),
+      slug: z.string().trim().min(1).max(200),
+      namespaceSlug: z.string().trim().min(1).max(200),
+      folderPath: z.string().trim().min(1).max(800),
+    })
+    .nullable()
+    .optional(),
   messages: z
     .array(
       z.object({
@@ -968,6 +978,26 @@ function buildAnswerTrace(input: {
   };
 }
 
+function errorToDebugMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    return String(error.message);
+  }
+  return String(error);
+}
+
+function logTenantChatDebug(
+  stage: string,
+  details: Record<string, unknown>,
+  error?: unknown,
+) {
+  console.error("[TENANT_CHAT]", {
+    stage,
+    ...details,
+    ...(error ? { error: errorToDebugMessage(error) } : {}),
+  });
+}
+
 function shouldRetryAssistantInsertWithoutMetadata(error: { message?: string; details?: string } | null) {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
   return (
@@ -976,6 +1006,112 @@ function shouldRetryAssistantInsertWithoutMetadata(error: { message?: string; de
     message.includes("could not find the 'metadata' column") ||
     message.includes("column metadata")
   );
+}
+
+async function resolveTenantSubjectForChat({
+  requestedSubject,
+  profileSubjects,
+  tenantSubject,
+}: {
+  requestedSubject: string | null;
+  profileSubjects: string[];
+  tenantSubject?: {
+    name: string;
+    slug: string;
+    namespaceSlug: string;
+    folderPath: string;
+  } | null;
+}) {
+  const normalizedProfileSubjects = new Set(profileSubjects.map((subject) => normalizeSubjectLabel(subject)));
+  const normalizedRequestedSubject = normalizeSubjectLabel(requestedSubject ?? "");
+  const normalizedTenantSubjectName = normalizeSubjectLabel(tenantSubject?.name ?? "");
+
+  if (
+    tenantSubject &&
+    normalizedTenantSubjectName &&
+    normalizedProfileSubjects.has(normalizedTenantSubjectName) &&
+    (!normalizedRequestedSubject || normalizedRequestedSubject === normalizedTenantSubjectName)
+  ) {
+    return {
+      match: {
+        name: tenantSubject.name,
+        slug: tenantSubject.slug,
+        namespace: "",
+        namespace_slug: tenantSubject.namespaceSlug,
+        full_path: `nano-syllabus/${tenantSubject.folderPath}`,
+        folder_path: tenantSubject.folderPath,
+        chunk_count: 0,
+      } satisfies TenantSubject,
+      scopedSubjects: [
+        {
+          name: tenantSubject.name,
+          slug: tenantSubject.slug,
+          namespace: "",
+          namespace_slug: tenantSubject.namespaceSlug,
+          full_path: `nano-syllabus/${tenantSubject.folderPath}`,
+          folder_path: tenantSubject.folderPath,
+          chunk_count: 0,
+        } satisfies TenantSubject,
+      ],
+      source: "request_metadata" as const,
+    };
+  }
+
+  const tenantSubjects = await listTenantSubjects();
+  const scopedSubjects = tenantSubjects.filter((subject) =>
+    normalizedProfileSubjects.has(normalizeSubjectLabel(subject.name)),
+  );
+  if (!normalizedRequestedSubject) {
+    return {
+      match: null,
+      scopedSubjects,
+      source: "tenant_subjects_lookup" as const,
+    };
+  }
+
+  const match =
+    scopedSubjects.find(
+      (subject) => normalizeSubjectLabel(subject.name) === normalizedRequestedSubject,
+    ) ?? null;
+
+  return {
+    match,
+    scopedSubjects,
+    source: "tenant_subjects_lookup" as const,
+  };
+}
+
+function buildTenantRetrieval({
+  subjectName,
+  folderPath,
+  citations,
+}: {
+  subjectName: string;
+  folderPath: string;
+  citations?: Array<{
+    excerpt?: string;
+    title?: string;
+    chapter?: string;
+    topic?: string;
+  }>;
+}): RetrievalResult {
+  const normalizedCitations = (citations ?? []).map((citation, index) => ({
+    chunkId: `tenant-${index + 1}`,
+    documentId: `tenant-${subjectName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    sourceType: "general" as const,
+    sourceLabel: folderPath,
+    sourceTitle: citation.title || subjectName,
+    sourceName: citation.title || subjectName,
+    subject: subjectName,
+    chapter: citation.chapter ?? null,
+    topic: citation.topic ?? null,
+    excerpt: citation.excerpt,
+  }));
+  return {
+    chunks: [],
+    citations: normalizedCitations,
+    grounded: normalizedCitations.length > 0,
+  };
 }
 
 function buildSyntheticCatalogRetrieval({
@@ -2567,6 +2703,7 @@ async function persistAssistantCompletion({
 export async function POST(request: Request) {
   try {
     const requestStartedAt = Date.now();
+    const requestId = `chat_${requestStartedAt}_${Math.random().toString(36).slice(2, 8)}`;
     let retrievalMs = 0;
     let generationMs = 0;
     let rewriteMs = 0;
@@ -2580,6 +2717,7 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const authUser = user;
 
     const parsed = requestSchema.parse(await request.json());
     const answerStyle: AnswerStyle = parsed.answerStyle ?? "detailed";
@@ -2589,7 +2727,7 @@ export async function POST(request: Request) {
       chatLanguage: parsed.language,
       messageLanguage: parsed.messageLanguage,
     });
-    const latestUserMessage = [...parsed.messages].reverse().find((message) => message.role === "user");
+    const latestUserMessage = [...parsed.messages].reverse().find((message) => message.role === "user")!;
 
     if (!latestUserMessage?.content.trim()) {
       return NextResponse.json({ error: "Message content is required." }, { status: 400 });
@@ -2598,14 +2736,14 @@ export async function POST(request: Request) {
     const { data: profileRow } = await supabase
       .from("student_profiles")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", authUser.id)
       .maybeSingle();
 
     if (!profileRow) {
       return NextResponse.json({ error: "Onboarding required." }, { status: 400 });
     }
 
-    const currentBalance = await ensureStarterCreditsForUser(user.id);
+    const currentBalance = await ensureStarterCreditsForUser(authUser.id);
     if (!canSpendCredits(currentBalance)) {
       return NextResponse.json(
         { error: "No credits left. Buy a plan to continue chatting." },
@@ -2640,7 +2778,7 @@ export async function POST(request: Request) {
         .from("chat_sessions")
         .select("id, subject_tags, subject_context")
         .eq("id", sessionId)
-        .eq("user_id", user.id)
+        .eq("user_id", authUser.id)
         .maybeSingle();
 
       if (!sessionRow) {
@@ -2655,7 +2793,7 @@ export async function POST(request: Request) {
       const { data: insertedSession, error: sessionError } = await supabase
         .from("chat_sessions")
         .insert({
-          user_id: user.id,
+          user_id: authUser.id,
           title: deriveSessionTitle(latestUserMessage.content, sessionSubjectContext),
           subject_context: sessionSubjectContext,
           subject_tags: sessionSubjectContext ? [sessionSubjectContext] : [],
@@ -2689,10 +2827,252 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to save the user message." }, { status: 500 });
     }
 
-    await supabase
-      .from("chat_sessions")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", finalSessionId);
+    const tenantQuestion = latestUserMessage.content.trim();
+
+    let tenantSubjectResolution: Awaited<ReturnType<typeof resolveTenantSubjectForChat>>;
+    const subjectLookupStartedAt = Date.now();
+    try {
+      logTenantChatDebug("tenant_subject_lookup_started", {
+        requestId,
+        sessionId: finalSessionId,
+        requestedSubject: sessionSubjectContext,
+        profileSubjectCount: profile.subjects.length,
+        hasTenantSubjectMetadata: Boolean(parsed.tenantSubject),
+      });
+      tenantSubjectResolution = await resolveTenantSubjectForChat({
+        requestedSubject: sessionSubjectContext,
+        profileSubjects: profile.subjects,
+        tenantSubject: parsed.tenantSubject ?? null,
+      });
+      logTenantChatDebug("tenant_subject_lookup_succeeded", {
+        requestId,
+        sessionId: finalSessionId,
+        requestedSubject: sessionSubjectContext,
+        lookupMs: Date.now() - subjectLookupStartedAt,
+        source: tenantSubjectResolution.source,
+        scopedSubjectCount: tenantSubjectResolution.scopedSubjects.length,
+        matchedSubject: tenantSubjectResolution.match?.name ?? null,
+      });
+    } catch (error) {
+      logTenantChatDebug(
+        "tenant_subject_lookup_failed",
+        {
+          requestId,
+          sessionId: finalSessionId,
+          requestedSubject: sessionSubjectContext,
+          profileSubjects: profile.subjects,
+          lookupMs: Date.now() - subjectLookupStartedAt,
+        },
+        error,
+      );
+      return NextResponse.json(
+        {
+          error: "Tenant subject lookup failed.",
+          code: "TENANT_SUBJECT_LOOKUP_FAILED",
+          requestId,
+        },
+        { status: 502 },
+      );
+    }
+
+    const { match: tenantSubject, scopedSubjects } = tenantSubjectResolution;
+    if (!tenantSubject) {
+      logTenantChatDebug("tenant_subject_not_matched", {
+        requestId,
+        sessionId: finalSessionId,
+        requestedSubject: sessionSubjectContext,
+        profileSubjects: profile.subjects,
+        scopedSubjects: scopedSubjects.map((subject) => subject.name),
+      });
+      return NextResponse.json(
+        {
+          error: "Selected subject could not be matched to a tenant subject in your current semester scope.",
+          code: "TENANT_SUBJECT_NOT_MATCHED",
+          requestId,
+        },
+        { status: 400 },
+      );
+    }
+
+    sessionSubjectContext = normalizeSubjectLabel(tenantSubject.name);
+    const tenantStartedAt = Date.now();
+    let tenantResponse: Awaited<ReturnType<typeof promptTenant>>;
+    try {
+      logTenantChatDebug("tenant_prompt_started", {
+        requestId,
+        sessionId: finalSessionId,
+        subject: tenantSubject.slug,
+        subjectName: tenantSubject.name,
+        folderPath: tenantSubject.folder_path,
+        namespace: tenantSubject.namespace_slug,
+        question: tenantQuestion,
+        promptLength: tenantQuestion.length,
+      });
+      tenantResponse = await promptTenant({
+        userId: authUser.id,
+        subject: tenantSubject.slug,
+        folderPath: tenantSubject.folder_path,
+        prompt: tenantQuestion,
+        namespace: tenantSubject.namespace_slug,
+        topK: 5,
+      });
+      generationMs = Date.now() - tenantStartedAt;
+      logTenantChatDebug("tenant_prompt_succeeded", {
+        requestId,
+        sessionId: finalSessionId,
+        subject: tenantSubject.slug,
+        subjectName: tenantSubject.name,
+        generationMs,
+        answerLength: (tenantResponse.answer || "").trim().length,
+        citationCount: Array.isArray(tenantResponse.citations) ? tenantResponse.citations.length : 0,
+      });
+    } catch (error) {
+      generationMs = Date.now() - tenantStartedAt;
+      const tenantPromptFailureReason = summarizeModelFailureReason(error);
+      const isTenantTimeout = tenantPromptFailureReason === "timeout";
+      logTenantChatDebug(
+        "tenant_prompt_failed",
+        {
+          requestId,
+          sessionId: finalSessionId,
+          subject: tenantSubject.slug,
+          subjectName: tenantSubject.name,
+          folderPath: tenantSubject.folder_path,
+          namespace: tenantSubject.namespace_slug,
+          question: tenantQuestion,
+          promptLength: tenantQuestion.length,
+          failureReason: tenantPromptFailureReason,
+          rewriteMs,
+          generationMs,
+        },
+        error,
+      );
+      return NextResponse.json(
+        {
+          error: isTenantTimeout
+            ? "Tenant answer API timed out. Please retry once."
+            : "Tenant answer API failed.",
+          code: isTenantTimeout ? "TENANT_PROMPT_TIMEOUT" : "TENANT_PROMPT_FAILED",
+          requestId,
+        },
+        { status: 502 },
+      );
+    }
+
+    const tenantAnswer = (tenantResponse.answer || "").trim();
+    if (!tenantAnswer) {
+      logTenantChatDebug("tenant_empty_answer", {
+        requestId,
+        sessionId: finalSessionId,
+        subject: tenantSubject.slug,
+        subjectName: tenantSubject.name,
+        folderPath: tenantSubject.folder_path,
+        namespace: tenantSubject.namespace_slug,
+        question: tenantQuestion,
+        promptLength: tenantQuestion.length,
+        detail: tenantResponse.detail ?? null,
+        citationCount: Array.isArray(tenantResponse.citations) ? tenantResponse.citations.length : 0,
+        responseKeys: Object.keys(tenantResponse),
+      });
+      return NextResponse.json(
+        {
+          error: "Tenant API returned no answer.",
+          code: "TENANT_EMPTY_ANSWER",
+          requestId,
+        },
+        { status: 502 },
+      );
+    }
+
+    const tenantRetrieval = buildTenantRetrieval({
+      subjectName: tenantSubject.name,
+      folderPath: tenantSubject.folder_path,
+      citations: tenantResponse.citations,
+    });
+    const tenantSubjectTags = [sessionSubjectContext];
+    const tenantRouteScopeDebug = tenantSubject.folder_path;
+    const totalMs = Date.now() - requestStartedAt;
+
+    const assistantMessageId = await persistAssistantCompletion({
+      supabase,
+      sessionId: finalSessionId,
+      userId: authUser.id,
+      answer: tenantAnswer,
+      language: resolvedLanguage,
+      retrieval: tenantRetrieval,
+      subjectTags: tenantSubjectTags,
+      subjectContext: sessionSubjectContext,
+      followUpSuggestions: [],
+      answerTrace: buildAnswerTrace({
+        routePath: "tenant_prompt",
+        routeScopeDebug: tenantRouteScopeDebug,
+        retrievalMode,
+        answerMode: "tenant_prompt",
+        answerModeReason: "raw_question_sent_to_tenant",
+        matchedScope: tenantSubject.name,
+        topicCardUsed: false,
+        questionBankUsed: false,
+        answerModel: "tenant:v1/prompt",
+        usedFallback: false,
+        usedQualityRescue: false,
+        fallbackReason: null,
+        grounded: tenantRetrieval.grounded,
+        ragChunks: tenantRetrieval.citations.length,
+        ragMs: 0,
+        generationMs,
+        rewriteMs,
+        followupMs: 0,
+        totalMs,
+      }),
+    });
+
+    if (!assistantMessageId) {
+      logTenantChatDebug("assistant_message_persist_failed", {
+        requestId,
+        sessionId: finalSessionId,
+        subject: tenantSubject.slug,
+        subjectName: tenantSubject.name,
+      });
+      return NextResponse.json(
+        {
+          error: "Failed to save the assistant message.",
+          code: "ASSISTANT_MESSAGE_PERSIST_FAILED",
+          requestId,
+        },
+        { status: 500 },
+      );
+    }
+
+    return new Response(toDataStreamPayload(tenantAnswer), {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "x-session-id": finalSessionId,
+        "x-request-id": requestId,
+        "x-rag-grounded": tenantRetrieval.grounded ? "1" : "0",
+        "x-rag-chunks": String(tenantRetrieval.citations.length),
+        "x-retrieval-mode": retrievalMode,
+        "x-subject-context": sessionSubjectContext ?? "",
+        "x-thinking-enabled": "0",
+        "x-answer-mode": "tenant_prompt",
+        "x-answer-mode-reason": "raw_question_sent_to_tenant",
+        "x-answer-model": "tenant:v1/prompt",
+        "x-matched-scope": tenantSubject.name,
+        "x-route-path": "tenant_prompt",
+        "x-route-scope-debug": tenantRouteScopeDebug,
+        "x-topic-card-used": "0",
+        "x-topic-card-title": "",
+        "x-question-bank-used": "0",
+        "x-answer-fallback": "0",
+        "x-answer-quality-rescue": "0",
+        "x-answer-fallback-reason": "",
+        "x-rag-ms": "0",
+        "x-generation-ms": String(generationMs),
+        "x-rewrite-ms": String(rewriteMs),
+        "x-followup-ms": "0",
+        "x-total-ms": String(totalMs),
+      },
+    });
 
     const ragTimeoutMs = Number(process.env.CHAT_RAG_TIMEOUT_MS || DEFAULT_RAG_TIMEOUT_MS);
     const modelTimeoutMs = Number(process.env.CHAT_MODEL_TIMEOUT_MS || DEFAULT_MODEL_TIMEOUT_MS);
@@ -2719,12 +3099,13 @@ export async function POST(request: Request) {
         });
 
     if (deterministicCatalogAnswer) {
+      const deterministicCatalog = deterministicCatalogAnswer!;
       retrievalMs = Date.now() - retrievalStartedAt;
-      retrieval = deterministicCatalogAnswer.filteredRetrieval;
+      retrieval = deterministicCatalog.filteredRetrieval;
       const deterministicAnswerMode: string =
-        deterministicCatalogAnswer.answerMode ?? "deterministic_catalog_lookup";
+        deterministicCatalog.answerMode ?? "deterministic_catalog_lookup";
       sessionSubjectContext =
-        deterministicCatalogAnswer.subjectContextOverride ?? sessionSubjectContext;
+        deterministicCatalog.subjectContextOverride ?? sessionSubjectContext;
 
       const resolvedSubjectTags = deriveSubjectTags({
         existingTags: sessionSubjectTags,
@@ -2740,7 +3121,7 @@ export async function POST(request: Request) {
         citations: retrieval.citations,
       });
 
-      const answer = sanitizeAnswerPresentation(deterministicCatalogAnswer.answer);
+      const answer = sanitizeAnswerPresentation(deterministicCatalog.answer);
       const followUpSuggestions = buildE2EFollowUpSuggestions({
         question: latestUserMessage.content,
         language: resolvedLanguage,
@@ -2756,7 +3137,7 @@ export async function POST(request: Request) {
       const assistantMessageId = await persistAssistantCompletion({
         supabase,
         sessionId: finalSessionId,
-        userId: user.id,
+        userId: authUser.id,
         answer,
         language: resolvedLanguage,
         retrieval,
@@ -2764,13 +3145,13 @@ export async function POST(request: Request) {
         subjectContext: sessionSubjectContext,
         followUpSuggestions,
         answerTrace: buildAnswerTrace({
-          routePath: deterministicCatalogAnswer.routePath ?? "deterministic_catalog",
+          routePath: deterministicCatalog.routePath ?? "deterministic_catalog",
           routeScopeDebug,
           retrievalMode,
           answerMode: deterministicAnswerMode,
           answerModeReason:
-            deterministicCatalogAnswer.answerModeReason ?? "subject_chapter_topic_list",
-          matchedScope: deterministicCatalogAnswer.matchedScope,
+            deterministicCatalog.answerModeReason ?? "subject_chapter_topic_list",
+          matchedScope: deterministicCatalog.matchedScope,
           topicCardUsed: false,
           questionBankUsed: false,
           grounded: retrieval.grounded,
@@ -2796,9 +3177,9 @@ export async function POST(request: Request) {
           "x-thinking-enabled": "0",
           "x-answer-mode": deterministicAnswerMode,
           "x-answer-mode-reason":
-            deterministicCatalogAnswer.answerModeReason ?? "subject_chapter_topic_list",
-          "x-matched-scope": deterministicCatalogAnswer.matchedScope,
-          "x-route-path": deterministicCatalogAnswer.routePath ?? "deterministic_catalog",
+            deterministicCatalog.answerModeReason ?? "subject_chapter_topic_list",
+          "x-matched-scope": deterministicCatalog.matchedScope,
+          "x-route-path": deterministicCatalog.routePath ?? "deterministic_catalog",
           "x-route-scope-debug": routeScopeDebug,
           "x-topic-card-used": "0",
           "x-topic-card-title": "",
@@ -2830,10 +3211,11 @@ export async function POST(request: Request) {
         });
 
     if (deterministicExamBankCatalogAnswer) {
+      const deterministicExamBank = deterministicExamBankCatalogAnswer!;
       retrievalMs = Date.now() - retrievalStartedAt;
-      retrieval = deterministicExamBankCatalogAnswer.filteredRetrieval;
+      retrieval = deterministicExamBank.filteredRetrieval;
       sessionSubjectContext =
-        deterministicExamBankCatalogAnswer.subjectContextOverride ?? sessionSubjectContext;
+        deterministicExamBank.subjectContextOverride ?? sessionSubjectContext;
 
       const resolvedSubjectTags = deriveSubjectTags({
         existingTags: sessionSubjectTags,
@@ -2849,7 +3231,7 @@ export async function POST(request: Request) {
         citations: retrieval.citations,
       });
 
-      const answer = sanitizeAnswerPresentation(deterministicExamBankCatalogAnswer.answer);
+      const answer = sanitizeAnswerPresentation(deterministicExamBank.answer);
       const followUpSuggestions = buildE2EFollowUpSuggestions({
         question: latestUserMessage.content,
         language: resolvedLanguage,
@@ -2858,7 +3240,7 @@ export async function POST(request: Request) {
         board: profile.board,
         grade: profile.grade,
         subject: sessionSubjectContext,
-        chapter: deterministicExamBankCatalogAnswer.matchedScope,
+        chapter: deterministicExamBank.matchedScope,
         mode: retrievalMode,
       });
       const totalMs = Date.now() - requestStartedAt;
@@ -2866,7 +3248,7 @@ export async function POST(request: Request) {
       const assistantMessageId = await persistAssistantCompletion({
         supabase,
         sessionId: finalSessionId,
-        userId: user.id,
+        userId: authUser.id,
         answer,
         language: resolvedLanguage,
         retrieval,
@@ -2874,12 +3256,12 @@ export async function POST(request: Request) {
         subjectContext: sessionSubjectContext,
         followUpSuggestions,
         answerTrace: buildAnswerTrace({
-          routePath: deterministicExamBankCatalogAnswer.routePath,
+          routePath: deterministicExamBank.routePath,
           routeScopeDebug,
           retrievalMode,
           answerMode: "deterministic_exam_lookup",
-          answerModeReason: deterministicExamBankCatalogAnswer.answerModeReason,
-          matchedScope: deterministicExamBankCatalogAnswer.matchedScope,
+          answerModeReason: deterministicExamBank.answerModeReason,
+          matchedScope: deterministicExamBank.matchedScope,
           topicCardUsed: false,
           questionBankUsed: true,
           grounded: retrieval.grounded,
@@ -2904,9 +3286,9 @@ export async function POST(request: Request) {
           "x-subject-context": sessionSubjectContext ?? "",
           "x-thinking-enabled": "0",
           "x-answer-mode": "deterministic_exam_lookup",
-          "x-answer-mode-reason": deterministicExamBankCatalogAnswer.answerModeReason,
-          "x-matched-scope": deterministicExamBankCatalogAnswer.matchedScope,
-          "x-route-path": deterministicExamBankCatalogAnswer.routePath,
+          "x-answer-mode-reason": deterministicExamBank.answerModeReason,
+          "x-matched-scope": deterministicExamBank.matchedScope,
+          "x-route-path": deterministicExamBank.routePath,
           "x-route-scope-debug": routeScopeDebug,
           "x-topic-card-used": "0",
           "x-topic-card-title": "",
@@ -2985,13 +3367,14 @@ export async function POST(request: Request) {
           retrieval,
         });
     if (deterministicChapterAnswer) {
-      if (deterministicChapterAnswer.matchedScope) {
-        matchedScope = deterministicChapterAnswer.matchedScope;
+      const deterministicChapter = deterministicChapterAnswer!;
+      if (deterministicChapter.matchedScope) {
+        matchedScope = deterministicChapter.matchedScope;
       }
-      if (deterministicChapterAnswer.filteredRetrieval) {
-        retrieval = deterministicChapterAnswer.filteredRetrieval;
+      if (deterministicChapter.filteredRetrieval) {
+        retrieval = deterministicChapter.filteredRetrieval!;
       }
-      const answer = deterministicChapterAnswer.answer;
+      const answer = deterministicChapter.answer;
       const followUpSuggestions = buildE2EFollowUpSuggestions({
         question: latestUserMessage.content,
         language: resolvedLanguage,
@@ -3008,7 +3391,7 @@ export async function POST(request: Request) {
       const assistantMessageId = await persistAssistantCompletion({
         supabase,
         sessionId: finalSessionId,
-        userId: user.id,
+        userId: authUser.id,
         answer,
         language: resolvedLanguage,
         retrieval,
@@ -3074,7 +3457,8 @@ export async function POST(request: Request) {
           retrieval,
         });
     if (deterministicExamBankAnswer) {
-      const answer = deterministicExamBankAnswer.answer;
+      const deterministicExam = deterministicExamBankAnswer!;
+      const answer = deterministicExam.answer;
       const followUpSuggestions = buildE2EFollowUpSuggestions({
         question: latestUserMessage.content,
         language: resolvedLanguage,
@@ -3083,7 +3467,7 @@ export async function POST(request: Request) {
         board: profile.board,
         grade: profile.grade,
         subject: sessionSubjectContext,
-        chapter: deterministicExamBankAnswer.matchedScope,
+        chapter: deterministicExam.matchedScope,
         mode: retrievalMode,
       });
       const totalMs = Date.now() - requestStartedAt;
@@ -3091,7 +3475,7 @@ export async function POST(request: Request) {
       const assistantMessageId = await persistAssistantCompletion({
         supabase,
         sessionId: finalSessionId,
-        userId: user.id,
+        userId: authUser.id,
         answer,
         language: resolvedLanguage,
         retrieval,
@@ -3099,12 +3483,12 @@ export async function POST(request: Request) {
         subjectContext: sessionSubjectContext,
         followUpSuggestions,
         answerTrace: buildAnswerTrace({
-          routePath: deterministicExamBankAnswer.routePath,
+          routePath: deterministicExam.routePath,
           routeScopeDebug,
           retrievalMode,
           answerMode: "deterministic_exam_lookup",
-          answerModeReason: deterministicExamBankAnswer.answerModeReason,
-          matchedScope: deterministicExamBankAnswer.matchedScope,
+          answerModeReason: deterministicExam.answerModeReason,
+          matchedScope: deterministicExam.matchedScope,
           topicCardUsed: false,
           questionBankUsed: true,
           grounded: retrieval.grounded,
@@ -3129,9 +3513,9 @@ export async function POST(request: Request) {
           "x-subject-context": sessionSubjectContext ?? "",
           "x-thinking-enabled": "0",
           "x-answer-mode": "deterministic_exam_lookup",
-          "x-answer-mode-reason": deterministicExamBankAnswer.answerModeReason,
-          "x-matched-scope": deterministicExamBankAnswer.matchedScope,
-          "x-route-path": deterministicExamBankAnswer.routePath,
+          "x-answer-mode-reason": deterministicExam.answerModeReason,
+          "x-matched-scope": deterministicExam.matchedScope,
+          "x-route-path": deterministicExam.routePath,
           "x-route-scope-debug": routeScopeDebug,
           "x-topic-card-used": "0",
           "x-topic-card-title": "",
@@ -3198,7 +3582,7 @@ export async function POST(request: Request) {
       const assistantMessageId = await persistAssistantCompletion({
         supabase,
         sessionId: finalSessionId,
-        userId: user.id,
+        userId: authUser.id,
         answer,
         language: resolvedLanguage,
         retrieval,
@@ -3403,10 +3787,11 @@ export async function POST(request: Request) {
         };
       }
       if (explicitFallbackModelName && explicitFallbackModelName !== modelName) {
+        const fallbackModelId = explicitFallbackModelName;
         const fallbackThinkingBudget =
-          explicitFallbackModelName === quickModel ? quickThinkingBudget : Math.max(128, quickThinkingBudget);
-        fallbackModel = gemini(explicitFallbackModelName);
-        fallbackModelName = explicitFallbackModelName;
+          fallbackModelId === quickModel ? quickThinkingBudget : Math.max(128, quickThinkingBudget);
+        fallbackModel = gemini(fallbackModelId as NonNullable<typeof fallbackModelId>);
+        fallbackModelName = fallbackModelId;
         fallbackAnswerProviderOptions = {
           google: {
             thinkingConfig: {
@@ -3430,12 +3815,13 @@ export async function POST(request: Request) {
           label: `${modelName} via backup Gemini key`,
         });
         if (explicitFallbackModelName && explicitFallbackModelName !== modelName) {
+          const extraFallbackModelId = explicitFallbackModelName;
           const extraFallbackThinkingBudget =
-            explicitFallbackModelName === quickModel
+            extraFallbackModelId === quickModel
               ? quickThinkingBudget
               : Math.max(128, quickThinkingBudget);
           fallbackCandidates.push({
-            model: extraGemini(explicitFallbackModelName),
+            model: extraGemini(extraFallbackModelId as NonNullable<typeof extraFallbackModelId>),
             providerOptions: {
               google: {
                 thinkingConfig: {
@@ -3667,7 +4053,7 @@ export async function POST(request: Request) {
         await persistAssistantCompletion({
           supabase,
           sessionId: finalSessionId,
-          userId: user.id,
+          userId: authUser.id,
           answer: persistedAnswer,
           language: resolvedLanguage,
           retrieval,
@@ -3761,7 +4147,7 @@ export async function POST(request: Request) {
       await persistAssistantCompletion({
         supabase,
         sessionId: finalSessionId,
-        userId: user.id,
+        userId: authUser.id,
         answer: persistedAnswer,
         language: resolvedLanguage,
         retrieval,
@@ -3867,12 +4253,12 @@ export async function POST(request: Request) {
         for (const candidate of orderedFallbacks) {
           try {
             const fallbackResult = await runDirectGeneration(
-              candidate.model,
+              candidate.model!,
               candidate.providerOptions,
               candidate.maxTokens,
             );
             directAnswer = sanitizeAnswerPresentation(fallbackResult.text.trim());
-            generationModel = candidate.model;
+            generationModel = candidate.model!;
             generationProviderOptions = candidate.providerOptions;
             usedFallback = true;
             usedBackupFallback = true;
@@ -4019,7 +4405,7 @@ export async function POST(request: Request) {
       for (const candidate of orderedFallbacks) {
         try {
           streamResult = await streamText({
-            model: candidate.model,
+            model: candidate.model!,
             maxRetries: chatMaxRetries,
             maxTokens: candidate.maxTokens,
             providerOptions: candidate.providerOptions,
@@ -4027,7 +4413,7 @@ export async function POST(request: Request) {
             system: systemPrompt,
             onFinish: handleStreamFinish,
           });
-          generationModel = candidate.model;
+          generationModel = candidate.model!;
           generationProviderOptions = candidate.providerOptions;
           usedFallback = true;
           usedBackupFallback = true;
