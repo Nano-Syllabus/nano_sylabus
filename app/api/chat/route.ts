@@ -1,7 +1,7 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, streamText } from "ai";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { canSpendCredits, CHAT_MESSAGE_CREDIT_COST, computeNextBalance } from "@/lib/billing";
 import {
@@ -2823,17 +2823,6 @@ export async function POST(request: Request) {
         ? `Give me the full chapter or full unit in detail for this topic, using sequential grounded sections from the indexed syllabus/textbook: ${latestUserMessage.content}`
         : latestUserMessage.content;
 
-    const { error: userMessageError } = await supabase.from("chat_messages").insert({
-      session_id: finalSessionId,
-      role: "user",
-      content: latestUserMessage.content,
-      language: resolvedLanguage,
-    });
-
-    if (userMessageError) {
-      return NextResponse.json({ error: "Failed to save the user message." }, { status: 500 });
-    }
-
     const tenantQuestion = latestUserMessage.content.trim();
 
     let tenantSubjectResolution: Awaited<ReturnType<typeof resolveTenantSubjectForChat>>;
@@ -3000,55 +2989,83 @@ export async function POST(request: Request) {
     const tenantRouteScopeDebug = tenantSubject.folder_path;
     const totalMs = Date.now() - requestStartedAt;
 
-    const assistantMessageId = await persistAssistantCompletion({
-      supabase,
-      sessionId: finalSessionId,
-      userId: authUser.id,
-      answer: tenantAnswer,
-      language: resolvedLanguage,
-      retrieval: tenantRetrieval,
-      subjectTags: tenantSubjectTags,
-      subjectContext: sessionSubjectContext,
-      followUpSuggestions: [],
-      answerTrace: buildAnswerTrace({
-        routePath: "tenant_prompt",
-        routeScopeDebug: tenantRouteScopeDebug,
-        retrievalMode,
-        answerMode: "tenant_prompt",
-        answerModeReason: "raw_question_sent_to_tenant",
-        matchedScope: tenantSubject.name,
-        topicCardUsed: false,
-        questionBankUsed: false,
-        answerModel: "tenant:v1/prompt",
-        usedFallback: false,
-        usedQualityRescue: false,
-        fallbackReason: null,
-        grounded: tenantRetrieval.grounded,
-        ragChunks: tenantRetrieval.citations.length,
-        ragMs: 0,
-        generationMs,
-        rewriteMs,
-        followupMs: 0,
-        totalMs,
-      }),
-    });
+    after(async () => {
+      const persistStartedAt = Date.now();
+      const { error: userMessageError } = await supabase.from("chat_messages").insert({
+        session_id: finalSessionId,
+        role: "user",
+        content: latestUserMessage.content,
+        language: resolvedLanguage,
+      });
 
-    if (!assistantMessageId) {
-      logTenantChatDebug("assistant_message_persist_failed", {
+      if (userMessageError) {
+        logTenantChatDebug(
+          "user_message_persist_failed_after_response",
+          {
+            requestId,
+            sessionId: finalSessionId,
+            subject: tenantSubject.slug,
+            subjectName: tenantSubject.name,
+            persistMs: Date.now() - persistStartedAt,
+          },
+          userMessageError,
+        );
+        return;
+      }
+
+      const assistantMessageId = await persistAssistantCompletion({
+        supabase,
+        sessionId: finalSessionId,
+        userId: authUser.id,
+        answer: tenantAnswer,
+        language: resolvedLanguage,
+        retrieval: tenantRetrieval,
+        subjectTags: tenantSubjectTags,
+        subjectContext: sessionSubjectContext,
+        followUpSuggestions: [],
+        answerTrace: buildAnswerTrace({
+          routePath: "tenant_prompt",
+          routeScopeDebug: tenantRouteScopeDebug,
+          retrievalMode,
+          answerMode: "tenant_prompt",
+          answerModeReason: "raw_question_sent_to_tenant",
+          matchedScope: tenantSubject.name,
+          topicCardUsed: false,
+          questionBankUsed: false,
+          answerModel: "tenant:v1/prompt",
+          usedFallback: false,
+          usedQualityRescue: false,
+          fallbackReason: null,
+          grounded: tenantRetrieval.grounded,
+          ragChunks: tenantRetrieval.citations.length,
+          ragMs: 0,
+          generationMs,
+          rewriteMs,
+          followupMs: 0,
+          totalMs,
+        }),
+      });
+
+      if (!assistantMessageId) {
+        logTenantChatDebug("assistant_message_persist_failed_after_response", {
+          requestId,
+          sessionId: finalSessionId,
+          subject: tenantSubject.slug,
+          subjectName: tenantSubject.name,
+          persistMs: Date.now() - persistStartedAt,
+        });
+        return;
+      }
+
+      logTenantChatDebug("tenant_persist_succeeded_after_response", {
         requestId,
         sessionId: finalSessionId,
         subject: tenantSubject.slug,
         subjectName: tenantSubject.name,
+        assistantMessageId,
+        persistMs: Date.now() - persistStartedAt,
       });
-      return NextResponse.json(
-        {
-          error: "Failed to save the assistant message.",
-          code: "ASSISTANT_MESSAGE_PERSIST_FAILED",
-          requestId,
-        },
-        { status: 500 },
-      );
-    }
+    });
 
     return new Response(toDataStreamPayload(tenantAnswer), {
       status: 200,
