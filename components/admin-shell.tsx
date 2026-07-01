@@ -56,7 +56,7 @@ export function AdminShell({
         <div className="mx-auto flex max-w-[1600px] items-center justify-between px-5 py-4 md:px-8">
           <div className="flex items-center gap-4">
             <p className="font-display text-4xl leading-none">Nano Syllabus administration</p>
-            <span className="hidden text-sm text-text-secondary lg:inline">Manage notebooks, students, billing, and AI quality</span>
+            <span className="hidden text-sm text-text-secondary lg:inline">Manage students, billing, and answer quality</span>
           </div>
           <div className="flex items-center gap-3 text-sm text-text-secondary">
             <span className="hidden md:inline">Welcome, admin</span>

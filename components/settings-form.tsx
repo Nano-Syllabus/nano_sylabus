@@ -103,17 +103,25 @@ export function SettingsForm({
   useEffect(() => {
     let active = true;
     const loadCatalog = async () => {
-      const response = await fetch("/api/knowledge/options", { cache: "no-store" });
+      const response = await fetch("/api/tenant/catalog", { cache: "no-store" });
       if (!response.ok) return;
       const payload = (await response.json()) as {
-        boards?: string[];
-        gradesByBoard?: Record<string, string[]>;
-        subjectsByBoardGrade?: Record<string, string[]>;
+        faculties?: string[];
+        levelsByFaculty?: Record<string, string[]>;
+        subjectsByPath?: Record<string, Array<{ name: string }>>;
       };
       if (!active) return;
-      setCatalogBoards(Array.isArray(payload.boards) ? payload.boards : []);
-      setCatalogGradesByBoard(payload.gradesByBoard ?? {});
-      setCatalogSubjectsByBoardGrade(payload.subjectsByBoardGrade ?? {});
+      setCatalogBoards(Array.isArray(payload.faculties) ? payload.faculties : []);
+      setCatalogGradesByBoard(payload.levelsByFaculty ?? {});
+      const nextSubjectsByBoardGrade: Record<string, string[]> = {};
+      for (const [key, subjects] of Object.entries(payload.subjectsByPath ?? {})) {
+        const normalizedKey = key.split("::").slice(0, 2).join("::");
+        nextSubjectsByBoardGrade[normalizedKey] = normalizeSubjects([
+          ...(nextSubjectsByBoardGrade[normalizedKey] ?? []),
+          ...subjects.map((subject) => subject.name),
+        ]);
+      }
+      setCatalogSubjectsByBoardGrade(nextSubjectsByBoardGrade);
     };
     void loadCatalog();
     return () => {

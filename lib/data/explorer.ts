@@ -1,5 +1,4 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { listKnowledgeCatalogOptions } from "@/lib/data/knowledge-catalog";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel, normalizeSubjects } from "@/lib/profile-normalization";
 import type {
   StudentProfile,
@@ -83,15 +82,10 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
   const supabase = await createSupabaseServerClient();
   const normalizedBoard = normalizeBoard(profile.board);
   const normalizedGrade = normalizeGrade(profile.grade);
-  const catalogKey = `${normalizedBoard}::${normalizedGrade}`;
-
-  const [sessionResult, catalog] = await Promise.all([
-    supabase
-      .from("chat_sessions")
-      .select("id, updated_at, subject_tags")
-      .eq("user_id", userId),
-    listKnowledgeCatalogOptions(),
-  ]);
+  const sessionResult = await supabase
+    .from("chat_sessions")
+    .select("id, updated_at, subject_tags")
+    .eq("user_id", userId);
 
   if (sessionResult.error) throw sessionResult.error;
 
@@ -117,12 +111,11 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
   });
 
   const profileSubjects = uniqueSubjects(profile.subjects);
-  const knowledgeSubjects = uniqueSubjects(catalog.subjectsByBoardGrade[catalogKey] ?? []);
   const sessionSubjects = uniqueSubjects(
     sessions.flatMap((session) => (Array.isArray(session.subject_tags) ? session.subject_tags : [])),
   );
 
-  const allSubjects = uniqueSubjects([...profileSubjects, ...sessionSubjects, ...knowledgeSubjects]);
+  const allSubjects = uniqueSubjects([...profileSubjects, ...sessionSubjects]);
 
   const summaries = allSubjects.map((subject) => {
     const matchingSessions = sessions.filter((session) =>
