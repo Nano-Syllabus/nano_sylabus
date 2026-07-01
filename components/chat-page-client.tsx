@@ -61,6 +61,7 @@ type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  createdAt?: string;
 };
 
 type TenantCatalogPayload = {
@@ -160,7 +161,7 @@ function createLocalMessage(role: "user" | "assistant", content: string): Messag
       ? crypto.randomUUID()
       : `${role}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  return { id, role, content };
+  return { id, role, content, createdAt: new Date().toISOString() };
 }
 
 function parseAssistantDataStream(text: string) {
@@ -296,6 +297,7 @@ export function ChatPageClient({
             id: message.id,
             role: message.role,
             content: message.content,
+            createdAt: message.createdAt,
           }))
         : [],
     [initialSession, currentSessionId],
@@ -482,6 +484,7 @@ export function ChatPageClient({
           id: message.id,
           role: message.role,
           content: message.content,
+          createdAt: message.createdAt,
         })),
       );
       setSessions((prev) =>
@@ -527,6 +530,7 @@ export function ChatPageClient({
         id: message.id,
         role: message.role,
         content: message.content,
+        createdAt: message.createdAt,
       })),
     );
     setSubjectContext(stripSubjectChapter(detail.subjectContext) || defaultSubjectContext);
@@ -557,6 +561,14 @@ export function ChatPageClient({
 
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
+
+  useEffect(() => {
+    if (composerRef.current) {
+      composerRef.current.style.height = "auto";
+      const newHeight = Math.min(composerRef.current.scrollHeight, 200); // cap max height
+      composerRef.current.style.height = `${newHeight}px`;
+    }
+  }, [input]);
   const [isLoading, setIsLoading] = useState(false);
 
   function handleInputChange(event: ChangeEvent<HTMLTextAreaElement>) {
@@ -805,6 +817,7 @@ export function ChatPageClient({
           messages: nextMessages.map((message) => ({
             role: message.role,
             content: message.content,
+            createdAt: message.createdAt,
           })),
         }),
       });
@@ -1039,7 +1052,7 @@ export function ChatPageClient({
         }}
         rows={1}
         placeholder="How can I help you today?"
-        className="min-h-[44px] w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted"
+        className="min-h-[44px] w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted"
       />
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1 md:gap-3">
@@ -1139,11 +1152,29 @@ export function ChatPageClient({
                         )}
                       >
                         {message.role === "assistant" ? (
-                          <Markdown text={message.content} className="text-[16px] leading-[28px] font-medium" />
+                          <>
+                            <Markdown text={message.content} className="text-[16px] leading-[28px] font-medium" />
+                            {message.createdAt && (
+                              <div className="mt-1">
+                                <span className="text-[11px] text-text-muted font-medium">
+                                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            )}
+                          </>
                         ) : (
-                          <div className="whitespace-pre-wrap text-[16px] leading-[24px] text-text-primary font-medium">
-                            {message.content}
-                          </div>
+                          <>
+                            <div className="whitespace-pre-wrap text-[16px] leading-[24px] text-text-primary font-medium">
+                              {message.content}
+                            </div>
+                            {message.createdAt && (
+                              <div className="mt-1 flex justify-end">
+                                <span className="text-[11px] text-text-muted font-medium">
+                                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            )}
+                          </>
                         )}
 
 
