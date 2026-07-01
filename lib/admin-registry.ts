@@ -1,10 +1,8 @@
 export type AdminSurfaceKey =
   | "home"
-  | "notebooks"
   | "answers"
   | "students"
-  | "payments"
-  | "instructions";
+  | "payments";
 
 export interface AdminSurfaceDefinition {
   key: AdminSurfaceKey;
@@ -21,23 +19,15 @@ export const ADMIN_SURFACES: AdminSurfaceDefinition[] = [
     href: "/admin",
     navLabel: "Home",
     pageTitle: "Home",
-    subtitle: "Daily control room for notebooks, answers, students, payments, and live AI instructions.",
+    subtitle: "Daily control room for answers, students, and payments.",
     icon: "🏠",
-  },
-  {
-    key: "notebooks",
-    href: "/admin/knowledge",
-    navLabel: "Notebooks",
-    pageTitle: "Notebooks",
-    subtitle: "Create notebooks by board, level, faculty, and subject. Then add syllabus, study material, and question bank resources under each notebook.",
-    icon: "📚",
   },
   {
     key: "answers",
     href: "/admin/answers",
     navLabel: "Answers",
     pageTitle: "Answers",
-    subtitle: "Inspect student conversations, audit grounded sources, and review flagged assistant answers from one place.",
+    subtitle: "Inspect student conversations and review flagged assistant answers from one place.",
     icon: "🤖",
   },
   {
@@ -55,14 +45,6 @@ export const ADMIN_SURFACES: AdminSurfaceDefinition[] = [
     pageTitle: "Payments",
     subtitle: "Review manual payments, manage plans, and control active student subscriptions from one place.",
     icon: "🧾",
-  },
-  {
-    key: "instructions",
-    href: "/admin/prompts",
-    navLabel: "AI Instructions",
-    pageTitle: "AI Instructions",
-    subtitle: "Change the live AI instructions. One active template per purpose and language shapes student answers.",
-    icon: "✍️",
   },
 ];
 

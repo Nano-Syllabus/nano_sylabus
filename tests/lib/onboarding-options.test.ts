@@ -12,7 +12,7 @@ describe("onboarding options", () => {
     expect(defaultGradeOptions()).toContain("Bachelor");
     expect(defaultGradeOptions("IOE")).toEqual(["Bachelor"]);
     expect(defaultProgramOptions("IOE", "Bachelor")).toEqual([
-      "BE Electronics and Communication Engineering",
+      "Electronics (NEW 075-079)",
     ]);
   });
 

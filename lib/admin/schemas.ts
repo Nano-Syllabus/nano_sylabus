@@ -1,47 +1,5 @@
 import { z } from "zod";
-import type { AdminAnswerFilter, KnowledgeDocumentType, KnowledgeResourceKind } from "@/lib/types";
-
-export const knowledgeResourceKinds = ["syllabus", "study_material", "question_bank"] as const;
-export const knowledgeDocumentTypes = [
-  "micro_syllabus",
-  "curriculum",
-  "syllabus",
-  "learning_outcomes",
-  "textbook",
-  "notes",
-  "solutions",
-  "guides",
-  "question_bank",
-  "past_questions",
-  "example_questions",
-  "other",
-] as const satisfies readonly KnowledgeDocumentType[];
-
-export const notebookInputSchema = z.object({
-  title: z.string().trim().min(1),
-  board: z.string().trim().min(1),
-  level: z.string().trim().min(1),
-  faculty: z.string().trim().default(""),
-  subject: z.string().trim().min(1),
-  curriculum: z.string().trim().default(""),
-  description: z.string().trim().default(""),
-});
-
-export const knowledgeDocumentInputSchema = z.object({
-  notebookId: z.string().trim().min(1),
-  board: z.string().trim().min(1),
-  grade: z.string().trim().min(1),
-  faculty: z.string().trim().default(""),
-  curriculum: z.string().trim().default(""),
-  subject: z.string().trim().min(1),
-  chapter: z.string().trim().nullable().optional(),
-  resourceKind: z.enum(knowledgeResourceKinds),
-  resourceSubtype: z.enum(knowledgeDocumentTypes),
-  title: z.string().trim().min(1),
-  sourceName: z.string().trim().min(1),
-  sourceType: z.string().trim().min(1),
-  rawContent: z.string().trim().min(1),
-});
+import type { AdminAnswerFilter } from "@/lib/types";
 
 export const userRoleUpdateSchema = z.object({
   role: z.enum(["student", "admin"]),
@@ -67,28 +25,6 @@ export const bulkAnswerActionSchema = z.object({
   action: z.enum(["mark_reviewed", "mark_open"]),
   messageIds: z.array(z.string().uuid()).min(1).max(200),
   adminReviewNote: z.string().trim().max(4000).optional(),
-});
-
-export const bulkKnowledgeActionSchema = z.object({
-  action: z.enum(["process"]),
-  documentIds: z.array(z.string().uuid()).min(1).max(100),
-});
-
-export const topicCardInputSchema = z.object({
-  documentId: z.string().uuid(),
-  board: z.string().trim().min(1),
-  grade: z.string().trim().min(1),
-  subject: z.string().trim().min(1),
-  chapter: z.string().trim().nullable().optional(),
-  topic: z.string().trim().min(1),
-  title: z.string().trim().min(1),
-  keyTerms: z.array(z.string().trim()).default([]),
-  coreExplanation: z.array(z.string().trim()).default([]),
-  formulaSheet: z.array(z.string().trim()).default([]),
-  exampleLine: z.string().trim().nullable().optional(),
-  commonMistake: z.string().trim().nullable().optional(),
-  examAngle: z.string().trim().nullable().optional(),
-  status: z.enum(["draft", "reviewed", "published"]).default("draft"),
 });
 
 export function parseAnswerFilter(value: string | null): AdminAnswerFilter {

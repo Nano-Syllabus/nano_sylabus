@@ -233,10 +233,9 @@ export function AdminAnswersManager({
         <div className="grid gap-0 border-b border-border bg-bg-secondary sm:grid-cols-2 xl:grid-cols-6">
           <HealthMetric label="Sample" value={snapshot.sampleSize} />
           <HealthMetric label="Grounded" value={`${snapshot.groundedRate}%`} />
-          <HealthMetric label="Fallback" value={`${snapshot.fallbackRate}%`} />
-          <HealthMetric label="Topic cards" value={`${snapshot.topicCardRate}%`} />
-          <HealthMetric label="Question bank" value={`${snapshot.questionBankRate}%`} />
+          <HealthMetric label="Reviewed" value={`${snapshot.reviewedRate}%`} />
           <HealthMetric label="Avg total" value={`${snapshot.avgTotalMs}ms`} />
+          <HealthMetric label="Avg generation" value={`${snapshot.avgGenerationMs}ms`} />
         </div>
         <div className="grid gap-0 md:grid-cols-2">
           <BreakdownPanel
@@ -546,10 +545,6 @@ function AnswerTracePanel({ trace }: { trace: AssistantAnswerTrace }) {
         <Badge variant={trace.grounded ? "success" : "warning"}>
           {trace.grounded ? "grounded" : "ungrounded"}
         </Badge>
-        {trace.topicCardUsed ? <Badge variant="default">topic card</Badge> : null}
-        {trace.questionBankUsed ? <Badge variant="default">question bank</Badge> : null}
-        {trace.usedFallback ? <Badge variant="warning">fallback</Badge> : null}
-        {trace.usedQualityRescue ? <Badge variant="warning">quality rescue</Badge> : null}
       </div>
 
       <div className="grid gap-0 overflow-hidden rounded-none border border-border bg-bg-secondary sm:grid-cols-2">
@@ -557,8 +552,6 @@ function AnswerTracePanel({ trace }: { trace: AssistantAnswerTrace }) {
         <TraceMetric label="Reason" value={trace.answerModeReason || "—"} />
         <TraceMetric label="Retrieval mode" value={trace.retrievalMode || "—"} />
         <TraceMetric label="Matched scope" value={trace.matchedScope || "—"} />
-        <TraceMetric label="Topic card title" value={trace.topicCardTitle || "—"} />
-        <TraceMetric label="Topic card source" value={trace.topicCardSource || "—"} />
         <TraceMetric label="Model" value={trace.answerModel || "—"} />
       </div>
 
@@ -568,19 +561,13 @@ function AnswerTracePanel({ trace }: { trace: AssistantAnswerTrace }) {
       </div>
 
       <div className="grid gap-0 overflow-hidden rounded-none border border-border bg-bg-secondary sm:grid-cols-2">
-        <TraceMetric label="RAG chunks" value={String(trace.ragChunks)} />
-        <TraceMetric label="RAG ms" value={`${trace.ragMs}ms`} />
+        <TraceMetric label="Tenant citations" value={String(trace.citationCount)} />
+        <TraceMetric label="Lookup ms" value={`${trace.lookupMs}ms`} />
         <TraceMetric label="Generation ms" value={`${trace.generationMs}ms`} />
         <TraceMetric label="Rewrite ms" value={`${trace.rewriteMs}ms`} />
         <TraceMetric label="Follow-up ms" value={`${trace.followupMs}ms`} />
         <TraceMetric label="Total ms" value={`${trace.totalMs}ms`} />
       </div>
-
-      {trace.fallbackReason ? (
-        <div className="rounded-none border border-border px-3 py-3 text-sm text-text-secondary">
-          <span className="font-medium text-text-primary">Fallback reason:</span> {trace.fallbackReason}
-        </div>
-      ) : null}
     </div>
   );
 }
