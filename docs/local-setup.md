@@ -5,41 +5,34 @@
 - Node.js 20+
 - npm
 - Supabase project
-- Gemini API key
+- Tenant API base URL and token
 
-## 1. Install dependencies
+## 1. Install Dependencies
 
 ```bash
 npm install
 ```
 
-## 2. Create local environment file
+## 2. Create `.env.local`
 
-Copy `.env.example` to `.env.local` and fill in:
+Set:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `NEXT_PUBLIC_ENABLE_GOOGLE_AUTH`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `GEMINI_API_KEY`
+- `TENANT_API_BASE_URL`
+- `TENANT_API_TOKEN`
+- `TENANT_API_REJECT_UNAUTHORIZED=0` for the current self-signed tenant host
+- `TENANT_API_TIMEOUT_MS=30000`
 
-The repository already provides default model values for:
+The app no longer needs any local model provider keys for chat answers.
 
-- `GEMINI_MODEL`
-- `GEMINI_EMBEDDING_MODEL`
+## 3. Apply Database Migrations
 
-## 3. Apply database migrations
-
-Run the SQL files in `supabase/migrations/` in order inside the Supabase SQL Editor:
-
-1. `20260420170000_phase1.sql`
-2. `20260420193000_phase2_grounding_and_notes.sql`
-3. `20260420213000_phase3_billing_and_admin.sql`
-4. `20260422145640_deactivate_seeded_subscription_plans.sql`
-5. `20260422161000_subject_explorer_core.sql`
-6. `20260422173500_chat_feedback_and_followups.sql`
-
-After the billing migrations, create your real plans directly in `subscription_plans`. The repo no longer ships active sample plans to students by default.
+Run SQL files in `supabase/migrations/` in order inside the Supabase SQL Editor.
+Supabase still stores users, profiles, chat sessions, notes, credits, billing,
+and admin review data.
 
 ## 4. Configure Supabase Auth
 
@@ -49,51 +42,25 @@ In Supabase Authentication settings:
 - Redirect URL: `http://localhost:3000/auth/callback`
 - Redirect URL: `http://localhost:3000/reset-password`
 
-Enable:
+Enable email auth. Enable Google auth only after the OAuth app is configured and
+`NEXT_PUBLIC_ENABLE_GOOGLE_AUTH=true` is set.
 
-- Email auth
-- Google auth when the OAuth app is ready
-
-Only set `NEXT_PUBLIC_ENABLE_GOOGLE_AUTH=true` after Google is enabled in Supabase and the OAuth client is configured.
-
-## 5. Seed knowledge content
-
-Use the ingestion script after the database and API keys are ready:
-
-```bash
-npm run ingest:syllabus -- <path-to-documents.json>
-```
-
-Each document should include at least:
-
-- `board`
-- `grade`
-- `subject`
-- `title`
-- `sourceName`
-- `sourceType`
-- `content`
-
-For the exact JSON structure, see:
-
-- [docs/syllabus-ingest-format.md](/Users/sumangiri/Desktop/padhai/docs/syllabus-ingest-format.md)
-
-## 6. Run the app
+## 5. Run The App
 
 ```bash
 npm run dev
 ```
 
-## 7. Verification checklist
+## 6. Verification Checklist
 
 Before pushing or deploying, verify:
 
-- `npm run lint`
 - `npm test`
+- `npm run test:tenant-prompt`
 - `npm run build`
 - signup and login
-- onboarding save
-- grounded chat response
-- note save and revision
+- onboarding subject flow
+- chat answer from the tenant API
+- note save and revision pages
 - billing page load
-- admin payment review access
+- admin payment/review access
