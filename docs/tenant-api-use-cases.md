@@ -44,7 +44,7 @@ Use this when the app needs coverage and indexing totals.
 
 ### `POST /v1/prompt`
 
-Use this when the app needs an answer grounded in tenant material or a web-search style fallback.
+Use this when the app needs an answer from the tenant prompt service.
 
 - Subject chat: ask questions inside one scoped subject.
 - Syllabus mode: answer from the selected subject's indexed material.
