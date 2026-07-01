@@ -130,7 +130,6 @@ maybeDescribe("tenant prompt API for indexed subject pairs", () => {
           folder_path: subject!.folder_path,
           prompt: target.prompt,
           namespace: subject!.namespace_slug,
-          top_k: 5,
         },
       });
 

@@ -260,7 +260,6 @@ maybeDescribe("tenant API smoke test", () => {
         folder_path: subject!.folder_path,
         prompt: promptForSubject(subject!),
         namespace: subject!.namespace_slug,
-        top_k: 5,
       },
     });
 
