@@ -140,7 +140,7 @@ function promptForSubject(subject: TenantSubject) {
 }
 
 maybeDescribe("tenant prompt API indexed sample", () => {
-  it("answers from an indexed tenant subject without local RAG fallback", async () => {
+  it("answers from an indexed tenant subject without local answer generation", async () => {
     const subjectsResponse = await requestJson<{ subjects: TenantSubject[] }>("/tenant/subjects");
     const treeResponse = await requestJson<{ tree: TenantSourceTreeNode[] }>("/tenant/source-tree");
 
@@ -178,7 +178,6 @@ maybeDescribe("tenant prompt API indexed sample", () => {
         folder_path: preferredSubject.folder_path,
         prompt: promptForSubject(preferredSubject),
         namespace: preferredSubject.namespace_slug,
-        top_k: 5,
       },
     });
 

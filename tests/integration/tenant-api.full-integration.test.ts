@@ -203,7 +203,6 @@ maybeDescribe("tenant API full integration", () => {
           folder_path: subject!.folder_path,
           prompt: target.prompt,
           namespace: subject!.namespace_slug,
-          top_k: 5,
         },
       });
 
