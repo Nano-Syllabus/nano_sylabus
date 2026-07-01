@@ -1,5 +1,9 @@
-import type { RetrievalResult } from "@/lib/ai/retrieval";
+import type { AssistantCitation } from "@/lib/types";
 import { normalizeSubjectLabel } from "@/lib/profile-normalization";
+
+type RetrievalResultLike = {
+  citations: AssistantCitation[];
+};
 
 function normalize(value: string) {
   return normalizeSubjectLabel(value);
@@ -14,7 +18,7 @@ export function deriveSubjectTags({
 }: {
   existingTags: string[];
   subjectContext: string | null;
-  retrieval: RetrievalResult;
+  retrieval: RetrievalResultLike;
   question: string;
   profileSubjects: string[];
 }) {

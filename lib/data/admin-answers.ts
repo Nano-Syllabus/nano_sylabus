@@ -92,27 +92,14 @@ function normalizeAnswerTrace(input: unknown): AssistantAnswerTrace | null {
   return {
     routePath: value.routePath,
     routeScopeDebug: typeof value.routeScopeDebug === "string" ? value.routeScopeDebug : "",
-    retrievalMode:
-      value.retrievalMode === "chapter" || value.retrievalMode === "web"
-        ? value.retrievalMode
-        : "default",
+    retrievalMode: value.retrievalMode === "web" ? value.retrievalMode : "default",
     answerMode: value.answerMode,
     answerModeReason: typeof value.answerModeReason === "string" ? value.answerModeReason : "",
     matchedScope: typeof value.matchedScope === "string" ? value.matchedScope : null,
-    topicCardUsed: Boolean(value.topicCardUsed),
-    topicCardTitle: typeof value.topicCardTitle === "string" ? value.topicCardTitle : null,
-    topicCardSource:
-      value.topicCardSource === "persisted" || value.topicCardSource === "derived"
-        ? value.topicCardSource
-        : null,
-    questionBankUsed: Boolean(value.questionBankUsed),
     answerModel: typeof value.answerModel === "string" ? value.answerModel : null,
-    usedFallback: Boolean(value.usedFallback),
-    usedQualityRescue: Boolean(value.usedQualityRescue),
-    fallbackReason: typeof value.fallbackReason === "string" ? value.fallbackReason : null,
     grounded: Boolean(value.grounded),
-    ragChunks: typeof value.ragChunks === "number" ? value.ragChunks : 0,
-    ragMs: typeof value.ragMs === "number" ? value.ragMs : 0,
+    citationCount: typeof value.citationCount === "number" ? value.citationCount : 0,
+    lookupMs: typeof value.lookupMs === "number" ? value.lookupMs : 0,
     generationMs: typeof value.generationMs === "number" ? value.generationMs : 0,
     rewriteMs: typeof value.rewriteMs === "number" ? value.rewriteMs : 0,
     followupMs: typeof value.followupMs === "number" ? value.followupMs : 0,
@@ -243,10 +230,7 @@ export function buildAdminAnswerHealthSnapshot(rows: AdminAnswerHealthRow[]): Ad
     return {
       sampleSize: 0,
       groundedRate: 0,
-      fallbackRate: 0,
       reviewedRate: 0,
-      topicCardRate: 0,
-      questionBankRate: 0,
       avgTotalMs: 0,
       avgGenerationMs: 0,
       latestCapturedAt: null,
@@ -256,10 +240,7 @@ export function buildAdminAnswerHealthSnapshot(rows: AdminAnswerHealthRow[]): Ad
   }
 
   let groundedCount = 0;
-  let fallbackCount = 0;
   let reviewedCount = 0;
-  let topicCardCount = 0;
-  let questionBankCount = 0;
   let totalMsSum = 0;
   let generationMsSum = 0;
   let totalMsCount = 0;
@@ -278,9 +259,6 @@ export function buildAdminAnswerHealthSnapshot(rows: AdminAnswerHealthRow[]): Ad
 
     if (!trace) continue;
 
-    if (trace.usedFallback) fallbackCount += 1;
-    if (trace.topicCardUsed) topicCardCount += 1;
-    if (trace.questionBankUsed) questionBankCount += 1;
     if (trace.totalMs > 0) {
       totalMsSum += trace.totalMs;
       totalMsCount += 1;
@@ -300,10 +278,7 @@ export function buildAdminAnswerHealthSnapshot(rows: AdminAnswerHealthRow[]): Ad
   return {
     sampleSize,
     groundedRate: roundMetric((groundedCount / sampleSize) * 100),
-    fallbackRate: roundMetric((fallbackCount / sampleSize) * 100),
     reviewedRate: roundMetric((reviewedCount / sampleSize) * 100),
-    topicCardRate: roundMetric((topicCardCount / sampleSize) * 100),
-    questionBankRate: roundMetric((questionBankCount / sampleSize) * 100),
     avgTotalMs: totalMsCount ? roundMetric(totalMsSum / totalMsCount) : 0,
     avgGenerationMs: generationMsCount ? roundMetric(generationMsSum / generationMsCount) : 0,
     latestCapturedAt: rows[0]?.created_at ?? null,

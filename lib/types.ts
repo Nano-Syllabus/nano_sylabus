@@ -6,24 +6,7 @@ export type AppRole = "student" | "admin";
 export type MessageFeedback = "up" | "down";
 export type AdminAnswerState = "flagged" | "reviewed" | "liked" | "neutral";
 export type AdminAnswerFilter = AdminAnswerState | "all";
-export type KnowledgeDocumentType =
-  | "micro_syllabus"
-  | "curriculum"
-  | "syllabus"
-  | "learning_outcomes"
-  | "textbook"
-  | "notes"
-  | "solutions"
-  | "guides"
-  | "question_bank"
-  | "past_questions"
-  | "example_questions"
-  | "other";
-export type KnowledgeResourceKind = "syllabus" | "study_material" | "question_bank";
-export type KnowledgeProcessingStatus = "draft" | "processing" | "ready" | "failed";
-export type PromptPurpose = "system" | "followup" | "rewrite";
-export type CitationSourceType = "syllabus" | "textbook" | "question_bank" | "general";
-export type TopicCardSource = "persisted" | "derived";
+export type CitationSourceType = "syllabus" | "textbook" | "general";
 export type CreditLedgerType = "grant" | "usage" | "refund" | "adjustment";
 export type ReferenceType =
   | "starter_grant"
@@ -57,140 +40,18 @@ export interface AssistantCitation {
 export interface AssistantAnswerTrace {
   routePath: string;
   routeScopeDebug: string | null;
-  retrievalMode: "default" | "web" | "chapter";
+  retrievalMode: "default" | "web";
   answerMode: string | null;
   answerModeReason: string | null;
   matchedScope: string | null;
-  topicCardUsed: boolean;
-  topicCardTitle: string | null;
-  topicCardSource: TopicCardSource | null;
-  questionBankUsed: boolean;
   answerModel: string | null;
-  usedFallback: boolean;
-  usedQualityRescue: boolean;
-  fallbackReason: string | null;
   grounded: boolean;
-  ragChunks: number;
-  ragMs: number;
+  citationCount: number;
+  lookupMs: number;
   generationMs: number;
   rewriteMs: number;
   followupMs: number;
   totalMs: number;
-}
-
-export interface KnowledgeDocument {
-  id: string;
-  notebookId: string | null;
-  notebookTitle: string | null;
-  board: string;
-  grade: string;
-  faculty: string;
-  curriculum: string;
-  subject: string;
-  chapter: string | null;
-  resourceKind: KnowledgeResourceKind;
-  resourceSubtype: KnowledgeDocumentType;
-  title: string;
-  sourceName: string;
-  sourceType: string;
-  storageBucket: string | null;
-  storagePath: string | null;
-  sourceMimeType: string | null;
-  sourceSizeBytes: number | null;
-  documentType: KnowledgeDocumentType;
-  rawContent: string;
-  chunkCount: number;
-  processingStatus: KnowledgeProcessingStatus;
-  processingError: string | null;
-  uploadedAt: string;
-  updatedAt: string;
-}
-
-export interface KnowledgeChunk {
-  id: string;
-  documentId: string;
-  board: string;
-  grade: string;
-  subject: string;
-  chapter: string | null;
-  topic: string | null;
-  content: string;
-  chunkIndex: number;
-  createdAt: string;
-}
-
-export interface KnowledgeChunkDetail extends KnowledgeChunk {
-  sourceTitle: string;
-  sourceName: string;
-  sourceType: string;
-  uploadedAt: string;
-}
-
-export interface TopicCard {
-  id: string;
-  documentId: string | null;
-  board: string;
-  grade: string;
-  subject: string;
-  chapter: string | null;
-  topic: string;
-  title: string;
-  keyTerms: string[];
-  coreExplanation: string[];
-  formulaSheet: string[];
-  exampleLine: string | null;
-  commonMistake: string | null;
-  examAngle: string | null;
-  status: "draft" | "reviewed" | "published";
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface AdminKnowledgeDocumentSummary extends KnowledgeDocument {}
-
-export interface AdminKnowledgeDocumentDetail extends KnowledgeDocument {
-  chunks: KnowledgeChunk[];
-  topicCards: TopicCard[];
-}
-
-export interface KnowledgeNotebook {
-  id: string;
-  title: string;
-  board: string;
-  level: string;
-  faculty: string;
-  subject: string;
-  curriculum: string;
-  description: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface AdminKnowledgeNotebookSummary extends KnowledgeNotebook {
-  resourceCount: number;
-  readyChunkCount: number;
-}
-
-export interface AdminKnowledgeNotebookDetail extends KnowledgeNotebook {
-  resources: AdminKnowledgeDocumentSummary[];
-  resourceTotal: number;
-  resourcePage: number;
-  resourcePageSize: number;
-  resourceTotalPages: number;
-}
-
-export interface PromptTemplate {
-  id: string;
-  name: string;
-  slug: string;
-  purpose: PromptPurpose;
-  language: Language;
-  description: string | null;
-  content: string;
-  isActive: boolean;
-  updatedBy: string | null;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface StudentProfile {
@@ -474,10 +335,7 @@ export interface AdminAnswerHealthBreakdownItem {
 export interface AdminAnswerHealthSnapshot {
   sampleSize: number;
   groundedRate: number;
-  fallbackRate: number;
   reviewedRate: number;
-  topicCardRate: number;
-  questionBankRate: number;
   avgTotalMs: number;
   avgGenerationMs: number;
   latestCapturedAt: string | null;
