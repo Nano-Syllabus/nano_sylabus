@@ -7,41 +7,27 @@
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "eslint .",
     "verify": "npm run lint && npm test && npm run build",
-    "prepare:class11:english:units": "node scripts/prepare-class11-english-by-unit.mjs",
-    "extract:scanned:pdf": "node scripts/extract-scanned-pdf-text.mjs",
-    "ingest:syllabus": "node scripts/ingest-syllabus.mjs",
-    "validate:class11:core:manifest": "node scripts/ingest-syllabus.mjs data/syllabus/prepared/documents.class11.core.manifest.json --validate-only --strict-class11-core",
-    "ingest:class11:core": "node scripts/ingest-syllabus.mjs data/syllabus/prepared/documents.class11.core.manifest.json --replace-scope --strict-class11-core",
-    "test:rag:class11:english": "node scripts/test-rag-class11-english.mjs",
-    "test:language-mode": "vitest run tests/lib/chat-language-mode.test.ts tests/lib/e2e-harness-language-mode.test.ts",
-    "test:gemini:local": "node scripts/test-gemini-local-quality.mjs",
+    "test:language-mode": "vitest run tests/lib/chat-language-mode.test.ts",
     "test": "vitest run",
     "test:tenant-api": "vitest run tests/integration/tenant-api.smoke.test.ts",
     "test:tenant-full": "vitest run tests/integration/tenant-api.full-integration.test.ts",
     "test:tenant-prompt": "vitest run tests/integration/tenant-prompt.indexed-sample.test.ts",
-    "test:tenant-subject-pairs": "vitest run tests/integration/tenant-prompt.subject-pairs.test.ts",
-    "test:e2e": "playwright test"
+    "test:tenant-subject-pairs": "vitest run tests/integration/tenant-prompt.subject-pairs.test.ts"
   },
   "dependencies": {
-    "@ai-sdk/google": "^1.2.22",
-    "@ai-sdk/openai": "^1.3.24",
     "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "^2.56.0",
-    "ai": "^4.3.16",
+    "@supabase/supabase-js": "^2.110.0",
     "clsx": "^2.1.1",
     "cookie": "^0.7.0",
-    "mammoth": "^1.12.0",
-    "next": "^15.3.1",
-    "pdf-parse": "^2.4.5",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "next": "^15.5.19",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "tailwind-merge": "^3.3.0",
     "tailwindcss": "^4.1.4",
     "tw-animate-css": "^1.3.4",
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.1",
     "@tailwindcss/postcss": "^4.1.4",
     "@types/node": "^22.15.3",
     "@types/react": "^19.1.2",
@@ -51,5 +37,8 @@
     "prettier": "^3.5.3",
     "typescript": "^5.8.3",
     "vitest": "^4.1.4"
+  },
+  "overrides": {
+    "postcss": "8.5.10"
   }
 }
