@@ -11,7 +11,6 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from "react";
-import { useChat, type Message } from "ai/react";
 import { AppShellContext } from "@/components/app-shell-context";
 
 import { Markdown } from "@/components/markdown";
@@ -21,7 +20,6 @@ import { Field, Input, Textarea } from "@/components/ui/field";
 import { dedupeCitationsForDisplay } from "@/lib/citations";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type {
-  AnswerStyle,
   AppUser,
   ChatMessageRecord,
   ChatSessionDetail,
@@ -46,15 +44,8 @@ const COLOR_LABEL: Record<NoteColor, string> = {
   green: "Got it",
 };
 
-const ANSWER_STYLE_STORAGE_KEY = "nano-answer-style";
-const RETRIEVAL_MODE_STORAGE_KEY = "nano-retrieval-mode";
-const ANSWER_STYLE_LABELS: Record<AnswerStyle, string> = {
-  simple: "Simple",
-  balanced: "Balanced",
-  detailed: "Detailed",
-};
-type RetrievalMode = "default" | "web" | "chapter";
-const RETRIEVAL_MODE_LABELS: Record<Exclude<RetrievalMode, "chapter">, string> = {
+type RetrievalMode = "default" | "web";
+const RETRIEVAL_MODE_LABELS: Record<RetrievalMode, string> = {
   default: "Syllabus",
   web: "Web Search",
 };
@@ -64,6 +55,12 @@ type TenantChatSubject = {
   slug: string;
   namespaceSlug: string;
   folderPath: string;
+};
+
+type Message = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
 };
 
 type TenantCatalogPayload = {
@@ -91,30 +88,16 @@ function loadTenantSubjectMetadata(): Promise<TenantCatalogPayload> {
 
 type ThinkingTrace = {
   grounded: boolean;
-  ragChunks: number;
+  citationCount: number;
   subjectContext: string | null;
   retrievalMode: RetrievalMode;
-  answerMode:
-    | "quick"
-    | "deep"
-    | "tenant_prompt"
-    | "deterministic_structure_lookup"
-    | "deterministic_catalog_lookup"
-    | "deterministic_exam_lookup"
-    | null;
+  answerMode: "tenant_prompt" | null;
   answerModeReason: string | null;
   answerModel: string | null;
   routePath: string | null;
   routeScopeDebug: string | null;
-  topicCardUsed: boolean;
-  topicCardSource: "persisted" | "derived" | null;
-  topicCardTitle: string | null;
-  questionBankUsed: boolean;
-  usedFallback: boolean;
-  usedQualityRescue: boolean;
-  fallbackReason: string | null;
   matchedScope: string | null;
-  ragMs: number | null;
+  lookupMs: number | null;
   generationMs: number | null;
   rewriteMs: number | null;
   totalMs: number | null;
@@ -132,7 +115,7 @@ function buildThoughtSummary(trace: ThinkingTrace) {
     lines.push("Answer came from the tenant subject API using your selected subject scope.");
   } else if (trace.grounded) {
     lines.push(
-      `Retrieved ${trace.ragChunks} grounded chunk${trace.ragChunks === 1 ? "" : "s"} from your indexed study sources.`,
+      `Received ${trace.citationCount} tenant citation${trace.citationCount === 1 ? "" : "s"} for this answer.`,
     );
   } else {
     lines.push("Grounded study evidence was not available for this response path.");
@@ -150,29 +133,13 @@ function buildThoughtSummary(trace: ThinkingTrace) {
   if (trace.routeScopeDebug && trace.routeScopeDebug !== trace.matchedScope) {
     lines.push(`Resolved scope: ${trace.routeScopeDebug}.`);
   }
-  if (trace.topicCardUsed) {
-    lines.push(
-      trace.topicCardSource === "persisted"
-        ? `Topic card used: ${trace.topicCardTitle || "stored academic card"} (stored academic card).`
-        : `Topic card used: ${trace.topicCardTitle || "derived teaching context"} (derived from grounded chunks).`,
-    );
-  }
-  if (trace.questionBankUsed) {
-    lines.push("Question bank evidence was prioritized for this response.");
-  }
   if (trace.answerMode) {
     lines.push(
       `Answer mode: ${trace.answerMode}${trace.answerModeReason ? ` (${trace.answerModeReason})` : ""}.`,
     );
   }
   if (trace.answerModel) {
-    lines.push(`Model used: ${trace.answerModel}${trace.usedFallback ? " (fallback triggered)" : ""}.`);
-  }
-  if (trace.usedFallback) {
-    lines.push(`Fallback reason: ${trace.fallbackReason || "provider-side primary failure"}.`);
-  }
-  if (trace.usedQualityRescue) {
-    lines.push("Quality rescue: quick draft was upgraded to a stronger pass for better explanation quality.");
+    lines.push(`Model used: ${trace.answerModel}.`);
   }
   return lines;
 }
@@ -180,25 +147,54 @@ function buildThoughtSummary(trace: ThinkingTrace) {
 function buildTracePills(trace: ThinkingTrace) {
   return [
     trace.grounded ? "Grounded" : "Ungrounded",
-    trace.retrievalMode === "chapter" ? "Chapter" : RETRIEVAL_MODE_LABELS[trace.retrievalMode],
-    trace.answerMode === "deterministic_structure_lookup"
-      ? "Chapter lookup"
-      : trace.answerMode === "deterministic_catalog_lookup"
-        ? "Catalog lookup"
-      : trace.answerMode === "deterministic_exam_lookup"
-        ? "Exam lookup"
-      : trace.answerMode
+    RETRIEVAL_MODE_LABELS[trace.retrievalMode],
+    trace.answerMode
         ? `${trace.answerMode} answer`
         : null,
-    trace.topicCardUsed
-      ? trace.topicCardSource === "persisted"
-        ? "Stored topic card"
-        : "Topic card"
-      : null,
-    trace.questionBankUsed ? "Question bank" : null,
-    trace.usedQualityRescue ? "Quality rescue" : null,
-    trace.usedFallback ? "Backup model" : null,
   ].filter(Boolean) as string[];
+}
+
+function createLocalMessage(role: "user" | "assistant", content: string): Message {
+  const id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${role}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  return { id, role, content };
+}
+
+function parseAssistantDataStream(text: string) {
+  const line = text
+    .split(/\r?\n/)
+    .find((item) => item.startsWith("0:"));
+
+  if (!line) return text.trim();
+
+  try {
+    const parsed = JSON.parse(line.slice(2));
+    return typeof parsed === "string" ? parsed : String(parsed ?? "");
+  } catch {
+    return text.trim();
+  }
+}
+
+function buildMissingSubjectMessage(subjects: string[]) {
+  if (subjects.length === 0) {
+    return [
+      "You haven't selected any subject yet.",
+      "",
+      "I could not find available subjects for your current semester right now. Please select a subject from the **Subjects** menu, or update your profile subjects first.",
+    ].join("\n");
+  }
+
+  return [
+    "You haven't selected any subject yet.",
+    "",
+    "Available subjects:",
+    ...subjects.map((subject) => `- ${subject}`),
+    "",
+    "Please select one from the **Subjects** menu, then ask your question again.",
+  ].join("\n");
 }
 
 function TopHeaderTitle({ 
@@ -270,7 +266,6 @@ export function ChatPageClient({
     return null;
   }, [initialSubjectContext, initialSession?.subjectContext]);
   const [subjectContext, setSubjectContext] = useState<string | null>(defaultSubjectContext);
-  const [answerStyle, setAnswerStyle] = useState<AnswerStyle>("detailed");
   const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("default");
   const [saveState, setSaveState] = useState<{
     message: ChatMessageRecord;
@@ -291,6 +286,7 @@ export function ChatPageClient({
   const searchDebounceRef = useRef<number | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const requestWatchdogRef = useRef<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const stopChatRef = useRef<(() => void) | null>(null);
 
   const initialMessages: Message[] = useMemo(
@@ -329,24 +325,6 @@ export function ChatPageClient({
   }, [subjectContext, tenantSubjectsByName]);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(ANSWER_STYLE_STORAGE_KEY);
-      if (stored === "simple" || stored === "balanced" || stored === "detailed") {
-        setAnswerStyle(stored);
-      }
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(RETRIEVAL_MODE_STORAGE_KEY);
-      if (stored === "default" || stored === "web" || stored === "chapter") {
-        setRetrievalMode(stored);
-      }
-    } catch {}
-  }, []);
-
-  useEffect(() => {
     let active = true;
 
     const hydrateTenantSubjectMetadata = async () => {
@@ -376,18 +354,6 @@ export function ChatPageClient({
       active = false;
     };
   }, [normalizedProfileSubjects]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(ANSWER_STYLE_STORAGE_KEY, answerStyle);
-    } catch {}
-  }, [answerStyle]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(RETRIEVAL_MODE_STORAGE_KEY, retrievalMode);
-    } catch {}
-  }, [retrievalMode]);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -589,193 +555,141 @@ export function ChatPageClient({
     sessionDetail?.title ??
     "Start a new conversation";
 
-  const {
-    messages,
-    input,
-    handleInputChange,
-    append,
-    stop,
-    isLoading,
-    setInput,
-    setMessages,
-  } = useChat({
-    api: "/api/chat",
-    initialMessages,
-    body: {
-      sessionId: currentSessionId,
-      subjectContext,
-      tenantSubject: selectedTenantSubject,
-      answerStyle,
-      retrievalMode,
-    },
-    onResponse(response) {
-      // Backend has started responding — reset the watchdog with a generous
-      // streaming budget so a slow-but-active stream is not killed.
-      if (requestWatchdogRef.current) {
-        window.clearTimeout(requestWatchdogRef.current);
-        requestWatchdogRef.current = window.setTimeout(() => {
-          setThinkingStatus("This question is taking longer than expected...");
-          setChatError(
-            "Answer generation is taking too long right now. We stopped this try so you are not stuck; please retry once.",
-          );
-          stop();
-        }, 90_000);
-      }
-      const returnedSessionId = response.headers.get("x-session-id");
-      const responseMatchedScope = response.headers.get("x-matched-scope")?.trim() || null;
-      const ragChunks = Number(response.headers.get("x-rag-chunks") || "0");
-      const grounded = response.headers.get("x-rag-grounded") === "1";
-      const responseRetrievalModeHeader = response.headers.get("x-retrieval-mode");
-      const responseRetrievalMode =
-        responseRetrievalModeHeader === "chapter" || responseRetrievalModeHeader === "web"
-          ? responseRetrievalModeHeader
-          : "default";
-      const responseSubjectContext = response.headers.get("x-subject-context")?.trim() || null;
-      const answerModeHeader = response.headers.get("x-answer-mode");
-      const answerMode =
-        answerModeHeader === "quick" ||
-        answerModeHeader === "deep" ||
-        answerModeHeader === "tenant_prompt" ||
-        answerModeHeader === "deterministic_structure_lookup" ||
-        answerModeHeader === "deterministic_catalog_lookup" ||
-        answerModeHeader === "deterministic_exam_lookup"
-          ? answerModeHeader
-          : null;
-      const answerModeReason = response.headers.get("x-answer-mode-reason")?.trim() || null;
-      const answerModel = response.headers.get("x-answer-model")?.trim() || null;
-      const routePath = response.headers.get("x-route-path")?.trim() || null;
-      const routeScopeDebug = response.headers.get("x-route-scope-debug")?.trim() || null;
-      const topicCardUsed = response.headers.get("x-topic-card-used") === "1";
-      const topicCardSourceHeader = response.headers.get("x-topic-card-source");
-      const topicCardSource =
-        topicCardSourceHeader === "persisted" || topicCardSourceHeader === "derived"
-          ? topicCardSourceHeader
-          : null;
-      const topicCardTitle = response.headers.get("x-topic-card-title")?.trim() || null;
-      const questionBankUsed = response.headers.get("x-question-bank-used") === "1";
-      const usedFallback = response.headers.get("x-answer-fallback") === "1";
-      const usedQualityRescue = response.headers.get("x-answer-quality-rescue") === "1";
-      const fallbackReason = response.headers.get("x-answer-fallback-reason")?.trim() || null;
-      const ragMsRaw = Number(response.headers.get("x-rag-ms") || "");
-      const generationMsRaw = Number(response.headers.get("x-generation-ms") || "");
-      const rewriteMsRaw = Number(response.headers.get("x-rewrite-ms") || "");
-      const totalMsRaw = Number(response.headers.get("x-total-ms") || "");
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-      setLatestThinkingTrace({
-        grounded,
-        ragChunks,
-        retrievalMode: responseRetrievalMode,
-        subjectContext: responseSubjectContext,
-        answerMode,
-        answerModeReason,
-        answerModel,
-        routePath,
-        routeScopeDebug,
-        topicCardUsed,
-        topicCardSource,
-        topicCardTitle,
-        questionBankUsed,
-        usedFallback,
-        usedQualityRescue,
-        fallbackReason,
-        matchedScope: responseMatchedScope,
-        ragMs: Number.isFinite(ragMsRaw) ? ragMsRaw : null,
-        generationMs: Number.isFinite(generationMsRaw) ? generationMsRaw : null,
-        rewriteMs: Number.isFinite(rewriteMsRaw) ? rewriteMsRaw : null,
-        totalMs: Number.isFinite(totalMsRaw) ? totalMsRaw : null,
-      });
+  function handleInputChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    setInput(event.target.value);
+  }
 
-      if (responseMatchedScope) setMatchedScope(responseMatchedScope);
-      if (grounded && ragChunks > 0) {
-        setThinkingStatus(`Thinking with ${ragChunks} grounded chunks...`);
-      } else {
-        setThinkingStatus("Building the answer...");
-      }
+  const stop = useCallback(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsLoading(false);
+  }, []);
 
-      if (!returnedSessionId || currentSessionIdRef.current) return;
+  function handleChatResponseHeaders(response: Response) {
+    if (requestWatchdogRef.current) {
+      window.clearTimeout(requestWatchdogRef.current);
+      requestWatchdogRef.current = window.setTimeout(() => {
+        setThinkingStatus("This question is taking longer than expected...");
+        setChatError(
+          "Answer generation is taking too long right now. We stopped this try so you are not stuck; please retry once.",
+        );
+        stop();
+      }, 90_000);
+    }
 
-      const title = pendingTitleRef.current || "New chat";
-      setCurrentSessionId(returnedSessionId);
-      currentSessionIdRef.current = returnedSessionId;
-      window.history.replaceState(null, "", `/app/chat?session=${returnedSessionId}`);
-      setSessions((prev) => [
-        {
-          id: returnedSessionId,
-          userId: user.id,
-          title,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          subjectTags: subjectContext ? [subjectContext] : [],
-          subjectContext,
-          isPinned: false,
-        },
-        ...prev,
-      ]);
-      window.dispatchEvent(new CustomEvent("chat-session-updated"));
-    },
-    async onFinish() {
-      if (requestWatchdogRef.current) {
-        window.clearTimeout(requestWatchdogRef.current);
-        requestWatchdogRef.current = null;
-      }
-      setThinkingStatus("Saving the response...");
-      setChatError("");
-      const resolvedSessionId = currentSessionIdRef.current;
-      if (!resolvedSessionId) return;
+    const returnedSessionId = response.headers.get("x-session-id");
+    const responseMatchedScope = response.headers.get("x-matched-scope")?.trim() || null;
+    const citationCount = Number(response.headers.get("x-tenant-citations") || "0");
+    const grounded = response.headers.get("x-tenant-grounded") === "1";
+    const responseRetrievalModeHeader = response.headers.get("x-retrieval-mode");
+    const responseRetrievalMode =
+      responseRetrievalModeHeader === "web"
+        ? responseRetrievalModeHeader
+        : "default";
+    const responseSubjectContext = response.headers.get("x-subject-context")?.trim() || null;
+    const answerModeHeader = response.headers.get("x-answer-mode");
+    const answerMode = answerModeHeader === "tenant_prompt" ? answerModeHeader : null;
+    const answerModeReason = response.headers.get("x-answer-mode-reason")?.trim() || null;
+    const answerModel = response.headers.get("x-answer-model")?.trim() || null;
+    const routePath = response.headers.get("x-route-path")?.trim() || null;
+    const routeScopeDebug = response.headers.get("x-route-scope-debug")?.trim() || null;
+    const lookupMsRaw = Number(response.headers.get("x-tenant-lookup-ms") || "");
+    const generationMsRaw = Number(response.headers.get("x-generation-ms") || "");
+    const rewriteMsRaw = Number(response.headers.get("x-rewrite-ms") || "");
+    const totalMsRaw = Number(response.headers.get("x-total-ms") || "");
+
+    setLatestThinkingTrace({
+      grounded,
+      citationCount,
+      retrievalMode: responseRetrievalMode,
+      subjectContext: responseSubjectContext,
+      answerMode,
+      answerModeReason,
+      answerModel,
+      routePath,
+      routeScopeDebug,
+      matchedScope: responseMatchedScope,
+      lookupMs: Number.isFinite(lookupMsRaw) ? lookupMsRaw : null,
+      generationMs: Number.isFinite(generationMsRaw) ? generationMsRaw : null,
+      rewriteMs: Number.isFinite(rewriteMsRaw) ? rewriteMsRaw : null,
+      totalMs: Number.isFinite(totalMsRaw) ? totalMsRaw : null,
+    });
+
+    if (responseMatchedScope) setMatchedScope(responseMatchedScope);
+    setThinkingStatus(
+      grounded && citationCount > 0
+        ? `Using ${citationCount} tenant citation${citationCount === 1 ? "" : "s"}...`
+        : "Building the answer...",
+    );
+
+    if (!returnedSessionId || currentSessionIdRef.current) return;
+
+    const title = pendingTitleRef.current || "New chat";
+    setCurrentSessionId(returnedSessionId);
+    currentSessionIdRef.current = returnedSessionId;
+    window.history.replaceState(null, "", `/app/chat?session=${returnedSessionId}`);
+    setSessions((prev) => [
+      {
+        id: returnedSessionId,
+        userId: user.id,
+        title,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        subjectTags: subjectContext ? [subjectContext] : [],
+        subjectContext,
+        isPinned: false,
+      },
+      ...prev,
+    ]);
+    window.dispatchEvent(new CustomEvent("chat-session-updated"));
+  }
+
+  async function finishChatResponse() {
+    if (requestWatchdogRef.current) {
+      window.clearTimeout(requestWatchdogRef.current);
+      requestWatchdogRef.current = null;
+    }
+    setThinkingStatus("Saving the response...");
+    setChatError("");
+    const resolvedSessionId = currentSessionIdRef.current;
+    if (resolvedSessionId) {
       await Promise.all([refreshSession(resolvedSessionId), refreshCredits()]);
-      setThinkingStatus(null);
-    },
-    onError(error) {
-      if (requestWatchdogRef.current) {
-        window.clearTimeout(requestWatchdogRef.current);
-        requestWatchdogRef.current = null;
-      }
-      setThinkingStatus(null);
-      const rawMessage = error.message || "";
-      let parsedError = "";
-      let parsedCode = "";
-      
-      try {
-        const parsed = JSON.parse(rawMessage);
-        if (parsed && typeof parsed.error === "string") {
-          parsedError = parsed.error;
-        }
-        if (parsed && typeof parsed.code === "string") {
-          parsedCode = parsed.code;
-        }
-      } catch (e) {
-        // Not a JSON string
-      }
+    }
+    setThinkingStatus(null);
+  }
 
-      if (parsedCode === "MODEL_GENERATION_FAILED" || rawMessage.includes("MODEL_GENERATION_FAILED")) {
-        setChatError(
-          parsedError ||
-          rawMessage.replace(/^.*MODEL_GENERATION_FAILED[:\s-]*("})?/i, "").replace(/["}]+$/, "").trim() ||
-          "The answer model failed for this question. Please retry."
-        );
-        return;
-      }
+  function handleChatError(error: unknown) {
+    if (requestWatchdogRef.current) {
+      window.clearTimeout(requestWatchdogRef.current);
+      requestWatchdogRef.current = null;
+    }
+    setThinkingStatus(null);
+    const rawMessage = error instanceof Error ? error.message : String(error || "");
+    let parsedError = "";
+    let parsedCode = "";
 
-      if (rawMessage.trim() === "An error occurred.") {
-        setChatError(
-          "Answer model yo try मा fail bhayo. Feri send gara; simple questions ko lagi lighter model use garne banाइएको छ.",
-        );
-        return;
-      }
+    try {
+      const parsed = JSON.parse(rawMessage);
+      if (parsed && typeof parsed.error === "string") parsedError = parsed.error;
+      if (parsed && typeof parsed.code === "string") parsedCode = parsed.code;
+    } catch {}
 
-      if (
-        rawMessage.includes("RAG_RETRIEVAL_FAILED") ||
-        rawMessage.toLowerCase().includes("syllabus context")
-      ) {
-        setChatError(
-          "Syllabus context could not be loaded right now, so we paused this answer to avoid ungrounded output. Please retry.",
-        );
-        return;
-      }
+    if (parsedCode === "TENANT_PROMPT_TIMEOUT" || rawMessage.includes("TENANT_PROMPT_TIMEOUT")) {
+      setChatError(parsedError || "Tenant answer API timed out. Please retry once.");
+      return;
+    }
 
-      setChatError(parsedError || rawMessage || "Something went wrong while generating a response.");
-    },
-  });
+    if (parsedCode === "TENANT_SUBJECT_NOT_MATCHED" || rawMessage.includes("TENANT_SUBJECT_NOT_MATCHED")) {
+      setChatError(parsedError || "Selected subject could not be matched to the tenant subject list.");
+      return;
+    }
+
+    setChatError(parsedError || rawMessage || "Something went wrong while generating a response.");
+  }
 
   const groupedSessions = useMemo(() => {
     const groups = new Map<string, ChatSessionSummary[]>();
@@ -835,6 +749,19 @@ export function ChatPageClient({
       return;
     }
 
+    if (!stripSubjectChapter(subjectContext)) {
+      setChatError("");
+      setThinkingStatus(null);
+      setShowThinkingTrace(false);
+      setInput("");
+      setMessages((previousMessages) => [
+        ...previousMessages,
+        createLocalMessage("user", trimmed),
+        createLocalMessage("assistant", buildMissingSubjectMessage(availableSubjects)),
+      ]);
+      return;
+    }
+
     if (requestWatchdogRef.current) {
       window.clearTimeout(requestWatchdogRef.current);
       requestWatchdogRef.current = null;
@@ -853,23 +780,58 @@ export function ChatPageClient({
       stop();
     }, 60_000);
 
-    await append(
-      {
-        role: "user",
-        content: trimmed,
-      },
-      {
-        body: {
+    const userMessage = createLocalMessage("user", trimmed);
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
+    setIsLoading(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
           sessionId: currentSessionId,
           language: chatLanguage,
           messageLanguage: composerLanguage,
           subjectContext,
           tenantSubject: selectedTenantSubject,
-          answerStyle,
           retrievalMode,
-        },
-      },
-    );
+          messages: nextMessages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Chat request failed with ${response.status}`);
+      }
+
+      handleChatResponseHeaders(response);
+      const answer = parseAssistantDataStream(await response.text());
+      if (answer) {
+        setMessages((previousMessages) => [
+          ...previousMessages,
+          createLocalMessage("assistant", answer),
+        ]);
+      }
+      await finishChatResponse();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      handleChatError(error);
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      setIsLoading(false);
+    }
   }
 
   async function submitMessage(event: React.FormEvent<HTMLFormElement>) {
@@ -987,11 +949,6 @@ export function ChatPageClient({
     composerRef.current?.focus();
   }
 
-  function applyAnswerStyle(style: AnswerStyle) {
-    setAnswerStyle(style);
-    setUiFeedback(`${ANSWER_STYLE_LABELS[style]} answers will be preferred from now on.`);
-  }
-
   useEffect(() => {
     if (!initialPrompt?.trim()) return;
     setInput(initialPrompt.trim());
@@ -1097,10 +1054,10 @@ export function ChatPageClient({
           />
           <CompactSelect
             value={retrievalMode}
-            onChange={(v) => setRetrievalMode(v as RetrievalMode)}
-            options={(Object.keys(RETRIEVAL_MODE_LABELS) as Array<Exclude<RetrievalMode, "chapter">>).map(mode => ({
+            onChange={(value) => setRetrievalMode(value as RetrievalMode)}
+            options={(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map((mode) => ({
               label: RETRIEVAL_MODE_LABELS[mode],
-              value: mode
+              value: mode,
             }))}
             direction="up"
           />

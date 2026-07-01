@@ -18,7 +18,7 @@ export function dedupeCitationsForDisplay(citations: AssistantCitation[]) {
       .filter(Boolean)
       .join("::");
 
-    const fallbackKey = [
+    const secondaryKey = [
       normalizeKeyPart(citation.sourceLabel),
       normalizeKeyPart(citation.sourceName),
       normalizeKeyPart(citation.excerpt?.slice(0, 80)),
@@ -26,7 +26,7 @@ export function dedupeCitationsForDisplay(citations: AssistantCitation[]) {
       .filter(Boolean)
       .join("::");
 
-    const finalKey = key || fallbackKey;
+    const finalKey = key || secondaryKey;
     if (!finalKey || seen.has(finalKey)) continue;
     seen.add(finalKey);
     deduped.push(citation);

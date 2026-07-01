@@ -19,27 +19,14 @@ function normalizeAnswerTrace(input: unknown): AssistantAnswerTrace | null {
   return {
     routePath: trace.routePath,
     routeScopeDebug: typeof trace.routeScopeDebug === "string" ? trace.routeScopeDebug : null,
-    retrievalMode:
-      trace.retrievalMode === "chapter" || trace.retrievalMode === "web"
-        ? trace.retrievalMode
-        : "default",
+    retrievalMode: trace.retrievalMode === "web" ? trace.retrievalMode : "default",
     answerMode: typeof trace.answerMode === "string" ? trace.answerMode : null,
     answerModeReason: typeof trace.answerModeReason === "string" ? trace.answerModeReason : null,
     matchedScope: typeof trace.matchedScope === "string" ? trace.matchedScope : null,
-    topicCardUsed: Boolean(trace.topicCardUsed),
-    topicCardTitle: typeof trace.topicCardTitle === "string" ? trace.topicCardTitle : null,
-    topicCardSource:
-      trace.topicCardSource === "persisted" || trace.topicCardSource === "derived"
-        ? trace.topicCardSource
-        : null,
-    questionBankUsed: Boolean(trace.questionBankUsed),
     answerModel: typeof trace.answerModel === "string" ? trace.answerModel : null,
-    usedFallback: Boolean(trace.usedFallback),
-    usedQualityRescue: Boolean(trace.usedQualityRescue),
-    fallbackReason: typeof trace.fallbackReason === "string" ? trace.fallbackReason : null,
     grounded: Boolean(trace.grounded),
-    ragChunks: typeof trace.ragChunks === "number" ? trace.ragChunks : 0,
-    ragMs: typeof trace.ragMs === "number" ? trace.ragMs : 0,
+    citationCount: typeof trace.citationCount === "number" ? trace.citationCount : 0,
+    lookupMs: typeof trace.lookupMs === "number" ? trace.lookupMs : 0,
     generationMs: typeof trace.generationMs === "number" ? trace.generationMs : 0,
     rewriteMs: typeof trace.rewriteMs === "number" ? trace.rewriteMs : 0,
     followupMs: typeof trace.followupMs === "number" ? trace.followupMs : 0,

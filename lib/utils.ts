@@ -17,14 +17,21 @@ const TITLE_STOP_WORDS = new Set([
   "are",
   "as",
   "at",
+  "answer",
+  "answers",
   "be",
+  "brief",
   "bro",
   "by",
   "can",
   "chapter",
   "could",
+  "detail",
+  "detailed",
+  "details",
   "do",
   "does",
+  "explain",
   "for",
   "from",
   "give",
@@ -41,14 +48,19 @@ const TITLE_STOP_WORDS = new Set([
   "me",
   "my",
   "of",
+  "one",
   "on",
   "our",
+  "para",
+  "paragraph",
   "please",
   "qsn",
   "question",
   "questions",
   "should",
+  "short",
   "show",
+  "study",
   "summarize",
   "summary",
   "tell",
@@ -87,8 +99,8 @@ const CHAPTER_WORDS: Record<string, string> = {
   tenth: "10",
 };
 
-const MIN_SESSION_TITLE_WORDS = 4;
-const MAX_SESSION_TITLE_WORDS = 5;
+const MIN_SESSION_TITLE_WORDS = 3;
+const MAX_SESSION_TITLE_WORDS = 4;
 const MAX_SESSION_TITLE_LENGTH = 44;
 
 function titleCase(value: string) {
@@ -122,8 +134,8 @@ function cleanTitleSubject(subjectContext?: string | null) {
 
 function stripTitleSubjectPrefix(value: string) {
   return value
-    .replace(/^(Engineering Physics|Physics|Chemistry|English|Mathematics|Maths)\s*:\s*/i, "")
-    .replace(/^(Engineering Physics|Physics|Chemistry|English|Mathematics|Maths)\s+(Chapter\s+\d+)/i, "$2")
+    .replace(/^(Digital Logic|Engineering Physics|Physics|Chemistry|English|Mathematics|Maths)\s*:\s*/i, "")
+    .replace(/^(Digital Logic|Engineering Physics|Physics|Chemistry|English|Mathematics|Maths)\s+(Chapter\s+\d+)/i, "$2")
     .trim();
 }
 
@@ -195,7 +207,11 @@ export function deriveSessionTitle(text: string, subjectContext?: string | null)
   }
 
   if (/\b(explain|simple terms|what is|what are|overview|intro|introduction)\b/.test(lower)) {
-    return compactTitle([subject || extractKeywordsTitle(clean), "Overview"].filter(Boolean).join(" "));
+    const topicTitle = extractKeywordsTitle(clean);
+    if (topicTitle !== "New Chat") {
+      return compactTitle(expandShortTitle(`${topicTitle} Overview`));
+    }
+    return compactTitle(expandShortTitle(`${subject || "Study"} Overview`));
   }
 
   const derived = extractKeywordsTitle(clean, subject);

@@ -176,7 +176,6 @@ export async function promptTenant(input: {
   folderPath: string;
   prompt: string;
   namespace: string;
-  topK?: number;
 }) {
   return requestJson<TenantPromptResponse>("/v1/prompt", {
     method: "POST",
@@ -186,7 +185,6 @@ export async function promptTenant(input: {
       folder_path: input.folderPath,
       prompt: input.prompt,
       namespace: input.namespace,
-      top_k: input.topK ?? 5,
     },
   });
 }
