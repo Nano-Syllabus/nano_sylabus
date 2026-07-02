@@ -6,7 +6,7 @@ import { resolveResponseLanguage } from "@/lib/chat-language-mode";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
 import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { listTenantSubjects, promptTenant, type TenantPromptCitation, type TenantSubject } from "@/lib/tenant/client";
+import { chatTenant, listTenantSubjects, type TenantChatSource, type TenantSubject } from "@/lib/tenant/client";
 import { deriveSessionTitle } from "@/lib/utils";
 import type { AssistantAnswerTrace, AssistantCitation } from "@/lib/types";
 
@@ -92,10 +92,12 @@ function logTenantChatDebug(
 function normalizeTenantSubjectFromRequest(
   tenantSubject: NonNullable<z.infer<typeof requestSchema>["tenantSubject"]>,
 ): TenantSubject {
+  const namespaceFromPath = tenantSubject.folderPath.split("/")[0]?.trim();
+
   return {
     name: tenantSubject.name,
     slug: tenantSubject.slug,
-    namespace: tenantSubject.namespaceSlug,
+    namespace: namespaceFromPath || tenantSubject.namespaceSlug,
     namespace_slug: tenantSubject.namespaceSlug,
     full_path: `nano-syllabus/${tenantSubject.folderPath}`,
     folder_path: tenantSubject.folderPath,
@@ -151,28 +153,118 @@ async function resolveTenantSubjectForChat({
   };
 }
 
+function normalizeContextSummary(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function hasMissingColumnError(error: { message?: string; details?: string } | null, columnName: string) {
+  const message = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
+  return message.includes("column") && message.includes(columnName.toLowerCase());
+}
+
+async function getLatestTenantContextSummaryFromMessageMetadata({
+  supabase,
+  sessionId,
+}: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  sessionId: string | null;
+}) {
+  if (!sessionId) return "";
+
+  const { data } = await supabase
+    .from("chat_messages")
+    .select("metadata")
+    .eq("session_id", sessionId)
+    .eq("role", "assistant")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const metadata =
+    data?.metadata && typeof data.metadata === "object" && !Array.isArray(data.metadata)
+      ? (data.metadata as Record<string, unknown>)
+      : null;
+
+  return normalizeContextSummary(metadata?.tenant_context_summary);
+}
+
+async function getLatestTenantContextSummary({
+  supabase,
+  sessionId,
+}: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  sessionId: string | null;
+}) {
+  if (!sessionId) return "";
+
+  const { data, error } = await supabase
+    .from("chat_sessions")
+    .select("last_context_summary")
+    .eq("id", sessionId)
+    .maybeSingle();
+
+  if (!error) {
+    const sessionRow =
+      data && typeof data === "object" && !Array.isArray(data)
+        ? (data as { last_context_summary?: unknown })
+        : null;
+    return normalizeContextSummary(sessionRow?.last_context_summary);
+  }
+
+  return getLatestTenantContextSummaryFromMessageMetadata({
+    supabase,
+    sessionId,
+  });
+}
+
+async function persistSessionContextSummary({
+  supabase,
+  sessionId,
+  userId,
+  contextSummary,
+}: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  sessionId: string;
+  userId: string;
+  contextSummary: string;
+}) {
+  const { error } = await supabase
+    .from("chat_sessions")
+    .update({
+      last_context_summary: normalizeContextSummary(contextSummary),
+    })
+    .eq("id", sessionId)
+    .eq("user_id", userId);
+
+  return {
+    ok: !error,
+    error,
+    missingColumn: hasMissingColumnError(error, "last_context_summary"),
+  };
+}
+
 function buildTenantCitations({
   subjectName,
   folderPath,
-  citations,
+  sources,
 }: {
   subjectName: string;
   folderPath: string;
-  citations?: TenantPromptCitation[];
+  sources?: TenantChatSource[];
 }): AssistantCitation[] {
-  return (citations ?? []).map((citation, index) => {
-    const sourceTitle = citation.title || citation.source || folderPath;
+  return (sources ?? []).map((source, index) => {
+    const sourceTitle = source.title || source.source_path || folderPath;
     return {
       chunkId: `tenant-${index}`,
-      documentId: folderPath,
+      documentId: source.source_path || folderPath,
       sourceType: "syllabus" as const,
       sourceLabel: sourceTitle,
       sourceTitle,
-      sourceName: citation.source || folderPath,
-      subject: subjectName,
-      chapter: citation.chapter ?? null,
-      topic: citation.topic ?? null,
-      excerpt: citation.excerpt,
+      sourceName: source.source_path || folderPath,
+      subject: source.subject || subjectName,
+      chapter: source.semester ?? null,
+      topic: null,
+      excerpt: source.excerpt,
     };
   });
 }
@@ -196,6 +288,7 @@ async function persistAssistantCompletion({
   subjectTags,
   subjectContext,
   answerTrace,
+  contextSummary,
 }: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   sessionId: string;
@@ -206,6 +299,7 @@ async function persistAssistantCompletion({
   subjectTags: string[];
   subjectContext: string | null;
   answerTrace: AssistantAnswerTrace;
+  contextSummary: string;
 }) {
   const basePayload = {
     session_id: sessionId,
@@ -223,6 +317,7 @@ async function persistAssistantCompletion({
       ...basePayload,
       metadata: {
         answer_trace: answerTrace,
+        tenant_context_summary: contextSummary,
       },
     })
     .select("id")
@@ -461,6 +556,7 @@ export async function POST(request: Request) {
     }
 
     const sessionSubjectContext = normalizeSubjectLabel(tenantSubject.name);
+    const tenantNamespaces = [tenantSubject.namespace || tenantSubject.namespace_slug];
     const sessionPromise = resolveChatSession({
       supabase,
       userId: user.id,
@@ -468,50 +564,85 @@ export async function POST(request: Request) {
       question,
       subjectContext: sessionSubjectContext,
     });
+    const contextSummaryPromise = getLatestTenantContextSummary({
+      supabase,
+      sessionId: parsed.sessionId ?? null,
+    });
+
+    let contextSummary = "";
+    let session: Awaited<typeof sessionPromise>;
+    try {
+      [session, contextSummary] = await Promise.all([sessionPromise, contextSummaryPromise]);
+    } catch (error) {
+      logTenantChatDebug(
+        "tenant_session_or_context_failed",
+        {
+          requestId,
+          requestedSessionId: parsed.sessionId ?? null,
+          requestedSubject,
+        },
+        error,
+      );
+      return NextResponse.json(
+        {
+          error: errorToDebugMessage(error),
+          code: "TENANT_SESSION_CONTEXT_FAILED",
+          requestId,
+        },
+        { status: 400 },
+      );
+    }
 
     const tenantStartedAt = Date.now();
-    logTenantChatDebug("tenant_prompt_started", {
+    logTenantChatDebug("tenant_chat_started", {
       requestId,
       retrievalMode,
-      subject: tenantSubject.slug,
+      subject: tenantSubject.name,
       subjectName: tenantSubject.name,
       folderPath: tenantSubject.folder_path,
       namespace: tenantSubject.namespace_slug,
+      contextSummaryHash: contextSummary ? hashDebugValue(contextSummary) : null,
+      contextSummaryLength: contextSummary.length,
       question,
       questionHash,
       payloadHash: hashDebugValue({
-        subject: tenantSubject.slug,
-        folder_path: tenantSubject.folder_path,
-        prompt: question,
-        namespace: tenantSubject.namespace_slug,
+        question,
+        context_summary: contextSummary,
+        subject: tenantSubject.name,
+        tenant: "nano-syllabus",
+        namespaces: tenantNamespaces,
+        top_k: 8,
       }),
       promptLength: question.length,
     });
 
-    const tenantPromise = promptTenant({
-      userId: user.id,
-      subject: tenantSubject.slug,
-      folderPath: tenantSubject.folder_path,
-      prompt: question,
-      namespace: tenantSubject.namespace_slug,
+    const tenantPromise = chatTenant({
+      question,
+      contextSummary,
+      subject: tenantSubject.name,
+      tenant: "nano-syllabus",
+      namespaces: tenantNamespaces,
+      topK: 8,
     });
 
     let tenantResponse: Awaited<typeof tenantPromise>;
-    let session: Awaited<typeof sessionPromise>;
     try {
-      [tenantResponse, session] = await Promise.all([tenantPromise, sessionPromise]);
+      tenantResponse = await tenantPromise;
       generationMs = Date.now() - tenantStartedAt;
     } catch (error) {
       generationMs = Date.now() - tenantStartedAt;
       const failureReason = summarizeTenantFailure(error);
       logTenantChatDebug(
-        "tenant_prompt_or_session_failed",
+        "tenant_chat_failed",
         {
           requestId,
-          subject: tenantSubject.slug,
+          sessionId: session.id,
+          subject: tenantSubject.name,
           subjectName: tenantSubject.name,
           folderPath: tenantSubject.folder_path,
           namespace: tenantSubject.namespace_slug,
+          contextSummaryHash: contextSummary ? hashDebugValue(contextSummary) : null,
+          contextSummaryLength: contextSummary.length,
           question,
           questionHash,
           promptLength: question.length,
@@ -535,15 +666,15 @@ export async function POST(request: Request) {
       logTenantChatDebug("tenant_empty_answer", {
         requestId,
         sessionId: session.id,
-        subject: tenantSubject.slug,
+        subject: tenantSubject.name,
         subjectName: tenantSubject.name,
         folderPath: tenantSubject.folder_path,
-      namespace: tenantSubject.namespace_slug,
-      question,
-      questionHash,
-      promptLength: question.length,
+        namespace: tenantSubject.namespace_slug,
+        question,
+        questionHash,
+        promptLength: question.length,
         detail: tenantResponse.detail ?? null,
-        citationCount: Array.isArray(tenantResponse.citations) ? tenantResponse.citations.length : 0,
+        citationCount: Array.isArray(tenantResponse.sources) ? tenantResponse.sources.length : 0,
         responseKeys: Object.keys(tenantResponse),
       });
       return NextResponse.json(
@@ -556,38 +687,65 @@ export async function POST(request: Request) {
       );
     }
 
-    logTenantChatDebug("tenant_prompt_succeeded", {
+    const returnedContextSummary = normalizeContextSummary(tenantResponse.context_summary);
+
+    logTenantChatDebug("tenant_chat_succeeded", {
       requestId,
       sessionId: session.id,
-      subject: tenantSubject.slug,
+      subject: tenantSubject.name,
       subjectName: tenantSubject.name,
       questionHash,
       payloadHash: hashDebugValue({
-        subject: tenantSubject.slug,
-        folder_path: tenantSubject.folder_path,
-        prompt: question,
-        namespace: tenantSubject.namespace_slug,
+        question,
+        context_summary: contextSummary,
+        subject: tenantSubject.name,
+        tenant: "nano-syllabus",
+        namespaces: tenantNamespaces,
+        top_k: 8,
       }),
       generationMs,
       answerLength: answer.length,
-      citationCount: Array.isArray(tenantResponse.citations) ? tenantResponse.citations.length : 0,
+      citationCount: Array.isArray(tenantResponse.sources) ? tenantResponse.sources.length : 0,
+      chunksRetrieved: tenantResponse.chunks_retrieved ?? null,
+      servedFrom: tenantResponse.served_from ?? null,
+      returnedContextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
+      returnedContextSummaryLength: returnedContextSummary.length,
     });
 
     const citations = buildTenantCitations({
       subjectName: tenantSubject.name,
       folderPath: tenantSubject.folder_path,
-      citations: tenantResponse.citations,
+      sources: tenantResponse.sources,
     });
+
+    const sessionContextPersist = await persistSessionContextSummary({
+      supabase,
+      sessionId: session.id,
+      userId: user.id,
+      contextSummary: returnedContextSummary,
+    });
+
+    if (!sessionContextPersist.ok && !sessionContextPersist.missingColumn) {
+      logTenantChatDebug("tenant_session_context_persist_failed", {
+        requestId,
+        sessionId: session.id,
+        subject: tenantSubject.name,
+        subjectName: tenantSubject.name,
+        contextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
+        contextSummaryLength: returnedContextSummary.length,
+      }, sessionContextPersist.error);
+    }
+
     const totalMs = Date.now() - requestStartedAt;
     const subjectTags = [session.subjectContext ?? sessionSubjectContext];
     const answerTrace = buildAnswerTrace({
-      routePath: "tenant_prompt",
+      routePath: "tenant_chat",
       routeScopeDebug: tenantSubject.folder_path,
       retrievalMode,
-      answerMode: "tenant_prompt",
-      answerModeReason: "raw_question_sent_to_tenant",
+      answerMode: "tenant_chat",
+      answerModeReason: "raw_question_and_context_summary_sent_to_tenant",
       matchedScope: tenantSubject.name,
-      answerModel: "tenant:v1/prompt",
+      answerModel: "tenant:/api/chat",
       grounded: citations.length > 0,
       citationCount: citations.length,
       lookupMs: 0,
@@ -612,7 +770,7 @@ export async function POST(request: Request) {
           {
             requestId,
             sessionId: session.id,
-            subject: tenantSubject.slug,
+            subject: tenantSubject.name,
             subjectName: tenantSubject.name,
             persistMs: Date.now() - persistStartedAt,
           },
@@ -631,13 +789,14 @@ export async function POST(request: Request) {
         subjectTags,
         subjectContext: session.subjectContext ?? sessionSubjectContext,
         answerTrace,
+        contextSummary: returnedContextSummary,
       });
 
       if (!assistantMessageId) {
         logTenantChatDebug("assistant_message_persist_failed_after_response", {
           requestId,
           sessionId: session.id,
-          subject: tenantSubject.slug,
+          subject: tenantSubject.name,
           subjectName: tenantSubject.name,
           persistMs: Date.now() - persistStartedAt,
         });
@@ -647,10 +806,12 @@ export async function POST(request: Request) {
       logTenantChatDebug("tenant_persist_succeeded_after_response", {
         requestId,
         sessionId: session.id,
-        subject: tenantSubject.slug,
+        subject: tenantSubject.name,
         subjectName: tenantSubject.name,
         assistantMessageId,
         persistMs: Date.now() - persistStartedAt,
+        contextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
+        contextSummaryLength: returnedContextSummary.length,
       });
     });
 
@@ -662,28 +823,34 @@ export async function POST(request: Request) {
         "x-request-id": requestId,
         "x-tenant-grounded": citations.length > 0 ? "1" : "0",
         "x-tenant-citations": String(citations.length),
+        "x-tenant-chunks-retrieved": String(tenantResponse.chunks_retrieved ?? citations.length),
+        "x-tenant-served-from": tenantResponse.served_from ?? "",
         "x-retrieval-mode": retrievalMode,
         "x-subject-context": session.subjectContext ?? sessionSubjectContext,
         "x-thinking-enabled": "0",
-        "x-answer-mode": "tenant_prompt",
-        "x-answer-mode-reason": "raw_question_sent_to_tenant",
-        "x-answer-model": "tenant:v1/prompt",
+        "x-answer-mode": "tenant_chat",
+        "x-answer-mode-reason": "raw_question_and_context_summary_sent_to_tenant",
+        "x-answer-model": "tenant:/api/chat",
         "x-matched-scope": tenantSubject.name,
-        "x-route-path": "tenant_prompt",
+        "x-route-path": "tenant_chat",
         "x-route-scope-debug": tenantSubject.folder_path,
-        "x-history-strategy": "tenant_direct",
+        "x-history-strategy": "tenant_context_summary",
         "x-history-messages": "1",
         "x-tenant-lookup-ms": "0",
         "x-generation-ms": String(generationMs),
         "x-question-sha": questionHash,
         "x-payload-sha": hashDebugValue({
-          subject: tenantSubject.slug,
-          folder_path: tenantSubject.folder_path,
-          prompt: question,
-          namespace: tenantSubject.namespace_slug,
+          question,
+          context_summary: contextSummary,
+          subject: tenantSubject.name,
+          tenant: "nano-syllabus",
+          namespaces: tenantNamespaces,
+          top_k: 8,
         }),
         "x-subject-slug": tenantSubject.slug,
         "x-namespace-slug": tenantSubject.namespace_slug,
+        "x-tenant-context-summary": returnedContextSummary ? "1" : "0",
+        "x-tenant-context-summary-length": String(returnedContextSummary.length),
         "x-rewrite-ms": "0",
         "x-followup-ms": "0",
         "x-total-ms": String(totalMs),

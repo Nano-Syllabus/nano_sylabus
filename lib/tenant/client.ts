@@ -29,10 +29,32 @@ export type TenantPromptCitation = {
   topic?: string;
 };
 
+export type TenantChatSource = {
+  rank?: number;
+  title?: string;
+  subject?: string;
+  semester?: string;
+  source_path?: string;
+  clean_path?: string;
+  excerpt?: string;
+  score?: number;
+  pages?: number[] | null;
+};
+
 export type TenantPromptResponse = {
   answer?: string;
   detail?: string;
   citations?: TenantPromptCitation[];
+};
+
+export type TenantChatResponse = {
+  answer?: string;
+  sources?: TenantChatSource[];
+  query?: string;
+  chunks_retrieved?: number;
+  served_from?: string;
+  context_summary?: string;
+  detail?: string;
 };
 
 type TenantNamespacesResponse = {
@@ -185,6 +207,27 @@ export async function promptTenant(input: {
       folder_path: input.folderPath,
       prompt: input.prompt,
       namespace: input.namespace,
+    },
+  });
+}
+
+export async function chatTenant(input: {
+  question: string;
+  contextSummary: string;
+  subject: string;
+  tenant: string;
+  namespaces: string[];
+  topK: number;
+}) {
+  return requestJson<TenantChatResponse>("/api/chat", {
+    method: "POST",
+    body: {
+      question: input.question,
+      context_summary: input.contextSummary,
+      subject: input.subject,
+      tenant: input.tenant,
+      namespaces: input.namespaces,
+      top_k: input.topK,
     },
   });
 }
