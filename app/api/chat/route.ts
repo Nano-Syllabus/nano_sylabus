@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { canSpendCredits, CHAT_MESSAGE_CREDIT_COST, computeNextBalance } from "@/lib/billing";
-import { resolveResponseLanguage } from "@/lib/chat-language-mode";
+import { describeModeRule, resolveResponseLanguage } from "@/lib/chat-language-mode";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
 import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -29,11 +29,13 @@ const requestSchema = z.object({
     })
     .nullable()
     .optional(),
+  truncateFromId: z.string().optional(),
   messages: z
     .array(
       z.object({
         role: z.enum(["user", "assistant"]),
         content: z.string(),
+        createdAt: z.string().optional(),
       }),
     )
     .min(1),
@@ -593,36 +595,43 @@ export async function POST(request: Request) {
       );
     }
 
+    const responseLanguageRule = describeModeRule(resolvedLanguage);
+    const tenantContextSummary = normalizeContextSummary(
+      [responseLanguageRule, contextSummary].filter(Boolean).join("\n"),
+    );
     const tenantStartedAt = Date.now();
     logTenantChatDebug("tenant_chat_started", {
       requestId,
       retrievalMode,
+      responseLanguage: resolvedLanguage,
       subject: tenantSubject.name,
       subjectName: tenantSubject.name,
       folderPath: tenantSubject.folder_path,
       namespace: tenantSubject.namespace_slug,
-      contextSummaryHash: contextSummary ? hashDebugValue(contextSummary) : null,
-      contextSummaryLength: contextSummary.length,
+      contextSummaryHash: tenantContextSummary ? hashDebugValue(tenantContextSummary) : null,
+      contextSummaryLength: tenantContextSummary.length,
       question,
       questionHash,
       payloadHash: hashDebugValue({
         question,
-        context_summary: contextSummary,
+        context_summary: tenantContextSummary,
         subject: tenantSubject.name,
         tenant: "nano-syllabus",
         namespaces: tenantNamespaces,
         top_k: 8,
+        response_language: resolvedLanguage,
       }),
       promptLength: question.length,
     });
 
     const tenantPromise = chatTenant({
       question,
-      contextSummary,
+      contextSummary: tenantContextSummary,
       subject: tenantSubject.name,
       tenant: "nano-syllabus",
       namespaces: tenantNamespaces,
       topK: 8,
+      responseLanguage: resolvedLanguage,
     });
 
     let tenantResponse: Awaited<typeof tenantPromise>;
@@ -641,8 +650,9 @@ export async function POST(request: Request) {
           subjectName: tenantSubject.name,
           folderPath: tenantSubject.folder_path,
           namespace: tenantSubject.namespace_slug,
-          contextSummaryHash: contextSummary ? hashDebugValue(contextSummary) : null,
-          contextSummaryLength: contextSummary.length,
+          responseLanguage: resolvedLanguage,
+          contextSummaryHash: tenantContextSummary ? hashDebugValue(tenantContextSummary) : null,
+          contextSummaryLength: tenantContextSummary.length,
           question,
           questionHash,
           promptLength: question.length,
@@ -697,11 +707,12 @@ export async function POST(request: Request) {
       questionHash,
       payloadHash: hashDebugValue({
         question,
-        context_summary: contextSummary,
+        context_summary: tenantContextSummary,
         subject: tenantSubject.name,
         tenant: "nano-syllabus",
         namespaces: tenantNamespaces,
         top_k: 8,
+        response_language: resolvedLanguage,
       }),
       generationMs,
       answerLength: answer.length,
@@ -757,11 +768,31 @@ export async function POST(request: Request) {
 
     after(async () => {
       const persistStartedAt = Date.now();
+
+      // If this is an edit, delete the old message and all subsequent messages in this session
+      if (parsed.truncateFromId && !parsed.truncateFromId.startsWith("local-")) {
+        const { data: targetMessage } = await supabase
+          .from("chat_messages")
+          .select("created_at")
+          .eq("id", parsed.truncateFromId)
+          .eq("session_id", session.id)
+          .maybeSingle();
+
+        if (targetMessage) {
+          await supabase
+            .from("chat_messages")
+            .delete()
+            .eq("session_id", session.id)
+            .gte("created_at", targetMessage.created_at);
+        }
+      }
+
       const { error: userMessageError } = await supabase.from("chat_messages").insert({
         session_id: session.id,
         role: "user",
         content: question,
         language: resolvedLanguage,
+        created_at: parsed.messages[parsed.messages.length - 1].createdAt || undefined,
       });
 
       if (userMessageError) {
@@ -841,11 +872,12 @@ export async function POST(request: Request) {
         "x-question-sha": questionHash,
         "x-payload-sha": hashDebugValue({
           question,
-          context_summary: contextSummary,
+          context_summary: tenantContextSummary,
           subject: tenantSubject.name,
           tenant: "nano-syllabus",
           namespaces: tenantNamespaces,
           top_k: 8,
+          response_language: resolvedLanguage,
         }),
         "x-subject-slug": tenantSubject.slug,
         "x-namespace-slug": tenantSubject.namespace_slug,

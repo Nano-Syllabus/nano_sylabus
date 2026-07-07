@@ -541,7 +541,7 @@ export function AppSidebar({
                   {(user.fullName?.trim() || user.email?.trim() || "U").charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1 text-left pl-1">
-                  <p className="truncate text-[15px] font-medium leading-[22px] text-white capitalize">
+                  <p className="truncate text-[15px] font-medium leading-[22px] text-text-primary capitalize">
                     {user.fullName || user.email?.split("@")[0] || "User"}
                   </p>
                   <p className="truncate text-[13px] text-text-muted mt-0.5">
@@ -599,7 +599,7 @@ export function AppSidebar({
           {!isCollapsed && (
             <>
               <div className="min-w-0 flex-1 text-left pl-1">
-                <p className="truncate text-[15px] font-medium leading-[22px] text-white capitalize">
+                <p className="truncate text-[15px] font-medium leading-[22px] text-text-primary capitalize">
                   {user.fullName || user.email?.split("@")[0] || "User"}
                 </p>
                 <p className="truncate text-[13px] text-text-muted mt-0.5">
@@ -645,7 +645,7 @@ export function AppSidebar({
             <p className="text-sm text-text-secondary mb-6">This action cannot be undone. All messages in this chat will be permanently removed.</p>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setDeleteSessionId(null)} disabled={actionLoading}>Cancel</Button>
-              <Button variant="danger" onClick={handleDeleteSession} disabled={actionLoading}>
+              <Button variant="danger" onClick={handleDeleteSession} disabled={actionLoading} className="whitespace-nowrap">
                 {actionLoading ? "Deleting..." : "Delete chat"}
               </Button>
             </div>

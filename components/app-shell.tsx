@@ -78,9 +78,11 @@ export function AppShell({
               </div>
             </div>
             <div className="flex items-center gap-1.5 md:gap-2">
-              <Badge variant={user.creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
-                {user.creditBalance} credits
-              </Badge>
+              {!dynamicActions && (
+                <Badge variant={user.creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
+                  {user.creditBalance} credits
+                </Badge>
+              )}
               {dynamicActions ?? actions}
               <ThemeToggle />
             </div>

@@ -218,6 +218,7 @@ export async function chatTenant(input: {
   tenant: string;
   namespaces: string[];
   topK: number;
+  responseLanguage?: "EN" | "RN";
 }) {
   return requestJson<TenantChatResponse>("/api/chat", {
     method: "POST",
@@ -228,6 +229,8 @@ export async function chatTenant(input: {
       tenant: input.tenant,
       namespaces: input.namespaces,
       top_k: input.topK,
+      response_language: input.responseLanguage,
+      language: input.responseLanguage,
     },
   });
 }

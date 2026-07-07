@@ -74,7 +74,7 @@ export function CompactSelect({
               className={`w-full rounded-md px-3 py-1.5 text-left text-[12px] transition ${
                 value === opt.value 
                   ? "bg-bg-tertiary font-medium text-text-primary" 
-                  : "text-text-muted hover:bg-bg-tertiary/50 hover:text-text-primary"
+                  : "text-text-secondary hover:bg-bg-tertiary/50 hover:text-text-primary"
               }`}
             >
               {opt.label}
