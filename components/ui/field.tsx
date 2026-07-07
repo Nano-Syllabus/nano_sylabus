@@ -185,7 +185,7 @@ export function Select(
       {open ? (
         <div 
           className={cn(
-            "absolute left-0 z-50 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-[#050505] p-1 shadow-2xl sm:max-h-64",
+            "absolute left-0 z-50 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-bg-primary p-1 shadow-2xl sm:max-h-64",
             placement === "top" ? "bottom-[calc(100%+4px)]" : "top-[calc(100%+4px)]"
           )}
         >

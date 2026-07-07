@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ReactNode } from "react";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 
 const themeBootScript = `

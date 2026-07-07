@@ -1,5 +1,26 @@
+import katex from "katex";
+
 function escapeHtml(value: string) {
   return value.replace(/[&<>]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[char]!);
+}
+
+function renderMath(value: string, displayMode: boolean) {
+  const math = value.trim();
+  if (!math) return "";
+
+  try {
+    return katex.renderToString(math, {
+      displayMode,
+      output: "html",
+      strict: "ignore",
+      throwOnError: false,
+      trust: false,
+    });
+  } catch {
+    const tag = displayMode ? "div" : "span";
+    const className = displayMode ? "math-block" : "math-inline";
+    return `<${tag} class="${className}">${escapeHtml(math)}</${tag}>`;
+  }
 }
 
 function applyInlineStyles(value: string): string {
@@ -8,7 +29,7 @@ function applyInlineStyles(value: string): string {
     if (codeContent) {
       tokens.push(`<code>${codeContent}</code>`);
     } else {
-      tokens.push(`<span class="math-inline">${mathContent}</span>`);
+      tokens.push(renderMath(mathContent, false));
     }
     return `@@TOKEN_${tokens.length - 1}@@`;
   });
@@ -45,12 +66,19 @@ function renderMd(source: string): string {
 
   const flushMathBlock = () => {
     if (!inMathBlock) return;
-    output += `<div class="math-block">${mathLines.join("<br />")}</div>`;
+    output += `<div class="math-block">${renderMath(mathLines.join("\n"), true)}</div>`;
     inMathBlock = false;
     mathLines = [];
   };
 
   for (const raw of lines) {
+    const singleLineMathMatch = raw.match(/^\s*\$\$(.+)\$\$\s*$/);
+    if (singleLineMathMatch && !inCodeBlock && !inMathBlock) {
+      flush();
+      output += `<div class="math-block">${renderMath(singleLineMathMatch[1], true)}</div>`;
+      continue;
+    }
+
     if (raw.trimStart().startsWith("```")) {
       flush();
       flushMathBlock();

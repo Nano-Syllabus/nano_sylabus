@@ -15,12 +15,14 @@ import { AppShellContext } from "@/components/app-shell-context";
 
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { CompactSelect } from "@/components/ui/compact-select";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { dedupeCitationsForDisplay } from "@/lib/citations";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type {
   AppUser,
+  AssistantAnswerTrace,
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionSummary,
@@ -62,6 +64,7 @@ type Message = {
   role: "user" | "assistant";
   content: string;
   createdAt?: string;
+  answerTrace?: AssistantAnswerTrace | null;
 };
 
 type TenantCatalogPayload = {
@@ -289,6 +292,9 @@ export function ChatPageClient({
   const requestWatchdogRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const stopChatRef = useRef<(() => void) | null>(null);
+  const sendStartTimeRef = useRef<number>(0);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [responseTimes, setResponseTimes] = useState<Record<string, number>>({});
 
   const initialMessages: Message[] = useMemo(
     () =>
@@ -298,6 +304,7 @@ export function ChatPageClient({
             role: message.role,
             content: message.content,
             createdAt: message.createdAt,
+            answerTrace: message.answerTrace,
           }))
         : [],
     [initialSession, currentSessionId],
@@ -485,6 +492,7 @@ export function ChatPageClient({
           role: message.role,
           content: message.content,
           createdAt: message.createdAt,
+          answerTrace: message.answerTrace,
         })),
       );
       setSessions((prev) =>
@@ -525,14 +533,21 @@ export function ChatPageClient({
     if (!response.ok) return;
     const detail = (await response.json()) as ChatSessionDetail;
     setSessionDetail(detail);
-    setMessages(
-      detail.messages.map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        createdAt: message.createdAt,
-      })),
-    );
+    // Only overwrite local messages if DB has at least as many messages.
+    // After an edit, the backend after() may not have persisted yet,
+    // so DB can temporarily have fewer messages than local state.
+    setMessages((currentMessages) => {
+      if (detail.messages.length >= currentMessages.length) {
+        return detail.messages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          createdAt: message.createdAt,
+          answerTrace: message.answerTrace,
+        }));
+      }
+      return currentMessages;
+    });
     setSubjectContext(stripSubjectChapter(detail.subjectContext) || defaultSubjectContext);
     setSessions((prev) =>
       prev
@@ -570,10 +585,16 @@ export function ChatPageClient({
     }
   }, [input]);
   const [isLoading, setIsLoading] = useState(false);
+  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   function handleInputChange(event: ChangeEvent<HTMLTextAreaElement>) {
     setInput(event.target.value);
   }
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
 
   const stop = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -753,8 +774,8 @@ export function ChatPageClient({
     };
   }, [currentSessionId, sessionDetail, sessions]);
 
-  async function sendCurrentMessage() {
-    const trimmed = input.trim();
+  async function sendCurrentMessage(overrideText?: string, overrideMessages?: Message[], truncateFromId?: string) {
+    const trimmed = (overrideText ?? input).trim();
     if (!trimmed || isLoading) return;
     if (creditBalance <= 0) {
       setChatError("No credits left. Buy a plan to continue chatting.");
@@ -762,12 +783,22 @@ export function ChatPageClient({
     }
 
     if (!stripSubjectChapter(subjectContext)) {
+      // If only one subject is available, auto-select it and proceed
+      if (availableSubjects.length === 1) {
+        setSubjectContext(availableSubjects[0]);
+        // Small delay to let the state update, then re-send
+        setTimeout(() => {
+          void sendCurrentMessage(trimmed, overrideMessages);
+        }, 50);
+        return;
+      }
+
       setChatError("");
       setThinkingStatus(null);
       setShowThinkingTrace(false);
       setInput("");
       setMessages((previousMessages) => [
-        ...previousMessages,
+        ...(overrideMessages ?? previousMessages),
         createLocalMessage("user", trimmed),
         createLocalMessage("assistant", buildMissingSubjectMessage(availableSubjects)),
       ]);
@@ -793,12 +824,14 @@ export function ChatPageClient({
     }, 60_000);
 
     const userMessage = createLocalMessage("user", trimmed);
-    const nextMessages = [...messages, userMessage];
+    const nextMessages = [...(overrideMessages ?? messages), userMessage];
     setMessages(nextMessages);
     setIsLoading(true);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    sendStartTimeRef.current = Date.now();
+    const requestSessionId = currentSessionIdRef.current;
 
     try {
       const response = await fetch("/api/chat", {
@@ -808,12 +841,13 @@ export function ChatPageClient({
         },
         signal: controller.signal,
         body: JSON.stringify({
-          sessionId: currentSessionId,
+          sessionId: requestSessionId,
           language: chatLanguage,
           messageLanguage: composerLanguage,
           subjectContext,
           tenantSubject: selectedTenantSubject,
           retrievalMode,
+          truncateFromId,
           messages: nextMessages.map((message) => ({
             role: message.role,
             content: message.content,
@@ -830,9 +864,13 @@ export function ChatPageClient({
       handleChatResponseHeaders(response);
       const answer = parseAssistantDataStream(await response.text());
       if (answer) {
+        const assistantMessage = createLocalMessage("assistant", answer);
+        const elapsedSeconds = Math.max(1, Math.round((Date.now() - sendStartTimeRef.current) / 1000));
+        const activeSessionId = currentSessionIdRef.current || currentSessionId;
+        setResponseTimes((prev) => ({ ...prev, [`${activeSessionId}_${nextMessages.length}`]: elapsedSeconds }));
         setMessages((previousMessages) => [
           ...previousMessages,
-          createLocalMessage("assistant", answer),
+          assistantMessage,
         ]);
       }
       await finishChatResponse();
@@ -845,6 +883,35 @@ export function ChatPageClient({
       }
       setIsLoading(false);
     }
+  }
+
+  function handleRetryMessage(index: number) {
+    const message = messages[index];
+    if (!message || message.role !== "user" || isLoading) return;
+    const previousMessages = messages.slice(0, index);
+    void sendCurrentMessage(message.content, previousMessages);
+  }
+
+  function handleEditMessage(index: number) {
+    const message = messages[index];
+    if (!message || message.role !== "user" || isLoading) return;
+    setEditingMessageIndex(index);
+    setEditingText(message.content);
+  }
+
+  function handleCancelEdit() {
+    setEditingMessageIndex(null);
+    setEditingText("");
+  }
+
+  function handleSaveEdit(index: number) {
+    const trimmed = editingText.trim();
+    if (!trimmed || isLoading) return;
+    const truncateFromId = messages[index].id;
+    setEditingMessageIndex(null);
+    setEditingText("");
+    const previousMessages = messages.slice(0, index);
+    void sendCurrentMessage(trimmed, previousMessages, truncateFromId);
   }
 
   async function submitMessage(event: React.FormEvent<HTMLFormElement>) {
@@ -1012,7 +1079,10 @@ export function ChatPageClient({
 
   useEffect(() => {
     shell.setActions(
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
+        <Badge variant={creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
+          {creditBalance} credits
+        </Badge>
         <CompactSelect
           value={composerLanguage}
           onChange={(v) => setComposerLanguage(v as "EN" | "RN")}
@@ -1024,7 +1094,7 @@ export function ChatPageClient({
       </div>
     );
     return () => shell.setActions(null);
-  }, [shell, composerLanguage, setComposerLanguage]);
+  }, [shell, composerLanguage, setComposerLanguage, creditBalance]);
 
   useEffect(() => {
     stopChatRef.current = stop;
@@ -1136,12 +1206,32 @@ export function ChatPageClient({
                     : [];
                   const question = assistantOrdinal >= 0 ? assistantQuestions[assistantOrdinal] ?? activeSessionTitle : "";
 
+                  let responseTimeText = "";
+                  if (message.role === "assistant") {
+                    const storedSeconds = responseTimes[`${currentSessionId}_${index}`];
+                    if (storedSeconds) {
+                      responseTimeText = `replied in ${storedSeconds}s`;
+                    } else if (message.createdAt && index > 0) {
+                      const prevMessage = messages[index - 1];
+                      if (prevMessage.role === "user" && prevMessage.createdAt) {
+                        const diffInMs = new Date(message.createdAt).getTime() - new Date(prevMessage.createdAt).getTime();
+                        const diffInSeconds = Math.max(1, Math.round(diffInMs / 1000));
+                        responseTimeText = `replied in ${diffInSeconds}s`;
+                      }
+                    } else if (message.answerTrace?.totalMs) {
+                      const diffInSeconds = Math.max(1, Math.round(message.answerTrace.totalMs / 1000));
+                      responseTimeText = `replied in ${diffInSeconds}s`;
+                    }
+                  }
+
                   return (
                     <article
                       key={message.id}
                       className={cn(
-                        "animate-fade-in flex flex-col",
-                        message.role === "user" ? "ml-auto w-fit max-w-[min(900px,92%)]" : "mr-auto w-full max-w-[1020px]",
+                        "animate-fade-in flex flex-col group relative",
+                        message.role === "user" 
+                          ? cn("ml-auto pl-16 max-w-[min(900px,92%)]", editingMessageIndex === index ? "w-full" : "w-fit") 
+                          : "mr-auto w-full max-w-[1020px]",
                       )}
                     >
                       <div
@@ -1151,30 +1241,80 @@ export function ChatPageClient({
                             : "py-2 text-text-primary w-full",
                         )}
                       >
+                        {message.role === "user" && editingMessageIndex !== index && (
+                          <div className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all">
+                            <button
+                              onClick={() => handleEditMessage(index)}
+                              className="flex items-center justify-center w-8 h-8 rounded-full bg-bg-secondary/80 hover:bg-bg-tertiary text-text-primary shadow-sm transition-all"
+                              title="Edit message"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                            </button>
+                            <button
+                              onClick={() => handleRetryMessage(index)}
+                              className="flex items-center justify-center w-8 h-8 rounded-full bg-bg-secondary/80 hover:bg-bg-tertiary text-text-primary shadow-sm transition-all"
+                              title="Retry message"
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            </button>
+                          </div>
+                        )}
                         {message.role === "assistant" ? (
                           <>
                             <Markdown text={message.content} className="text-[16px] leading-[28px] font-medium" />
-                            {message.createdAt && (
-                              <div className="mt-1">
-                                <span className="text-[11px] text-text-muted font-medium">
-                                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {responseTimeText && (
+                              <div className="mt-2">
+                                <span className="text-[12px] text-text-primary/80 font-medium">
+                                  {responseTimeText}
                                 </span>
                               </div>
                             )}
                           </>
+                        ) : editingMessageIndex === index ? (
+                          <div className="flex flex-col gap-2 w-full">
+                            <textarea
+                              autoFocus
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                  e.preventDefault();
+                                  handleSaveEdit(index);
+                                }
+                                if (e.key === "Escape") {
+                                  handleCancelEdit();
+                                }
+                              }}
+                              className="w-full max-h-[200px] resize-none rounded-xl bg-bg-primary/60 border border-border px-3 py-2 text-[16px] leading-[24px] text-text-primary font-medium focus:outline-none focus:ring-2 focus:ring-border-strong/40"
+                              rows={Math.max(1, Math.min(editingText.split("\n").length, 6))}
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={handleCancelEdit}
+                                className="px-3 py-1 rounded-lg text-[13px] font-medium text-text-secondary hover:bg-bg-secondary transition"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => handleSaveEdit(index)}
+                                disabled={!editingText.trim()}
+                                className="px-3 py-1 rounded-lg text-[13px] font-medium bg-text-primary text-text-inverse hover:opacity-90 transition disabled:opacity-40"
+                              >
+                                Send
+                              </button>
+                            </div>
+                          </div>
                         ) : (
-                          <>
+                          <div className="flex items-end justify-between gap-3">
                             <div className="whitespace-pre-wrap text-[16px] leading-[24px] text-text-primary font-medium">
                               {message.content}
                             </div>
                             {message.createdAt && (
-                              <div className="mt-1 flex justify-end">
-                                <span className="text-[11px] text-text-muted font-medium">
-                                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                              </div>
+                              <span className="text-[11px] text-text-muted font-medium shrink-0 mb-[2px]">
+                                {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                              </span>
                             )}
-                          </>
+                          </div>
                         )}
 
 
@@ -1235,6 +1375,7 @@ export function ChatPageClient({
                     </div>
                   </div>
                 ) : null}
+                <div ref={messagesEndRef} className="h-px w-full" />
               </div>
             )}
           </div>
@@ -1291,6 +1432,7 @@ export function ChatPageClient({
                   setDeleteConfirmSession(null);
                 }} 
                 disabled={!!deletingSessionId}
+                className="whitespace-nowrap"
               >
                 {deletingSessionId ? "Deleting..." : "Delete chat"}
               </Button>

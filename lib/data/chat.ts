@@ -78,7 +78,7 @@ export async function listChatSessions(
   const supabase = await createSupabaseServerClient();
   let query = supabase
     .from("chat_sessions")
-    .select("*", { count: "exact" })
+    .select("*, chat_messages!inner(id)", { count: "exact" })
     .eq("user_id", userId)
     .order("is_pinned", { ascending: false })
     .order("updated_at", { ascending: false })
