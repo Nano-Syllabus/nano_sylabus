@@ -1,6 +1,7 @@
 import { renderMarkdown } from "@/lib/markdown";
+import React from "react";
 
-export function Markdown({ text, className = "" }: { text: string; className?: string }) {
+export const Markdown = React.memo(function Markdown({ text, className = "" }: { text: string; className?: string }) {
   return (
     <div
       className={
@@ -10,4 +11,4 @@ export function Markdown({ text, className = "" }: { text: string; className?: s
       dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
     />
   );
-}
+});

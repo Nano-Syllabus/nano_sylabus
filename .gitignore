@@ -35,3 +35,11 @@ playwright-report/
 *.sln
 *.sw?
 .vercel
+.env.vercel.check
+local_keys.txt
+vercel_keys.txt
+test-*.mjs
+update-thinking-steps.js
+app/api/test-stream/
+app/api/test-tenant-stream/
+public/test-stream.html

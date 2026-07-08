@@ -16,6 +16,7 @@ import { AppShellContext } from "@/components/app-shell-context";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ThinkingSteps } from "@/components/ui/thinking-steps";
 import { CompactSelect } from "@/components/ui/compact-select";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { dedupeCitationsForDisplay } from "@/lib/citations";
@@ -95,7 +96,7 @@ type ThinkingTrace = {
   citationCount: number;
   subjectContext: string | null;
   retrievalMode: RetrievalMode;
-  answerMode: "tenant_prompt" | null;
+  answerMode: "tenant_prompt" | "tenant_chat_stream" | null;
   answerModeReason: string | null;
   answerModel: string | null;
   routePath: string | null;
@@ -167,19 +168,110 @@ function createLocalMessage(role: "user" | "assistant", content: string): Messag
   return { id, role, content, createdAt: new Date().toISOString() };
 }
 
-function parseAssistantDataStream(text: string) {
-  const line = text
-    .split(/\r?\n/)
-    .find((item) => item.startsWith("0:"));
+type ChatStreamEvent =
+  | { type: "status"; message: string }
+  | { type: "token"; text: string }
+  | { type: "sources"; citationCount?: number; chunks_retrieved?: number; served_from?: string }
+  | {
+      type: "done";
+      ok?: boolean;
+      sessionId?: string;
+      generationMs?: number;
+      totalMs?: number;
+      citationCount?: number;
+    }
+  | { type: "error"; message: string; code?: string };
 
-  if (!line) return text.trim();
+const THINKING_STAGE_MESSAGES = [
+  "Reading your message...",
+  "Analyzing course syllabus...",
+  "Searching for relevant topics...",
+  "Structuring the answer...",
+  "Cross-referencing study materials...",
+  "Synthesizing information...",
+  "Formatting response...",
+  "Finalizing details...",
+  "Almost there, taking a bit longer than usual...",
+] as const;
 
-  try {
-    const parsed = JSON.parse(line.slice(2));
-    return typeof parsed === "string" ? parsed : String(parsed ?? "");
-  } catch {
-    return text.trim();
+function mapTenantStatusMessage(message: string) {
+  const trimmed = message.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (!trimmed) return "Working on your answer...";
+  if (lower.includes("connecting")) return "Reading your message...";
+  if (lower.includes("checking learned") || lower.includes("reading")) {
+    return "Reading your message...";
   }
+  if (lower.includes("analyzing") || lower.includes("course syllabus")) {
+    return "Analyzing course syllabus...";
+  }
+  if (lower.includes("retrieving") || lower.includes("searching") || lower.includes("source")) {
+    return "Searching for relevant topics...";
+  }
+  if (lower.includes("generating") || lower.includes("structuring") || lower.includes("found")) {
+    return "Structuring the answer...";
+  }
+
+  return trimmed;
+}
+
+function appendThinkingStep(previous: string[], message: string) {
+  if (previous.length > 0 && previous[previous.length - 1] === message) return previous;
+  if (previous.includes(message)) {
+    return [...previous.filter((step) => step !== message), message];
+  }
+  return [...previous, message];
+}
+
+function parseSseBlock(block: string): ChatStreamEvent | null {
+  const eventName = block.match(/^event:\s*(.+)$/m)?.[1]?.trim() ?? "message";
+  const data = [...block.matchAll(/^data:\s?(.*)$/gm)].map((match) => match[1]).join("\n");
+  if (!data) return null;
+
+  let payload: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(data);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      payload = parsed as Record<string, unknown>;
+    }
+  } catch {
+    payload = { message: data };
+  }
+
+  if (eventName === "status") {
+    return { type: "status", message: String(payload.message ?? "Working...") };
+  }
+  if (eventName === "token") {
+    return { type: "token", text: String(payload.text ?? "") };
+  }
+  if (eventName === "sources") {
+    return {
+      type: "sources",
+      citationCount: Array.isArray(payload.sources) ? payload.sources.length : undefined,
+      chunks_retrieved:
+        typeof payload.chunks_retrieved === "number" ? payload.chunks_retrieved : undefined,
+      served_from: typeof payload.served_from === "string" ? payload.served_from : undefined,
+    };
+  }
+  if (eventName === "done") {
+    return {
+      type: "done",
+      ok: typeof payload.ok === "boolean" ? payload.ok : undefined,
+      sessionId: typeof payload.sessionId === "string" ? payload.sessionId : undefined,
+      generationMs: typeof payload.generationMs === "number" ? payload.generationMs : undefined,
+      totalMs: typeof payload.totalMs === "number" ? payload.totalMs : undefined,
+      citationCount: typeof payload.citationCount === "number" ? payload.citationCount : undefined,
+    };
+  }
+  if (eventName === "error") {
+    return {
+      type: "error",
+      message: String(payload.message ?? payload.error ?? "Streaming failed."),
+      code: typeof payload.code === "string" ? payload.code : undefined,
+    };
+  }
+  return null;
 }
 
 function buildMissingSubjectMessage(subjects: string[]) {
@@ -279,22 +371,80 @@ export function ChatPageClient({
   const [renameState, setRenameState] = useState<ChatSessionSummary | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [copyingMessageId, setCopyingMessageId] = useState<string | null>(null);
-  const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
+  const [thinkingSteps, setThinkingSteps] = useState<string[]>([]);
   const [matchedScope, setMatchedScope] = useState<string | null>(null);
   const [latestThinkingTrace, setLatestThinkingTrace] = useState<ThinkingTrace | null>(null);
   const [showThinkingTrace, setShowThinkingTrace] = useState(false);
   const [deleteConfirmSession, setDeleteConfirmSession] = useState<ChatSessionSummary | null>(null);
+  const [quotedText, setQuotedText] = useState("");
+  const [selectionPopover, setSelectionPopover] = useState<{ top: number; left: number; text: string } | null>(null);
   const [tenantSubjectsByName, setTenantSubjectsByName] = useState<Record<string, TenantChatSubject>>({});
   const pendingTitleRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(initialSession?.id ?? null);
   const searchDebounceRef = useRef<number | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const requestWatchdogRef = useRef<number | null>(null);
+  const thinkingStageTimersRef = useRef<number[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
   const stopChatRef = useRef<(() => void) | null>(null);
   const sendStartTimeRef = useRef<number>(0);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [responseTimes, setResponseTimes] = useState<Record<string, number>>({});
+
+  const clearThinkingStageTimers = useCallback(() => {
+    for (const timer of thinkingStageTimersRef.current) {
+      window.clearTimeout(timer);
+    }
+    thinkingStageTimersRef.current = [];
+  }, []);
+
+  const startThinkingStages = useCallback(() => {
+    clearThinkingStageTimers();
+    setThinkingSteps([THINKING_STAGE_MESSAGES[0]]);
+
+    thinkingStageTimersRef.current = [
+      window.setTimeout(() => {
+        setThinkingSteps((previous) =>
+          previous.length === 0 ? previous : appendThinkingStep(previous, THINKING_STAGE_MESSAGES[1]),
+        );
+      }, 1_200),
+      window.setTimeout(() => {
+        setThinkingSteps((previous) =>
+          previous.length === 0 ? previous : appendThinkingStep(previous, THINKING_STAGE_MESSAGES[2]),
+        );
+      }, 3_000),
+      window.setTimeout(() => {
+        setThinkingSteps((previous) =>
+          previous.length === 0 ? previous : appendThinkingStep(previous, THINKING_STAGE_MESSAGES[3]),
+        );
+      }, 6_000),
+      window.setTimeout(() => {
+        setThinkingSteps((previous) =>
+          previous.length === 0 ? previous : appendThinkingStep(previous, THINKING_STAGE_MESSAGES[4]),
+        );
+      }, 10_000),
+      window.setTimeout(() => {
+        setThinkingSteps((previous) =>
+          previous.length === 0 ? previous : appendThinkingStep(previous, THINKING_STAGE_MESSAGES[5]),
+        );
+      }, 15_000),
+      window.setTimeout(() => {
+        setThinkingSteps((previous) =>
+          previous.length === 0 ? previous : appendThinkingStep(previous, THINKING_STAGE_MESSAGES[6]),
+        );
+      }, 20_000),
+      window.setTimeout(() => {
+        setThinkingSteps((previous) =>
+          previous.length === 0 ? previous : appendThinkingStep(previous, THINKING_STAGE_MESSAGES[7]),
+        );
+      }, 25_000),
+      window.setTimeout(() => {
+        setThinkingSteps((previous) =>
+          previous.length === 0 ? previous : appendThinkingStep(previous, THINKING_STAGE_MESSAGES[8]),
+        );
+      }, 35_000),
+    ];
+  }, [clearThinkingStageTimers]);
 
   const initialMessages: Message[] = useMemo(
     () =>
@@ -374,6 +524,7 @@ export function ChatPageClient({
 
   useEffect(() => {
     const handleNewChat = () => {
+      clearThinkingStageTimers();
       setCurrentSessionId(null);
       currentSessionIdRef.current = null;
       setSessionDetail(null);
@@ -383,21 +534,22 @@ export function ChatPageClient({
         window.clearTimeout(requestWatchdogRef.current);
         requestWatchdogRef.current = null;
       }
-      setThinkingStatus(null);
+      setThinkingSteps([]);
       window.history.replaceState(null, "", "/app/chat");
     };
     window.addEventListener("app:new-chat", handleNewChat);
     return () => window.removeEventListener("app:new-chat", handleNewChat);
-  }, []);
+  }, [clearThinkingStageTimers]);
 
   useEffect(() => {
     return () => {
+      clearThinkingStageTimers();
       if (requestWatchdogRef.current) {
         window.clearTimeout(requestWatchdogRef.current);
         requestWatchdogRef.current = null;
       }
     };
-  }, []);
+  }, [clearThinkingStageTimers]);
 
   const fetchSessions = useCallback(async function fetchSessions({
     reset,
@@ -466,11 +618,12 @@ export function ChatPageClient({
       currentSessionIdRef.current = sessionId;
 
       stopChatRef.current?.();
+      clearThinkingStageTimers();
       if (requestWatchdogRef.current) {
         window.clearTimeout(requestWatchdogRef.current);
         requestWatchdogRef.current = null;
       }
-      setThinkingStatus(null);
+      setThinkingSteps([]);
 
       // Fetch data FIRST, then update all state at once (no intermediate empty flash)
       const response = await fetch(`/api/chat/session?session=${sessionId}`, {
@@ -516,7 +669,7 @@ export function ChatPageClient({
     };
     window.addEventListener("chat-switch-session", handleSwitch);
     return () => window.removeEventListener("chat-switch-session", handleSwitch);
-  }, [defaultSubjectContext]);
+  }, [clearThinkingStageTimers, defaultSubjectContext]);
 
   async function refreshCredits() {
     const response = await fetch("/api/billing/credits", { cache: "no-store" });
@@ -596,17 +749,67 @@ export function ChatPageClient({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  useEffect(() => {
+    let timeoutId: number;
+    
+    const handleSelectionChange = () => {
+      window.clearTimeout(timeoutId);
+      
+      timeoutId = window.setTimeout(() => {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed) {
+          setSelectionPopover(null);
+          return;
+        }
+        const text = selection.toString().trim();
+        if (!text) {
+          setSelectionPopover(null);
+          return;
+        }
+
+        const range = selection.getRangeAt(0);
+        const container = range.commonAncestorContainer;
+        const element = container.nodeType === 3 ? container.parentElement : (container as HTMLElement);
+        
+        // Don't show popover if user is selecting text inside the input box
+        const isInsideInput = element?.closest("form") || element?.closest("textarea") || element?.closest("input");
+        
+        if (isInsideInput) {
+          setSelectionPopover(null);
+          return;
+        }
+
+        const rects = range.getClientRects();
+        if (rects.length === 0) return;
+        const firstRect = rects[0];
+
+        setSelectionPopover({
+          top: firstRect.top - 45,
+          left: firstRect.left + firstRect.width / 2,
+          text,
+        });
+      }, 150); // 150ms debounce
+    };
+
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => {
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
   const stop = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    clearThinkingStageTimers();
     setIsLoading(false);
-  }, []);
+  }, [clearThinkingStageTimers]);
 
   function handleChatResponseHeaders(response: Response) {
     if (requestWatchdogRef.current) {
       window.clearTimeout(requestWatchdogRef.current);
       requestWatchdogRef.current = window.setTimeout(() => {
-        setThinkingStatus("This question is taking longer than expected...");
+        setThinkingSteps(["This question is taking longer than expected..."]);
         setChatError(
           "Answer generation is taking too long right now. We stopped this try so you are not stuck; please retry once.",
         );
@@ -625,7 +828,10 @@ export function ChatPageClient({
         : "default";
     const responseSubjectContext = response.headers.get("x-subject-context")?.trim() || null;
     const answerModeHeader = response.headers.get("x-answer-mode");
-    const answerMode = answerModeHeader === "tenant_prompt" ? answerModeHeader : null;
+    const answerMode =
+      answerModeHeader === "tenant_prompt" || answerModeHeader === "tenant_chat_stream"
+        ? answerModeHeader
+        : null;
     const answerModeReason = response.headers.get("x-answer-mode-reason")?.trim() || null;
     const answerModel = response.headers.get("x-answer-model")?.trim() || null;
     const routePath = response.headers.get("x-route-path")?.trim() || null;
@@ -653,10 +859,8 @@ export function ChatPageClient({
     });
 
     if (responseMatchedScope) setMatchedScope(responseMatchedScope);
-    setThinkingStatus(
-      grounded && citationCount > 0
-        ? `Using ${citationCount} tenant citation${citationCount === 1 ? "" : "s"}...`
-        : "Building the answer...",
+    setThinkingSteps((previous) =>
+      previous.length > 0 ? previous : [THINKING_STAGE_MESSAGES[1]],
     );
 
     if (!returnedSessionId || currentSessionIdRef.current) return;
@@ -682,25 +886,27 @@ export function ChatPageClient({
   }
 
   async function finishChatResponse() {
+    clearThinkingStageTimers();
+    setThinkingSteps([]);
     if (requestWatchdogRef.current) {
       window.clearTimeout(requestWatchdogRef.current);
       requestWatchdogRef.current = null;
     }
-    setThinkingStatus("Saving the response...");
+    setIsLoading(false);
     setChatError("");
     const resolvedSessionId = currentSessionIdRef.current;
     if (resolvedSessionId) {
       await Promise.all([refreshSession(resolvedSessionId), refreshCredits()]);
     }
-    setThinkingStatus(null);
   }
 
   function handleChatError(error: unknown) {
+    clearThinkingStageTimers();
     if (requestWatchdogRef.current) {
       window.clearTimeout(requestWatchdogRef.current);
       requestWatchdogRef.current = null;
     }
-    setThinkingStatus(null);
+    setThinkingSteps([]);
     const rawMessage = error instanceof Error ? error.message : String(error || "");
     let parsedError = "";
     let parsedCode = "";
@@ -794,7 +1000,8 @@ export function ChatPageClient({
       }
 
       setChatError("");
-      setThinkingStatus(null);
+      clearThinkingStageTimers();
+      setThinkingSteps([]);
       setShowThinkingTrace(false);
       setInput("");
       setMessages((previousMessages) => [
@@ -813,19 +1020,22 @@ export function ChatPageClient({
     pendingTitleRef.current = deriveSessionTitle(trimmed, subjectContext);
     setChatError("");
     setShowThinkingTrace(false);
-    setThinkingStatus("Retrieving syllabus context...");
+    startThinkingStages();
     setInput("");
     requestWatchdogRef.current = window.setTimeout(() => {
-      setThinkingStatus("This question is taking longer than expected...");
+      clearThinkingStageTimers();
+      setThinkingSteps(["This question is taking longer than expected..."]);
       setChatError(
         "Answer generation is taking too long right now. We stopped this try so you are not stuck; please retry once.",
       );
       stop();
-    }, 60_000);
+    }, 90_000);
 
-    const userMessage = createLocalMessage("user", trimmed);
+    const finalMessageText = quotedText ? `> **${quotedText}**\n\n${trimmed}` : trimmed;
+    const userMessage = createLocalMessage("user", finalMessageText);
     const nextMessages = [...(overrideMessages ?? messages), userMessage];
     setMessages(nextMessages);
+    setQuotedText("");
     setIsLoading(true);
 
     const controller = new AbortController();
@@ -862,22 +1072,116 @@ export function ChatPageClient({
       }
 
       handleChatResponseHeaders(response);
-      const answer = parseAssistantDataStream(await response.text());
-      if (answer) {
-        const assistantMessage = createLocalMessage("assistant", answer);
-        const elapsedSeconds = Math.max(1, Math.round((Date.now() - sendStartTimeRef.current) / 1000));
-        const activeSessionId = currentSessionIdRef.current || currentSessionId;
-        setResponseTimes((prev) => ({ ...prev, [`${activeSessionId}_${nextMessages.length}`]: elapsedSeconds }));
-        setMessages((previousMessages) => [
-          ...previousMessages,
-          assistantMessage,
-        ]);
+      if (!response.body) {
+        throw new Error("Chat stream did not return a response body.");
       }
+
+      const assistantMessage = createLocalMessage("assistant", "");
+      setMessages((previousMessages) => [...previousMessages, assistantMessage]);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamFinished = false;
+      let receivedToken = false;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split(/\r?\n\r?\n/);
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          const event = parseSseBlock(part);
+          if (!event) continue;
+
+          if (event.type === "status") {
+            if (receivedToken) continue;
+            clearThinkingStageTimers();
+            const mappedMessage = mapTenantStatusMessage(event.message);
+            setThinkingSteps((previous) => appendThinkingStep(previous, mappedMessage));
+            continue;
+          }
+
+          if (event.type === "token") {
+            receivedToken = true;
+            clearThinkingStageTimers();
+            if (requestWatchdogRef.current) {
+              window.clearTimeout(requestWatchdogRef.current);
+              requestWatchdogRef.current = null;
+            }
+            setThinkingSteps([]);
+            setMessages((previousMessages) =>
+              previousMessages.map((message) =>
+                message.id === assistantMessage.id
+                  ? { ...message, content: `${message.content}${event.text}` }
+                  : message,
+              ),
+            );
+            continue;
+          }
+
+          if (event.type === "sources") {
+            setLatestThinkingTrace((previous) =>
+              previous
+                ? {
+                    ...previous,
+                    citationCount: event.citationCount ?? previous.citationCount,
+                    grounded: (event.citationCount ?? previous.citationCount) > 0,
+                  }
+                : previous,
+            );
+            continue;
+          }
+
+          if (event.type === "error") {
+            if (requestWatchdogRef.current) {
+              window.clearTimeout(requestWatchdogRef.current);
+              requestWatchdogRef.current = null;
+            }
+            throw new Error(JSON.stringify({ error: event.message, code: event.code }));
+          }
+
+          if (event.type === "done") {
+            clearThinkingStageTimers();
+            setThinkingSteps([]);
+            if (requestWatchdogRef.current) {
+              window.clearTimeout(requestWatchdogRef.current);
+              requestWatchdogRef.current = null;
+            }
+            streamFinished = true;
+            const elapsedSeconds = Math.max(1, Math.round((Date.now() - sendStartTimeRef.current) / 1000));
+            const activeSessionId = event.sessionId || currentSessionIdRef.current || currentSessionId;
+            setResponseTimes((prev) => ({ ...prev, [`${activeSessionId}_${nextMessages.length}`]: elapsedSeconds }));
+            if (event.sessionId && !currentSessionIdRef.current) {
+              setCurrentSessionId(event.sessionId);
+              currentSessionIdRef.current = event.sessionId;
+              window.history.replaceState(null, "", `/app/chat?session=${event.sessionId}`);
+            }
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        const event = parseSseBlock(buffer);
+        if (event?.type === "error") {
+          throw new Error(JSON.stringify({ error: event.message, code: event.code }));
+        }
+      }
+
+      if (!streamFinished) {
+        throw new Error("Chat stream ended before completion.");
+      }
+
       await finishChatResponse();
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       handleChatError(error);
     } finally {
+      clearThinkingStageTimers();
+      setThinkingSteps([]);
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
       }
@@ -1104,12 +1408,29 @@ export function ChatPageClient({
 
 
   const hasMessages = messages.length > 0;
+  const latestMessage = messages[messages.length - 1];
+  const showLoadingIndicator =
+    isLoading && !(latestMessage?.role === "assistant" && latestMessage.content.length > 0);
   
   const firstName = user?.fullName?.split(" ")[0] || "Student";
   const capitalizedFirstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
 
   const renderInputForm = () => (
     <form onSubmit={submitMessage} className="w-full rounded-[16px] border border-black/5 dark:border-white/5 bg-bg-secondary p-2.5 px-3.5 shadow-[0_4px_24px_rgba(0,0,0,0.15)] flex flex-col justify-between">
+      {quotedText && (
+        <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 rounded-xl px-3 py-2.5 mb-3 border border-black/10 dark:border-white/10">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-muted shrink-0">
+              <polyline points="15 10 20 15 15 20"/>
+              <path d="M4 4v7a4 4 0 0 0 4 4h12"/>
+            </svg>
+            <span className="text-[14px] text-text-secondary truncate">{`"${quotedText}"`}</span>
+          </div>
+          <button type="button" onClick={() => setQuotedText("")} className="text-text-muted hover:text-text-primary shrink-0 ml-3 p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+      )}
       <textarea
         ref={composerRef}
         value={input}
@@ -1145,13 +1466,24 @@ export function ChatPageClient({
             direction="up"
           />
         </div>
-        <Button
-          type="submit"
-          disabled={isLoading || !input.trim() || creditBalance <= 0}
-          className="h-10 min-w-[90px] rounded-full px-4 text-[15px] font-medium bg-black dark:bg-white text-white dark:text-black hover:opacity-80 disabled:opacity-50 transition"
-        >
-          {isLoading ? "Sending..." : "Send →"}
-        </Button>
+        {isLoading ? (
+          <button
+            type="button"
+            onClick={stop}
+            className="h-10 w-10 rounded-full flex items-center justify-center bg-black dark:bg-white text-white dark:text-black hover:opacity-80 transition shadow-sm"
+            title="Stop generating"
+          >
+            <div className="w-3.5 h-3.5 bg-current rounded-[3px]"></div>
+          </button>
+        ) : (
+          <Button
+            type="submit"
+            disabled={!input.trim() || creditBalance <= 0}
+            className="h-10 min-w-[90px] rounded-full px-4 text-[15px] font-medium bg-black dark:bg-white text-white dark:text-black hover:opacity-80 disabled:opacity-50 transition"
+          >
+            Send →
+          </Button>
+        )}
       </div>
     </form>
   );
@@ -1224,16 +1556,32 @@ export function ChatPageClient({
                     }
                   }
 
+                  let displayQuote = "";
+                  let displayContent = message.content;
+                  if (message.role === "user" && message.content.startsWith("> **")) {
+                    const quoteEndIdx = message.content.indexOf("**\n\n");
+                    if (quoteEndIdx !== -1) {
+                      displayQuote = message.content.substring(4, quoteEndIdx);
+                      displayContent = message.content.substring(quoteEndIdx + 4);
+                    }
+                  }
+
                   return (
                     <article
                       key={message.id}
                       className={cn(
                         "animate-fade-in flex flex-col group relative",
                         message.role === "user" 
-                          ? cn("ml-auto pl-16 max-w-[min(900px,92%)]", editingMessageIndex === index ? "w-full" : "w-fit") 
+                          ? cn("ml-auto max-w-[min(900px,92%)]", editingMessageIndex === index ? "w-full" : "w-fit") 
                           : "mr-auto w-full max-w-[1020px]",
                       )}
                     >
+                      {displayQuote && (
+                        <div className="flex items-center justify-end gap-2 mb-1.5 opacity-60 px-2 text-text-secondary">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg>
+                          <span className="text-[13px] font-medium truncate max-w-[300px] sm:max-w-sm">{displayQuote}</span>
+                        </div>
+                      )}
                       <div
                         className={cn(
                           message.role === "user"
@@ -1261,7 +1609,7 @@ export function ChatPageClient({
                         )}
                         {message.role === "assistant" ? (
                           <>
-                            <Markdown text={message.content} className="text-[16px] leading-[28px] font-medium" />
+                            <Markdown text={displayContent} className="text-[16px] leading-[28px] font-medium" />
                             {responseTimeText && (
                               <div className="mt-2">
                                 <span className="text-[12px] text-text-primary/80 font-medium">
@@ -1307,7 +1655,7 @@ export function ChatPageClient({
                         ) : (
                           <div className="flex items-end justify-between gap-3">
                             <div className="whitespace-pre-wrap text-[16px] leading-[24px] text-text-primary font-medium">
-                              {message.content}
+                              {displayContent}
                             </div>
                             {message.createdAt && (
                               <span className="text-[11px] text-text-muted font-medium shrink-0 mb-[2px]">
@@ -1365,13 +1713,17 @@ export function ChatPageClient({
                   );
                 })}
 
-                {isLoading ? (
-                  <div className="mr-auto w-full max-w-[1020px] px-2 py-4">
-                    <p className="mb-2 text-[13px] text-text-muted">{thinkingStatus || "Generating..."}</p>
-                    <div className="flex items-center">
-                      <span className="typing-dot" />
-                      <span className="typing-dot" />
-                      <span className="typing-dot" />
+                {showLoadingIndicator ? (
+                  <div className="flex flex-col gap-6 w-full animate-fade-in">
+                    <ThinkingSteps steps={thinkingSteps.length > 0 ? thinkingSteps : ["Generating..."]} />
+                    <div className="flex justify-center w-full">
+                      <button
+                        onClick={stop}
+                        className="flex items-center gap-2.5 bg-[#FFEFEF] dark:bg-red-950/30 text-[#E03131] dark:text-red-400 px-4 py-2 rounded-full font-medium text-[14px] hover:bg-[#FFD8D8] dark:hover:bg-red-900/40 transition shadow-sm"
+                      >
+                        <div className="w-3 h-3 bg-current rounded-[2px]"></div>
+                        Stop generating
+                      </button>
                     </div>
                   </div>
                 ) : null}
@@ -1438,6 +1790,37 @@ export function ChatPageClient({
               </Button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {selectionPopover ? (
+        <div 
+          className="fixed z-50 animate-in fade-in zoom-in-95 duration-150 flex items-center bg-[#2F2F2F] shadow-[0_4px_24px_rgba(0,0,0,0.4)] border border-white/10 rounded-full overflow-hidden"
+          style={{ top: selectionPopover.top, left: selectionPopover.left, transform: 'translateX(-50%)' }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <button
+            onClick={() => {
+              setQuotedText(selectionPopover.text);
+              setSelectionPopover(null);
+              window.getSelection()?.removeAllRanges();
+              composerRef.current?.focus();
+            }}
+            className="px-4 py-2 text-[14px] font-medium text-white/90 hover:bg-white/10 transition-colors border-r border-white/10"
+          >
+            Ask the question
+          </button>
+          <button
+            onClick={() => {
+              const text = selectionPopover.text;
+              setSelectionPopover(null);
+              window.getSelection()?.removeAllRanges();
+              void sendCurrentMessage(text);
+            }}
+            className="px-4 py-2 text-[14px] font-medium text-white/90 hover:bg-white/10 transition-colors"
+          >
+            Answer this
+          </button>
         </div>
       ) : null}
     </div>

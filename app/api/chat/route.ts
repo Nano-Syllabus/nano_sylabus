@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 import { z } from "zod";
 import { canSpendCredits, CHAT_MESSAGE_CREDIT_COST, computeNextBalance } from "@/lib/billing";
-import { describeModeRule, resolveResponseLanguage } from "@/lib/chat-language-mode";
+import { resolveResponseLanguage } from "@/lib/chat-language-mode";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
 import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { chatTenant, listTenantSubjects, type TenantChatSource, type TenantSubject } from "@/lib/tenant/client";
+import { chatTenantStream, listTenantSubjects, type TenantChatSource, type TenantSubject } from "@/lib/tenant/client";
 import { deriveSessionTitle } from "@/lib/utils";
 import type { AssistantAnswerTrace, AssistantCitation } from "@/lib/types";
 
@@ -40,10 +43,6 @@ const requestSchema = z.object({
     )
     .min(1),
 });
-
-function toDataStreamPayload(text: string) {
-  return `0:${JSON.stringify(text)}\ne:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0},"isContinued":false}\n`;
-}
 
 function errorToDebugMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -273,6 +272,45 @@ function buildTenantCitations({
 
 function buildAnswerTrace(input: AssistantAnswerTrace): AssistantAnswerTrace {
   return input;
+}
+
+function buildAnswerInstruction({
+  language,
+  subjectName,
+  grade,
+  board,
+}: {
+  language: ResponseLanguage;
+  subjectName: string;
+  grade: string;
+  board: string;
+}) {
+  const languageRule =
+    language === "EN"
+      ? "Answer in English."
+      : "Answer in Roman Nepali.";
+
+  return [
+    "You are an expert IOE Electronics and Communication Engineering professor and exam mentor.",
+    `Teach the subject: ${subjectName}.`,
+    board ? `Academic authority/context: ${board}.` : null,
+    grade ? `Target level: ${grade}.` : "Target level: IOE Bachelor engineering students.",
+    "Use the retrieved syllabus/source context as the authority.",
+    "Give a deep, clear, exam-ready answer: short and direct for simple questions; detailed, step-by-step, and concept-first for theory, derivations, design, and numerical questions.",
+    "When relevant, include definition, core idea, working/principle, formulas, truth table or table, diagram description, key points, applications, and a concise conclusion.",
+    "Use headings and bullets for readability, and keep explanations student-friendly without losing technical accuracy.",
+    "For ALL mathematical formulas, equations, and derivations, ALWAYS wrap them in double dollar signs ($$ ... $$) on their own separate lines so they render as centered blocks. Use single dollar signs ($ ... $) ONLY for small inline variables within text.",
+    "Never use \\[ or \\( for math, only use $$ and $.",
+    "Do not invent chapters, marks, syllabus units, references, or facts not supported by the retrieved context.",
+    "If the provided source context is insufficient, clearly say that the provided syllabus context does not contain enough information.",
+    languageRule,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function toSse(event: string, payload: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
 function shouldRetryAssistantInsertWithoutMetadata(error: { message?: string; details?: string } | null) {
@@ -595,10 +633,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const responseLanguageRule = describeModeRule(resolvedLanguage);
-    const tenantContextSummary = normalizeContextSummary(
-      [responseLanguageRule, contextSummary].filter(Boolean).join("\n"),
-    );
+    const tenantContextSummary = normalizeContextSummary(contextSummary);
+    const answerInstruction = buildAnswerInstruction({
+      language: resolvedLanguage,
+      subjectName: tenantSubject.name,
+      grade: profile.grade,
+      board: profile.board,
+    });
     const tenantStartedAt = Date.now();
     logTenantChatDebug("tenant_chat_started", {
       requestId,
@@ -615,255 +656,319 @@ export async function POST(request: Request) {
       payloadHash: hashDebugValue({
         question,
         context_summary: tenantContextSummary,
+        answer_instruction: answerInstruction,
         subject: tenantSubject.name,
         tenant: "nano-syllabus",
         namespaces: tenantNamespaces,
         top_k: 8,
-        response_language: resolvedLanguage,
       }),
       promptLength: question.length,
     });
 
-    const tenantPromise = chatTenant({
-      question,
-      contextSummary: tenantContextSummary,
-      subject: tenantSubject.name,
-      tenant: "nano-syllabus",
-      namespaces: tenantNamespaces,
-      topK: 8,
-      responseLanguage: resolvedLanguage,
-    });
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        void (async () => {
+        const encoder = new TextEncoder();
+        const enqueue = (event: string, payload: unknown) => {
+          controller.enqueue(encoder.encode(toSse(event, payload)));
+        };
 
-    let tenantResponse: Awaited<typeof tenantPromise>;
-    try {
-      tenantResponse = await tenantPromise;
-      generationMs = Date.now() - tenantStartedAt;
-    } catch (error) {
-      generationMs = Date.now() - tenantStartedAt;
-      const failureReason = summarizeTenantFailure(error);
-      logTenantChatDebug(
-        "tenant_chat_failed",
-        {
-          requestId,
-          sessionId: session.id,
-          subject: tenantSubject.name,
-          subjectName: tenantSubject.name,
-          folderPath: tenantSubject.folder_path,
-          namespace: tenantSubject.namespace_slug,
-          responseLanguage: resolvedLanguage,
-          contextSummaryHash: tenantContextSummary ? hashDebugValue(tenantContextSummary) : null,
-          contextSummaryLength: tenantContextSummary.length,
-          question,
-          questionHash,
-          promptLength: question.length,
-          failureReason,
-          generationMs,
-        },
-        error,
-      );
-      return NextResponse.json(
-        {
-          error: failureReason === "timeout" ? "Tenant answer API timed out. Please retry once." : errorToDebugMessage(error),
-          code: failureReason === "timeout" ? "TENANT_PROMPT_TIMEOUT" : "TENANT_PROMPT_FAILED",
-          requestId,
-        },
-        { status: failureReason === "not_found" ? 404 : 502 },
-      );
-    }
+        const answerParts: string[] = [];
+        let tenantSources: TenantChatSource[] = [];
+        let returnedContextSummary = "";
+        let chunksRetrieved: number | null = null;
+        let servedFrom: string | null = null;
 
-    const answer = (tenantResponse.answer || "").trim();
-    if (!answer) {
-      logTenantChatDebug("tenant_empty_answer", {
-        requestId,
-        sessionId: session.id,
-        subject: tenantSubject.name,
-        subjectName: tenantSubject.name,
-        folderPath: tenantSubject.folder_path,
-        namespace: tenantSubject.namespace_slug,
-        question,
-        questionHash,
-        promptLength: question.length,
-        detail: tenantResponse.detail ?? null,
-        citationCount: Array.isArray(tenantResponse.sources) ? tenantResponse.sources.length : 0,
-        responseKeys: Object.keys(tenantResponse),
-      });
-      return NextResponse.json(
-        {
-          error: "Tenant API returned no answer.",
-          code: "TENANT_EMPTY_ANSWER",
-          requestId,
-        },
-        { status: 502 },
-      );
-    }
+        try {
+          enqueue("status", {
+            message: "Connecting to syllabus stream...",
+          });
 
-    const returnedContextSummary = normalizeContextSummary(tenantResponse.context_summary);
+          await chatTenantStream(
+            {
+              question,
+              answerInstruction,
+              contextSummary: tenantContextSummary,
+              subject: tenantSubject.name,
+              tenant: "nano-syllabus",
+              namespaces: tenantNamespaces,
+              topK: 8,
+            },
+            (event) => {
+              if (event.type === "status") {
+                enqueue("status", {
+                  message: event.message,
+                  query: event.query,
+                  served_from: event.served_from,
+                });
+                return;
+              }
 
-    logTenantChatDebug("tenant_chat_succeeded", {
-      requestId,
-      sessionId: session.id,
-      subject: tenantSubject.name,
-      subjectName: tenantSubject.name,
-      questionHash,
-      payloadHash: hashDebugValue({
-        question,
-        context_summary: tenantContextSummary,
-        subject: tenantSubject.name,
-        tenant: "nano-syllabus",
-        namespaces: tenantNamespaces,
-        top_k: 8,
-        response_language: resolvedLanguage,
-      }),
-      generationMs,
-      answerLength: answer.length,
-      citationCount: Array.isArray(tenantResponse.sources) ? tenantResponse.sources.length : 0,
-      chunksRetrieved: tenantResponse.chunks_retrieved ?? null,
-      servedFrom: tenantResponse.served_from ?? null,
-      returnedContextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
-      returnedContextSummaryLength: returnedContextSummary.length,
-    });
+              if (event.type === "token") {
+                answerParts.push(event.text);
+                enqueue("token", { text: event.text });
+                return;
+              }
 
-    const citations = buildTenantCitations({
-      subjectName: tenantSubject.name,
-      folderPath: tenantSubject.folder_path,
-      sources: tenantResponse.sources,
-    });
+              if (event.type === "sources") {
+                tenantSources = event.sources;
+                chunksRetrieved = event.chunks_retrieved ?? null;
+                servedFrom = event.served_from ?? null;
+                returnedContextSummary = normalizeContextSummary(event.context_summary);
+                enqueue("sources", {
+                  sources: tenantSources,
+                  chunks_retrieved: chunksRetrieved,
+                  served_from: servedFrom,
+                  context_summary: returnedContextSummary ? "1" : "0",
+                });
+                return;
+              }
 
-    const sessionContextPersist = await persistSessionContextSummary({
-      supabase,
-      sessionId: session.id,
-      userId: user.id,
-      contextSummary: returnedContextSummary,
-    });
+              if (event.type === "error") {
+                enqueue("error", { message: event.message });
+              }
+            },
+          );
 
-    if (!sessionContextPersist.ok && !sessionContextPersist.missingColumn) {
-      logTenantChatDebug("tenant_session_context_persist_failed", {
-        requestId,
-        sessionId: session.id,
-        subject: tenantSubject.name,
-        subjectName: tenantSubject.name,
-        contextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
-        contextSummaryLength: returnedContextSummary.length,
-      }, sessionContextPersist.error);
-    }
+          generationMs = Date.now() - tenantStartedAt;
+          const answer = answerParts.join("").trim();
+          if (!answer) {
+            logTenantChatDebug("tenant_empty_answer", {
+              requestId,
+              sessionId: session.id,
+              subject: tenantSubject.name,
+              subjectName: tenantSubject.name,
+              folderPath: tenantSubject.folder_path,
+              namespace: tenantSubject.namespace_slug,
+              question,
+              questionHash,
+              promptLength: question.length,
+              citationCount: tenantSources.length,
+            });
+            enqueue("error", {
+              code: "TENANT_EMPTY_ANSWER",
+              message: "Tenant API returned no answer.",
+            });
+            controller.close();
+            return;
+          }
 
-    const totalMs = Date.now() - requestStartedAt;
-    const subjectTags = [session.subjectContext ?? sessionSubjectContext];
-    const answerTrace = buildAnswerTrace({
-      routePath: "tenant_chat",
-      routeScopeDebug: tenantSubject.folder_path,
-      retrievalMode,
-      answerMode: "tenant_chat",
-      answerModeReason: "raw_question_and_context_summary_sent_to_tenant",
-      matchedScope: tenantSubject.name,
-      answerModel: "tenant:/api/chat",
-      grounded: citations.length > 0,
-      citationCount: citations.length,
-      lookupMs: 0,
-      generationMs,
-      rewriteMs: 0,
-      followupMs: 0,
-      totalMs,
-    });
-
-    after(async () => {
-      const persistStartedAt = Date.now();
-
-      // If this is an edit, delete the old message and all subsequent messages in this session
-      if (parsed.truncateFromId && !parsed.truncateFromId.startsWith("local-")) {
-        const { data: targetMessage } = await supabase
-          .from("chat_messages")
-          .select("created_at")
-          .eq("id", parsed.truncateFromId)
-          .eq("session_id", session.id)
-          .maybeSingle();
-
-        if (targetMessage) {
-          await supabase
-            .from("chat_messages")
-            .delete()
-            .eq("session_id", session.id)
-            .gte("created_at", targetMessage.created_at);
-        }
-      }
-
-      const { error: userMessageError } = await supabase.from("chat_messages").insert({
-        session_id: session.id,
-        role: "user",
-        content: question,
-        language: resolvedLanguage,
-        created_at: parsed.messages[parsed.messages.length - 1].createdAt || undefined,
-      });
-
-      if (userMessageError) {
-        logTenantChatDebug(
-          "user_message_persist_failed_after_response",
-          {
+          logTenantChatDebug("tenant_chat_succeeded", {
             requestId,
             sessionId: session.id,
             subject: tenantSubject.name,
             subjectName: tenantSubject.name,
+            questionHash,
+            payloadHash: hashDebugValue({
+              question,
+              answer_instruction: answerInstruction,
+              context_summary: tenantContextSummary,
+              subject: tenantSubject.name,
+              tenant: "nano-syllabus",
+              namespaces: tenantNamespaces,
+              top_k: 8,
+            }),
+            generationMs,
+            answerLength: answer.length,
+            citationCount: tenantSources.length,
+            chunksRetrieved,
+            servedFrom,
+            returnedContextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
+            returnedContextSummaryLength: returnedContextSummary.length,
+          });
+
+          const citations = buildTenantCitations({
+            subjectName: tenantSubject.name,
+            folderPath: tenantSubject.folder_path,
+            sources: tenantSources,
+          });
+
+          const sessionContextPersist = await persistSessionContextSummary({
+            supabase,
+            sessionId: session.id,
+            userId: user.id,
+            contextSummary: returnedContextSummary,
+          });
+
+          if (!sessionContextPersist.ok && !sessionContextPersist.missingColumn) {
+            logTenantChatDebug("tenant_session_context_persist_failed", {
+              requestId,
+              sessionId: session.id,
+              subject: tenantSubject.name,
+              subjectName: tenantSubject.name,
+              contextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
+              contextSummaryLength: returnedContextSummary.length,
+            }, sessionContextPersist.error);
+          }
+
+          const totalMs = Date.now() - requestStartedAt;
+          const subjectTags = [session.subjectContext ?? sessionSubjectContext];
+          const answerTrace = buildAnswerTrace({
+            routePath: "tenant_chat_stream",
+            routeScopeDebug: tenantSubject.folder_path,
+            retrievalMode,
+            answerMode: "tenant_chat_stream",
+            answerModeReason: "raw_question_answer_instruction_and_context_summary_sent_to_tenant_stream",
+            matchedScope: tenantSubject.name,
+            answerModel: "tenant:/api/chat/stream",
+            grounded: citations.length > 0,
+            citationCount: citations.length,
+            lookupMs: 0,
+            generationMs,
+            rewriteMs: 0,
+            followupMs: 0,
+            totalMs,
+          });
+
+          const persistStartedAt = Date.now();
+
+          if (parsed.truncateFromId && !parsed.truncateFromId.startsWith("local-")) {
+            const { data: targetMessage } = await supabase
+              .from("chat_messages")
+              .select("created_at")
+              .eq("id", parsed.truncateFromId)
+              .eq("session_id", session.id)
+              .maybeSingle();
+
+            if (targetMessage) {
+              await supabase
+                .from("chat_messages")
+                .delete()
+                .eq("session_id", session.id)
+                .gte("created_at", targetMessage.created_at);
+            }
+          }
+
+          const { error: userMessageError } = await supabase.from("chat_messages").insert({
+            session_id: session.id,
+            role: "user",
+            content: question,
+            language: resolvedLanguage,
+            created_at: parsed.messages[parsed.messages.length - 1].createdAt || undefined,
+          });
+
+          if (userMessageError) {
+            logTenantChatDebug(
+              "user_message_persist_failed_after_response",
+              {
+                requestId,
+                sessionId: session.id,
+                subject: tenantSubject.name,
+                subjectName: tenantSubject.name,
+                persistMs: Date.now() - persistStartedAt,
+              },
+              userMessageError,
+            );
+            enqueue("error", { message: "Answer generated, but saving your message failed." });
+            controller.close();
+            return;
+          }
+
+          const assistantMessageId = await persistAssistantCompletion({
+            supabase,
+            sessionId: session.id,
+            userId: user.id,
+            answer,
+            language: resolvedLanguage,
+            citations,
+            subjectTags,
+            subjectContext: session.subjectContext ?? sessionSubjectContext,
+            answerTrace,
+            contextSummary: returnedContextSummary,
+          });
+
+          if (!assistantMessageId) {
+            logTenantChatDebug("assistant_message_persist_failed_after_response", {
+              requestId,
+              sessionId: session.id,
+              subject: tenantSubject.name,
+              subjectName: tenantSubject.name,
+              persistMs: Date.now() - persistStartedAt,
+            });
+            enqueue("error", { message: "Answer generated, but saving the response failed." });
+            controller.close();
+            return;
+          }
+
+          logTenantChatDebug("tenant_persist_succeeded_after_response", {
+            requestId,
+            sessionId: session.id,
+            subject: tenantSubject.name,
+            subjectName: tenantSubject.name,
+            assistantMessageId,
             persistMs: Date.now() - persistStartedAt,
-          },
-          userMessageError,
-        );
-        return;
-      }
+            contextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
+            contextSummaryLength: returnedContextSummary.length,
+          });
 
-      const assistantMessageId = await persistAssistantCompletion({
-        supabase,
-        sessionId: session.id,
-        userId: user.id,
-        answer,
-        language: resolvedLanguage,
-        citations,
-        subjectTags,
-        subjectContext: session.subjectContext ?? sessionSubjectContext,
-        answerTrace,
-        contextSummary: returnedContextSummary,
-      });
-
-      if (!assistantMessageId) {
-        logTenantChatDebug("assistant_message_persist_failed_after_response", {
-          requestId,
-          sessionId: session.id,
-          subject: tenantSubject.name,
-          subjectName: tenantSubject.name,
-          persistMs: Date.now() - persistStartedAt,
-        });
-        return;
-      }
-
-      logTenantChatDebug("tenant_persist_succeeded_after_response", {
-        requestId,
-        sessionId: session.id,
-        subject: tenantSubject.name,
-        subjectName: tenantSubject.name,
-        assistantMessageId,
-        persistMs: Date.now() - persistStartedAt,
-        contextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
-        contextSummaryLength: returnedContextSummary.length,
-      });
+          enqueue("done", {
+            ok: true,
+            sessionId: session.id,
+            requestId,
+            generationMs,
+            totalMs,
+            citationCount: citations.length,
+            chunksRetrieved,
+            servedFrom,
+          });
+          controller.close();
+        } catch (error) {
+          generationMs = Date.now() - tenantStartedAt;
+          const failureReason = summarizeTenantFailure(error);
+          logTenantChatDebug(
+            "tenant_chat_failed",
+            {
+              requestId,
+              sessionId: session.id,
+              subject: tenantSubject.name,
+              subjectName: tenantSubject.name,
+              folderPath: tenantSubject.folder_path,
+              namespace: tenantSubject.namespace_slug,
+              responseLanguage: resolvedLanguage,
+              contextSummaryHash: tenantContextSummary ? hashDebugValue(tenantContextSummary) : null,
+              contextSummaryLength: tenantContextSummary.length,
+              question,
+              questionHash,
+              promptLength: question.length,
+              failureReason,
+              generationMs,
+            },
+            error,
+          );
+          enqueue("error", {
+            code: failureReason === "timeout" ? "TENANT_PROMPT_TIMEOUT" : "TENANT_PROMPT_FAILED",
+            message:
+              failureReason === "timeout"
+                ? "Tenant answer API timed out. Please retry once."
+                : errorToDebugMessage(error),
+          });
+          controller.close();
+        }
+        })();
+      },
     });
 
-    return new Response(toDataStreamPayload(answer), {
+    return new Response(stream, {
       status: 200,
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+        Connection: "keep-alive",
         "x-session-id": session.id,
         "x-request-id": requestId,
-        "x-tenant-grounded": citations.length > 0 ? "1" : "0",
-        "x-tenant-citations": String(citations.length),
-        "x-tenant-chunks-retrieved": String(tenantResponse.chunks_retrieved ?? citations.length),
-        "x-tenant-served-from": tenantResponse.served_from ?? "",
+        "x-tenant-grounded": "0",
+        "x-tenant-citations": "0",
+        "x-tenant-chunks-retrieved": "0",
+        "x-tenant-served-from": "",
         "x-retrieval-mode": retrievalMode,
         "x-subject-context": session.subjectContext ?? sessionSubjectContext,
-        "x-thinking-enabled": "0",
-        "x-answer-mode": "tenant_chat",
-        "x-answer-mode-reason": "raw_question_and_context_summary_sent_to_tenant",
-        "x-answer-model": "tenant:/api/chat",
+        "x-thinking-enabled": "1",
+        "x-answer-mode": "tenant_chat_stream",
+        "x-answer-mode-reason": "raw_question_answer_instruction_and_context_summary_sent_to_tenant_stream",
+        "x-answer-model": "tenant:/api/chat/stream",
         "x-matched-scope": tenantSubject.name,
-        "x-route-path": "tenant_chat",
+        "x-route-path": "tenant_chat_stream",
         "x-route-scope-debug": tenantSubject.folder_path,
         "x-history-strategy": "tenant_context_summary",
         "x-history-messages": "1",
@@ -872,20 +977,20 @@ export async function POST(request: Request) {
         "x-question-sha": questionHash,
         "x-payload-sha": hashDebugValue({
           question,
+          answer_instruction: answerInstruction,
           context_summary: tenantContextSummary,
           subject: tenantSubject.name,
           tenant: "nano-syllabus",
           namespaces: tenantNamespaces,
           top_k: 8,
-          response_language: resolvedLanguage,
         }),
         "x-subject-slug": tenantSubject.slug,
         "x-namespace-slug": tenantSubject.namespace_slug,
-        "x-tenant-context-summary": returnedContextSummary ? "1" : "0",
-        "x-tenant-context-summary-length": String(returnedContextSummary.length),
+        "x-tenant-context-summary": "0",
+        "x-tenant-context-summary-length": "0",
         "x-rewrite-ms": "0",
         "x-followup-ms": "0",
-        "x-total-ms": String(totalMs),
+        "x-total-ms": "0",
       },
     });
   } catch (error) {
