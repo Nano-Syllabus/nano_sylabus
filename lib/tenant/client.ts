@@ -57,6 +57,19 @@ export type TenantChatResponse = {
   detail?: string;
 };
 
+export type TenantStreamEvent =
+  | { type: "status"; message: string; query?: string; served_from?: string }
+  | { type: "token"; text: string }
+  | {
+      type: "sources";
+      sources: TenantChatSource[];
+      chunks_retrieved?: number;
+      served_from?: string;
+      context_summary?: string;
+    }
+  | { type: "done"; ok?: boolean }
+  | { type: "error"; message: string };
+
 type TenantNamespacesResponse = {
   tenant: string;
   namespaces: Array<{
@@ -232,5 +245,192 @@ export async function chatTenant(input: {
       response_language: input.responseLanguage,
       language: input.responseLanguage,
     },
+  });
+}
+
+function parseSseEvent(rawEvent: string): TenantStreamEvent | null {
+  const eventName = rawEvent.match(/^event:\s*(.+)$/m)?.[1]?.trim() ?? "message";
+  const data = [...rawEvent.matchAll(/^data:\s?(.*)$/gm)].map((match) => match[1]).join("\n");
+  if (!data) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data);
+  } catch {
+    parsed = { message: data };
+  }
+
+  const payload =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+
+  if (eventName === "status") {
+    return {
+      type: "status",
+      message: String(payload.message ?? ""),
+      query: typeof payload.query === "string" ? payload.query : undefined,
+      served_from: typeof payload.served_from === "string" ? payload.served_from : undefined,
+    };
+  }
+
+  if (eventName === "token") {
+    return {
+      type: "token",
+      text: String(payload.text ?? ""),
+    };
+  }
+
+  if (eventName === "sources") {
+    return {
+      type: "sources",
+      sources: Array.isArray(payload.sources) ? (payload.sources as TenantChatSource[]) : [],
+      chunks_retrieved:
+        typeof payload.chunks_retrieved === "number" ? payload.chunks_retrieved : undefined,
+      served_from: typeof payload.served_from === "string" ? payload.served_from : undefined,
+      context_summary:
+        typeof payload.context_summary === "string" ? payload.context_summary : undefined,
+    };
+  }
+
+  if (eventName === "done") {
+    return {
+      type: "done",
+      ok: typeof payload.ok === "boolean" ? payload.ok : undefined,
+    };
+  }
+
+  if (eventName === "error") {
+    return {
+      type: "error",
+      message: String(payload.message ?? payload.error ?? data),
+    };
+  }
+
+  return null;
+}
+
+export async function chatTenantStream(
+  input: {
+    question: string;
+    answerInstruction: string;
+    contextSummary: string;
+    subject: string;
+    tenant: string;
+    namespaces: string[];
+    topK: number;
+  },
+  onEvent: (event: TenantStreamEvent) => void | Promise<void>,
+) {
+  const { baseUrl, token, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
+  const url = new URL("/api/chat/stream", baseUrl);
+  const transport = url.protocol === "https:" ? https : http;
+  const serializedBody = JSON.stringify({
+    question: input.question,
+    answer_instruction: input.answerInstruction,
+    context_summary: input.contextSummary,
+    subject: input.subject,
+    tenant: input.tenant,
+    namespaces: input.namespaces,
+    top_k: input.topK,
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let buffer = "";
+
+    const request = transport.request(
+      url,
+      {
+        method: "POST",
+        rejectUnauthorized,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "text/event-stream",
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(serializedBody),
+        },
+      },
+      (response) => {
+        response.setEncoding("utf8");
+
+        if ((response.statusCode ?? 500) >= 400) {
+          let raw = "";
+          response.on("data", (chunk) => {
+            raw += chunk;
+          });
+          response.on("end", () => {
+            if (settled) return;
+            settled = true;
+            reject(
+              new Error(
+                `Tenant API ${url.pathname} failed with ${response.statusCode}: ${raw.slice(0, 500)}`,
+              ),
+            );
+          });
+          return;
+        }
+
+        response.on("data", async (chunk) => {
+          buffer += chunk;
+          const parts = buffer.split(/\r?\n\r?\n/);
+          buffer = parts.pop() ?? "";
+
+          for (const part of parts) {
+            const event = parseSseEvent(part);
+            if (!event) continue;
+            try {
+              await onEvent(event);
+            } catch (error) {
+              request.destroy(error instanceof Error ? error : new Error(String(error)));
+              return;
+            }
+          }
+        });
+
+        response.on("aborted", () => {
+          if (settled) return;
+          settled = true;
+          reject(new Error(`Tenant API ${url.pathname} aborted before completing the stream.`));
+        });
+
+        response.on("error", (error) => {
+          if (settled) return;
+          settled = true;
+          reject(error);
+        });
+
+        response.on("end", async () => {
+          if (settled) return;
+          if (buffer.trim()) {
+            const event = parseSseEvent(buffer);
+            if (event) {
+              try {
+                await onEvent(event);
+              } catch (error) {
+                settled = true;
+                reject(error);
+                return;
+              }
+            }
+          }
+          settled = true;
+          resolve();
+        });
+      },
+    );
+
+    request.setTimeout(timeoutMs, () => {
+      if (settled) return;
+      settled = true;
+      request.destroy(new Error(`Tenant API ${url.pathname} timed out after ${timeoutMs}ms`));
+    });
+    request.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+    request.write(serializedBody);
+    request.end();
   });
 }
