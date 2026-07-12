@@ -3,7 +3,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Logo({ className = "" }: { className?: string }) {
   return (
-    <Link href="/" className={`flex items-center gap-2 ${className}`}>
+    <Link href="/" className={`flex min-h-10 items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 ${className}`}>
       <span className="flex h-7 w-7 items-center justify-center rounded-md bg-text-primary text-text-inverse font-mono-ui text-sm">
         N
       </span>
@@ -38,7 +38,7 @@ export function MarketingNav() {
           </Link>
           <Link
             href="/signup"
-            className="inline-flex h-9 items-center rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90"
+            className="inline-flex h-10 items-center rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70"
           >
             Sign up
           </Link>

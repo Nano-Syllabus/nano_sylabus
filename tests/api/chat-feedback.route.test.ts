@@ -43,18 +43,22 @@ describe("PATCH /api/chat/messages/[messageId]/feedback", () => {
     sessionChain.select.mockReturnValue(sessionChain);
     sessionChain.eq.mockReturnValue(sessionChain);
 
-    const updateMaybeSingle = vi.fn(async () => ({
-      data: { id: "message-1", feedback: "up" },
-      error: null,
-    }));
+    const updateMaybeSingle = vi.fn(async function updateFeedbackResult() {
+      const payload = update.mock.calls.at(-1)?.[0] as { feedback?: "up" | "down" | null };
+      return {
+        data: { id: "message-1", feedback: payload.feedback ?? null },
+        error: null,
+      };
+    });
     const updateSelect = vi.fn(() => ({ maybeSingle: updateMaybeSingle }));
     const updateEqSecond = vi.fn(() => ({ select: updateSelect }));
     const updateEqFirst = vi.fn(() => ({ eq: updateEqSecond }));
+    const update = vi.fn(() => ({ eq: updateEqFirst }));
     const chatMessagesTable = {
       select: vi.fn(() => messageChain),
     };
     const adminChatMessagesTable = {
-      update: vi.fn(() => ({ eq: updateEqFirst })),
+      update,
     };
 
     createSupabaseServerClient.mockResolvedValue({
@@ -65,6 +69,12 @@ describe("PATCH /api/chat/messages/[messageId]/feedback", () => {
           },
         })),
       },
+      rpc: vi.fn((_functionName: string, args: { p_feedback?: "up" | "down" | null }) => ({
+        maybeSingle: vi.fn(async () => ({
+          data: { id: "message-1", feedback: args.p_feedback ?? null },
+          error: null,
+        })),
+      })),
       from: vi.fn((table: string) => {
         if (table === "chat_messages") return chatMessagesTable;
         if (table === "chat_sessions") return sessionChain;
@@ -96,6 +106,25 @@ describe("PATCH /api/chat/messages/[messageId]/feedback", () => {
     await expect(response.json()).resolves.toEqual({
       id: "message-1",
       feedback: "up",
+    });
+  });
+
+  it("clears feedback for an assistant message in the user's own session", async () => {
+    const response = await PATCH(
+      new Request("http://localhost/api/chat/messages/message-1/feedback", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback: null }),
+      }),
+      {
+        params: Promise.resolve({ messageId: "message-1" }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      id: "message-1",
+      feedback: null,
     });
   });
 });

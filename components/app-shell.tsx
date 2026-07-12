@@ -39,12 +39,12 @@ export function AppShell({
 
   return (
     <AppShellContext.Provider value={shellContextValue}>
-      <div className="flex h-screen overflow-hidden bg-bg-primary text-text-primary">
+      <div className="flex h-[100dvh] overflow-hidden bg-bg-primary text-text-primary">
         <aside
           className={
             "fixed inset-y-0 left-0 z-30 flex flex-col border-r border-border transition-all duration-300 md:static md:translate-x-0 " +
             (open ? "translate-x-0 " : "-translate-x-full ") +
-            (isCollapsed ? "w-[68px]" : "w-[260px]")
+            (isCollapsed ? "w-[68px]" : "w-[min(86vw,320px)] md:w-[260px]")
           }
         >
           <AppSidebar 
@@ -63,21 +63,22 @@ export function AppShell({
           />
         ) : null}
 
-        <main className="flex flex-1 flex-col overflow-hidden">
-          <header className="flex h-12 items-center justify-between gap-3 px-4 md:px-8">
-            <div className="flex min-w-0 items-center gap-3">
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="flex min-h-12 items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4 md:px-8">
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
               <button
                 type="button"
-                className="text-text-muted md:hidden"
+                className="-ml-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-text-muted transition hover:bg-bg-secondary hover:text-text-primary md:hidden"
                 onClick={() => setOpen(true)}
+                aria-label="Open sidebar"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
               </button>
-              <div className="min-w-0 truncate font-sans text-[15px] font-semibold text-text-primary">
+              <div className="min-w-0 flex-1 truncate font-sans text-[14px] font-semibold text-text-primary sm:text-[15px]">
                 {dynamicTitle ?? title}
               </div>
             </div>
-            <div className="flex items-center gap-1.5 md:gap-2">
+            <div className="flex min-w-0 shrink-0 items-center gap-1.5 md:gap-2">
               {!dynamicActions && (
                 <Badge variant={user.creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
                   {user.creditBalance} credits

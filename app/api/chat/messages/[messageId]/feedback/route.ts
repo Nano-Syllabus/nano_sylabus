@@ -4,8 +4,20 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const feedbackSchema = z.object({
-  feedback: z.enum(["up", "down"]),
+  feedback: z.enum(["up", "down"]).nullable(),
 });
+
+type FeedbackValue = z.infer<typeof feedbackSchema>["feedback"];
+type FeedbackRow = {
+  id: string;
+  feedback: FeedbackValue;
+};
+
+function getSupabaseErrorMessage(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  if ("message" in error && typeof error.message === "string") return error.message;
+  return null;
+}
 
 export async function PATCH(
   request: Request,
@@ -22,7 +34,14 @@ export async function PATCH(
     }
 
     const { messageId } = await params;
-    const payload = feedbackSchema.parse(await request.json());
+    const rawPayload = await request.json().catch(() => null);
+    const parsedPayload = feedbackSchema.safeParse(rawPayload);
+
+    if (!parsedPayload.success) {
+      return NextResponse.json({ error: "Invalid feedback payload." }, { status: 400 });
+    }
+
+    const payload = parsedPayload.data;
 
     const { data: existingMessage } = await supabase
       .from("chat_messages")
@@ -45,17 +64,54 @@ export async function PATCH(
       return NextResponse.json({ error: "Chat session not found." }, { status: 404 });
     }
 
-    const adminSupabase = createSupabaseAdminClient();
-    const { data, error } = await adminSupabase
-      .from("chat_messages")
-      .update({ feedback: payload.feedback })
-      .eq("id", messageId)
-      .eq("session_id", existingMessage.session_id)
-      .select("id, feedback")
-      .maybeSingle();
+    let data: FeedbackRow | null = null;
+    let saveError: unknown = null;
 
-    if (error || !data) {
-      return NextResponse.json({ error: "Failed to save feedback." }, { status: 500 });
+    const rpcResult = await supabase
+      .rpc("set_chat_message_feedback", {
+        p_message_id: messageId,
+        p_feedback: payload.feedback,
+      })
+      .maybeSingle<FeedbackRow>();
+
+    if (rpcResult.error) {
+      saveError = rpcResult.error;
+      console.warn("[CHAT_FEEDBACK] Authenticated RPC failed; trying admin fallback.", {
+        messageId,
+        code: rpcResult.error.code,
+        message: rpcResult.error.message,
+      });
+
+      const adminSupabase = createSupabaseAdminClient();
+      const adminResult = await adminSupabase
+        .from("chat_messages")
+        .update({ feedback: payload.feedback })
+        .eq("id", messageId)
+        .eq("session_id", existingMessage.session_id)
+        .select("id, feedback")
+        .maybeSingle<FeedbackRow>();
+
+      data = adminResult.data;
+      saveError = adminResult.error;
+    } else {
+      data = rpcResult.data;
+      saveError = null;
+    }
+
+    if (saveError || !data) {
+      console.error("[CHAT_FEEDBACK] Failed to save feedback.", {
+        messageId,
+        sessionId: existingMessage.session_id,
+        feedback: payload.feedback,
+        error: saveError,
+      });
+
+      return NextResponse.json(
+        {
+          error: getSupabaseErrorMessage(saveError) ?? "Failed to save feedback.",
+        },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({

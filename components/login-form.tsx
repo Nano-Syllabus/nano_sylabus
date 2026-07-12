@@ -136,12 +136,13 @@ export function LoginForm({
               onChange={(event) => setPassword(event.target.value)}
               placeholder="••••••••"
               invalid={Boolean(error)}
+              className="pr-16"
               required
             />
             <button
               type="button"
               onClick={() => setShowPassword((value) => !value)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono-ui text-text-muted hover:text-text-primary"
+              className="absolute right-1.5 top-1/2 inline-flex min-h-10 min-w-12 -translate-y-1/2 items-center justify-center rounded-full text-xs font-mono-ui text-text-muted transition hover:bg-bg-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70"
             >
               {showPassword ? "HIDE" : "SHOW"}
             </button>
@@ -155,7 +156,7 @@ export function LoginForm({
       <p className="mt-4 text-center text-sm text-text-secondary">
         <Link
           href="/forgot-password"
-          className="font-medium text-text-primary underline underline-offset-4"
+          className="inline-flex min-h-10 items-center font-medium text-text-primary underline underline-offset-4"
         >
           Forgot password?
         </Link>
@@ -163,7 +164,7 @@ export function LoginForm({
 
       <p className="mt-6 text-center text-sm text-text-secondary">
         Don&apos;t have an account?{" "}
-        <Link href="/signup" className="font-medium text-text-primary underline underline-offset-4">
+        <Link href="/signup" className="inline-flex min-h-10 items-center font-medium text-text-primary underline underline-offset-4">
           Sign up
         </Link>
       </p>

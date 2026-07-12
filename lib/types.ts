@@ -54,6 +54,12 @@ export interface AssistantAnswerTrace {
   totalMs: number;
 }
 
+export interface MessageTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 export interface StudentProfile {
   userId: string;
   fullName: string;
@@ -87,6 +93,8 @@ export interface ChatSessionSummary {
   subjectTags: string[];
   subjectContext: string | null;
   isPinned: boolean;
+  shareToken?: string | null;
+  sharedAt?: string | null;
 }
 
 export interface ChatMessageRecord {
@@ -102,9 +110,21 @@ export interface ChatMessageRecord {
   followUpSuggestions: string[];
   savedNoteId: string | null;
   answerTrace: AssistantAnswerTrace | null;
+  tokenUsage: MessageTokenUsage;
 }
 
 export interface ChatSessionDetail extends ChatSessionSummary {
+  messages: ChatMessageRecord[];
+}
+
+export interface PublicChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  subjectTags: string[];
+  subjectContext: string | null;
+  sharedAt: string;
   messages: ChatMessageRecord[];
 }
 

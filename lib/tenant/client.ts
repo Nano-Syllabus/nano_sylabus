@@ -41,6 +41,12 @@ export type TenantChatSource = {
   pages?: number[] | null;
 };
 
+export type TenantTokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
 export type TenantPromptResponse = {
   answer?: string;
   detail?: string;
@@ -67,7 +73,7 @@ export type TenantStreamEvent =
       served_from?: string;
       context_summary?: string;
     }
-  | { type: "done"; ok?: boolean }
+  | { type: "done"; ok?: boolean; usage?: TenantTokenUsage }
   | { type: "error"; message: string };
 
 type TenantNamespacesResponse = {
@@ -265,6 +271,30 @@ function parseSseEvent(rawEvent: string): TenantStreamEvent | null {
       ? (parsed as Record<string, unknown>)
       : {};
 
+  const readNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+
+  const normalizeUsage = (value: unknown): TenantTokenUsage | undefined => {
+    const usageValue = Array.isArray(value) ? value[0] : value;
+    if (!usageValue || typeof usageValue !== "object") return undefined;
+    const usage = usageValue as Record<string, unknown>;
+    const inputTokens =
+      readNumber(usage.promptTokens) ||
+      readNumber(usage.prompt_tokens) ||
+      readNumber(usage.inputTokens) ||
+      readNumber(usage.input_tokens);
+    const outputTokens =
+      readNumber(usage.completionTokens) ||
+      readNumber(usage.completion_tokens) ||
+      readNumber(usage.outputTokens) ||
+      readNumber(usage.output_tokens);
+    const totalTokens =
+      readNumber(usage.totalTokens) ||
+      readNumber(usage.total_tokens) ||
+      inputTokens + outputTokens;
+
+    return { inputTokens, outputTokens, totalTokens };
+  };
+
   if (eventName === "status") {
     return {
       type: "status",
@@ -297,6 +327,7 @@ function parseSseEvent(rawEvent: string): TenantStreamEvent | null {
     return {
       type: "done",
       ok: typeof payload.ok === "boolean" ? payload.ok : undefined,
+      usage: normalizeUsage(payload.usage),
     };
   }
 
