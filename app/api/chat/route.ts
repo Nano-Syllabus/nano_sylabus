@@ -9,7 +9,7 @@ import { resolveResponseLanguage } from "@/lib/chat-language-mode";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
 import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { chatTenantStream, listTenantSubjects, type TenantChatSource, type TenantSubject } from "@/lib/tenant/client";
+import { chatTenantStream, listTenantSubjects, type TenantChatSource, type TenantSubject, type TenantTokenUsage } from "@/lib/tenant/client";
 import { deriveSessionTitle } from "@/lib/utils";
 import type { AssistantAnswerTrace, AssistantCitation } from "@/lib/types";
 
@@ -161,6 +161,29 @@ function normalizeContextSummary(value: unknown) {
 function hasMissingColumnError(error: { message?: string; details?: string } | null, columnName: string) {
   const message = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
   return message.includes("column") && message.includes(columnName.toLowerCase());
+}
+
+function normalizeTokenUsage(usage?: TenantTokenUsage | null): TenantTokenUsage {
+  const inputTokens = usage?.inputTokens ?? 0;
+  const outputTokens = usage?.outputTokens ?? 0;
+  const totalTokens = usage?.totalTokens ?? inputTokens + outputTokens;
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+  };
+}
+
+function shouldRetryMessageInsertWithoutTokenUsage(error: { message?: string; details?: string } | null) {
+  const message = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
+  return Boolean(
+    message &&
+      message.includes("column") &&
+      (message.includes("input_tokens") ||
+        message.includes("output_tokens") ||
+        message.includes("total_tokens")),
+  );
 }
 
 async function getLatestTenantContextSummaryFromMessageMetadata({
@@ -329,6 +352,7 @@ async function persistAssistantCompletion({
   subjectContext,
   answerTrace,
   contextSummary,
+  tokenUsage,
 }: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   sessionId: string;
@@ -340,7 +364,9 @@ async function persistAssistantCompletion({
   subjectContext: string | null;
   answerTrace: AssistantAnswerTrace;
   contextSummary: string;
+  tokenUsage: TenantTokenUsage;
 }) {
+  const normalizedTokenUsage = normalizeTokenUsage(tokenUsage);
   const basePayload = {
     session_id: sessionId,
     role: "assistant" as const,
@@ -349,6 +375,9 @@ async function persistAssistantCompletion({
     grounded: citations.length > 0,
     citations,
     follow_up_suggestions: [],
+    input_tokens: normalizedTokenUsage.inputTokens,
+    output_tokens: normalizedTokenUsage.outputTokens,
+    total_tokens: normalizedTokenUsage.totalTokens,
   };
 
   const attempt = await supabase
@@ -358,6 +387,7 @@ async function persistAssistantCompletion({
       metadata: {
         answer_trace: answerTrace,
         tenant_context_summary: contextSummary,
+        tenant_token_usage: normalizedTokenUsage,
       },
     })
     .select("id")
@@ -366,10 +396,21 @@ async function persistAssistantCompletion({
   let assistantMessage = attempt.data;
   let assistantError = attempt.error;
 
-  if (!assistantMessage && shouldRetryAssistantInsertWithoutMetadata(assistantError)) {
+  if (
+    !assistantMessage &&
+    (shouldRetryAssistantInsertWithoutMetadata(assistantError) ||
+      shouldRetryMessageInsertWithoutTokenUsage(assistantError))
+  ) {
+    const { input_tokens, output_tokens, total_tokens, ...tokenFreeBasePayload } = basePayload;
+    void input_tokens;
+    void output_tokens;
+    void total_tokens;
+    const retryPayload = shouldRetryMessageInsertWithoutTokenUsage(assistantError)
+      ? tokenFreeBasePayload
+      : basePayload;
     const metadataFreeAttempt = await supabase
       .from("chat_messages")
-      .insert(basePayload)
+      .insert(retryPayload)
       .select("id")
       .single();
     assistantMessage = metadataFreeAttempt.data;
@@ -678,6 +719,7 @@ export async function POST(request: Request) {
         let returnedContextSummary = "";
         let chunksRetrieved: number | null = null;
         let servedFrom: string | null = null;
+        let tenantTokenUsage = normalizeTokenUsage(null);
 
         try {
           enqueue("status", {
@@ -726,6 +768,11 @@ export async function POST(request: Request) {
 
               if (event.type === "error") {
                 enqueue("error", { message: event.message });
+                return;
+              }
+
+              if (event.type === "done") {
+                tenantTokenUsage = normalizeTokenUsage(event.usage);
               }
             },
           );
@@ -775,6 +822,9 @@ export async function POST(request: Request) {
             servedFrom,
             returnedContextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
             returnedContextSummaryLength: returnedContextSummary.length,
+            inputTokens: tenantTokenUsage.inputTokens,
+            outputTokens: tenantTokenUsage.outputTokens,
+            totalTokens: tenantTokenUsage.totalTokens,
           });
 
           const citations = buildTenantCitations({
@@ -839,13 +889,35 @@ export async function POST(request: Request) {
             }
           }
 
-          const { error: userMessageError } = await supabase.from("chat_messages").insert({
+          const userMessagePayload = {
             session_id: session.id,
             role: "user",
             content: question,
             language: resolvedLanguage,
             created_at: parsed.messages[parsed.messages.length - 1].createdAt || undefined,
-          });
+            input_tokens: tenantTokenUsage.inputTokens,
+            output_tokens: 0,
+            total_tokens: tenantTokenUsage.inputTokens,
+          };
+          const userMessageInsert = await supabase
+            .from("chat_messages")
+            .insert(userMessagePayload)
+            .select("id")
+            .single();
+          let userMessageError = userMessageInsert.error;
+
+          if (shouldRetryMessageInsertWithoutTokenUsage(userMessageError)) {
+            const { input_tokens, output_tokens, total_tokens, ...tokenFreeUserMessagePayload } = userMessagePayload;
+            void input_tokens;
+            void output_tokens;
+            void total_tokens;
+            const retryUserMessageInsert = await supabase
+              .from("chat_messages")
+              .insert(tokenFreeUserMessagePayload)
+              .select("id")
+              .single();
+            userMessageError = retryUserMessageInsert.error;
+          }
 
           if (userMessageError) {
             logTenantChatDebug(
@@ -875,6 +947,7 @@ export async function POST(request: Request) {
             subjectContext: session.subjectContext ?? sessionSubjectContext,
             answerTrace,
             contextSummary: returnedContextSummary,
+            tokenUsage: tenantTokenUsage,
           });
 
           if (!assistantMessageId) {
@@ -899,6 +972,9 @@ export async function POST(request: Request) {
             persistMs: Date.now() - persistStartedAt,
             contextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
             contextSummaryLength: returnedContextSummary.length,
+            inputTokens: tenantTokenUsage.inputTokens,
+            outputTokens: tenantTokenUsage.outputTokens,
+            totalTokens: tenantTokenUsage.totalTokens,
           });
 
           enqueue("done", {
@@ -910,6 +986,7 @@ export async function POST(request: Request) {
             citationCount: citations.length,
             chunksRetrieved,
             servedFrom,
+            tokenUsage: tenantTokenUsage,
           });
           controller.close();
         } catch (error) {

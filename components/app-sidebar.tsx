@@ -39,6 +39,8 @@ export function AppSidebar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentSessionId = searchParams.get("session");
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
+  const activeSessionId = pendingSessionId ?? currentSessionId;
 
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [hasMoreSessions, setHasMoreSessions] = useState(false);
@@ -52,6 +54,12 @@ export function AppSidebar({
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (pendingSessionId && pendingSessionId === currentSessionId) {
+      setPendingSessionId(null);
+    }
+  }, [currentSessionId, pendingSessionId]);
 
 
   const handleTogglePin = async (session: ChatSessionSummary) => {
@@ -403,14 +411,31 @@ export function AppSidebar({
                         <div className="flex items-center">
 	                          <button
 	                            type="button"
+	                            onPointerEnter={() => {
+	                              router.prefetch(`/app/chat?session=${session.id}`);
+	                            }}
 	                            onClick={() => {
-	                              router.push(`/app/chat?session=${session.id}`);
-	                              window.dispatchEvent(new CustomEvent("chat-switch-session", { detail: { sessionId: session.id } }));
+	                              if (activeSessionId === session.id) {
+	                                onCloseMobile?.();
+	                                return;
+	                              }
+
+	                              setPendingSessionId(session.id);
+	                              window.dispatchEvent(
+	                                new CustomEvent("chat-switch-session", {
+	                                  detail: {
+	                                    sessionId: session.id,
+	                                    title: session.title,
+	                                    subjectContext: session.subjectContext,
+	                                  },
+	                                }),
+	                              );
+	                              router.push(`/app/chat?session=${session.id}`, { scroll: false });
 	                              onCloseMobile?.();
 	                            }}
                             className={cn(
                               "group flex items-center gap-2.5 w-full rounded-xl px-2 py-2 text-left text-[14px] leading-5 transition",
-                              currentSessionId === session.id
+                              activeSessionId === session.id
                                 ? "bg-bg-secondary font-semibold text-text-primary"
                                 : "font-medium text-text-primary hover:bg-bg-secondary hover:text-text-primary",
                             )}
@@ -508,7 +533,12 @@ export function AppSidebar({
                 </div>
               ) : null,
             )}
-            {sessions.length === 0 ? (
+            {sessions.length === 0 && historyLoading ? (
+              <p className="px-2.5 py-4 text-[12px] text-text-muted">
+                Loading chats...
+              </p>
+            ) : null}
+            {sessions.length === 0 && !historyLoading ? (
               <p className="px-2.5 py-4 text-[12px] text-text-muted">
                 No chat history yet.
               </p>

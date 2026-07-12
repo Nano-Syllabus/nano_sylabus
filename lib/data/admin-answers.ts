@@ -108,6 +108,14 @@ function normalizeAnswerTrace(input: unknown): AssistantAnswerTrace | null {
 }
 
 function normalizeConversationMessage(row: AdminAnswerMessageRow): ChatMessageRecord {
+  const tokenRow = row as AdminAnswerMessageRow & {
+    input_tokens?: unknown;
+    output_tokens?: unknown;
+    total_tokens?: unknown;
+  };
+  const inputTokens = typeof tokenRow.input_tokens === "number" ? tokenRow.input_tokens : 0;
+  const outputTokens = typeof tokenRow.output_tokens === "number" ? tokenRow.output_tokens : 0;
+
   return {
     id: row.id,
     sessionId: row.session_id,
@@ -124,6 +132,12 @@ function normalizeConversationMessage(row: AdminAnswerMessageRow): ChatMessageRe
       row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
         ? normalizeAnswerTrace((row.metadata as Record<string, unknown>).answer_trace)
         : null,
+    tokenUsage: {
+      inputTokens,
+      outputTokens,
+      totalTokens:
+        typeof tokenRow.total_tokens === "number" ? tokenRow.total_tokens : inputTokens + outputTokens,
+    },
   };
 }
 

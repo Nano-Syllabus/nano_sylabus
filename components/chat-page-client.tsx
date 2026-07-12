@@ -28,6 +28,7 @@ import type {
   ChatSessionDetail,
   ChatSessionSummary,
   Language,
+  MessageFeedback,
   NoteColor,
 } from "@/lib/types";
 import { cn, deriveSessionTitle, formatDate, groupDateLabel } from "@/lib/utils";
@@ -71,6 +72,25 @@ type Message = {
 type TenantCatalogPayload = {
   subjects?: TenantChatSubject[];
 };
+
+type ChatSwitchSessionDetail = {
+  sessionId: string;
+  title?: string;
+  subjectContext?: string | null;
+};
+
+async function readJsonResponse<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    return null;
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
 
 let tenantSubjectMetadataPromise: Promise<TenantCatalogPayload> | null = null;
 
@@ -293,17 +313,70 @@ function buildMissingSubjectMessage(subjects: string[]) {
   ].join("\n");
 }
 
-function TopHeaderTitle({ 
+function TopHeaderTitle({
   activeSessionTitle, 
+  currentSessionId,
+  onShare,
+  shareLoading,
 }: { 
   activeSessionTitle: string; 
   currentSessionId: string | null; 
   onRename: () => void; 
   onDelete: () => void; 
+  onShare: () => void;
+  shareLoading: boolean;
 }) {
   return (
-    <div className="relative flex items-center gap-1.5">
-      <span className="truncate">{activeSessionTitle}</span>
+    <div className="relative flex min-w-0 items-center gap-2">
+      <span className="min-w-0 truncate">{activeSessionTitle}</span>
+      {currentSessionId ? (
+        <button
+          type="button"
+          onClick={onShare}
+          disabled={shareLoading}
+          className="inline-flex h-8 shrink-0 items-center rounded-full border border-border px-3 text-[11px] font-medium text-text-secondary transition hover:bg-bg-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {shareLoading ? "Sharing..." : "Share"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+ * CHAT SESSION SWITCH STORYBOARD
+ *
+ *    0ms   selected recent + target title become active
+ *    0ms   previous conversation is replaced by a stable skeleton
+ *  ready   fetched messages fade into the existing chat shell
+ * ───────────────────────────────────────────────────────── */
+function ChatSessionLoadingSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label="Loading conversation"
+      className="mx-auto w-full max-w-[1020px] animate-fade-in py-8 motion-reduce:animate-none"
+    >
+      <span className="sr-only">Loading conversation...</span>
+      <div className="space-y-10" aria-hidden="true">
+        <div className="ml-auto flex w-[min(520px,78%)] flex-col items-end gap-2">
+          <div className="h-14 w-full rounded-[24px] bg-bg-tertiary animate-pulse-soft motion-reduce:animate-none" />
+          <div className="h-3 w-16 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
+        </div>
+        <div className="mr-auto w-full max-w-3xl space-y-3">
+          <div className="h-4 w-1/3 rounded-full bg-bg-tertiary animate-pulse-soft motion-reduce:animate-none" />
+          <div className="h-4 w-full rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
+          <div className="h-4 w-[92%] rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
+          <div className="h-4 w-2/3 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
+        </div>
+        <div className="ml-auto h-12 w-[min(360px,64%)] rounded-[24px] bg-bg-tertiary animate-pulse-soft motion-reduce:animate-none" />
+        <div className="mr-auto w-full max-w-2xl space-y-3">
+          <div className="h-4 w-1/2 rounded-full bg-bg-tertiary animate-pulse-soft motion-reduce:animate-none" />
+          <div className="h-4 w-full rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
+          <div className="h-4 w-4/5 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -342,6 +415,7 @@ export function ChatPageClient({
   const [chatError, setChatError] = useState("");
   const [creditBalance, setCreditBalance] = useState(user.creditBalance);
   const [sessionDetail, setSessionDetail] = useState<ChatSessionDetail | null>(initialSession);
+  const [switchingSessionId, setSwitchingSessionId] = useState<string | null>(null);
   const shell = useContext(AppShellContext);
   const normalizedProfileSubjects = useMemo(
     () =>
@@ -371,6 +445,12 @@ export function ChatPageClient({
   const [renameState, setRenameState] = useState<ChatSessionSummary | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [copyingMessageId, setCopyingMessageId] = useState<string | null>(null);
+  const [feedbackSavingMessageId, setFeedbackSavingMessageId] = useState<string | null>(null);
+  const [shareState, setShareState] = useState<{
+    url: string;
+    copied: boolean;
+  } | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
   const [thinkingSteps, setThinkingSteps] = useState<string[]>([]);
   const [matchedScope, setMatchedScope] = useState<string | null>(null);
   const [latestThinkingTrace, setLatestThinkingTrace] = useState<ThinkingTrace | null>(null);
@@ -386,6 +466,7 @@ export function ChatPageClient({
   const requestWatchdogRef = useRef<number | null>(null);
   const thinkingStageTimersRef = useRef<number[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const sessionSwitchAbortRef = useRef<AbortController | null>(null);
   const stopChatRef = useRef<(() => void) | null>(null);
   const sendStartTimeRef = useRef<number>(0);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -525,6 +606,9 @@ export function ChatPageClient({
   useEffect(() => {
     const handleNewChat = () => {
       clearThinkingStageTimers();
+      sessionSwitchAbortRef.current?.abort();
+      sessionSwitchAbortRef.current = null;
+      setSwitchingSessionId(null);
       setCurrentSessionId(null);
       currentSessionIdRef.current = null;
       setSessionDetail(null);
@@ -544,6 +628,7 @@ export function ChatPageClient({
   useEffect(() => {
     return () => {
       clearThinkingStageTimers();
+      sessionSwitchAbortRef.current?.abort();
       if (requestWatchdogRef.current) {
         window.clearTimeout(requestWatchdogRef.current);
         requestWatchdogRef.current = null;
@@ -611,12 +696,16 @@ export function ChatPageClient({
   // Listen for fast client-side session switching from sidebar
   useEffect(() => {
     const handleSwitch = async (event: Event) => {
-      const sessionId = (event as CustomEvent).detail?.sessionId;
+      const detail = (event as CustomEvent<ChatSwitchSessionDetail>).detail;
+      const sessionId = detail?.sessionId;
       if (!sessionId || sessionId === currentSessionIdRef.current) return;
 
-      // Update ref immediately so subsequent clicks are ignored
-      currentSessionIdRef.current = sessionId;
+      sessionSwitchAbortRef.current?.abort();
+      const controller = new AbortController();
+      sessionSwitchAbortRef.current = controller;
 
+      // Switch the visible shell immediately; conversation data hydrates underneath it.
+      currentSessionIdRef.current = sessionId;
       stopChatRef.current?.();
       clearThinkingStageTimers();
       if (requestWatchdogRef.current) {
@@ -624,48 +713,81 @@ export function ChatPageClient({
         requestWatchdogRef.current = null;
       }
       setThinkingSteps([]);
-
-      // Fetch data FIRST, then update all state at once (no intermediate empty flash)
-      const response = await fetch(`/api/chat/session?session=${sessionId}`, {
-        cache: "no-store",
-      });
-      if (!response.ok) return;
-      const detail = (await response.json()) as ChatSessionDetail;
-
-      // Batch all state updates — React batches these into a single render
       setCurrentSessionId(sessionId);
+      setSwitchingSessionId(sessionId);
+      setSessionDetail(null);
+      setMessages([]);
       setChatError("");
       setMatchedScope(null);
       setLatestThinkingTrace(null);
-      setSessionDetail(detail);
-      setSubjectContext(stripSubjectChapter(detail.subjectContext) || defaultSubjectContext);
-      setMessages(
-        detail.messages.map((message) => ({
-          id: message.id,
-          role: message.role,
-          content: message.content,
-          createdAt: message.createdAt,
-          answerTrace: message.answerTrace,
-        })),
-      );
-      setSessions((prev) =>
-        prev
-          .map((session) =>
-            session.id === sessionId
-              ? {
-                  ...session,
-                  title: detail.title,
-                  updatedAt: detail.updatedAt,
-                  subjectTags: detail.subjectTags,
-                  subjectContext: detail.subjectContext,
-                }
-              : session,
-          )
-          .sort(
-            (left, right) =>
-              new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+
+      const nextSubjectContext = stripSubjectChapter(detail.subjectContext);
+      if (nextSubjectContext) {
+        setSubjectContext(nextSubjectContext);
+      }
+
+      if (detail.title) {
+        setSessions((previous) =>
+          previous.map((session) =>
+            session.id === sessionId ? { ...session, title: detail.title! } : session,
           ),
-      );
+        );
+      }
+
+      try {
+        const response = await fetch(`/api/chat/session?session=${sessionId}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error("Failed to load this conversation.");
+        }
+
+        const session = (await response.json()) as ChatSessionDetail;
+        if (controller.signal.aborted || currentSessionIdRef.current !== sessionId) return;
+
+        setSessionDetail(session);
+        setSubjectContext(stripSubjectChapter(session.subjectContext) || defaultSubjectContext);
+        setMessages(
+          session.messages.map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            createdAt: message.createdAt,
+            answerTrace: message.answerTrace,
+          })),
+        );
+        setSessions((previous) =>
+          previous
+            .map((item) =>
+              item.id === sessionId
+                ? {
+                    ...item,
+                    title: session.title,
+                    updatedAt: session.updatedAt,
+                    subjectTags: session.subjectTags,
+                    subjectContext: session.subjectContext,
+                  }
+                : item,
+            )
+            .sort(
+              (left, right) =>
+                new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+            ),
+        );
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (currentSessionIdRef.current === sessionId) {
+          setChatError("This conversation could not be loaded. Please try again.");
+        }
+      } finally {
+        if (sessionSwitchAbortRef.current === controller) {
+          sessionSwitchAbortRef.current = null;
+        }
+        if (currentSessionIdRef.current === sessionId) {
+          setSwitchingSessionId(null);
+        }
+      }
     };
     window.addEventListener("chat-switch-session", handleSwitch);
     return () => window.removeEventListener("chat-switch-session", handleSwitch);
@@ -1328,6 +1450,98 @@ export function ChatPageClient({
     }
   }
 
+  async function updateAssistantFeedback(message: ChatMessageRecord, feedback: MessageFeedback | null) {
+    const previousFeedback = message.feedback;
+    setFeedbackSavingMessageId(message.id);
+    setSessionDetail((previous) =>
+      previous
+        ? {
+            ...previous,
+            messages: previous.messages.map((item) =>
+              item.id === message.id ? { ...item, feedback } : item,
+            ),
+          }
+        : previous,
+    );
+
+    try {
+      const response = await fetch(`/api/chat/messages/${encodeURIComponent(message.id)}/feedback`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback }),
+      });
+      const payload = await readJsonResponse<{ error?: string; feedback?: MessageFeedback | null }>(response);
+
+      if (!response.ok) {
+        throw new Error(payload?.error || `Failed to save feedback. (${response.status})`);
+      }
+
+      if (!payload || !("feedback" in payload)) {
+        throw new Error("Feedback API returned an unexpected response.");
+      }
+
+      setSessionDetail((previous) =>
+        previous
+          ? {
+              ...previous,
+              messages: previous.messages.map((item) =>
+                item.id === message.id ? { ...item, feedback: payload.feedback ?? null } : item,
+              ),
+            }
+          : previous,
+      );
+      setUiFeedback(payload.feedback === "down" ? "Marked as not satisfied." : "Feedback cleared.");
+    } catch (error) {
+      setSessionDetail((previous) =>
+        previous
+          ? {
+              ...previous,
+              messages: previous.messages.map((item) =>
+                item.id === message.id ? { ...item, feedback: previousFeedback } : item,
+              ),
+            }
+          : previous,
+      );
+      setChatError(error instanceof Error ? error.message : "Failed to save feedback.");
+    } finally {
+      setFeedbackSavingMessageId(null);
+    }
+  }
+
+  const shareCurrentSession = useCallback(async () => {
+    const sessionId = currentSessionIdRef.current;
+    if (!sessionId || shareLoading) return;
+
+    setShareLoading(true);
+    setChatError("");
+
+    try {
+      const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}/share`, {
+        method: "POST",
+      });
+      const payload = await readJsonResponse<{ error?: string; url?: string; token?: string }>(response);
+
+      if (!response.ok || !payload?.url) {
+        throw new Error(payload?.error || "Failed to create share link.");
+      }
+
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(payload.url);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+
+      setShareState({ url: payload.url, copied });
+      setUiFeedback(copied ? "Share link copied." : "Share link created.");
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "Failed to create share link.");
+    } finally {
+      setShareLoading(false);
+    }
+  }, [shareLoading]);
+
   function applySuggestedPrompt(prompt: string) {
     setInput(prompt);
     composerRef.current?.focus();
@@ -1376,10 +1590,12 @@ export function ChatPageClient({
             );
           }
         }}
+        onShare={() => void shareCurrentSession()}
+        shareLoading={shareLoading}
       />
     );
     return () => shell.setTitle(null);
-  }, [activeSessionTitle, currentSessionId, shell, activeSessionSummary, user.id, subjectContext]);
+  }, [activeSessionTitle, currentSessionId, shell, activeSessionSummary, user.id, subjectContext, shareLoading, shareCurrentSession]);
 
   useEffect(() => {
     shell.setActions(
@@ -1416,7 +1632,7 @@ export function ChatPageClient({
   const capitalizedFirstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
 
   const renderInputForm = () => (
-    <form onSubmit={submitMessage} className="w-full rounded-[16px] border border-black/5 dark:border-white/5 bg-bg-secondary p-2.5 px-3.5 shadow-[0_4px_24px_rgba(0,0,0,0.15)] flex flex-col justify-between">
+    <form onSubmit={submitMessage} className="flex w-full flex-col justify-between rounded-[16px] border border-black/5 bg-bg-secondary p-2.5 px-3 shadow-[0_4px_24px_rgba(0,0,0,0.15)] dark:border-white/5 sm:px-3.5">
       {quotedText && (
         <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 rounded-xl px-3 py-2.5 mb-3 border border-black/10 dark:border-white/10">
           <div className="flex items-center gap-2.5 overflow-hidden">
@@ -1445,8 +1661,8 @@ export function ChatPageClient({
         placeholder="How can I help you today?"
         className="min-h-[44px] w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted"
       />
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1 md:gap-3">
+      <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-3">
           <button type="button" className="text-text-muted hover:text-text-primary p-1.5 ml-1 hidden md:block">
              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
@@ -1479,7 +1695,7 @@ export function ChatPageClient({
           <Button
             type="submit"
             disabled={!input.trim() || creditBalance <= 0}
-            className="h-10 min-w-[90px] rounded-full px-4 text-[15px] font-medium bg-black dark:bg-white text-white dark:text-black hover:opacity-80 disabled:opacity-50 transition"
+            className="h-10 min-w-[78px] shrink-0 rounded-full bg-black px-4 text-[15px] font-medium text-white transition hover:opacity-80 disabled:opacity-50 dark:bg-white dark:text-black sm:min-w-[90px]"
           >
             Send →
           </Button>
@@ -1494,13 +1710,15 @@ export function ChatPageClient({
         {/* matchedScope banner hidden temporarily */}
 
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-5xl flex-col px-4 pb-24 pt-5 md:px-5 xl:px-6">
-            {messages.length === 0 ? (
-              <div className="mx-auto flex min-h-[75vh] w-full max-w-3xl flex-col items-center justify-center text-center">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="mx-auto flex w-full max-w-5xl flex-col px-3 pb-24 pt-4 sm:px-4 sm:pt-5 md:px-5 xl:px-6">
+            {switchingSessionId ? (
+              <ChatSessionLoadingSkeleton />
+            ) : messages.length === 0 ? (
+              <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-3xl flex-col items-center justify-center text-center md:min-h-[75vh]">
                 <div className="flex flex-row items-center justify-center gap-4 sm:gap-5 text-text-primary mb-8 text-center">
                   <h1 className="font-display text-3xl sm:text-[40px] leading-tight font-normal tracking-tight">
-                    <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="url(#premium-blue)" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" className="inline-block align-text-bottom mr-3 sm:mr-4 drop-shadow-[0_0_10px_rgba(96,165,250,0.65)]">
+                    <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="url(#premium-blue)" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" className="mr-2 inline-block h-8 w-8 align-text-bottom drop-shadow-[0_0_10px_rgba(96,165,250,0.65)] sm:mr-4 sm:h-[42px] sm:w-[42px]">
                       <defs>
                         <linearGradient id="premium-blue" x1="0%" y1="0%" x2="100%" y2="100%">
                           <stop offset="0%" stopColor="#60A5FA" />
@@ -1572,7 +1790,7 @@ export function ChatPageClient({
                       className={cn(
                         "animate-fade-in flex flex-col group relative",
                         message.role === "user" 
-                          ? cn("ml-auto max-w-[min(900px,92%)]", editingMessageIndex === index ? "w-full" : "w-fit") 
+                          ? cn("ml-auto max-w-[88%] sm:max-w-[min(900px,92%)]", editingMessageIndex === index ? "w-full" : "w-fit")
                           : "mr-auto w-full max-w-[1020px]",
                       )}
                     >
@@ -1585,7 +1803,7 @@ export function ChatPageClient({
                       <div
                         className={cn(
                           message.role === "user"
-                            ? "rounded-[24px] px-4 py-2.5 bg-bg-tertiary text-text-primary shadow-sm"
+                            ? "rounded-[22px] bg-bg-tertiary px-3.5 py-2.5 text-text-primary shadow-sm sm:rounded-[24px] sm:px-4"
                             : "py-2 text-text-primary w-full",
                         )}
                       >
@@ -1609,7 +1827,7 @@ export function ChatPageClient({
                         )}
                         {message.role === "assistant" ? (
                           <>
-                            <Markdown text={displayContent} className="text-[16px] leading-[28px] font-medium" />
+                            <Markdown text={displayContent} className="text-[15px] leading-[26px] font-medium sm:text-[16px] sm:leading-[28px]" />
                             {responseTimeText && (
                               <div className="mt-2">
                                 <span className="text-[12px] text-text-primary/80 font-medium">
@@ -1654,7 +1872,7 @@ export function ChatPageClient({
                           </div>
                         ) : (
                           <div className="flex items-end justify-between gap-3">
-                            <div className="whitespace-pre-wrap text-[16px] leading-[24px] text-text-primary font-medium">
+                            <div className="whitespace-pre-wrap break-words text-[15px] leading-[23px] font-medium text-text-primary sm:text-[16px] sm:leading-[24px]">
                               {displayContent}
                             </div>
                             {message.createdAt && (
@@ -1680,6 +1898,27 @@ export function ChatPageClient({
                                 className="rounded-full"
                               >
                                 {copyingMessageId === persistedAssistant.id ? "Copying..." : "Copy"}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={persistedAssistant.feedback === "down" ? "danger" : "ghost"}
+                                onClick={() =>
+                                  void updateAssistantFeedback(
+                                    persistedAssistant,
+                                    persistedAssistant.feedback === "down" ? null : "down",
+                                  )
+                                }
+                                disabled={feedbackSavingMessageId === persistedAssistant.id}
+                                data-testid={`not-satisfied-message-${persistedAssistant.id}`}
+                                aria-pressed={persistedAssistant.feedback === "down"}
+                                className="rounded-full"
+                              >
+                                {feedbackSavingMessageId === persistedAssistant.id
+                                  ? "Saving..."
+                                  : persistedAssistant.feedback === "down"
+                                    ? "Marked unsatisfied"
+                                    : "Not satisfied"}
                               </Button>
                               <Button
                                 type="button"
@@ -1734,7 +1973,7 @@ export function ChatPageClient({
         </div>
 
         {messages.length > 0 ? (
-          <div className="bg-bg-primary px-4 pb-4 pt-3 md:px-5 xl:px-6">
+          <div className="bg-bg-primary px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-4 md:px-5 xl:px-6">
             <div className="mx-auto max-w-3xl">
               {chatError ? (
                 <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
@@ -1791,6 +2030,18 @@ export function ChatPageClient({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {shareState ? (
+        <ShareChatModal
+          url={shareState.url}
+          onClose={() => setShareState(null)}
+          onCopy={async () => {
+            await navigator.clipboard.writeText(shareState.url);
+            setShareState({ url: shareState.url, copied: true });
+            setUiFeedback("Share link copied.");
+          }}
+        />
       ) : null}
 
       {selectionPopover ? (
@@ -1997,6 +2248,53 @@ function SaveNoteModal({
           <Button onClick={handleSave} disabled={loading || hydratingExistingNote}>
             {loading ? "Saving..." : initialMessage.savedNoteId ? "Update note" : "Save note"}
           </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShareChatModal({
+  url,
+  onClose,
+  onCopy,
+}: {
+  url: string;
+  onClose: () => void;
+  onCopy: () => void | Promise<void>;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className="max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-border bg-bg-primary p-5 shadow-2xl animate-slide-up sm:rounded-xl sm:p-6"
+      >
+        <h3 className="font-display text-2xl text-text-primary">Share chat</h3>
+        <p className="mt-2 text-sm text-text-secondary">
+          Anyone with this link can read this chat without logging in.
+        </p>
+        <label className="mt-5 block">
+          <span className="mb-2 block text-[10px] font-mono-ui uppercase tracking-[0.18em] text-text-muted">
+            Public link
+          </span>
+          <input
+            readOnly
+            value={url}
+            className="w-full rounded-xl border border-border bg-bg-secondary px-3 py-3 text-xs text-text-primary outline-none sm:text-sm"
+            onFocus={(event) => event.currentTarget.select()}
+          />
+        </label>
+        <div className="mt-6 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+          <Button variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+          <a href={url} target="_blank" rel="noreferrer">
+            <Button variant="outline" className="w-full sm:w-auto">Open link</Button>
+          </a>
+          <Button onClick={() => void onCopy()} className="w-full sm:w-auto">Copy</Button>
         </div>
       </div>
     </div>

@@ -55,6 +55,15 @@ function normalizeMessage(row: any): ChatMessageRecord {
     followUpSuggestions: Array.isArray(row.follow_up_suggestions) ? row.follow_up_suggestions : [],
     savedNoteId: null,
     answerTrace,
+    tokenUsage: {
+      inputTokens: typeof row.input_tokens === "number" ? row.input_tokens : 0,
+      outputTokens: typeof row.output_tokens === "number" ? row.output_tokens : 0,
+      totalTokens:
+        typeof row.total_tokens === "number"
+          ? row.total_tokens
+          : (typeof row.input_tokens === "number" ? row.input_tokens : 0) +
+            (typeof row.output_tokens === "number" ? row.output_tokens : 0),
+    },
   };
 }
 

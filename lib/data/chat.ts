@@ -7,7 +7,9 @@ import type {
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionSummary,
+  PublicChatSession,
   MessageFeedback,
+  MessageTokenUsage,
 } from "@/lib/types";
 
 function normalizeAnswerTrace(input: unknown): AssistantAnswerTrace | null {
@@ -44,6 +46,21 @@ function normalizeSession(row: any): ChatSessionSummary {
     subjectTags: normalizeSubjects(Array.isArray(row.subject_tags) ? row.subject_tags : []),
     subjectContext: row.subject_context ? normalizeSubjectLabel(row.subject_context) : null,
     isPinned: Boolean(row.is_pinned),
+    shareToken: typeof row.share_token === "string" ? row.share_token : null,
+    sharedAt: typeof row.shared_at === "string" ? row.shared_at : null,
+  };
+}
+
+function normalizeTokenUsage(row: any): MessageTokenUsage {
+  const inputTokens = typeof row.input_tokens === "number" ? row.input_tokens : 0;
+  const outputTokens = typeof row.output_tokens === "number" ? row.output_tokens : 0;
+  const totalTokens =
+    typeof row.total_tokens === "number" ? row.total_tokens : inputTokens + outputTokens;
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
   };
 }
 
@@ -61,6 +78,7 @@ function normalizeMessage(row: any): ChatMessageRecord {
     followUpSuggestions: Array.isArray(row.follow_up_suggestions) ? row.follow_up_suggestions : [],
     savedNoteId: null,
     answerTrace: normalizeAnswerTrace(row.metadata?.answer_trace),
+    tokenUsage: normalizeTokenUsage(row),
   };
 }
 
@@ -78,7 +96,7 @@ export async function listChatSessions(
   const supabase = await createSupabaseServerClient();
   let query = supabase
     .from("chat_sessions")
-    .select("*, chat_messages!inner(id)", { count: "exact" })
+    .select("*", { count: "exact" })
     .eq("user_id", userId)
     .order("is_pinned", { ascending: false })
     .order("updated_at", { ascending: false })
@@ -136,6 +154,86 @@ export async function getChatSessionDetail(sessionId: string, userId: string) {
       savedNoteId: noteByMessageId.get(row.id) ?? null,
     })),
   } satisfies ChatSessionDetail;
+}
+
+export async function getPublicChatSessionDetail(token: string) {
+  const trimmedToken = token.trim();
+  if (!trimmedToken) return null;
+
+  const supabase = createSupabaseAdminClient();
+  const { data: sessionRow, error: sessionError } = await supabase
+    .from("chat_sessions")
+    .select("*")
+    .eq("share_token", trimmedToken)
+    .not("shared_at", "is", null)
+    .maybeSingle();
+
+  if (sessionError) throw sessionError;
+  if (!sessionRow || !sessionRow.shared_at) return null;
+
+  const { data: messageRows, error: messageError } = await supabase
+    .from("chat_messages")
+    .select("*")
+    .eq("session_id", sessionRow.id)
+    .order("created_at", { ascending: true });
+
+  if (messageError) throw messageError;
+
+  return {
+    id: sessionRow.id,
+    title: sessionRow.title,
+    createdAt: sessionRow.created_at,
+    updatedAt: sessionRow.updated_at,
+    subjectTags: normalizeSubjects(Array.isArray(sessionRow.subject_tags) ? sessionRow.subject_tags : []),
+    subjectContext: sessionRow.subject_context ? normalizeSubjectLabel(sessionRow.subject_context) : null,
+    sharedAt: sessionRow.shared_at,
+    messages: (messageRows ?? []).map((row) => ({
+      ...normalizeMessage(row),
+      savedNoteId: null,
+      feedback: null,
+    })),
+  } satisfies PublicChatSession;
+}
+
+export async function shareChatSession(sessionId: string, userId: string, token: string) {
+  const supabase = createSupabaseAdminClient();
+  const now = new Date().toISOString();
+
+  const { data: existingSession, error: existingError } = await supabase
+    .from("chat_sessions")
+    .select("id, share_token, shared_at")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (!existingSession) return null;
+
+  if (existingSession.share_token && existingSession.shared_at) {
+    return {
+      token: existingSession.share_token as string,
+      sharedAt: existingSession.shared_at as string,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("chat_sessions")
+    .update({
+      share_token: existingSession.share_token ?? token,
+      shared_at: now,
+    })
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .select("share_token, shared_at")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data?.share_token || !data.shared_at) return null;
+
+  return {
+    token: data.share_token as string,
+    sharedAt: data.shared_at as string,
+  };
 }
 
 export async function updateChatSession(
