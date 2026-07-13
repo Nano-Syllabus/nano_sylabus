@@ -9,6 +9,7 @@ import {
   useState,
   useContext,
   type ChangeEvent,
+  type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
@@ -24,6 +25,7 @@ import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/pro
 import type {
   AppUser,
   AssistantAnswerTrace,
+  ChatImageAttachment,
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionSummary,
@@ -67,7 +69,37 @@ type Message = {
   content: string;
   createdAt?: string;
   answerTrace?: AssistantAnswerTrace | null;
+  attachments?: ChatImageAttachment[];
 };
+
+function keepLocalAttachmentsOnRefresh(
+  incomingMessages: ChatMessageRecord[],
+  currentMessages: Message[],
+): Message[] {
+  return incomingMessages.map((message, index) => {
+    const currentMessage = currentMessages[index];
+    const incomingAttachments = message.attachments ?? [];
+    const currentAttachments = currentMessage?.attachments ?? [];
+    const shouldKeepLocalAttachments =
+      incomingAttachments.length === 0 &&
+      currentAttachments.length > 0 &&
+      currentMessage?.role === message.role &&
+      currentMessage.content === message.content;
+
+    return {
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      createdAt: message.createdAt,
+      answerTrace: message.answerTrace,
+      attachments: shouldKeepLocalAttachments ? currentAttachments : incomingAttachments,
+    };
+  });
+}
+
+const MAX_IMAGE_ATTACHMENTS = 4;
+const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
 
 type TenantCatalogPayload = {
   subjects?: TenantChatSubject[];
@@ -186,6 +218,55 @@ function createLocalMessage(role: "user" | "assistant", content: string): Messag
       : `${role}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   return { id, role, content, createdAt: new Date().toISOString() };
+}
+
+function formatAttachmentSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isAllowedImageFile(file: File) {
+  const type = file.type.toLowerCase();
+  const name = file.name.toLowerCase();
+  return (
+    ACCEPTED_IMAGE_TYPES.has(type) ||
+    /\.(png|jpe?g|webp|gif)$/.test(name)
+  );
+}
+
+function createImageAttachment(file: File): Promise<ChatImageAttachment> {
+  if (!isAllowedImageFile(file)) {
+    return Promise.reject(new Error("Only PNG, JPG, JPEG, WEBP, and GIF images are supported."));
+  }
+
+  if (file.size > MAX_IMAGE_ATTACHMENT_BYTES) {
+    return Promise.reject(new Error(`Image must be ${formatAttachmentSize(MAX_IMAGE_ATTACHMENT_BYTES)} or smaller.`));
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result.startsWith("data:image/")) {
+        reject(new Error("Could not read this image."));
+        return;
+      }
+
+      resolve({
+        id:
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `image-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name || "Pasted image",
+        mimeType: file.type || "image/png",
+        size: file.size,
+        dataUrl: result,
+      });
+    };
+    reader.onerror = () => reject(new Error("Could not read this image."));
+    reader.readAsDataURL(file);
+  });
 }
 
 type ChatStreamEvent =
@@ -446,6 +527,7 @@ export function ChatPageClient({
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [copyingMessageId, setCopyingMessageId] = useState<string | null>(null);
   const [feedbackSavingMessageId, setFeedbackSavingMessageId] = useState<string | null>(null);
+  const [noteSavingMessageId, setNoteSavingMessageId] = useState<string | null>(null);
   const [shareState, setShareState] = useState<{
     url: string;
     copied: boolean;
@@ -457,12 +539,15 @@ export function ChatPageClient({
   const [showThinkingTrace, setShowThinkingTrace] = useState(false);
   const [deleteConfirmSession, setDeleteConfirmSession] = useState<ChatSessionSummary | null>(null);
   const [quotedText, setQuotedText] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<ChatImageAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState("");
   const [selectionPopover, setSelectionPopover] = useState<{ top: number; left: number; text: string } | null>(null);
   const [tenantSubjectsByName, setTenantSubjectsByName] = useState<Record<string, TenantChatSubject>>({});
   const pendingTitleRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(initialSession?.id ?? null);
   const searchDebounceRef = useRef<number | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const requestWatchdogRef = useRef<number | null>(null);
   const thinkingStageTimersRef = useRef<number[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -536,18 +621,19 @@ export function ChatPageClient({
             content: message.content,
             createdAt: message.createdAt,
             answerTrace: message.answerTrace,
+            attachments: message.attachments,
           }))
         : [],
     [initialSession, currentSessionId],
   );
   const availableSubjects = useMemo(() => {
-    const all = [...normalizedProfileSubjects, stripSubjectChapter(subjectContext)]
+    const all = [...Object.keys(tenantSubjectsByName), ...normalizedProfileSubjects, stripSubjectChapter(subjectContext)]
       .map((item) => (item ? normalizeSubjectLabel(item) : ""))
       .filter(Boolean) as string[];
     return Array.from(new Set(all)).sort((left, right) =>
       left.localeCompare(right, undefined, { sensitivity: "base", numeric: true }),
     );
-  }, [normalizedProfileSubjects, subjectContext]);
+  }, [normalizedProfileSubjects, subjectContext, tenantSubjectsByName]);
   const subjectActionOptions = useMemo(
     () =>
       availableSubjects.length > 0
@@ -572,12 +658,11 @@ export function ChatPageClient({
         const payload = await loadTenantSubjectMetadata();
         if (!active) return;
 
-        const profileSubjectSet = new Set(normalizedProfileSubjects);
         const nextSubjectsByName: Record<string, TenantChatSubject> = {};
 
         for (const subject of payload.subjects ?? []) {
           const normalizedName = normalizeSubjectLabel(subject.name);
-          if (!normalizedName || !profileSubjectSet.has(normalizedName)) continue;
+          if (!normalizedName) continue;
           if (!subject.slug || !subject.folderPath || !subject.namespaceSlug) continue;
           nextSubjectsByName[normalizedName] = subject;
         }
@@ -593,7 +678,7 @@ export function ChatPageClient({
     return () => {
       active = false;
     };
-  }, [normalizedProfileSubjects]);
+  }, []);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -755,6 +840,7 @@ export function ChatPageClient({
             content: message.content,
             createdAt: message.createdAt,
             answerTrace: message.answerTrace,
+            attachments: message.attachments,
           })),
         );
         setSessions((previous) =>
@@ -813,13 +899,7 @@ export function ChatPageClient({
     // so DB can temporarily have fewer messages than local state.
     setMessages((currentMessages) => {
       if (detail.messages.length >= currentMessages.length) {
-        return detail.messages.map((message) => ({
-          id: message.id,
-          role: message.role,
-          content: message.content,
-          createdAt: message.createdAt,
-          answerTrace: message.answerTrace,
-        }));
+        return keepLocalAttachmentsOnRefresh(detail.messages, currentMessages);
       }
       return currentMessages;
     });
@@ -1102,9 +1182,63 @@ export function ChatPageClient({
     };
   }, [currentSessionId, sessionDetail, sessions]);
 
+  const addImageFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const imageFiles = Array.from(files).filter(isAllowedImageFile);
+
+      if (imageFiles.length === 0) {
+        setAttachmentError("Only image files are supported here.");
+        return;
+      }
+
+      const remainingSlots = MAX_IMAGE_ATTACHMENTS - pendingAttachments.length;
+      if (remainingSlots <= 0) {
+        setAttachmentError(`You can attach up to ${MAX_IMAGE_ATTACHMENTS} images at once.`);
+        return;
+      }
+
+      const selectedFiles = imageFiles.slice(0, remainingSlots);
+
+      try {
+        const attachments = await Promise.all(selectedFiles.map(createImageAttachment));
+        setPendingAttachments((current) => [...current, ...attachments].slice(0, MAX_IMAGE_ATTACHMENTS));
+        setAttachmentError(
+          imageFiles.length > remainingSlots
+            ? `Added ${remainingSlots} image${remainingSlots === 1 ? "" : "s"}. Limit is ${MAX_IMAGE_ATTACHMENTS}.`
+            : "",
+        );
+      } catch (error) {
+        setAttachmentError(error instanceof Error ? error.message : "Could not attach this image.");
+      }
+    },
+    [pendingAttachments.length],
+  );
+
+  const handleImageInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      if (event.target.files?.length) {
+        void addImageFiles(event.target.files);
+      }
+      event.target.value = "";
+    },
+    [addImageFiles],
+  );
+
+  const handleComposerPaste = useCallback(
+    (event: ClipboardEvent<HTMLTextAreaElement>) => {
+      const imageFiles = Array.from(event.clipboardData.files).filter(isAllowedImageFile);
+      if (imageFiles.length === 0) return;
+
+      event.preventDefault();
+      void addImageFiles(imageFiles);
+    },
+    [addImageFiles],
+  );
+
   async function sendCurrentMessage(overrideText?: string, overrideMessages?: Message[], truncateFromId?: string) {
     const trimmed = (overrideText ?? input).trim();
-    if (!trimmed || isLoading) return;
+    const attachmentsForMessage = overrideText ? [] : pendingAttachments;
+    if ((!trimmed && attachmentsForMessage.length === 0) || isLoading) return;
     if (creditBalance <= 0) {
       setChatError("No credits left. Buy a plan to continue chatting.");
       return;
@@ -1126,9 +1260,13 @@ export function ChatPageClient({
       setThinkingSteps([]);
       setShowThinkingTrace(false);
       setInput("");
+      if (!overrideText) {
+        setPendingAttachments([]);
+        setAttachmentError("");
+      }
       setMessages((previousMessages) => [
         ...(overrideMessages ?? previousMessages),
-        createLocalMessage("user", trimmed),
+        { ...createLocalMessage("user", trimmed), attachments: attachmentsForMessage },
         createLocalMessage("assistant", buildMissingSubjectMessage(availableSubjects)),
       ]);
       return;
@@ -1139,11 +1277,15 @@ export function ChatPageClient({
       requestWatchdogRef.current = null;
     }
 
-    pendingTitleRef.current = deriveSessionTitle(trimmed, subjectContext);
+    pendingTitleRef.current = deriveSessionTitle(trimmed || "Image attachment", subjectContext);
     setChatError("");
     setShowThinkingTrace(false);
     startThinkingStages();
     setInput("");
+    if (!overrideText) {
+      setPendingAttachments([]);
+      setAttachmentError("");
+    }
     requestWatchdogRef.current = window.setTimeout(() => {
       clearThinkingStageTimers();
       setThinkingSteps(["This question is taking longer than expected..."]);
@@ -1154,7 +1296,8 @@ export function ChatPageClient({
     }, 90_000);
 
     const finalMessageText = quotedText ? `> **${quotedText}**\n\n${trimmed}` : trimmed;
-    const userMessage = createLocalMessage("user", finalMessageText);
+    const isImageOnlyMessage = !finalMessageText.trim() && attachmentsForMessage.length > 0;
+    const userMessage = { ...createLocalMessage("user", finalMessageText), attachments: attachmentsForMessage };
     const nextMessages = [...(overrideMessages ?? messages), userMessage];
     setMessages(nextMessages);
     setQuotedText("");
@@ -1184,6 +1327,7 @@ export function ChatPageClient({
             role: message.role,
             content: message.content,
             createdAt: message.createdAt,
+            attachments: message.attachments ?? [],
           })),
         }),
       });
@@ -1196,6 +1340,57 @@ export function ChatPageClient({
       handleChatResponseHeaders(response);
       if (!response.body) {
         throw new Error("Chat stream did not return a response body.");
+      }
+
+      if (isImageOnlyMessage) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let streamFinished = false;
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split(/\r?\n\r?\n/);
+          buffer = parts.pop() ?? "";
+
+          for (const part of parts) {
+            const event = parseSseBlock(part);
+            if (!event) continue;
+
+            if (event.type === "error") {
+              throw new Error(JSON.stringify({ error: event.message, code: event.code }));
+            }
+
+            if (event.type === "done") {
+              streamFinished = true;
+              if (event.sessionId && !currentSessionIdRef.current) {
+                setCurrentSessionId(event.sessionId);
+                currentSessionIdRef.current = event.sessionId;
+                window.history.replaceState(null, "", `/app/chat?session=${event.sessionId}`);
+              }
+            }
+          }
+        }
+
+        if (buffer.trim()) {
+          const event = parseSseBlock(buffer);
+          if (event?.type === "error") {
+            throw new Error(JSON.stringify({ error: event.message, code: event.code }));
+          }
+          if (event?.type === "done") {
+            streamFinished = true;
+          }
+        }
+
+        if (!streamFinished) {
+          throw new Error("Image upload ended before completion.");
+        }
+
+        await finishChatResponse();
+        return;
       }
 
       const assistantMessage = createLocalMessage("assistant", "");
@@ -1508,6 +1703,60 @@ export function ChatPageClient({
     }
   }
 
+  async function saveAssistantNote(message: ChatMessageRecord, question: string) {
+    if (message.savedNoteId || noteSavingMessageId === message.id) {
+      return;
+    }
+
+    setNoteSavingMessageId(message.id);
+    setChatError("");
+
+    try {
+      const title = (question || message.content.slice(0, 80) || "Saved answer").trim();
+      const response = await fetch("/api/notes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: message.sessionId,
+          messageId: message.id,
+          title,
+          subjectTag: message.citations[0]?.subject || subjectContext || "General",
+          chapterTag: message.citations[0]?.chapter || message.citations[0]?.topic || "",
+          annotation: "",
+          colorLabel: "yellow",
+        }),
+      });
+      const payload = await readJsonResponse<{ id?: string; error?: string }>(response);
+
+      if (!response.ok || !payload?.id) {
+        throw new Error(payload?.error || `Failed to save note. (${response.status})`);
+      }
+
+      setSessionDetail((previous) =>
+        previous
+          ? {
+              ...previous,
+              messages: previous.messages.map((item) =>
+                item.id === message.id ? { ...item, savedNoteId: payload.id ?? item.savedNoteId } : item,
+              ),
+            }
+          : previous,
+      );
+      setUiFeedback("Note saved.");
+
+      const resolvedSessionId = currentSessionIdRef.current;
+      if (resolvedSessionId) {
+        void refreshSession(resolvedSessionId);
+      }
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "Failed to save note.");
+    } finally {
+      setNoteSavingMessageId(null);
+    }
+  }
+
   const shareCurrentSession = useCallback(async () => {
     const sessionId = currentSessionIdRef.current;
     if (!sessionId || shareLoading) return;
@@ -1633,6 +1882,15 @@ export function ChatPageClient({
 
   const renderInputForm = () => (
     <form onSubmit={submitMessage} className="flex w-full flex-col justify-between rounded-[16px] border border-black/5 bg-bg-secondary p-2.5 px-3 shadow-[0_4px_24px_rgba(0,0,0,0.15)] dark:border-white/5 sm:px-3.5">
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+        multiple
+        className="sr-only"
+        onChange={handleImageInputChange}
+        aria-label="Upload images"
+      />
       {quotedText && (
         <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 rounded-xl px-3 py-2.5 mb-3 border border-black/10 dark:border-white/10">
           <div className="flex items-center gap-2.5 overflow-hidden">
@@ -1647,10 +1905,47 @@ export function ChatPageClient({
           </button>
         </div>
       )}
+      {pendingAttachments.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {pendingAttachments.map((attachment) => (
+            <div
+              key={attachment.id}
+              className="group relative h-20 w-20 overflow-hidden rounded-2xl border border-white/10 bg-bg-tertiary shadow-sm"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={attachment.dataUrl}
+                alt={attachment.name}
+                className="h-full w-full object-cover"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setPendingAttachments((current) => current.filter((item) => item.id !== attachment.id))
+                }
+                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white opacity-100 transition hover:bg-black sm:opacity-0 sm:group-hover:opacity-100"
+                aria-label={`Remove ${attachment.name}`}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 pb-1 pt-5">
+                <p className="truncate text-[10px] font-medium text-white">{formatAttachmentSize(attachment.size)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {attachmentError && (
+        <p className="mb-2 px-2 text-[12px] font-medium text-red-400">{attachmentError}</p>
+      )}
       <textarea
         ref={composerRef}
         value={input}
         onChange={(event: ChangeEvent<HTMLTextAreaElement>) => handleInputChange(event)}
+        onPaste={handleComposerPaste}
         onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
@@ -1663,7 +1958,13 @@ export function ChatPageClient({
       />
       <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-3">
-          <button type="button" className="text-text-muted hover:text-text-primary p-1.5 ml-1 hidden md:block">
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-muted transition hover:bg-bg-tertiary hover:text-text-primary"
+            aria-label="Upload image"
+            title="Upload image"
+          >
              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
           <CompactSelect
@@ -1694,7 +1995,7 @@ export function ChatPageClient({
         ) : (
           <Button
             type="submit"
-            disabled={!input.trim() || creditBalance <= 0}
+            disabled={(!input.trim() && pendingAttachments.length === 0) || creditBalance <= 0}
             className="h-10 min-w-[78px] shrink-0 rounded-full bg-black px-4 text-[15px] font-medium text-white transition hover:opacity-80 disabled:opacity-50 dark:bg-white dark:text-black sm:min-w-[90px]"
           >
             Send →
@@ -1871,15 +2172,35 @@ export function ChatPageClient({
                             </div>
                           </div>
                         ) : (
-                          <div className="flex items-end justify-between gap-3">
-                            <div className="whitespace-pre-wrap break-words text-[15px] leading-[23px] font-medium text-text-primary sm:text-[16px] sm:leading-[24px]">
-                              {displayContent}
-                            </div>
-                            {message.createdAt && (
-                              <span className="text-[11px] text-text-muted font-medium shrink-0 mb-[2px]">
-                                {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
-                              </span>
+                          <div className="min-w-0 space-y-2">
+                            {(message.attachments?.length ?? 0) > 0 && (
+                              <div
+                                className={cn(
+                                  "grid gap-2",
+                                  (message.attachments?.length ?? 0) > 1 ? "grid-cols-2" : "grid-cols-1",
+                                )}
+                              >
+                                {message.attachments?.map((attachment) => (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    key={attachment.id}
+                                    src={attachment.dataUrl}
+                                    alt={attachment.name}
+                                    className="max-h-64 w-full rounded-2xl border border-white/10 object-cover shadow-sm"
+                                  />
+                                ))}
+                              </div>
                             )}
+                            <div className="flex items-end justify-between gap-3">
+                              <div className="whitespace-pre-wrap break-words text-[15px] leading-[23px] font-medium text-text-primary sm:text-[16px] sm:leading-[24px]">
+                                {displayContent}
+                              </div>
+                              {message.createdAt && (
+                                <span className="mb-[2px] shrink-0 text-[11px] font-medium text-text-muted">
+                                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -1925,23 +2246,18 @@ export function ChatPageClient({
                                 size="sm"
                                 variant={persistedAssistant.savedNoteId ? "outline" : "filled"}
                                 className="rounded-full"
-                                onClick={() =>
-                                  setSaveState({
-                                    message: persistedAssistant,
-                                    question,
-                                  })
+                                onClick={() => void saveAssistantNote(persistedAssistant, question)}
+                                disabled={
+                                  noteSavingMessageId === persistedAssistant.id || Boolean(persistedAssistant.savedNoteId)
                                 }
                                 data-testid={`save-note-${persistedAssistant.id}`}
                               >
-                                {persistedAssistant.savedNoteId ? "Edit note" : "Save as note"}
+                                {noteSavingMessageId === persistedAssistant.id
+                                  ? "Saving..."
+                                  : persistedAssistant.savedNoteId
+                                    ? "Saved"
+                                    : "Save as note"}
                               </Button>
-                              {persistedAssistant.savedNoteId ? (
-                                <Link href={`/app/notes/${persistedAssistant.savedNoteId}`}>
-                                  <Button size="sm" variant="ghost" className="rounded-full">
-                                    Open note →
-                                  </Button>
-                                </Link>
-                              ) : null}
                             </div>
 
 

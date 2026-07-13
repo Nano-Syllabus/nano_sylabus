@@ -1,29 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { NoteColor, RevisionNoteSummary } from "@/lib/types";
+import type { RevisionNoteSummary } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
-const COLOR_LABEL: Record<NoteColor, string> = {
-  red: "Must revise",
-  yellow: "Review later",
-  green: "Got it",
-};
-
-const COLOR_DOT: Record<NoteColor, string> = {
-  red: "bg-destructive",
-  yellow: "bg-warning",
-  green: "bg-success",
-};
-
 export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) {
+  const router = useRouter();
   const [view, setView] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
   const [subjectFilter, setSubjectFilter] = useState<string>("All");
-  const [colorFilter, setColorFilter] = useState<NoteColor | "All">("All");
 
   const subjects = useMemo(
     () => ["All", ...Array.from(new Set(notes.map((note) => note.subjectTag)))],
@@ -33,7 +22,6 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
   const filtered = useMemo(() => {
     return notes.filter((note) => {
       if (subjectFilter !== "All" && note.subjectTag !== subjectFilter) return false;
-      if (colorFilter !== "All" && note.colorLabel !== colorFilter) return false;
       if (search) {
         const query = search.toLowerCase();
         if (
@@ -45,7 +33,7 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
       }
       return true;
     });
-  }, [notes, subjectFilter, colorFilter, search]);
+  }, [notes, subjectFilter, search]);
 
   return (
     <>
@@ -72,25 +60,6 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
               <option key={subject}>{subject}</option>
             ))}
           </select>
-
-          <div className="inline-flex rounded-full border border-border p-0.5">
-            {(["All", "red", "yellow", "green"] as const).map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => setColorFilter(color)}
-                className={
-                  "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] transition " +
-                  (colorFilter === color ? "bg-text-primary text-text-inverse" : "text-text-secondary")
-                }
-              >
-                {color !== "All" ? (
-                  <span className={`h-2 w-2 rounded-full ${COLOR_DOT[color as NoteColor]}`} />
-                ) : null}
-                {color === "All" ? "All" : COLOR_LABEL[color as NoteColor]}
-              </button>
-            ))}
-          </div>
 
           <div className="ml-auto inline-flex rounded-full border border-border p-0.5">
             {(["grid", "list"] as const).map((value) => (
@@ -119,9 +88,10 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
               <Link
                 key={note.id}
                 href={`/app/notes/${note.id}`}
-                className="group relative block overflow-hidden rounded-lg border border-border bg-bg-primary p-5 transition hover:border-border-strong hover:-translate-y-0.5"
+                onPointerEnter={() => router.prefetch(`/app/notes/${note.id}`)}
+                onFocus={() => router.prefetch(`/app/notes/${note.id}`)}
+                className="group relative block overflow-hidden rounded-2xl border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,0.055),rgba(255,255,255,0.012)_38%,rgba(255,255,255,0.035))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_45px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:border-white/30 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_22px_60px_rgba(0,0,0,0.28)]"
               >
-                <span className={`absolute inset-y-0 left-0 w-1 ${COLOR_DOT[note.colorLabel]}`} />
                 <div className="flex items-center justify-between gap-2">
                   <Badge variant="outline">{note.subjectTag}</Badge>
                   <span className="text-[10px] text-text-muted">{formatDate(note.createdAt)}</span>
@@ -130,8 +100,7 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
                 <p className="mt-2 line-clamp-3 text-xs text-text-secondary">
                   {note.answerContent.replace(/[*_`#]/g, "")}
                 </p>
-                <div className="mt-4 flex items-center justify-between text-[11px] text-text-muted">
-                  <span className="font-mono-ui">{note.reviewedCount} reviews</span>
+                <div className="mt-4 flex justify-end text-[11px] text-text-muted">
                   <span className="opacity-0 transition group-hover:opacity-100">Open →</span>
                 </div>
               </Link>
@@ -143,9 +112,10 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
               <li key={note.id}>
                 <Link
                   href={`/app/notes/${note.id}`}
+                  onPointerEnter={() => router.prefetch(`/app/notes/${note.id}`)}
+                  onFocus={() => router.prefetch(`/app/notes/${note.id}`)}
                   className="flex items-center gap-4 px-4 py-3 transition hover:bg-bg-secondary"
                 >
-                  <span className={`h-8 w-1 rounded-full ${COLOR_DOT[note.colorLabel]}`} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{note.title}</p>
                     <p className="truncate text-xs text-text-muted">

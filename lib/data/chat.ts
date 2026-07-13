@@ -4,6 +4,7 @@ import { normalizeSubjectLabel, normalizeSubjects } from "@/lib/profile-normaliz
 import type {
   AssistantAnswerTrace,
   AssistantCitation,
+  ChatImageAttachment,
   ChatMessageRecord,
   ChatSessionDetail,
   ChatSessionSummary,
@@ -64,7 +65,34 @@ function normalizeTokenUsage(row: any): MessageTokenUsage {
   };
 }
 
+function normalizeImageAttachments(input: unknown): ChatImageAttachment[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((item): ChatImageAttachment | null => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const attachment = item as Record<string, unknown>;
+      const id = typeof attachment.id === "string" ? attachment.id : "";
+      const name = typeof attachment.name === "string" ? attachment.name : "Image";
+      const mimeType = typeof attachment.mimeType === "string" ? attachment.mimeType : "";
+      const size = typeof attachment.size === "number" ? attachment.size : 0;
+      const dataUrl = typeof attachment.dataUrl === "string" ? attachment.dataUrl : "";
+
+      if (!id || !mimeType.startsWith("image/") || !dataUrl.startsWith("data:image/")) {
+        return null;
+      }
+
+      return { id, name, mimeType, size, dataUrl };
+    })
+    .filter(Boolean) as ChatImageAttachment[];
+}
+
 function normalizeMessage(row: any): ChatMessageRecord {
+  const metadata =
+    row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+
   return {
     id: row.id,
     sessionId: row.session_id,
@@ -77,8 +105,9 @@ function normalizeMessage(row: any): ChatMessageRecord {
     feedback: row.feedback === "up" || row.feedback === "down" ? (row.feedback as MessageFeedback) : null,
     followUpSuggestions: Array.isArray(row.follow_up_suggestions) ? row.follow_up_suggestions : [],
     savedNoteId: null,
-    answerTrace: normalizeAnswerTrace(row.metadata?.answer_trace),
+    answerTrace: normalizeAnswerTrace(metadata.answer_trace),
     tokenUsage: normalizeTokenUsage(row),
+    attachments: normalizeImageAttachments(metadata.attachments),
   };
 }
 
