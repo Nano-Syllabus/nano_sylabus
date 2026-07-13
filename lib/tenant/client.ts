@@ -47,6 +47,12 @@ export type TenantTokenUsage = {
   totalTokens: number;
 };
 
+export type TenantChatAttachment = {
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+};
+
 export type TenantPromptResponse = {
   answer?: string;
   detail?: string;
@@ -341,6 +347,61 @@ function parseSseEvent(rawEvent: string): TenantStreamEvent | null {
   return null;
 }
 
+function dataUrlToBuffer(dataUrl: string) {
+  const match = dataUrl.match(/^data:([^;,]+);base64,(.+)$/);
+  if (!match) {
+    throw new Error("Invalid image attachment data URL.");
+  }
+
+  return {
+    mimeType: match[1],
+    buffer: Buffer.from(match[2], "base64"),
+  };
+}
+
+function sanitizeAttachmentName(name: string, index: number) {
+  const safeName = name.trim().replace(/[^\w.\- ()]/g, "_");
+  return safeName || `attachment-${index + 1}.png`;
+}
+
+function createTenantChatMultipartBody({
+  payload,
+  attachments,
+}: {
+  payload: Record<string, unknown>;
+  attachments: TenantChatAttachment[];
+}) {
+  const boundary = `----nano-syllabus-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const chunks: Buffer[] = [];
+  const pushText = (value: string) => chunks.push(Buffer.from(value, "utf8"));
+
+  pushText(`--${boundary}\r\n`);
+  pushText('Content-Disposition: form-data; name="payload"\r\n');
+  pushText("Content-Type: application/json; charset=utf-8\r\n\r\n");
+  pushText(`${JSON.stringify(payload)}\r\n`);
+
+  attachments.forEach((attachment, index) => {
+    const decoded = dataUrlToBuffer(attachment.dataUrl);
+    const mimeType = attachment.mimeType || decoded.mimeType;
+    const filename = sanitizeAttachmentName(attachment.name, index);
+
+    pushText(`--${boundary}\r\n`);
+    pushText(
+      `Content-Disposition: form-data; name="attachments"; filename="${filename.replace(/"/g, "_")}"\r\n`,
+    );
+    pushText(`Content-Type: ${mimeType}\r\n\r\n`);
+    chunks.push(decoded.buffer);
+    pushText("\r\n");
+  });
+
+  pushText(`--${boundary}--\r\n`);
+
+  return {
+    body: Buffer.concat(chunks),
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
+}
+
 export async function chatTenantStream(
   input: {
     question: string;
@@ -350,13 +411,14 @@ export async function chatTenantStream(
     tenant: string;
     namespaces: string[];
     topK: number;
+    attachments?: TenantChatAttachment[];
   },
   onEvent: (event: TenantStreamEvent) => void | Promise<void>,
 ) {
   const { baseUrl, token, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
   const url = new URL("/api/chat/stream", baseUrl);
   const transport = url.protocol === "https:" ? https : http;
-  const serializedBody = JSON.stringify({
+  const requestPayload = {
     question: input.question,
     answer_instruction: input.answerInstruction,
     context_summary: input.contextSummary,
@@ -364,7 +426,12 @@ export async function chatTenantStream(
     tenant: input.tenant,
     namespaces: input.namespaces,
     top_k: input.topK,
-  });
+  };
+  const attachments = input.attachments ?? [];
+  const multipartBody = attachments.length
+    ? createTenantChatMultipartBody({ payload: requestPayload, attachments })
+    : null;
+  const serializedBody = multipartBody ? multipartBody.body : JSON.stringify(requestPayload);
 
   await new Promise<void>((resolve, reject) => {
     let settled = false;
@@ -378,8 +445,10 @@ export async function chatTenantStream(
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "text/event-stream",
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(serializedBody),
+          "Content-Type": multipartBody?.contentType ?? "application/json",
+          "Content-Length": Buffer.isBuffer(serializedBody)
+            ? serializedBody.length
+            : Buffer.byteLength(serializedBody),
         },
       },
       (response) => {

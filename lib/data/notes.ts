@@ -64,6 +64,7 @@ function normalizeMessage(row: any): ChatMessageRecord {
           : (typeof row.input_tokens === "number" ? row.input_tokens : 0) +
             (typeof row.output_tokens === "number" ? row.output_tokens : 0),
     },
+    attachments: [],
   };
 }
 
@@ -94,7 +95,7 @@ export async function listRevisionNotes(userId: string) {
 
   const { data: answerMessages, error: messagesError } = await supabase
     .from("chat_messages")
-    .select("*")
+    .select("id, session_id, content, created_at")
     .in("id", messageIds);
 
   if (messagesError) throw messagesError;
@@ -110,29 +111,29 @@ export async function listRevisionNotes(userId: string) {
   const answerById = new Map((answerMessages ?? []).map((message) => [message.id, message]));
 
   const sessionIds = Array.from(new Set((answerMessages ?? []).map((message) => message.session_id)));
-  const { data: sessionMessages, error: sessionMessagesError } = await supabase
+  const { data: userMessages, error: userMessagesError } = await supabase
     .from("chat_messages")
-    .select("*")
+    .select("session_id, content, created_at")
     .in("session_id", sessionIds)
+    .eq("role", "user")
     .order("created_at", { ascending: true });
 
-  if (sessionMessagesError) throw sessionMessagesError;
+  if (userMessagesError) throw userMessagesError;
 
-  const sessionMessageMap = new Map<string, ChatMessageRecord[]>();
-  for (const row of sessionMessages ?? []) {
+  const sessionMessageMap = new Map<string, Array<{ content: string; created_at: string }>>();
+  for (const row of userMessages ?? []) {
     const list = sessionMessageMap.get(row.session_id) ?? [];
-    list.push(normalizeMessage(row));
+    list.push({ content: row.content, created_at: row.created_at });
     sessionMessageMap.set(row.session_id, list);
   }
 
   return notes.map((note) => {
     const answer = answerById.get(note.message_id);
     const sessionMessagesForNote = sessionMessageMap.get(note.session_id) ?? [];
-    const answerIndex = sessionMessagesForNote.findIndex((message) => message.id === note.message_id);
     const question =
-      answerIndex > 0 && sessionMessagesForNote[answerIndex - 1]?.role === "user"
-        ? sessionMessagesForNote[answerIndex - 1].content
-        : "";
+      sessionMessagesForNote
+        .filter((message) => answer?.created_at && message.created_at < answer.created_at)
+        .at(-1)?.content ?? "";
     const { reviewedCount, lastReviewedAt } = aggregateRevisionStats(logs ?? [], note.id);
 
     return {
@@ -167,21 +168,32 @@ export async function getRevisionNoteDetail(noteId: string, userId: string) {
   if (noteError) throw noteError;
   if (!note) return null;
 
-  const { data: sessionMessages, error: sessionError } = await supabase
+  const { data: answerRow, error: answerError } = await supabase
     .from("chat_messages")
     .select("*")
+    .eq("id", note.message_id)
     .eq("session_id", note.session_id)
-    .order("created_at", { ascending: true });
+    .maybeSingle();
 
-  if (sessionError) throw sessionError;
+  if (answerError) throw answerError;
 
-  const normalizedMessages = (sessionMessages ?? []).map(normalizeMessage);
-  const answerIndex = normalizedMessages.findIndex((message) => message.id === note.message_id);
-  const answer = answerIndex >= 0 ? normalizedMessages[answerIndex] : null;
-  const question =
-    answerIndex > 0 && normalizedMessages[answerIndex - 1]?.role === "user"
-      ? normalizedMessages[answerIndex - 1].content
-      : "";
+  const answer = answerRow ? normalizeMessage(answerRow) : null;
+
+  const { data: previousQuestion, error: questionError } = answerRow
+    ? await supabase
+        .from("chat_messages")
+        .select("content")
+        .eq("session_id", note.session_id)
+        .eq("role", "user")
+        .lt("created_at", answerRow.created_at)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null, error: null };
+
+  if (questionError) throw questionError;
+
+  const question = previousQuestion?.content ?? "";
 
   const { data: logs, error: logsError } = await supabase
     .from("note_revision_logs")

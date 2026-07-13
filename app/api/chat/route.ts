@@ -39,6 +39,18 @@ const requestSchema = z.object({
         role: z.enum(["user", "assistant"]),
         content: z.string(),
         createdAt: z.string().optional(),
+        attachments: z
+          .array(
+            z.object({
+              id: z.string().trim().min(1).max(120),
+              name: z.string().trim().min(1).max(180),
+              mimeType: z.string().trim().min(1).max(120).refine((value) => value.startsWith("image/")),
+              size: z.number().int().nonnegative().max(5 * 1024 * 1024),
+              dataUrl: z.string().trim().min(1).max(7_000_000).refine((value) => value.startsWith("data:image/")),
+            }),
+          )
+          .max(4)
+          .optional(),
       }),
     )
     .min(1),
@@ -113,21 +125,16 @@ function matchesRequestedSubject(subject: TenantSubject, requestedSubject: strin
 
 async function resolveTenantSubjectForChat({
   requestedSubject,
-  profileSubjects,
   tenantSubject,
 }: {
   requestedSubject: string | null;
-  profileSubjects: string[];
   tenantSubject?: NonNullable<z.infer<typeof requestSchema>["tenantSubject"]> | null;
 }) {
-  const normalizedProfileSubjects = new Set(profileSubjects.map((subject) => normalizeSubjectLabel(subject)));
-
   if (tenantSubject) {
     const normalizedTenantSubjectName = normalizeSubjectLabel(tenantSubject.name);
     const requestedMatches = !requestedSubject || normalizeSubjectLabel(requestedSubject) === normalizedTenantSubjectName;
-    const profileMatches = normalizedProfileSubjects.size === 0 || normalizedProfileSubjects.has(normalizedTenantSubjectName);
 
-    if (requestedMatches && profileMatches) {
+    if (requestedMatches) {
       const match = normalizeTenantSubjectFromRequest(tenantSubject);
       return {
         match,
@@ -138,11 +145,9 @@ async function resolveTenantSubjectForChat({
   }
 
   const tenantSubjects = await listTenantSubjects();
-  const scopedSubjects = tenantSubjects.filter((subject) =>
-    normalizedProfileSubjects.size === 0
-      ? matchesRequestedSubject(subject, requestedSubject)
-      : normalizedProfileSubjects.has(normalizeSubjectLabel(subject.name)),
-  );
+  const scopedSubjects = requestedSubject
+    ? tenantSubjects.filter((subject) => matchesRequestedSubject(subject, requestedSubject))
+    : tenantSubjects;
   const match =
     scopedSubjects.find((subject) => matchesRequestedSubject(subject, requestedSubject)) ??
     (scopedSubjects.length === 1 ? scopedSubjects[0] : null);
@@ -156,6 +161,18 @@ async function resolveTenantSubjectForChat({
 
 function normalizeContextSummary(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeRequestAttachments(
+  attachments: NonNullable<z.infer<typeof requestSchema>["messages"][number]["attachments"]> | undefined,
+) {
+  return (attachments ?? []).map((attachment) => ({
+    id: attachment.id,
+    name: attachment.name,
+    mimeType: attachment.mimeType,
+    size: attachment.size,
+    dataUrl: attachment.dataUrl,
+  }));
 }
 
 function hasMissingColumnError(error: { message?: string; details?: string } | null, columnName: string) {
@@ -302,11 +319,13 @@ function buildAnswerInstruction({
   subjectName,
   grade,
   board,
+  hasAttachments = false,
 }: {
   language: ResponseLanguage;
   subjectName: string;
   grade: string;
   board: string;
+  hasAttachments?: boolean;
 }) {
   const languageRule =
     language === "EN"
@@ -319,13 +338,16 @@ function buildAnswerInstruction({
     board ? `Academic authority/context: ${board}.` : null,
     grade ? `Target level: ${grade}.` : "Target level: IOE Bachelor engineering students.",
     "Use the retrieved syllabus/source context as the authority.",
+    hasAttachments
+      ? "When images or files are attached, read/extract the attachment content first and use it as the primary input for this turn. If the attachment is readable, explain or answer the visible attachment content even when syllabus retrieval is sparse."
+      : null,
     "Give a deep, clear, exam-ready answer: short and direct for simple questions; detailed, step-by-step, and concept-first for theory, derivations, design, and numerical questions.",
     "When relevant, include definition, core idea, working/principle, formulas, truth table or table, diagram description, key points, applications, and a concise conclusion.",
     "Use headings and bullets for readability, and keep explanations student-friendly without losing technical accuracy.",
     "For ALL mathematical formulas, equations, and derivations, ALWAYS wrap them in double dollar signs ($$ ... $$) on their own separate lines so they render as centered blocks. Use single dollar signs ($ ... $) ONLY for small inline variables within text.",
     "Never use \\[ or \\( for math, only use $$ and $.",
-    "Do not invent chapters, marks, syllabus units, references, or facts not supported by the retrieved context.",
-    "If the provided source context is insufficient, clearly say that the provided syllabus context does not contain enough information.",
+    "Do not invent chapters, marks, syllabus units, references, or facts not supported by the retrieved context or readable attachment content.",
+    "If neither the provided source context nor the readable attachment content contains enough information, clearly say that the provided context does not contain enough information.",
     languageRule,
   ]
     .filter(Boolean)
@@ -338,7 +360,7 @@ function toSse(event: string, payload: unknown) {
 
 function shouldRetryAssistantInsertWithoutMetadata(error: { message?: string; details?: string } | null) {
   const message = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
-  return Boolean(message && (message.includes("metadata") || message.includes("column")));
+  return Boolean(message && message.includes("column") && message.includes("metadata"));
 }
 
 async function persistAssistantCompletion({
@@ -527,9 +549,10 @@ export async function POST(request: Request) {
     });
     const latestUserMessage = [...parsed.messages].reverse().find((message) => message.role === "user");
     const question = latestUserMessage?.content.trim() ?? "";
+    const latestUserAttachments = normalizeRequestAttachments(latestUserMessage?.attachments);
     const questionHash = hashDebugValue(question);
 
-    if (!question) {
+    if (!question && latestUserAttachments.length === 0) {
       return NextResponse.json({ error: "Message content is required." }, { status: 400 });
     }
 
@@ -584,7 +607,6 @@ export async function POST(request: Request) {
     try {
       tenantSubjectResolution = await resolveTenantSubjectForChat({
         requestedSubject,
-        profileSubjects: profile.subjects,
         tenantSubject: parsed.tenantSubject ?? null,
       });
     } catch (error) {
@@ -628,7 +650,7 @@ export async function POST(request: Request) {
       });
       return NextResponse.json(
         {
-          error: "Selected subject could not be matched to a tenant subject in your current semester scope.",
+          error: "Selected subject could not be matched to an available tenant subject.",
           code: "TENANT_SUBJECT_NOT_MATCHED",
           requestId,
         },
@@ -642,7 +664,7 @@ export async function POST(request: Request) {
       supabase,
       userId: user.id,
       sessionId: parsed.sessionId ?? null,
-      question,
+      question: question || "Image attachment",
       subjectContext: sessionSubjectContext,
     });
     const contextSummaryPromise = getLatestTenantContextSummary({
@@ -675,11 +697,18 @@ export async function POST(request: Request) {
     }
 
     const tenantContextSummary = normalizeContextSummary(contextSummary);
+    const hasAttachments = latestUserAttachments.length > 0;
+    const tenantQuestion =
+      question ||
+      "Read the attached image and explain the visible content clearly. If it contains notes, a diagram, or a question, answer based on that image.";
+    const tenantQuestionHash = hashDebugValue(tenantQuestion);
+
     const answerInstruction = buildAnswerInstruction({
       language: resolvedLanguage,
       subjectName: tenantSubject.name,
       grade: profile.grade,
       board: profile.board,
+      hasAttachments,
     });
     const tenantStartedAt = Date.now();
     logTenantChatDebug("tenant_chat_started", {
@@ -692,18 +721,21 @@ export async function POST(request: Request) {
       namespace: tenantSubject.namespace_slug,
       contextSummaryHash: tenantContextSummary ? hashDebugValue(tenantContextSummary) : null,
       contextSummaryLength: tenantContextSummary.length,
-      question,
-      questionHash,
+      question: tenantQuestion,
+      questionHash: tenantQuestionHash,
+      attachmentCount: latestUserAttachments.length,
+      transport: hasAttachments ? "multipart/form-data" : "application/json",
       payloadHash: hashDebugValue({
-        question,
+        question: tenantQuestion,
         context_summary: tenantContextSummary,
         answer_instruction: answerInstruction,
         subject: tenantSubject.name,
         tenant: "nano-syllabus",
         namespaces: tenantNamespaces,
         top_k: 8,
+        attachment_count: latestUserAttachments.length,
       }),
-      promptLength: question.length,
+      promptLength: tenantQuestion.length,
     });
 
     const stream = new ReadableStream<Uint8Array>({
@@ -728,13 +760,14 @@ export async function POST(request: Request) {
 
           await chatTenantStream(
             {
-              question,
+              question: tenantQuestion,
               answerInstruction,
               contextSummary: tenantContextSummary,
               subject: tenantSubject.name,
               tenant: "nano-syllabus",
               namespaces: tenantNamespaces,
               topK: 8,
+              attachments: latestUserAttachments,
             },
             (event) => {
               if (event.type === "status") {
@@ -787,9 +820,9 @@ export async function POST(request: Request) {
               subjectName: tenantSubject.name,
               folderPath: tenantSubject.folder_path,
               namespace: tenantSubject.namespace_slug,
-              question,
-              questionHash,
-              promptLength: question.length,
+              question: tenantQuestion,
+              questionHash: tenantQuestionHash,
+              promptLength: tenantQuestion.length,
               citationCount: tenantSources.length,
             });
             enqueue("error", {
@@ -805,15 +838,16 @@ export async function POST(request: Request) {
             sessionId: session.id,
             subject: tenantSubject.name,
             subjectName: tenantSubject.name,
-            questionHash,
+            questionHash: tenantQuestionHash,
             payloadHash: hashDebugValue({
-              question,
+              question: tenantQuestion,
               answer_instruction: answerInstruction,
               context_summary: tenantContextSummary,
               subject: tenantSubject.name,
               tenant: "nano-syllabus",
               namespaces: tenantNamespaces,
               top_k: 8,
+              attachment_count: latestUserAttachments.length,
             }),
             generationMs,
             answerLength: answer.length,
@@ -895,6 +929,7 @@ export async function POST(request: Request) {
             content: question,
             language: resolvedLanguage,
             created_at: parsed.messages[parsed.messages.length - 1].createdAt || undefined,
+            metadata: latestUserAttachments.length > 0 ? { attachments: latestUserAttachments } : {},
             input_tokens: tenantTokenUsage.inputTokens,
             output_tokens: 0,
             total_tokens: tenantTokenUsage.inputTokens,
@@ -906,14 +941,25 @@ export async function POST(request: Request) {
             .single();
           let userMessageError = userMessageInsert.error;
 
-          if (shouldRetryMessageInsertWithoutTokenUsage(userMessageError)) {
-            const { input_tokens, output_tokens, total_tokens, ...tokenFreeUserMessagePayload } = userMessagePayload;
+          if (
+            shouldRetryMessageInsertWithoutTokenUsage(userMessageError) ||
+            shouldRetryAssistantInsertWithoutMetadata(userMessageError)
+          ) {
+            const { input_tokens, output_tokens, total_tokens, metadata, ...tokenAndMetadataFreeUserMessagePayload } = userMessagePayload;
             void input_tokens;
             void output_tokens;
             void total_tokens;
+            void metadata;
+            const tokenFreeUserMessagePayload = {
+              ...tokenAndMetadataFreeUserMessagePayload,
+              metadata,
+            };
+            const retryUserMessagePayload = shouldRetryAssistantInsertWithoutMetadata(userMessageError)
+              ? tokenAndMetadataFreeUserMessagePayload
+              : tokenFreeUserMessagePayload;
             const retryUserMessageInsert = await supabase
               .from("chat_messages")
-              .insert(tokenFreeUserMessagePayload)
+              .insert(retryUserMessagePayload)
               .select("id")
               .single();
             userMessageError = retryUserMessageInsert.error;
@@ -1004,11 +1050,12 @@ export async function POST(request: Request) {
               responseLanguage: resolvedLanguage,
               contextSummaryHash: tenantContextSummary ? hashDebugValue(tenantContextSummary) : null,
               contextSummaryLength: tenantContextSummary.length,
-              question,
-              questionHash,
-              promptLength: question.length,
+              question: tenantQuestion,
+              questionHash: tenantQuestionHash,
+              promptLength: tenantQuestion.length,
               failureReason,
               generationMs,
+              attachmentCount: latestUserAttachments.length,
             },
             error,
           );
@@ -1051,15 +1098,16 @@ export async function POST(request: Request) {
         "x-history-messages": "1",
         "x-tenant-lookup-ms": "0",
         "x-generation-ms": String(generationMs),
-        "x-question-sha": questionHash,
+        "x-question-sha": tenantQuestionHash,
         "x-payload-sha": hashDebugValue({
-          question,
+          question: tenantQuestion,
           answer_instruction: answerInstruction,
           context_summary: tenantContextSummary,
           subject: tenantSubject.name,
           tenant: "nano-syllabus",
           namespaces: tenantNamespaces,
           top_k: 8,
+          attachment_count: latestUserAttachments.length,
         }),
         "x-subject-slug": tenantSubject.slug,
         "x-namespace-slug": tenantSubject.namespace_slug,

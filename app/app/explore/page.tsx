@@ -8,7 +8,7 @@ export default async function ExplorePage() {
   const subjects = await listExplorerSubjects(user.id, profile!);
 
   return (
-    <AppShell user={user} title="Explore by Subject">
+    <AppShell user={user} title="Subjects">
       <SubjectExplorerClient subjects={subjects} />
     </AppShell>
   );

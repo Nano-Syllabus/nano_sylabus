@@ -57,8 +57,28 @@ export default async function SharedChatPage({
               {message.role === "assistant" ? (
                 <Markdown text={message.content} className="text-[15px] leading-[26px] font-medium sm:text-[16px] sm:leading-[28px]" />
               ) : (
-                <div className="whitespace-pre-wrap break-words text-[15px] leading-[23px] font-medium sm:text-[16px] sm:leading-[24px]">
-                  {message.content}
+                <div className="space-y-2">
+                  {message.attachments.length > 0 && (
+                    <div
+                      className={cn(
+                        "grid gap-2",
+                        message.attachments.length > 1 ? "grid-cols-2" : "grid-cols-1",
+                      )}
+                    >
+                      {message.attachments.map((attachment) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={attachment.id}
+                          src={attachment.dataUrl}
+                          alt={attachment.name}
+                          className="max-h-64 w-full rounded-2xl border border-white/10 object-cover shadow-sm"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap break-words text-[15px] leading-[23px] font-medium sm:text-[16px] sm:leading-[24px]">
+                    {message.content}
+                  </div>
                 </div>
               )}
             </article>

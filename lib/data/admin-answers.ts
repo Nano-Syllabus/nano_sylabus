@@ -138,6 +138,7 @@ function normalizeConversationMessage(row: AdminAnswerMessageRow): ChatMessageRe
       totalTokens:
         typeof tokenRow.total_tokens === "number" ? tokenRow.total_tokens : inputTokens + outputTokens,
     },
+    attachments: [],
   };
 }
 

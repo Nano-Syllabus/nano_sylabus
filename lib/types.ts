@@ -60,6 +60,14 @@ export interface MessageTokenUsage {
   totalTokens: number;
 }
 
+export interface ChatImageAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+}
+
 export interface StudentProfile {
   userId: string;
   fullName: string;
@@ -111,6 +119,7 @@ export interface ChatMessageRecord {
   savedNoteId: string | null;
   answerTrace: AssistantAnswerTrace | null;
   tokenUsage: MessageTokenUsage;
+  attachments: ChatImageAttachment[];
 }
 
 export interface ChatSessionDetail extends ChatSessionSummary {

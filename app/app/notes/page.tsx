@@ -19,10 +19,6 @@ export default async function NotesPage() {
       title={
         <span className="flex items-center gap-3">
           My Notes
-          <span className="font-mono-ui text-xs text-text-muted">
-            {notes.length} saved
-            {Number.isFinite(access.maxNotes) ? ` / ${access.maxNotes}` : ""}
-          </span>
         </span>
       }
       actions={

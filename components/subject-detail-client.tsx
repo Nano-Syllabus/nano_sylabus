@@ -28,7 +28,7 @@ export function SubjectDetailClient({
     <div className="mx-auto max-w-5xl px-5 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[10px] font-mono-ui uppercase text-text-muted">Subject Explorer</p>
+          <p className="text-[10px] font-mono-ui uppercase text-text-muted">Subjects</p>
           <h1 className="mt-2 font-display text-4xl">{subject}</h1>
           <p className="mt-2 text-sm text-text-secondary">
             Browse your previous sessions in this subject or start a focused new chat.

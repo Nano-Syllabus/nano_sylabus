@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel, normalizeSubjects } from "@/lib/profile-normalization";
+import { listTenantSubjects } from "@/lib/tenant/client";
 import type {
   StudentProfile,
   SubjectExplorerSessionSummary,
@@ -51,6 +52,12 @@ function categorizeSubject(subject: string): SubjectExplorerSummary["category"] 
       "electronics",
       "instrumentation",
       "circuit",
+      "logic",
+      "machine",
+      "communication",
+      "system",
+      "electrical",
+      "filter",
       "civil",
       "mechanical",
     ].some((token) => normalized.includes(token))
@@ -82,10 +89,13 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
   const supabase = await createSupabaseServerClient();
   const normalizedBoard = normalizeBoard(profile.board);
   const normalizedGrade = normalizeGrade(profile.grade);
-  const sessionResult = await supabase
-    .from("chat_sessions")
-    .select("id, updated_at, subject_tags")
-    .eq("user_id", userId);
+  const [sessionResult, tenantSubjects] = await Promise.all([
+    supabase
+      .from("chat_sessions")
+      .select("id, updated_at, subject_tags")
+      .eq("user_id", userId),
+    listTenantSubjects(),
+  ]);
 
   if (sessionResult.error) throw sessionResult.error;
 
@@ -114,8 +124,9 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
   const sessionSubjects = uniqueSubjects(
     sessions.flatMap((session) => (Array.isArray(session.subject_tags) ? session.subject_tags : [])),
   );
+  const tenantSubjectNames = uniqueSubjects(tenantSubjects.map((subject) => subject.name));
 
-  const allSubjects = uniqueSubjects([...profileSubjects, ...sessionSubjects]);
+  const allSubjects = uniqueSubjects([...tenantSubjectNames, ...profileSubjects, ...sessionSubjects]);
 
   const summaries = allSubjects.map((subject) => {
     const matchingSessions = sessions.filter((session) =>
