@@ -2193,7 +2193,7 @@ export function ChatPageClient({
                         className={cn(
                           message.role === "user"
                             ? "rounded-[22px] bg-bg-tertiary px-3.5 py-2.5 text-text-primary shadow-sm sm:rounded-[24px] sm:px-4"
-                            : "rounded-[22px] bg-bg-secondary px-4 py-4 text-text-primary shadow-sm sm:rounded-[24px] sm:px-5 w-full",
+                            : "rounded-[22px] bg-black/[0.04] dark:bg-[#202020] px-4 py-4 text-text-primary shadow-sm sm:rounded-[24px] sm:px-5 w-full",
                         )}
                       >
                         {message.role === "user" && editingMessageIndex !== index && (
