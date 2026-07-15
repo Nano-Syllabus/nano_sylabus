@@ -54,19 +54,14 @@ export function SubjectExplorerClient({ subjects }: { subjects: SubjectExplorerS
     <div className="mx-auto max-w-6xl px-5 py-8">
       <section className="mb-5 space-y-3">
         <div>
-          <p className="font-mono-ui text-xs uppercase tracking-[0.22em] text-text-muted">
-            {filteredSubjects.length} of {subjects.length} subjects
-          </p>
           <h1 className="mt-2 font-display text-3xl text-text-primary sm:text-4xl">
             Find your subject
           </h1>
         </div>
 
-        <div className="grid gap-2 lg:grid-cols-[1.35fr_0.75fr_0.75fr_0.75fr]">
-          <label className="group rounded-xl border border-border bg-bg-primary px-3 py-2.5 focus-within:border-text-secondary">
-            <span className="font-mono-ui text-[9px] uppercase tracking-[0.2em] text-text-muted">
-              Search
-            </span>
+        <div className="grid gap-2 lg:grid-cols-[2fr_1fr]">
+          <label className="group rounded-xl border border-black/10 dark:border-white/10 bg-bg-primary px-3 py-2.5 focus-within:border-text-secondary">
+
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -75,43 +70,9 @@ export function SubjectExplorerClient({ subjects }: { subjects: SubjectExplorerS
             />
           </label>
 
-          <label className="rounded-xl border border-border bg-bg-primary px-3 py-2.5">
-            <span className="font-mono-ui text-[9px] uppercase tracking-[0.2em] text-text-muted">
-              Source
-            </span>
-            <select
-              value={source}
-              onChange={(event) => setSource(event.target.value as typeof source)}
-              className="mt-1.5 w-full bg-bg-primary text-sm text-text-primary outline-none"
-            >
-              <option value="All">All subjects</option>
-              <option value="Profile">My profile ({profileCount})</option>
-              <option value="Available">Available only</option>
-            </select>
-          </label>
 
-          <label className="rounded-xl border border-border bg-bg-primary px-3 py-2.5">
-            <span className="font-mono-ui text-[9px] uppercase tracking-[0.2em] text-text-muted">
-              Category
-            </span>
-            <select
-              value={category}
-              onChange={(event) => setCategory(event.target.value as typeof category)}
-              className="mt-1.5 w-full bg-bg-primary text-sm text-text-primary outline-none"
-            >
-              <option value="All">All categories</option>
-              {categories.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
+          <label className="rounded-xl border border-black/10 dark:border-white/10 bg-bg-primary px-3 py-2.5">
 
-          <label className="rounded-xl border border-border bg-bg-primary px-3 py-2.5">
-            <span className="font-mono-ui text-[9px] uppercase tracking-[0.2em] text-text-muted">
-              Sort
-            </span>
             <select
               value={sort}
               onChange={(event) => setSort(event.target.value as typeof sort)}
@@ -135,9 +96,7 @@ export function SubjectExplorerClient({ subjects }: { subjects: SubjectExplorerS
                     {subject.inProfile ? "From your profile" : "Available subject"}
                   </p>
                   <h2 className="mt-2 font-display text-xl sm:text-2xl truncate" title={subject.subject}>{subject.subject}</h2>
-                  <p className="mt-1 text-xs text-text-muted truncate">
-                    {subject.board || "Board N/A"} · {subject.grade || "Grade N/A"} · {subject.category}
-                  </p>
+
                 </div>
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-bg-secondary text-lg">
                   {subject.subject.slice(0, 1).toUpperCase()}

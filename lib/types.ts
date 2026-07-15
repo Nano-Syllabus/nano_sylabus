@@ -149,8 +149,7 @@ export interface SubjectExplorerSummary {
 }
 
 export interface SubjectExplorerSessionSummary extends ChatSessionSummary {
-  turnCount: number;
-  language: Language;
+  messageCount: number;
 }
 
 export interface RevisionNoteSummary {

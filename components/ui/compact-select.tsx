@@ -4,11 +4,13 @@ export function CompactSelect({
   value, 
   onChange, 
   options,
+  placeholder,
   direction = "down"
 }: { 
   value: string; 
   onChange: (v: string) => void; 
   options: { label: string; value: string }[];
+  placeholder?: string;
   direction?: "up" | "down";
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -24,7 +26,7 @@ export function CompactSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedLabel = options.find((option) => option.value === value)?.label || options[0]?.label || value;
+  const selectedLabel = options.find((option) => option.value === value)?.label || placeholder || options[0]?.label || value;
 
   return (
     <div
