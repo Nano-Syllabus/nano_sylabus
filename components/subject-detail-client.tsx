@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { normalizeSubjectLabel } from "@/lib/profile-normalization";
@@ -55,11 +54,10 @@ export function SubjectDetailClient({
                 <div>
                   <h2 className="font-medium">{session.title}</h2>
                   <p className="mt-1 text-sm text-text-secondary">
-                    {session.turnCount} turns · Last activity {formatDate(session.updatedAt)}
+                    Total messages {session.messageCount} · Last activity {formatDate(session.updatedAt)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline">{session.language === "RN" ? "Roman Nepali" : "English"}</Badge>
                   <Link href={`/app/chat?session=${session.id}`}>
                     <Button size="sm" variant="outline">
                       Open →

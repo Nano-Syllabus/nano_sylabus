@@ -395,31 +395,86 @@ function buildMissingSubjectMessage(subjects: string[]) {
 }
 
 function TopHeaderTitle({
-  activeSessionTitle, 
+  activeSessionTitle,
   currentSessionId,
+  onSaveTitle,
   onShare,
   shareLoading,
-}: { 
-  activeSessionTitle: string; 
-  currentSessionId: string | null; 
-  onRename: () => void; 
-  onDelete: () => void; 
+}: {
+  activeSessionTitle: string;
+  currentSessionId: string | null;
+  onSaveTitle: (title: string) => Promise<void> | void;
   onShare: () => void;
   shareLoading: boolean;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(activeSessionTitle);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraftTitle(activeSessionTitle);
+    }
+  }, [activeSessionTitle, isEditing]);
+
+  async function saveTitle() {
+    const nextTitle = draftTitle.trim();
+
+    if (!currentSessionId || !nextTitle || nextTitle === activeSessionTitle) {
+      setDraftTitle(activeSessionTitle);
+      setIsEditing(false);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await onSaveTitle(nextTitle);
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <div className="relative flex min-w-0 items-center gap-2">
-      <span className="min-w-0 truncate">{activeSessionTitle}</span>
-      {currentSessionId ? (
+      {isEditing ? (
+        <input
+          autoFocus
+          value={draftTitle}
+          disabled={isSaving}
+          onBlur={() => void saveTitle()}
+          onFocus={(event) => event.currentTarget.select()}
+          onChange={(event) => setDraftTitle(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void saveTitle();
+            }
+
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setDraftTitle(activeSessionTitle);
+              setIsEditing(false);
+            }
+          }}
+          className="h-9 min-w-0 w-[min(58vw,520px)] max-w-[calc(100vw-190px)] rounded-full border border-border bg-bg-secondary px-3 text-sm font-semibold text-text-primary outline-none transition focus:border-text-primary disabled:opacity-60 sm:w-[min(46vw,520px)] sm:text-base"
+          aria-label="Edit chat title"
+        />
+      ) : (
         <button
           type="button"
-          onClick={onShare}
-          disabled={shareLoading}
-          className="inline-flex h-8 shrink-0 items-center rounded-full border border-border px-3 text-[11px] font-medium text-text-secondary transition hover:bg-bg-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!currentSessionId}
+          onClick={() => {
+            setDraftTitle(activeSessionTitle);
+            setIsEditing(true);
+          }}
+          className="group inline-flex min-w-0 max-w-[min(58vw,520px)] items-center gap-2 rounded-full px-1 py-1 text-left font-semibold transition hover:bg-bg-secondary disabled:cursor-default disabled:hover:bg-transparent sm:max-w-[min(46vw,520px)]"
+          title={currentSessionId ? "Edit chat title" : undefined}
         >
-          {shareLoading ? "Sharing..." : "Share"}
+          <span className="min-w-0 truncate">{activeSessionTitle}</span>
         </button>
-      ) : null}
+      )}
+
     </div>
   );
 }
@@ -635,13 +690,7 @@ export function ChatPageClient({
     );
   }, [normalizedProfileSubjects, subjectContext, tenantSubjectsByName]);
   const subjectActionOptions = useMemo(
-    () =>
-      availableSubjects.length > 0
-        ? [
-            { label: "Subjects", value: "" },
-            ...availableSubjects.map((subject) => ({ label: subject, value: subject })),
-          ]
-        : [{ label: "Subjects", value: "" }],
+    () => availableSubjects.map((subject) => ({ label: subject, value: subject })),
     [availableSubjects],
   );
   const selectedTenantSubject = useMemo(() => {
@@ -698,6 +747,15 @@ export function ChatPageClient({
       currentSessionIdRef.current = null;
       setSessionDetail(null);
       setMessages([]);
+      setSubjectContext(null);
+      setInput("");
+      setPendingAttachments([]);
+      setAttachmentError("");
+      setQuotedText("");
+      setChatError("");
+      setMatchedScope(null);
+      setLatestThinkingTrace(null);
+      setShowThinkingTrace(false);
       stopChatRef.current?.();
       if (requestWatchdogRef.current) {
         window.clearTimeout(requestWatchdogRef.current);
@@ -1181,6 +1239,20 @@ export function ChatPageClient({
       isPinned: sessionDetail.isPinned,
     };
   }, [currentSessionId, sessionDetail, sessions]);
+  const lockedSubjectContext = useMemo(() => {
+    if (!currentSessionId) return null;
+    return stripSubjectChapter(
+      activeSessionSummary?.subjectContext ??
+        sessionDetail?.subjectContext ??
+        subjectContext,
+    );
+  }, [activeSessionSummary?.subjectContext, currentSessionId, sessionDetail?.subjectContext, subjectContext]);
+  const isSubjectLocked = Boolean(
+    (currentSessionId || messages.length > 0 || isLoading) &&
+      (lockedSubjectContext || stripSubjectChapter(subjectContext)),
+  );
+  const displayedLockedSubjectContext =
+    lockedSubjectContext ?? stripSubjectChapter(subjectContext) ?? "Selected subject";
 
   const addImageFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -1240,11 +1312,23 @@ export function ChatPageClient({
     const attachmentsForMessage = overrideText ? [] : pendingAttachments;
     if ((!trimmed && attachmentsForMessage.length === 0) || isLoading) return;
     if (creditBalance <= 0) {
-      setChatError("No credits left. Buy a plan to continue chatting.");
+      setChatError("No messages left. Buy a plan to continue chatting.");
       return;
     }
 
-    if (!stripSubjectChapter(subjectContext)) {
+    const sessionSubjectContext = currentSessionIdRef.current
+      ? stripSubjectChapter(
+          sessions.find((session) => session.id === currentSessionIdRef.current)?.subjectContext ??
+            sessionDetail?.subjectContext ??
+            subjectContext,
+        )
+      : stripSubjectChapter(subjectContext);
+    const resolvedSubjectContext = sessionSubjectContext ?? stripSubjectChapter(subjectContext);
+    const resolvedTenantSubject = resolvedSubjectContext
+      ? tenantSubjectsByName[normalizeSubjectLabel(resolvedSubjectContext)] ?? selectedTenantSubject
+      : null;
+
+    if (!resolvedSubjectContext) {
       // If only one subject is available, auto-select it and proceed
       if (availableSubjects.length === 1) {
         setSubjectContext(availableSubjects[0]);
@@ -1277,7 +1361,7 @@ export function ChatPageClient({
       requestWatchdogRef.current = null;
     }
 
-    pendingTitleRef.current = deriveSessionTitle(trimmed || "Image attachment", subjectContext);
+    pendingTitleRef.current = deriveSessionTitle(trimmed || "Image attachment", resolvedSubjectContext);
     setChatError("");
     setShowThinkingTrace(false);
     startThinkingStages();
@@ -1319,8 +1403,8 @@ export function ChatPageClient({
           sessionId: requestSessionId,
           language: chatLanguage,
           messageLanguage: composerLanguage,
-          subjectContext,
-          tenantSubject: selectedTenantSubject,
+          subjectContext: resolvedSubjectContext,
+          tenantSubject: resolvedTenantSubject,
           retrievalMode,
           truncateFromId,
           messages: nextMessages.map((message) => ({
@@ -1540,16 +1624,18 @@ export function ChatPageClient({
     await sendCurrentMessage();
   }
 
-  async function renameCurrentSession(title: string) {
+  const renameCurrentSession = useCallback(async (title: string) => {
     const targetSession = renameState ?? activeSessionSummary;
-    if (!targetSession?.id) return;
+    const targetSessionId = targetSession?.id ?? currentSessionIdRef.current;
+    const nextTitle = title.trim();
+    if (!targetSessionId || !nextTitle) return;
 
-    const response = await fetch(`/api/chat/sessions/${targetSession.id}`, {
+    const response = await fetch(`/api/chat/sessions/${targetSessionId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title: nextTitle }),
     });
 
     if (!response.ok) {
@@ -1560,12 +1646,20 @@ export function ChatPageClient({
 
     const updated = (await response.json()) as ChatSessionSummary;
     setSessions((prev) =>
-      prev.map((s) => (s.id === targetSession.id ? { ...s, title } : s)),
+      prev.map((s) =>
+        s.id === targetSessionId
+          ? { ...s, title: updated.title, updatedAt: updated.updatedAt }
+          : s,
+      ),
     );
     window.dispatchEvent(new CustomEvent("chat-session-updated"));
-    setSessionDetail((prev) => (prev ? { ...prev, title: updated.title, updatedAt: updated.updatedAt } : prev));
+    setSessionDetail((prev) =>
+      prev && prev.id === targetSessionId
+        ? { ...prev, title: updated.title, updatedAt: updated.updatedAt }
+        : prev,
+    );
     setRenameState(null);
-  }
+  }, [activeSessionSummary, renameState]);
 
   async function deleteCurrentSession() {
     const targetSession = deleteConfirmSession ?? activeSessionSummary;
@@ -1590,13 +1684,15 @@ export function ChatPageClient({
       setCurrentSessionId(null);
       currentSessionIdRef.current = null;
       setSessionDetail(null);
-      setSubjectContext(defaultSubjectContext);
+      setSubjectContext(null);
       setMessages([]);
       window.history.replaceState(null, "", "/app/chat");
     }
   }
 
   const updateSessionSubjectContext = useCallback(async (nextSubjectContext: string | null) => {
+    if (currentSessionIdRef.current || messages.length > 0 || isLoading) return;
+
     const normalizedSubjectContext = nextSubjectContext ? normalizeSubjectLabel(nextSubjectContext) : null;
     const previousSubjectContext = subjectContext;
     setChatError("");
@@ -1631,7 +1727,7 @@ export function ChatPageClient({
           }
         : prev,
     );
-  }, [activeSessionSummary, subjectContext]);
+  }, [activeSessionSummary, isLoading, messages.length, subjectContext]);
 
   async function copyAssistantMessage(message: ChatMessageRecord) {
     setCopyingMessageId(message.id);
@@ -1807,50 +1903,30 @@ export function ChatPageClient({
       <TopHeaderTitle 
         activeSessionTitle={activeSessionTitle}
         currentSessionId={currentSessionId}
-        onRename={() => {
-          if (currentSessionId) {
-            setRenameState(
-              activeSessionSummary ?? {
-                id: currentSessionId,
-                userId: user.id,
-                title: activeSessionTitle,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                subjectTags: [],
-                subjectContext,
-                isPinned: false,
-              },
-            );
-          }
-        }}
-        onDelete={() => {
-          if (currentSessionId) {
-            setDeleteConfirmSession(
-              activeSessionSummary ?? {
-                id: currentSessionId,
-                userId: user.id,
-                title: activeSessionTitle,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                subjectTags: [],
-                subjectContext,
-                isPinned: false,
-              },
-            );
-          }
-        }}
+        onSaveTitle={renameCurrentSession}
         onShare={() => void shareCurrentSession()}
         shareLoading={shareLoading}
       />
     );
     return () => shell.setTitle(null);
-  }, [activeSessionTitle, currentSessionId, shell, activeSessionSummary, user.id, subjectContext, shareLoading, shareCurrentSession]);
+  }, [activeSessionTitle, currentSessionId, shell, shareLoading, shareCurrentSession, renameCurrentSession]);
 
   useEffect(() => {
     shell.setActions(
       <div className="flex items-center gap-2">
+        {currentSessionId ? (
+          <Button
+            type="button"
+            size="sm"
+            className="rounded-full h-8 px-4 text-xs font-medium bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition"
+            onClick={() => void shareCurrentSession()}
+            disabled={shareLoading}
+          >
+            {shareLoading ? "Sharing..." : "Share"}
+          </Button>
+        ) : null}
         <Badge variant={creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
-          {creditBalance} credits
+          {creditBalance} MESSAGES
         </Badge>
         <CompactSelect
           value={composerLanguage}
@@ -1863,7 +1939,7 @@ export function ChatPageClient({
       </div>
     );
     return () => shell.setActions(null);
-  }, [shell, composerLanguage, setComposerLanguage, creditBalance]);
+  }, [shell, composerLanguage, setComposerLanguage, creditBalance, currentSessionId, shareCurrentSession, shareLoading]);
 
   useEffect(() => {
     stopChatRef.current = stop;
@@ -1967,12 +2043,24 @@ export function ChatPageClient({
           >
              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
-          <CompactSelect
-            value={stripSubjectChapter(subjectContext) ?? subjectActionOptions[0]?.value ?? ""}
-            onChange={(value) => void updateSessionSubjectContext(value || null)}
-            options={subjectActionOptions}
-            direction="up"
-          />
+          {isSubjectLocked ? (
+            <button
+              type="button"
+              disabled
+              className="flex h-8 max-w-[46vw] cursor-default items-center rounded-full bg-bg-tertiary px-3 py-1 text-[12px] font-medium text-text-primary sm:h-7 sm:max-w-[220px]"
+              title={`This chat is locked to ${displayedLockedSubjectContext}`}
+            >
+              <span className="truncate">{displayedLockedSubjectContext}</span>
+            </button>
+          ) : (
+            <CompactSelect
+              value={stripSubjectChapter(subjectContext) ?? ""}
+              onChange={(value) => void updateSessionSubjectContext(value || null)}
+              options={subjectActionOptions}
+              placeholder="Subjects"
+              direction="up"
+            />
+          )}
           <CompactSelect
             value={retrievalMode}
             onChange={(value) => setRetrievalMode(value as RetrievalMode)}
@@ -2105,7 +2193,7 @@ export function ChatPageClient({
                         className={cn(
                           message.role === "user"
                             ? "rounded-[22px] bg-bg-tertiary px-3.5 py-2.5 text-text-primary shadow-sm sm:rounded-[24px] sm:px-4"
-                            : "py-2 text-text-primary w-full",
+                            : "rounded-[22px] bg-bg-secondary px-4 py-4 text-text-primary shadow-sm sm:rounded-[24px] sm:px-5 w-full",
                         )}
                       >
                         {message.role === "user" && editingMessageIndex !== index && (
@@ -2382,7 +2470,10 @@ export function ChatPageClient({
               const text = selectionPopover.text;
               setSelectionPopover(null);
               window.getSelection()?.removeAllRanges();
-              void sendCurrentMessage(text);
+              const prompt = composerLanguage === "EN"
+                ? `Answer the following in English:\n\n${text}`
+                : `Answer the following in Roman Nepali:\n\n${text}`;
+              void sendCurrentMessage(prompt);
             }}
             className="px-4 py-2 text-[14px] font-medium text-white/90 hover:bg-white/10 transition-colors"
           >

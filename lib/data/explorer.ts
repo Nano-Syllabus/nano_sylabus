@@ -181,25 +181,20 @@ export async function listSubjectSessions(userId: string, subject: string) {
   const sessionIds = sessions.map((session) => session.id);
   const { data: messageRows, error: messageError } = await supabase
     .from("chat_messages")
-    .select("session_id, role, language")
+    .select("session_id, role")
     .in("session_id", sessionIds);
 
   if (messageError) throw messageError;
 
-  const rowsBySessionId = new Map<string, Array<{ role: string; language: string }>>();
+  const rowsBySessionId = new Map<string, Array<{ role: string }>>();
   (messageRows ?? []).forEach((row) => {
     const list = rowsBySessionId.get(row.session_id) ?? [];
-    list.push({ role: row.role, language: row.language });
+    list.push({ role: row.role });
     rowsBySessionId.set(row.session_id, list);
   });
 
   return sessions.map((session) => {
     const rows = rowsBySessionId.get(session.id) ?? [];
-    const assistantLanguages = rows
-      .filter((row) => row.role === "assistant")
-      .map((row) => row.language);
-
-    const language = assistantLanguages[0] === "RN" ? "RN" : "EN";
 
     return {
       id: session.id,
@@ -210,8 +205,7 @@ export async function listSubjectSessions(userId: string, subject: string) {
       subjectTags: Array.isArray(session.subject_tags) ? session.subject_tags : [],
       subjectContext: session.subject_context ?? null,
       isPinned: Boolean(session.is_pinned),
-      turnCount: rows.length,
-      language,
+      messageCount: rows.length,
     } satisfies SubjectExplorerSessionSummary;
   });
 }

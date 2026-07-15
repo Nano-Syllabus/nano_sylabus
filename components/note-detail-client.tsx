@@ -78,7 +78,7 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
         <div className="mt-10 flex flex-wrap gap-2">
           <Link href={`/app/chat?session=${current.sessionId}`}>
             <Button variant="outline" size="sm">
-              ← Back to chat
+              ↑ Jump to chat
             </Button>
           </Link>
           <Link
