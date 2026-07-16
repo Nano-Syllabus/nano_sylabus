@@ -32,6 +32,7 @@ import type {
   Language,
   MessageFeedback,
   NoteColor,
+  RevisionNoteDetail,
 } from "@/lib/types";
 import { cn, deriveSessionTitle, formatDate, groupDateLabel } from "@/lib/utils";
 
@@ -295,6 +296,17 @@ const THINKING_STAGE_MESSAGES = [
   "Almost there, taking a bit longer than usual...",
 ] as const;
 
+const CHAT_MESSAGE_PAGE_SIZE = 30;
+const OLDER_MESSAGE_LOAD_THRESHOLD_PX = 160;
+const BOTTOM_STICK_THRESHOLD_PX = 180;
+
+/**
+ * Chat history storyboard:
+ * 0ms: render the latest message page and jump to the bottom without animation.
+ * Scroll near top: fetch one older page while showing a compact loader.
+ * After prepend: restore scrollTop by the height delta so the viewport does not jump.
+ */
+
 function mapTenantStatusMessage(message: string) {
   const trimmed = message.trim();
   const lower = trimmed.toLowerCase();
@@ -528,6 +540,7 @@ export function ChatPageClient({
   initialSession,
   initialSubjectContext,
   initialPrompt,
+  initialReferenceNote,
 }: {
   user: AppUser;
   defaultLanguage: Language;
@@ -539,6 +552,7 @@ export function ChatPageClient({
   initialSession: ChatSessionDetail | null;
   initialSubjectContext: string | null;
   initialPrompt: string | null;
+  initialReferenceNote?: RevisionNoteDetail | null;
 }) {
   const [sessions, setSessions] = useState(initialSessions);
   const [hasMoreSessions, setHasMoreSessions] = useState(initialHasMore);
@@ -572,6 +586,14 @@ export function ChatPageClient({
     return null;
   }, [initialSubjectContext, initialSession?.subjectContext]);
   const [subjectContext, setSubjectContext] = useState<string | null>(defaultSubjectContext);
+  const [referenceNote, setReferenceNote] = useState<RevisionNoteDetail | null>(initialReferenceNote ?? null);
+
+  useEffect(() => {
+    if (initialReferenceNote) {
+      setReferenceNote(initialReferenceNote);
+    }
+  }, [initialReferenceNote]);
+
   const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("default");
   const [saveState, setSaveState] = useState<{
     message: ChatMessageRecord;
@@ -609,7 +631,10 @@ export function ChatPageClient({
   const sessionSwitchAbortRef = useRef<AbortController | null>(null);
   const stopChatRef = useRef<(() => void) | null>(null);
   const sendStartTimeRef = useRef<number>(0);
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const loadingOlderMessagesRef = useRef(false);
+  const shouldStickToBottomRef = useRef(true);
   const [responseTimes, setResponseTimes] = useState<Record<string, number>>({});
 
   const clearThinkingStageTimers = useCallback(() => {
@@ -743,6 +768,10 @@ export function ChatPageClient({
       sessionSwitchAbortRef.current?.abort();
       sessionSwitchAbortRef.current = null;
       setSwitchingSessionId(null);
+      loadingOlderMessagesRef.current = false;
+      shouldStickToBottomRef.current = true;
+      setLoadingOlderMessages(false);
+      setHasMoreMessages(false);
       setCurrentSessionId(null);
       currentSessionIdRef.current = null;
       setSessionDetail(null);
@@ -860,6 +889,10 @@ export function ChatPageClient({
       setSwitchingSessionId(sessionId);
       setSessionDetail(null);
       setMessages([]);
+      loadingOlderMessagesRef.current = false;
+      shouldStickToBottomRef.current = true;
+      setLoadingOlderMessages(false);
+      setHasMoreMessages(false);
       setChatError("");
       setMatchedScope(null);
       setLatestThinkingTrace(null);
@@ -878,10 +911,13 @@ export function ChatPageClient({
       }
 
       try {
-        const response = await fetch(`/api/chat/session?session=${sessionId}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
+        const response = await fetch(
+          `/api/chat/session?session=${sessionId}&limit=${CHAT_MESSAGE_PAGE_SIZE}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
         if (!response.ok) {
           throw new Error("Failed to load this conversation.");
         }
@@ -890,6 +926,7 @@ export function ChatPageClient({
         if (controller.signal.aborted || currentSessionIdRef.current !== sessionId) return;
 
         setSessionDetail(session);
+        setHasMoreMessages(Boolean(session.hasMoreMessages));
         setSubjectContext(stripSubjectChapter(session.subjectContext) || defaultSubjectContext);
         setMessages(
           session.messages.map((message) => ({
@@ -919,6 +956,7 @@ export function ChatPageClient({
                 new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
             ),
         );
+        window.requestAnimationFrame(() => scrollMessagesToBottom("auto"));
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         if (currentSessionIdRef.current === sessionId) {
@@ -945,13 +983,14 @@ export function ChatPageClient({
   }
 
   async function refreshSession(sessionId: string) {
-    const response = await fetch(`/api/chat/session?session=${sessionId}`, {
+    const response = await fetch(`/api/chat/session?session=${sessionId}&limit=${CHAT_MESSAGE_PAGE_SIZE}`, {
       cache: "no-store",
     });
 
     if (!response.ok) return;
     const detail = (await response.json()) as ChatSessionDetail;
     setSessionDetail(detail);
+    setHasMoreMessages(Boolean(detail.hasMoreMessages));
     // Only overwrite local messages if DB has at least as many messages.
     // After an edit, the backend after() may not have persisted yet,
     // so DB can temporarily have fewer messages than local state.
@@ -988,6 +1027,8 @@ export function ChatPageClient({
     "Start a new conversation";
 
   const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [hasMoreMessages, setHasMoreMessages] = useState(Boolean(initialSession?.hasMoreMessages));
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [input, setInput] = useState("");
 
   useEffect(() => {
@@ -1005,8 +1046,110 @@ export function ChatPageClient({
     setInput(event.target.value);
   }
 
+  function scrollMessagesToBottom(behavior: ScrollBehavior = "smooth") {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  }
+
+  function isMessagesViewportNearBottom() {
+    const element = messagesScrollRef.current;
+    if (!element) return true;
+    return element.scrollHeight - element.scrollTop - element.clientHeight < BOTTOM_STICK_THRESHOLD_PX;
+  }
+
+  const loadOlderMessages = useCallback(async () => {
+    const sessionId = currentSessionIdRef.current;
+    const oldestMessage = messages[0];
+    const container = messagesScrollRef.current;
+    if (
+      !sessionId ||
+      !oldestMessage?.createdAt ||
+      !container ||
+      !hasMoreMessages ||
+      loadingOlderMessagesRef.current
+    ) {
+      return;
+    }
+
+    loadingOlderMessagesRef.current = true;
+    setLoadingOlderMessages(true);
+    const previousScrollHeight = container.scrollHeight;
+    const previousScrollTop = container.scrollTop;
+
+    try {
+      const response = await fetch(
+        `/api/chat/session?session=${sessionId}&limit=${CHAT_MESSAGE_PAGE_SIZE}&before=${encodeURIComponent(
+          oldestMessage.createdAt,
+        )}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) return;
+
+      const detail = (await response.json()) as ChatSessionDetail;
+      const olderMessages = detail.messages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        createdAt: message.createdAt,
+        answerTrace: message.answerTrace,
+        attachments: message.attachments,
+      }));
+
+      if (currentSessionIdRef.current !== sessionId || olderMessages.length === 0) {
+        setHasMoreMessages(Boolean(detail.hasMoreMessages));
+        return;
+      }
+
+      const existingIds = new Set(messages.map((message) => message.id));
+      const uniqueOlderMessages = olderMessages.filter((message) => !existingIds.has(message.id));
+      if (uniqueOlderMessages.length === 0) {
+        setHasMoreMessages(Boolean(detail.hasMoreMessages));
+        return;
+      }
+
+      shouldStickToBottomRef.current = false;
+      setMessages((currentMessages) => [...uniqueOlderMessages, ...currentMessages]);
+      setSessionDetail((currentDetail) =>
+        currentDetail
+          ? {
+              ...currentDetail,
+              messages: [
+                ...detail.messages.filter(
+                  (message) => !currentDetail.messages.some((item) => item.id === message.id),
+                ),
+                ...currentDetail.messages,
+              ],
+              hasMoreMessages: detail.hasMoreMessages,
+            }
+          : detail,
+      );
+      setHasMoreMessages(Boolean(detail.hasMoreMessages));
+
+      window.requestAnimationFrame(() => {
+        const updatedContainer = messagesScrollRef.current;
+        if (!updatedContainer) return;
+        updatedContainer.scrollTop =
+          updatedContainer.scrollHeight - previousScrollHeight + previousScrollTop;
+      });
+    } finally {
+      loadingOlderMessagesRef.current = false;
+      setLoadingOlderMessages(false);
+    }
+  }, [hasMoreMessages, messages]);
+
+  const handleMessagesScroll = useCallback(() => {
+    const element = messagesScrollRef.current;
+    if (!element) return;
+    shouldStickToBottomRef.current = isMessagesViewportNearBottom();
+    if (element.scrollTop < OLDER_MESSAGE_LOAD_THRESHOLD_PX) {
+      void loadOlderMessages();
+    }
+  }, [loadOlderMessages]);
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (loadingOlderMessagesRef.current) return;
+    if (shouldStickToBottomRef.current) {
+      scrollMessagesToBottom(isLoading ? "smooth" : "auto");
+    }
   }, [messages, isLoading]);
 
   useEffect(() => {
@@ -1379,7 +1522,11 @@ export function ChatPageClient({
       stop();
     }, 90_000);
 
-    const finalMessageText = quotedText ? `> **${quotedText}**\n\n${trimmed}` : trimmed;
+    let finalMessageText = quotedText ? `> **${quotedText}**\n\n${trimmed}` : trimmed;
+    if (referenceNote) {
+      finalMessageText = `<referenced_note title="${referenceNote.title.replace(/"/g, '&quot;')}">\nQuestion: ${referenceNote.questionContent}\nAnswer: ${referenceNote.answerContent}\n</referenced_note>\n\n${finalMessageText}`;
+      setReferenceNote(null);
+    }
     const isImageOnlyMessage = !finalMessageText.trim() && attachmentsForMessage.length > 0;
     const userMessage = { ...createLocalMessage("user", finalMessageText), attachments: attachmentsForMessage };
     const nextMessages = [...(overrideMessages ?? messages), userMessage];
@@ -1681,6 +1828,10 @@ export function ChatPageClient({
 
     setSessions((prev) => prev.filter((session) => session.id !== targetSession.id));
     if (currentSessionIdRef.current === targetSession.id) {
+      loadingOlderMessagesRef.current = false;
+      shouldStickToBottomRef.current = true;
+      setLoadingOlderMessages(false);
+      setHasMoreMessages(false);
       setCurrentSessionId(null);
       currentSessionIdRef.current = null;
       setSessionDetail(null);
@@ -1981,6 +2132,31 @@ export function ChatPageClient({
           </button>
         </div>
       )}
+      {referenceNote && (
+        <div className="group relative h-[160px] w-[225px] mb-3 overflow-hidden rounded-[16px] border border-black/10 dark:border-white/10 bg-black/5 dark:bg-[#1a1a1c] flex flex-col p-3.5 shadow-sm transition hover:bg-black/10 dark:hover:bg-[#232325]">
+          <div className="flex-1 overflow-hidden">
+            <p className="text-[13px] font-semibold leading-[18px] text-text-primary line-clamp-2 mb-1.5">
+              {referenceNote.title || "Note"}
+            </p>
+            <p className="text-[12px] leading-[17px] text-text-muted line-clamp-3">
+              {referenceNote.answerContent.slice(0, 150)}
+            </p>
+          </div>
+          <div className="mt-2 flex items-center">
+            <span className="rounded-md border border-black/20 dark:border-white/20 px-2 py-[3px] text-[11px] font-medium tracking-wide text-text-muted uppercase">
+              Pasted
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReferenceNote(null)}
+            className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/40 text-white opacity-0 backdrop-blur-md transition group-hover:opacity-100 hover:bg-black/60"
+            aria-label="Remove pasted note"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+      )}
       {pendingAttachments.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
           {pendingAttachments.map((attachment) => (
@@ -2099,7 +2275,11 @@ export function ChatPageClient({
         {/* matchedScope banner hidden temporarily */}
 
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div
+          ref={messagesScrollRef}
+          onScroll={handleMessagesScroll}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
           <div className="mx-auto flex w-full max-w-5xl flex-col px-3 pb-24 pt-4 sm:px-4 sm:pt-5 md:px-5 xl:px-6">
             {switchingSessionId ? (
               <ChatSessionLoadingSkeleton />
@@ -2133,6 +2313,13 @@ export function ChatPageClient({
               </div>
             ) : (
               <div className="space-y-5">
+                {loadingOlderMessages ? (
+                  <div className="flex justify-center py-2">
+                    <span className="rounded-full border border-border bg-bg-secondary px-3 py-1 text-[12px] font-medium text-text-muted">
+                      Loading earlier messages...
+                    </span>
+                  </div>
+                ) : null}
                 {messages.map((message, index) => {
                   const assistantOrdinal =
                     message.role === "assistant"
@@ -2149,27 +2336,36 @@ export function ChatPageClient({
                   if (message.role === "assistant") {
                     const storedSeconds = responseTimes[`${currentSessionId}_${index}`];
                     if (storedSeconds) {
-                      responseTimeText = `replied in ${storedSeconds}s`;
+                      responseTimeText = `${storedSeconds}s`;
                     } else if (message.createdAt && index > 0) {
                       const prevMessage = messages[index - 1];
                       if (prevMessage.role === "user" && prevMessage.createdAt) {
                         const diffInMs = new Date(message.createdAt).getTime() - new Date(prevMessage.createdAt).getTime();
                         const diffInSeconds = Math.max(1, Math.round(diffInMs / 1000));
-                        responseTimeText = `replied in ${diffInSeconds}s`;
+                        responseTimeText = `${diffInSeconds}s`;
                       }
                     } else if (message.answerTrace?.totalMs) {
                       const diffInSeconds = Math.max(1, Math.round(message.answerTrace.totalMs / 1000));
-                      responseTimeText = `replied in ${diffInSeconds}s`;
+                      responseTimeText = `${diffInSeconds}s`;
                     }
                   }
 
                   let displayQuote = "";
+                  let displayNoteTitle = "";
                   let displayContent = message.content;
-                  if (message.role === "user" && message.content.startsWith("> **")) {
-                    const quoteEndIdx = message.content.indexOf("**\n\n");
-                    if (quoteEndIdx !== -1) {
-                      displayQuote = message.content.substring(4, quoteEndIdx);
-                      displayContent = message.content.substring(quoteEndIdx + 4);
+                  if (message.role === "user") {
+                    const noteMatch = displayContent.match(/<referenced_note title="([^"]+)">[\s\S]*?<\/referenced_note>\n*/);
+                    if (noteMatch) {
+                      displayNoteTitle = noteMatch[1];
+                      displayContent = displayContent.replace(noteMatch[0], "");
+                    }
+
+                    if (displayContent.startsWith("> **")) {
+                      const quoteEndIdx = displayContent.indexOf("**\n\n");
+                      if (quoteEndIdx !== -1) {
+                        displayQuote = displayContent.substring(4, quoteEndIdx);
+                        displayContent = displayContent.substring(quoteEndIdx + 4);
+                      }
                     }
                   }
 
@@ -2193,11 +2389,11 @@ export function ChatPageClient({
                         className={cn(
                           message.role === "user"
                             ? "rounded-[22px] bg-bg-tertiary px-3.5 py-2.5 text-text-primary shadow-sm sm:rounded-[24px] sm:px-4"
-                            : "rounded-[22px] bg-black/[0.04] dark:bg-[#202020] px-4 py-4 text-text-primary shadow-sm sm:rounded-[24px] sm:px-5 w-full",
+                            : "text-text-primary w-full",
                         )}
                       >
                         {message.role === "user" && editingMessageIndex !== index && (
-                          <div className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all">
+                          <div className="absolute -left-2 -translate-x-full top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all">
                             <button
                               onClick={() => handleEditMessage(index)}
                               className="flex items-center justify-center w-8 h-8 rounded-full bg-bg-secondary/80 hover:bg-bg-tertiary text-text-primary shadow-sm transition-all"
@@ -2216,14 +2412,12 @@ export function ChatPageClient({
                         )}
                         {message.role === "assistant" ? (
                           <>
-                            <Markdown text={displayContent} className="text-[15px] leading-[26px] font-medium sm:text-[16px] sm:leading-[28px]" />
-                            {responseTimeText && (
-                              <div className="mt-2">
-                                <span className="text-[12px] text-text-primary/80 font-medium">
-                                  {responseTimeText}
-                                </span>
+                            {displayContent ? (
+                              <div className="rounded-[22px] bg-black/[0.04] dark:bg-[#202020] px-4 py-4 text-text-primary shadow-sm sm:rounded-[24px] sm:px-5 w-full">
+                                <Markdown text={displayContent} className="text-[15px] leading-[26px] font-medium sm:text-[16px] sm:leading-[28px]" />
                               </div>
-                            )}
+                            ) : null}
+
                           </>
                         ) : editingMessageIndex === index ? (
                           <div className="flex flex-col gap-2 w-full">
@@ -2280,8 +2474,16 @@ export function ChatPageClient({
                               </div>
                             )}
                             <div className="flex items-end justify-between gap-3">
-                              <div className="whitespace-pre-wrap break-words text-[15px] leading-[23px] font-medium text-text-primary sm:text-[16px] sm:leading-[24px]">
-                                {displayContent}
+                              <div>
+                                {displayNoteTitle && (
+                                  <div className="flex items-center gap-1.5 bg-black/5 dark:bg-white/5 rounded-lg px-2 py-1 mb-2 w-fit border border-black/5 dark:border-white/5">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-text-muted shrink-0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                                    <span className="text-[12px] font-medium text-text-secondary truncate max-w-[200px]">{displayNoteTitle}</span>
+                                  </div>
+                                )}
+                                <div className="whitespace-pre-wrap break-words text-[15px] leading-[23px] font-medium text-text-primary sm:text-[16px] sm:leading-[24px]">
+                                  {displayContent}
+                                </div>
                               </div>
                               {message.createdAt && (
                                 <span className="mb-[2px] shrink-0 text-[11px] font-medium text-text-muted">
@@ -2295,60 +2497,63 @@ export function ChatPageClient({
 
 
                         {persistedAssistant ? (
-                          <div className="mt-5 space-y-4">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Button
+                          <div className="mt-1.5 flex items-center gap-1 text-text-muted">
+
+                            <div className="relative group/btn flex items-center justify-center">
+                              <button
                                 type="button"
-                                size="sm"
-                                variant="ghost"
                                 onClick={() => void copyAssistantMessage(persistedAssistant)}
                                 disabled={copyingMessageId === persistedAssistant.id}
-                                data-testid={`copy-message-${persistedAssistant.id}`}
-                                className="rounded-full"
+                                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+                                aria-label="Copy"
                               >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                              </button>
+                              <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#2D2D2D] dark:bg-[#3D3D3D] px-2.5 py-1 text-[12px] font-medium text-[#E3E3E3] dark:text-white opacity-0 transition-opacity group-hover/btn:opacity-100 shadow-sm z-10">
                                 {copyingMessageId === persistedAssistant.id ? "Copying..." : "Copy"}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant={persistedAssistant.feedback === "down" ? "danger" : "ghost"}
-                                onClick={() =>
-                                  void updateAssistantFeedback(
-                                    persistedAssistant,
-                                    persistedAssistant.feedback === "down" ? null : "down",
-                                  )
-                                }
-                                disabled={feedbackSavingMessageId === persistedAssistant.id}
-                                data-testid={`not-satisfied-message-${persistedAssistant.id}`}
-                                aria-pressed={persistedAssistant.feedback === "down"}
-                                className="rounded-full"
-                              >
-                                {feedbackSavingMessageId === persistedAssistant.id
-                                  ? "Saving..."
-                                  : persistedAssistant.feedback === "down"
-                                    ? "Marked unsatisfied"
-                                    : "Not satisfied"}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant={persistedAssistant.savedNoteId ? "outline" : "filled"}
-                                className="rounded-full"
-                                onClick={() => void saveAssistantNote(persistedAssistant, question)}
-                                disabled={
-                                  noteSavingMessageId === persistedAssistant.id || Boolean(persistedAssistant.savedNoteId)
-                                }
-                                data-testid={`save-note-${persistedAssistant.id}`}
-                              >
-                                {noteSavingMessageId === persistedAssistant.id
-                                  ? "Saving..."
-                                  : persistedAssistant.savedNoteId
-                                    ? "Saved"
-                                    : "Save as note"}
-                              </Button>
+                              </div>
                             </div>
 
+                            <div className="relative group/btn flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => void saveAssistantNote(persistedAssistant, question)}
+                                disabled={noteSavingMessageId === persistedAssistant.id || Boolean(persistedAssistant.savedNoteId)}
+                                className={cn(
+                                  "flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-tertiary transition-colors",
+                                  persistedAssistant.savedNoteId ? "text-text-primary" : "hover:text-text-primary"
+                                )}
+                                aria-label={persistedAssistant.savedNoteId ? "Saved as note" : "Save as note"}
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill={persistedAssistant.savedNoteId ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+                              </button>
+                              <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#2D2D2D] dark:bg-[#3D3D3D] px-2.5 py-1 text-[12px] font-medium text-[#E3E3E3] dark:text-white opacity-0 transition-opacity group-hover/btn:opacity-100 shadow-sm z-10">
+                                {persistedAssistant.savedNoteId ? "Saved as note" : "Save as note"}
+                              </div>
+                            </div>
 
+                            <div className="relative group/btn flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => void updateAssistantFeedback(persistedAssistant, persistedAssistant.feedback === "down" ? null : "down")}
+                                disabled={feedbackSavingMessageId === persistedAssistant.id}
+                                className={cn(
+                                  "flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-tertiary transition-colors",
+                                  persistedAssistant.feedback === "down" ? "text-red-500" : "hover:text-red-400"
+                                )}
+                                aria-label="Not satisfied"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill={persistedAssistant.feedback === "down" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+                              </button>
+                              <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#2D2D2D] dark:bg-[#3D3D3D] px-2.5 py-1 text-[12px] font-medium text-[#E3E3E3] dark:text-white opacity-0 transition-opacity group-hover/btn:opacity-100 shadow-sm z-10">
+                                Not satisfied
+                              </div>
+                            </div>
+                            {responseTimeText && (
+                              <span className="ml-1 text-[12px] font-medium text-text-muted">
+                                {responseTimeText}
+                              </span>
+                            )}
                           </div>
                         ) : null}
                       </div>
@@ -2470,10 +2675,7 @@ export function ChatPageClient({
               const text = selectionPopover.text;
               setSelectionPopover(null);
               window.getSelection()?.removeAllRanges();
-              const prompt = composerLanguage === "EN"
-                ? `Answer the following in English:\n\n${text}`
-                : `Answer the following in Roman Nepali:\n\n${text}`;
-              void sendCurrentMessage(prompt);
+              void sendCurrentMessage(text);
             }}
             className="px-4 py-2 text-[14px] font-medium text-white/90 hover:bg-white/10 transition-colors"
           >

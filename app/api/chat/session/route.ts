@@ -14,12 +14,18 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const sessionId = searchParams.get("session");
+  const limitParam = searchParams.get("limit");
+  const before = searchParams.get("before") ?? undefined;
+  const limit = limitParam ? Number(limitParam) : undefined;
 
   if (!sessionId) {
     return NextResponse.json({ error: "Missing session parameter." }, { status: 400 });
   }
 
-  const detail = await getChatSessionDetail(sessionId, user.id);
+  const detail = await getChatSessionDetail(sessionId, user.id, {
+    limit: Number.isFinite(limit) ? limit : undefined,
+    before,
+  });
   if (!detail) {
     return NextResponse.json({ error: "Chat session not found." }, { status: 404 });
   }

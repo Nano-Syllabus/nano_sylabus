@@ -124,6 +124,7 @@ export interface ChatMessageRecord {
 
 export interface ChatSessionDetail extends ChatSessionSummary {
   messages: ChatMessageRecord[];
+  hasMoreMessages?: boolean;
 }
 
 export interface PublicChatSession {

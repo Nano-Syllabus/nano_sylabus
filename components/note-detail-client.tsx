@@ -82,7 +82,7 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
             </Button>
           </Link>
           <Link
-            href={`/app/chat?session=${current.sessionId}&prompt=${encodeURIComponent(followUpPrompt)}`}
+            href={`/app/chat?referenceNoteId=${current.id}&subject=${encodeURIComponent(current.subjectTag)}`}
           >
             <Button size="sm">Ask follow-up →</Button>
           </Link>
