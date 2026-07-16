@@ -42,10 +42,6 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
     <>
       <article className="mx-auto max-w-3xl px-5 py-10 animate-fade-in">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`h-2 w-2 rounded-full ${COLOR_DOT[current.colorLabel]}`} />
-          <span className="text-[11px] font-mono-ui uppercase tracking-wider text-text-muted">
-            {COLOR_LABEL[current.colorLabel]}
-          </span>
           <Badge variant="outline">{current.subjectTag}</Badge>
           {current.chapterTag ? <Badge>{current.chapterTag}</Badge> : null}
           <span className="ml-auto text-[11px] font-mono-ui text-text-muted">
