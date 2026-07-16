@@ -146,7 +146,14 @@ export async function listChatSessions(
   };
 }
 
-export async function getChatSessionDetail(sessionId: string, userId: string) {
+export async function getChatSessionDetail(
+  sessionId: string,
+  userId: string,
+  options?: {
+    limit?: number;
+    before?: string;
+  },
+) {
   const supabase = await createSupabaseServerClient();
   const { data: sessionRow, error: sessionError } = await supabase
     .from("chat_sessions")
@@ -158,13 +165,34 @@ export async function getChatSessionDetail(sessionId: string, userId: string) {
   if (sessionError) throw sessionError;
   if (!sessionRow) return null;
 
-  const { data: messageRows, error: messageError } = await supabase
+  const messageLimit =
+    typeof options?.limit === "number" && Number.isFinite(options.limit)
+      ? Math.max(1, Math.min(100, Math.floor(options.limit)))
+      : null;
+  const before = options?.before?.trim();
+
+  let messageQuery = supabase
     .from("chat_messages")
     .select("*")
-    .eq("session_id", sessionId)
-    .order("created_at", { ascending: true });
+    .eq("session_id", sessionId);
+
+  if (messageLimit) {
+    messageQuery = messageQuery.order("created_at", { ascending: false }).limit(messageLimit + 1);
+    if (before) {
+      messageQuery = messageQuery.lt("created_at", before);
+    }
+  } else {
+    messageQuery = messageQuery.order("created_at", { ascending: true });
+  }
+
+  const { data: rawMessageRows, error: messageError } = await messageQuery;
 
   if (messageError) throw messageError;
+
+  const hasMoreMessages = messageLimit ? (rawMessageRows?.length ?? 0) > messageLimit : false;
+  const messageRows = messageLimit
+    ? (rawMessageRows ?? []).slice(0, messageLimit).reverse()
+    : (rawMessageRows ?? []);
 
   const { data: noteRows, error: noteError } = await supabase
     .from("revision_notes")
@@ -178,10 +206,11 @@ export async function getChatSessionDetail(sessionId: string, userId: string) {
 
   return {
     ...normalizeSession(sessionRow),
-    messages: (messageRows ?? []).map((row) => ({
+    messages: messageRows.map((row) => ({
       ...normalizeMessage(row),
       savedNoteId: noteByMessageId.get(row.id) ?? null,
     })),
+    hasMoreMessages,
   } satisfies ChatSessionDetail;
 }
 
