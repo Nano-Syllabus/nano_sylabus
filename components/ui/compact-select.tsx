@@ -69,7 +69,8 @@ export function CompactSelect({
             <button
               key={opt.value}
               type="button"
-              onClick={() => { 
+              onPointerDown={(e) => { 
+                e.preventDefault();
                 onChange(opt.value); 
                 setIsOpen(false); 
               }}
