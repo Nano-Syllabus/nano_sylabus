@@ -2292,7 +2292,7 @@ export function ChatPageClient({
             ) : messages.length === 0 ? (
               <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center text-center">
                 <div className="flex flex-row items-center justify-center gap-4 sm:gap-5 text-text-primary mb-8 text-center">
-                  <h1 className="font-display text-3xl sm:text-[40px] leading-tight font-normal tracking-tight">
+                  <h1 className="font-display text-3xl sm:text-[40px] leading-tight font-medium tracking-tight">
                     <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="url(#premium-blue)" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" className="mr-2 inline-block h-8 w-8 align-text-bottom drop-shadow-[0_0_10px_rgba(96,165,250,0.65)] sm:mr-4 sm:h-[42px] sm:w-[42px]">
                       <defs>
                         <linearGradient id="premium-blue" x1="0%" y1="0%" x2="100%" y2="100%">
