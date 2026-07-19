@@ -594,7 +594,7 @@ export function ChatPageClient({
     }
   }, [initialReferenceNote]);
 
-  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("default");
+  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("web");
   const [saveState, setSaveState] = useState<{
     message: ChatMessageRecord;
     question: string;
