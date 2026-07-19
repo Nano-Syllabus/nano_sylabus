@@ -1,7 +1,29 @@
 import type { Metadata } from "next";
+import { DM_Mono, Inter, Outfit } from "next/font/google";
 import { ReactNode } from "react";
 import "katex/dist/katex.min.css";
 import "./globals.css";
+
+const outfit = Outfit({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-outfit",
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-dm-mono",
+  display: "swap",
+});
 
 const themeBootScript = `
 (function(){try{
@@ -24,7 +46,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="font-sans antialiased">
+      <body className={`${outfit.variable} ${inter.variable} ${dmMono.variable} font-sans antialiased`}>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         {children}
       </body>
