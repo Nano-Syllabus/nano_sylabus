@@ -982,7 +982,11 @@ export function ChatPageClient({
     setCreditBalance(payload.balance);
   }
 
-  async function refreshSession(sessionId: string) {
+  async function refreshSession(
+    sessionId: string,
+    options: { syncMessages?: boolean } = {},
+  ) {
+    const { syncMessages = true } = options;
     const response = await fetch(`/api/chat/session?session=${sessionId}&limit=${CHAT_MESSAGE_PAGE_SIZE}`, {
       cache: "no-store",
     });
@@ -991,15 +995,17 @@ export function ChatPageClient({
     const detail = (await response.json()) as ChatSessionDetail;
     setSessionDetail(detail);
     setHasMoreMessages(Boolean(detail.hasMoreMessages));
-    // Only overwrite local messages if DB has at least as many messages.
-    // After an edit, the backend after() may not have persisted yet,
-    // so DB can temporarily have fewer messages than local state.
-    setMessages((currentMessages) => {
-      if (detail.messages.length >= currentMessages.length) {
-        return keepLocalAttachmentsOnRefresh(detail.messages, currentMessages);
-      }
-      return currentMessages;
-    });
+    if (syncMessages) {
+      // Only overwrite local messages if DB has at least as many messages.
+      // After an edit, the backend after() may not have persisted yet,
+      // so DB can temporarily have fewer messages than local state.
+      setMessages((currentMessages) => {
+        if (detail.messages.length >= currentMessages.length) {
+          return keepLocalAttachmentsOnRefresh(detail.messages, currentMessages);
+        }
+        return currentMessages;
+      });
+    }
     setSubjectContext(stripSubjectChapter(detail.subjectContext) || defaultSubjectContext);
     setSessions((prev) =>
       prev
@@ -1288,7 +1294,7 @@ export function ChatPageClient({
     window.dispatchEvent(new CustomEvent("chat-session-updated"));
   }
 
-  async function finishChatResponse() {
+  async function finishChatResponse(options: { syncMessages?: boolean } = {}) {
     clearThinkingStageTimers();
     setThinkingSteps([]);
     if (requestWatchdogRef.current) {
@@ -1299,7 +1305,7 @@ export function ChatPageClient({
     setChatError("");
     const resolvedSessionId = currentSessionIdRef.current;
     if (resolvedSessionId) {
-      await Promise.all([refreshSession(resolvedSessionId), refreshCredits()]);
+      await Promise.all([refreshSession(resolvedSessionId, options), refreshCredits()]);
     }
   }
 
@@ -1507,6 +1513,7 @@ export function ChatPageClient({
     pendingTitleRef.current = deriveSessionTitle(trimmed || "Image attachment", resolvedSubjectContext);
     setChatError("");
     setShowThinkingTrace(false);
+    setIsLoading(true);
     startThinkingStages();
     setInput("");
     if (!overrideText) {
@@ -1532,7 +1539,6 @@ export function ChatPageClient({
     const nextMessages = [...(overrideMessages ?? messages), userMessage];
     setMessages(nextMessages);
     setQuotedText("");
-    setIsLoading(true);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -1723,7 +1729,7 @@ export function ChatPageClient({
         throw new Error("Chat stream ended before completion.");
       }
 
-      await finishChatResponse();
+      await finishChatResponse({ syncMessages: false });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       handleChatError(error);
@@ -1880,7 +1886,7 @@ export function ChatPageClient({
     );
   }, [activeSessionSummary, isLoading, messages.length, subjectContext]);
 
-  async function copyAssistantMessage(message: ChatMessageRecord) {
+  async function copyAssistantMessage(message: { id: string; content: string }) {
     setCopyingMessageId(message.id);
     try {
       await navigator.clipboard.writeText(message.content);
@@ -2335,17 +2341,11 @@ export function ChatPageClient({
                   let responseTimeText = "";
                   if (message.role === "assistant") {
                     const storedSeconds = responseTimes[`${currentSessionId}_${index}`];
+                    const traceMs = message.answerTrace?.totalMs;
                     if (storedSeconds) {
                       responseTimeText = `${storedSeconds}s`;
-                    } else if (message.createdAt && index > 0) {
-                      const prevMessage = messages[index - 1];
-                      if (prevMessage.role === "user" && prevMessage.createdAt) {
-                        const diffInMs = new Date(message.createdAt).getTime() - new Date(prevMessage.createdAt).getTime();
-                        const diffInSeconds = Math.max(1, Math.round(diffInMs / 1000));
-                        responseTimeText = `${diffInSeconds}s`;
-                      }
-                    } else if (message.answerTrace?.totalMs) {
-                      const diffInSeconds = Math.max(1, Math.round(message.answerTrace.totalMs / 1000));
+                    } else if (typeof traceMs === "number" && traceMs > 0) {
+                      const diffInSeconds = Math.max(1, Math.round(traceMs / 1000));
                       responseTimeText = `${diffInSeconds}s`;
                     }
                   }
@@ -2496,57 +2496,75 @@ export function ChatPageClient({
 
 
 
-                        {persistedAssistant ? (
+                        {message.role === "assistant" && !isLoading ? (
                           <div className="mt-1.5 flex items-center gap-1 text-text-muted">
 
                             <div className="relative group/btn flex items-center justify-center">
                               <button
                                 type="button"
-                                onClick={() => void copyAssistantMessage(persistedAssistant)}
-                                disabled={copyingMessageId === persistedAssistant.id}
+                                onClick={() => void copyAssistantMessage(message)}
+                                disabled={copyingMessageId === message.id}
                                 className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-tertiary hover:text-text-primary transition-colors"
                                 aria-label="Copy"
                               >
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                               </button>
                               <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#2D2D2D] dark:bg-[#3D3D3D] px-2.5 py-1 text-[12px] font-medium text-[#E3E3E3] dark:text-white opacity-0 transition-opacity group-hover/btn:opacity-100 shadow-sm z-10">
-                                {copyingMessageId === persistedAssistant.id ? "Copying..." : "Copy"}
+                                {copyingMessageId === message.id ? "Copying..." : "Copy"}
                               </div>
                             </div>
 
                             <div className="relative group/btn flex items-center justify-center">
                               <button
                                 type="button"
-                                onClick={() => void saveAssistantNote(persistedAssistant, question)}
-                                disabled={noteSavingMessageId === persistedAssistant.id || Boolean(persistedAssistant.savedNoteId)}
+                                onClick={() => persistedAssistant && void saveAssistantNote(persistedAssistant, question)}
+                                disabled={!persistedAssistant || noteSavingMessageId === persistedAssistant.id || Boolean(persistedAssistant.savedNoteId)}
                                 className={cn(
-                                  "flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-tertiary transition-colors",
-                                  persistedAssistant.savedNoteId ? "text-text-primary" : "hover:text-text-primary"
+                                  "flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-tertiary transition-colors disabled:opacity-50",
+                                  persistedAssistant?.savedNoteId ? "text-text-primary" : "hover:text-text-primary"
                                 )}
-                                aria-label={persistedAssistant.savedNoteId ? "Saved as note" : "Save as note"}
+                                aria-label={persistedAssistant?.savedNoteId ? "Saved as note" : "Save as note"}
                               >
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill={persistedAssistant.savedNoteId ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill={persistedAssistant?.savedNoteId ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
                               </button>
                               <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#2D2D2D] dark:bg-[#3D3D3D] px-2.5 py-1 text-[12px] font-medium text-[#E3E3E3] dark:text-white opacity-0 transition-opacity group-hover/btn:opacity-100 shadow-sm z-10">
-                                {persistedAssistant.savedNoteId ? "Saved as note" : "Save as note"}
+                                {persistedAssistant?.savedNoteId ? "Saved as note" : "Save as note"}
                               </div>
                             </div>
 
                             <div className="relative group/btn flex items-center justify-center">
                               <button
                                 type="button"
-                                onClick={() => void updateAssistantFeedback(persistedAssistant, persistedAssistant.feedback === "down" ? null : "down")}
-                                disabled={feedbackSavingMessageId === persistedAssistant.id}
+                                onClick={() => persistedAssistant && void updateAssistantFeedback(persistedAssistant, persistedAssistant.feedback === "up" ? null : "up")}
+                                disabled={!persistedAssistant || feedbackSavingMessageId === persistedAssistant.id}
                                 className={cn(
-                                  "flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-tertiary transition-colors",
-                                  persistedAssistant.feedback === "down" ? "text-red-500" : "hover:text-red-400"
+                                  "flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-tertiary transition-colors disabled:opacity-50",
+                                  persistedAssistant?.feedback === "up" ? "text-green-500" : "hover:text-green-400"
                                 )}
-                                aria-label="Not satisfied"
+                                aria-label="Helpful"
                               >
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill={persistedAssistant.feedback === "down" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill={persistedAssistant?.feedback === "up" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg>
                               </button>
                               <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#2D2D2D] dark:bg-[#3D3D3D] px-2.5 py-1 text-[12px] font-medium text-[#E3E3E3] dark:text-white opacity-0 transition-opacity group-hover/btn:opacity-100 shadow-sm z-10">
-                                Not satisfied
+                                Helpful
+                              </div>
+                            </div>
+
+                            <div className="relative group/btn flex items-center justify-center">
+                              <button
+                                type="button"
+                                onClick={() => persistedAssistant && void updateAssistantFeedback(persistedAssistant, persistedAssistant.feedback === "down" ? null : "down")}
+                                disabled={!persistedAssistant || feedbackSavingMessageId === persistedAssistant.id}
+                                className={cn(
+                                  "flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-tertiary transition-colors disabled:opacity-50",
+                                  persistedAssistant?.feedback === "down" ? "text-red-500" : "hover:text-red-400"
+                                )}
+                                aria-label="Not helpful"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill={persistedAssistant?.feedback === "down" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+                              </button>
+                              <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-[#2D2D2D] dark:bg-[#3D3D3D] px-2.5 py-1 text-[12px] font-medium text-[#E3E3E3] dark:text-white opacity-0 transition-opacity group-hover/btn:opacity-100 shadow-sm z-10">
+                                Not helpful
                               </div>
                             </div>
                             {responseTimeText && (
