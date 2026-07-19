@@ -1,3 +1,5 @@
+import { SetAppShell } from "@/components/set-app-shell";
+
 type LoadingVariant = "chat" | "subjects" | "notes" | "billing" | "settings";
 
 const titleByVariant: Record<LoadingVariant, string> = {
@@ -8,7 +10,6 @@ const titleByVariant: Record<LoadingVariant, string> = {
   settings: "Loading settings",
 };
 
-import { SetAppShell } from "@/components/set-app-shell";
 function CardGridSkeleton() {
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-4 px-5 py-6 md:grid-cols-2 xl:grid-cols-3">
