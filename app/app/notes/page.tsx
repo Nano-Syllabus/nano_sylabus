@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AppShell } from "@/components/app-shell";
+import { SetAppShell } from "@/components/set-app-shell";
 import { NotesLibraryClient } from "@/components/notes-library-client";
 import { Button } from "@/components/ui/button";
 import { requireOnboardedUser } from "@/lib/auth";
@@ -14,28 +14,28 @@ export default async function NotesPage() {
   ]);
 
   return (
-    <AppShell
-      user={user}
-      title={
-        <span className="flex items-center gap-3">
-          My Notes
-        </span>
-      }
-      actions={
-        access.revisionEnabled ? (
-          <Link href="/app/notes/revision">
-            <Button size="sm">Start revision →</Button>
-          </Link>
-        ) : (
-          <Link href="/app/billing">
-            <Button size="sm" variant="outline">
-              Upgrade for revision
-            </Button>
-          </Link>
-        )
-      }
-    >
+    <>
+      <SetAppShell
+        title={
+          <span className="flex items-center gap-3">
+            My Notes
+          </span>
+        }
+        actions={
+          access.revisionEnabled ? (
+            <Link href="/app/notes/revision">
+              <Button size="sm">Start revision →</Button>
+            </Link>
+          ) : (
+            <Link href="/app/billing">
+              <Button size="sm" variant="outline">
+                Upgrade for revision
+              </Button>
+            </Link>
+          )
+        }
+      />
       <NotesLibraryClient notes={notes} />
-    </AppShell>
+    </>
   );
 }

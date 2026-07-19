@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AppShell } from "@/components/app-shell";
+import { SetAppShell } from "@/components/set-app-shell";
 import { SubjectDetailClient } from "@/components/subject-detail-client";
 import { requireOnboardedUser } from "@/lib/auth";
 import { listSubjectSessions } from "@/lib/data/explorer";
@@ -18,8 +18,9 @@ export default async function SubjectDetailPage({
   const sessions = await listSubjectSessions(user.id, decodedSubject);
 
   return (
-    <AppShell user={user} title={decodedSubject}>
+    <>
+      <SetAppShell title={decodedSubject} />
       <SubjectDetailClient subject={decodedSubject} sessions={sessions} />
-    </AppShell>
+    </>
   );
 }

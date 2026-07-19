@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AppShell } from "@/components/app-shell";
+import { SetAppShell } from "@/components/set-app-shell";
 import { RevisionModeClient } from "@/components/revision-mode-client";
 import { Button } from "@/components/ui/button";
 import { requireOnboardedUser } from "@/lib/auth";
@@ -14,14 +14,14 @@ export default async function RevisionPage() {
   ]);
 
   return (
-    <AppShell
-      user={user}
-      title={
-        <Link href="/app/notes" className="text-text-secondary hover:text-text-primary">
-          ← My Notes
-        </Link>
-      }
-    >
+    <>
+      <SetAppShell
+        title={
+          <Link href="/app/notes" className="text-text-secondary hover:text-text-primary">
+            ← My Notes
+          </Link>
+        }
+      />
       {access.revisionEnabled ? (
         <RevisionModeClient notes={notes} />
       ) : (
@@ -35,6 +35,6 @@ export default async function RevisionPage() {
           </Link>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

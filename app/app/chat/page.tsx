@@ -1,4 +1,4 @@
-import { AppShell } from "@/components/app-shell";
+import { SetAppShell } from "@/components/set-app-shell";
 import { ChatPageClient } from "@/components/chat-page-client";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getChatSessionDetail, listChatSessions } from "@/lib/data/chat";
@@ -33,7 +33,8 @@ export default async function ChatPage({
   }
 
   return (
-    <AppShell user={user} title="Chat">
+    <>
+      <SetAppShell title="Chat" />
       <ChatPageClient
         key={activeSession?.id ?? (params.referenceNoteId ? `new-ref-${params.referenceNoteId}` : "new")}
         user={user}
@@ -48,6 +49,6 @@ export default async function ChatPage({
         initialPrompt={params.prompt ? decodeURIComponent(params.prompt) : null}
         initialReferenceNote={referenceNote}
       />
-    </AppShell>
+    </>
   );
 }
