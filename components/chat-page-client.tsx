@@ -2599,7 +2599,7 @@ export function ChatPageClient({
           </div>
         </div>
 
-        {messages.length > 0 ? (
+        {messages.length > 0 || switchingSessionId ? (
           <div className="bg-bg-primary px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-4 md:px-5 xl:px-6">
             <div className="mx-auto max-w-3xl">
               {chatError ? (
