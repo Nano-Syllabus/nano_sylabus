@@ -53,8 +53,8 @@ const COLOR_LABEL: Record<NoteColor, string> = {
 
 type RetrievalMode = "default" | "web";
 const RETRIEVAL_MODE_LABELS: Record<RetrievalMode, string> = {
-  default: "Syllabus",
-  web: "Web Search",
+  default: "Exam mode",
+  web: "Study mode",
 };
 
 type TenantChatSubject = {
