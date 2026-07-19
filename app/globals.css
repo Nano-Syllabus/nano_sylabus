@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap");
 @import "tailwindcss" source(none);
 @source "../app";
 @source "../components";
@@ -14,9 +13,9 @@
   --radius-xl: 24px;
   --radius-full: 9999px;
 
-  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "DM Mono", ui-monospace, "SF Mono", monospace;
+  --font-display: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, "SF Mono", monospace;
 
   --color-background: var(--bg-primary);
   --color-foreground: var(--text-primary);
@@ -108,7 +107,6 @@
 
 @utility font-display {
   font-family: var(--font-display);
-  font-weight: 400;
   letter-spacing: -0.01em;
 }
 
