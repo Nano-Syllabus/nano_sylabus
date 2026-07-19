@@ -8,31 +8,7 @@ const titleByVariant: Record<LoadingVariant, string> = {
   settings: "Loading settings",
 };
 
-function SidebarSkeleton() {
-  return (
-    <aside className="hidden w-[260px] shrink-0 border-r border-border bg-bg-primary md:block">
-      <div className="space-y-4 p-5">
-        <div className="h-7 w-36 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-        <div className="mt-10 space-y-3">
-          <div className="h-10 rounded-xl bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-10 rounded-xl bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-10 rounded-xl bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-10 rounded-xl bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-        </div>
-        <div className="pt-8 space-y-2">
-          {Array.from({ length: 7 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-5 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none"
-              style={{ width: `${88 - index * 6}%` }}
-            />
-          ))}
-        </div>
-      </div>
-    </aside>
-  );
-}
-
+import { SetAppShell } from "@/components/set-app-shell";
 function CardGridSkeleton() {
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-4 px-5 py-6 md:grid-cols-2 xl:grid-cols-3">
@@ -74,34 +50,20 @@ export function AppRouteLoading({ variant }: { variant: LoadingVariant }) {
   const isCardPage = variant === "subjects" || variant === "notes";
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-bg-primary text-text-primary">
-      <SidebarSkeleton />
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex min-h-12 items-center justify-between gap-3 px-4 md:px-8">
-          <div className="h-5 w-44 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-9 w-28 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-        </header>
-
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-5 pt-6 md:px-8">
-            <p className="font-mono-ui text-xs uppercase tracking-[0.22em] text-text-muted">
-              {titleByVariant[variant]}
-            </p>
-          </div>
-          {variant === "chat" ? <ChatSkeleton /> : null}
-          {isCardPage ? <CardGridSkeleton /> : null}
-          {!isCardPage && variant !== "chat" ? (
-            <div className="mx-auto max-w-4xl space-y-4 px-5 py-8">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="h-16 rounded-2xl border border-border bg-bg-secondary animate-pulse-soft motion-reduce:animate-none"
-                />
-              ))}
-            </div>
-          ) : null}
+    <>
+      <SetAppShell title={titleByVariant[variant]} />
+      {variant === "chat" ? <ChatSkeleton /> : null}
+      {isCardPage ? <CardGridSkeleton /> : null}
+      {!isCardPage && variant !== "chat" ? (
+        <div className="mx-auto max-w-4xl space-y-4 px-5 py-8">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-16 rounded-2xl border border-border bg-bg-secondary animate-pulse-soft motion-reduce:animate-none"
+            />
+          ))}
         </div>
-      </main>
-    </div>
+      ) : null}
+    </>
   );
 }
