@@ -2284,13 +2284,13 @@ export function ChatPageClient({
         <div
           ref={messagesScrollRef}
           onScroll={handleMessagesScroll}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
         >
-          <div className="mx-auto flex w-full max-w-5xl flex-col px-3 pb-24 pt-4 sm:px-4 sm:pt-5 md:px-5 xl:px-6">
+          <div className="mx-auto flex min-h-full w-full max-w-5xl flex-1 flex-col px-3 pb-24 pt-4 sm:px-4 sm:pt-5 md:px-5 xl:px-6">
             {switchingSessionId ? (
               <ChatSessionLoadingSkeleton />
             ) : messages.length === 0 ? (
-              <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-3xl flex-col items-center justify-center text-center md:min-h-[75vh]">
+              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center text-center">
                 <div className="flex flex-row items-center justify-center gap-4 sm:gap-5 text-text-primary mb-8 text-center">
                   <h1 className="font-display text-3xl sm:text-[40px] leading-tight font-normal tracking-tight">
                     <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="url(#premium-blue)" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" className="mr-2 inline-block h-8 w-8 align-text-bottom drop-shadow-[0_0_10px_rgba(96,165,250,0.65)] sm:mr-4 sm:h-[42px] sm:w-[42px]">
