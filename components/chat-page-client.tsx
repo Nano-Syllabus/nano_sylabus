@@ -2211,7 +2211,7 @@ export function ChatPageClient({
           }
         }}
         rows={1}
-        placeholder="How can I help you today?"
+        placeholder="What topic should we explore?"
         className="min-h-[44px] w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted"
       />
       <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
