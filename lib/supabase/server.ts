@@ -19,7 +19,13 @@ export async function createSupabaseServerClient() {
       },
       setAll(cookiesToSet: CookieToSet[]) {
         cookiesToSet.forEach(({ name, value, options }) => {
-          cookieStore.set(name, value, options as never);
+          try {
+            cookieStore.set(name, value, options as never);
+          } catch {
+            // The `set` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing
+            // user sessions, or the layout already handled it.
+          }
         });
       },
     },
