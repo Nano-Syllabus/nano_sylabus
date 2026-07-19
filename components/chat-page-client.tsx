@@ -2308,6 +2308,12 @@ export function ChatPageClient({
                 </div>
                 
                 <div className="w-full text-left">
+                  {chatError ? (
+                    <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
+                      {chatError}
+                    </p>
+                  ) : null}
+                  {renderInputForm()}
                 </div>
 
               </div>
@@ -2593,16 +2599,18 @@ export function ChatPageClient({
           </div>
         </div>
 
-        <div className="bg-bg-primary px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-4 md:px-5 xl:px-6">
-          <div className="mx-auto max-w-3xl">
-            {chatError ? (
-              <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
-                {chatError}
-              </p>
-            ) : null}
-            {renderInputForm()}
+        {messages.length > 0 || switchingSessionId ? (
+          <div className="bg-bg-primary px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-4 md:px-5 xl:px-6">
+            <div className="mx-auto max-w-3xl">
+              {chatError ? (
+                <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
+                  {chatError}
+                </p>
+              ) : null}
+              {renderInputForm()}
+            </div>
           </div>
-        </div>
+        ) : null}
       </section>
 
       {saveState ? (
