@@ -594,7 +594,7 @@ export function ChatPageClient({
     }
   }, [initialReferenceNote]);
 
-  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("web");
+  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("default");
   const [saveState, setSaveState] = useState<{
     message: ChatMessageRecord;
     question: string;
@@ -1036,6 +1036,7 @@ export function ChatPageClient({
   const [hasMoreMessages, setHasMoreMessages] = useState(Boolean(initialSession?.hasMoreMessages));
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [input, setInput] = useState("");
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
   useEffect(() => {
     if (composerRef.current) {
@@ -1146,7 +1147,9 @@ export function ChatPageClient({
     const element = messagesScrollRef.current;
     if (!element) return;
     if (!loadingOlderMessagesRef.current) {
-      shouldStickToBottomRef.current = isMessagesViewportNearBottom();
+      const isNearBottom = isMessagesViewportNearBottom();
+      shouldStickToBottomRef.current = isNearBottom;
+      setShowScrollButton(!isNearBottom);
     }
     if (element.scrollTop < OLDER_MESSAGE_LOAD_THRESHOLD_PX) {
       void loadOlderMessages();
@@ -1157,7 +1160,7 @@ export function ChatPageClient({
     if (loadingOlderMessagesRef.current) return;
     if (!shouldStickToBottomRef.current) return;
     scrollMessagesToBottom("auto");
-  }, [messages]);
+  }, [messages.length]);
 
   useEffect(() => {
     let timeoutId: number;
@@ -1561,7 +1564,7 @@ export function ChatPageClient({
           messageLanguage: composerLanguage,
           subjectContext: resolvedSubjectContext,
           tenantSubject: resolvedTenantSubject,
-          retrievalMode,
+          retrievalMode: "default",
           truncateFromId,
           messages: nextMessages.map((message) => ({
             role: message.role,
@@ -2289,7 +2292,7 @@ export function ChatPageClient({
           onScroll={handleMessagesScroll}
           className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
         >
-          <div className="mx-auto flex min-h-full w-full max-w-5xl flex-1 flex-col px-3 pb-24 pt-4 sm:px-4 sm:pt-5 md:px-5 xl:px-6">
+          <div className="mx-auto flex min-h-full w-full max-w-5xl flex-1 flex-col px-3 pb-6 pt-4 sm:px-4 sm:pt-5 md:px-5 xl:px-6">
             {switchingSessionId ? (
               <ChatSessionLoadingSkeleton />
             ) : messages.length === 0 ? (
@@ -2604,7 +2607,21 @@ export function ChatPageClient({
 
         {messages.length > 0 || switchingSessionId ? (
           <div className="bg-bg-primary px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-4 md:px-5 xl:px-6">
-            <div className="mx-auto max-w-3xl">
+            <div className="relative mx-auto max-w-3xl">
+              {showScrollButton && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    shouldStickToBottomRef.current = true;
+                    setShowScrollButton(false);
+                    scrollMessagesToBottom("smooth");
+                  }}
+                  className="absolute -top-12 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-[0_4px_12px_rgba(0,0,0,0.1)] transition-all hover:bg-bg-tertiary"
+                  aria-label="Scroll to bottom"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+                </button>
+              )}
               {chatError ? (
                 <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
                   {chatError}
