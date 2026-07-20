@@ -172,9 +172,9 @@ maybeDescribe("tenant API smoke test", () => {
   let collectionsResponse: JsonResponse<TenantCollectionsResponse>;
 
   beforeAll(async () => {
-    namespacesResponse = await requestJson("/tenant/namespaces");
-    subjectsResponse = await requestJson("/tenant/subjects");
-    sourceTreeResponse = await requestJson("/tenant/source-tree");
+    namespacesResponse = await requestJson("/api/v1/namespaces");
+    subjectsResponse = await requestJson("/api/v1/subjects");
+    sourceTreeResponse = await requestJson("/api/v1/source-tree");
     collectionsResponse = await requestJson("/tenant/collections");
   });
 
@@ -212,7 +212,7 @@ maybeDescribe("tenant API smoke test", () => {
     expect(sourceTreeResponse.body.tree.length).toBeGreaterThan(0);
   });
 
-  it("keeps /tenant/subjects aligned with subject folders present in /tenant/source-tree", () => {
+  it("keeps /api/v1/subjects aligned with subject folders present in /api/v1/source-tree", () => {
     const treeSubjectFolderPaths = collectTreeSubjectFolderPaths(sourceTreeResponse.body.tree);
     const subjects = subjectsResponse.body.subjects ?? [];
 
@@ -246,7 +246,7 @@ maybeDescribe("tenant API smoke test", () => {
       indexedSubjects.find((item) => /digital logic/i.test(item.name)) ??
       indexedSubjects[0];
 
-    expect(subject, "No usable subject metadata returned from /tenant/subjects").toBeTruthy();
+    expect(subject, "No usable subject metadata returned from /api/v1/subjects").toBeTruthy();
 
     const response = await requestJson<{
       answer?: string;

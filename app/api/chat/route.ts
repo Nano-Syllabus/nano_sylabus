@@ -15,6 +15,7 @@ import type { AssistantAnswerTrace, AssistantCitation } from "@/lib/types";
 
 type RetrievalMode = "default" | "web";
 type ResponseLanguage = "EN" | "RN";
+const MAX_TENANT_CONTEXT_SUMMARY_CHARS = 4_000;
 
 const requestSchema = z.object({
   sessionId: z.string().uuid().nullable().optional(),
@@ -160,7 +161,14 @@ async function resolveTenantSubjectForChat({
 }
 
 function normalizeContextSummary(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
+  if (typeof value !== "string") return "";
+
+  const normalized = value.trim();
+  if (normalized.length <= MAX_TENANT_CONTEXT_SUMMARY_CHARS) return normalized;
+
+  const clipped = normalized.slice(0, MAX_TENANT_CONTEXT_SUMMARY_CHARS);
+  const lastBoundary = Math.max(clipped.lastIndexOf("\n"), clipped.lastIndexOf(". "), clipped.lastIndexOf(" "));
+  return clipped.slice(0, lastBoundary > 3_000 ? lastBoundary : MAX_TENANT_CONTEXT_SUMMARY_CHARS).trim();
 }
 
 function normalizeRequestAttachments(

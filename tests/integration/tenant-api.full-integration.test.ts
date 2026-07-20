@@ -165,10 +165,10 @@ function requestJson<T>(
 maybeDescribe("tenant API full integration", () => {
   it("verifies core tenant endpoints and scoped prompt answers end to end", async () => {
     const [namespacesResponse, subjectsResponse, sourceTreeResponse, collectionsResponse] = await Promise.all([
-      requestJson<{ tenant: string; namespaces: TenantNamespace[] }>("/tenant/namespaces"),
-      requestJson<{ tenant: string; subjects: TenantSubject[] }>("/tenant/subjects"),
+      requestJson<{ tenant: string; namespaces: TenantNamespace[] }>("/api/v1/namespaces"),
+      requestJson<{ tenant: string; subjects: TenantSubject[] }>("/api/v1/subjects"),
       requestJson<{ tenant: string; total_files: number; indexed_files: number; tree: TenantSourceTreeNode[] }>(
-        "/tenant/source-tree",
+        "/api/v1/source-tree",
       ),
       requestJson<TenantCollectionsResponse>("/tenant/collections"),
     ]);
@@ -193,7 +193,7 @@ maybeDescribe("tenant API full integration", () => {
 
     for (const target of TARGET_PROMPTS) {
       const subject = subjectsResponse.body.subjects.find((item) => item.name === target.subjectName);
-      expect(subject, `Missing subject in /tenant/subjects: ${target.subjectName}`).toBeTruthy();
+      expect(subject, `Missing subject in /api/v1/subjects: ${target.subjectName}`).toBeTruthy();
 
       const promptResponse = await requestJson<PromptPayload>("/v1/prompt", {
         method: "POST",
