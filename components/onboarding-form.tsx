@@ -54,15 +54,17 @@ function engineeringLevel(value: string) {
 export function OnboardingForm({
   userId,
   initialProfile,
+  initialName,
 }: {
   userId: string;
   initialProfile: StudentProfile | null;
+  initialName?: string;
 }) {
   const router = useRouter();
   const draftKey = useMemo(() => `nano:onboarding:draft:${userId}`, [userId]);
   const hasHydratedDraft = useRef(false);
   const [step, setStep] = useState(1);
-  const [fullName, setFullName] = useState(initialProfile?.fullName ?? "");
+  const [fullName, setFullName] = useState(initialProfile?.fullName || initialName || "");
   const [college, setCollege] = useState(initialProfile?.college ?? "");
   const [board, setBoard] = useState(engineeringBoard(initialProfile?.board ?? ""));
   const [grade, setGrade] = useState(engineeringLevel(initialProfile?.grade ?? ""));
@@ -86,7 +88,7 @@ export function OnboardingForm({
   >({});
   const [catalogSubjectsByPath, setCatalogSubjectsByPath] = useState<Record<string, Array<{ name: string }>>>({});
 
-  const total = 5;
+  const total = 1;
   const normalizedBoard = normalizeBoard(board);
   const normalizedGrade = normalizeGrade(grade);
   const isIoeBachelor = normalizedBoard === "IOE" && normalizedGrade === "Bachelor";
@@ -269,39 +271,14 @@ export function OnboardingForm({
 
   function validateStep(nextStep = step) {
     if (nextStep === 1) {
-      if (!normalizeFullName(fullName) || !normalizeCollege(college)) {
-        return "Please complete your full name and institution.";
-      }
-    }
-
-    if (nextStep === 2) {
       if (!normalizeBoard(board) || !normalizeGrade(grade)) {
         return "Please complete your IOE Bachelor path.";
       }
       if (isIoeBachelor && !program) {
         return "Please select your branch.";
       }
-      if (isIoeBachelor && semesterOptions.length > 0 && !semester) {
-        return "Please select your semester.";
-      }
-    }
 
-    if (nextStep === 3) {
-      return validateBoardScore(score, scoreType);
     }
-
-    if (nextStep === 4) {
-      if (selectedSubjects.length === 0) {
-        return "Please select at least one subject.";
-      }
-    }
-
-    if (nextStep === 5) {
-      if (!normalizeTargetGrade(targetGrade)) {
-        return "Please set your target result.";
-      }
-    }
-
     return null;
   }
 
@@ -311,9 +288,7 @@ export function OnboardingForm({
       setError(nextError);
       return;
     }
-
-    setError("");
-    setStep((value) => Math.min(total, value + 1));
+    finish();
   }
 
   function toggleSubject(subject: string) {
@@ -325,36 +300,17 @@ export function OnboardingForm({
   }
 
   async function finish() {
-    const selectedSubjectSet = normalizeSubjects(selectedSubjects);
     const semesterSubjectSet = normalizeSubjects(suggestedSubjects);
-    const subjects = semesterSubjectSet.length > 0 ? semesterSubjectSet : selectedSubjectSet;
-    const normalizedFullName = normalizeFullName(fullName);
-    const normalizedCollege = normalizeCollege(college);
+    const subjects = semesterSubjectSet.length > 0 ? semesterSubjectSet : [];
     const normalizedBoard = normalizeBoard(board);
     const normalizedGrade = normalizeGrade(grade);
-    const normalizedTargetGrade = normalizeTargetGrade(targetGrade);
-    const scoreError = validateBoardScore(score, scoreType);
 
-    if (
-      !normalizedFullName ||
-      !normalizedCollege ||
-      !normalizedBoard ||
-      !normalizedGrade ||
-      !normalizedTargetGrade
-    ) {
-      setError("Please complete your name, institution, IOE Bachelor path, and target goal.");
+    if (!normalizedBoard || !normalizedGrade) {
+      setError("Please complete your IOE Bachelor path.");
       return;
     }
 
-    if (subjects.length === 0) {
-      setError("No subjects were found for this semester yet.");
-      return;
-    }
 
-    if (scoreError) {
-      setError(scoreError);
-      return;
-    }
 
     setLoading(true);
     setError("");
@@ -362,14 +318,14 @@ export function OnboardingForm({
     const supabase = createSupabaseBrowserClient();
     const { error: upsertError } = await supabase.from("student_profiles").upsert({
       user_id: userId,
-      full_name: normalizedFullName,
-      college: normalizedCollege,
+      full_name: fullName || "Student",
+      college: "",
       board: normalizedBoard,
       grade: normalizedGrade,
-      board_score: score ? `${normalizeBoardScore(score)}${scoreType}` : null,
+      board_score: null,
       subjects,
-      target_grade: normalizedTargetGrade,
-      language_pref: languagePref,
+      target_grade: "Pass",
+      language_pref: "EN",
     });
 
     if (upsertError) {
@@ -390,7 +346,7 @@ export function OnboardingForm({
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center animate-fade-in">
+      <div className="flex flex-1 flex-col items-center justify-center animate-fade-in pb-20">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-text-primary"></div>
         <h2 className="mt-6 text-lg font-medium">Setting up your profile...</h2>
         <p className="mt-2 text-sm text-text-muted">Personalizing your learning experience</p>
@@ -400,7 +356,7 @@ export function OnboardingForm({
 
   return (
     <form
-      className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-5 py-10"
+      className="mx-auto flex flex-1 w-full max-w-2xl flex-col px-5 py-10"
       onSubmit={(e) => {
         e.preventDefault();
         if (step < total) {
@@ -422,23 +378,6 @@ export function OnboardingForm({
 
       <main className="flex flex-1 flex-col py-12">
         {step === 1 ? (
-          <Step title="Where do you study?" subtitle="Enter your current school, college, campus, or university.">
-            <Field label="Full name">
-              <Input enterKeyHint="next" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name" />
-            </Field>
-            <Field label="Institution">
-              <Input
-                enterKeyHint="done"
-                value={college}
-                onChange={(event) => setCollege(event.target.value)}
-                placeholder="Eg. St. Xavier's College, Tribhuvan University"
-              />
-            </Field>
-            <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />
-          </Step>
-        ) : null}
-
-        {step === 2 ? (
           <Step title="Select your academic path" subtitle="Set your TU IOE Bachelor context before choosing subjects.">
             {/*
             <Field label="University / academic authority">
@@ -504,165 +443,8 @@ export function OnboardingForm({
                 </Select>
               </Field>
             ) : null}
-            {isBachelor && (
-              <Field label="Semester">
-                <Select
-                  value={semester}
-                  onChange={(event) => setSemester(event.target.value)}
-                >
-                  <option value="">Select semester</option>
-                  {semesterOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            )}
-            <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />
-          </Step>
-        ) : null}
 
-        {step === 3 ? (
-          <Step title="Last published Board Result" subtitle="We use this to calibrate explanation level. You can skip it.">
-            <div className="mb-3 inline-flex rounded-full border border-border p-1">
-              {(["%" , "GPA"] as const).map((item) => (
-                <button
-                  type="button"
-                  key={item}
-                  onClick={() => setScoreType(item)}
-                  className={
-                    "rounded-full px-4 py-1.5 text-xs font-mono-ui transition " +
-                    (scoreType === item ? "bg-text-primary text-text-inverse" : "text-text-secondary")
-                  }
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-            <Field label={scoreType === "%" ? "Score (0-100)" : "GPA (0-4.0)"}>
-              <Input
-                enterKeyHint="done"
-                type="number"
-                min="0"
-                max={scoreType === "%" ? "100" : "4"}
-                step={scoreType === "%" ? "1" : "0.01"}
-                value={score}
-                onChange={(event) => setScore(event.target.value)}
-                placeholder={scoreType === "%" ? "82" : "3.40"}
-              />
-            </Field>
             <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />
-          </Step>
-        ) : null}
-
-        {step === 4 ? (
-          <Step title="Which subjects do you want to focus on?" subtitle="Pick the subjects you personally care about most. Your semester chat scope will still include all subjects in this semester.">
-            {suggestedSubjects.length > 0 ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-mono-ui uppercase text-text-muted">{selectedSubjects.length} selected</p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      const allSelected = suggestedSubjects.every((s) => selectedSubjects.some((sel) => sel.toLowerCase() === s.toLowerCase()));
-                      if (allSelected) {
-                        setSelectedSubjects([]);
-                      } else {
-                        setSelectedSubjects([...suggestedSubjects]);
-                      }
-                    }}
-                  >
-                    {suggestedSubjects.every((s) => selectedSubjects.some((sel) => sel.toLowerCase() === s.toLowerCase())) ? "Deselect all" : "Select all"}
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {suggestedSubjects.map((subject) => {
-                    const isSelected = selectedSubjects.some(
-                      (item) => item.toLowerCase() === subject.toLowerCase(),
-                    );
-                    return (
-                      <Button
-                        key={subject}
-                        type="button"
-                        size="sm"
-                        variant={isSelected ? "filled" : "outline"}
-                        onClick={() => toggleSubject(subject)}
-                      >
-                        {subject}
-                      </Button>
-                    );
-                  })}
-                </div>
-                {selectedSubjects.length > 0 ? (
-                  <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
-                    Selected: {selectedSubjects.join(", ")}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
-                No subjects available for this IOE Bachelor scope yet.
-              </div>
-            )}
-            <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />
-          </Step>
-        ) : null}
-
-        {step === 5 ? (
-          <Step title="Goals & language" subtitle="This makes the AI feel personal from the first answer.">
-            <div className="space-y-6">
-              <div>
-                <Field label="Target result">
-                  <Select
-                    value={targetGrade}
-                    onChange={(event) => setTargetGrade(event.target.value)}
-                  >
-                    <option value="">Select your target</option>
-                    <option value="A+">A+</option>
-                    <option value="A">A</option>
-                    <option value="B+">B+</option>
-                    <option value="B">B</option>
-                    <option value="C+">C+</option>
-                    <option value="C">C</option>
-                    <option value="Distinction">Distinction</option>
-                    <option value="First Division">First Division</option>
-                    <option value="Second Division">Second Division</option>
-                    <option value="Pass">Pass</option>
-                    <option value="4.0 GPA">4.0 GPA</option>
-                    <option value="3.8 GPA">3.8 GPA</option>
-                    <option value="3.5 GPA">3.5 GPA</option>
-                    <option value="3.0 GPA">3.0 GPA</option>
-                  </Select>
-                </Field>
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-mono-ui uppercase text-text-muted">Default response language</p>
-                <div className="inline-flex rounded-full border border-border p-1">
-                  {(["EN", "RN"] as const).map((item) => (
-                    <button
-                      type="button"
-                      key={item}
-                      onClick={() => setLanguagePref(item)}
-                      className={
-                        "rounded-full px-5 py-1.5 text-xs font-mono-ui transition " +
-                        (languagePref === item
-                          ? "bg-text-primary text-text-inverse"
-                          : "text-text-secondary")
-                      }
-                    >
-                      {item === "EN" ? "English" : "Roman Nepali"}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-3 rounded-md border border-border bg-bg-secondary p-3 text-xs text-text-secondary">
-                  <span className="font-mono-ui text-text-muted">Roman Nepali example: </span>
-                  &quot;Newton ko teesro law explain gardinus na&quot;.
-                </p>
-              </div>
-            </div>
           </Step>
         ) : null}
 
