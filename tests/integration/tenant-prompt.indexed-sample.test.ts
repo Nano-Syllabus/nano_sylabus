@@ -141,8 +141,8 @@ function promptForSubject(subject: TenantSubject) {
 
 maybeDescribe("tenant prompt API indexed sample", () => {
   it("answers from an indexed tenant subject without local answer generation", async () => {
-    const subjectsResponse = await requestJson<{ subjects: TenantSubject[] }>("/tenant/subjects");
-    const treeResponse = await requestJson<{ tree: TenantSourceTreeNode[] }>("/tenant/source-tree");
+    const subjectsResponse = await requestJson<{ subjects: TenantSubject[] }>("/api/v1/subjects");
+    const treeResponse = await requestJson<{ tree: TenantSourceTreeNode[] }>("/api/v1/source-tree");
 
     expect(subjectsResponse.status).toBe(200);
     expect(treeResponse.status).toBe(200);
@@ -158,7 +158,7 @@ maybeDescribe("tenant prompt API indexed sample", () => {
 
     expect(
       indexedSubjects.length,
-      "No indexed subjects were found by matching /tenant/subjects with /tenant/source-tree.",
+      "No indexed subjects were found by matching /api/v1/subjects with /api/v1/source-tree.",
     ).toBeGreaterThan(0);
 
     const preferredSubject =

@@ -110,13 +110,13 @@ function requestJson<T>(
 
 maybeDescribe("tenant prompt API for indexed subject pairs", () => {
   it("answers Digital Logic and Engineering Physics with scoped tenant calls", async () => {
-    const subjectsResponse = await requestJson<{ subjects: TenantSubject[] }>("/tenant/subjects");
+    const subjectsResponse = await requestJson<{ subjects: TenantSubject[] }>("/api/v1/subjects");
     expect(subjectsResponse.status).toBe(200);
 
     const subjects = subjectsResponse.body.subjects ?? [];
     for (const target of TARGET_SUBJECTS) {
       const subject = subjects.find((item) => item.name === target.name);
-      expect(subject, `Missing subject in /tenant/subjects: ${target.name}`).toBeTruthy();
+      expect(subject, `Missing subject in /api/v1/subjects: ${target.name}`).toBeTruthy();
 
       const promptResponse = await requestJson<{
         answer?: string;

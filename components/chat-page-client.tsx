@@ -52,9 +52,10 @@ const COLOR_LABEL: Record<NoteColor, string> = {
 };
 
 type RetrievalMode = "default" | "web";
-const RETRIEVAL_MODE_LABELS: Record<RetrievalMode, string> = {
-  default: "Exam mode",
-  web: "Study mode",
+type ChatDisplayMode = "study" | "exam";
+const CHAT_DISPLAY_MODE_LABELS: Record<ChatDisplayMode, string> = {
+  study: "Study mode",
+  exam: "Exam mode",
 };
 
 type TenantChatSubject = {
@@ -205,7 +206,6 @@ function buildThoughtSummary(trace: ThinkingTrace) {
 function buildTracePills(trace: ThinkingTrace) {
   return [
     trace.grounded ? "Grounded" : "Ungrounded",
-    RETRIEVAL_MODE_LABELS[trace.retrievalMode],
     trace.answerMode
         ? `${trace.answerMode} answer`
         : null,
@@ -560,8 +560,8 @@ export function ChatPageClient({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(initialSession?.id ?? null);
-  const chatLanguage = defaultLanguage;
-  const [composerLanguage, setComposerLanguage] = useState<Language>(defaultLanguage);
+  const [chatLanguage, setChatLanguage] = useState<Language>(defaultLanguage);
+  const composerLanguage = chatLanguage;
   const [chatError, setChatError] = useState("");
   const [creditBalance, setCreditBalance] = useState(user.creditBalance);
   const [sessionDetail, setSessionDetail] = useState<ChatSessionDetail | null>(initialSession);
@@ -594,7 +594,7 @@ export function ChatPageClient({
     }
   }, [initialReferenceNote]);
 
-  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>("default");
+  const [chatDisplayMode, setChatDisplayMode] = useState<ChatDisplayMode>("study");
   const [saveState, setSaveState] = useState<{
     message: ChatMessageRecord;
     question: string;
@@ -691,6 +691,22 @@ export function ChatPageClient({
       }, 35_000),
     ];
   }, [clearThinkingStageTimers]);
+
+  const updateGlobalLanguage = useCallback(
+    (language: Language) => {
+      setChatLanguage(language);
+      void fetch("/api/account/language", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ language }),
+      }).catch(() => {
+        setChatError("Language changed for this chat, but could not save globally. Please retry once.");
+      });
+    },
+    [],
+  );
 
   const initialMessages: Message[] = useMemo(
     () =>
@@ -1564,7 +1580,6 @@ export function ChatPageClient({
           messageLanguage: composerLanguage,
           subjectContext: resolvedSubjectContext,
           tenantSubject: resolvedTenantSubject,
-          retrievalMode: "default",
           truncateFromId,
           messages: nextMessages.map((message) => ({
             role: message.role,
@@ -2093,7 +2108,7 @@ export function ChatPageClient({
         </Badge>
         <CompactSelect
           value={composerLanguage}
-          onChange={(v) => setComposerLanguage(v as "EN" | "RN")}
+          onChange={(v) => updateGlobalLanguage(v as "EN" | "RN")}
           options={[
             { label: "English", value: "EN" },
             { label: "Roman Nepali", value: "RN" }
@@ -2102,7 +2117,7 @@ export function ChatPageClient({
       </div>
     );
     return () => shell.setActions(null);
-  }, [shell, composerLanguage, setComposerLanguage, creditBalance, currentSessionId, shareCurrentSession, shareLoading]);
+  }, [shell, composerLanguage, updateGlobalLanguage, creditBalance, currentSessionId, shareCurrentSession, shareLoading]);
 
   useEffect(() => {
     stopChatRef.current = stop;
@@ -2250,10 +2265,10 @@ export function ChatPageClient({
             />
           )}
           <CompactSelect
-            value={retrievalMode}
-            onChange={(value) => setRetrievalMode(value as RetrievalMode)}
-            options={(Object.keys(RETRIEVAL_MODE_LABELS) as RetrievalMode[]).map((mode) => ({
-              label: RETRIEVAL_MODE_LABELS[mode],
+            value={chatDisplayMode}
+            onChange={(value) => setChatDisplayMode(value as ChatDisplayMode)}
+            options={(Object.keys(CHAT_DISPLAY_MODE_LABELS) as ChatDisplayMode[]).map((mode) => ({
+              label: CHAT_DISPLAY_MODE_LABELS[mode],
               value: mode,
             }))}
             direction="up"
@@ -2504,7 +2519,6 @@ export function ChatPageClient({
 
                         {message.role === "assistant" && !isLoading ? (
                           <div className="mt-1.5 flex items-center gap-1 text-text-muted">
-
                             <div className="relative group/btn flex items-center justify-center">
                               <button
                                 type="button"

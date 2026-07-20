@@ -106,6 +106,51 @@ type TenantSourceTreeResponse = {
   tree: TenantSourceTreeNode[];
 };
 
+function slugifyTenantValue(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function countIndexedChunks(nodes: TenantSourceTreeNode[] | undefined): number {
+  return (nodes ?? []).reduce((total, node) => {
+    const ownChunks = node.indexed && typeof node.chunk_count === "number" ? node.chunk_count : 0;
+    return total + ownChunks + countIndexedChunks(node.children);
+  }, 0);
+}
+
+function deriveTenantSubjectsFromSourceTree(nodes: TenantSourceTreeNode[], path: string[] = []) {
+  const subjects: TenantSubject[] = [];
+
+  for (const node of nodes) {
+    const nextPath = [...path, node.name];
+
+    if (nextPath.length === 5) {
+      const [namespace = "", , , , subjectName = ""] = nextPath;
+      const folderPath = nextPath.join("/");
+      subjects.push({
+        name: subjectName,
+        slug: slugifyTenantValue(subjectName),
+        namespace,
+        namespace_slug: slugifyTenantValue(namespace),
+        full_path: `nano-syllabus/${folderPath}`,
+        folder_path: folderPath,
+        chunk_count: countIndexedChunks(node.children),
+      });
+      continue;
+    }
+
+    if (node.children?.length) {
+      subjects.push(...deriveTenantSubjectsFromSourceTree(node.children, nextPath));
+    }
+  }
+
+  return subjects;
+}
+
 function requestJson<T>(
   path: string,
   options: {
@@ -204,17 +249,30 @@ function requestJson<T>(
 }
 
 export async function listTenantNamespaces() {
-  const payload = await requestJson<TenantNamespacesResponse>("/tenant/namespaces");
+  const payload = await requestJson<TenantNamespacesResponse>("/api/v1/namespaces");
   return payload.namespaces ?? [];
 }
 
 export async function listTenantSubjects() {
-  const payload = await requestJson<TenantSubjectsResponse>("/tenant/subjects");
-  return payload.subjects ?? [];
+  const [payload, sourceTree] = await Promise.all([
+    requestJson<TenantSubjectsResponse>("/api/v1/subjects"),
+    getTenantSourceTree(),
+  ]);
+  const subjectsByFolderPath = new Map<string, TenantSubject>();
+
+  for (const subject of deriveTenantSubjectsFromSourceTree(sourceTree.tree ?? [])) {
+    subjectsByFolderPath.set(subject.folder_path, subject);
+  }
+
+  for (const subject of payload.subjects ?? []) {
+    subjectsByFolderPath.set(subject.folder_path, subject);
+  }
+
+  return Array.from(subjectsByFolderPath.values());
 }
 
 export async function getTenantSourceTree() {
-  return requestJson<TenantSourceTreeResponse>("/tenant/source-tree");
+  return requestJson<TenantSourceTreeResponse>("/api/v1/source-tree");
 }
 
 export async function promptTenant(input: {

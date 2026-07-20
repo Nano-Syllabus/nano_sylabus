@@ -88,13 +88,13 @@ function hashDebugValue(value) {
 
 loadLocalEnv();
 
-const subjectsResponse = await requestJson("/tenant/subjects");
+const subjectsResponse = await requestJson("/api/v1/subjects");
 const subject = subjectsResponse.body.subjects?.find(
   (item) => item.name === "Engineering Physics",
 );
 
 if (!subject) {
-  throw new Error("Engineering Physics was not found in /tenant/subjects.");
+  throw new Error("Engineering Physics was not found in /api/v1/subjects.");
 }
 
 const payload = {
