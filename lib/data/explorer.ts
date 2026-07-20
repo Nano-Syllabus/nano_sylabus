@@ -121,12 +121,9 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
   });
 
   const profileSubjects = uniqueSubjects(profile.subjects);
-  const sessionSubjects = uniqueSubjects(
-    sessions.flatMap((session) => (Array.isArray(session.subject_tags) ? session.subject_tags : [])),
-  );
   const tenantSubjectNames = uniqueSubjects(tenantSubjects.map((subject) => subject.name));
 
-  const allSubjects = uniqueSubjects([...tenantSubjectNames, ...profileSubjects, ...sessionSubjects]);
+  const allSubjects = tenantSubjectNames;
 
   const summaries = allSubjects.map((subject) => {
     const matchingSessions = sessions.filter((session) =>
