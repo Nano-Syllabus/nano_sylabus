@@ -2401,6 +2401,15 @@ export function ChatPageClient({
                     } else if (typeof traceMs === "number" && traceMs > 0) {
                       const diffInSeconds = Math.max(1, Math.round(traceMs / 1000));
                       responseTimeText = `${diffInSeconds}s`;
+                    } else if (index > 0 && messages[index - 1].role === "user") {
+                      const prevMsg = messages[index - 1];
+                      if (message.createdAt && prevMsg.createdAt) {
+                        const diffMs = new Date(message.createdAt).getTime() - new Date(prevMsg.createdAt).getTime();
+                        if (diffMs > 0 && diffMs < 300_000) { // Fallback for old messages without traceMs
+                          const diffInSeconds = Math.max(1, Math.round(diffMs / 1000));
+                          responseTimeText = `${diffInSeconds}s`;
+                        }
+                      }
                     }
                   }
 

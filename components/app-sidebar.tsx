@@ -111,6 +111,7 @@ export function AppSidebar({
 
   const searchDebounceRef = useRef<number | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const historyScrollRef = useRef<HTMLDivElement>(null);
 
   const fetchSessions = useCallback(async function fetchSessions({
     reset,
@@ -156,6 +157,24 @@ export function AppSidebar({
       setHistoryLoading(false);
     }
   }, [historySearch]);
+
+  const handleHistoryScroll = useCallback(() => {
+    const element = historyScrollRef.current;
+    if (!element || historyLoading || !hasMoreSessions) return;
+
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    if (distanceFromBottom > 96) return;
+
+    void fetchSessions({ reset: false, offset: sessions.length });
+  }, [fetchSessions, hasMoreSessions, historyLoading, sessions.length]);
+
+  useEffect(() => {
+    const element = historyScrollRef.current;
+    if (!element || historyLoading || !hasMoreSessions || sessions.length === 0) return;
+    if (element.scrollHeight > element.clientHeight + 96) return;
+
+    void fetchSessions({ reset: false, offset: sessions.length });
+  }, [fetchSessions, hasMoreSessions, historyLoading, sessions.length]);
 
   const handleRenameSession = async (title: string) => {
     if (!renameSession || !title.trim()) return;
@@ -404,7 +423,11 @@ export function AppSidebar({
         </div>
 
         {/* ── Recent Chats ── */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 mt-1">
+        <div
+          ref={historyScrollRef}
+          onScroll={handleHistoryScroll}
+          className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 mt-1"
+        >
           <div className="space-y-0.5">
             {groupedSessions.map(({ group, items }) =>
               items.length ? (
@@ -578,15 +601,10 @@ export function AppSidebar({
               </p>
             ) : null}
             {historyError ? <p className="px-2.5 text-xs text-destructive">{historyError}</p> : null}
-            {hasMoreSessions ? (
-              <button
-                type="button"
-                className="w-full px-2.5 py-1.5 text-left text-[12px] text-text-muted transition hover:text-text-primary"
-                onClick={() => void fetchSessions({ reset: false, offset: sessions.length })}
-                disabled={historyLoading}
-              >
-                {historyLoading ? "Loading..." : "Load more..."}
-              </button>
+            {hasMoreSessions && historyLoading && sessions.length > 0 ? (
+              <p className="px-2.5 py-2 text-[12px] text-text-muted">
+                Loading older chats...
+              </p>
             ) : null}
           </div>
         </div>
