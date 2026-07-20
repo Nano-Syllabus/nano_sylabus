@@ -17,7 +17,7 @@ export default async function OnboardingPage() {
         <Logo />
         <ThemeToggle />
       </header>
-      <OnboardingForm userId={user.id} initialProfile={profile} />
+      <OnboardingForm userId={user.id} initialProfile={profile} initialName={user.fullName} />
     </div>
   );
 }

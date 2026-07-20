@@ -6,12 +6,8 @@ export function isProfileComplete(profile: Pick<
 > | null) {
   if (!profile) return false;
   return Boolean(
-    profile.fullName &&
-    profile.college &&
     profile.board &&
-    profile.grade &&
-    profile.targetGrade &&
-    profile.languagePref,
+    profile.grade,
   );
 }
 
