@@ -72,6 +72,7 @@ type Message = {
   createdAt?: string;
   answerTrace?: AssistantAnswerTrace | null;
   attachments?: ChatImageAttachment[];
+  followUpSuggestions?: string[];
 };
 
 function keepLocalAttachmentsOnRefresh(
@@ -95,6 +96,7 @@ function keepLocalAttachmentsOnRefresh(
       createdAt: message.createdAt,
       answerTrace: message.answerTrace,
       attachments: shouldKeepLocalAttachments ? currentAttachments : incomingAttachments,
+      followUpSuggestions: message.followUpSuggestions,
     };
   });
 }
@@ -273,7 +275,13 @@ function createImageAttachment(file: File): Promise<ChatImageAttachment> {
 type ChatStreamEvent =
   | { type: "status"; message: string }
   | { type: "token"; text: string }
-  | { type: "sources"; citationCount?: number; chunks_retrieved?: number; served_from?: string }
+  | {
+      type: "sources";
+      citationCount?: number;
+      chunks_retrieved?: number;
+      served_from?: string;
+      nextTopic?: string;
+    }
   | {
       type: "done";
       ok?: boolean;
@@ -337,6 +345,10 @@ function appendThinkingStep(previous: string[], message: string) {
   return [...previous, message];
 }
 
+function suggestionToPrompt(suggestion: string) {
+  return `Explain ${suggestion.replace(/^Next:\s*/i, "").trim()}`;
+}
+
 function parseSseBlock(block: string): ChatStreamEvent | null {
   const eventName = block.match(/^event:\s*(.+)$/m)?.[1]?.trim() ?? "message";
   const data = [...block.matchAll(/^data:\s?(.*)$/gm)].map((match) => match[1]).join("\n");
@@ -365,6 +377,7 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
       chunks_retrieved:
         typeof payload.chunks_retrieved === "number" ? payload.chunks_retrieved : undefined,
       served_from: typeof payload.served_from === "string" ? payload.served_from : undefined,
+      nextTopic: typeof payload.next_topic === "string" ? payload.next_topic : undefined,
     };
   }
   if (eventName === "done") {
@@ -567,13 +580,6 @@ export function ChatPageClient({
   const [sessionDetail, setSessionDetail] = useState<ChatSessionDetail | null>(initialSession);
   const [switchingSessionId, setSwitchingSessionId] = useState<string | null>(null);
   const shell = useContext(AppShellContext);
-  const normalizedProfileSubjects = useMemo(
-    () =>
-      profileSubjects
-        .map((subject) => normalizeSubjectLabel(subject))
-        .filter(Boolean),
-    [profileSubjects],
-  );
   const defaultSubjectContext = useMemo(() => {
     const fromInitial = initialSubjectContext ? stripSubjectChapter(normalizeSubjectLabel(initialSubjectContext)) : "";
     if (fromInitial) return fromInitial;
@@ -718,18 +724,19 @@ export function ChatPageClient({
             createdAt: message.createdAt,
             answerTrace: message.answerTrace,
             attachments: message.attachments,
+            followUpSuggestions: message.followUpSuggestions,
           }))
         : [],
     [initialSession, currentSessionId],
   );
   const availableSubjects = useMemo(() => {
-    const all = [...Object.keys(tenantSubjectsByName), ...normalizedProfileSubjects, stripSubjectChapter(subjectContext)]
+    const all = Object.keys(tenantSubjectsByName)
       .map((item) => (item ? normalizeSubjectLabel(item) : ""))
       .filter(Boolean) as string[];
     return Array.from(new Set(all)).sort((left, right) =>
       left.localeCompare(right, undefined, { sensitivity: "base", numeric: true }),
     );
-  }, [normalizedProfileSubjects, subjectContext, tenantSubjectsByName]);
+  }, [tenantSubjectsByName]);
   const subjectActionOptions = useMemo(
     () => availableSubjects.map((subject) => ({ label: subject, value: subject })),
     [availableSubjects],
@@ -1065,6 +1072,14 @@ export function ChatPageClient({
   const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
 
+  useEffect(() => {
+    const normalizedSubjectContext = normalizeSubjectLabel(stripSubjectChapter(subjectContext) ?? "");
+    if (!normalizedSubjectContext || Object.keys(tenantSubjectsByName).length === 0) return;
+    if (tenantSubjectsByName[normalizedSubjectContext]) return;
+    if (currentSessionId || messages.length > 0 || isLoading) return;
+    setSubjectContext(null);
+  }, [currentSessionId, isLoading, messages.length, subjectContext, tenantSubjectsByName]);
+
   function handleInputChange(event: ChangeEvent<HTMLTextAreaElement>) {
     setInput(event.target.value);
   }
@@ -1200,10 +1215,11 @@ export function ChatPageClient({
         const container = range.commonAncestorContainer;
         const element = container.nodeType === 3 ? container.parentElement : (container as HTMLElement);
         
-        // Don't show popover if user is selecting text inside the input box
+        // Only show popover if user is selecting text inside an AI answer (<article data-role="assistant">)
+        const isInsideMessage = element?.closest('article[data-role="assistant"]');
         const isInsideInput = element?.closest("form") || element?.closest("textarea") || element?.closest("input");
         
-        if (isInsideInput) {
+        if (!isInsideMessage || isInsideInput) {
           setSelectionPopover(null);
           return;
         }
@@ -1226,6 +1242,13 @@ export function ChatPageClient({
       window.clearTimeout(timeoutId);
     };
   }, []);
+
+  useEffect(() => {
+    setSelectionPopover(null);
+    try {
+      window.getSelection()?.removeAllRanges();
+    } catch {}
+  }, [currentSessionId]);
 
   const stop = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -1699,6 +1722,7 @@ export function ChatPageClient({
           }
 
           if (event.type === "sources") {
+            const nextSuggestions = event.nextTopic?.trim() ? [`Next: ${event.nextTopic.trim()}`] : [];
             setLatestThinkingTrace((previous) =>
               previous
                 ? {
@@ -1708,6 +1732,15 @@ export function ChatPageClient({
                   }
                 : previous,
             );
+            if (nextSuggestions.length > 0) {
+              setMessages((previousMessages) =>
+                previousMessages.map((message) =>
+                  message.id === assistantMessage.id
+                    ? { ...message, followUpSuggestions: nextSuggestions }
+                    : message,
+                ),
+              );
+            }
             continue;
           }
 
@@ -2091,7 +2124,7 @@ export function ChatPageClient({
 
   useEffect(() => {
     shell.setActions(
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 select-none">
         {currentSessionId ? (
           <Button
             type="button"
@@ -2393,6 +2426,7 @@ export function ChatPageClient({
                   return (
                     <article
                       key={message.id}
+                      data-role={message.role}
                       className={cn(
                         "flex flex-col group relative",
                         message.role === "user" 
@@ -2414,7 +2448,7 @@ export function ChatPageClient({
                         )}
                       >
                         {message.role === "user" && editingMessageIndex !== index && (
-                          <div className="absolute -left-2 -translate-x-full top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all">
+                          <div className="absolute left-0 -translate-x-full pr-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all">
                             <button
                               onClick={() => handleEditMessage(index)}
                               className="flex items-center justify-center w-8 h-8 rounded-full bg-bg-secondary/80 hover:bg-bg-tertiary text-text-primary shadow-sm transition-all"
@@ -2516,6 +2550,23 @@ export function ChatPageClient({
                         )}
 
 
+
+                        {message.role === "assistant" &&
+                          !isLoading &&
+                          (message.followUpSuggestions?.length ?? 0) > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2 px-1">
+                              {message.followUpSuggestions?.map((suggestion) => (
+                                <button
+                                  key={suggestion}
+                                  type="button"
+                                  onClick={() => void sendCurrentMessage(suggestionToPrompt(suggestion))}
+                                  className="rounded-full border border-border-subtle px-3 py-1.5 text-left text-[12px] font-medium text-text-muted transition hover:border-text-muted hover:bg-bg-tertiary hover:text-text-primary"
+                                >
+                                  {suggestion}
+                                </button>
+                              ))}
+                            </div>
+                          )}
 
                         {message.role === "assistant" && !isLoading ? (
                           <div className="mt-1.5 flex items-center gap-1 text-text-muted">

@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import type { AppUser } from "@/lib/types";
 import { AppShellContext } from "@/components/app-shell-context";
+import { AppRouteLoading } from "@/components/app-route-loading";
+
+type PendingNavigation = {
+  href: string;
+  variant: "chat" | "subjects" | "notes" | "billing" | "settings";
+};
 
 export function AppShell({
   user,
@@ -18,10 +25,12 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [dynamicTitle, setDynamicTitle] = useState<ReactNode>(null);
   const [dynamicActions, setDynamicActions] = useState<ReactNode>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
 
 
   useEffect(() => {
@@ -31,6 +40,27 @@ export function AppShell({
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    function handleNavigationStart(event: Event) {
+      const detail = (event as CustomEvent<PendingNavigation>).detail;
+      if (!detail?.href || !detail.variant) return;
+      setDynamicActions(null);
+      setPendingNavigation(detail);
+    }
+
+    window.addEventListener("app:navigation-start", handleNavigationStart);
+    return () => {
+      window.removeEventListener("app:navigation-start", handleNavigationStart);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pendingNavigation) return;
+    if (pathname.startsWith(pendingNavigation.href)) {
+      setPendingNavigation(null);
+    }
+  }, [pathname, pendingNavigation]);
 
   const shellContextValue = useMemo(
     () => ({ setTitle: setDynamicTitle, setActions: setDynamicActions }),
@@ -88,7 +118,9 @@ export function AppShell({
               <ThemeToggle />
             </div>
           </header>
-          <div className="flex-1 overflow-y-auto">{children}</div>
+          <div className="flex-1 overflow-y-auto">
+            {pendingNavigation ? <AppRouteLoading variant={pendingNavigation.variant} /> : children}
+          </div>
         </main>
       </div>
     </AppShellContext.Provider>

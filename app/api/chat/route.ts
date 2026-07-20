@@ -322,6 +322,12 @@ function buildAnswerTrace(input: AssistantAnswerTrace): AssistantAnswerTrace {
   return input;
 }
 
+function buildTenantNextSuggestion(nextTopic: string) {
+  const normalized = nextTopic.trim();
+  if (!normalized) return [];
+  return [`Next: ${normalized}`];
+}
+
 function buildAnswerInstruction({
   language,
   subjectName,
@@ -383,6 +389,7 @@ async function persistAssistantCompletion({
   answerTrace,
   contextSummary,
   tokenUsage,
+  followUpSuggestions,
 }: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   sessionId: string;
@@ -395,6 +402,7 @@ async function persistAssistantCompletion({
   answerTrace: AssistantAnswerTrace;
   contextSummary: string;
   tokenUsage: TenantTokenUsage;
+  followUpSuggestions: string[];
 }) {
   const normalizedTokenUsage = normalizeTokenUsage(tokenUsage);
   const basePayload = {
@@ -404,7 +412,7 @@ async function persistAssistantCompletion({
     language,
     grounded: citations.length > 0,
     citations,
-    follow_up_suggestions: [],
+    follow_up_suggestions: followUpSuggestions,
     input_tokens: normalizedTokenUsage.inputTokens,
     output_tokens: normalizedTokenUsage.outputTokens,
     total_tokens: normalizedTokenUsage.totalTokens,
@@ -757,6 +765,7 @@ export async function POST(request: Request) {
         const answerParts: string[] = [];
         let tenantSources: TenantChatSource[] = [];
         let returnedContextSummary = "";
+        let tenantNextTopic = "";
         let chunksRetrieved: number | null = null;
         let servedFrom: string | null = null;
         let tenantTokenUsage = normalizeTokenUsage(null);
@@ -798,11 +807,16 @@ export async function POST(request: Request) {
                 chunksRetrieved = event.chunks_retrieved ?? null;
                 servedFrom = event.served_from ?? null;
                 returnedContextSummary = normalizeContextSummary(event.context_summary);
+                tenantNextTopic =
+                  event.next_topic?.trim() ||
+                  event.next_context_chunk?.title?.trim() ||
+                  "";
                 enqueue("sources", {
                   sources: tenantSources,
                   chunks_retrieved: chunksRetrieved,
                   served_from: servedFrom,
                   context_summary: returnedContextSummary ? "1" : "0",
+                  next_topic: tenantNextTopic || undefined,
                 });
                 return;
               }
@@ -874,6 +888,7 @@ export async function POST(request: Request) {
             folderPath: tenantSubject.folder_path,
             sources: tenantSources,
           });
+          const followUpSuggestions = buildTenantNextSuggestion(tenantNextTopic);
 
           const sessionContextPersist = await persistSessionContextSummary({
             supabase,
@@ -1002,6 +1017,7 @@ export async function POST(request: Request) {
             answerTrace,
             contextSummary: returnedContextSummary,
             tokenUsage: tenantTokenUsage,
+            followUpSuggestions,
           });
 
           if (!assistantMessageId) {

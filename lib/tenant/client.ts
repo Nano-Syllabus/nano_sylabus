@@ -41,6 +41,14 @@ export type TenantChatSource = {
   pages?: number[] | null;
 };
 
+export type TenantNextContextChunk = {
+  title?: string;
+  subject?: string;
+  source_path?: string;
+  clean_path?: string;
+  text?: string;
+};
+
 export type TenantTokenUsage = {
   inputTokens: number;
   outputTokens: number;
@@ -78,6 +86,8 @@ export type TenantStreamEvent =
       chunks_retrieved?: number;
       served_from?: string;
       context_summary?: string;
+      next_topic?: string;
+      next_context_chunk?: TenantNextContextChunk;
     }
   | { type: "done"; ok?: boolean; usage?: TenantTokenUsage }
   | { type: "error"; message: string };
@@ -105,51 +115,6 @@ type TenantSourceTreeResponse = {
   indexed_files: number;
   tree: TenantSourceTreeNode[];
 };
-
-function slugifyTenantValue(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-function countIndexedChunks(nodes: TenantSourceTreeNode[] | undefined): number {
-  return (nodes ?? []).reduce((total, node) => {
-    const ownChunks = node.indexed && typeof node.chunk_count === "number" ? node.chunk_count : 0;
-    return total + ownChunks + countIndexedChunks(node.children);
-  }, 0);
-}
-
-function deriveTenantSubjectsFromSourceTree(nodes: TenantSourceTreeNode[], path: string[] = []) {
-  const subjects: TenantSubject[] = [];
-
-  for (const node of nodes) {
-    const nextPath = [...path, node.name];
-
-    if (nextPath.length === 5) {
-      const [namespace = "", , , , subjectName = ""] = nextPath;
-      const folderPath = nextPath.join("/");
-      subjects.push({
-        name: subjectName,
-        slug: slugifyTenantValue(subjectName),
-        namespace,
-        namespace_slug: slugifyTenantValue(namespace),
-        full_path: `nano-syllabus/${folderPath}`,
-        folder_path: folderPath,
-        chunk_count: countIndexedChunks(node.children),
-      });
-      continue;
-    }
-
-    if (node.children?.length) {
-      subjects.push(...deriveTenantSubjectsFromSourceTree(node.children, nextPath));
-    }
-  }
-
-  return subjects;
-}
 
 function requestJson<T>(
   path: string,
@@ -254,21 +219,8 @@ export async function listTenantNamespaces() {
 }
 
 export async function listTenantSubjects() {
-  const [payload, sourceTree] = await Promise.all([
-    requestJson<TenantSubjectsResponse>("/api/v1/subjects"),
-    getTenantSourceTree(),
-  ]);
-  const subjectsByFolderPath = new Map<string, TenantSubject>();
-
-  for (const subject of deriveTenantSubjectsFromSourceTree(sourceTree.tree ?? [])) {
-    subjectsByFolderPath.set(subject.folder_path, subject);
-  }
-
-  for (const subject of payload.subjects ?? []) {
-    subjectsByFolderPath.set(subject.folder_path, subject);
-  }
-
-  return Array.from(subjectsByFolderPath.values());
+  const payload = await requestJson<TenantSubjectsResponse>("/api/v1/subjects");
+  return payload.subjects ?? [];
 }
 
 export async function getTenantSourceTree() {
@@ -384,6 +336,11 @@ function parseSseEvent(rawEvent: string): TenantStreamEvent | null {
       served_from: typeof payload.served_from === "string" ? payload.served_from : undefined,
       context_summary:
         typeof payload.context_summary === "string" ? payload.context_summary : undefined,
+      next_topic: typeof payload.next_topic === "string" ? payload.next_topic : undefined,
+      next_context_chunk:
+        payload.next_context_chunk && typeof payload.next_context_chunk === "object" && !Array.isArray(payload.next_context_chunk)
+          ? (payload.next_context_chunk as TenantNextContextChunk)
+          : undefined,
     };
   }
 
