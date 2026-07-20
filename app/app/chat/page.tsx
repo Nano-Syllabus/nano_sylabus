@@ -36,7 +36,6 @@ export default async function ChatPage({
     <>
       <SetAppShell title="Chat" />
       <ChatPageClient
-        key={activeSession?.id ?? (params.referenceNoteId ? `new-ref-${params.referenceNoteId}` : "new")}
         user={user}
         defaultLanguage={profile!.languagePref}
         profileBoard={profile!.board}

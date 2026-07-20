@@ -1145,7 +1145,9 @@ export function ChatPageClient({
   const handleMessagesScroll = useCallback(() => {
     const element = messagesScrollRef.current;
     if (!element) return;
-    shouldStickToBottomRef.current = isMessagesViewportNearBottom();
+    if (!loadingOlderMessagesRef.current) {
+      shouldStickToBottomRef.current = isMessagesViewportNearBottom();
+    }
     if (element.scrollTop < OLDER_MESSAGE_LOAD_THRESHOLD_PX) {
       void loadOlderMessages();
     }
@@ -1153,10 +1155,9 @@ export function ChatPageClient({
 
   useEffect(() => {
     if (loadingOlderMessagesRef.current) return;
-    if (shouldStickToBottomRef.current) {
-      scrollMessagesToBottom(isLoading ? "smooth" : "auto");
-    }
-  }, [messages, isLoading]);
+    if (!shouldStickToBottomRef.current) return;
+    scrollMessagesToBottom("auto");
+  }, [messages]);
 
   useEffect(() => {
     let timeoutId: number;
@@ -1497,6 +1498,7 @@ export function ChatPageClient({
         setPendingAttachments([]);
         setAttachmentError("");
       }
+      shouldStickToBottomRef.current = true;
       setMessages((previousMessages) => [
         ...(overrideMessages ?? previousMessages),
         { ...createLocalMessage("user", trimmed), attachments: attachmentsForMessage },
@@ -1537,6 +1539,7 @@ export function ChatPageClient({
     const isImageOnlyMessage = !finalMessageText.trim() && attachmentsForMessage.length > 0;
     const userMessage = { ...createLocalMessage("user", finalMessageText), attachments: attachmentsForMessage };
     const nextMessages = [...(overrideMessages ?? messages), userMessage];
+    shouldStickToBottomRef.current = true;
     setMessages(nextMessages);
     setQuotedText("");
 
@@ -2373,7 +2376,7 @@ export function ChatPageClient({
                     <article
                       key={message.id}
                       className={cn(
-                        "animate-fade-in flex flex-col group relative",
+                        "flex flex-col group relative",
                         message.role === "user" 
                           ? cn("ml-auto max-w-[88%] sm:max-w-[min(900px,92%)]", editingMessageIndex === index ? "w-full" : "w-fit")
                           : "mr-auto w-full max-w-[1020px]",
