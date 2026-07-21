@@ -346,7 +346,9 @@ function appendThinkingStep(previous: string[], message: string) {
 }
 
 function suggestionToPrompt(suggestion: string) {
-  return `Explain ${suggestion.replace(/^Next:\s*/i, "").trim()}`;
+  const normalized = suggestion.trim();
+  if (/^Explain\s+/i.test(normalized)) return normalized;
+  return `Explain ${normalized.replace(/^Next:\s*/i, "").trim()}`;
 }
 
 function parseSseBlock(block: string): ChatStreamEvent | null {
@@ -2256,17 +2258,22 @@ export function ChatPageClient({
       <textarea
         ref={composerRef}
         value={input}
+        disabled={!subjectContext}
         onChange={(event: ChangeEvent<HTMLTextAreaElement>) => handleInputChange(event)}
         onPaste={handleComposerPaste}
         onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+          if (!subjectContext) {
+            event.preventDefault();
+            return;
+          }
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             void sendCurrentMessage();
           }
         }}
         rows={1}
-        placeholder="What topic should we explore?"
-        className="min-h-[44px] w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted"
+        placeholder={!subjectContext ? "Select the subject first" : "What topic should we explore?"}
+        className={cn("min-h-[44px] w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted", !subjectContext && "cursor-not-allowed opacity-60")}
       />
       <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-3">
@@ -2295,6 +2302,7 @@ export function ChatPageClient({
               options={subjectActionOptions}
               placeholder="Subjects"
               direction="up"
+              pulseButton={!subjectContext}
             />
           )}
           <CompactSelect
@@ -2319,7 +2327,7 @@ export function ChatPageClient({
         ) : (
           <Button
             type="submit"
-            disabled={(!input.trim() && pendingAttachments.length === 0) || creditBalance <= 0}
+            disabled={!subjectContext || (!input.trim() && pendingAttachments.length === 0) || creditBalance <= 0}
             className="h-10 min-w-[78px] shrink-0 rounded-full bg-black px-4 text-[15px] font-medium text-white transition hover:opacity-80 disabled:opacity-50 dark:bg-white dark:text-black sm:min-w-[90px]"
           >
             Send →
@@ -2345,7 +2353,7 @@ export function ChatPageClient({
               <ChatSessionLoadingSkeleton />
             ) : messages.length === 0 ? (
               <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center text-center">
-                <div className="flex flex-row items-center justify-center gap-4 sm:gap-5 text-text-primary mb-8 text-center">
+                <div className="flex flex-row items-center justify-center gap-4 sm:gap-5 text-text-primary mb-8 text-center animate-fade-in">
                   <h1 className="font-display text-3xl sm:text-[40px] leading-tight font-normal tracking-tight">
                     <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="url(#premium-blue)" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" className="mr-2 inline-block h-8 w-8 align-text-bottom drop-shadow-[0_0_10px_rgba(96,165,250,0.65)] sm:mr-4 sm:h-[42px] sm:w-[42px]">
                       <defs>
@@ -2360,14 +2368,14 @@ export function ChatPageClient({
                     One step closer to your dreams, {capitalizedFirstName}.
                   </h1>
                 </div>
-                
-                <div className="w-full text-left">
-                  {chatError ? (
-                    <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
-                      {chatError}
-                    </p>
-                  ) : null}
-                  {renderInputForm()}
+
+                <div className="w-full text-left animate-fade-in" style={{ animationDelay: '50ms', animationFillMode: 'both' }}>
+                    {chatError ? (
+                      <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
+                        {chatError}
+                      </p>
+                    ) : null}
+                    {renderInputForm()}
                 </div>
 
               </div>
@@ -2563,15 +2571,20 @@ export function ChatPageClient({
                         {message.role === "assistant" &&
                           !isLoading &&
                           (message.followUpSuggestions?.length ?? 0) > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2 px-1">
+                            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[13px] leading-6 text-text-primary sm:text-[14px]">
                               {message.followUpSuggestions?.map((suggestion) => (
                                 <button
                                   key={suggestion}
                                   type="button"
                                   onClick={() => void sendCurrentMessage(suggestionToPrompt(suggestion))}
-                                  className="rounded-full border border-border-subtle px-3 py-1.5 text-left text-[12px] font-medium text-text-muted transition hover:border-text-muted hover:bg-bg-tertiary hover:text-text-primary"
+                                  className="group inline-flex min-w-0 items-baseline gap-1.5 text-left font-medium text-text-primary transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/60"
                                 >
-                                  {suggestion}
+                                  <span className="text-[17px] leading-none transition group-hover:translate-x-0.5">
+                                    ↳
+                                  </span>
+                                  <span className="decoration-text-primary underline decoration-dotted underline-offset-4">
+                                    {suggestion}
+                                  </span>
                                 </button>
                               ))}
                             </div>
