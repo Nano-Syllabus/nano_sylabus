@@ -41,6 +41,47 @@ function applyInlineStyles(value: string): string {
   return withFormatting.replace(/@@TOKEN_(\d+)@@/g, (_, index) => tokens[Number(index)] ?? "");
 }
 
+function isTableRow(value: string) {
+  const trimmed = value.trim();
+  return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.split("|").length > 2;
+}
+
+function parseTableCells(value: string) {
+  return value
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function isTableSeparator(value: string) {
+  const cells = parseTableCells(value);
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function renderTable(rows: string[]) {
+  if (rows.length < 2 || !isTableSeparator(rows[1])) {
+    return rows.map((row) => `<p>${applyInlineStyles(row)}</p>`).join("");
+  }
+
+  const headers = parseTableCells(rows[0]);
+  const bodyRows = rows.slice(2).filter(isTableRow).map(parseTableCells);
+  if (headers.length === 0 || bodyRows.length === 0) {
+    return rows.map((row) => `<p>${applyInlineStyles(row)}</p>`).join("");
+  }
+
+  const headerHtml = headers.map((cell) => `<th>${applyInlineStyles(cell)}</th>`).join("");
+  const bodyHtml = bodyRows
+    .map((row) => {
+      const cells = headers.map((_, index) => `<td>${applyInlineStyles(row[index] ?? "")}</td>`).join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+
+  return `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+}
+
 function renderMd(source: string): string {
   const lines = escapeHtml(source).split("\n");
   let output = "";
@@ -49,12 +90,19 @@ function renderMd(source: string): string {
   let codeLines: string[] = [];
   let inMathBlock = false;
   let mathLines: string[] = [];
+  let tableLines: string[] = [];
 
   const flush = () => {
     if (listType) {
       output += `</${listType}>`;
       listType = null;
     }
+  };
+
+  const flushTable = () => {
+    if (tableLines.length === 0) return;
+    output += renderTable(tableLines);
+    tableLines = [];
   };
 
   const flushCodeBlock = () => {
@@ -74,12 +122,14 @@ function renderMd(source: string): string {
   for (const raw of lines) {
     const singleLineMathMatch = raw.match(/^\s*\$\$(.+)\$\$\s*$/);
     if (singleLineMathMatch && !inCodeBlock && !inMathBlock) {
+      flushTable();
       flush();
       output += `<div class="math-block">${renderMath(singleLineMathMatch[1], true)}</div>`;
       continue;
     }
 
     if (raw.trimStart().startsWith("```")) {
+      flushTable();
       flush();
       flushMathBlock();
       if (inCodeBlock) {
@@ -92,6 +142,7 @@ function renderMd(source: string): string {
     }
 
     if (raw.trim() === "$$") {
+      flushTable();
       flush();
       flushCodeBlock();
       if (inMathBlock) {
@@ -112,6 +163,14 @@ function renderMd(source: string): string {
       mathLines.push(raw);
       continue;
     }
+
+    if (isTableRow(raw)) {
+      flush();
+      tableLines.push(raw);
+      continue;
+    }
+
+    flushTable();
 
     const headingMatch = raw.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
@@ -143,6 +202,7 @@ function renderMd(source: string): string {
     }
   }
 
+  flushTable();
   flush();
   flushCodeBlock();
   flushMathBlock();

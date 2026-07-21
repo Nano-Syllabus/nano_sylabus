@@ -2272,7 +2272,7 @@ export function ChatPageClient({
           }
         }}
         rows={1}
-        placeholder={!subjectContext ? "Select the subject first" : "What topic should we explore?"}
+        placeholder={!subjectContext ? "Please select subject" : "What topic should we explore?"}
         className={cn("min-h-[44px] w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted", !subjectContext && "cursor-not-allowed opacity-60")}
       />
       <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
