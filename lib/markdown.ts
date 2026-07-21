@@ -57,7 +57,7 @@ function parseTableCells(value: string) {
 
 function isTableSeparator(value: string) {
   const cells = parseTableCells(value);
-  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+  return cells.length > 0 && cells.every((cell) => /^:?-+:?$/.test(cell));
 }
 
 function renderTable(rows: string[]) {

@@ -24,6 +24,12 @@ type CircuitLabel = {
   align: "start" | "end";
 };
 
+type CircuitCoordRef = {
+  id: string;
+  gateId: string;
+  dx: number;
+};
+
 type CircuitWire =
   | {
       type: "input";
@@ -65,12 +71,61 @@ type CircuitWire =
       fromY: number;
       gateId: string;
       inputIndex: number;
+    }
+  | {
+      type: "feedback";
+      coordId: string;
+      dx: number;
+      dy: number;
+      gateId: string;
+      inputIndex: number;
     };
 
 type CircuitDiagram = {
   gates: CircuitGate[];
   wires: CircuitWire[];
   labels: CircuitLabel[];
+  coordRefs: CircuitCoordRef[];
+};
+
+type BlockBox = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
+
+type BlockNode = {
+  x: number;
+  y: number;
+  text: string;
+  shape?: "circle";
+  placement?: "left" | "right" | "above" | "below";
+};
+
+type BlockArrow = {
+  direction: "input" | "output";
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  label?: string;
+  labelPlacement?: "left" | "right" | "above" | "below" | "midway";
+};
+
+type BlockWire = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  label?: string;
+};
+
+type BlockDiagram = {
+  boxes: BlockBox[];
+  nodes: BlockNode[];
+  arrows: BlockArrow[];
+  wires: BlockWire[];
 };
 
 function isTikzSource(source: string) {
@@ -92,16 +147,201 @@ function cleanCircuitLabel(value: string) {
   return value
     .trim()
     .replace(/^\{|\}$/g, "")
+    .replace(/\\begin\{tabular\}\{[^}]*\}/g, "")
+    .replace(/\\end\{tabular\}/g, "")
+    .replace(/\\\\/g, " ")
+    .replace(/\\overline\s*\{([^}]+)\}/g, "$1\u0305")
+    .replace(/\\bar\s*\{([^}]+)\}/g, "$1\u0305")
     .replace(/\$/g, "")
     .replace(/\\_/g, "_")
     .replace(/_\{([^}]+)\}/g, "_$1")
+    .replace(/\\([A-Za-z]+)/g, "$1")
     .replace(/[{}]/g, "");
+}
+
+function parseBlockDiagram(source: string): BlockDiagram | null {
+  const boxes: BlockBox[] = [];
+  const nodes: BlockNode[] = [];
+  const arrows: BlockArrow[] = [];
+  const wires: BlockWire[] = [];
+
+  const rectanglePattern =
+    /\\draw(?:\[[^\]]*\])?\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*rectangle\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)/gi;
+  for (const match of source.matchAll(rectanglePattern)) {
+    const x1 = parseNumber(match[1]);
+    const y1 = parseNumber(match[2]);
+    const x2 = parseNumber(match[3]);
+    const y2 = parseNumber(match[4]);
+    if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+    boxes.push({ x1, y1, x2, y2 });
+  }
+
+  const rectangleWithLabelPattern =
+    /\\draw(?:\[[^\]]*\])?\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*rectangle\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*node\[[^\]]*\]\s*(\{[^\n;]+\})/gi;
+  for (const match of source.matchAll(rectangleWithLabelPattern)) {
+    const x1 = parseNumber(match[1]);
+    const y1 = parseNumber(match[2]);
+    const x2 = parseNumber(match[3]);
+    const y2 = parseNumber(match[4]);
+    if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+    nodes.push({ x: (x1 + x2) / 2, y: (y1 + y2) / 2, text: cleanCircuitLabel(match[5]) });
+  }
+
+  const nodePattern =
+    /\\node\s+at\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*(\{[^\n;]+\})/gi;
+  for (const match of source.matchAll(nodePattern)) {
+    const x = parseNumber(match[1]);
+    const y = parseNumber(match[2]);
+    if (x === null || y === null) continue;
+    nodes.push({ x, y, text: cleanCircuitLabel(match[3]) });
+  }
+
+  const styledNodePattern =
+    /\\node\s*\[([^\]]+)\]\s*at\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*(\{[^\n;]+\})/gi;
+  for (const match of source.matchAll(styledNodePattern)) {
+    const x = parseNumber(match[2]);
+    const y = parseNumber(match[3]);
+    if (x === null || y === null) continue;
+    nodes.push({
+      x,
+      y,
+      text: cleanCircuitLabel(match[4]),
+      shape: match[1].includes("circle") ? "circle" : undefined,
+      placement: match[1].includes("left")
+        ? "left"
+        : match[1].includes("right")
+          ? "right"
+          : match[1].includes("above")
+            ? "above"
+            : match[1].includes("below")
+              ? "below"
+              : undefined,
+    });
+  }
+
+  const arrowPattern =
+    /\\draw\s*\[\s*(<-|->)[^\]]*\]\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*--\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*node\[[^\]]*(left|right)[^\]]*\]\s*(\{[^\n;]+\})/gi;
+  for (const match of source.matchAll(arrowPattern)) {
+    const x1 = parseNumber(match[2]);
+    const y1 = parseNumber(match[3]);
+    const x2 = parseNumber(match[4]);
+    const y2 = parseNumber(match[5]);
+    if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+    arrows.push({
+      direction: match[1] === "<-" ? "input" : "output",
+      x1,
+      y1,
+      x2,
+      y2,
+      label: cleanCircuitLabel(match[7]),
+      labelPlacement: match[6] === "left" ? "left" : "right",
+    });
+  }
+
+  const genericArrowPattern =
+    /\\draw\s*\[\s*(<-|->)[^\]]*\]\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*--\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)(?:\s*node\[([^\]]*)\]\s*(\{[^\n;]+\}))?/gi;
+  for (const match of source.matchAll(genericArrowPattern)) {
+    const x1 = parseNumber(match[2]);
+    const y1 = parseNumber(match[3]);
+    const x2 = parseNumber(match[4]);
+    const y2 = parseNumber(match[5]);
+    if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+    const labelOptions = match[6] ?? "";
+    const label = match[7] ? cleanCircuitLabel(match[7]) : undefined;
+    const labelPlacement = labelOptions.includes("left")
+      ? "left"
+      : labelOptions.includes("right")
+        ? "right"
+        : labelOptions.includes("below")
+          ? "below"
+          : labelOptions.includes("above")
+            ? "above"
+            : labelOptions.includes("midway")
+              ? "midway"
+              : undefined;
+    const alreadyCaptured = arrows.some(
+      (arrow) => arrow.x1 === x1 && arrow.y1 === y1 && arrow.x2 === x2 && arrow.y2 === y2 && arrow.label === label,
+    );
+    if (!alreadyCaptured) {
+      arrows.push({
+        direction: match[1] === "<-" ? "input" : "output",
+        x1,
+        y1,
+        x2,
+        y2,
+        label,
+        labelPlacement,
+      });
+    }
+  }
+
+  const labeledWirePattern =
+    /\\draw\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*node\[[^\]]*(left|right)[^\]]*\]\s*(\{[^\n;]+\})\s*--\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)/gi;
+  for (const match of source.matchAll(labeledWirePattern)) {
+    const x1 = parseNumber(match[1]);
+    const y1 = parseNumber(match[2]);
+    const x2 = parseNumber(match[5]);
+    const y2 = parseNumber(match[6]);
+    if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+    wires.push({ x1, y1, x2, y2, label: cleanCircuitLabel(match[4]) });
+  }
+
+  const plainWirePattern =
+    /\\draw\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*--\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)/gi;
+  for (const match of source.matchAll(plainWirePattern)) {
+    const x1 = parseNumber(match[1]);
+    const y1 = parseNumber(match[2]);
+    const x2 = parseNumber(match[3]);
+    const y2 = parseNumber(match[4]);
+    if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+    const alreadyCaptured = wires.some((wire) => wire.x1 === x1 && wire.y1 === y1 && wire.x2 === x2 && wire.y2 === y2);
+    if (!alreadyCaptured) wires.push({ x1, y1, x2, y2 });
+  }
+
+  const chainWirePattern = /\\draw\s+((?:\(\s*[-+]?\d*\.?\d+\s*,\s*[-+]?\d*\.?\d+\s*\)\s*--\s*)+\(\s*[-+]?\d*\.?\d+\s*,\s*[-+]?\d*\.?\d+\s*\))/gi;
+  for (const match of source.matchAll(chainWirePattern)) {
+    const coords = Array.from(match[1].matchAll(/\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)/g))
+      .map((coord) => {
+        const x = parseNumber(coord[1]);
+        const y = parseNumber(coord[2]);
+        return x === null || y === null ? null : { x, y };
+      })
+      .filter((coord): coord is { x: number; y: number } => Boolean(coord));
+
+    for (let index = 0; index < coords.length - 1; index += 1) {
+      const start = coords[index];
+      const end = coords[index + 1];
+      const alreadyCaptured = wires.some(
+        (wire) => wire.x1 === start.x && wire.y1 === start.y && wire.x2 === end.x && wire.y2 === end.y,
+      );
+      if (!alreadyCaptured) wires.push({ x1: start.x, y1: start.y, x2: end.x, y2: end.y });
+    }
+  }
+
+  const inlineNotPattern =
+    /\\draw\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*--\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*to\[[^\]]*not\s+port[^,]*,\s*l=([^\]]+)\]\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)/gi;
+  for (const match of source.matchAll(inlineNotPattern)) {
+    const x1 = parseNumber(match[1]);
+    const y1 = parseNumber(match[2]);
+    const x2 = parseNumber(match[3]);
+    const y2 = parseNumber(match[4]);
+    const x3 = parseNumber(match[6]);
+    const y3 = parseNumber(match[7]);
+    if (x1 === null || y1 === null || x2 === null || y2 === null || x3 === null || y3 === null) continue;
+    wires.push({ x1, y1, x2, y2 });
+    wires.push({ x1: x2, y1: y2, x2: x3, y2: y3, label: cleanCircuitLabel(match[5]) });
+  }
+
+  return boxes.length > 0 && (nodes.length > 0 || arrows.length > 0 || wires.length > 0)
+    ? { boxes, nodes, arrows, wires }
+    : null;
 }
 
 function parseGateDiagram(source: string): CircuitDiagram | null {
   const gates: CircuitGate[] = [];
   const wires: CircuitWire[] = [];
   const labels: CircuitLabel[] = [];
+  const coordRefs: CircuitCoordRef[] = [];
 
   const gatePattern =
     /\\node\s*\[\s*([a-z]+)\s+port[^\]]*\]\s*\(([^)]+)\)\s*at\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)/gi;
@@ -110,6 +350,18 @@ function parseGateDiagram(source: string): CircuitDiagram | null {
     const y = parseNumber(match[4]);
     if (x === null || y === null) continue;
     gates.push({ id: match[2].trim(), kind: match[1].toLowerCase(), x, y });
+  }
+
+  const drawNodeGatePattern =
+    /\\draw\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*node\s*\[\s*([a-z]+)\s+port[^\]]*\]\s*\(([^)]+)\)/gi;
+  for (const match of source.matchAll(drawNodeGatePattern)) {
+    const x = parseNumber(match[1]);
+    const y = parseNumber(match[2]);
+    if (x === null || y === null) continue;
+    const id = match[4].trim();
+    if (!gates.some((gate) => gate.id === id)) {
+      gates.push({ id, kind: match[3].toLowerCase(), x, y });
+    }
   }
 
   const inputPattern =
@@ -145,6 +397,17 @@ function parseGateDiagram(source: string): CircuitDiagram | null {
     const dx = parseNumber(match[2]);
     if (dx === null) continue;
     wires.push({ type: "output", gateId: match[1].trim(), dx, label: cleanCircuitLabel(match[3]) });
+  }
+
+  const outputCoordinatePattern =
+    /\\draw\s*\(([^.]+)\.out\)\s*--\s*\+\+\(\s*([-+]?\d*\.?\d+)\s*,\s*[-+]?\d*\.?\d+\s*\)\s*coordinate\s*\(([^)]+)\)\s*node\[right\]\s*(\{[^\n;]+\})/gi;
+  for (const match of source.matchAll(outputCoordinatePattern)) {
+    const dx = parseNumber(match[2]);
+    if (dx === null) continue;
+    const gateId = match[1].trim();
+    const coordId = match[3].trim();
+    wires.push({ type: "output", gateId, dx, label: cleanCircuitLabel(match[4]) });
+    coordRefs.push({ id: coordId, gateId, dx });
   }
 
   const gatePatternDirect = /\\draw\s*\(([^.]+)\.out\)\s*--\s*\(([^.]+)\.in\s+(\d+)\)/gi;
@@ -190,6 +453,23 @@ function parseGateDiagram(source: string): CircuitDiagram | null {
     });
   }
 
+  const feedbackPattern =
+    /\\draw\s*\(([^)]+)\)\s*\+\+\(\s*([-+]?\d*\.?\d+)\s*,\s*[-+]?\d*\.?\d+\s*\)\s*--\s*\+\+\(\s*[-+]?\d*\.?\d+\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*-\|\s*\(([^.]+)\.in\s+(\d+)\)/gi;
+  for (const match of source.matchAll(feedbackPattern)) {
+    const dx = parseNumber(match[2]);
+    const dy = parseNumber(match[3]);
+    const inputIndex = Number.parseInt(match[5], 10);
+    if (dx === null || dy === null || !Number.isFinite(inputIndex)) continue;
+    wires.push({
+      type: "feedback",
+      coordId: match[1].trim(),
+      dx,
+      dy,
+      gateId: match[4].trim(),
+      inputIndex,
+    });
+  }
+
   const labelPattern =
     /\\draw\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)\s*node\[(left|right)\]\s*\{([^}]*)\}/gi;
   for (const match of source.matchAll(labelPattern)) {
@@ -199,7 +479,7 @@ function parseGateDiagram(source: string): CircuitDiagram | null {
     labels.push({ text: cleanCircuitLabel(match[4]), x, y, align: match[3] === "left" ? "end" : "start" });
   }
 
-  return gates.length > 0 ? { gates, wires, labels } : null;
+  return gates.length > 0 ? { gates, wires, labels, coordRefs } : null;
 }
 
 function splitTikzSegments(source: string): MarkdownSegment[] {
@@ -343,7 +623,7 @@ function GateShape({ gate }: { gate: CircuitGate }) {
     );
   }
 
-  if (gate.kind === "or") {
+  if (gate.kind === "or" || gate.kind === "nor") {
     return (
       <g transform={transform}>
         <path
@@ -353,8 +633,9 @@ function GateShape({ gate }: { gate: CircuitGate }) {
           strokeWidth="3"
         />
         <text x="6" y="8" textAnchor="middle" className="fill-slate-700 text-[18px] font-semibold">
-          OR
+          {gate.kind.toUpperCase()}
         </text>
+        {gate.kind === "nor" ? <circle cx="58" cy="0" r="8" fill="#fff" stroke="#111827" strokeWidth="3" /> : null}
       </g>
     );
   }
@@ -369,20 +650,206 @@ function GateShape({ gate }: { gate: CircuitGate }) {
   );
 }
 
+function BlockDiagramSvg({ diagram }: { diagram: BlockDiagram }) {
+  const scale = 190;
+  const toPoint = (x: number, y: number) => ({ x: x * scale, y: -y * scale });
+  const isNear = (a: number, b: number) => Math.abs(a - b) < 0.04;
+  const resolvePlacedNode = (node: BlockNode) => {
+    const edgeBox = diagram.boxes.find((box) => {
+      const left = Math.min(box.x1, box.x2);
+      const right = Math.max(box.x1, box.x2);
+      const bottom = Math.min(box.y1, box.y2);
+      const top = Math.max(box.y1, box.y2);
+      const withinY = node.y >= bottom - 0.04 && node.y <= top + 0.04;
+      const withinX = node.x >= left - 0.04 && node.x <= right + 0.04;
+      return (
+        (node.placement === "left" && isNear(node.x, left) && withinY) ||
+        (node.placement === "right" && isNear(node.x, right) && withinY) ||
+        (node.placement === "above" && isNear(node.y, top) && withinX) ||
+        (node.placement === "below" && isNear(node.y, bottom) && withinX)
+      );
+    });
+    if (!edgeBox || !node.placement) return { x: node.x, y: node.y, placement: node.placement };
+    const offset = 0.22;
+    if (node.placement === "left") return { x: node.x - offset, y: node.y, placement: node.placement };
+    if (node.placement === "right") return { x: node.x + offset, y: node.y, placement: node.placement };
+    if (node.placement === "above") return { x: node.x, y: node.y + offset, placement: node.placement };
+    return { x: node.x, y: node.y - offset, placement: node.placement };
+  };
+  const points = [
+    ...diagram.boxes.flatMap((box) => [toPoint(box.x1, box.y1), toPoint(box.x2, box.y2)]),
+    ...diagram.nodes.map((node) => {
+      const placed = resolvePlacedNode(node);
+      return toPoint(placed.x, placed.y);
+    }),
+    ...diagram.arrows.flatMap((arrow) => [toPoint(arrow.x1, arrow.y1), toPoint(arrow.x2, arrow.y2)]),
+    ...diagram.wires.flatMap((wire) => [toPoint(wire.x1, wire.y1), toPoint(wire.x2, wire.y2)]),
+  ];
+  const minX = Math.min(...points.map((point) => point.x)) - 170;
+  const minY = Math.min(...points.map((point) => point.y)) - 70;
+  const maxX = Math.max(...points.map((point) => point.x)) + 220;
+  const maxY = Math.max(...points.map((point) => point.y)) + 70;
+  const width = Math.max(maxX - minX, 420);
+  const height = Math.max(maxY - minY, 220);
+  const aspectRatio = width / height;
+  const renderedHeight = aspectRatio > 3.2 ? 220 : aspectRatio > 1.8 ? 260 : 300;
+  const viewBox = `${minX} ${minY} ${width} ${height}`;
+
+  return (
+    <svg
+      role="img"
+      aria-label="Rendered block diagram"
+      viewBox={viewBox}
+      style={{ height: renderedHeight }}
+      className="block w-full bg-white"
+    >
+      <defs>
+        <marker id="block-arrow-end" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#111827" />
+        </marker>
+        <marker id="block-arrow-start" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M 10 0 L 0 5 L 10 10 z" fill="#111827" />
+        </marker>
+      </defs>
+      {diagram.boxes.map((box, index) => {
+        const topLeft = toPoint(Math.min(box.x1, box.x2), Math.max(box.y1, box.y2));
+        const bottomRight = toPoint(Math.max(box.x1, box.x2), Math.min(box.y1, box.y2));
+        return (
+          <rect
+            key={`box-${index}`}
+            x={topLeft.x}
+            y={topLeft.y}
+            width={bottomRight.x - topLeft.x}
+            height={bottomRight.y - topLeft.y}
+            rx="12"
+            fill="#fff"
+            stroke="#111827"
+            strokeWidth="4"
+          />
+        );
+      })}
+      <g stroke="#111827" strokeLinecap="round" strokeWidth="4">
+        {diagram.wires.map((wire, index) => {
+          const start = toPoint(wire.x1, wire.y1);
+          const end = toPoint(wire.x2, wire.y2);
+          const isHorizontal = Math.abs(start.y - end.y) < 2;
+          const isRightOutput = isHorizontal && start.x < end.x && start.x > maxX - 420;
+          const labelX = isRightOutput ? end.x + 22 : (start.x + end.x) / 2;
+          const labelY = isRightOutput ? end.y + 8 : (start.y + end.y) / 2 - 18;
+          const textAnchor = isRightOutput ? "start" : "middle";
+          return (
+            <g key={`wire-${index}`}>
+              <path d={`M ${start.x} ${start.y} L ${end.x} ${end.y}`} fill="none" />
+              {wire.label ? (
+                <text
+                  x={labelX}
+                  y={labelY}
+                  textAnchor={textAnchor}
+                  stroke="none"
+                  className="fill-slate-900 text-[22px] font-semibold"
+                >
+                  {wire.label}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+        {diagram.arrows.map((arrow, index) => {
+          const start = toPoint(arrow.x1, arrow.y1);
+          const end = toPoint(arrow.x2, arrow.y2);
+          const marker = arrow.direction === "input" ? "url(#block-arrow-start)" : "url(#block-arrow-end)";
+          const isHorizontal = Math.abs(start.y - end.y) < 2;
+          const labelPlacement =
+            arrow.labelPlacement === "left" || arrow.labelPlacement === "right"
+              ? arrow.labelPlacement
+              : arrow.labelPlacement === "above" && isHorizontal
+                ? arrow.direction === "input"
+                  ? "left"
+                  : "right"
+                : arrow.labelPlacement;
+          const labelX =
+            labelPlacement === "left"
+              ? Math.min(start.x, end.x) - 22
+              : labelPlacement === "right"
+                ? Math.max(start.x, end.x) + 22
+                : (start.x + end.x) / 2;
+          const labelY =
+            labelPlacement === "above"
+              ? Math.min(start.y, end.y) - 16
+              : labelPlacement === "below"
+                ? Math.max(start.y, end.y) + 30
+                : (start.y + end.y) / 2 + 8;
+          const textAnchor = labelPlacement === "left" ? "end" : labelPlacement === "right" ? "start" : "middle";
+          return (
+            <g key={`arrow-${index}`}>
+              <path
+                d={`M ${start.x} ${start.y} L ${end.x} ${end.y}`}
+                fill="none"
+                markerStart={arrow.direction === "input" ? marker : undefined}
+                markerEnd={arrow.direction === "output" ? marker : undefined}
+              />
+              {arrow.label ? (
+                <text
+                  x={labelX}
+                  y={labelY}
+                  textAnchor={textAnchor}
+                  stroke="none"
+                  className="fill-slate-900 text-[26px] font-semibold"
+                >
+                  {arrow.label}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+      </g>
+      {diagram.nodes.map((node, index) => {
+        const placed = resolvePlacedNode(node);
+        const point = toPoint(placed.x, placed.y);
+        const textAnchor = placed.placement === "left" ? "end" : placed.placement === "right" ? "start" : "middle";
+        if (node.shape === "circle") {
+          return (
+            <g key={`node-${index}`}>
+              <circle cx={point.x} cy={point.y} r="34" fill="#fff" stroke="#111827" strokeWidth="4" />
+              <text x={point.x} y={point.y + 8} textAnchor={textAnchor} className="fill-slate-900 text-[20px] font-bold">
+                {node.text}
+              </text>
+            </g>
+          );
+        }
+
+        return (
+          <text key={`node-${index}`} x={point.x} y={point.y + 9} textAnchor={textAnchor} className="fill-slate-900 text-[28px] font-bold">
+            {node.text}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
 function CircuitSvg({ diagram }: { diagram: CircuitDiagram }) {
   const scale = 125;
   const gateMap = new Map(diagram.gates.map((gate) => [gate.id, { ...gate, x: gate.x * scale, y: -gate.y * scale }]));
 
   const inputPort = (gate: CircuitGate, inputIndex: number) => {
     const yOffset = inputIndex === 1 ? -22 : 22;
-    const xOffset = gate.kind === "xor" || gate.kind === "or" ? -40 : -42;
+    const xOffset = gate.kind === "xor" || gate.kind === "or" || gate.kind === "nor" ? -40 : -42;
     return { x: gate.x + xOffset, y: gate.y + yOffset };
   };
 
   const outputPort = (gate: CircuitGate) => {
-    const xOffset = gate.kind === "xor" || gate.kind === "or" ? 50 : 48;
+    const xOffset = gate.kind === "nor" ? 66 : gate.kind === "xor" || gate.kind === "or" ? 50 : 48;
     return { x: gate.x + xOffset, y: gate.y };
   };
+  const coordMap = new Map(
+    diagram.coordRefs.flatMap((coord) => {
+      const gate = gateMap.get(coord.gateId);
+      if (!gate) return [];
+      const start = outputPort(gate);
+      return [[coord.id, { x: start.x + coord.dx * scale, y: start.y }]];
+    }),
+  );
 
   const points = [
     ...Array.from(gateMap.values()).flatMap((gate) => [
@@ -409,21 +876,39 @@ function CircuitSvg({ diagram }: { diagram: CircuitDiagram }) {
         const end = inputPort(toGate, wire.inputIndex);
         return [start, { x: start.x + wire.dx * scale, y: start.y }, { x: start.x + wire.dx * scale, y: end.y }, end];
       }
+      if (wire.type === "feedback") {
+        const from = coordMap.get(wire.coordId);
+        const toGate = gateMap.get(wire.gateId);
+        if (!from || !toGate) return [];
+        const start = { x: from.x + wire.dx * scale, y: from.y };
+        const mid = { x: start.x, y: start.y - wire.dy * scale };
+        return [from, start, mid, inputPort(toGate, wire.inputIndex)];
+      }
       return [{ x: wire.fromX * scale, y: -wire.fromY * scale }];
     }),
   ];
-  const minX = Math.min(...points.map((point) => point.x)) - 34;
-  const minY = Math.min(...points.map((point) => point.y)) - 32;
-  const maxX = Math.max(...points.map((point) => point.x)) + 54;
-  const maxY = Math.max(...points.map((point) => point.y)) + 32;
-  const viewBox = `${minX} ${minY} ${Math.max(maxX - minX, 360)} ${Math.max(maxY - minY, 180)}`;
+  const labelAllowance = Math.max(
+    70,
+    ...diagram.labels.map((label) => cleanCircuitLabel(label.text).length * 12 + 26),
+    ...diagram.wires.map((wire) => ("label" in wire && wire.label ? cleanCircuitLabel(wire.label).length * 12 + 26 : 0)),
+  );
+  const minX = Math.min(...points.map((point) => point.x)) - labelAllowance;
+  const minY = Math.min(...points.map((point) => point.y)) - 86;
+  const maxX = Math.max(...points.map((point) => point.x)) + labelAllowance;
+  const maxY = Math.max(...points.map((point) => point.y)) + 70;
+  const width = Math.max(maxX - minX, 360);
+  const height = Math.max(maxY - minY, 180);
+  const aspectRatio = width / height;
+  const renderedHeight = aspectRatio > 3.2 ? 220 : aspectRatio > 1.8 ? 260 : 300;
+  const viewBox = `${minX} ${minY} ${width} ${height}`;
 
   return (
     <svg
       role="img"
       aria-label="Rendered circuit diagram"
       viewBox={viewBox}
-      className="h-auto max-h-[360px] w-full bg-white"
+      style={{ height: renderedHeight }}
+      className="block w-full bg-white"
     >
       <g stroke="#111827" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3">
         {diagram.wires.map((wire, index) => {
@@ -467,6 +952,23 @@ function CircuitSvg({ diagram }: { diagram: CircuitDiagram }) {
             const to = inputPort(toGate, wire.inputIndex);
             const midX = from.x + wire.dx * scale;
             return <path key={`wire-${index}`} d={`M ${from.x} ${from.y} L ${midX} ${from.y} L ${midX} ${to.y} L ${to.x} ${to.y}`} fill="none" />;
+          }
+
+          if (wire.type === "feedback") {
+            const fromRef = coordMap.get(wire.coordId);
+            const toGate = gateMap.get(wire.gateId);
+            if (!fromRef || !toGate) return null;
+            const startX = fromRef.x + wire.dx * scale;
+            const startY = fromRef.y;
+            const midY = startY - wire.dy * scale;
+            const to = inputPort(toGate, wire.inputIndex);
+            return (
+              <path
+                key={`wire-${index}`}
+                d={`M ${fromRef.x} ${fromRef.y} L ${startX} ${startY} L ${startX} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y}`}
+                fill="none"
+              />
+            );
           }
 
           const gate = gateMap.get(wire.gateId);
@@ -513,42 +1015,26 @@ function CircuitSvg({ diagram }: { diagram: CircuitDiagram }) {
 }
 
 function TikzDiagram({ source }: { source: string }) {
-  const iframeRef = React.useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(260);
-  const srcDoc = useMemo(() => buildTikzSrcDoc(source), [source]);
+  const blockDiagram = useMemo(() => parseBlockDiagram(source), [source]);
   const circuitDiagram = useMemo(() => parseGateDiagram(source), [source]);
-
-  React.useEffect(() => {
-    function handleMessage(event: MessageEvent) {
-      if (event.source !== iframeRef.current?.contentWindow) return;
-      const data = event.data as { type?: string; height?: number };
-      if (data?.type !== "nano:tikz-height" || typeof data.height !== "number") return;
-      setHeight(Math.min(Math.max(data.height, 180), 560));
-    }
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
 
   return (
     <figure className="my-4 overflow-hidden rounded-lg border border-border bg-bg-primary">
       <div className="border-b border-border px-3 py-2 text-[13px] font-semibold text-text-primary">
-        Circuit Diagram
+        {blockDiagram ? "Block Diagram" : "Circuit Diagram"}
       </div>
-      {circuitDiagram ? (
-        <div className="bg-white p-4">
+      {blockDiagram ? (
+        <div className="bg-white px-4 py-3">
+          <BlockDiagramSvg diagram={blockDiagram} />
+        </div>
+      ) : circuitDiagram ? (
+        <div className="bg-white px-4 py-3">
           <CircuitSvg diagram={circuitDiagram} />
         </div>
       ) : (
-        <iframe
-          ref={iframeRef}
-          title="Rendered TikZ diagram"
-          srcDoc={srcDoc}
-          sandbox="allow-scripts"
-          loading="lazy"
-          style={{ height }}
-          className="block w-full bg-white"
-        />
+        <div className="border-b border-border bg-bg-secondary px-4 py-5 text-sm leading-6 text-text-secondary">
+          This diagram uses a TikZ pattern that the app cannot render yet. The source is available below.
+        </div>
       )}
       <details className="border-t border-border bg-bg-secondary/45 px-3 py-2">
         <summary className="cursor-pointer text-[12px] font-medium text-text-muted transition hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/60">

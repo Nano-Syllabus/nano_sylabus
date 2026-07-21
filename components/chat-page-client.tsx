@@ -2997,6 +2997,14 @@ function ShareChatModal({
   onClose: () => void;
   onCopy: () => void | Promise<void>;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await onCopy();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 backdrop-blur-sm sm:items-center sm:p-4"
@@ -3028,7 +3036,18 @@ function ShareChatModal({
           <a href={url} target="_blank" rel="noreferrer">
             <Button variant="outline" className="w-full sm:w-auto">Open link</Button>
           </a>
-          <Button onClick={() => void onCopy()} className="w-full sm:w-auto">Copy</Button>
+          <Button onClick={() => void handleCopy()} className={cn("w-full sm:w-auto transition-all duration-200", copied && "bg-green-600 hover:bg-green-600 dark:bg-green-500 dark:hover:bg-green-500")}>
+            {copied ? (
+              <span className="flex items-center gap-1.5">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                Copied!
+              </span>
+            ) : (
+              "Copy"
+            )}
+          </Button>
         </div>
       </div>
     </div>
