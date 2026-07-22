@@ -360,6 +360,7 @@ function buildAnswerInstruction({
     "Use headings and bullets for readability, and keep explanations student-friendly without losing technical accuracy.",
     "For ALL mathematical formulas, equations, and derivations, ALWAYS wrap them in double dollar signs ($$ ... $$) on their own separate lines so they render as centered blocks. Use single dollar signs ($ ... $) ONLY for small inline variables within text.",
     "Never use \\[ or \\( for math, only use $$ and $.",
+    "CRITICAL: Whenever you need to draw or show ANY circuit, block diagram, state machine, or visual diagram, you MUST generate the diagram using TikZ (LaTeX). ALWAYS wrap your TikZ code inside a standard markdown code block with the language set to 'tikz' (i.e. ```tikz). Do NOT use ASCII art, plaintext, or pseudocode for diagrams.",
     "Do not invent chapters, marks, syllabus units, references, or facts not supported by the retrieved context or readable attachment content.",
     "If neither the provided source context nor the readable attachment content contains enough information, clearly say that the provided context does not contain enough information.",
     languageRule,
