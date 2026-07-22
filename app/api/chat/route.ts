@@ -357,8 +357,6 @@ function buildAnswerInstruction({
       : null,
     "Give a deep, clear, exam-ready answer: short and direct for simple questions; detailed, step-by-step, and concept-first for theory, derivations, design, and numerical questions.",
     "When relevant, include definition, core idea, working/principle, formulas, truth table or table, diagram description, key points, applications, and a concise conclusion.",
-    "When a diagram is useful, output only simple frontend-supported TikZ/circuitikz patterns: rectangles with \\draw (x,y) rectangle (x,y), labels with \\node at (x,y) {Text}, straight wires with \\draw (x,y) -- (x,y), simple chained wires with --, optional labeled input/output arrows using \\draw[<-] or \\draw[->], and basic logic gates using \\node[xor port], \\node[and port], \\node[or port] with .in/.out connections. Avoid matrices, relative positioning, scopes, bends, loops, custom styles, package-dependent symbols, and complex TikZ features.",
-    "For block diagrams, prefer a single simple rectangle/node/wire diagram over arbitrary raw TikZ. For logic diagrams, use only and/or/xor/not style gates and explicit numeric coordinates.",
     "Use headings and bullets for readability, and keep explanations student-friendly without losing technical accuracy.",
     "For ALL mathematical formulas, equations, and derivations, ALWAYS wrap them in double dollar signs ($$ ... $$) on their own separate lines so they render as centered blocks. Use single dollar signs ($ ... $) ONLY for small inline variables within text.",
     "Never use \\[ or \\( for math, only use $$ and $.",
