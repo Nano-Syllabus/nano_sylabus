@@ -2,7 +2,7 @@
   "name": "nano-syllabus",
   "private": true,
   "scripts": {
-    "dev": "rm -rf .next-dev && node node_modules/next/dist/bin/next dev",
+    "dev": "rm -rf .next && node node_modules/next/dist/bin/next dev",
     "build": "node node_modules/next/dist/bin/next build",
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "eslint .",

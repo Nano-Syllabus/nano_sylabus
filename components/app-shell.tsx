@@ -11,7 +11,7 @@ import { AppRouteLoading } from "@/components/app-route-loading";
 
 type PendingNavigation = {
   href: string;
-  variant: "chat" | "subjects" | "notes" | "billing" | "settings";
+  variant: "chat" | "exams" | "subjects" | "notes" | "billing" | "settings";
 };
 
 export function AppShell({

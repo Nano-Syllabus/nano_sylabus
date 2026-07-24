@@ -17,10 +17,40 @@ describe("resolveAccess", () => {
     });
   });
 
+  it("protects the standalone exam workspace and preserves its destination", () => {
+    expect(
+      resolveAccess({
+        pathname: "/exams",
+        hasUser: false,
+        onboarded: false,
+        role: "student",
+      }),
+    ).toEqual({
+      allow: false,
+      redirectTo: "/login",
+      includeNext: true,
+    });
+  });
+
   it("redirects non-onboarded students to onboarding", () => {
     expect(
       resolveAccess({
         pathname: "/app/notes",
+        hasUser: true,
+        onboarded: false,
+        role: "student",
+      }),
+    ).toEqual({
+      allow: false,
+      redirectTo: "/onboarding",
+      includeNext: false,
+    });
+  });
+
+  it("requires onboarding before entering the standalone exam workspace", () => {
+    expect(
+      resolveAccess({
+        pathname: "/exams",
         hasUser: true,
         onboarded: false,
         role: "student",

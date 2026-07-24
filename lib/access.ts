@@ -19,7 +19,7 @@ export function resolveAccess(input: {
 }) {
   const { pathname, hasUser, onboarded, role } = input;
   const isAdminRoute = pathname.startsWith("/admin");
-  const isStudentRoute = pathname.startsWith("/app");
+  const isStudentRoute = pathname.startsWith("/app") || pathname.startsWith("/exams");
   const isOnboarding = pathname === "/onboarding";
   const isGuestPage = pathname === "/login" || pathname === "/signup";
 

@@ -1,9 +1,10 @@
 import { SetAppShell } from "@/components/set-app-shell";
 
-type LoadingVariant = "chat" | "subjects" | "notes" | "billing" | "settings";
+type LoadingVariant = "chat" | "exams" | "subjects" | "notes" | "billing" | "settings";
 
 const titleByVariant: Record<LoadingVariant, string> = {
   chat: "Loading chat",
+  exams: "Loading exams",
   subjects: "Loading subjects",
   notes: "Loading notes",
   billing: "Loading billing",
@@ -48,7 +49,7 @@ function ChatSkeleton() {
 }
 
 export function AppRouteLoading({ variant }: { variant: LoadingVariant }) {
-  const isCardPage = variant === "subjects" || variant === "notes";
+  const isCardPage = variant === "subjects" || variant === "notes" || variant === "exams";
 
   return (
     <>
