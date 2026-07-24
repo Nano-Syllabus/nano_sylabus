@@ -11,11 +11,13 @@ import { Field, Input } from "@/components/ui/field";
 
 const NAV = [
   { href: "/app/chat", label: "Chats", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
+  { href: "/exams", label: "Exams", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4"/><path d="M9 12h6"/><path d="M9 16h4"/></svg> },
   { href: "/app/explore", label: "Subjects", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> },
   { href: "/app/notes", label: "My Notes", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg> },
 ] as const;
 
 function routeLoadingVariant(href: string) {
+  if (href.startsWith("/exams")) return "exams";
   if (href.startsWith("/app/explore")) return "subjects";
   if (href.startsWith("/app/notes")) return "notes";
   if (href.startsWith("/app/billing")) return "billing";
@@ -372,6 +374,12 @@ export function AppSidebar({
               key={item.href}
               href={item.href}
               onClick={(event) => {
+                if (item.href === "/exams") {
+                  setPendingSessionId(null);
+                  onCloseMobile?.();
+                  return;
+                }
+
                 event.preventDefault();
                 setPendingRouteHref(item.href);
                 setPendingSessionId(null);
