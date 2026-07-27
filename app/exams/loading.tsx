@@ -41,12 +41,9 @@ export default function ExamsLoading() {
           <Skeleton className="h-11 w-full sm:w-80" />
         </div>
 
-        <div className="grid grid-cols-5 border-b border-border">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div
-              key={index}
-              className="flex min-h-16 items-center justify-center gap-2 px-2"
-            >
+        <div className="grid grid-cols-4 border-b border-border">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="flex min-h-16 items-center justify-center gap-2 px-2">
               <Skeleton className="h-7 w-7 rounded-full" />
               <Skeleton className="hidden h-4 w-16 sm:block" />
             </div>

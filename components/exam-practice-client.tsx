@@ -10,7 +10,7 @@ type ExamTab = "take" | "history" | "map";
 type ExamStage = "configure" | "started" | "submission" | "submitted" | "result";
 type AnswerMode = "upload" | "type";
 type TopicLevel = "uncovered" | "weak" | "mid" | "strong";
-type QuestionType = "Short Answer" | "Long Answer" | "Numerical" | "Diagram";
+type PaperStyle = "balanced" | "theory" | "numerical" | "diagram" | "custom";
 
 export type ExamSubjectOption = {
   name: string;
@@ -18,17 +18,16 @@ export type ExamSubjectOption = {
   chunkCount: number;
 };
 
-type MockQuestion = {
+type GeneratedQuestion = {
   id: string;
+  number: number;
   subject: string;
   topic: string;
-  type: QuestionType;
+  questionType?: string;
+  bandLabel?: string;
   marks: number;
   prompt: string;
-};
-
-type GeneratedQuestion = MockQuestion & {
-  number: number;
+  referenceAnswer?: string;
 };
 
 type EvaluationRow = {
@@ -36,6 +35,43 @@ type EvaluationRow = {
   obtained: number;
   feedback: string;
   correction: string;
+};
+
+type ApiTeacherQuestion = {
+  id: string;
+  chapter?: string;
+  band_label?: string;
+  question_type?: string;
+  marks: number;
+  text: string;
+  reference_answer?: string;
+};
+
+type ApiTeacherPaper = {
+  id: string;
+  title?: string;
+  subject?: string;
+  university?: string;
+  pass_marks?: number;
+  total_marks: number;
+  warning?: string;
+  questions: ApiTeacherQuestion[];
+};
+
+type ApiGradeResult = {
+  question_id: string;
+  chapter?: string;
+  question: string;
+  marks: number;
+  score: number;
+  feedback: string;
+};
+
+type ApiGrade = {
+  submission_id?: string;
+  results: ApiGradeResult[];
+  total_score: number;
+  total_marks: number;
 };
 
 type ExamAttempt = {
@@ -50,294 +86,205 @@ type ExamAttempt = {
 };
 
 type BlueprintBand = {
+  id: string;
   label: string;
+  questionType: string;
   count: number;
   marksEach: number;
 };
 
-const QUESTION_BANK: MockQuestion[] = [
+const MARK_OPTIONS = ["20", "40", "60", "80", "100", "custom"] as const;
+
+const PAPER_STYLES: Array<{
+  id: PaperStyle;
+  label: string;
+  description: string;
+}> = [
   {
-    id: "dl-1",
-    subject: "Digital Logic",
-    topic: "Number Systems",
-    type: "Short Answer",
-    marks: 5,
-    prompt:
-      "Explain the decimal, binary, octal, and hexadecimal number systems with suitable examples.",
+    id: "balanced",
+    label: "Mixed",
+    description: "Theory, numerical, and diagram questions.",
   },
   {
-    id: "dl-2",
-    subject: "Digital Logic",
-    topic: "Combinational Circuits",
-    type: "Diagram",
-    marks: 10,
-    prompt:
-      "Design a full adder using two half adders. Draw the block diagram and derive the output equations.",
+    id: "theory",
+    label: "Theory",
+    description: "Definition and explanation-heavy paper.",
   },
   {
-    id: "dl-3",
-    subject: "Digital Logic",
-    topic: "Sequential Circuits",
-    type: "Long Answer",
-    marks: 10,
-    prompt: "Explain an SR latch using NOR gates with a circuit diagram and truth table.",
+    id: "numerical",
+    label: "Numerical",
+    description: "Problem-solving and calculation-focused paper.",
   },
   {
-    id: "dl-4",
-    subject: "Digital Logic",
-    topic: "Boolean Algebra",
-    type: "Short Answer",
-    marks: 5,
-    prompt: "State De Morgan's theorems and verify each theorem using a truth table.",
+    id: "diagram",
+    label: "Diagram",
+    description: "Circuit, block, and figure-based questions.",
   },
   {
-    id: "dl-5",
-    subject: "Digital Logic",
-    topic: "Counters",
-    type: "Diagram",
-    marks: 10,
-    prompt: "Draw and explain a 3-bit asynchronous ripple counter with its timing diagram.",
-  },
-  {
-    id: "dl-6",
-    subject: "Digital Logic",
-    topic: "K-Map",
-    type: "Numerical",
-    marks: 5,
-    prompt: "Minimize F(A,B,C,D) = Σm(0,2,5,7,8,10,13,15) using a Karnaugh map.",
-  },
-  {
-    id: "dl-7",
-    subject: "Digital Logic",
-    topic: "Registers",
-    type: "Long Answer",
-    marks: 10,
-    prompt: "Explain the operation of a universal shift register with a neat logic diagram.",
-  },
-  {
-    id: "dl-8",
-    subject: "Digital Logic",
-    topic: "Logic Gates",
-    type: "Short Answer",
-    marks: 5,
-    prompt: "Why are NAND and NOR gates called universal gates? Demonstrate one realization.",
-  },
-  {
-    id: "ep-1",
-    subject: "Engineering Physics",
-    topic: "SHM",
-    type: "Long Answer",
-    marks: 10,
-    prompt:
-      "Derive the differential equation of simple harmonic motion and obtain its general solution.",
-  },
-  {
-    id: "ep-2",
-    subject: "Engineering Physics",
-    topic: "Electromagnetism",
-    type: "Numerical",
-    marks: 5,
-    prompt:
-      "Use the Biot-Savart law to obtain the magnetic field due to a long straight conductor.",
-  },
-  {
-    id: "ep-3",
-    subject: "Engineering Physics",
-    topic: "Oscillation",
-    type: "Diagram",
-    marks: 10,
-    prompt:
-      "Explain electrical oscillation in a series LCR circuit with the circuit diagram and governing equation.",
-  },
-  {
-    id: "ep-4",
-    subject: "Engineering Physics",
-    topic: "Wave Motion",
-    type: "Short Answer",
-    marks: 5,
-    prompt: "Differentiate between progressive and stationary waves using four suitable points.",
-  },
-  {
-    id: "ep-5",
-    subject: "Engineering Physics",
-    topic: "Interference",
-    type: "Long Answer",
-    marks: 10,
-    prompt: "Explain Young's double-slit experiment and derive the expression for fringe width.",
-  },
-  {
-    id: "ep-6",
-    subject: "Engineering Physics",
-    topic: "Quantum Physics",
-    type: "Numerical",
-    marks: 5,
-    prompt:
-      "Calculate the de Broglie wavelength of an electron accelerated through a given potential difference.",
-  },
-  {
-    id: "ep-7",
-    subject: "Engineering Physics",
-    topic: "Diffraction",
-    type: "Long Answer",
-    marks: 10,
-    prompt: "Discuss Fraunhofer diffraction at a single slit and derive the condition for minima.",
-  },
-  {
-    id: "ep-8",
-    subject: "Engineering Physics",
-    topic: "Polarization",
-    type: "Short Answer",
-    marks: 5,
-    prompt: "Define polarization and explain how it establishes the transverse nature of light.",
+    id: "custom",
+    label: "Custom",
+    description: "Choose the exact sections yourself.",
   },
 ];
 
-const SYLLABUS_TOPICS: Record<string, string[]> = {
-  "Digital Logic": [
-    "Number Systems",
-    "Boolean Algebra",
-    "Logic Gates",
-    "Combinational Circuits",
-    "K-Map",
-    "Sequential Circuits",
-    "Flip-Flops",
-    "Counters",
-    "Registers",
-    "Memory",
-  ],
-  "Engineering Physics": [
-    "SHM",
-    "Oscillation",
-    "Wave Motion",
-    "Interference",
-    "Diffraction",
-    "Polarization",
-    "Electromagnetism",
-    "Quantum Physics",
-  ],
-};
+function questionText(count: number) {
+  return `${count} question${count === 1 ? "" : "s"}`;
+}
 
-function buildBlueprint(marks: number): BlueprintBand[] {
-  const tenMarkQuestions = Math.floor(marks / 20);
-  const remainingMarks = marks - tenMarkQuestions * 10;
-  const fiveMarkQuestions = Math.max(1, Math.floor(remainingMarks / 5));
-
+function createTypeBands(totalMarks: number, questionType: string, label: string): BlueprintBand[] {
+  const marks = Math.max(1, totalMarks);
+  const tenMarkQuestions = Math.floor(marks / 10);
+  const remainder = marks - tenMarkQuestions * 10;
   const bands: BlueprintBand[] = [];
-  if (fiveMarkQuestions > 0) {
-    bands.push({
-      label: "Short answer / numerical",
-      count: fiveMarkQuestions,
-      marksEach: 5,
-    });
-  }
+
   if (tenMarkQuestions > 0) {
-    bands.push({
-      label: "Long answer / diagram",
-      count: tenMarkQuestions,
-      marksEach: 10,
-    });
+    bands.push(
+      createBand({
+        label: `${questionText(tenMarkQuestions)} of 10 marks`,
+        questionType,
+        count: tenMarkQuestions,
+        marksEach: 10,
+      }),
+    );
   }
 
-  const plannedMarks = bands.reduce((sum, band) => sum + band.count * band.marksEach, 0);
-  if (plannedMarks < marks) {
-    bands.push({
-      label: "Applied question",
-      count: 1,
-      marksEach: marks - plannedMarks,
-    });
+  if (remainder > 0) {
+    bands.push(
+      createBand({
+        label: `1 question of ${remainder} marks`,
+        questionType,
+        count: 1,
+        marksEach: remainder,
+      }),
+    );
   }
-  return bands;
+
+  if (!bands.length) {
+    bands.push(createBand({ label, questionType }));
+  }
+
+  return bands.map((band) => ({ ...band, label: band.label || label }));
 }
 
-function generateQuestions(
-  subject: string,
-  marks: number,
-  round: number,
-  preferredTopics: string[] = [],
-) {
-  const source = QUESTION_BANK.filter((question) => question.subject === subject);
-  const baseSource = source.length
-    ? source
-    : QUESTION_BANK.map((question) => ({ ...question, subject }));
-  const preferredTopicSet = new Set(preferredTopics);
-  const usableSource = [...baseSource].sort(
-    (left, right) =>
-      Number(preferredTopicSet.has(right.topic)) - Number(preferredTopicSet.has(left.topic)),
-  );
-  const fiveMarkPool = usableSource.filter((question) => question.marks === 5);
-  const tenMarkPool = usableSource.filter((question) => question.marks === 10);
-  const blueprint = buildBlueprint(marks);
-  const picked: GeneratedQuestion[] = [];
+function buildBlueprint(marks: number, style: PaperStyle = "balanced"): BlueprintBand[] {
+  const fullMarks = Math.max(5, marks);
 
-  blueprint.forEach((band, bandIndex) => {
-    const pool = band.marksEach <= 5 ? fiveMarkPool : tenMarkPool;
-    for (let index = 0; index < band.count; index += 1) {
-      const fallback = usableSource[(round + bandIndex + index) % usableSource.length];
-      const next = pool.length
-        ? pool[(round + bandIndex * 2 + index) % pool.length]
-        : { ...fallback, marks: band.marksEach };
-      picked.push({
-        ...next,
-        id: `${next.id}-${round}-${bandIndex}-${index}`,
-        number: picked.length + 1,
-      });
-    }
-  });
+  if (style === "theory") return createTypeBands(fullMarks, "theory", "Theory");
+  if (style === "numerical") return createTypeBands(fullMarks, "numerical", "Numerical");
+  if (style === "diagram") return createTypeBands(fullMarks, "diagram", "Diagram");
 
-  return picked;
-}
+  if (fullMarks < 15) return createTypeBands(fullMarks, "theory", "Theory");
 
-function mockEvaluate(questions: GeneratedQuestion[]) {
-  return questions.map((question, index) => {
-    const ratio = [0.8, 0.58, 0.92, 0.36][index % 4];
-    const obtained = Math.max(1, Math.round(question.marks * ratio));
+  let theoryMarks = Math.max(5, Math.round((fullMarks * 0.35) / 5) * 5);
+  let numericalMarks = Math.max(5, Math.round((fullMarks * 0.25) / 5) * 5);
+  let diagramMarks = fullMarks - theoryMarks - numericalMarks;
+  if (diagramMarks < 5) {
+    const shortage = 5 - diagramMarks;
+    theoryMarks = Math.max(5, theoryMarks - shortage);
+    diagramMarks = fullMarks - theoryMarks - numericalMarks;
+  }
+
+  return [
+    ...createTypeBands(theoryMarks, "theory", "Theory"),
+    ...createTypeBands(numericalMarks, "numerical", "Numerical"),
+    ...createTypeBands(diagramMarks, "diagram", "Diagram"),
+  ].map((band) => {
+    const typeLabel =
+      band.questionType === "numerical"
+        ? "Numerical"
+        : band.questionType === "diagram"
+          ? "Diagram"
+          : "Theory";
     return {
-      questionId: question.id,
-      obtained,
-      feedback:
-        ratio >= 0.75
-          ? "Strong answer. The main concept and exam-worthy points are covered."
-          : ratio >= 0.45
-            ? "Partially correct. The core idea is present, but the explanation needs more structure."
-            : "The answer misses essential steps and needs another focused revision.",
-      correction:
-        question.type === "Diagram"
-          ? "Label every input and output, then explain the signal flow below the diagram."
-          : question.type === "Numerical"
-            ? "Write the formula first, substitute units clearly, and box the final result."
-            : "Begin with a precise definition, use ordered key points, and finish with a short conclusion.",
+      ...band,
+      label: `${typeLabel} · ${band.label}`,
     };
   });
 }
 
-function seedQuestions(subject: string, marks: number, round: number) {
-  return generateQuestions(subject, marks, round);
+function createBand(overrides: Partial<BlueprintBand> = {}): BlueprintBand {
+  return {
+    id: `band-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    label: "Theory",
+    questionType: "theory",
+    count: 1,
+    marksEach: 5,
+    ...overrides,
+  };
 }
 
-const SEEDED_DIGITAL_LOGIC = seedQuestions("Digital Logic", 20, 1);
-const SEEDED_ENGINEERING_PHYSICS = seedQuestions("Engineering Physics", 10, 2);
-const SEEDED_HISTORY: ExamAttempt[] = [
-  {
-    id: "attempt-1",
-    title: "Digital Logic practice set",
-    subject: "Digital Logic",
-    marks: 20,
-    obtained: 15,
-    date: "Jul 20",
-    questions: SEEDED_DIGITAL_LOGIC,
-    evaluation: mockEvaluate(SEEDED_DIGITAL_LOGIC),
-  },
-  {
-    id: "attempt-2",
-    title: "Engineering Physics quick test",
-    subject: "Engineering Physics",
-    marks: 10,
-    obtained: 4,
-    date: "Jul 18",
-    questions: SEEDED_ENGINEERING_PHYSICS,
-    evaluation: mockEvaluate(SEEDED_ENGINEERING_PHYSICS),
-  },
-];
+function mapApiQuestion(
+  question: ApiTeacherQuestion,
+  index: number,
+  subject: string,
+): GeneratedQuestion {
+  return {
+    id: question.id,
+    number: index + 1,
+    subject,
+    topic: question.chapter ?? "",
+    questionType: question.question_type,
+    bandLabel: question.band_label,
+    marks: question.marks,
+    prompt: question.text,
+    referenceAnswer: question.reference_answer,
+  };
+}
+
+function formatMark(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
+}
+
+function positiveInteger(value: string, fallback: number) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function questionMetadata(question: GeneratedQuestion) {
+  return [question.questionType, question.bandLabel, question.topic].filter(Boolean).join(" · ");
+}
+
+function gradeTypedAnswers(
+  paperId: string,
+  questions: GeneratedQuestion[],
+  typedAnswers: Record<string, string>,
+  studentName: string,
+  instruction: string,
+) {
+  return fetch(`/api/exams/${encodeURIComponent(paperId)}/grade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      student_name: studentName.trim() || "Student",
+      instruction,
+      answers: questions.map((question) => ({
+        question_id: question.id,
+        answer_text: typedAnswers[question.id] ?? "",
+      })),
+    }),
+  });
+}
+
+function gradeUploadedAnswer(
+  paperId: string,
+  uploadedFile: File | null,
+  studentName: string,
+  instruction: string,
+) {
+  if (!uploadedFile) {
+    throw new Error("Upload an answer sheet before checking.");
+  }
+
+  const formData = new FormData();
+  formData.append("file", uploadedFile);
+  formData.append("student_name", studentName.trim() || "Student");
+  formData.append("instruction", instruction);
+
+  return fetch(`/api/exams/${encodeURIComponent(paperId)}/grade-file`, {
+    method: "POST",
+    body: formData,
+  });
+}
 
 function levelForScore(score: number, total: number): TopicLevel {
   if (total === 0) return "uncovered";
@@ -376,7 +323,9 @@ function Icon({
     | "print"
     | "refresh"
     | "file"
-    | "edit";
+    | "edit"
+    | "plus"
+    | "trash";
   className?: string;
 }) {
   const paths = {
@@ -455,6 +404,21 @@ function Icon({
         <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z" />
       </>
     ),
+    plus: (
+      <>
+        <path d="M12 5v14" />
+        <path d="M5 12h14" />
+      </>
+    ),
+    trash: (
+      <>
+        <path d="M3 6h18" />
+        <path d="M8 6V4h8v2" />
+        <path d="M6 6l1 15h10l1-15" />
+        <path d="M10 11v6" />
+        <path d="M14 11v6" />
+      </>
+    ),
   } as const;
 
   return (
@@ -496,26 +460,66 @@ export function ExamPracticeClient({
   const [tab, setTab] = useState<ExamTab>("take");
   const [stage, setStage] = useState<ExamStage>("configure");
   const [subject, setSubject] = useState(subjects[0]?.name ?? "");
-  const [marks, setMarks] = useState("20");
   const [duration, setDuration] = useState("60");
   const [title, setTitle] = useState("");
-  const [coverage, setCoverage] = useState<"full" | "weak">("full");
+  const [instruction, setInstruction] = useState("");
+  const [passMarks, setPassMarks] = useState("");
+  const [marksOption, setMarksOption] = useState<(typeof MARK_OPTIONS)[number]>("20");
+  const [customMarks, setCustomMarks] = useState("20");
+  const [paperStyle, setPaperStyle] = useState<PaperStyle>("balanced");
+  const [customPatternOpen, setCustomPatternOpen] = useState(false);
+  const [blueprint, setBlueprint] = useState<BlueprintBand[]>(() => buildBlueprint(20, "balanced"));
   const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
-  const [generationRound, setGenerationRound] = useState(0);
+  const [paperId, setPaperId] = useState("");
+  const [paperWarning, setPaperWarning] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateElapsed, setGenerateElapsed] = useState(0);
+  const [generateError, setGenerateError] = useState("");
   const [answerMode, setAnswerMode] = useState<AnswerMode>("upload");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [typedAnswers, setTypedAnswers] = useState<Record<string, string>>({});
+  const [studentName, setStudentName] = useState("");
   const [evaluation, setEvaluation] = useState<EvaluationRow[]>([]);
-  const [history, setHistory] = useState<ExamAttempt[]>(SEEDED_HISTORY);
+  const [isChecking, setIsChecking] = useState(false);
+  const [gradingError, setGradingError] = useState("");
+  const [submissionId, setSubmissionId] = useState("");
+  const [history, setHistory] = useState<ExamAttempt[]>([]);
   const [secondsLeft, setSecondsLeft] = useState(Number(duration) * 60);
   const [submissionWasLate, setSubmissionWasLate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const generateAbortRef = useRef<AbortController | null>(null);
+  const generateCancelledRef = useRef(false);
 
-  const totalMarks = Number(marks);
+  const requestedMarks =
+    marksOption === "custom" ? positiveInteger(customMarks, 20) : Number(marksOption);
+  const totalMarks = blueprint.reduce((sum, band) => sum + band.count * band.marksEach, 0);
   const generatedMarks = questions.reduce((total, question) => total + question.marks, 0);
   const obtainedMarks = evaluation.reduce((total, row) => total + row.obtained, 0);
   const currentSubject = subjects.find((item) => item.name === subject);
-  const blueprint = useMemo(() => buildBlueprint(totalMarks), [totalMarks]);
+  const parsedPassMarks = passMarks.trim() ? Number(passMarks) : undefined;
+  const passMarksValid =
+    parsedPassMarks === undefined ||
+    (Number.isFinite(parsedPassMarks) && parsedPassMarks >= 0 && parsedPassMarks <= totalMarks);
+  const blueprintValid =
+    totalMarks > 0 &&
+    blueprint.every(
+      (band) =>
+        band.label.trim().length > 0 &&
+        band.questionType.trim().length > 0 &&
+        Number.isInteger(band.count) &&
+        band.count > 0 &&
+        Number.isFinite(band.marksEach) &&
+        band.marksEach > 0,
+    ) &&
+    passMarksValid;
+  const blueprintError = !passMarksValid
+    ? "Pass marks must be between 0 and full marks."
+    : !blueprintValid
+      ? "Every blueprint row needs a label, question type, count, and marks each."
+      : "";
+  const generateDisabledReason = !subject
+    ? "Choose a subject before generating."
+    : blueprintError;
   const currentStep = stageIndex(stage);
   const navigableSteps = useMemo(() => {
     if (stage === "configure") return [0];
@@ -540,6 +544,18 @@ export function ExamPracticeClient({
     return () => window.clearInterval(timer);
   }, [stage]);
 
+  useEffect(() => {
+    if (!isGenerating) {
+      setGenerateElapsed(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setGenerateElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isGenerating]);
+
   const topicScores = useMemo(() => {
     const result = new Map<string, { obtained: number; total: number }>();
     history.forEach((attempt) => {
@@ -554,15 +570,14 @@ export function ExamPracticeClient({
     return result;
   }, [history]);
 
-  const subjectTopics =
-    SYLLABUS_TOPICS[subject] ??
-    Array.from(
-      new Set(
-        QUESTION_BANK.filter((question) => question.subject === subject).map(
-          (question) => question.topic,
-        ),
-      ),
-    );
+  const subjectTopics = Array.from(
+    new Set(
+      history
+        .filter((attempt) => attempt.subject === subject)
+        .flatMap((attempt) => attempt.questions.map((question) => question.topic))
+        .filter((topic) => topic.trim().length > 0),
+    ),
+  );
   const coveredTopics = subjectTopics.filter(
     (topic) => (topicScores.get(topic)?.total ?? 0) > 0,
   ).length;
@@ -571,25 +586,91 @@ export function ExamPracticeClient({
     return score ? levelForScore(score.obtained, score.total) === "strong" : false;
   }).length;
 
-  function handleGenerate() {
+  async function handleGenerate() {
+    if (isGenerating) return;
     if (!subject) return;
-    const nextRound = generationRound + 1;
-    const weakTopics =
-      coverage === "weak"
-        ? subjectTopics.filter((topic) => {
-            const score = topicScores.get(topic);
-            return score && levelForScore(score.obtained, score.total) !== "strong";
-          })
-        : [];
-    const nextQuestions = generateQuestions(subject, totalMarks, nextRound, weakTopics);
-    setGenerationRound(nextRound);
-    setQuestions(nextQuestions);
-    setEvaluation([]);
-    setUploadedFile(null);
-    setTypedAnswers({});
-    setSecondsLeft(Number(duration) * 60);
-    setSubmissionWasLate(false);
-    setStage("started");
+    if (!blueprintValid) {
+      setGenerateError(blueprintError || "Check the paper blueprint before generating.");
+      return;
+    }
+    const namespace = currentSubject?.namespace || "Tribhuvan University";
+
+    setIsGenerating(true);
+    setGenerateElapsed(0);
+    setGenerateError("");
+    setPaperWarning("");
+
+    let timeout: number | undefined;
+    let controller: AbortController | null = null;
+    try {
+      controller = new AbortController();
+      const activeController = controller;
+      generateAbortRef.current = activeController;
+      generateCancelledRef.current = false;
+      timeout = window.setTimeout(() => activeController.abort(), 90000);
+      const response = await fetch("/api/exams/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: activeController.signal,
+        body: JSON.stringify({
+          namespaces: [namespace],
+          subject,
+          bands: blueprint.map((band) => ({
+            label: band.label.trim(),
+            question_type: band.questionType,
+            count: band.count,
+            marks_each: band.marksEach,
+          })),
+          title: title.trim() || `${subject} practice set`,
+          ...(instruction.trim() ? { instruction: instruction.trim() } : {}),
+          university: namespace,
+          ...(parsedPassMarks !== undefined ? { pass_marks: parsedPassMarks } : {}),
+        }),
+      });
+
+      const payload = (await response.json()) as { paper?: ApiTeacherPaper; error?: string };
+      if (!response.ok || !payload.paper) {
+        throw new Error(payload.error || "The teacher API could not generate a paper.");
+      }
+
+      const paper = payload.paper;
+      setPaperId(paper.id);
+      setPaperWarning(paper.warning ?? "");
+      setQuestions(
+        paper.questions.map((question, index) => mapApiQuestion(question, index, subject)),
+      );
+      setEvaluation([]);
+      setUploadedFile(null);
+      setTypedAnswers({});
+      setStudentName("");
+      setSubmissionId("");
+      setGradingError("");
+      setSecondsLeft(Number(duration) * 60);
+      setSubmissionWasLate(false);
+      setStage("started");
+    } catch (error) {
+      setGenerateError(
+        error instanceof DOMException && error.name === "AbortError"
+          ? generateCancelledRef.current
+            ? "Generation cancelled. You can adjust the paper and try again."
+            : "The teacher API is taking too long for this paper. Try again, or generate a smaller/custom paper."
+          : error instanceof Error
+            ? error.message
+            : "The teacher API could not generate a paper.",
+      );
+    } finally {
+      if (timeout) window.clearTimeout(timeout);
+      if (generateAbortRef.current === controller) {
+        generateAbortRef.current = null;
+      }
+      generateCancelledRef.current = false;
+      setIsGenerating(false);
+    }
+  }
+
+  function handleCancelGenerate() {
+    generateCancelledRef.current = true;
+    generateAbortRef.current?.abort();
   }
 
   function handleSubmitAnswer() {
@@ -599,41 +680,139 @@ export function ExamPracticeClient({
     setStage("submitted");
   }
 
-  function handleCheckAnswers() {
-    const nextEvaluation = mockEvaluate(questions);
-    const nextObtained = nextEvaluation.reduce((total, row) => total + row.obtained, 0);
-    const nextAttempt: ExamAttempt = {
-      id: `attempt-${Date.now()}`,
-      title: title.trim() || `${subject} practice set`,
-      subject,
-      marks: generatedMarks,
-      obtained: nextObtained,
-      date: "Today",
-      questions,
-      evaluation: nextEvaluation,
-    };
-    setEvaluation(nextEvaluation);
-    setHistory((current) => [nextAttempt, ...current]);
-    setStage("result");
+  async function handleCheckAnswers() {
+    if (!paperId) {
+      setGradingError("Generate a question paper before checking answers.");
+      return;
+    }
+
+    setIsChecking(true);
+    setGradingError("");
+
+    try {
+      const instruction = submissionWasLate
+        ? "This submission was late. Grade normally, but keep the late status in mind for feedback tone."
+        : "Grade this practice exam answer according to the marks assigned to each question.";
+      const response =
+        answerMode === "upload"
+          ? await gradeUploadedAnswer(paperId, uploadedFile, studentName, instruction)
+          : await gradeTypedAnswers(paperId, questions, typedAnswers, studentName, instruction);
+      const payload = (await response.json()) as { grade?: ApiGrade; error?: string };
+
+      if (!response.ok || !payload.grade) {
+        throw new Error(payload.error || "The teacher API could not check this answer.");
+      }
+
+      const grade = payload.grade;
+      const nextEvaluation = questions.map((question) => {
+        const row = grade.results.find((item) => item.question_id === question.id);
+        return {
+          questionId: question.id,
+          obtained: row?.score ?? 0,
+          feedback: row?.feedback ?? "No feedback returned for this question.",
+          correction: question.referenceAnswer || "No reference answer returned by the API.",
+        };
+      });
+      const nextObtained = nextEvaluation.reduce((total, row) => total + row.obtained, 0);
+      const nextAttempt: ExamAttempt = {
+        id: grade.submission_id || `attempt-${Date.now()}`,
+        title: title.trim() || `${subject} practice set`,
+        subject,
+        marks: grade.total_marks || generatedMarks,
+        obtained: nextObtained,
+        date: submissionWasLate ? "Today · late" : "Today",
+        questions,
+        evaluation: nextEvaluation,
+      };
+
+      setSubmissionId(grade.submission_id ?? "");
+      setEvaluation(nextEvaluation);
+      setHistory((current) => [nextAttempt, ...current]);
+      setStage("result");
+    } catch (error) {
+      setGradingError(
+        error instanceof Error ? error.message : "The teacher API could not check this answer.",
+      );
+    } finally {
+      setIsChecking(false);
+    }
   }
 
   function resetExam() {
     setStage("configure");
     setQuestions([]);
+    setPaperId("");
+    setPaperWarning("");
+    setGenerateError("");
     setUploadedFile(null);
     setTypedAnswers({});
+    setStudentName("");
     setEvaluation([]);
+    setGradingError("");
+    setSubmissionId("");
     setSubmissionWasLate(false);
+    setMarksOption("20");
+    setCustomMarks("20");
+    setPaperStyle("balanced");
+    setCustomPatternOpen(false);
+    setBlueprint(buildBlueprint(20, "balanced"));
+    setPassMarks("");
+    setInstruction("");
   }
 
   function viewAttempt(attempt: ExamAttempt) {
     setSubject(attempt.subject);
     setQuestions(attempt.questions);
     setEvaluation(attempt.evaluation);
-    setMarks(String(attempt.marks));
     setTitle(attempt.title);
     setStage("result");
     setTab("take");
+  }
+
+  function updateBlueprintBand(id: string, patch: Partial<Omit<BlueprintBand, "id">>) {
+    setBlueprint((current) =>
+      current.map((band) => (band.id === id ? { ...band, ...patch } : band)),
+    );
+  }
+
+  function handleMarksOptionChange(value: string) {
+    const nextOption = MARK_OPTIONS.includes(value as (typeof MARK_OPTIONS)[number])
+      ? (value as (typeof MARK_OPTIONS)[number])
+      : "20";
+    const nextMarks = nextOption === "custom" ? positiveInteger(customMarks, requestedMarks) : Number(nextOption);
+    setMarksOption(nextOption);
+    if (paperStyle !== "custom") {
+      setBlueprint(buildBlueprint(nextMarks, paperStyle));
+    }
+    setPassMarks("");
+  }
+
+  function handleCustomMarksChange(value: string) {
+    setCustomMarks(value);
+    if (marksOption !== "custom" || paperStyle === "custom") return;
+    setBlueprint(buildBlueprint(positiveInteger(value, requestedMarks), paperStyle));
+    setPassMarks("");
+  }
+
+  function handlePaperStyleChange(style: PaperStyle) {
+    setPaperStyle(style);
+    if (style === "custom") {
+      setCustomPatternOpen(true);
+      return;
+    }
+    setCustomPatternOpen(false);
+    setBlueprint(buildBlueprint(requestedMarks, style));
+    setPassMarks("");
+  }
+
+  function addBlueprintBand() {
+    setBlueprint((current) => [...current, createBand()]);
+  }
+
+  function removeBlueprintBand(id: string) {
+    setBlueprint((current) =>
+      current.length > 1 ? current.filter((band) => band.id !== id) : current,
+    );
   }
 
   const hasTypedAnswer = Object.values(typedAnswers).some((answer) => answer.trim().length > 0);
@@ -650,8 +829,8 @@ export function ExamPracticeClient({
             Practice under real exam conditions
           </h1>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-text-secondary">
-            Generate from indexed subjects, write on paper, upload your answer sheet, and turn weak
-            topics green.
+            Generate from indexed subjects, write on paper, upload your answer sheet, and get API
+            grading instantly.
           </p>
         </div>
         <nav
@@ -723,6 +902,13 @@ export function ExamPracticeClient({
                 </div>
               ) : null}
 
+              {generateError ? (
+                <div className="mt-5 rounded-lg border border-destructive/40 bg-note-red p-4 text-sm">
+                  <p className="font-semibold text-destructive">Could not generate paper</p>
+                  <p className="mt-1 text-text-secondary">{generateError}</p>
+                </div>
+              ) : null}
+
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -738,7 +924,7 @@ export function ExamPracticeClient({
                     <Input
                       value={title}
                       onChange={(event) => setTitle(event.target.value)}
-                      placeholder="Digital Logic mock exam"
+                      placeholder="Digital Logic practice exam"
                       autoComplete="off"
                     />
                   </Field>
@@ -759,16 +945,7 @@ export function ExamPracticeClient({
                       )}
                     </Select>
                   </Field>
-                  <Field label="Full marks">
-                    <Select value={marks} onChange={(event) => setMarks(event.target.value)}>
-                      {["10", "20", "25", "40", "80"].map((item) => (
-                        <option key={item} value={item}>
-                          {item} marks
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <Field label="Exam duration">
+                  <Field label="Exam duration" hint="Local timer only; submission stays open if late.">
                     <Select value={duration} onChange={(event) => setDuration(event.target.value)}>
                       {["30", "60", "90", "180"].map((item) => (
                         <option key={item} value={item}>
@@ -779,67 +956,284 @@ export function ExamPracticeClient({
                   </Field>
                 </div>
 
-                <fieldset>
-                  <legend className="text-xs font-medium uppercase tracking-wider text-text-secondary">
-                    Coverage
-                  </legend>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <ChoiceButton
-                      active={coverage === "full"}
-                      title="Full syllabus"
-                      description="Balanced questions across the indexed subject."
-                      onClick={() => setCoverage("full")}
-                    />
-                    <ChoiceButton
-                      active={coverage === "weak"}
-                      title="Weak topics"
-                      description="More questions from red and yellow topics."
-                      onClick={() => setCoverage("weak")}
-                    />
-                  </div>
-                </fieldset>
-
                 <section
-                  aria-labelledby="paper-blueprint-title"
-                  className="rounded-lg border border-border"
+                  aria-labelledby="paper-pattern-title"
+                  className="space-y-5 border-t border-border pt-5"
                 >
-                  <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                      <h3 id="paper-blueprint-title" className="text-sm font-semibold">
-                        Paper blueprint
+                      <h3 id="paper-pattern-title" className="text-base font-semibold">
+                        Question paper pattern
                       </h3>
-                      <p className="mt-0.5 text-xs text-text-muted">
-                        A clear marks distribution for this mock exam.
+                      <p className="mt-1 text-sm text-text-secondary">
+                        Pick the marks and question mix. We send the matching sections to the API.
                       </p>
                     </div>
-                    <span className="text-sm font-semibold">{totalMarks} marks</span>
+                    <div className="rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm font-semibold">
+                      Total {totalMarks} marks
+                    </div>
                   </div>
-                  <div className="divide-y divide-border">
-                    {blueprint.map((band) => (
-                      <div
-                        key={`${band.label}-${band.marksEach}`}
-                        className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-4 py-3 text-sm"
-                      >
-                        <span className="font-medium">{band.label}</span>
-                        <span className="text-text-secondary">{band.count} questions</span>
-                        <span className="w-16 text-right text-text-secondary">
-                          {band.marksEach} each
-                        </span>
+
+                  <div className="grid gap-4 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                    <fieldset>
+                      <legend className="mb-2 text-xs font-medium uppercase tracking-wider text-text-muted">
+                        Full marks
+                      </legend>
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {MARK_OPTIONS.map((item) => {
+                          const selected = marksOption === item;
+                          return (
+                            <button
+                              key={item}
+                              type="button"
+                              onClick={() => handleMarksOptionChange(item)}
+                              className={cn(
+                                "min-h-11 rounded-md border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
+                                selected
+                                  ? "border-text-primary bg-text-primary text-bg-primary"
+                                  : "border-border text-text-secondary hover:bg-bg-secondary hover:text-text-primary",
+                              )}
+                            >
+                              {item === "custom" ? "Custom" : item}
+                            </button>
+                          );
+                        })}
                       </div>
-                    ))}
+                      {marksOption === "custom" ? (
+                        <div className="mt-3">
+                          <Field label="Custom full marks">
+                            <Input
+                              value={customMarks}
+                              onChange={(event) => handleCustomMarksChange(event.target.value)}
+                              placeholder="e.g. 75"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              autoComplete="off"
+                            />
+                          </Field>
+                        </div>
+                      ) : null}
+                    </fieldset>
+
+                    <fieldset>
+                      <legend className="mb-2 text-xs font-medium uppercase tracking-wider text-text-muted">
+                        Question mix
+                      </legend>
+                      <div className="grid gap-2">
+                        {PAPER_STYLES.map((item) => {
+                          const selected = paperStyle === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => handlePaperStyleChange(item.id)}
+                              className={cn(
+                                "min-h-14 rounded-md border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
+                                selected
+                                  ? "border-text-primary bg-bg-secondary text-text-primary"
+                                  : "border-border text-text-secondary hover:bg-bg-secondary hover:text-text-primary",
+                              )}
+                            >
+                              <span className="block text-sm font-semibold">{item.label}</span>
+                              <span className="mt-0.5 block text-xs text-text-muted">
+                                {item.description}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  </div>
+
+                  <div className="rounded-lg border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setCustomPatternOpen((current) => !current)}
+                      className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+                      aria-expanded={customPatternOpen}
+                    >
+                      <span>
+                        <span className="block text-sm font-semibold">Customize sections</span>
+                        <span className="mt-0.5 block text-xs text-text-muted">
+                          Edit the exact API bands only when you need full control.
+                        </span>
+                      </span>
+                      <span className="text-sm text-text-muted">
+                        {customPatternOpen ? "Hide" : "Show"}
+                      </span>
+                    </button>
+                    {customPatternOpen ? (
+                      <>
+                        <fieldset className="divide-y divide-border border-t border-border">
+                          <legend className="sr-only">Question paper API bands</legend>
+                          {blueprint.map((band, index) => (
+                            <div
+                              key={band.id}
+                              className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1.1fr)_150px_120px_130px_44px] lg:items-end"
+                            >
+                              <Field label={`Section ${index + 1} label`}>
+                                <Input
+                                  value={band.label}
+                                  onChange={(event) =>
+                                    updateBlueprintBand(band.id, { label: event.target.value })
+                                  }
+                                  placeholder="Theory short"
+                                  autoComplete="off"
+                                  invalid={!band.label.trim()}
+                                />
+                              </Field>
+                              <Field label="Question type">
+                                <Select
+                                  value={band.questionType}
+                                  onChange={(event) =>
+                                    updateBlueprintBand(band.id, {
+                                      questionType: event.target.value,
+                                    })
+                                  }
+                                >
+                                  <option value="theory">theory</option>
+                                  <option value="numerical">numerical</option>
+                                  <option value="diagram">diagram</option>
+                                </Select>
+                              </Field>
+                              <Field label="Count">
+                                <Input
+                                  value={String(band.count)}
+                                  onChange={(event) =>
+                                    updateBlueprintBand(band.id, {
+                                      count: positiveInteger(event.target.value, band.count),
+                                    })
+                                  }
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  autoComplete="off"
+                                />
+                              </Field>
+                              <Field label="Marks each">
+                                <Input
+                                  value={String(band.marksEach)}
+                                  onChange={(event) =>
+                                    updateBlueprintBand(band.id, {
+                                      marksEach: positiveInteger(event.target.value, band.marksEach),
+                                    })
+                                  }
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  autoComplete="off"
+                                />
+                              </Field>
+                              <button
+                                type="button"
+                                aria-label={`Remove section ${index + 1}`}
+                                disabled={blueprint.length === 1}
+                                onClick={() => removeBlueprintBand(band.id)}
+                                className="flex h-11 w-11 items-center justify-center rounded-md border border-border text-text-secondary transition hover:bg-bg-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                <Icon name="trash" />
+                              </button>
+                            </div>
+                          ))}
+                        </fieldset>
+                        <div className="flex flex-col gap-3 border-t border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-xs text-text-muted">
+                            These sections become the teacher API bands.
+                          </p>
+                          <Button type="button" variant="outline" onClick={addBlueprintBand}>
+                            <Icon name="plus" />
+                            Add section
+                          </Button>
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 </section>
 
-                <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-text-muted">
-                    {currentSubject
-                      ? `${currentSubject.namespace} · ${currentSubject.chunkCount} indexed chunks`
-                      : "Subjects are loaded from the tenant API."}
+                <details className="rounded-lg border border-border">
+                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
+                    <span>
+                      <span className="block text-sm font-semibold">Optional API settings</span>
+                      <span className="mt-0.5 block text-xs text-text-muted">
+                        Pass marks and extra instructions are sent only when filled.
+                      </span>
+                    </span>
+                    <span className="text-sm text-text-muted">Open</span>
+                  </summary>
+                  <div className="grid gap-4 border-t border-border p-4 sm:grid-cols-2">
+                    <Field
+                      label="Pass marks"
+                      hint="Optional. Sent to the API only when filled."
+                      error={!passMarksValid ? "Use a value between 0 and full marks." : undefined}
+                    >
+                      <Input
+                        value={passMarks}
+                        onChange={(event) => setPassMarks(event.target.value)}
+                        placeholder="e.g. 32"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoComplete="off"
+                        invalid={Boolean(passMarks.trim()) && !passMarksValid}
+                      />
+                    </Field>
+                    <div className="sm:col-span-2">
+                      <Field label="Extra API instruction" hint="Optional. Goes directly to the API.">
+                        <Textarea
+                          value={instruction}
+                          onChange={(event) => setInstruction(event.target.value)}
+                          placeholder="e.g. include one numerical and one diagram question"
+                          rows={3}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                </details>
+
+                {blueprintError ? (
+                  <p className="rounded-lg border border-destructive/40 bg-note-red p-3 text-sm text-destructive">
+                    {blueprintError}
                   </p>
-                  <Button type="submit" size="lg" disabled={!subject}>
-                    <Icon name="spark" />
-                    Generate question set
-                  </Button>
+                ) : null}
+
+                <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm text-text-muted">
+                    <p>
+                      {currentSubject
+                        ? `${currentSubject.namespace} · ${currentSubject.chunkCount} indexed chunks`
+                        : "Subjects are loaded from the tenant API."}
+                      {paperStyle !== "custom" ? ` · ${requestedMarks} marks · ${paperStyle}` : ""}
+                    </p>
+                    {isGenerating ? (
+                      <p className="mt-1 text-xs text-text-secondary" aria-live="polite">
+                        Waiting for the teacher API
+                        {generateElapsed > 0 ? ` · ${generateElapsed}s` : ""}. Larger papers can
+                        take a little longer.
+                      </p>
+                    ) : null}
+                    {!isGenerating && generateDisabledReason ? (
+                      <p className="mt-1 text-xs text-destructive" aria-live="polite">
+                        {generateDisabledReason}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    {isGenerating ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="lg"
+                        onClick={handleCancelGenerate}
+                      >
+                        Cancel request
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="submit"
+                      size="lg"
+                      disabled={!subject || !blueprintValid || isGenerating}
+                    >
+                      <Icon name="spark" />
+                      {isGenerating ? "Generating..." : "Generate question set"}
+                    </Button>
+                  </div>
                 </div>
               </form>
             </section>
@@ -851,6 +1245,7 @@ export function ExamPracticeClient({
               subject={subject}
               questions={questions}
               marks={generatedMarks}
+              warning={paperWarning}
               secondsLeft={secondsLeft}
               onFinish={() => {
                 setAnswerMode("upload");
@@ -872,6 +1267,8 @@ export function ExamPracticeClient({
               onFileChange={setUploadedFile}
               fileInputRef={fileInputRef}
               typedAnswers={typedAnswers}
+              studentName={studentName}
+              onStudentNameChange={setStudentName}
               onTypedAnswerChange={(questionId, value) =>
                 setTypedAnswers((current) => ({ ...current, [questionId]: value }))
               }
@@ -893,12 +1290,24 @@ export function ExamPracticeClient({
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-secondary">
                 Your{" "}
                 {answerMode === "upload" ? (uploadedFile?.name ?? "answer sheet") : "typed answers"}{" "}
-                is ready for instant mock evaluation.
+                is ready for instant evaluation.
                 {submissionWasLate ? " This attempt is marked as late." : ""}
               </p>
-              <Button type="button" size="lg" className="mt-6" onClick={handleCheckAnswers}>
+              {gradingError ? (
+                <div className="mt-5 rounded-lg border border-destructive/40 bg-note-red p-3 text-left text-sm">
+                  <p className="font-semibold text-destructive">Could not check answers</p>
+                  <p className="mt-1 text-text-secondary">{gradingError}</p>
+                </div>
+              ) : null}
+              <Button
+                type="button"
+                size="lg"
+                className="mt-6"
+                disabled={isChecking}
+                onClick={handleCheckAnswers}
+              >
                 <Icon name="spark" />
-                Check my answers
+                {isChecking ? "Checking..." : "Check my answers"}
               </Button>
             </section>
           ) : null}
@@ -910,6 +1319,8 @@ export function ExamPracticeClient({
               evaluation={evaluation}
               obtained={obtainedMarks}
               marks={generatedMarks}
+              submissionId={submissionId}
+              isLate={submissionWasLate}
               onViewMap={() => setTab("map")}
               onNewExam={resetExam}
             />
@@ -928,8 +1339,7 @@ export function ExamPracticeClient({
           topicScores={topicScores}
           coveredTopics={coveredTopics}
           strongTopics={strongTopics}
-          onPracticeWeak={() => {
-            setCoverage("weak");
+          onStartExam={() => {
             setStage("configure");
             setTab("take");
           }}
@@ -955,10 +1365,7 @@ function ExamProgress({
         const current = index === currentStep;
         const navigable = navigableSteps.includes(index);
         return (
-          <li
-            key={step.id}
-            className="relative min-w-0"
-          >
+          <li key={step.id} className="relative min-w-0">
             <button
               type="button"
               disabled={!navigable}
@@ -996,47 +1403,12 @@ function ExamProgress({
   );
 }
 
-function ChoiceButton({
-  active,
-  title,
-  description,
-  onClick,
-}: {
-  active: boolean;
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      onClick={onClick}
-      className={cn(
-        "min-h-20 rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
-        active ? "border-border-strong bg-bg-secondary" : "border-border hover:bg-bg-secondary",
-      )}
-    >
-      <span className="flex items-center gap-2 text-sm font-semibold">
-        <span
-          className={cn(
-            "h-3 w-3 rounded-full border",
-            active ? "border-text-primary bg-text-primary" : "border-border-strong",
-          )}
-        />
-        {title}
-      </span>
-      <span className="mt-1.5 block text-xs leading-5 text-text-secondary">{description}</span>
-    </button>
-  );
-}
-
 function ExamInProgress({
   title,
   subject,
   questions,
   marks,
+  warning,
   secondsLeft,
   onFinish,
   onPrintQuestions,
@@ -1045,6 +1417,7 @@ function ExamInProgress({
   subject: string;
   questions: GeneratedQuestion[];
   marks: number;
+  warning: string;
   secondsLeft: number;
   onFinish: () => void;
   onPrintQuestions: () => void;
@@ -1078,6 +1451,12 @@ function ExamInProgress({
         </div>
       </div>
       <div className="py-6">
+        {warning ? (
+          <div className="mb-5 rounded-lg border border-warning/50 bg-note-yellow p-4 text-sm text-warning">
+            <p className="font-semibold">Teacher API note</p>
+            <p className="mt-1 text-text-secondary">{warning}</p>
+          </div>
+        ) : null}
         <div className="border-b border-border pb-5 text-center">
           <p className="text-xs uppercase tracking-wider text-text-muted">Instructions</p>
           <p className="mt-2 text-sm text-text-secondary">
@@ -1095,9 +1474,9 @@ function ExamInProgress({
               </span>
               <div>
                 <p className="text-base leading-7">{question.prompt}</p>
-                <p className="mt-2 text-xs text-text-muted">
-                  {question.type} · {question.topic}
-                </p>
+                {questionMetadata(question) ? (
+                  <p className="mt-2 text-xs text-text-muted">{questionMetadata(question)}</p>
+                ) : null}
               </div>
               <span className="text-right text-sm font-medium">{question.marks} marks</span>
             </li>
@@ -1122,6 +1501,8 @@ function SubmissionPanel({
   onFileChange,
   fileInputRef,
   typedAnswers,
+  studentName,
+  onStudentNameChange,
   onTypedAnswerChange,
   canSubmit,
   isLate,
@@ -1135,6 +1516,8 @@ function SubmissionPanel({
   onFileChange: (file: File | null) => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
   typedAnswers: Record<string, string>;
+  studentName: string;
+  onStudentNameChange: (value: string) => void;
   onTypedAnswerChange: (questionId: string, value: string) => void;
   canSubmit: boolean;
   isLate: boolean;
@@ -1148,6 +1531,17 @@ function SubmissionPanel({
         <p className="mt-1 text-sm text-text-secondary">
           Upload a scanned answer sheet or type answers directly.
         </p>
+      </div>
+
+      <div className="mt-5">
+        <Field label="Student name / roll number" hint="Optional. Used only for this exam result.">
+          <Input
+            value={studentName}
+            onChange={(event) => onStudentNameChange(event.target.value)}
+            placeholder="e.g. Aryog 01"
+            autoComplete="name"
+          />
+        </Field>
       </div>
 
       {isLate ? (
@@ -1248,6 +1642,8 @@ function ResultPanel({
   evaluation,
   obtained,
   marks,
+  submissionId,
+  isLate,
   onViewMap,
   onNewExam,
 }: {
@@ -1256,6 +1652,8 @@ function ResultPanel({
   evaluation: EvaluationRow[];
   obtained: number;
   marks: number;
+  submissionId: string;
+  isLate: boolean;
   onViewMap: () => void;
   onNewExam: () => void;
 }) {
@@ -1267,8 +1665,8 @@ function ResultPanel({
         <div className={cn("rounded-lg border p-5", levelClasses(level))}>
           <p className="text-xs font-medium uppercase tracking-wider">Your result</p>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-display text-5xl font-semibold">{obtained}</span>
-            <span className="text-sm">/ {marks}</span>
+            <span className="font-display text-5xl font-semibold">{formatMark(obtained)}</span>
+            <span className="text-sm">/ {formatMark(marks)}</span>
           </div>
           <p className="mt-3 text-sm font-medium">{percentage}% overall</p>
         </div>
@@ -1285,6 +1683,12 @@ function ResultPanel({
             Your marks are mapped back to syllabus topics. Use the corrections below, then retake
             weak areas until the map turns green.
           </p>
+          {submissionId || isLate ? (
+            <p className="mt-2 text-xs text-text-muted">
+              {submissionId ? `Submission ${submissionId}` : "Submission checked"}
+              {isLate ? " · late" : ""}
+            </p>
+          ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <Button type="button" onClick={onViewMap}>
               <Icon name="map" />
@@ -1309,7 +1713,8 @@ function ResultPanel({
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
-                      Question {question.number} · {question.topic}
+                      Question {question.number}
+                      {questionMetadata(question) ? ` · ${questionMetadata(question)}` : ""}
                     </p>
                     <p className="mt-2 text-sm leading-6">{question.prompt}</p>
                   </div>
@@ -1319,17 +1724,17 @@ function ResultPanel({
                       levelClasses(rowLevel),
                     )}
                   >
-                    {row?.obtained ?? 0}/{question.marks}
+                    {formatMark(row?.obtained ?? 0)}/{formatMark(question.marks)}
                   </span>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <FeedbackBlock
                     label="Assessment"
-                    text={row?.feedback ?? "No feedback available."}
+                    text={row?.feedback ?? "No feedback returned by the API."}
                   />
                   <FeedbackBlock
-                    label="Improve next"
-                    text={row?.correction ?? "Review this topic once more."}
+                    label="Reference"
+                    text={row?.correction ?? "No reference answer returned by the API."}
                   />
                 </div>
               </article>
@@ -1370,7 +1775,11 @@ function HistoryPanel({
         <Metric label="Average score" value={`${average}%`} />
         <Metric
           label="Latest score"
-          value={history[0] ? `${history[0].obtained}/${history[0].marks}` : "None"}
+          value={
+            history[0]
+              ? `${formatMark(history[0].obtained)}/${formatMark(history[0].marks)}`
+              : "None"
+          }
         />
       </div>
       <section className="mt-6">
@@ -1402,7 +1811,7 @@ function HistoryPanel({
                     levelClasses(levelForScore(attempt.obtained, attempt.marks)),
                   )}
                 >
-                  {attempt.obtained}/{attempt.marks}
+                  {formatMark(attempt.obtained)}/{formatMark(attempt.marks)}
                 </span>
                 <Icon name="arrow" className="hidden sm:block" />
               </button>
@@ -1438,7 +1847,7 @@ function SyllabusPanel({
   topicScores,
   coveredTopics,
   strongTopics,
-  onPracticeWeak,
+  onStartExam,
 }: {
   subjects: ExamSubjectOption[];
   selectedSubject: string;
@@ -1447,16 +1856,16 @@ function SyllabusPanel({
   topicScores: Map<string, { obtained: number; total: number }>;
   coveredTopics: number;
   strongTopics: number;
-  onPracticeWeak: () => void;
+  onStartExam: () => void;
 }) {
-  const coveragePercent = topics.length ? Math.round((coveredTopics / topics.length) * 100) : 0;
+  const gradedPercent = topics.length ? Math.round((coveredTopics / topics.length) * 100) : 0;
   return (
     <main className="mt-6">
       <div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">Syllabus readiness</h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Make every topic green before the final exam.
+            Only API-graded topics appear here. Full uncovered syllabus needs a topic-list API.
           </p>
         </div>
         <div className="w-full sm:w-64">
@@ -1478,13 +1887,15 @@ function SyllabusPanel({
       <div className="mt-5 grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <div className="rounded-lg border border-border p-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Coverage</p>
-            <p className="mt-2 text-3xl font-semibold">{coveragePercent}%</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">
+              Graded topics
+            </p>
+            <p className="mt-2 text-3xl font-semibold">{gradedPercent}%</p>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-bg-tertiary">
-              <div className="h-full bg-text-primary" style={{ width: `${coveragePercent}%` }} />
+              <div className="h-full bg-text-primary" style={{ width: `${gradedPercent}%` }} />
             </div>
             <p className="mt-3 text-sm text-text-secondary">
-              {coveredTopics} of {topics.length} topics attempted
+              {coveredTopics} of {topics.length} API-returned topics attempted
             </p>
           </div>
           <div className="rounded-lg border border-border p-4">
@@ -1494,8 +1905,8 @@ function SyllabusPanel({
             <p className="mt-2 text-3xl font-semibold text-success">{strongTopics}</p>
             <p className="mt-1 text-sm text-text-secondary">Green topics scoring 75% or above</p>
           </div>
-          <Button type="button" className="w-full" onClick={onPracticeWeak}>
-            Practice weak topics
+          <Button type="button" className="w-full" onClick={onStartExam}>
+            Take another exam
           </Button>
           <div className="flex flex-wrap gap-2 text-xs">
             <Legend label="Uncovered" level="uncovered" />
@@ -1527,7 +1938,7 @@ function SyllabusPanel({
                   </div>
                   <p className="mt-5 text-xs">
                     {score?.total
-                      ? `${score.obtained}/${score.total} marks across attempts`
+                      ? `${formatMark(score.obtained)}/${formatMark(score.total)} marks across attempts`
                       : "Not covered in an exam yet"}
                   </p>
                 </article>
@@ -1537,7 +1948,7 @@ function SyllabusPanel({
             <div className="col-span-full rounded-lg border border-border p-8 text-center">
               <p className="font-medium">No syllabus topics mapped yet</p>
               <p className="mt-1 text-sm text-text-secondary">
-                Complete an exam to begin building this map.
+                Complete an API-graded exam to begin building this map.
               </p>
             </div>
           )}

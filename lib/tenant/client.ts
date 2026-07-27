@@ -116,14 +116,86 @@ type TenantSourceTreeResponse = {
   tree: TenantSourceTreeNode[];
 };
 
+export type TeacherQuestionBand = {
+  label: string;
+  question_type: string;
+  count: number;
+  marks_each: number;
+};
+
+export type TeacherQuestion = {
+  id: string;
+  chapter?: string;
+  band_label?: string;
+  question_type?: string;
+  marks: number;
+  text: string;
+  reference_answer?: string;
+};
+
+export type TeacherGenerateRequest = {
+  namespaces: string[];
+  subject: string;
+  bands: TeacherQuestionBand[];
+  title?: string;
+  instruction?: string;
+  university?: string;
+  pass_marks?: number;
+};
+
+export type TeacherGenerateResponse = {
+  id: string;
+  title?: string;
+  subject?: string;
+  university?: string;
+  pass_marks?: number;
+  total_marks: number;
+  warning?: string;
+  questions: TeacherQuestion[];
+};
+
+export type TeacherTypedAnswer = {
+  question_id: string;
+  answer_text: string;
+};
+
+export type TeacherGradeRequest = {
+  student_name?: string;
+  answers: TeacherTypedAnswer[];
+  instruction?: string;
+};
+
+export type TeacherGradeResult = {
+  question_id: string;
+  chapter?: string;
+  question: string;
+  marks: number;
+  student_answer?: string;
+  score: number;
+  feedback: string;
+};
+
+export type TeacherGradeResponse = {
+  submission_id?: string;
+  set_id?: string;
+  student_name?: string;
+  source?: string;
+  results: TeacherGradeResult[];
+  total_score: number;
+  total_marks: number;
+  graded?: boolean;
+};
+
 function requestJson<T>(
   path: string,
   options: {
     method?: "GET" | "POST";
     body?: unknown;
+    timeoutMs?: number;
   } = {},
 ) {
-  const { baseUrl, token, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
+  const { baseUrl, token, rejectUnauthorized, timeoutMs: defaultTimeoutMs } = getTenantApiEnv();
+  const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
 
   return new Promise<T>((resolve, reject) => {
     const url = new URL(path, baseUrl);
@@ -227,6 +299,142 @@ export async function getTenantSourceTree() {
   return requestJson<TenantSourceTreeResponse>("/api/v1/source-tree");
 }
 
+export async function generateTeacherPaper(input: TeacherGenerateRequest) {
+  return requestJson<TeacherGenerateResponse>("/api/v1/teacher/generate", {
+    method: "POST",
+    body: input,
+    timeoutMs: 120000,
+  });
+}
+
+export async function gradeTeacherPaper(setId: string, input: TeacherGradeRequest) {
+  return requestJson<TeacherGradeResponse>(
+    `/api/v1/teacher/papers/${encodeURIComponent(setId)}/grade`,
+    {
+      method: "POST",
+      body: input,
+      timeoutMs: 120000,
+    },
+  );
+}
+
+function createTeacherGradeFileMultipartBody(input: {
+  studentName?: string;
+  instruction?: string;
+  file: {
+    name: string;
+    mimeType: string;
+    buffer: Buffer;
+  };
+}) {
+  const boundary = `----nano-syllabus-grade-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const chunks: Buffer[] = [];
+  const pushText = (value: string) => chunks.push(Buffer.from(value, "utf8"));
+
+  const fields = [
+    ["student_name", input.studentName?.trim() || "Student"],
+    ["instruction", input.instruction?.trim() || ""],
+  ];
+
+  fields.forEach(([name, value]) => {
+    pushText(`--${boundary}\r\n`);
+    pushText(`Content-Disposition: form-data; name="${name}"\r\n\r\n`);
+    pushText(`${value}\r\n`);
+  });
+
+  pushText(`--${boundary}\r\n`);
+  pushText(
+    `Content-Disposition: form-data; name="file"; filename="${input.file.name.replace(/"/g, "_")}"\r\n`,
+  );
+  pushText(`Content-Type: ${input.file.mimeType || "application/octet-stream"}\r\n\r\n`);
+  chunks.push(input.file.buffer);
+  pushText("\r\n");
+  pushText(`--${boundary}--\r\n`);
+
+  return {
+    body: Buffer.concat(chunks),
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
+}
+
+export async function gradeTeacherPaperFile(
+  setId: string,
+  input: {
+    studentName?: string;
+    instruction?: string;
+    file: {
+      name: string;
+      mimeType: string;
+      buffer: Buffer;
+    };
+  },
+) {
+  const { baseUrl, token, rejectUnauthorized, timeoutMs: defaultTimeoutMs } = getTenantApiEnv();
+  const timeoutMs = Math.max(defaultTimeoutMs, 120000);
+  const url = new URL(`/api/v1/teacher/papers/${encodeURIComponent(setId)}/grade-file`, baseUrl);
+  const transport = url.protocol === "https:" ? https : http;
+  const multipartBody = createTeacherGradeFileMultipartBody(input);
+
+  return new Promise<TeacherGradeResponse>((resolve, reject) => {
+    let settled = false;
+    const request = transport.request(
+      url,
+      {
+        method: "POST",
+        rejectUnauthorized,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          "Content-Type": multipartBody.contentType,
+          "Content-Length": multipartBody.body.length,
+        },
+      },
+      (response) => {
+        let raw = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          raw += chunk;
+        });
+        response.on("end", () => {
+          if (settled) return;
+          settled = true;
+          if ((response.statusCode ?? 500) >= 400) {
+            reject(
+              new Error(
+                `Tenant API ${url.pathname} failed with ${response.statusCode}: ${raw.slice(0, 500)}`,
+              ),
+            );
+            return;
+          }
+
+          try {
+            resolve(raw ? (JSON.parse(raw) as TeacherGradeResponse) : ({} as TeacherGradeResponse));
+          } catch {
+            reject(
+              new Error(
+                `Failed to parse tenant API JSON from ${url.pathname}. Body: ${raw.slice(0, 500)}`,
+              ),
+            );
+          }
+        });
+      },
+    );
+
+    request.setTimeout(timeoutMs, () => {
+      if (settled) return;
+      settled = true;
+      request.destroy(new Error(`Tenant API ${url.pathname} timed out after ${timeoutMs}ms`));
+    });
+    request.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+    request.write(multipartBody.body);
+    request.end();
+  });
+}
+
 export async function promptTenant(input: {
   userId: string;
   subject: string;
@@ -287,7 +495,8 @@ function parseSseEvent(rawEvent: string): TenantStreamEvent | null {
       ? (parsed as Record<string, unknown>)
       : {};
 
-  const readNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+  const readNumber = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
 
   const normalizeUsage = (value: unknown): TenantTokenUsage | undefined => {
     const usageValue = Array.isArray(value) ? value[0] : value;
@@ -304,9 +513,7 @@ function parseSseEvent(rawEvent: string): TenantStreamEvent | null {
       readNumber(usage.outputTokens) ||
       readNumber(usage.output_tokens);
     const totalTokens =
-      readNumber(usage.totalTokens) ||
-      readNumber(usage.total_tokens) ||
-      inputTokens + outputTokens;
+      readNumber(usage.totalTokens) || readNumber(usage.total_tokens) || inputTokens + outputTokens;
 
     return { inputTokens, outputTokens, totalTokens };
   };
@@ -338,7 +545,9 @@ function parseSseEvent(rawEvent: string): TenantStreamEvent | null {
         typeof payload.context_summary === "string" ? payload.context_summary : undefined,
       next_topic: typeof payload.next_topic === "string" ? payload.next_topic : undefined,
       next_context_chunk:
-        payload.next_context_chunk && typeof payload.next_context_chunk === "object" && !Array.isArray(payload.next_context_chunk)
+        payload.next_context_chunk &&
+        typeof payload.next_context_chunk === "object" &&
+        !Array.isArray(payload.next_context_chunk)
           ? (payload.next_context_chunk as TenantNextContextChunk)
           : undefined,
     };
