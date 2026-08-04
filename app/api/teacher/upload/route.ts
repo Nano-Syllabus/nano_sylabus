@@ -27,6 +27,24 @@ function uploadedPath(payload: unknown) {
   return "";
 }
 
+function jobId(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "";
+  const record = payload as ApiRecord;
+  if (typeof record.job_id === "string") return record.job_id;
+  if (record.job && typeof record.job === "object") {
+    const id = (record.job as ApiRecord).job_id ?? (record.job as ApiRecord).id;
+    if (typeof id === "string") return id;
+  }
+  return typeof record.id === "string" ? record.id : "";
+}
+
+function validUploadPath(path: string) {
+  if (!path || path.startsWith("/") || path.includes("\\")) return false;
+  const parts = path.split("/");
+  if (parts.some((part) => !part || part === "." || part === "..")) return false;
+  return ["Syllabus", "Notes", "Question Bank"].includes(parts.at(-1) || "");
+}
+
 export async function POST(req: Request) {
   try {
     const teacher = await getTeacherProfile();
@@ -44,16 +62,16 @@ export async function POST(req: Request) {
     if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
-    if (!path) {
+    if (!validUploadPath(path)) {
       return NextResponse.json(
-        { error: "A collection-relative upload path is required." },
+        { error: "Choose a valid Syllabus, Notes or Question Bank folder." },
         { status: 400 },
       );
     }
 
     const fileBuffer = Buffer.from(await file.arrayBuffer());
     const boundary = `----WebKitFormBoundary${Math.random().toString(36).substring(2)}`;
-    const safeFilename = file.name.replace(/[\r\n"]/g, "_");
+    const safeFilename = file.name.replace(/[\\/\r\n"]/g, "_");
 
     const parts = [];
 
@@ -158,7 +176,7 @@ export async function POST(req: Request) {
       indexBody,
     );
 
-    return NextResponse.json({ upload: uploadRes, index: indexRes });
+    return NextResponse.json({ upload: uploadRes, index: indexRes, jobId: jobId(indexRes) });
   } catch (error: unknown) {
     console.error("Upload route error:", error);
     return NextResponse.json(
