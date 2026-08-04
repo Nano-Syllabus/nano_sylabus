@@ -1,5 +1,14 @@
-import { redirect } from "next/navigation";
+import { SetAppShell } from "@/components/set-app-shell";
+import { StudentExamsClient } from "@/components/student-exams-client";
+import { requireOnboardedUser } from "@/lib/auth";
 
 export default async function ExamsPage() {
-  redirect("/exams");
+  await requireOnboardedUser();
+
+  return (
+    <>
+      <SetAppShell title="Exams" />
+      <StudentExamsClient />
+    </>
+  );
 }

@@ -2,6 +2,18 @@ import http from "node:http";
 import https from "node:https";
 import { getTenantApiEnv } from "@/lib/env";
 
+function extractErrorMessage(url: URL, statusCode: number, raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.detail) {
+      return typeof parsed.detail === "string"
+        ? parsed.detail
+        : JSON.stringify(parsed.detail);
+    }
+  } catch {}
+  return `Tenant API ${url.pathname} failed with ${statusCode}: ${raw.slice(0, 500)}`;
+}
+
 export type TenantSubject = {
   name: string;
   slug: string;
@@ -247,11 +259,7 @@ function requestJson<T>(
           settled = true;
           if (timeoutHandle) clearTimeout(timeoutHandle);
           if ((response.statusCode ?? 500) >= 400) {
-            reject(
-              new Error(
-                `Tenant API ${url.pathname} failed with ${response.statusCode}: ${raw.slice(0, 500)}`,
-              ),
-            );
+            reject(new Error(extractErrorMessage(url, response.statusCode ?? 500, raw)));
             return;
           }
 
@@ -300,7 +308,7 @@ export async function getTenantSourceTree() {
 }
 
 export async function generateTeacherPaper(input: TeacherGenerateRequest) {
-  return requestJson<TeacherGenerateResponse>("/api/v1/teacher/generate", {
+  return requestJson<TeacherGenerateResponse>("/api/v1/practice/generate", {
     method: "POST",
     body: input,
     timeoutMs: 120000,
@@ -309,7 +317,7 @@ export async function generateTeacherPaper(input: TeacherGenerateRequest) {
 
 export async function gradeTeacherPaper(setId: string, input: TeacherGradeRequest) {
   return requestJson<TeacherGradeResponse>(
-    `/api/v1/teacher/papers/${encodeURIComponent(setId)}/grade`,
+    `/api/v1/practice/papers/${encodeURIComponent(setId)}/grade`,
     {
       method: "POST",
       body: input,
@@ -371,7 +379,7 @@ export async function gradeTeacherPaperFile(
 ) {
   const { baseUrl, token, rejectUnauthorized, timeoutMs: defaultTimeoutMs } = getTenantApiEnv();
   const timeoutMs = Math.max(defaultTimeoutMs, 120000);
-  const url = new URL(`/api/v1/teacher/papers/${encodeURIComponent(setId)}/grade-file`, baseUrl);
+  const url = new URL(`/api/v1/practice/papers/${encodeURIComponent(setId)}/grade-file`, baseUrl);
   const transport = url.protocol === "https:" ? https : http;
   const multipartBody = createTeacherGradeFileMultipartBody(input);
 
@@ -399,11 +407,7 @@ export async function gradeTeacherPaperFile(
           if (settled) return;
           settled = true;
           if ((response.statusCode ?? 500) >= 400) {
-            reject(
-              new Error(
-                `Tenant API ${url.pathname} failed with ${response.statusCode}: ${raw.slice(0, 500)}`,
-              ),
-            );
+            reject(new Error(extractErrorMessage(url, response.statusCode ?? 500, raw)));
             return;
           }
 
@@ -686,11 +690,7 @@ export async function chatTenantStream(
           response.on("end", () => {
             if (settled) return;
             settled = true;
-            reject(
-              new Error(
-                `Tenant API ${url.pathname} failed with ${response.statusCode}: ${raw.slice(0, 500)}`,
-              ),
-            );
+            reject(new Error(extractErrorMessage(url, response.statusCode ?? 500, raw)));
           });
           return;
         }

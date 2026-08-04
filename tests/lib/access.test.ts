@@ -72,7 +72,7 @@ describe("resolveAccess", () => {
       }),
     ).toEqual({
       allow: false,
-      redirectTo: "/app/chat",
+      redirectTo: "/app/today",
       includeNext: false,
     });
   });

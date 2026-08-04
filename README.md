@@ -34,6 +34,7 @@ docs/        Product and operations notes
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `TENANT_API_BASE_URL`
 - `TENANT_API_TOKEN`
+- `TEACHER_APP_API_TOKEN` required for creating teacher workspaces
 - `TENANT_API_REJECT_UNAUTHORIZED` optional, defaults to `0`
 - `TENANT_API_TIMEOUT_MS` optional, minimum enforced timeout is `30000`
 
@@ -43,6 +44,7 @@ docs/        Product and operations notes
 npm install
 npm run dev
 npm test
+npm run test:integration
 npm run test:tenant-prompt
 npm run build
 ```

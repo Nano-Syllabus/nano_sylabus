@@ -109,7 +109,7 @@ export function AppShell({
               </div>
             </div>
             <div className="flex min-w-0 shrink-0 items-center gap-1.5 md:gap-2">
-              {!dynamicActions && (
+              {!dynamicActions && pathname !== "/app/today" && (
                 <Badge variant={user.creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
                   {user.creditBalance} messages
                 </Badge>

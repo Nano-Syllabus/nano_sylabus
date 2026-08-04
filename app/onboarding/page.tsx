@@ -8,7 +8,7 @@ export default async function OnboardingPage() {
   const { user, profile } = await requireAuthenticatedUser();
 
   if (user.onboarded) {
-    redirect("/app/chat");
+    redirect("/app/today");
   }
 
   return (

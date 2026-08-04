@@ -15,15 +15,15 @@ export function resolvePostAuthDestination(input: {
   const safeNext = sanitizeNextPath(input.nextPath);
 
   if (!safeNext) {
-    return input.onboarded ? "/app/chat" : "/onboarding";
+    return input.onboarded ? "/app/today" : "/onboarding";
   }
 
   if (safeNext === "/login" || safeNext === "/signup") {
-    return input.onboarded ? "/app/chat" : "/onboarding";
+    return input.onboarded ? "/app/today" : "/onboarding";
   }
 
   if (safeNext === "/onboarding" && input.onboarded) {
-    return "/app/chat";
+    return "/app/today";
   }
 
   return safeNext;
