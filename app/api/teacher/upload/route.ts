@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { getTenantApiEnv } from "@/lib/env";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { randomUUID } from "node:crypto";
 import https from "node:https";
 import http from "node:http";
 
@@ -176,7 +178,43 @@ export async function POST(req: Request) {
       indexBody,
     );
 
-    return NextResponse.json({ upload: uploadRes, index: indexRes, jobId: jobId(indexRes) });
+    let previewWarning = "";
+    try {
+      const admin = createSupabaseAdminClient();
+      const storagePath = `${teacher.id}/${randomUUID()}-${safeFilename}`;
+      const { error: storageError } = await admin.storage
+        .from("teacher-documents")
+        .upload(storagePath, fileBuffer, {
+          contentType: file.type || "application/octet-stream",
+          upsert: false,
+        });
+      if (storageError) throw storageError;
+      const { error: mirrorError } = await admin.from("teacher_document_files").upsert(
+        {
+          teacher_id: teacher.id,
+          collection_path: uploadedFilePath,
+          storage_path: storagePath,
+          original_name: file.name || safeFilename,
+          mime_type: file.type || "application/octet-stream",
+          size_bytes: file.size,
+        },
+        { onConflict: "teacher_id,collection_path" },
+      );
+      if (mirrorError) {
+        await admin.storage.from("teacher-documents").remove([storagePath]);
+        throw mirrorError;
+      }
+    } catch {
+      previewWarning =
+        "The document was indexed, but preview storage is not ready. Apply the latest Supabase migration.";
+    }
+
+    return NextResponse.json({
+      upload: uploadRes,
+      index: indexRes,
+      jobId: jobId(indexRes),
+      previewWarning,
+    });
   } catch (error: unknown) {
     console.error("Upload route error:", error);
     return NextResponse.json(

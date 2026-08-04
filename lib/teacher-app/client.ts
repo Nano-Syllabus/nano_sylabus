@@ -245,6 +245,21 @@ export const generateTeacherPracticePaper = (
     timeoutMs: 120_000,
   });
 
+export const gradeTeacherPracticePaper = (
+  key: string,
+  paperId: string,
+  input: {
+    student_name?: string;
+    instruction?: string;
+    answers: Array<{ question_id: string; answer_text: string }>;
+  },
+) =>
+  teacherRequest<ApiRecord>(
+    `/api/v1/practice/papers/${encodeURIComponent(paperId)}/grade`,
+    key,
+    { method: "POST", body: input, timeoutMs: 120_000 },
+  );
+
 export async function gradeTeacherPracticePaperFile(
   key: string,
   paperId: string,

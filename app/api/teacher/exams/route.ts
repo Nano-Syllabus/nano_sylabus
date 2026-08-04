@@ -10,15 +10,16 @@ export async function GET() {
     const admin = createSupabaseAdminClient();
     const { data, error } = await admin
       .from("teacher_exam_papers")
-      .select("paper,created_at")
+      .select("id,paper,created_at,updated_at")
       .eq("teacher_id", teacher.id)
+      .is("archived_at", null)
       .order("created_at", { ascending: false })
       .limit(100);
 
     if (error) throw new Error(error.message);
     const papers = (data || []).flatMap((row) => {
       if (!row.paper || typeof row.paper !== "object") return [];
-      return [{ ...row.paper, createdAt: row.created_at }];
+      return [{ ...row.paper, appPaperId: row.id, createdAt: row.created_at, updatedAt: row.updated_at }];
     });
     return NextResponse.json({ papers });
   } catch {

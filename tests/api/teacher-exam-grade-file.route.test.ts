@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => {
   return {
     getTeacherProfile: vi.fn(),
     gradeTeacherPracticePaperFile: vi.fn(),
+    createSupabaseAdminClient: vi.fn(),
     MockTeacherApiError,
   };
 });
@@ -17,6 +18,9 @@ vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherPr
 vi.mock("@/lib/teacher-app/client", () => ({
   gradeTeacherPracticePaperFile: mocks.gradeTeacherPracticePaperFile,
   TeacherApiError: mocks.MockTeacherApiError,
+}));
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: mocks.createSupabaseAdminClient,
 }));
 
 import { POST } from "@/app/api/teacher/exams/[paperId]/grade-file/route";
@@ -44,6 +48,13 @@ describe("POST /api/teacher/exams/[paperId]/grade-file", () => {
       total_score: 8,
       total_marks: 10,
       results: [],
+    });
+    const readChain = {
+      select: vi.fn(), eq: vi.fn(), is: vi.fn(), maybeSingle: vi.fn(async () => ({ data: { id: "paper-row-1" }, error: null })),
+    };
+    readChain.select.mockReturnValue(readChain); readChain.eq.mockReturnValue(readChain); readChain.is.mockReturnValue(readChain);
+    mocks.createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => table === "teacher_exam_papers" ? readChain : { insert: vi.fn(async () => ({ error: null })) }),
     });
   });
 

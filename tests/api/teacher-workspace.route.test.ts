@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
     getTeacherSubjects: vi.fn(),
     getTeacherSourceTree: vi.fn(),
     getTeacherDocuments: vi.fn(),
+    createSupabaseAdminClient: vi.fn(),
     MockTeacherApiError,
   };
 });
@@ -29,6 +30,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/app/teachers/actions", () => ({
   getTeacherProfile: mocks.getTeacherProfile,
 }));
+vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.createSupabaseAdminClient }));
 
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherMe: mocks.getTeacherMe,
@@ -63,6 +65,9 @@ describe("GET /api/teacher/workspace", () => {
     mocks.getTeacherDocuments.mockResolvedValue([
       { document_id: "doc-1", name: "notes.pdf", path: "Physics/Notes/notes.pdf" },
     ]);
+    const chain = { select: vi.fn(), eq: vi.fn(async () => ({ data: [], error: null })) };
+    chain.select.mockReturnValue(chain);
+    mocks.createSupabaseAdminClient.mockReturnValue({ from: vi.fn(() => chain) });
   });
 
   it("returns the real workspace without exposing the collection key", async () => {

@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => {
     getTeacherProfile: vi.fn(),
     indexTeacherDocument: vi.fn(),
     deleteTeacherDocument: vi.fn(),
+    getTeacherDocument: vi.fn(),
+    createSupabaseAdminClient: vi.fn(),
     MockTeacherApiError,
   };
 });
@@ -18,8 +20,10 @@ vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherPr
 vi.mock("@/lib/teacher-app/client", () => ({
   indexTeacherDocument: mocks.indexTeacherDocument,
   deleteTeacherDocument: mocks.deleteTeacherDocument,
+  getTeacherDocument: mocks.getTeacherDocument,
   TeacherApiError: mocks.MockTeacherApiError,
 }));
+vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.createSupabaseAdminClient }));
 
 import { DELETE, POST } from "@/app/api/teacher/documents/[documentId]/route";
 
@@ -35,6 +39,10 @@ describe("/api/teacher/documents/[documentId]", () => {
     });
     mocks.indexTeacherDocument.mockResolvedValue({ job_id: "job-1", status: "queued" });
     mocks.deleteTeacherDocument.mockResolvedValue({ deleted: true });
+    mocks.getTeacherDocument.mockResolvedValue({ source_path: "Physics/Notes/notes.pdf" });
+    const chain = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: null, error: null })) };
+    chain.select.mockReturnValue(chain); chain.eq.mockReturnValue(chain);
+    mocks.createSupabaseAdminClient.mockReturnValue({ from: vi.fn(() => chain), storage: { from: vi.fn() } });
   });
 
   it("re-indexes by document ID and returns the polling job ID", async () => {
@@ -58,7 +66,7 @@ describe("/api/teacher/documents/[documentId]", () => {
   });
 
   it("does not reveal whether another collection owns a missing document", async () => {
-    mocks.deleteTeacherDocument.mockRejectedValue(new mocks.MockTeacherApiError("Nope", 404));
+    mocks.getTeacherDocument.mockRejectedValue(new mocks.MockTeacherApiError("Nope", 404));
 
     const response = await DELETE(new Request("http://localhost", { method: "DELETE" }), context("other"));
 

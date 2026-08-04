@@ -8,6 +8,7 @@ import {
   TeacherApiError,
 } from "@/lib/teacher-app/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
   try {
@@ -31,6 +32,11 @@ export async function GET() {
       getTeacherSourceTree(teacher.collection_sk),
       getTeacherDocuments(teacher.collection_sk),
     ]);
+    const admin = createSupabaseAdminClient();
+    const { data: documentFiles } = await admin
+      .from("teacher_document_files")
+      .select("collection_path")
+      .eq("teacher_id", teacher.id);
 
     return NextResponse.json({
       teacher: { handle: teacher.handle, email: user.email ?? "" },
@@ -38,6 +44,7 @@ export async function GET() {
       subjects,
       sourceTree,
       documents,
+      previewPaths: (documentFiles || []).map((item) => item.collection_path),
     });
   } catch (error) {
     const invalidKey = error instanceof TeacherApiError && error.status === 401;
