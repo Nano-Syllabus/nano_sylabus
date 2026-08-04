@@ -21,9 +21,6 @@ export function MarketingNav() {
           <a href="#features" className="hover:text-text-primary">
             Features
           </a>
-          <a href="#pricing" className="hover:text-text-primary">
-            Pricing
-          </a>
           <a href="#faq" className="hover:text-text-primary">
             FAQ
           </a>

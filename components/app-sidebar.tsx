@@ -10,14 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 
 const NAV = [
-  { href: "/app/chat", label: "Chats", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
-  { href: "/exams", label: "Exams", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4"/><path d="M9 12h6"/><path d="M9 16h4"/></svg> },
+  { href: "/app/exams", label: "Exams", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4"/><path d="M9 12h6"/><path d="M9 16h4"/></svg> },
   { href: "/app/explore", label: "Subjects", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg> },
   { href: "/app/notes", label: "My Notes", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg> },
 ] as const;
 
 function routeLoadingVariant(href: string) {
-  if (href.startsWith("/exams")) return "exams";
+  if (href.startsWith("/app/exams")) return "exams";
   if (href.startsWith("/app/explore")) return "subjects";
   if (href.startsWith("/app/notes")) return "notes";
   if (href.startsWith("/app/billing")) return "billing";
@@ -306,7 +305,7 @@ export function AppSidebar({
       {/* ── Brand ── */}
       <div className={cn("flex items-center pt-3.5 pb-2", isCollapsed ? "justify-center px-0" : "justify-between px-3")}>
         {!isCollapsed && (
-          <Link href="/app/chat" className="font-display text-lg font-semibold tracking-tight">
+          <Link href="/app/today" className="font-display text-lg font-semibold tracking-tight">
             Nano Syllabus
           </Link>
         )}
@@ -336,6 +335,28 @@ export function AppSidebar({
       {/* ── Nav Links ── */}
       <nav className={cn("mt-3 space-y-1", isCollapsed ? "px-2" : "px-3")}>
         <Link
+          href="/app/today"
+          onClick={() => onCloseMobile?.()}
+          className={cn(
+            "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            isCollapsed
+              ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
+              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+            pathname.startsWith("/app/today")
+              ? "bg-text-primary text-text-inverse"
+              : "hover:bg-bg-secondary hover:text-text-primary",
+          )}
+          title={isCollapsed ? "Today" : undefined}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 11.5 12 4l9 7.5" />
+            <path d="M5.5 10.5V20h13v-9.5" />
+            <path d="M9.5 20v-6h5v6" />
+          </svg>
+          {!isCollapsed && "Today"}
+        </Link>
+
+        <Link
           href="/app/chat"
           onClick={(e) => {
             if (window.location.pathname === "/app/chat") {
@@ -346,9 +367,13 @@ export function AppSidebar({
           className={cn(
             "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
             isCollapsed
-              ? "mx-auto mb-3 h-10 w-10 justify-center rounded-full bg-bg-secondary p-2 text-text-primary hover:opacity-80"
-              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5 hover:bg-bg-secondary hover:text-text-primary"
+              ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
+              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+            pathname.startsWith("/app/chat")
+              ? "bg-bg-secondary text-text-primary"
+              : "hover:bg-bg-secondary hover:text-text-primary",
           )}
+          title={isCollapsed ? "New chat" : undefined}
         >
           {isCollapsed ? (
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -368,18 +393,12 @@ export function AppSidebar({
         
         {NAV.map((item) => {
           const isPending = pendingRouteHref === item.href;
-          const isActive = isPending || (item.href === "/app/chat" ? !!currentSessionId : pathname.startsWith(item.href));
+          const isActive = isPending || pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
               onClick={(event) => {
-                if (item.href === "/exams") {
-                  setPendingSessionId(null);
-                  onCloseMobile?.();
-                  return;
-                }
-
                 event.preventDefault();
                 setPendingRouteHref(item.href);
                 setPendingSessionId(null);
@@ -416,7 +435,7 @@ export function AppSidebar({
       </nav>
 
       {/* ── Chat History ── */}
-      <div className={cn("mt-6 flex flex-col flex-1 min-h-0", isCollapsed && "hidden")}>
+      {pathname.startsWith("/app/chat") ? <div className={cn("mt-6 flex flex-col flex-1 min-h-0", isCollapsed && "hidden")}>
         <div className="hidden items-center justify-between px-4 py-1.5 shrink-0">
           <div className="relative">
             <input
@@ -616,7 +635,7 @@ export function AppSidebar({
             ) : null}
           </div>
         </div>
-      </div>
+      </div> : null}
       
       {/* Spacer for collapsed state */}
       {isCollapsed && <div className="flex-1" />}

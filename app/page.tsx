@@ -16,7 +16,7 @@ const features = [
   {
     icon: "📚",
     title: "Built for revision",
-    body: "Phase 1 focuses on real chat foundations so study workflows can become real next.",
+    body: "Turn useful answers into notes, revisit weak topics, and practice with exam-focused workflows.",
   },
   {
     icon: "🇳🇵",
@@ -42,14 +42,29 @@ export default function HomePage() {
             Ask in English or Roman Nepali. Get personalized AI support that feels closer to how Nepali students actually study.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/signup">
-              <Button size="lg">Create account →</Button>
-            </Link>
-            <Link href="/login">
-              <Button size="lg" variant="outline">
-                Login
-              </Button>
-            </Link>
+            <div className="flex w-full flex-col gap-2 sm:w-auto">
+              <Link href="/signup">
+                <Button size="lg" className="w-full sm:w-auto">
+                  I am a Student →
+                </Button>
+              </Link>
+              <div className="text-xs text-text-secondary mt-1">Chat, Exams, and Notes</div>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:w-auto">
+              <Link href="/teachers">
+                <Button size="lg" variant="outline" className="w-full sm:w-auto">
+                  I am a Teacher →
+                </Button>
+              </Link>
+              <div className="text-xs text-text-secondary mt-1">Upload & Manage Subjects</div>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:w-auto">
+              <Link href="/login">
+                <Button size="lg" variant="ghost">
+                  Login
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </section>
@@ -75,11 +90,13 @@ export default function HomePage() {
 
       <section id="faq" className="border-b border-border bg-bg-secondary">
         <div className="mx-auto max-w-3xl px-5 py-20 text-center">
-          <h2 className="mt-2 font-display text-4xl font-bold tracking-tight sm:text-5xl">What ships first?</h2>
+          <h2 className="mt-2 font-display text-4xl font-bold tracking-tight sm:text-5xl">
+            One workspace for everyday study.
+          </h2>
           <div className="mt-8 space-y-4 text-sm text-text-secondary">
-            <p>Real auth, real onboarding, real persistent chat, and real AI responses.</p>
+            <p>Ask questions, explore your subjects, practice exams, and keep revision notes together.</p>
             <p>
-              Notes, revision mode persistence, billing, and syllabus-grounded retrieval will come after the foundation is stable.
+              Answers stay grounded in the academic material available for your programme and semester.
             </p>
           </div>
         </div>

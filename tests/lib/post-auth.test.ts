@@ -15,8 +15,8 @@ describe("sanitizeNextPath", () => {
 
 describe("resolvePostAuthDestination", () => {
 
-  it("sends onboarded student to chat when next is missing", () => {
-    expect(resolvePostAuthDestination({ role: "student", onboarded: true })).toBe("/app/chat");
+  it("sends onboarded student to Today when next is missing", () => {
+    expect(resolvePostAuthDestination({ role: "student", onboarded: true })).toBe("/app/today");
   });
 
   it("sends non-onboarded student to onboarding when next is missing", () => {

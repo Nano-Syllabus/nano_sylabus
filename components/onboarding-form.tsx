@@ -340,7 +340,7 @@ export function OnboardingForm({
       // Ignore storage delete failures.
     }
 
-    router.replace("/app/chat");
+    router.replace("/app/today");
     router.refresh();
   }
 

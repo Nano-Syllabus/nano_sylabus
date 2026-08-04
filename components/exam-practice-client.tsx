@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
@@ -35,6 +35,7 @@ type EvaluationRow = {
   obtained: number;
   feedback: string;
   correction: string;
+  studentAnswer: string;
 };
 
 type ApiTeacherQuestion = {
@@ -93,7 +94,26 @@ type BlueprintBand = {
   marksEach: number;
 };
 
-const MARK_OPTIONS = ["20", "40", "60", "80", "100", "custom"] as const;
+const MARK_OPTIONS = ["20", "40", "60", "80", "100"] as const;
+
+function getDurationForMarks(marks: string) {
+  switch (marks) {
+    case "20": return 30;
+    case "40": return 60;
+    case "60": return 90;
+    case "80": return 180;
+    case "100": return 180;
+    default: return 60;
+  }
+}
+
+function formatDuration(minutes: number) {
+  if (minutes === 30) return "30m";
+  if (minutes === 60) return "1h";
+  if (minutes === 90) return "1.5h";
+  if (minutes === 180) return "3h";
+  return `${minutes}m`;
+}
 
 const PAPER_STYLES: Array<{
   id: PaperStyle;
@@ -449,6 +469,52 @@ function stageIndex(stage: ExamStage) {
   return STAGE_STEPS.findIndex((step) => step.id === stage);
 }
 
+const EXAM_SESSION_KEY = "exam-practice-session";
+
+interface ExamSession {
+  stage: ExamStage;
+  subject: string;
+  title: string;
+  instruction: string;
+  marksOption: string;
+  paperStyle: PaperStyle;
+  answerMode: AnswerMode;
+  blueprint: BlueprintBand[];
+  questions: GeneratedQuestion[];
+  paperId: string;
+  paperWarning: string;
+  typedAnswers: Record<string, string>;
+  /** epoch ms when the timer expires */
+  timerDeadline: number;
+  submissionWasLate: boolean;
+  evaluation: EvaluationRow[];
+  submissionId: string;
+  obtainedMarks: number;
+  gradingError: string;
+}
+
+function saveSession(data: ExamSession) {
+  try {
+    sessionStorage.setItem(EXAM_SESSION_KEY, JSON.stringify(data));
+  } catch {}
+}
+
+function loadSession(): ExamSession | null {
+  try {
+    const raw = sessionStorage.getItem(EXAM_SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ExamSession;
+  } catch {
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    sessionStorage.removeItem(EXAM_SESSION_KEY);
+  } catch {}
+}
+
 export function ExamPracticeClient({
   subjects,
   subjectLoadError,
@@ -457,49 +523,58 @@ export function ExamPracticeClient({
   subjectLoadError?: string;
 }) {
   const router = useRouter();
+
+  // ---------- restore persisted session (runs once) ----------
+  const saved = useMemo(() => loadSession(), []);
+
   const [tab, setTab] = useState<ExamTab>("take");
-  const [stage, setStage] = useState<ExamStage>("configure");
-  const [subject, setSubject] = useState(subjects[0]?.name ?? "");
-  const [duration, setDuration] = useState("60");
-  const [title, setTitle] = useState("");
-  const [instruction, setInstruction] = useState("");
-  const [passMarks, setPassMarks] = useState("");
-  const [marksOption, setMarksOption] = useState<(typeof MARK_OPTIONS)[number]>("20");
-  const [customMarks, setCustomMarks] = useState("20");
-  const [paperStyle, setPaperStyle] = useState<PaperStyle>("balanced");
+  const [stage, setStage] = useState<ExamStage>(saved?.stage ?? "configure");
+  const [subject, setSubject] = useState(saved?.subject ?? subjects[0]?.name ?? "");
+  const [title, setTitle] = useState(saved?.title ?? "");
+  const [instruction, setInstruction] = useState(saved?.instruction ?? "");
+  const [marksOption, setMarksOption] = useState<(typeof MARK_OPTIONS)[number]>(
+    (saved?.marksOption as (typeof MARK_OPTIONS)[number]) ?? "20",
+  );
+  const [paperStyle, setPaperStyle] = useState<PaperStyle>(saved?.paperStyle ?? "balanced");
   const [customPatternOpen, setCustomPatternOpen] = useState(false);
-  const [blueprint, setBlueprint] = useState<BlueprintBand[]>(() => buildBlueprint(20, "balanced"));
-  const [questions, setQuestions] = useState<GeneratedQuestion[]>([]);
-  const [paperId, setPaperId] = useState("");
-  const [paperWarning, setPaperWarning] = useState("");
+  const [blueprint, setBlueprint] = useState<BlueprintBand[]>(
+    () => saved?.blueprint ?? buildBlueprint(20, "balanced"),
+  );
+  const [questions, setQuestions] = useState<GeneratedQuestion[]>(saved?.questions ?? []);
+  const [paperId, setPaperId] = useState(saved?.paperId ?? "");
+  const [paperWarning, setPaperWarning] = useState(saved?.paperWarning ?? "");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateElapsed, setGenerateElapsed] = useState(0);
   const [generateError, setGenerateError] = useState("");
-  const [answerMode, setAnswerMode] = useState<AnswerMode>("upload");
+  const [answerMode, setAnswerMode] = useState<AnswerMode>(saved?.answerMode ?? "upload");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [typedAnswers, setTypedAnswers] = useState<Record<string, string>>({});
-  const [studentName, setStudentName] = useState("");
-  const [evaluation, setEvaluation] = useState<EvaluationRow[]>([]);
+  const [typedAnswers, setTypedAnswers] = useState<Record<string, string>>(
+    saved?.typedAnswers ?? {},
+  );
+  const [evaluation, setEvaluation] = useState<EvaluationRow[]>(saved?.evaluation ?? []);
   const [isChecking, setIsChecking] = useState(false);
-  const [gradingError, setGradingError] = useState("");
-  const [submissionId, setSubmissionId] = useState("");
+  const [gradingError, setGradingError] = useState(saved?.gradingError ?? "");
+  const [submissionId, setSubmissionId] = useState(saved?.submissionId ?? "");
   const [history, setHistory] = useState<ExamAttempt[]>([]);
-  const [secondsLeft, setSecondsLeft] = useState(Number(duration) * 60);
-  const [submissionWasLate, setSubmissionWasLate] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(() => {
+    if (saved?.timerDeadline) {
+      const remaining = Math.max(0, Math.round((saved.timerDeadline - Date.now()) / 1000));
+      return remaining;
+    }
+    return getDurationForMarks(marksOption) * 60;
+  });
+  const [timerDeadline, setTimerDeadline] = useState<number | null>(saved?.timerDeadline ?? null);
+  const [submissionWasLate, setSubmissionWasLate] = useState(saved?.submissionWasLate ?? false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generateAbortRef = useRef<AbortController | null>(null);
   const generateCancelledRef = useRef(false);
 
-  const requestedMarks =
-    marksOption === "custom" ? positiveInteger(customMarks, 20) : Number(marksOption);
+  // ---------- derived ----------
+  const requestedMarks = Number(marksOption);
   const totalMarks = blueprint.reduce((sum, band) => sum + band.count * band.marksEach, 0);
   const generatedMarks = questions.reduce((total, question) => total + question.marks, 0);
   const obtainedMarks = evaluation.reduce((total, row) => total + row.obtained, 0);
   const currentSubject = subjects.find((item) => item.name === subject);
-  const parsedPassMarks = passMarks.trim() ? Number(passMarks) : undefined;
-  const passMarksValid =
-    parsedPassMarks === undefined ||
-    (Number.isFinite(parsedPassMarks) && parsedPassMarks >= 0 && parsedPassMarks <= totalMarks);
   const blueprintValid =
     totalMarks > 0 &&
     blueprint.every(
@@ -510,39 +585,73 @@ export function ExamPracticeClient({
         band.count > 0 &&
         Number.isFinite(band.marksEach) &&
         band.marksEach > 0,
-    ) &&
-    passMarksValid;
-  const blueprintError = !passMarksValid
-    ? "Pass marks must be between 0 and full marks."
-    : !blueprintValid
-      ? "Every blueprint row needs a label, question type, count, and marks each."
-      : "";
+    );
+  const blueprintError = !blueprintValid
+    ? "Every blueprint row needs a label, question type, count, and marks each."
+    : "";
   const generateDisabledReason = !subject
     ? "Choose a subject before generating."
     : blueprintError;
   const currentStep = stageIndex(stage);
   const navigableSteps = useMemo(() => {
-    if (stage === "configure") return [0];
-    if (stage === "started") return [0, 1];
-    if (stage === "submission" || stage === "submitted") return [0, 1, 2];
-    return [0, 1, 2, 3];
-  }, [stage]);
+    const steps = [0];
+    if (questions.length > 0) {
+      steps.push(1);
+    }
+    if (stage === "submission" || stage === "submitted" || stage === "result" || evaluation.length > 0) {
+      steps.push(2);
+    }
+    if (stage === "result" || evaluation.length > 0) {
+      steps.push(3);
+    }
+    return steps;
+  }, [stage, questions.length, evaluation.length]);
 
+  // ---------- persist to sessionStorage on key state changes ----------
   useEffect(() => {
-    if (stage !== "started") return;
+    saveSession({
+      stage,
+      subject,
+      title,
+      instruction,
+      marksOption,
+      paperStyle,
+      answerMode,
+      blueprint,
+      questions,
+      paperId,
+      paperWarning,
+      typedAnswers,
+      timerDeadline: timerDeadline ?? (Date.now() + secondsLeft * 1000),
+      submissionWasLate,
+      evaluation,
+      submissionId,
+      obtainedMarks,
+      gradingError,
+    });
+  }, [
+    stage, subject, title, instruction, marksOption, paperStyle, answerMode,
+    blueprint, questions, paperId, paperWarning, typedAnswers, secondsLeft,
+    submissionWasLate, evaluation, submissionId, obtainedMarks, gradingError, timerDeadline,
+  ]);
+
+  // ---------- countdown timer ----------
+  useEffect(() => {
+    if (questions.length === 0 || stage === "submission" || stage === "submitted" || stage === "result") return;
+    if (!timerDeadline) return;
+
     const timer = window.setInterval(() => {
-      setSecondsLeft((current) => {
-        if (current <= 1) {
-          window.clearInterval(timer);
-          setSubmissionWasLate(true);
-          setStage("submission");
-          return 0;
-        }
-        return current - 1;
-      });
+      const remaining = Math.max(0, Math.round((timerDeadline - Date.now()) / 1000));
+      setSecondsLeft(remaining);
+
+      if (remaining <= 0) {
+        window.clearInterval(timer);
+        setSubmissionWasLate(true);
+        setStage("submission");
+      }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [stage]);
+  }, [stage, questions.length, timerDeadline]);
 
   useEffect(() => {
     if (!isGenerating) {
@@ -624,7 +733,7 @@ export function ExamPracticeClient({
           title: title.trim() || `${subject} practice set`,
           ...(instruction.trim() ? { instruction: instruction.trim() } : {}),
           university: namespace,
-          ...(parsedPassMarks !== undefined ? { pass_marks: parsedPassMarks } : {}),
+          pass_marks: Math.ceil(totalMarks * 0.4),
         }),
       });
 
@@ -642,10 +751,11 @@ export function ExamPracticeClient({
       setEvaluation([]);
       setUploadedFile(null);
       setTypedAnswers({});
-      setStudentName("");
       setSubmissionId("");
       setGradingError("");
-      setSecondsLeft(Number(duration) * 60);
+      const duration = getDurationForMarks(marksOption) * 60;
+      setSecondsLeft(duration);
+      setTimerDeadline(Date.now() + duration * 1000);
       setSubmissionWasLate(false);
       setStage("started");
     } catch (error) {
@@ -695,8 +805,8 @@ export function ExamPracticeClient({
         : "Grade this practice exam answer according to the marks assigned to each question.";
       const response =
         answerMode === "upload"
-          ? await gradeUploadedAnswer(paperId, uploadedFile, studentName, instruction)
-          : await gradeTypedAnswers(paperId, questions, typedAnswers, studentName, instruction);
+          ? await gradeUploadedAnswer(paperId, uploadedFile, "", instruction)
+          : await gradeTypedAnswers(paperId, questions, typedAnswers, "", instruction);
       const payload = (await response.json()) as { grade?: ApiGrade; error?: string };
 
       if (!response.ok || !payload.grade) {
@@ -711,6 +821,7 @@ export function ExamPracticeClient({
           obtained: row?.score ?? 0,
           feedback: row?.feedback ?? "No feedback returned for this question.",
           correction: question.referenceAnswer || "No reference answer returned by the API.",
+          studentAnswer: answerMode === "upload" ? "Answer sheet uploaded." : (typedAnswers[question.id] || "No typed answer provided."),
         };
       });
       const nextObtained = nextEvaluation.reduce((total, row) => total + row.obtained, 0);
@@ -746,18 +857,17 @@ export function ExamPracticeClient({
     setGenerateError("");
     setUploadedFile(null);
     setTypedAnswers({});
-    setStudentName("");
     setEvaluation([]);
     setGradingError("");
     setSubmissionId("");
     setSubmissionWasLate(false);
+    setTimerDeadline(null);
     setMarksOption("20");
-    setCustomMarks("20");
     setPaperStyle("balanced");
     setCustomPatternOpen(false);
     setBlueprint(buildBlueprint(20, "balanced"));
-    setPassMarks("");
     setInstruction("");
+    clearSession();
   }
 
   function viewAttempt(attempt: ExamAttempt) {
@@ -779,19 +889,11 @@ export function ExamPracticeClient({
     const nextOption = MARK_OPTIONS.includes(value as (typeof MARK_OPTIONS)[number])
       ? (value as (typeof MARK_OPTIONS)[number])
       : "20";
-    const nextMarks = nextOption === "custom" ? positiveInteger(customMarks, requestedMarks) : Number(nextOption);
+    const nextMarks = Number(nextOption);
     setMarksOption(nextOption);
     if (paperStyle !== "custom") {
       setBlueprint(buildBlueprint(nextMarks, paperStyle));
     }
-    setPassMarks("");
-  }
-
-  function handleCustomMarksChange(value: string) {
-    setCustomMarks(value);
-    if (marksOption !== "custom" || paperStyle === "custom") return;
-    setBlueprint(buildBlueprint(positiveInteger(value, requestedMarks), paperStyle));
-    setPassMarks("");
   }
 
   function handlePaperStyleChange(style: PaperStyle) {
@@ -802,7 +904,6 @@ export function ExamPracticeClient({
     }
     setCustomPatternOpen(false);
     setBlueprint(buildBlueprint(requestedMarks, style));
-    setPassMarks("");
   }
 
   function addBlueprintBand() {
@@ -945,13 +1046,13 @@ export function ExamPracticeClient({
                       )}
                     </Select>
                   </Field>
-                  <Field label="Exam duration" hint="Local timer only; submission stays open if late.">
-                    <Select value={duration} onChange={(event) => setDuration(event.target.value)}>
-                      {["30", "60", "90", "180"].map((item) => (
-                        <option key={item} value={item}>
-                          {item} minutes
-                        </option>
-                      ))}
+                  <Field label="Answer mode" hint="How will you answer the exam?">
+                    <Select
+                      value={answerMode}
+                      onChange={(event) => setAnswerMode(event.target.value as AnswerMode)}
+                    >
+                      <option value="upload">Upload written paper</option>
+                      <option value="type">Type answers directly</option>
                     </Select>
                   </Field>
                 </div>
@@ -988,55 +1089,15 @@ export function ExamPracticeClient({
                               type="button"
                               onClick={() => handleMarksOptionChange(item)}
                               className={cn(
-                                "min-h-11 rounded-md border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
+                                "flex flex-col items-center justify-center min-h-[4.5rem] rounded-md border px-2 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
                                 selected
                                   ? "border-text-primary bg-text-primary text-bg-primary"
                                   : "border-border text-text-secondary hover:bg-bg-secondary hover:text-text-primary",
                               )}
                             >
-                              {item === "custom" ? "Custom" : item}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {marksOption === "custom" ? (
-                        <div className="mt-3">
-                          <Field label="Custom full marks">
-                            <Input
-                              value={customMarks}
-                              onChange={(event) => handleCustomMarksChange(event.target.value)}
-                              placeholder="e.g. 75"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              autoComplete="off"
-                            />
-                          </Field>
-                        </div>
-                      ) : null}
-                    </fieldset>
-
-                    <fieldset>
-                      <legend className="mb-2 text-xs font-medium uppercase tracking-wider text-text-muted">
-                        Question mix
-                      </legend>
-                      <div className="grid gap-2">
-                        {PAPER_STYLES.map((item) => {
-                          const selected = paperStyle === item.id;
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => handlePaperStyleChange(item.id)}
-                              className={cn(
-                                "min-h-14 rounded-md border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
-                                selected
-                                  ? "border-text-primary bg-bg-secondary text-text-primary"
-                                  : "border-border text-text-secondary hover:bg-bg-secondary hover:text-text-primary",
-                              )}
-                            >
-                              <span className="block text-sm font-semibold">{item.label}</span>
-                              <span className="mt-0.5 block text-xs text-text-muted">
-                                {item.description}
+                              <span className="text-sm font-semibold">{item} marks</span>
+                              <span className="text-xs opacity-80 mt-0.5">
+                                {formatDuration(getDurationForMarks(item))}
                               </span>
                             </button>
                           );
@@ -1044,148 +1105,7 @@ export function ExamPracticeClient({
                       </div>
                     </fieldset>
                   </div>
-
-                  <div className="rounded-lg border border-border">
-                    <button
-                      type="button"
-                      onClick={() => setCustomPatternOpen((current) => !current)}
-                      className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
-                      aria-expanded={customPatternOpen}
-                    >
-                      <span>
-                        <span className="block text-sm font-semibold">Customize sections</span>
-                        <span className="mt-0.5 block text-xs text-text-muted">
-                          Edit the exact API bands only when you need full control.
-                        </span>
-                      </span>
-                      <span className="text-sm text-text-muted">
-                        {customPatternOpen ? "Hide" : "Show"}
-                      </span>
-                    </button>
-                    {customPatternOpen ? (
-                      <>
-                        <fieldset className="divide-y divide-border border-t border-border">
-                          <legend className="sr-only">Question paper API bands</legend>
-                          {blueprint.map((band, index) => (
-                            <div
-                              key={band.id}
-                              className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1.1fr)_150px_120px_130px_44px] lg:items-end"
-                            >
-                              <Field label={`Section ${index + 1} label`}>
-                                <Input
-                                  value={band.label}
-                                  onChange={(event) =>
-                                    updateBlueprintBand(band.id, { label: event.target.value })
-                                  }
-                                  placeholder="Theory short"
-                                  autoComplete="off"
-                                  invalid={!band.label.trim()}
-                                />
-                              </Field>
-                              <Field label="Question type">
-                                <Select
-                                  value={band.questionType}
-                                  onChange={(event) =>
-                                    updateBlueprintBand(band.id, {
-                                      questionType: event.target.value,
-                                    })
-                                  }
-                                >
-                                  <option value="theory">theory</option>
-                                  <option value="numerical">numerical</option>
-                                  <option value="diagram">diagram</option>
-                                </Select>
-                              </Field>
-                              <Field label="Count">
-                                <Input
-                                  value={String(band.count)}
-                                  onChange={(event) =>
-                                    updateBlueprintBand(band.id, {
-                                      count: positiveInteger(event.target.value, band.count),
-                                    })
-                                  }
-                                  inputMode="numeric"
-                                  pattern="[0-9]*"
-                                  autoComplete="off"
-                                />
-                              </Field>
-                              <Field label="Marks each">
-                                <Input
-                                  value={String(band.marksEach)}
-                                  onChange={(event) =>
-                                    updateBlueprintBand(band.id, {
-                                      marksEach: positiveInteger(event.target.value, band.marksEach),
-                                    })
-                                  }
-                                  inputMode="numeric"
-                                  pattern="[0-9]*"
-                                  autoComplete="off"
-                                />
-                              </Field>
-                              <button
-                                type="button"
-                                aria-label={`Remove section ${index + 1}`}
-                                disabled={blueprint.length === 1}
-                                onClick={() => removeBlueprintBand(band.id)}
-                                className="flex h-11 w-11 items-center justify-center rounded-md border border-border text-text-secondary transition hover:bg-bg-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                <Icon name="trash" />
-                              </button>
-                            </div>
-                          ))}
-                        </fieldset>
-                        <div className="flex flex-col gap-3 border-t border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                          <p className="text-xs text-text-muted">
-                            These sections become the teacher API bands.
-                          </p>
-                          <Button type="button" variant="outline" onClick={addBlueprintBand}>
-                            <Icon name="plus" />
-                            Add section
-                          </Button>
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
                 </section>
-
-                <details className="rounded-lg border border-border">
-                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong">
-                    <span>
-                      <span className="block text-sm font-semibold">Optional API settings</span>
-                      <span className="mt-0.5 block text-xs text-text-muted">
-                        Pass marks and extra instructions are sent only when filled.
-                      </span>
-                    </span>
-                    <span className="text-sm text-text-muted">Open</span>
-                  </summary>
-                  <div className="grid gap-4 border-t border-border p-4 sm:grid-cols-2">
-                    <Field
-                      label="Pass marks"
-                      hint="Optional. Sent to the API only when filled."
-                      error={!passMarksValid ? "Use a value between 0 and full marks." : undefined}
-                    >
-                      <Input
-                        value={passMarks}
-                        onChange={(event) => setPassMarks(event.target.value)}
-                        placeholder="e.g. 32"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        autoComplete="off"
-                        invalid={Boolean(passMarks.trim()) && !passMarksValid}
-                      />
-                    </Field>
-                    <div className="sm:col-span-2">
-                      <Field label="Extra API instruction" hint="Optional. Goes directly to the API.">
-                        <Textarea
-                          value={instruction}
-                          onChange={(event) => setInstruction(event.target.value)}
-                          placeholder="e.g. include one numerical and one diagram question"
-                          rows={3}
-                        />
-                      </Field>
-                    </div>
-                  </div>
-                </details>
 
                 {blueprintError ? (
                   <p className="rounded-lg border border-destructive/40 bg-note-red p-3 text-sm text-destructive">
@@ -1247,12 +1167,20 @@ export function ExamPracticeClient({
               marks={generatedMarks}
               warning={paperWarning}
               secondsLeft={secondsLeft}
+              answerMode={answerMode}
+              typedAnswers={typedAnswers}
+              onTypedAnswerChange={(questionId, value) =>
+                setTypedAnswers((current) => ({ ...current, [questionId]: value }))
+              }
               onFinish={() => {
-                setAnswerMode("upload");
                 if (secondsLeft === 0) {
                   setSubmissionWasLate(true);
                 }
-                setStage("submission");
+                if (answerMode === "type") {
+                  handleSubmitAnswer();
+                } else {
+                  setStage("submission");
+                }
               }}
               onPrintQuestions={() => window.print()}
             />
@@ -1260,18 +1188,10 @@ export function ExamPracticeClient({
 
           {stage === "submission" ? (
             <SubmissionPanel
-              questions={questions}
               answerMode={answerMode}
-              onAnswerModeChange={setAnswerMode}
               uploadedFile={uploadedFile}
               onFileChange={setUploadedFile}
               fileInputRef={fileInputRef}
-              typedAnswers={typedAnswers}
-              studentName={studentName}
-              onStudentNameChange={setStudentName}
-              onTypedAnswerChange={(questionId, value) =>
-                setTypedAnswers((current) => ({ ...current, [questionId]: value }))
-              }
               canSubmit={canSubmit}
               isLate={submissionWasLate}
               onBack={() => setStage("started")}
@@ -1410,6 +1330,9 @@ function ExamInProgress({
   marks,
   warning,
   secondsLeft,
+  answerMode,
+  typedAnswers,
+  onTypedAnswerChange,
   onFinish,
   onPrintQuestions,
 }: {
@@ -1419,6 +1342,9 @@ function ExamInProgress({
   marks: number;
   warning: string;
   secondsLeft: number;
+  answerMode: AnswerMode;
+  typedAnswers: Record<string, string>;
+  onTypedAnswerChange: (questionId: string, value: string) => void;
   onFinish: () => void;
   onPrintQuestions: () => void;
 }) {
@@ -1477,6 +1403,16 @@ function ExamInProgress({
                 {questionMetadata(question) ? (
                   <p className="mt-2 text-xs text-text-muted">{questionMetadata(question)}</p>
                 ) : null}
+                {answerMode === "type" ? (
+                  <div className="mt-4">
+                    <Textarea
+                      value={typedAnswers[question.id] ?? ""}
+                      onChange={(event) => onTypedAnswerChange(question.id, event.target.value)}
+                      rows={5}
+                      placeholder="Type your answer here..."
+                    />
+                  </div>
+                ) : null}
               </div>
               <span className="text-right text-sm font-medium">{question.marks} marks</span>
             </li>
@@ -1485,7 +1421,7 @@ function ExamInProgress({
       </div>
       <div className="flex justify-end border-t border-border pt-5">
         <Button type="button" size="lg" onClick={onFinish}>
-          Finish and submit
+          Finish writing
           <Icon name="arrow" />
         </Button>
       </div>
@@ -1494,31 +1430,19 @@ function ExamInProgress({
 }
 
 function SubmissionPanel({
-  questions,
   answerMode,
-  onAnswerModeChange,
   uploadedFile,
   onFileChange,
   fileInputRef,
-  typedAnswers,
-  studentName,
-  onStudentNameChange,
-  onTypedAnswerChange,
   canSubmit,
   isLate,
   onBack,
   onSubmit,
 }: {
-  questions: GeneratedQuestion[];
   answerMode: AnswerMode;
-  onAnswerModeChange: (mode: AnswerMode) => void;
   uploadedFile: File | null;
   onFileChange: (file: File | null) => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
-  typedAnswers: Record<string, string>;
-  studentName: string;
-  onStudentNameChange: (value: string) => void;
-  onTypedAnswerChange: (questionId: string, value: string) => void;
   canSubmit: boolean;
   isLate: boolean;
   onBack: () => void;
@@ -1529,19 +1453,10 @@ function SubmissionPanel({
       <div className="border-b border-border pb-4">
         <h2 className="text-lg font-semibold">Submit your answers</h2>
         <p className="mt-1 text-sm text-text-secondary">
-          Upload a scanned answer sheet or type answers directly.
+          {answerMode === "upload"
+            ? "Upload a scanned answer sheet."
+            : "Review your typed answers and submit."}
         </p>
-      </div>
-
-      <div className="mt-5">
-        <Field label="Student name / roll number" hint="Optional. Used only for this exam result.">
-          <Input
-            value={studentName}
-            onChange={(event) => onStudentNameChange(event.target.value)}
-            placeholder="e.g. Aryog 01"
-            autoComplete="name"
-          />
-        </Field>
       </div>
 
       {isLate ? (
@@ -1552,31 +1467,6 @@ function SubmissionPanel({
           </p>
         </div>
       ) : null}
-
-      <div className="mt-5 grid grid-cols-2 rounded-lg border border-border bg-bg-secondary p-1">
-        <button
-          type="button"
-          onClick={() => onAnswerModeChange("upload")}
-          className={cn(
-            "inline-flex min-h-11 items-center justify-center gap-2 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
-            answerMode === "upload" ? "bg-bg-primary shadow-sm" : "text-text-secondary",
-          )}
-        >
-          <Icon name="upload" />
-          Upload answer sheet
-        </button>
-        <button
-          type="button"
-          onClick={() => onAnswerModeChange("type")}
-          className={cn(
-            "inline-flex min-h-11 items-center justify-center gap-2 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
-            answerMode === "type" ? "bg-bg-primary shadow-sm" : "text-text-secondary",
-          )}
-        >
-          <Icon name="edit" />
-          Type answers
-        </button>
-      </div>
 
       {answerMode === "upload" ? (
         <div className="mt-5">
@@ -1606,20 +1496,9 @@ function SubmissionPanel({
           </label>
         </div>
       ) : (
-        <div className="mt-5 space-y-4">
-          {questions.map((question) => (
-            <Field
-              key={question.id}
-              label={`Question ${question.number} · ${question.marks} marks`}
-            >
-              <Textarea
-                value={typedAnswers[question.id] ?? ""}
-                onChange={(event) => onTypedAnswerChange(question.id, event.target.value)}
-                rows={5}
-                placeholder={question.prompt}
-              />
-            </Field>
-          ))}
+        <div className="mt-5 rounded-lg border border-border bg-bg-secondary p-5 text-center">
+          <p className="text-sm font-medium">Your typed answers are saved.</p>
+          <p className="mt-1 text-xs text-text-muted">If you are ready, click Submit below.</p>
         </div>
       )}
 
@@ -1727,7 +1606,11 @@ function ResultPanel({
                     {formatMark(row?.obtained ?? 0)}/{formatMark(question.marks)}
                   </span>
                 </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <FeedbackBlock
+                    label="Your Answer"
+                    text={row?.studentAnswer ?? "No answer provided."}
+                  />
                   <FeedbackBlock
                     label="Assessment"
                     text={row?.feedback ?? "No feedback returned by the API."}

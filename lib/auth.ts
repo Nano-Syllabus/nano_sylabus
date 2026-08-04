@@ -91,6 +91,6 @@ export async function requireOnboardedUser() {
 
 export async function requireAdminUser() {
   const auth = await requireAuthenticatedUser();
-  if (auth.user.role !== "admin") redirect(auth.user.onboarded ? "/app/chat" : "/onboarding");
+  if (auth.user.role !== "admin") redirect(auth.user.onboarded ? "/app/today" : "/onboarding");
   return auth;
 }
