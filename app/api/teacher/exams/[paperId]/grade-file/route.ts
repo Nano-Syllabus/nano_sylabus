@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   gradeTeacherPracticePaperFile,
   TeacherApiError,
@@ -38,6 +39,17 @@ export async function POST(
       return NextResponse.json({ error: "Student name or instruction is too long." }, { status: 400 });
     }
 
+    const admin = createSupabaseAdminClient();
+    const { data: paper, error: paperError } = await admin
+      .from("teacher_exam_papers")
+      .select("id")
+      .eq("teacher_id", teacher.id)
+      .eq("external_paper_id", paperId)
+      .is("archived_at", null)
+      .maybeSingle();
+    if (paperError) throw paperError;
+    if (!paper) return NextResponse.json({ error: "Paper not found." }, { status: 404 });
+
     const grade = await gradeTeacherPracticePaperFile(teacher.collection_sk, paperId, {
       studentName,
       instruction,
@@ -47,6 +59,16 @@ export async function POST(
         buffer: Buffer.from(await file.arrayBuffer()),
       },
     });
+    const { error: saveError } = await admin.from("teacher_exam_submissions").insert({
+      teacher_id: teacher.id,
+      paper_id: paper.id,
+      external_submission_id:
+        typeof grade.submission_id === "string" ? grade.submission_id : null,
+      student_name: studentName || "Student",
+      source: "upload",
+      grade,
+    });
+    if (saveError) throw saveError;
     return NextResponse.json({ grade });
   } catch (error) {
     const apiError = error instanceof TeacherApiError ? error : null;

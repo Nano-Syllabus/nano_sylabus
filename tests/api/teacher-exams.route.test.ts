@@ -24,6 +24,7 @@ describe("GET /api/teacher/exams", () => {
     const chain = {
       select: vi.fn(),
       eq: vi.fn(),
+      is: vi.fn(),
       order: vi.fn(),
       limit: vi.fn(async () => ({
         data: [
@@ -34,7 +35,9 @@ describe("GET /api/teacher/exams", () => {
               title: "Physics test",
               questions: [],
             },
+            id: "paper-row-1",
             created_at: "2026-08-05T00:00:00.000Z",
+            updated_at: "2026-08-05T00:00:00.000Z",
           },
         ],
         error: null,
@@ -42,6 +45,7 @@ describe("GET /api/teacher/exams", () => {
     };
     chain.select.mockReturnValue(chain);
     chain.eq.mockReturnValue(chain);
+    chain.is.mockReturnValue(chain);
     chain.order.mockReturnValue(chain);
     mocks.createSupabaseAdminClient.mockReturnValue({ from: vi.fn(() => chain) });
   });

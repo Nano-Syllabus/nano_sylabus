@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   EXAM_TOPIC_LEVELS,
-  PUBLISHED_EXAM,
   STUDENT_EXAMS,
   findStudentExam,
   type StudentExam,
@@ -19,6 +18,23 @@ type ResultLine = { question: StudentExamQuestion; got: number; note: string; an
 type Result = { exam: StudentExam; score: number; outOf: number; lines: ResultLine[] };
 type PracticeLength = 5 | 10;
 type PracticeStyle = "mixed" | "past";
+type TeacherAssignment = {
+  id: string;
+  externalPaperId: string;
+  classroomName: string;
+  subjectName: string;
+  opensAt?: string | null;
+  closesAt?: string | null;
+  submitted?: boolean;
+  grade?: { total_score?: number; total_marks?: number } | null;
+  paper: {
+    id: string;
+    title: string;
+    subject: string;
+    totalMarks: number;
+    questions: Array<{ id: string; chapter?: string; questionType?: string; marks: number; text: string }>;
+  };
+};
 
 const shellButton = "inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2";
 const primaryButton = `${shellButton} bg-text-primary text-text-inverse hover:opacity-85`;
@@ -67,6 +83,32 @@ function weakestTopics(subject: NanoStudentSubject) {
     .sort((left, right) => knowledgeRank[left.level] - knowledgeRank[right.level])
     .slice(0, 3)
     .map((topic) => topic.name);
+}
+
+function assignmentExam(assignment: TeacherAssignment): StudentExam {
+  const now = Date.now();
+  const opens = assignment.opensAt ? new Date(assignment.opensAt).getTime() : null;
+  const closes = assignment.closesAt ? new Date(assignment.closesAt).getTime() : null;
+  const windowState = opens && opens > now ? "before" : closes && closes < now ? "done" : "open";
+  return {
+    id: `teacher_${assignment.id}`,
+    subject: assignment.subjectName || assignment.paper.subject,
+    title: assignment.paper.title,
+    kind: "exam",
+    counts: true,
+    marks: assignment.paper.totalMarks,
+    minutes: Math.max(15, Math.min(180, Math.round(assignment.paper.totalMarks * 2))),
+    attempts: 1,
+    window: windowState,
+    windowLabel: windowState === "open" ? assignment.classroomName : windowState === "before" ? "Not open yet" : "Closed",
+    questions: assignment.paper.questions.map((question) => ({
+      id: question.id,
+      type: question.questionType === "numerical" ? "long" : "short",
+      marks: question.marks,
+      topic: question.chapter || assignment.subjectName,
+      prompt: question.text,
+    })),
+  };
 }
 
 function PracticeDialog({
@@ -187,7 +229,7 @@ export function StudentExamsClient() {
   const searchParams = useSearchParams();
   const examId = searchParams.get("exam");
   const mode = searchParams.get("mode");
-  const selectedExam = findStudentExam(examId);
+  const staticSelectedExam = findStudentExam(examId);
   const [listTab, setListTab] = useState<"todo" | "done">("todo");
   const [dialog, setDialog] = useState<"join" | "practice" | "writing" | "submit" | null>(null);
   const [joinCode, setJoinCode] = useState("");
@@ -202,7 +244,32 @@ export function StudentExamsClient() {
   const [practiceTopics, setPracticeTopics] = useState<string[]>(() => weakestTopics(NANO_STUDENT_SUBJECTS[0]));
   const [practiceLength, setPracticeLength] = useState<PracticeLength>(5);
   const [practiceStyle, setPracticeStyle] = useState<PracticeStyle>("mixed");
+  const [teacherAssignments, setTeacherAssignments] = useState<TeacherAssignment[]>([]);
+  const [assignmentState, setAssignmentState] = useState<"loading" | "ready" | "error">("loading");
+  const [assignmentError, setAssignmentError] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [isGrading, setIsGrading] = useState(false);
+  const [gradingError, setGradingError] = useState("");
   const joinInput = useRef<HTMLInputElement>(null);
+  const teacherExams = useMemo(() => teacherAssignments.map(assignmentExam), [teacherAssignments]);
+  const selectedExam = teacherExams.find((exam) => exam.id === examId) || staticSelectedExam;
+
+  async function loadTeacherAssignments() {
+    setAssignmentState("loading");
+    try {
+      const response = await fetch("/api/student/teacher-exams", { headers: { Accept: "application/json" } });
+      const payload = await response.json() as { assignments?: TeacherAssignment[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Could not load teacher exams.");
+      setTeacherAssignments(Array.isArray(payload.assignments) ? payload.assignments : []);
+      setAssignmentError("");
+      setAssignmentState("ready");
+    } catch (error) {
+      setAssignmentError(error instanceof Error ? error.message : "Could not load teacher exams.");
+      setAssignmentState("error");
+    }
+  }
+
+  useEffect(() => { void loadTeacherAssignments(); }, []);
 
   useEffect(() => {
     if (dialog === "join") joinInput.current?.focus();
@@ -223,10 +290,8 @@ export function StudentExamsClient() {
   }, [mode, router, selectedExam]);
 
   const answeredCount = useMemo(() => Object.values(answers).filter((answer) => answer.choice !== undefined || answer.text?.trim() || answer.photoName).length, [answers]);
-  const todoExams = useMemo(
-    () => STUDENT_EXAMS.filter((exam) => exam.id === "x_mid" || exam.id === "x_mock"),
-    [],
-  );
+  const todoExams = useMemo(() => teacherExams.filter((_, index) => !teacherAssignments[index]?.submitted), [teacherAssignments, teacherExams]);
+  const doneAssignments = useMemo(() => teacherAssignments.filter((assignment) => assignment.submitted), [teacherAssignments]);
 
   useEffect(() => {
     if (!selectedExam || !mode) return;
@@ -264,8 +329,39 @@ export function StudentExamsClient() {
     router.push(`/app/exams?exam=${exam.id}&mode=sit`, { scroll: false });
   }
 
-  function markExam() {
+  async function markExam() {
     if (!attemptExam) return;
+    const assignment = attemptExam.id.startsWith("teacher_")
+      ? teacherAssignments.find((item) => `teacher_${item.id}` === attemptExam.id)
+      : null;
+    if (assignment) {
+      setIsGrading(true);
+      setGradingError("");
+      try {
+        const response = await fetch(`/api/student/teacher-exams/${encodeURIComponent(assignment.id)}/grade`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ answers: attemptExam.questions.map((question) => ({
+            questionId: question.id,
+            answerText: answers[question.id]?.text || "",
+          })) }),
+        });
+        const payload = await response.json() as { grade?: { total_score?: number; total_marks?: number; results?: Array<{ question_id: string; score: number; feedback: string }> }; error?: string };
+        if (!response.ok || !payload.grade) throw new Error(payload.error || "Could not grade this exam.");
+        const lines = attemptExam.questions.map((question) => {
+          const graded = payload.grade?.results?.find((item) => item.question_id === question.id);
+          return { question, got: graded?.score || 0, note: graded?.feedback || "No feedback returned.", answer: answers[question.id]?.text || "" };
+        });
+        setResult({ exam: attemptExam, score: payload.grade.total_score || 0, outOf: payload.grade.total_marks || attemptExam.marks, lines });
+        setDialog(null);
+        router.push(`/app/exams?exam=${attemptExam.id}&mode=result`, { scroll: false });
+      } catch (error) {
+        setGradingError(error instanceof Error ? error.message : "Could not grade this exam.");
+      } finally {
+        setIsGrading(false);
+      }
+      return;
+    }
     const lines = attemptExam.questions.map((question) => {
       const answer = answers[question.id];
       let got = 0;
@@ -373,9 +469,10 @@ export function StudentExamsClient() {
         onSubmit={() => setDialog("submit")}
       >
         {dialog === "submit" ? (
-          <Dialog title="Hand it in" onClose={() => setDialog(null)} footer={<><button type="button" className={secondaryButton} onClick={() => setDialog(null)}>Keep working</button><button type="button" className={primaryButton} onClick={markExam}>Hand it in</button></>}>
+          <Dialog title="Hand it in" onClose={() => setDialog(null)} footer={<><button type="button" className={secondaryButton} onClick={() => setDialog(null)} disabled={isGrading}>Keep working</button><button type="button" className={primaryButton} onClick={() => void markExam()} disabled={isGrading}>{isGrading ? "Grading…" : "Hand it in"}</button></>}>
             <p>{attemptExam.questions.length - answeredCount ? <><b>{attemptExam.questions.length - answeredCount} questions are still blank.</b> Blank answers get no marks.</> : "Every question has an answer."}</p>
             <div className="mt-4 rounded-xl border border-border bg-bg-secondary p-4 text-sm">Marking usually takes under a minute. {attemptExam.counts ? "Your teacher sees the result too." : "This is practice, so it stays with you."}</div>
+            {gradingError ? <p className="mt-3 text-sm text-destructive" role="alert">{gradingError}</p> : null}
           </Dialog>
         ) : null}
       </AttemptView>
@@ -384,13 +481,29 @@ export function StudentExamsClient() {
 
   if (selectedExam) return <ExamOverview exam={selectedExam} onStart={startExam} />;
 
-  function submitJoin(event: FormEvent<HTMLFormElement>) {
+  async function submitJoin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!joinCode.trim()) {
       setJoinError("Type the code you were given.");
       return;
     }
-    setJoinError("Nothing has that code. Check it and try again.");
+    setIsJoining(true);
+    try {
+      const response = await fetch("/api/student/teacher-classrooms/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ code: joinCode.trim() }),
+      });
+      const payload = await response.json() as { classroom?: { name: string }; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Could not join the classroom.");
+      setDialog(null);
+      setJoinCode("");
+      await loadTeacherAssignments();
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message : "Could not join the classroom.");
+    } finally {
+      setIsJoining(false);
+    }
   }
 
   return (
@@ -406,35 +519,31 @@ export function StudentExamsClient() {
       </div>
 
       <div role="tablist" aria-label="Exam lists" className="mt-6 inline-flex rounded-xl border border-border p-1">
-        {([['todo', 'To do', 2], ['done', 'Done', 2]] as const).map(([value, label, count]) => (
+        {([['todo', 'To do', todoExams.length], ['done', 'Done', doneAssignments.length]] as const).map(([value, label, count]) => (
           <button key={value} type="button" role="tab" aria-selected={listTab === value} className={cn("min-h-10 rounded-lg px-5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong", listTab === value ? "bg-text-primary text-text-inverse" : "text-text-secondary hover:bg-bg-secondary")} onClick={() => setListTab(value)}>{label} <span className="ml-1 opacity-70">{count}</span></button>
         ))}
       </div>
 
       {listTab === "todo" ? (
         <div className="mt-4 flex flex-wrap gap-3">
+          {assignmentState === "loading" ? Array.from({ length: 2 }).map((_, index) => <div key={index} className="h-44 w-full animate-pulse rounded-[14px] bg-bg-secondary motion-reduce:animate-none sm:max-w-[395px]" />) : null}
+          {assignmentState === "error" ? <section className="w-full rounded-[14px] border border-destructive/40 p-5"><h2 className="font-semibold text-destructive">Could not load teacher exams</h2><p className="mt-2 text-sm text-text-secondary">{assignmentError}</p><button type="button" className={`${secondaryButton} mt-4`} onClick={() => void loadTeacherAssignments()}>Try again</button></section> : null}
+          {assignmentState === "ready" && todoExams.length === 0 ? <section className="w-full rounded-[14px] border border-border p-8 text-center"><h2 className="font-display text-lg font-semibold">No teacher exams yet</h2><p className="mt-2 text-sm text-text-secondary">Join a classroom with its code. Published exams will appear here.</p><button type="button" className={`${primaryButton} mt-4`} onClick={() => setDialog("join")}>Join with a code</button></section> : null}
           {todoExams.map((exam) => <ExamListCard key={exam.id} exam={exam} onOpen={() => showExam(exam)} onStart={() => startExam(exam)} />)}
         </div>
       ) : (
-        <>
-          <section className="mt-4 rounded-[14px] border border-border p-5">
-            <h2 className="font-display text-lg font-semibold">2 results are not published yet.</h2>
-            <p className="mt-2 text-sm text-text-muted">Your teacher checks the papers first. You will see the marks the moment they publish.</p>
-          </section>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <UnpublishedExamCard title="Quick quiz: induction" marks="10 marks · 20 minutes" />
-            <UnpublishedExamCard title={PUBLISHED_EXAM.title} marks={`${PUBLISHED_EXAM.marks} marks`} />
-          </div>
-        </>
+        <div className="mt-4 flex flex-wrap gap-3">
+          {doneAssignments.length ? doneAssignments.map((assignment) => <article key={assignment.id} className="w-full rounded-[14px] border border-border p-5 sm:max-w-[395px]"><div className="flex items-center gap-2"><Chip>{assignment.subjectName}</Chip><span className="flex-1" /><Chip strong>submitted</Chip></div><h2 className="mt-3 font-display text-lg font-semibold">{assignment.paper.title}</h2><p className="mt-2 text-sm text-text-secondary">{assignment.classroomName}</p><p className="mt-5 font-display text-3xl font-semibold">{assignment.grade?.total_score ?? 0}<small className="ml-1 text-sm text-text-muted">of {assignment.grade?.total_marks ?? assignment.paper.totalMarks}</small></p></article>) : <section className="w-full rounded-[14px] border border-border p-8 text-center"><h2 className="font-display text-lg font-semibold">No completed teacher exams</h2><p className="mt-2 text-sm text-text-secondary">Your submitted classroom exams will appear here.</p></section>}
+        </div>
       )}
 
       {dialog === "join" ? (
-        <Dialog title="Join with a code" onClose={() => setDialog(null)} footer={<><button type="button" className={secondaryButton} onClick={() => setDialog("practice")}>Browse courses</button><button type="submit" form="join-exam-form" className={primaryButton}>Go</button></>}>
+        <Dialog title="Join with a code" onClose={() => setDialog(null)} footer={<><button type="button" className={secondaryButton} onClick={() => setDialog(null)}>Cancel</button><button type="submit" form="join-exam-form" className={primaryButton} disabled={isJoining}>{isJoining ? "Joining…" : "Join classroom"}</button></>}>
           <form id="join-exam-form" onSubmit={submitJoin}>
             <label htmlFor="exam-code" className="text-sm font-medium">Type the code you were given</label>
             <input ref={joinInput} id="exam-code" type="text" autoComplete="one-time-code" spellCheck={false} value={joinCode} onChange={(event) => { setJoinCode(event.target.value.toUpperCase()); setJoinError(""); }} placeholder="BEI-4K2M" aria-invalid={joinError ? "true" : undefined} aria-describedby={joinError ? "exam-code-error" : undefined} className="mt-2 h-12 w-full rounded-lg border border-border bg-bg-primary px-3 font-mono text-lg uppercase tracking-widest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong" />
             {joinError ? <p id="exam-code-error" className="mt-2 text-sm text-destructive">{joinError}</p> : null}
-            <div className="mt-4 rounded-xl border border-border bg-bg-secondary p-4 text-sm">Your class code brings in every subject at once. A single subject or a single exam may have its own code.</div>
+            <div className="mt-4 rounded-xl border border-border bg-bg-secondary p-4 text-sm">Your teacher shares one code for this classroom. Published exams appear here after you join.</div>
           </form>
         </Dialog>
       ) : null}
@@ -477,24 +586,6 @@ function ExamListCard({ exam, onOpen, onStart }: { exam: StudentExam; onOpen: ()
         <Chip>{exam.windowLabel}</Chip>
         <span className="flex-1" />
         <button type="button" className={secondaryButton} onClick={onOpen}>What it covers</button>
-      </div>
-    </article>
-  );
-}
-
-function UnpublishedExamCard({ title, marks }: { title: string; marks: string }) {
-  return (
-    <article className="w-full rounded-[14px] border border-border px-4 py-4 sm:max-w-[395px] sm:basis-[395px] sm:flex-none">
-      <div className="flex items-center justify-between gap-2">
-        <Chip>Engineering Physics I</Chip>
-        <Chip strong>counts</Chip>
-      </div>
-      <h2 className="mt-3 font-display text-lg font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-text-muted">{marks}</p>
-      <div className="mt-5">
-        <span className="inline-flex min-h-9 items-center rounded-full bg-text-primary px-3 text-[13px] text-text-inverse">
-          result not published yet
-        </span>
       </div>
     </article>
   );

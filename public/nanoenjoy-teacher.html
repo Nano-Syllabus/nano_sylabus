@@ -725,7 +725,8 @@ function classesOfTeacher(teacherId) { return DB.classes.filter(k => k.teachers.
 const S = { me:DB.people[0], portal:"student", term:"t26", page:{}, q:{}, filt:{},
             map:{ class:null, source:"tests", pick:null }, runner:null,
             teacherBackend:{ state:"loading", error:"", collection:null, subjects:[], documents:[], tree:null },
-            teacherPapers:{}, teacherPaperError:"" };
+            teacherPapers:{}, teacherPaperError:"", teacherClassrooms:[], teacherClassroomError:"",
+            teacherSyllabi:{}, teacherSubmissions:{} };
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
@@ -774,6 +775,7 @@ function normalizeTeacherWorkspace(payload) {
     ? payload.documents
     : Array.isArray(payload && payload.documents && payload.documents.documents)
       ? payload.documents.documents : [];
+  const previewPaths = new Set(Array.isArray(payload && payload.previewPaths) ? payload.previewPaths : []);
   const documents = rawDocuments.map(document => {
     const path = String(document.path || document.source_path || document.source_file || "");
     const status = String(document.status || "").toLowerCase();
@@ -784,10 +786,22 @@ function normalizeTeacherWorkspace(payload) {
       kind:liveDocumentKind(path), size:fileSizeLabel(document.size || document.size_bytes),
       state:document.indexed || ["completed", "indexed", "ready"].includes(status) ? "ready"
         : ["failed", "error"].includes(status) ? "unreadable" : "preparing",
-      found:Number(document.chunk_count || document.chunks_indexed) || 0, live:true
+      found:Number(document.chunk_count || document.chunks_indexed) || 0, live:true,
+      previewAvailable:previewPaths.has(path)
     };
   });
   return { subjects, documents };
+}
+async function loadTeacherClassrooms() {
+  try {
+    const response = await fetch("/api/teacher/classrooms", { headers:{ Accept:"application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not load classrooms.");
+    S.teacherClassrooms = Array.isArray(payload.classrooms) ? payload.classrooms : [];
+    S.teacherClassroomError = "";
+  } catch (error) {
+    S.teacherClassroomError = error instanceof Error ? error.message : "Could not load classrooms.";
+  }
 }
 async function loadTeacherPapers() {
   try {
@@ -819,7 +833,7 @@ async function loadTeacherWorkspace() {
       S.me.name = String(payload.teacher.handle || S.me.name);
       S.me.email = String(payload.teacher.email || "");
     }
-    await loadTeacherPapers();
+    await Promise.all([loadTeacherPapers(), loadTeacherClassrooms()]);
   } catch (error) {
     S.teacherBackend = { state:"error",
       error:error instanceof Error ? error.message : "Could not load the teacher workspace.",
@@ -936,6 +950,9 @@ function openCollectionSettings() {
       <div class="small muted">Queues every supported file that is pending or needs indexing.</div>
       <button class="btn ghost" id="collection_index_all" style="margin-top:10px" onclick="indexAllLiveDocuments()">Index all documents</button></div>
     <hr class="rule">
+    <div><b>Collection folders</b><div class="small muted">Browse the real source tree for this teacher collection.</div>
+      <div class="card pad flat" style="margin-top:10px; max-height:280px; overflow:auto">${teacherSourceTreeHtml()}</div></div>
+    <hr class="rule">
     <div><b>Rotate collection API key</b>
       <div class="small muted">The current key stops working immediately. The replacement is saved securely on the server and is never shown here.</div></div>
     <label class="fld" style="margin-top:12px"><span>Type ROTATE to confirm</span>
@@ -943,6 +960,20 @@ function openCollectionSettings() {
     <button class="btn" id="collection_rotate" onclick="rotateLiveCollectionKey()">Rotate key</button>
     <div id="collection_settings_error" class="small" style="color:var(--red); min-height:20px; margin-top:12px"></div>`,
     `<button class="btn ghost" onclick="closeModal()">Close</button>`, "big");
+}
+
+function teacherSourceTreeHtml() {
+  const root = S.teacherBackend.tree || {};
+  const nodes = Array.isArray(root.tree) ? root.tree : [];
+  const draw = (node, depth) => {
+    const children = Array.isArray(node.children) ? node.children : [];
+    const label = esc(node.name || String(node.path || "").split("/").pop() || "Untitled");
+    if (children.length) return `<details ${depth < 1 ? "open" : ""} style="margin-left:${depth * 12}px; padding:4px 0">
+      <summary class="small" style="cursor:pointer"><b>${label}</b> <span class="muted">${children.length}</span></summary>
+      ${children.map(child => draw(child, depth + 1)).join("")}</details>`;
+    return `<div class="small" style="margin-left:${depth * 12}px; padding:5px 0; border-bottom:1px solid var(--rule-2)">${label}</div>`;
+  };
+  return nodes.length ? nodes.map(node => draw(node, 0)).join("") : `<div class="small muted">No folders or files yet.</div>`;
 }
 
 async function indexAllLiveDocuments() {
@@ -1102,6 +1133,90 @@ async function submitLiveGradeFile(sid, paperIndex) {
   }
 }
 
+function openLiveTypedGrade(sid, paperIndex) {
+  const paper = livePapersOf(sid)[paperIndex];
+  if (!paper || !paper.id) return;
+  openModal("Grade typed answers", `<div class="card pad flat" style="margin-bottom:14px"><b>${esc(paper.title)}</b><div class="small muted">Enter one student's answers. Blank answers receive zero.</div></div>
+    <label class="fld"><span>Student name</span><input id="typed_grade_student" type="text" maxlength="160" autocomplete="name" placeholder="Student name"></label>
+    ${(paper.questions || []).map((question, index) => `<label class="fld"><span>Question ${index + 1} · ${Number(question.marks) || 0} marks</span><div class="small muted" style="margin-bottom:6px">${esc(question.text)}</div><textarea class="typed-grade-answer" data-question="${esc(question.id)}" maxlength="20000" placeholder="Student's answer"></textarea></label>`).join("")}
+    <div id="typed_grade_error" class="small" style="color:var(--red); min-height:20px"></div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="typed_grade_submit" onclick="submitLiveTypedGrade('${sid}',${paperIndex})">Grade answers</button>`, "big");
+}
+
+async function submitLiveTypedGrade(sid, paperIndex) {
+  const paper = livePapersOf(sid)[paperIndex], button = $("#typed_grade_submit"), errorBox = $("#typed_grade_error");
+  if (!paper) return;
+  const answers = [...document.querySelectorAll(".typed-grade-answer")].map(input => ({ questionId:input.dataset.question, answerText:input.value.trim() }));
+  if (!answers.some(answer => answer.answerText)) { if (errorBox) errorBox.textContent = "Enter at least one answer."; return; }
+  if (button) { button.disabled = true; button.textContent = "Grading…"; }
+  try {
+    const response = await fetch("/api/teacher/exams/" + encodeURIComponent(paper.id) + "/grade", { method:"POST", headers:{ "Content-Type":"application/json", Accept:"application/json" }, body:JSON.stringify({ studentName:$("#typed_grade_student").value.trim(), answers }) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not grade typed answers.");
+    delete S.teacherSubmissions[paper.id];
+    openModal("Grading result", liveGradeResultHtml(payload.grade || {}), `<button class="btn" onclick="closeModal()">Done</button>`, "big");
+    toast("Typed answers graded and saved");
+  } catch (error) {
+    if (errorBox) errorBox.textContent = error instanceof Error ? error.message : "Could not grade typed answers.";
+    if (button) { button.disabled = false; button.textContent = "Grade answers"; }
+  }
+}
+
+function openEditLivePaper(sid, paperIndex) {
+  const paper = livePapersOf(sid)[paperIndex]; if (!paper) return;
+  openModal("Edit paper details", `<div class="card pad flat" style="margin-bottom:14px"><div class="small">The external Practice API keeps generated questions immutable so cached grading stays correct. You can safely edit the app title and pass mark.</div></div>
+    <label class="fld"><span>Paper title</span><input id="paper_edit_title" type="text" maxlength="160" value="${esc(paper.title)}"></label>
+    <label class="fld"><span>Pass marks</span><input id="paper_edit_pass" type="number" min="0" max="${Number(paper.totalMarks) || 0}" value="${Number(paper.passMarks) || 0}"></label>
+    <div id="paper_edit_error" class="small" style="color:var(--red); min-height:20px"></div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="paper_edit_submit" onclick="saveLivePaper('${sid}',${paperIndex})">Save changes</button>`);
+}
+async function saveLivePaper(sid, paperIndex) {
+  const paper = livePapersOf(sid)[paperIndex], button = $("#paper_edit_submit"), errorBox = $("#paper_edit_error"); if (!paper) return;
+  if (button) { button.disabled = true; button.textContent = "Saving…"; }
+  try {
+    const response = await fetch("/api/teacher/exams/" + encodeURIComponent(paper.id), { method:"PATCH", headers:{ "Content-Type":"application/json", Accept:"application/json" }, body:JSON.stringify({ title:$("#paper_edit_title").value.trim(), passMarks:Number($("#paper_edit_pass").value) }) });
+    const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || "Could not update the paper.");
+    S.teacherPapers[sid][paperIndex] = { ...paper, ...payload.paper }; closeModal(); toast("Paper details updated"); render();
+  } catch (error) { if (errorBox) errorBox.textContent = error instanceof Error ? error.message : "Could not update the paper."; if (button) { button.disabled = false; button.textContent = "Save changes"; } }
+}
+
+function confirmArchiveLivePaper(sid, paperIndex) {
+  const paper = livePapersOf(sid)[paperIndex]; if (!paper) return;
+  openModal("Remove paper from history?", `<div class="card pad flat"><b>${esc(paper.title)}</b><div class="small muted" style="margin-top:6px">This archives the paper in Padhai. Existing external share links may continue to work.</div></div><div id="paper_archive_error" class="small" style="color:var(--red); min-height:20px; margin-top:12px"></div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="paper_archive_submit" onclick="archiveLivePaper('${sid}',${paperIndex})">Archive paper</button>`);
+}
+async function archiveLivePaper(sid, paperIndex) {
+  const paper = livePapersOf(sid)[paperIndex], button = $("#paper_archive_submit"), errorBox = $("#paper_archive_error"); if (!paper) return;
+  if (button) { button.disabled = true; button.textContent = "Archiving…"; }
+  try { const response = await fetch("/api/teacher/exams/" + encodeURIComponent(paper.id), { method:"DELETE", headers:{ Accept:"application/json" } }); const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || "Could not archive the paper."); S.teacherPapers[sid].splice(paperIndex, 1); closeModal(); toast("Paper archived"); render(); }
+  catch (error) { if (errorBox) errorBox.textContent = error instanceof Error ? error.message : "Could not archive the paper."; if (button) { button.disabled = false; button.textContent = "Archive paper"; } }
+}
+
+async function openLiveSubmissions(sid, paperIndex) {
+  const paper = livePapersOf(sid)[paperIndex]; if (!paper) return;
+  openModal("Submissions", `<div class="card pad flat"><b>${esc(paper.title)}</b><div class="small muted" style="margin-top:6px">Loading saved submissions…</div></div>`, `<button class="btn ghost" onclick="closeModal()">Close</button>`, "big");
+  try { const response = await fetch("/api/teacher/exams/" + encodeURIComponent(paper.id) + "/submissions", { headers:{ Accept:"application/json" } }); const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || "Could not load submissions."); const submissions = Array.isArray(payload.submissions) ? payload.submissions : []; S.teacherSubmissions[paper.id] = submissions;
+    openModal("Submissions", submissions.length ? submissions.map(item => `<div class="card pad flat" style="margin-bottom:10px"><div class="row"><div><b>${esc(item.studentName)}</b><div class="small muted">${esc(item.source)} · ${fmtFull(item.createdAt)}</div></div><span class="spacer"></span><div class="score">${Number(item.grade && item.grade.total_score) || 0}<small>of ${Number(item.grade && item.grade.total_marks) || 0}</small></div></div>${(item.grade && item.grade.results || []).map((result, i) => `<details style="margin-top:8px"><summary class="small">Question ${i + 1} · ${Number(result.score) || 0}/${Number(result.marks) || 0}</summary><div class="small" style="margin-top:6px">${esc(result.feedback || "")}</div></details>`).join("")}</div>`).join("") : `<div class="empty"><b>No submissions yet</b>Grade typed answers, upload an answer sheet, or publish this paper to a classroom.</div>`, `<button class="btn" onclick="closeModal()">Done</button>`, "big");
+  } catch (error) { openModal("Submissions", `<div class="empty"><b>Could not load submissions</b>${esc(error instanceof Error ? error.message : "Try again.")}</div>`, `<button class="btn" onclick="openLiveSubmissions('${sid}',${paperIndex})">Try again</button>`, "big"); }
+}
+
+function openPublishLivePaper(sid, paperIndex) {
+  const paper = livePapersOf(sid)[paperIndex]; if (!paper) return;
+  const rooms = S.teacherClassrooms.filter(room => room.subjectSlug === paper.subjectSlug);
+  openModal("Publish to classroom", rooms.length ? `<div class="card pad flat" style="margin-bottom:14px"><b>${esc(paper.title)}</b><div class="small muted">Students who joined the classroom will see this paper in their Exams page.</div></div>
+    <label class="fld"><span>Classroom</span><select id="paper_publish_classroom">${rooms.map(room => `<option value="${esc(room.id)}">${esc(room.name)} · ${Number(room.memberCount) || 0} students</option>`).join("")}</select></label>
+    <div class="grid g2"><label class="fld"><span>Opens (optional)</span><input id="paper_publish_open" type="datetime-local"></label><label class="fld"><span>Closes (optional)</span><input id="paper_publish_close" type="datetime-local"></label></div>
+    <div id="paper_publish_error" class="small" style="color:var(--red); min-height:20px"></div>` : `<div class="empty"><b>No classroom for this subject</b>Create one first, then publish this paper to its students.<div style="margin-top:14px"><button class="btn" onclick="closeModal(); openCreateLiveClassroom('${paper.subjectSlug}')">Create classroom</button></div></div>`,
+    rooms.length ? `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="paper_publish_submit" onclick="publishLivePaper('${sid}',${paperIndex})">Publish exam</button>` : `<button class="btn ghost" onclick="closeModal()">Close</button>`, "big");
+}
+async function publishLivePaper(sid, paperIndex) {
+  const paper = livePapersOf(sid)[paperIndex], button = $("#paper_publish_submit"), errorBox = $("#paper_publish_error"); if (!paper) return;
+  const dateValue = id => { const value = $(id).value; return value ? new Date(value).toISOString() : null; };
+  if (button) { button.disabled = true; button.textContent = "Publishing…"; }
+  try { const response = await fetch("/api/teacher/exams/" + encodeURIComponent(paper.id) + "/publish", { method:"POST", headers:{ "Content-Type":"application/json", Accept:"application/json" }, body:JSON.stringify({ classroomId:$("#paper_publish_classroom").value, opensAt:dateValue("#paper_publish_open"), closesAt:dateValue("#paper_publish_close") }) }); const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || "Could not publish the exam."); closeModal(); toast("Exam published to the classroom"); }
+  catch (error) { if (errorBox) errorBox.textContent = error instanceof Error ? error.message : "Could not publish the exam."; if (button) { button.disabled = false; button.textContent = "Publish exam"; } }
+}
+
 function liveExamGeneratorPane(sid) {
   const papers = livePapersOf(sid);
   return `<div class="row" style="margin-bottom:14px"><button class="btn" onclick="openLiveExamGenerator('${sid}')">Generate exam</button>
@@ -1109,7 +1224,7 @@ function liveExamGeneratorPane(sid) {
     ${S.teacherPaperError ? `<div class="card pad flat" style="margin-bottom:14px"><b>Paper history needs setup</b><div class="small muted" style="margin-top:5px">${esc(S.teacherPaperError)}</div></div>` : ""}
     ${papers.length ? papers.map((paper, paperIndex) => `<div class="card pad" style="margin-bottom:16px">
       <div class="row"><div><h2>${esc(paper.title)}</h2><div class="small muted">${esc(paper.subject)} · ${Number(paper.totalMarks) || 0} marks · pass ${Number(paper.passMarks) || 0}</div></div>
-        <span class="spacer"></span><button class="btn sm" onclick="openLiveGradeFile('${sid}',${paperIndex})">Grade answer sheet</button>
+        <span class="spacer"></span><button class="btn sm" onclick="openPublishLivePaper('${sid}',${paperIndex})">Publish</button>
         ${paper.shareUrl ? `<a class="btn ghost sm" href="${esc(paper.shareUrl)}" target="_blank" rel="noopener">Open shareable paper</a>` : ""}</div>
       ${paper.warning ? `<div class="card pad flat" style="margin-top:12px"><div class="small">${esc(paper.warning)}</div></div>` : ""}
       <div style="margin-top:14px">${(paper.questions || []).map((question, index) => `<div class="card pad flat" style="margin-bottom:10px">
@@ -1117,7 +1232,12 @@ function liveExamGeneratorPane(sid) {
         <div style="margin-top:9px; white-space:pre-wrap">${esc(question.text)}</div>
         ${question.referenceAnswer ? `<details style="margin-top:10px"><summary class="small">Full-marks reference answer · teacher only</summary>
           <div class="small" style="white-space:pre-wrap; margin-top:8px">${esc(question.referenceAnswer)}</div></details>` : ""}</div>`).join("")}</div>
-      <div class="small muted">Paper ID · ${esc(paper.id)}</div></div>`).join("")
+      <div class="row"><div class="small muted">Paper ID · ${esc(paper.id)}</div><span class="spacer"></span>
+        <button class="btn quiet sm" onclick="openLiveSubmissions('${sid}',${paperIndex})">Submissions</button>
+        <button class="btn quiet sm" onclick="openLiveTypedGrade('${sid}',${paperIndex})">Grade typed</button>
+        <button class="btn quiet sm" onclick="openLiveGradeFile('${sid}',${paperIndex})">Grade file</button>
+        <button class="btn quiet sm" onclick="openEditLivePaper('${sid}',${paperIndex})">Edit</button>
+        <button class="btn quiet sm" onclick="confirmArchiveLivePaper('${sid}',${paperIndex})">Archive</button></div></div>`).join("")
       : `<div class="empty"><b>No generated paper yet</b>Create one from this subject's real indexed material.
           <div style="margin-top:14px"><button class="btn" onclick="openLiveExamGenerator('${sid}')">Generate exam</button></div></div>`}`;
 }
@@ -1191,8 +1311,31 @@ function liveDocumentActions(document) {
   const token = encodeURIComponent(String(document.id)).replace(/'/g, "%27");
   const label = document.state === "unreadable" ? "Retry" : "Re-index";
   return `<span class="spacer"></span>
+    <button class="btn quiet sm" onclick="openLiveDocument('${token}')">${document.previewAvailable ? "Preview" : "Details"}</button>
     <button class="btn quiet sm" onclick="reindexLiveDocument('${token}')" ${document.state === "preparing" ? "disabled" : ""}>${label}</button>
     <button class="btn quiet sm" onclick="confirmDeleteLiveDocument('${token}')">Delete</button>`;
+}
+
+async function openLiveDocument(token) {
+  const document = liveDocumentByToken(token);
+  if (!document) return;
+  openModal("Document", `<div class="card pad flat"><b>${esc(document.name)}</b><div class="small muted" style="margin-top:6px">Loading secure document details…</div></div>`, `<button class="btn ghost" onclick="closeModal()">Close</button>`, "big");
+  try {
+    const response = await fetch("/api/teacher/documents/" + token, { headers:{ Accept:"application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not load the document.");
+    const detail = payload.document || {}, file = payload.file;
+    const preview = file && file.previewUrl
+      ? String(file.mimeType || "").startsWith("image/")
+        ? `<img src="${esc(file.previewUrl)}" alt="Preview of ${esc(document.name)}" style="width:100%; max-height:58vh; object-fit:contain; border:1px solid var(--rule); border-radius:10px">`
+        : `<iframe title="Preview of ${esc(document.name)}" src="${esc(file.previewUrl)}" style="width:100%; height:58vh; border:1px solid var(--rule); border-radius:10px"></iframe>`
+      : `<div class="empty"><b>Preview unavailable for this older upload</b>New uploads are mirrored privately for secure preview and download.</div>`;
+    openModal("Document", `<div class="card pad flat" style="margin-bottom:14px"><b>${esc(document.name)}</b>
+      <div class="small muted" style="margin-top:6px">${Number(detail.word_count) || 0} words · ${Number(detail.chunk_count) || 0} chunks · ${esc(detail.status || document.state)}</div></div>${preview}`,
+      `${file && file.previewUrl ? `<a class="btn ghost" href="${esc(file.previewUrl)}" target="_blank" rel="noopener">Open or download</a>` : ""}<button class="btn" onclick="closeModal()">Done</button>`, "big");
+  } catch (error) {
+    openModal("Document", `<div class="empty"><b>Could not load the document</b>${esc(error instanceof Error ? error.message : "Try again.")}</div>`, `<button class="btn" onclick="openLiveDocument('${token}')">Try again</button>`, "big");
+  }
 }
 
 async function reindexLiveDocument(token) {
@@ -1735,6 +1878,7 @@ function pageToday() {
    --------------------------------------------------------------- */
 function pageClasses() {
   if (S.me.role === "student") return studentSubjects();
+  if (S.teacherBackend.state === "ready") return pageLiveClassrooms();
   const all = classesOfTeacher(S.me.id);
   const terms = [["now", "This term", all.filter(k => k.term === "t26").length],
                  ["past", "Earlier", all.filter(k => k.term !== "t26").length]];
@@ -1753,6 +1897,28 @@ function pageClasses() {
     ${mine.length ? `<div class="tiles">${mine.map(classTile).join("")}</div>`
       : `<div class="empty"><b>No classrooms ${which === "now" ? "this term" : "earlier"}</b>Run one of your subjects for a batch of students.</div>`}`;
   return { html, crumbs:"<b>Classrooms</b>" };
+}
+
+function pageLiveClassrooms() {
+  const rooms = S.teacherClassrooms;
+  return { crumbs:"<b>Classrooms</b>", html:`<div class="pagehead"><div><h1>Classrooms</h1><p>Real classrooms connected to your subjects and published exams.</p></div><span class="spacer"></span><button class="btn" onclick="openCreateLiveClassroom('')">Create classroom</button></div>
+    ${S.teacherClassroomError ? `<div class="empty"><b>Could not load classrooms</b>${esc(S.teacherClassroomError)}<div style="margin-top:12px"><button class="btn" onclick="loadTeacherClassrooms().then(render)">Try again</button></div></div>` : rooms.length ? `<div class="tiles">${rooms.map(room => `<div class="tile"><div class="row"><span class="chip">${esc(room.subjectName)}</span><span class="spacer"></span><span class="small muted">${Number(room.memberCount) || 0} students</span></div><h3>${esc(room.name)}</h3><div class="sub">Students join with this code.</div><div class="foot"><span class="chip solid mono">${esc(room.joinCode)}</span><button class="btn ghost sm" onclick="navigator.clipboard.writeText('${esc(room.joinCode)}').then(()=>toast('Classroom code copied'))">Copy code</button></div></div>`).join("")}</div>` : `<div class="empty"><b>No real classrooms yet</b>Create one for a subject, share its code, then publish an exam to enrolled students.<div style="margin-top:14px"><button class="btn" onclick="openCreateLiveClassroom('')">Create classroom</button></div></div>`}` };
+}
+
+function openCreateLiveClassroom(subjectSlug) {
+  const subjects = S.teacherBackend.subjects;
+  openModal("Create classroom", subjects.length ? `<label class="fld"><span>Subject</span><select id="live_classroom_subject">${subjects.map(subject => `<option value="${esc(subject.apiSlug)}" ${subject.apiSlug === subjectSlug ? "selected" : ""}>${esc(subject.title)}</option>`).join("")}</select></label>
+    <label class="fld"><span>Classroom name</span><input id="live_classroom_name" type="text" maxlength="120" autocomplete="off" placeholder="BEI 081 · Section A"></label>
+    <div id="live_classroom_error" class="small" style="color:var(--red); min-height:20px"></div>` : `<div class="empty"><b>Create a subject first</b>A classroom must belong to one real teacher subject.</div>`,
+    subjects.length ? `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="live_classroom_submit" onclick="submitLiveClassroom()">Create classroom</button>` : `<button class="btn" onclick="closeModal(); location.hash='#/subjects'">Go to subjects</button>`);
+}
+
+async function submitLiveClassroom() {
+  const button = $("#live_classroom_submit"), errorBox = $("#live_classroom_error"), name = $("#live_classroom_name").value.trim();
+  if (!name) { if (errorBox) errorBox.textContent = "Enter a classroom name."; return; }
+  if (button) { button.disabled = true; button.textContent = "Creating…"; }
+  try { const response = await fetch("/api/teacher/classrooms", { method:"POST", headers:{ "Content-Type":"application/json", Accept:"application/json" }, body:JSON.stringify({ subjectSlug:$("#live_classroom_subject").value, name }) }); const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || "Could not create the classroom."); S.teacherClassrooms.unshift(payload.classroom); closeModal(); location.hash = "#/classes"; toast("Classroom created — share the join code"); render(); }
+  catch (error) { if (errorBox) errorBox.textContent = error instanceof Error ? error.message : "Could not create the classroom."; if (button) { button.disabled = false; button.textContent = "Create classroom"; } }
 }
 
 function pageSubjects() {
@@ -4350,6 +4516,82 @@ function createSubject() {
 /* ---------------------------------------------------------------
    One subject
    --------------------------------------------------------------- */
+function ensureLiveSyllabus(sid) {
+  if (S.teacherSyllabi[sid]) return;
+  const subject = subjectOf(sid);
+  if (!subject || !subject.apiSlug) return;
+  S.teacherSyllabi[sid] = { state:"loading", structure:[], error:"" };
+  fetch("/api/teacher/subjects/" + encodeURIComponent(subject.apiSlug) + "/syllabus", { headers:{ Accept:"application/json" } })
+    .then(async response => { const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || "Could not load syllabus units."); return payload; })
+    .then(payload => { S.teacherSyllabi[sid] = { state:"ready", structure:Array.isArray(payload.structure) ? payload.structure : [], error:"" }; render(); })
+    .catch(error => { S.teacherSyllabi[sid] = { state:"error", structure:[], error:error instanceof Error ? error.message : "Could not load syllabus units." }; render(); });
+}
+
+function liveSyllabusStructurePane(sid) {
+  const state = S.teacherSyllabi[sid];
+  if (!state) { setTimeout(() => ensureLiveSyllabus(sid), 0); return `<div class="card pad flat" style="margin-top:16px"><div class="small muted">Loading editable units…</div></div>`; }
+  if (state.state === "loading") return `<div class="card pad flat" style="margin-top:16px"><div class="small muted">Loading editable units…</div></div>`;
+  if (state.state === "error") return `<div class="empty" style="margin-top:16px"><b>Could not load syllabus units</b>${esc(state.error)}<div style="margin-top:12px"><button class="btn" onclick="delete S.teacherSyllabi['${sid}']; render()">Try again</button></div></div>`;
+  const structure = Array.isArray(state.structure) ? state.structure : [];
+  return `<div class="sect" style="margin-top:20px"><div class="head"><h2>Editable units and topics</h2><span class="count">${structure.length}</span><span class="spacer"></span>
+      <button class="btn ghost sm" onclick="extractLiveSyllabus('${sid}')">Extract from indexed syllabus</button>
+      <button class="btn sm" onclick="openLiveSyllabusEditor('${sid}')">Edit structure</button></div>
+    ${structure.length ? `<div class="tiles">${structure.map((chapter, index) => `<div class="tile"><span class="chip">Unit ${index + 1}</span><h3>${esc(chapter.title)}</h3><div class="row" style="gap:5px">${(chapter.topics || []).map(topic => `<span class="chip">${esc(topic.name)}</span>`).join("")}</div></div>`).join("")}</div>`
+      : `<div class="empty"><b>No structured units yet</b>Extract them from an indexed syllabus, then review and edit before saving.</div>`}</div>`;
+}
+
+async function extractLiveSyllabus(sid) {
+  const subject = subjectOf(sid), state = S.teacherSyllabi[sid];
+  if (!subject || !subject.apiSlug || !state || state.state === "extracting") return;
+  state.state = "extracting"; render();
+  try {
+    const response = await fetch("/api/teacher/subjects/" + encodeURIComponent(subject.apiSlug) + "/syllabus", { method:"POST", headers:{ Accept:"application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not extract syllabus units.");
+    S.teacherSyllabi[sid] = { state:"ready", structure:payload.structure || [], error:"" };
+    toast("Syllabus units extracted — review them before use"); render();
+  } catch (error) {
+    S.teacherSyllabi[sid] = { ...state, state:"ready", error:"" };
+    toast(error instanceof Error ? error.message : "Could not extract syllabus units."); render();
+  }
+}
+
+function syllabusEditorRow(chapter) {
+  const topics = (chapter && Array.isArray(chapter.topics) ? chapter.topics : []).map(topic => topic.name).join("\n");
+  return `<div class="card pad flat syllabus-edit-row" style="margin-bottom:12px">
+    <label class="fld"><span>Unit or chapter title</span><input class="syllabus-title" type="text" maxlength="200" value="${esc(chapter && chapter.title || "")}" autocomplete="off"></label>
+    <label class="fld"><span>Topics · one per line</span><textarea class="syllabus-topics" style="min-height:100px">${esc(topics)}</textarea></label>
+    <button class="btn quiet sm" type="button" onclick="this.closest('.syllabus-edit-row').remove()">Remove unit</button></div>`;
+}
+function addSyllabusEditorRow() { const list = $("#syllabus_editor_rows"); if (list) list.insertAdjacentHTML("beforeend", syllabusEditorRow({ title:"", topics:[] })); }
+function openLiveSyllabusEditor(sid) {
+  const state = S.teacherSyllabi[sid], structure = state && Array.isArray(state.structure) ? state.structure : [];
+  openModal("Edit syllabus structure", `<div id="syllabus_editor_rows">${structure.map(syllabusEditorRow).join("")}</div>
+    <button class="btn ghost" type="button" onclick="addSyllabusEditorRow()">Add unit</button>
+    <div id="syllabus_editor_error" class="small" style="color:var(--red); min-height:20px; margin-top:12px"></div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="syllabus_editor_save" onclick="saveLiveSyllabus('${sid}')">Save structure</button>`, "big");
+}
+async function saveLiveSyllabus(sid) {
+  const subject = subjectOf(sid), button = $("#syllabus_editor_save"), errorBox = $("#syllabus_editor_error");
+  if (!subject || !subject.apiSlug) return;
+  const structure = [...document.querySelectorAll(".syllabus-edit-row")].map(row => ({
+    title:row.querySelector(".syllabus-title").value.trim(),
+    topics:row.querySelector(".syllabus-topics").value.split(/\n/).map(name => name.trim()).filter(Boolean).map(name => ({ name }))
+  })).filter(chapter => chapter.title);
+  if (button) { button.disabled = true; button.textContent = "Saving…"; }
+  if (errorBox) errorBox.textContent = "";
+  try {
+    const response = await fetch("/api/teacher/subjects/" + encodeURIComponent(subject.apiSlug) + "/syllabus", { method:"PUT", headers:{ "Content-Type":"application/json", Accept:"application/json" }, body:JSON.stringify(structure) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not save syllabus structure.");
+    S.teacherSyllabi[sid] = { state:"ready", structure:payload.structure || [], error:"" };
+    closeModal(); toast("Syllabus structure saved"); render();
+  } catch (error) {
+    if (errorBox) errorBox.textContent = error instanceof Error ? error.message : "Could not save syllabus structure.";
+    if (button) { button.disabled = false; button.textContent = "Save structure"; }
+  }
+}
+
 function pageSubject(sid) {
   const s = subjectOf(sid);
   if (!s) return { html:`<div class="empty"><b>Subject not found</b></div>`, crumbs:"Subjects" };
@@ -4382,8 +4624,9 @@ function pageSubject(sid) {
           ? `<span class="chip">ready${file.found ? " · " + file.found + " chunks" : ""}</span>`
           : file.state === "preparing" ? `<span class="chip solid">indexing…</span>`
           : `<span class="chip solid">couldn't index</span>`}${liveDocumentActions(file)}</div></div>`).join("")}</div>`
-        : `<div class="empty"><b>No syllabus file yet</b>Upload the university syllabus here. Structured unit extraction is a later wiring step.
-            <div style="margin-top:14px"><button class="btn" onclick="openLiveUpload('${sid}','Syllabus')">Upload syllabus</button></div></div>`}`
+        : `<div class="empty"><b>No syllabus file yet</b>Upload the university syllabus here, then extract its units and topics.
+            <div style="margin-top:14px"><button class="btn" onclick="openLiveUpload('${sid}','Syllabus')">Upload syllabus</button></div></div>`}
+      ${liveSyllabusStructurePane(sid)}`
       : chs.length ? `
       ${canUseDemoActions ? `<div class="row" style="margin-bottom:14px"><button class="btn" onclick="addChapter('${sid}')">Add a unit</button>
         <button class="btn ghost" onclick="uploadSyllabusTo('${sid}')">Upload syllabus</button>
