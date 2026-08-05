@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-type Variant = "filled" | "outline" | "ghost" | "danger";
+type Variant = "filled" | "outline" | "ghost" | "danger" | "inverse";
 type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
@@ -11,6 +11,8 @@ const variants: Record<Variant, string> = {
   ghost: "text-text-secondary hover:text-text-primary hover:bg-bg-secondary",
   danger:
     "border border-destructive text-destructive hover:bg-destructive hover:text-white",
+  inverse:
+    "border border-bg-primary bg-bg-primary text-text-primary hover:bg-bg-secondary",
 };
 
 const sizes: Record<Size, string> = {

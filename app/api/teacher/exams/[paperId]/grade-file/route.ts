@@ -50,15 +50,21 @@ export async function POST(
     if (paperError) throw paperError;
     if (!paper) return NextResponse.json({ error: "Paper not found." }, { status: 404 });
 
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
     const grade = await gradeTeacherPracticePaperFile(teacher.collection_sk, paperId, {
       studentName,
       instruction,
       file: {
         name: file.name || "answer-sheet",
         mimeType: file.type,
-        buffer: Buffer.from(await file.arrayBuffer()),
+        buffer: fileBuffer,
       },
     });
+    const safeName = (file.name || "answer-sheet").replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath = `submissions/${teacher.id}/${paper.id}/${crypto.randomUUID()}-${safeName}`;
+    const { error: uploadError } = await admin.storage.from("teacher-documents").upload(storagePath, fileBuffer, { contentType: file.type, upsert: false });
+    if (uploadError) throw uploadError;
+    const gradeWithSheet = { ...grade, _answer_sheet: { storage_path: storagePath, name: file.name || "answer-sheet", mime_type: file.type, size_bytes: file.size } };
     const { error: saveError } = await admin.from("teacher_exam_submissions").insert({
       teacher_id: teacher.id,
       paper_id: paper.id,
@@ -66,10 +72,13 @@ export async function POST(
         typeof grade.submission_id === "string" ? grade.submission_id : null,
       student_name: studentName || "Student",
       source: "upload",
-      grade,
+      grade: gradeWithSheet,
     });
-    if (saveError) throw saveError;
-    return NextResponse.json({ grade });
+    if (saveError) {
+      await admin.storage.from("teacher-documents").remove([storagePath]);
+      throw saveError;
+    }
+    return NextResponse.json({ grade: gradeWithSheet });
   } catch (error) {
     const apiError = error instanceof TeacherApiError ? error : null;
     return NextResponse.json(

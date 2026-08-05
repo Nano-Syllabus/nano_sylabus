@@ -26,12 +26,20 @@ type TeacherAssignment = {
   opensAt?: string | null;
   closesAt?: string | null;
   submitted?: boolean;
-  grade?: { total_score?: number; total_marks?: number } | null;
+  canAttempt?: boolean;
+  attemptCount?: number;
+  maxAttempts?: number;
+  attempts?: Array<{ id: string; attemptNo: number; reviewStatus: "pending" | "reviewed" | "published"; grade?: { total_score?: number; total_marks?: number } | null; createdAt: string }>;
+  reviewStatus?: "pending" | "reviewed" | "published" | null;
+  grade?: { total_score?: number; total_marks?: number; results?: Array<{ question_id: string; score: number; feedback: string; student_answer?: string }> } | null;
   paper: {
     id: string;
     title: string;
     subject: string;
     totalMarks: number;
+    kind?: string;
+    timeLimitMinutes?: number;
+    attempts?: number;
     questions: Array<{ id: string; chapter?: string; questionType?: string; marks: number; text: string }>;
   };
 };
@@ -94,11 +102,11 @@ function assignmentExam(assignment: TeacherAssignment): StudentExam {
     id: `teacher_${assignment.id}`,
     subject: assignment.subjectName || assignment.paper.subject,
     title: assignment.paper.title,
-    kind: "exam",
+    kind: assignment.paper.kind || "exam",
     counts: true,
     marks: assignment.paper.totalMarks,
-    minutes: Math.max(15, Math.min(180, Math.round(assignment.paper.totalMarks * 2))),
-    attempts: 1,
+    minutes: Math.max(5, Math.min(300, Number(assignment.paper.timeLimitMinutes) || 60)),
+    attempts: Math.max(1, Number(assignment.maxAttempts) || Number(assignment.paper.attempts) || 1),
     window: windowState,
     windowLabel: windowState === "open" ? assignment.classroomName : windowState === "before" ? "Not open yet" : "Closed",
     questions: assignment.paper.questions.map((question) => ({
@@ -229,6 +237,7 @@ export function StudentExamsClient() {
   const searchParams = useSearchParams();
   const examId = searchParams.get("exam");
   const mode = searchParams.get("mode");
+  const inviteCode = searchParams.get("join");
   const staticSelectedExam = findStudentExam(examId);
   const [listTab, setListTab] = useState<"todo" | "done">("todo");
   const [dialog, setDialog] = useState<"join" | "practice" | "writing" | "submit" | null>(null);
@@ -272,6 +281,12 @@ export function StudentExamsClient() {
   useEffect(() => { void loadTeacherAssignments(); }, []);
 
   useEffect(() => {
+    if (!inviteCode) return;
+    setJoinCode(inviteCode);
+    setDialog("join");
+  }, [inviteCode]);
+
+  useEffect(() => {
     if (dialog === "join") joinInput.current?.focus();
   }, [dialog]);
 
@@ -282,6 +297,10 @@ export function StudentExamsClient() {
   }, [attemptExam, mode]);
 
   useEffect(() => {
+    if (attemptExam && mode === "sit" && secondsLeft === 0) setDialog("submit");
+  }, [attemptExam, mode, secondsLeft]);
+
+  useEffect(() => {
     if (!selectedExam || mode !== "marking") return;
     const timer = window.setTimeout(() => {
       router.replace(`/app/exams?exam=${selectedExam.id}&mode=result`, { scroll: false });
@@ -290,8 +309,8 @@ export function StudentExamsClient() {
   }, [mode, router, selectedExam]);
 
   const answeredCount = useMemo(() => Object.values(answers).filter((answer) => answer.choice !== undefined || answer.text?.trim() || answer.photoName).length, [answers]);
-  const todoExams = useMemo(() => teacherExams.filter((_, index) => !teacherAssignments[index]?.submitted), [teacherAssignments, teacherExams]);
-  const doneAssignments = useMemo(() => teacherAssignments.filter((assignment) => assignment.submitted), [teacherAssignments]);
+  const todoExams = useMemo(() => teacherExams.filter((exam) => teacherAssignments.find((assignment) => `teacher_${assignment.id}` === exam.id)?.canAttempt !== false), [teacherAssignments, teacherExams]);
+  const doneAssignments = useMemo(() => teacherAssignments.filter((assignment) => (assignment.attemptCount || 0) > 0), [teacherAssignments]);
 
   useEffect(() => {
     if (!selectedExam || !mode) return;
@@ -302,6 +321,31 @@ export function StudentExamsClient() {
       setSecondsLeft(selectedExam.minutes * 60);
     }
     if (mode === "result" && !result) {
+      const teacherAssignment = selectedExam.id.startsWith("teacher_")
+        ? teacherAssignments.find((item) => `teacher_${item.id}` === selectedExam.id)
+        : null;
+      if (teacherAssignment) {
+        if (!teacherAssignment.grade) {
+          router.replace("/app/exams", { scroll: false });
+          return;
+        }
+        const lines = selectedExam.questions.map((question) => {
+          const graded = teacherAssignment.grade?.results?.find((item) => item.question_id === question.id);
+          return {
+            question,
+            got: graded?.score || 0,
+            note: graded?.feedback || "No feedback returned.",
+            answer: graded?.student_answer || "",
+          };
+        });
+        setResult({
+          exam: selectedExam,
+          score: teacherAssignment.grade.total_score || 0,
+          outOf: teacherAssignment.grade.total_marks || selectedExam.marks,
+          lines,
+        });
+        return;
+      }
       const lines = selectedExam.questions.map((question) => ({
         question,
         got: Math.ceil(question.marks * 0.7),
@@ -315,7 +359,7 @@ export function StudentExamsClient() {
         lines,
       });
     }
-  }, [attemptExam?.id, mode, result, selectedExam]);
+  }, [attemptExam?.id, mode, result, router, selectedExam, teacherAssignments]);
 
   function showExam(exam: StudentExam) {
     router.push(`/app/exams?exam=${exam.id}`, { scroll: false });
@@ -346,15 +390,12 @@ export function StudentExamsClient() {
             answerText: answers[question.id]?.text || "",
           })) }),
         });
-        const payload = await response.json() as { grade?: { total_score?: number; total_marks?: number; results?: Array<{ question_id: string; score: number; feedback: string }> }; error?: string };
-        if (!response.ok || !payload.grade) throw new Error(payload.error || "Could not grade this exam.");
-        const lines = attemptExam.questions.map((question) => {
-          const graded = payload.grade?.results?.find((item) => item.question_id === question.id);
-          return { question, got: graded?.score || 0, note: graded?.feedback || "No feedback returned.", answer: answers[question.id]?.text || "" };
-        });
-        setResult({ exam: attemptExam, score: payload.grade.total_score || 0, outOf: payload.grade.total_marks || attemptExam.marks, lines });
+        const payload = await response.json() as { submitted?: boolean; awaitingReview?: boolean; error?: string };
+        if (!response.ok || !payload.submitted) throw new Error(payload.error || "Could not submit this exam.");
         setDialog(null);
-        router.push(`/app/exams?exam=${attemptExam.id}&mode=result`, { scroll: false });
+        await loadTeacherAssignments();
+        setListTab("done");
+        router.push("/app/exams", { scroll: false });
       } catch (error) {
         setGradingError(error instanceof Error ? error.message : "Could not grade this exam.");
       } finally {
@@ -456,6 +497,7 @@ export function StudentExamsClient() {
   if (mode === "result" && result) return <ResultView result={result} tab={resultTab} onTab={setResultTab} />;
   if (mode === "sit" && attemptExam) {
     const question = attemptExam.questions[questionIndex];
+    const timeExpired = secondsLeft === 0;
     return (
       <AttemptView
         exam={attemptExam}
@@ -469,8 +511,8 @@ export function StudentExamsClient() {
         onSubmit={() => setDialog("submit")}
       >
         {dialog === "submit" ? (
-          <Dialog title="Hand it in" onClose={() => setDialog(null)} footer={<><button type="button" className={secondaryButton} onClick={() => setDialog(null)} disabled={isGrading}>Keep working</button><button type="button" className={primaryButton} onClick={() => void markExam()} disabled={isGrading}>{isGrading ? "Grading…" : "Hand it in"}</button></>}>
-            <p>{attemptExam.questions.length - answeredCount ? <><b>{attemptExam.questions.length - answeredCount} questions are still blank.</b> Blank answers get no marks.</> : "Every question has an answer."}</p>
+          <Dialog title={timeExpired ? "Time is up" : "Hand it in"} onClose={() => { if (!timeExpired) setDialog(null); }} footer={<>{!timeExpired ? <button type="button" className={secondaryButton} onClick={() => setDialog(null)} disabled={isGrading}>Keep working</button> : null}<button type="button" className={primaryButton} onClick={() => void markExam()} disabled={isGrading}>{isGrading ? "Grading…" : "Hand it in"}</button></>}>
+            <p>{timeExpired ? <><b>The saved time limit has ended.</b> Submit the answers currently on this paper.</> : attemptExam.questions.length - answeredCount ? <><b>{attemptExam.questions.length - answeredCount} questions are still blank.</b> Blank answers get no marks.</> : "Every question has an answer."}</p>
             <div className="mt-4 rounded-xl border border-border bg-bg-secondary p-4 text-sm">Marking usually takes under a minute. {attemptExam.counts ? "Your teacher sees the result too." : "This is practice, so it stays with you."}</div>
             {gradingError ? <p className="mt-3 text-sm text-destructive" role="alert">{gradingError}</p> : null}
           </Dialog>
@@ -533,7 +575,7 @@ export function StudentExamsClient() {
         </div>
       ) : (
         <div className="mt-4 flex flex-wrap gap-3">
-          {doneAssignments.length ? doneAssignments.map((assignment) => <article key={assignment.id} className="w-full rounded-[14px] border border-border p-5 sm:max-w-[395px]"><div className="flex items-center gap-2"><Chip>{assignment.subjectName}</Chip><span className="flex-1" /><Chip strong>submitted</Chip></div><h2 className="mt-3 font-display text-lg font-semibold">{assignment.paper.title}</h2><p className="mt-2 text-sm text-text-secondary">{assignment.classroomName}</p><p className="mt-5 font-display text-3xl font-semibold">{assignment.grade?.total_score ?? 0}<small className="ml-1 text-sm text-text-muted">of {assignment.grade?.total_marks ?? assignment.paper.totalMarks}</small></p></article>) : <section className="w-full rounded-[14px] border border-border p-8 text-center"><h2 className="font-display text-lg font-semibold">No completed teacher exams</h2><p className="mt-2 text-sm text-text-secondary">Your submitted classroom exams will appear here.</p></section>}
+          {doneAssignments.length ? doneAssignments.map((assignment) => <article key={assignment.id} className="w-full rounded-[14px] border border-border p-5 sm:max-w-[395px]"><div className="flex items-center gap-2"><Chip>{assignment.subjectName}</Chip><span className="flex-1" /><Chip strong>{assignment.grade ? "published" : "submitted"}</Chip></div><h2 className="mt-3 font-display text-lg font-semibold">{assignment.paper.title}</h2><p className="mt-2 text-sm text-text-secondary">{assignment.classroomName} · {assignment.attemptCount || 0} of {assignment.maxAttempts || 1} attempts used</p>{assignment.grade ? <p className="mt-5 font-display text-3xl font-semibold">{assignment.grade.total_score ?? 0}<small className="ml-1 text-sm text-text-muted">of {assignment.grade.total_marks ?? assignment.paper.totalMarks}</small></p> : <div className="mt-5 rounded-xl bg-bg-secondary p-4"><p className="font-medium">Awaiting teacher review</p><p className="mt-1 text-sm text-text-secondary">Your answers are submitted. Marks appear here after your teacher publishes them.</p></div>}<div className="mt-4 space-y-2">{(assignment.attempts || []).map((attempt) => <div key={attempt.id} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm"><span className="min-w-0 flex-1">Attempt {attempt.attemptNo}</span><span className="capitalize text-text-muted">{attempt.reviewStatus}</span>{attempt.grade ? <strong>{attempt.grade.total_score ?? 0}/{attempt.grade.total_marks ?? assignment.paper.totalMarks}</strong> : null}</div>)}</div>{assignment.canAttempt !== false ? <button type="button" className={`${primaryButton} mt-4`} onClick={() => startExam(assignmentExam(assignment))}>Try again</button> : null}</article>) : <section className="w-full rounded-[14px] border border-border p-8 text-center"><h2 className="font-display text-lg font-semibold">No completed teacher exams</h2><p className="mt-2 text-sm text-text-secondary">Your submitted classroom exams will appear here.</p></section>}
         </div>
       )}
 

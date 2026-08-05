@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { recordTeacherClassroomActivity } from "@/lib/teacher-classroom-activity";
 
 const schema = z.object({ code: z.string().trim().min(4).max(20) });
 
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
       { onConflict: "classroom_id,student_id" },
     );
     if (joinError) throw joinError;
+    await recordTeacherClassroomActivity(admin, { classroomId: classroom.id, actorId: user.id, actorKind: "student", eventType: "student.joined", summary: "A student joined the classroom" });
     return NextResponse.json({ classroom: { id: classroom.id, name: classroom.name, subjectName: classroom.subject_name } });
   } catch {
     return NextResponse.json({ error: "Could not join the classroom." }, { status: 502 });

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import {
-  askTeacherQuestion,
+  askTeacherSubject,
   getTeacherSubjects,
   TeacherApiError,
   type ApiRecord,
 } from "@/lib/teacher-app/client";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ChatTurn = { role?: unknown; content?: unknown };
 type SafeChatTurn = { role: "user" | "assistant"; content: string };
@@ -36,6 +37,9 @@ export async function POST(request: Request) {
   try {
     const teacher = await getTeacherProfile();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = (await request.json().catch(() => null)) as {
       question?: unknown;
@@ -57,11 +61,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Subject not found in this teacher collection." }, { status: 404 });
     }
 
-    const result = await askTeacherQuestion(
+    const languageInstruction = user.user_metadata?.teacher_language === "RN" ? "Respond in natural Nepali." : "Respond in English.";
+    const styleInstruction = user.user_metadata?.teacher_answer_style === "concise"
+      ? "Explain simply and concisely; put formulas after the plain-language explanation."
+      : "Use an exam-focused answer with steps, marks logic, and examiner-friendly wording.";
+    const result = await askTeacherSubject(
       teacher.collection_sk,
+      typeof subject.name === "string" ? subject.name : subjectSlug,
       question,
       5,
-      subjectSlug,
+      `${languageInstruction} ${styleInstruction}`,
       chatHistory(body?.history),
     );
     const chunks = Array.isArray(result.chunks) ? result.chunks : [];

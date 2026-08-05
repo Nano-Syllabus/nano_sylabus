@@ -9,15 +9,17 @@ const mocks = vi.hoisted(() => {
   return {
     getTeacherProfile: vi.fn(),
     getTeacherSubjects: vi.fn(),
-    askTeacherQuestion: vi.fn(),
+    askTeacherSubject: vi.fn(),
+    createSupabaseServerClient: vi.fn(),
     MockTeacherApiError,
   };
 });
 
 vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile }));
+vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient: mocks.createSupabaseServerClient }));
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherSubjects: mocks.getTeacherSubjects,
-  askTeacherQuestion: mocks.askTeacherQuestion,
+  askTeacherSubject: mocks.askTeacherSubject,
   TeacherApiError: mocks.MockTeacherApiError,
 }));
 
@@ -33,6 +35,7 @@ function request(body: unknown) {
 
 describe("POST /api/teacher/answer", () => {
   beforeEach(() => {
+    mocks.createSupabaseServerClient.mockResolvedValue({ auth: { getUser: vi.fn(async () => ({ data: { user: { id: "user-1", user_metadata: {} } } })) } });
     mocks.getTeacherProfile.mockResolvedValue({
       id: "teacher-1",
       user_id: "user-1",
@@ -42,7 +45,7 @@ describe("POST /api/teacher/answer", () => {
     mocks.getTeacherSubjects.mockResolvedValue({
       subjects: [{ name: "Physics", slug: "ramesh-teacher-physics", folder_path: "Physics" }],
     });
-    mocks.askTeacherQuestion.mockResolvedValue({
+    mocks.askTeacherSubject.mockResolvedValue({
       answer_id: "answer-1",
       answer: "Lenz's law expresses conservation of energy.",
       quality_score: 0.91,
@@ -71,11 +74,12 @@ describe("POST /api/teacher/answer", () => {
       { name: "induction.pdf", where: "page 12 · Lenz's law", score: 0.88 },
     ]);
     expect(JSON.stringify(payload)).not.toContain("collection-secret");
-    expect(mocks.askTeacherQuestion).toHaveBeenCalledWith(
+    expect(mocks.askTeacherSubject).toHaveBeenCalledWith(
       "collection-secret",
+      "Physics",
       "Why is there a minus sign?",
       5,
-      "ramesh-teacher-physics",
+      "Respond in English. Use an exam-focused answer with steps, marks logic, and examiner-friendly wording.",
       [{ role: "user", content: "Explain induction" }],
     );
   });
@@ -86,7 +90,7 @@ describe("POST /api/teacher/answer", () => {
     );
 
     expect(response.status).toBe(404);
-    expect(mocks.askTeacherQuestion).not.toHaveBeenCalled();
+    expect(mocks.askTeacherSubject).not.toHaveBeenCalled();
   });
 
   it("sanitizes conversation history before forwarding it", async () => {
@@ -102,11 +106,12 @@ describe("POST /api/teacher/answer", () => {
       }),
     );
 
-    expect(mocks.askTeacherQuestion).toHaveBeenCalledWith(
+    expect(mocks.askTeacherSubject).toHaveBeenCalledWith(
       "collection-secret",
+      "Physics",
       "Continue",
       5,
-      "ramesh-teacher-physics",
+      "Respond in English. Use an exam-focused answer with steps, marks logic, and examiner-friendly wording.",
       [{ role: "assistant", content: "Previous answer" }],
     );
   });

@@ -222,9 +222,115 @@ export const retrieveTeacherChunks = (key: string, query: string, topK: number, 
     body: { query, top_k: topK, namespace },
   });
 
+function withQuery(path: string, values: Record<string, string | number | boolean | string[] | undefined>) {
+  const params = new URLSearchParams();
+  Object.entries(values).forEach(([name, value]) => {
+    if (value === undefined || value === "" || (Array.isArray(value) && !value.length)) return;
+    if (Array.isArray(value)) value.forEach((item) => params.append(name, item));
+    else params.set(name, String(value));
+  });
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+}
+
+export const askTeacherSubject = (
+  key: string,
+  subject: string,
+  query: string,
+  topK: number,
+  prompt: string,
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+) =>
+  teacherRequest<ApiRecord>("/v1/collection/ask", key, {
+    method: "POST",
+    body: {
+      subject,
+      query,
+      top_k: topK,
+      prompt,
+      conversation_history: conversationHistory,
+    },
+  });
+
+export const getTeacherCollectionWeightage = (key: string, subject: string) =>
+  teacherRequest<ApiRecord>(
+    withQuery("/v1/collection/weightage", { subject }),
+    key,
+  );
+
+export const getTeacherCollectionCapture = (key: string, subject: string) =>
+  teacherRequest<ApiRecord>(
+    withQuery("/v1/collection/capture", { subject }),
+    key,
+  );
+
+export const getTeacherCollectionReadiness = (key: string, subject: string) =>
+  teacherRequest<ApiRecord>(
+    withQuery("/v1/collection/readiness", { subject }),
+    key,
+  );
+
+export const getTeacherPracticeTopics = (
+  key: string,
+  subject: string,
+  options: { totalMarks?: number; maxQuestions?: number; refresh?: boolean } = {},
+) =>
+  teacherRequest<ApiRecord>(
+    withQuery("/api/v1/practice/topics", {
+      subject,
+      total_marks: options.totalMarks,
+      max_questions: options.maxQuestions,
+      refresh: options.refresh,
+    }),
+    key,
+  );
+
+export const getTeacherPracticeChapters = (key: string, subject: string) =>
+  teacherRequest<ApiRecord>(
+    withQuery("/api/v1/practice/chapters", { subject }),
+    key,
+  );
+
+export const getTeacherCollectionUsage = (key: string, since?: string) =>
+  teacherRequest<ApiRecord>(
+    withQuery("/v1/collection/usage", { since }),
+    key,
+  );
+
+export const getTeacherCollectionPapers = (key: string, subject?: string) =>
+  teacherRequest<ApiRecord | ApiRecord[]>(
+    withQuery("/v1/collection/papers", { subject }),
+    key,
+  );
+
+export const getTeacherCollectionPaper = (key: string, paperId: string) =>
+  teacherRequest<ApiRecord>(
+    `/v1/collection/papers/${encodeURIComponent(paperId)}`,
+    key,
+  );
+
+export const generateTeacherCollectionPaper = (
+  key: string,
+  input: {
+    subject: string;
+    chapters?: string[];
+    bands?: TeacherPracticeBand[];
+    mimic_question_bank?: boolean;
+    title?: string;
+    instruction?: string;
+    university?: string;
+    pass_marks?: number;
+  },
+) =>
+  teacherRequest<ApiRecord>("/v1/collection/generate", key, {
+    method: "POST",
+    body: input,
+    timeoutMs: 120_000,
+  });
+
 export type TeacherPracticeBand = {
   label: string;
-  question_type: "theory" | "numerical";
+  question_type: string;
   count: number;
   marks_each: number;
 };
