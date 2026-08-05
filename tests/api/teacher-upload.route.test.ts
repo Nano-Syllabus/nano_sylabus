@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getTeacherProfile: vi.fn(),
   getTenantApiEnv: vi.fn(),
+  getTeacherSubjects: vi.fn(),
 }));
 
 vi.mock("@/app/teachers/actions", () => ({
@@ -12,6 +13,10 @@ vi.mock("@/app/teachers/actions", () => ({
 
 vi.mock("@/lib/env", () => ({
   getTenantApiEnv: mocks.getTenantApiEnv,
+}));
+
+vi.mock("@/lib/teacher-app/client", () => ({
+  getTeacherSubjects: mocks.getTeacherSubjects,
 }));
 
 import { POST } from "@/app/api/teacher/upload/route";
@@ -30,6 +35,9 @@ describe("POST /api/teacher/upload", () => {
       user_id: "user-1",
       handle: "ramesh",
       collection_sk: "collection-secret",
+    });
+    mocks.getTeacherSubjects.mockResolvedValue({
+      subjects: [{ slug: "physics", name: "Physics", folder_path: "Physics" }],
     });
   });
 
@@ -63,7 +71,7 @@ describe("POST /api/teacher/upload", () => {
         timeoutMs: 30_000,
       });
 
-      const response = await POST(uploadRequest("Physics/Notes"));
+      const response = await POST(uploadRequest("Physics/Notes/Chapter 1"));
       const payload = await response.json();
 
       expect(response.status).toBe(200);
@@ -74,7 +82,7 @@ describe("POST /api/teacher/upload", () => {
         "/v1/collection/index-document",
       ]);
       expect(calls.every((call) => call.authorization === "Bearer collection-secret")).toBe(true);
-      expect(calls[0].body).toContain("Physics/Notes");
+      expect(calls[0].body).toContain("Physics/Notes/Chapter 1");
       expect(JSON.parse(calls[1].body)).toEqual({ path: "Physics/Notes/notes.pdf" });
     } finally {
       await new Promise<void>((resolve, reject) =>
@@ -88,5 +96,18 @@ describe("POST /api/teacher/upload", () => {
 
     expect(response.status).toBe(400);
     expect(mocks.getTenantApiEnv).toHaveBeenCalledOnce();
+  });
+
+  it("blocks a safe path that is not inside a pinned subject shelf", async () => {
+    mocks.getTenantApiEnv.mockReturnValue({
+      baseUrl: "http://127.0.0.1:1",
+      rejectUnauthorized: false,
+      timeoutMs: 30_000,
+    });
+
+    const response = await POST(uploadRequest("Other/Notes/Chapter 1"));
+
+    expect(response.status).toBe(400);
+    expect(mocks.getTeacherSubjects).toHaveBeenCalledWith("collection-secret");
   });
 });

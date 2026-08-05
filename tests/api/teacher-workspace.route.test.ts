@@ -47,7 +47,7 @@ describe("GET /api/teacher/workspace", () => {
     mocks.createSupabaseServerClient.mockResolvedValue({
       auth: {
         getUser: vi.fn(async () => ({
-          data: { user: { id: "user-1", email: "teacher@example.com" } },
+          data: { user: { id: "user-1", email: "teacher@example.com", user_metadata: {} } },
         })),
       },
     });
@@ -65,8 +65,9 @@ describe("GET /api/teacher/workspace", () => {
     mocks.getTeacherDocuments.mockResolvedValue([
       { document_id: "doc-1", name: "notes.pdf", path: "Physics/Notes/notes.pdf" },
     ]);
-    const chain = { select: vi.fn(), eq: vi.fn(async () => ({ data: [], error: null })) };
+    const chain = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: null, error: null })) };
     chain.select.mockReturnValue(chain);
+    chain.eq.mockReturnValue(chain);
     mocks.createSupabaseAdminClient.mockReturnValue({ from: vi.fn(() => chain) });
   });
 
@@ -75,7 +76,7 @@ describe("GET /api/teacher/workspace", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(payload.teacher).toEqual({ handle: "ramesh", email: "teacher@example.com" });
+    expect(payload.teacher).toEqual({ handle: "ramesh", email: "teacher@example.com", fullName: "ramesh", language: "EN", answerStyle: "exam_focused" });
     expect(payload.subjects.subjects[0].name).toBe("Physics");
     expect(JSON.stringify(payload)).not.toContain("collection-secret");
     expect(mocks.getTeacherMe).toHaveBeenCalledWith("collection-secret");

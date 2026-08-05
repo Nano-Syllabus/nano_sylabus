@@ -1,32 +1,40 @@
-import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getTeacherSubjects } from "@/lib/teacher-app/client";
+import { createTeacherClassroomJoinCode } from "@/lib/teacher-classroom-code";
+import { recordTeacherClassroomActivity } from "@/lib/teacher-classroom-activity";
 
 const schema = z.object({
   subjectSlug: z.string().trim().min(1).max(200),
   name: z.string().trim().min(1).max(120),
+  termKey: z.string().trim().min(1).max(40).default(String(new Date().getFullYear())),
+  meetingSchedule: z.string().trim().max(240).default(""),
 });
-
-function joinCode() {
-  return randomBytes(5).toString("hex").toUpperCase();
-}
 
 export async function GET() {
   try {
     const teacher = await getTeacherProfile();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const admin = createSupabaseAdminClient();
-    const { data, error } = await admin
+    const linksResult = await admin.from("teacher_classroom_teachers").select("classroom_id").eq("teacher_id", teacher.id);
+    if (linksResult.error) throw linksResult.error;
+    const helperIds = (linksResult.data || []).map((item) => item.classroom_id);
+    const ownResult = await admin
       .from("teacher_classrooms")
-      .select("id,subject_slug,subject_name,name,join_code,created_at")
+      .select("id,subject_slug,subject_name,name,join_code,created_at,term_key,meeting_schedule,notice")
       .eq("teacher_id", teacher.id)
       .is("archived_at", null)
       .order("created_at", { ascending: false });
-    if (error) throw error;
-    const ids = (data || []).map((row) => row.id);
+    if (ownResult.error) throw ownResult.error;
+    const helperResult = helperIds.length
+      ? await admin.from("teacher_classrooms").select("id,subject_slug,subject_name,name,join_code,created_at,term_key,meeting_schedule,notice").in("id", helperIds).is("archived_at", null)
+      : { data: [], error: null };
+    if (helperResult.error) throw helperResult.error;
+    const byId = new Map([...(ownResult.data || []), ...(helperResult.data || [])].map((row) => [row.id, row]));
+    const data = Array.from(byId.values()).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    const ids = data.map((row) => row.id);
     const { data: members } = ids.length
       ? await admin.from("teacher_classroom_members").select("classroom_id").in("classroom_id", ids)
       : { data: [] };
@@ -41,6 +49,9 @@ export async function GET() {
         joinCode: row.join_code,
         memberCount: counts.get(row.id) || 0,
         createdAt: row.created_at,
+        termKey: row.term_key,
+        meetingSchedule: row.meeting_schedule,
+        notice: row.notice,
       })),
     });
   } catch {
@@ -74,14 +85,19 @@ export async function POST(request: Request) {
           subject_slug: parsed.data.subjectSlug,
           subject_name: subject.name,
           name: parsed.data.name,
-          join_code: joinCode(),
+          join_code: createTeacherClassroomJoinCode(),
+          term_key: parsed.data.termKey,
+          meeting_schedule: parsed.data.meetingSchedule,
         })
-        .select("id,subject_slug,subject_name,name,join_code,created_at")
+        .select("id,subject_slug,subject_name,name,join_code,created_at,term_key,meeting_schedule,notice")
         .single();
       if (!error) created = data;
       else if (error.code !== "23505") throw error;
     }
     if (!created) throw new Error("Could not allocate a classroom code.");
+    const { error: leadError } = await admin.from("teacher_classroom_teachers").upsert({ classroom_id: created.id, teacher_id: teacher.id, role: "lead" }, { onConflict: "classroom_id,teacher_id" });
+    if (leadError) throw leadError;
+    await recordTeacherClassroomActivity(admin, { classroomId: created.id, actorId: teacher.id, eventType: "classroom.created", summary: "Classroom created" });
     return NextResponse.json({
       classroom: {
         id: created.id,
@@ -91,6 +107,9 @@ export async function POST(request: Request) {
         joinCode: created.join_code,
         memberCount: 0,
         createdAt: created.created_at,
+        termKey: created.term_key,
+        meetingSchedule: created.meeting_schedule,
+        notice: created.notice,
       },
     }, { status: 201 });
   } catch {

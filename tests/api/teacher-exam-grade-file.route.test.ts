@@ -55,6 +55,7 @@ describe("POST /api/teacher/exams/[paperId]/grade-file", () => {
     readChain.select.mockReturnValue(readChain); readChain.eq.mockReturnValue(readChain); readChain.is.mockReturnValue(readChain);
     mocks.createSupabaseAdminClient.mockReturnValue({
       from: vi.fn((table: string) => table === "teacher_exam_papers" ? readChain : { insert: vi.fn(async () => ({ error: null })) }),
+      storage: { from: vi.fn(() => ({ upload: vi.fn(async () => ({ error: null })), remove: vi.fn(async () => ({ error: null })) })) },
     });
   });
 

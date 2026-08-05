@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
   return {
     getTeacherProfile: vi.fn(),
     getTeacherSubjects: vi.fn(),
-    generateTeacherPracticePaper: vi.fn(),
+    generateTeacherCollectionPaper: vi.fn(),
     getTenantApiEnv: vi.fn(),
     createSupabaseAdminClient: vi.fn(),
     MockTeacherApiError,
@@ -23,7 +23,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherSubjects: mocks.getTeacherSubjects,
-  generateTeacherPracticePaper: mocks.generateTeacherPracticePaper,
+  generateTeacherCollectionPaper: mocks.generateTeacherCollectionPaper,
   TeacherApiError: mocks.MockTeacherApiError,
 }));
 
@@ -42,9 +42,10 @@ const validBody = {
   title: "Physics unit test",
   instruction: "Mix concepts and calculations.",
   passMarks: 8,
+  useSuggestedWeightage: false,
   bands: [
-    { label: "Short", questionType: "theory", count: 2, marksEach: 5 },
-    { label: "Numerical", questionType: "numerical", count: 1, marksEach: 10 },
+    { label: "Short", questionType: "Short answer", count: 2, marksEach: 5 },
+    { label: "Numerical", questionType: "Worked numerical", count: 1, marksEach: 10 },
   ],
 };
 
@@ -65,7 +66,7 @@ describe("POST /api/teacher/exams/generate", () => {
         upsert: vi.fn(async () => ({ error: null })),
       })),
     });
-    mocks.generateTeacherPracticePaper.mockResolvedValue({
+    mocks.generateTeacherCollectionPaper.mockResolvedValue({
       id: "exam-1",
       title: "Physics unit test",
       subject: "Physics",
@@ -93,7 +94,7 @@ describe("POST /api/teacher/exams/generate", () => {
     expect(payload.paper.shareUrl).toBe("https://teacher-api.example.test/exam/paper/exam-1");
     expect(payload.paper.questions[0].referenceAnswer).toContain("rate of change");
     expect(JSON.stringify(payload)).not.toContain("collection-secret");
-    expect(mocks.generateTeacherPracticePaper).toHaveBeenCalledWith(
+    expect(mocks.generateTeacherCollectionPaper).toHaveBeenCalledWith(
       "collection-secret",
       expect.objectContaining({
         subject: "Physics",
@@ -101,8 +102,12 @@ describe("POST /api/teacher/exams/generate", () => {
         pass_marks: 8,
       }),
     );
-    const forwarded = mocks.generateTeacherPracticePaper.mock.calls[0][1];
+    const forwarded = mocks.generateTeacherCollectionPaper.mock.calls[0][1];
     expect(forwarded).not.toHaveProperty("namespaces");
+    expect(forwarded.bands).toEqual([
+      { label: "Short", question_type: "Short answer", count: 2, marks_each: 5 },
+      { label: "Numerical", question_type: "Worked numerical", count: 1, marks_each: 10 },
+    ]);
     const admin = mocks.createSupabaseAdminClient.mock.results[0].value;
     const table = admin.from.mock.results[0].value;
     expect(table.upsert).toHaveBeenCalledWith(
@@ -120,13 +125,13 @@ describe("POST /api/teacher/exams/generate", () => {
     const response = await POST(request({ ...validBody, subjectSlug: "other-private-subject" }));
 
     expect(response.status).toBe(404);
-    expect(mocks.generateTeacherPracticePaper).not.toHaveBeenCalled();
+    expect(mocks.generateTeacherCollectionPaper).not.toHaveBeenCalled();
   });
 
   it("rejects pass marks above the generated paper total", async () => {
     const response = await POST(request({ ...validBody, passMarks: 25 }));
 
     expect(response.status).toBe(400);
-    expect(mocks.generateTeacherPracticePaper).not.toHaveBeenCalled();
+    expect(mocks.generateTeacherCollectionPaper).not.toHaveBeenCalled();
   });
 });

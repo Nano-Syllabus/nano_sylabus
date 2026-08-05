@@ -4,7 +4,7 @@ import { getTeacherProfile } from "@/app/teachers/actions";
 import { getTenantApiEnv } from "@/lib/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
-  generateTeacherPracticePaper,
+  generateTeacherCollectionPaper,
   getTeacherSubjects,
   TeacherApiError,
   type ApiRecord,
@@ -12,7 +12,7 @@ import {
 
 const bandSchema = z.object({
   label: z.string().trim().min(1).max(40),
-  questionType: z.enum(["theory", "numerical"]),
+  questionType: z.string().trim().min(1).max(120),
   count: z.number().int().min(1).max(20),
   marksEach: z.number().min(0.5).max(100),
 });
@@ -22,7 +22,12 @@ const requestSchema = z.object({
   title: z.string().trim().max(160).optional().default(""),
   instruction: z.string().trim().max(1_000).optional().default(""),
   passMarks: z.number().min(0).max(10_000).optional().default(0),
-  bands: z.array(bandSchema).min(1).max(6),
+  kind: z.enum(["exam", "class-test", "assignment", "quiz"]).optional().default("exam"),
+  timeLimitMinutes: z.number().int().min(5).max(300).optional().default(60),
+  chapters: z.array(z.string().trim().min(1).max(200)).max(40).optional().default([]),
+  mimicQuestionBank: z.boolean().optional().default(true),
+  useSuggestedWeightage: z.boolean().optional().default(true),
+  bands: z.array(bandSchema).max(6).optional().default([]),
 });
 
 function paperQuestion(value: unknown) {
@@ -66,21 +71,28 @@ export async function POST(request: Request) {
       (total, band) => total + band.count * band.marksEach,
       0,
     );
-    if (parsed.data.passMarks > totalMarks) {
+    if (!parsed.data.useSuggestedWeightage && !parsed.data.bands.length) {
+      return NextResponse.json({ error: "Choose at least one question." }, { status: 400 });
+    }
+    if (totalMarks > 0 && parsed.data.passMarks > totalMarks) {
       return NextResponse.json({ error: "Pass marks cannot exceed total marks." }, { status: 400 });
     }
 
-    const result = await generateTeacherPracticePaper(teacher.collection_sk, {
+    const result = await generateTeacherCollectionPaper(teacher.collection_sk, {
       subject: subjectName,
+      chapters: parsed.data.chapters,
       title: parsed.data.title || `${subjectName} exam`,
       instruction: parsed.data.instruction,
       pass_marks: parsed.data.passMarks,
-      bands: parsed.data.bands.map((band) => ({
-        label: band.label,
-        question_type: band.questionType,
-        count: band.count,
-        marks_each: band.marksEach,
-      })),
+      mimic_question_bank: parsed.data.mimicQuestionBank,
+      bands: parsed.data.useSuggestedWeightage
+        ? []
+        : parsed.data.bands.map((band) => ({
+            label: band.label,
+            question_type: band.questionType,
+            count: band.count,
+            marks_each: band.marksEach,
+          })),
     });
     const questions = Array.isArray(result.questions)
       ? result.questions.map(paperQuestion).filter((question) => question !== null)
@@ -95,6 +107,9 @@ export async function POST(request: Request) {
       subjectSlug: parsed.data.subjectSlug,
       totalMarks: Number(result.total_marks) || totalMarks,
       passMarks: Number(result.pass_marks) || parsed.data.passMarks,
+      kind: parsed.data.kind,
+      timeLimitMinutes: parsed.data.timeLimitMinutes,
+      attempts: 1,
       warning: typeof result.warning === "string" ? result.warning : "",
       shareUrl: paperId
         ? new URL(`/exam/paper/${encodeURIComponent(paperId)}`, baseUrl).toString()

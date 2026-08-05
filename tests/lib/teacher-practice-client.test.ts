@@ -1,7 +1,11 @@
 import http from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  askTeacherSubject,
+  generateTeacherCollectionPaper,
   generateTeacherPracticePaper,
+  getTeacherCollectionReadiness,
+  getTeacherCollectionWeightage,
   gradeTeacherPracticePaper,
   gradeTeacherPracticePaperFile,
 } from "@/lib/teacher-app/client";
@@ -56,6 +60,66 @@ describe("generateTeacherPracticePaper", () => {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
+    }
+  });
+
+  it("uses the subject-safe collection APIs for teacher chat, weightage, readiness, and generation", async () => {
+    const received: { path: string; method: string; authorization: string; body: unknown }[] = [];
+    const server = http.createServer((request, response) => {
+      let raw = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => (raw += chunk));
+      request.on("end", () => {
+        received.push({
+          path: request.url || "",
+          method: request.method || "",
+          authorization: String(request.headers.authorization || ""),
+          body: raw ? JSON.parse(raw) : null,
+        });
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify(request.url?.includes("generate") ? { id: "paper-1" } : {}));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not start.");
+      vi.stubEnv("TENANT_API_BASE_URL", `http://127.0.0.1:${address.port}`);
+      vi.stubEnv("TENANT_API_TOKEN", "unused-tenant-token");
+      vi.stubEnv("TENANT_API_REJECT_UNAUTHORIZED", "0");
+
+      await askTeacherSubject("collection-secret", "Physics", "Explain flux", 5, "Be concise", []);
+      await getTeacherCollectionWeightage("collection-secret", "Physics & Math");
+      await getTeacherCollectionReadiness("collection-secret", "Physics & Math");
+      await generateTeacherCollectionPaper("collection-secret", {
+        subject: "Physics",
+        chapters: ["Induction"],
+        bands: [],
+        mimic_question_bank: true,
+      });
+
+      expect(received.map((call) => call.path)).toEqual([
+        "/v1/collection/ask",
+        "/v1/collection/weightage?subject=Physics+%26+Math",
+        "/v1/collection/readiness?subject=Physics+%26+Math",
+        "/v1/collection/generate",
+      ]);
+      expect(received.every((call) => call.authorization === "Bearer collection-secret")).toBe(true);
+      expect(received[0].body).toEqual({
+        subject: "Physics",
+        query: "Explain flux",
+        top_k: 5,
+        prompt: "Be concise",
+        conversation_history: [],
+      });
+      expect(received[3].body).toEqual({
+        subject: "Physics",
+        chapters: ["Induction"],
+        bands: [],
+        mimic_question_bank: true,
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
   });
 

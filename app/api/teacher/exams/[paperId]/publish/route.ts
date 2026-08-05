@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getTeacherProfile } from "@/app/teachers/actions";
+import { recordTeacherClassroomActivity } from "@/lib/teacher-classroom-activity";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const schema = z.object({
   classroomId: z.string().uuid(),
   opensAt: z.string().datetime().nullable().optional(),
   closesAt: z.string().datetime().nullable().optional(),
+  maxAttempts: z.number().int().min(1).max(10).optional().default(1),
 });
 
 export async function POST(
@@ -24,8 +26,8 @@ export async function POST(
     }
     const admin = createSupabaseAdminClient();
     const [{ data: paper, error: paperError }, { data: classroom, error: classroomError }] = await Promise.all([
-      admin.from("teacher_exam_papers").select("id,subject_slug").eq("teacher_id", teacher.id).eq("external_paper_id", paperId).is("archived_at", null).maybeSingle(),
-      admin.from("teacher_classrooms").select("id,subject_slug").eq("teacher_id", teacher.id).eq("id", parsed.data.classroomId).is("archived_at", null).maybeSingle(),
+      admin.from("teacher_exam_papers").select("id,subject_slug,title").eq("teacher_id", teacher.id).eq("external_paper_id", paperId).is("archived_at", null).maybeSingle(),
+      admin.from("teacher_classrooms").select("id,subject_slug,name").eq("teacher_id", teacher.id).eq("id", parsed.data.classroomId).is("archived_at", null).maybeSingle(),
     ]);
     if (paperError || classroomError) throw paperError || classroomError;
     if (!paper || !classroom) return NextResponse.json({ error: "Paper or classroom not found." }, { status: 404 });
@@ -38,8 +40,16 @@ export async function POST(
       classroom_id: classroom.id,
       opens_at: parsed.data.opensAt || null,
       closes_at: parsed.data.closesAt || null,
+      max_attempts: parsed.data.maxAttempts,
     }, { onConflict: "paper_id,classroom_id" }).select("id,opens_at,closes_at,created_at").single();
     if (error) throw error;
+    await recordTeacherClassroomActivity(admin, {
+      classroomId: classroom.id,
+      actorId: teacher.id,
+      eventType: "exam.assigned",
+      summary: `${paper.title || "Exam"} assigned`,
+      metadata: { paperId, maxAttempts: parsed.data.maxAttempts },
+    });
     return NextResponse.json({ assignment: data });
   } catch {
     return NextResponse.json({ error: "Could not publish this paper." }, { status: 502 });

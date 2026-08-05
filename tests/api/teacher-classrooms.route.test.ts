@@ -11,7 +11,7 @@ describe("POST /api/teacher/classrooms", () => {
   beforeEach(() => {
     mocks.getTeacherProfile.mockResolvedValue({ id: "teacher-1", collection_sk: "collection-secret" });
     mocks.getTeacherSubjects.mockResolvedValue({ subjects: [{ slug: "physics", name: "Physics" }] });
-    const chain = { insert: vi.fn(), select: vi.fn(), single: vi.fn(async () => ({ data: { id: "room-1", subject_slug: "physics", subject_name: "Physics", name: "Section A", join_code: "ABC123", created_at: "now" }, error: null })) };
+    const chain = { insert: vi.fn(), upsert: vi.fn(async () => ({ error: null })), select: vi.fn(), single: vi.fn(async () => ({ data: { id: "room-1", subject_slug: "physics", subject_name: "Physics", name: "Section A", join_code: "ABC123", created_at: "now", term_key: "2026", meeting_schedule: "", notice: "" }, error: null })) };
     chain.insert.mockReturnValue(chain); chain.select.mockReturnValue(chain);
     mocks.createSupabaseAdminClient.mockReturnValue({ from: vi.fn(() => chain) });
   });

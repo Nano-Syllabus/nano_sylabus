@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { studentVisibleGrade, submissionReviewStatus } from "@/lib/teacher-submission-review";
+
+type SubmittedAttempt = { id: string; assignment_id: string; attempt_no: number; grade: unknown; created_at: string };
 
 function studentPaper(value: unknown) {
   if (!value || typeof value !== "object") return null;
@@ -29,21 +32,30 @@ export async function GET() {
     if (!classroomIds.length) return NextResponse.json({ assignments: [] });
     const { data, error } = await admin
       .from("teacher_exam_assignments")
-      .select("id,opens_at,closes_at,created_at,teacher_exam_papers!inner(external_paper_id,paper),teacher_classrooms!inner(name,subject_name)")
+      .select("id,opens_at,closes_at,created_at,max_attempts,teacher_exam_papers!inner(external_paper_id,paper),teacher_classrooms!inner(name,subject_name)")
       .in("classroom_id", classroomIds)
       .order("created_at", { ascending: false });
     if (error) throw error;
     const assignmentIds = (data || []).map((row) => row.id);
     const { data: submittedRows } = assignmentIds.length
-      ? await admin.from("teacher_exam_submissions").select("assignment_id,grade").eq("student_id", user.id).in("assignment_id", assignmentIds)
+      ? await admin.from("teacher_exam_submissions").select("id,assignment_id,attempt_no,grade,created_at").eq("student_id", user.id).in("assignment_id", assignmentIds).order("attempt_no", { ascending: false })
       : { data: [] };
-    const submitted = new Map((submittedRows || []).map((row) => [row.assignment_id, row.grade]));
+    const attemptsByAssignment = new Map<string, SubmittedAttempt[]>();
+    for (const row of submittedRows || []) {
+      const attempts = attemptsByAssignment.get(row.assignment_id) || [];
+      attempts.push({ id: row.id, assignment_id: row.assignment_id, attempt_no: row.attempt_no, grade: row.grade, created_at: row.created_at });
+      attemptsByAssignment.set(row.assignment_id, attempts);
+    }
     return NextResponse.json({
       assignments: (data || []).flatMap((row) => {
         const paperRow = Array.isArray(row.teacher_exam_papers) ? row.teacher_exam_papers[0] : row.teacher_exam_papers;
         const classroom = Array.isArray(row.teacher_classrooms) ? row.teacher_classrooms[0] : row.teacher_classrooms;
         const paper = studentPaper(paperRow?.paper);
         if (!paper) return [];
+        const attempts = attemptsByAssignment.get(row.id) || [];
+        const latest = attempts[0];
+        const latestPublished = attempts.find((attempt) => studentVisibleGrade(attempt.grade));
+        const maxAttempts = Math.max(1, Number(row.max_attempts) || 1);
         return [{
           id: row.id,
           externalPaperId: paperRow.external_paper_id,
@@ -53,8 +65,13 @@ export async function GET() {
           opensAt: row.opens_at,
           closesAt: row.closes_at,
           createdAt: row.created_at,
-          submitted: submitted.has(row.id),
-          grade: submitted.get(row.id) || null,
+          submitted: attempts.length > 0,
+          canAttempt: attempts.length < maxAttempts,
+          attemptCount: attempts.length,
+          maxAttempts,
+          attempts: attempts.map((attempt) => ({ id: attempt.id, attemptNo: attempt.attempt_no, reviewStatus: submissionReviewStatus(attempt.grade), grade: studentVisibleGrade(attempt.grade), createdAt: attempt.created_at })),
+          reviewStatus: latest ? submissionReviewStatus(latest.grade) : null,
+          grade: latestPublished ? studentVisibleGrade(latestPublished.grade) : null,
         }];
       }),
     });

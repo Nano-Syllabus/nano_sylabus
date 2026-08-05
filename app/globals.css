@@ -248,3 +248,100 @@
 *::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* The React teacher workspace intentionally mirrors the approved HTML prototype. */
+.teacher-html-parity {
+  color-scheme: light;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f7f6;
+  --bg-tertiary: #efefec;
+  --text-primary: #0b0b0b;
+  --text-secondary: #565654;
+  --text-muted: #767672;
+  --text-inverse: #ffffff;
+  --border: #e3e3e0;
+  --border-strong: #0b0b0b;
+  --red: #c43d2e;
+  --green: #2e7d4f;
+  --yellow: #b88700;
+  --note-red: rgb(196 61 46 / 12%);
+  --note-yellow: rgb(224 168 0 / 12%);
+  --note-green: rgb(46 125 79 / 12%);
+  --font-display: var(--font-teacher-display), "Trebuchet MS", sans-serif;
+  --font-sans: var(--font-teacher-body), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-teacher-mono), ui-monospace, Menlo, monospace;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+  min-height: 100vh;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.teacher-html-parity .font-display {
+  letter-spacing: -0.025em;
+}
+
+.teacher-html-parity .admin-btn {
+  min-height: 40px;
+  height: auto;
+  border-radius: 10px;
+  padding: 9px 15px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.teacher-html-parity .admin-btn[data-size="sm"] {
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: 13px;
+}
+
+.teacher-html-parity .admin-btn[data-size="lg"] {
+  min-height: 46px;
+  padding: 12px 20px;
+  font-size: 15px;
+}
+
+.teacher-html-parity .admin-btn[data-variant="filled"] {
+  border: 1px solid var(--text-primary);
+  background: var(--text-primary);
+  color: var(--text-inverse);
+}
+
+.teacher-html-parity .admin-btn[data-variant="filled"]:hover {
+  background: #282826;
+}
+
+.teacher-html-parity .admin-btn[data-variant="outline"] {
+  border-color: var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.teacher-html-parity .admin-btn[data-variant="outline"]:hover {
+  border-color: #8c8c89;
+  background: var(--bg-secondary);
+}
+
+.teacher-html-parity .admin-btn[data-variant="inverse"] {
+  border-color: var(--bg-primary);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.teacher-html-parity .admin-btn[data-variant="inverse"]:hover {
+  background: #ededea;
+}
+
+.teacher-html-parity :focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}

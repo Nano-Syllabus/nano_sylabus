@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { getTenantApiEnv } from "@/lib/env";
+import { getTeacherSubjects, type ApiRecord as TeacherApiRecord } from "@/lib/teacher-app/client";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { randomUUID } from "node:crypto";
 import https from "node:https";
@@ -40,11 +41,21 @@ function jobId(payload: unknown) {
   return typeof record.id === "string" ? record.id : "";
 }
 
-function validUploadPath(path: string) {
+function safeUploadPath(path: string) {
   if (!path || path.startsWith("/") || path.includes("\\")) return false;
   const parts = path.split("/");
-  if (parts.some((part) => !part || part === "." || part === "..")) return false;
-  return ["Syllabus", "Notes", "Question Bank"].includes(parts.at(-1) || "");
+  return !parts.some((part) => !part || part === "." || part === "..");
+}
+
+function pathBelongsToSubjectShelf(path: string, subjects: TeacherApiRecord[]) {
+  return subjects.some((subject) => {
+    const root = typeof subject.folder_path === "string" ? subject.folder_path.trim() : "";
+    if (!root || !safeUploadPath(root)) return false;
+    return ["Syllabus", "Notes", "Question Bank"].some((shelf) => {
+      const shelfPath = `${root}/${shelf}`;
+      return path === shelfPath || path.startsWith(`${shelfPath}/`);
+    });
+  });
 }
 
 export async function POST(req: Request) {
@@ -64,9 +75,16 @@ export async function POST(req: Request) {
     if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
-    if (!validUploadPath(path)) {
+    if (!safeUploadPath(path)) {
       return NextResponse.json(
         { error: "Choose a valid Syllabus, Notes or Question Bank folder." },
+        { status: 400 },
+      );
+    }
+    const subjects = await getTeacherSubjects(teacher.collection_sk);
+    if (!pathBelongsToSubjectShelf(path, subjects.subjects)) {
+      return NextResponse.json(
+        { error: "Choose a folder inside one of this teacher's subject shelves." },
         { status: 400 },
       );
     }
