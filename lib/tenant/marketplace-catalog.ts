@@ -106,8 +106,13 @@ export function joinMarketplaceWithSubjects(
 }
 
 export async function getPublishedCatalog(): Promise<PublishedCatalog> {
-  const [marketplace, tenantSubjects] = await Promise.all([getMarketplace(), listTenantSubjects()]);
-  return joinMarketplaceWithSubjects(marketplace, tenantSubjects);
+  try {
+    const [marketplace, tenantSubjects] = await Promise.all([getMarketplace(), listTenantSubjects()]);
+    return joinMarketplaceWithSubjects(marketplace, tenantSubjects);
+  } catch (error) {
+    console.error("[marketplace] published catalog unavailable", error);
+    return { providers: [], subjects: [] };
+  }
 }
 
 /** "Engineering Physics" and "engineering-physics" have to land on one key. */
