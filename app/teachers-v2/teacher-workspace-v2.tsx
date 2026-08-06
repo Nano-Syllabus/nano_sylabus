@@ -849,28 +849,91 @@ function StatusChip({ status }: { status: TeacherDocument["status"] }) {
   );
 }
 
+function SkeletonBlock({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        "animate-pulse-soft rounded-lg bg-bg-tertiary motion-reduce:animate-none",
+        className,
+      )}
+    />
+  );
+}
+
+function SkeletonCard({
+  lines = 3,
+  className,
+}: {
+  lines?: number;
+  className?: string;
+}) {
+  return (
+    <div className={cn("rounded-lg border border-border p-5", className)} aria-hidden="true">
+      <div className="flex items-start gap-3">
+        <SkeletonBlock className="h-10 w-10 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1 space-y-3">
+          <SkeletonBlock className="h-3 w-28" />
+          <SkeletonBlock className="h-5 w-3/4" />
+        </div>
+      </div>
+      <div className="mt-5 space-y-2">
+        {Array.from({ length: lines }).map((_, index) => (
+          <SkeletonBlock
+            key={index}
+            className={cn("h-3", index === lines - 1 ? "w-2/3" : "w-full")}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function WorkspaceSkeleton() {
   return (
-    <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
+    <div
+      className="grid min-h-screen lg:grid-cols-[280px_1fr]"
+      role="status"
+      aria-label="Loading teacher workspace"
+    >
       <aside className="hidden border-r border-border p-6 lg:block">
-        <div className="h-10 w-40 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none" />
+        <div className="flex items-center gap-3">
+          <SkeletonBlock className="h-11 w-11 rounded-full" />
+          <div className="space-y-2">
+            <SkeletonBlock className="h-5 w-36" />
+            <SkeletonBlock className="h-3 w-28" />
+          </div>
+        </div>
         <div className="mt-16 space-y-3">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-12 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none"
-            />
+            <SkeletonBlock key={index} className="h-12" />
           ))}
         </div>
       </aside>
       <main className="p-5 md:p-8">
-        <div className="h-10 w-56 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none" />
+        <div className="mb-8 rounded-xl border border-border bg-bg-primary p-5">
+          <p className="font-mono-ui text-xs uppercase tracking-[0.28em] text-text-muted">
+            Teacher workspace
+          </p>
+          <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight">
+            Loading your workspace…
+          </h1>
+          <p className="mt-2 text-sm text-text-secondary">
+            Fetching your subjects, classrooms, exams, and material.
+          </p>
+        </div>
+        <div className="flex items-start gap-4">
+          <div className="flex-1 space-y-3">
+            <SkeletonBlock className="h-3 w-32" />
+            <SkeletonBlock className="h-10 w-72 max-w-full" />
+            <SkeletonBlock className="h-4 w-56 max-w-full" />
+          </div>
+          <SkeletonBlock className="hidden h-12 w-44 sm:block" />
+        </div>
+        <SkeletonBlock className="mt-8 h-36 rounded-xl" />
         <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-44 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none"
-            />
+            <SkeletonCard key={index} lines={2} className="h-44" />
           ))}
         </div>
       </main>
@@ -1670,17 +1733,87 @@ function TodayView({
 
 function DashboardSkeleton() {
   return (
-    <div aria-label="Loading dashboard">
-      <div className="h-10 w-72 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none" />
-      <div className="mt-8 h-36 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none" />
+    <div role="status" aria-label="Loading dashboard">
+      <div className="space-y-3">
+        <SkeletonBlock className="h-3 w-24" />
+        <SkeletonBlock className="h-10 w-72 max-w-full" />
+        <SkeletonBlock className="h-4 w-56 max-w-full" />
+      </div>
+      <SkeletonBlock className="mt-8 h-36 rounded-xl" />
       <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 3 }).map((_, index) => (
-          <div
-            key={index}
-            className="h-48 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none"
-          />
+          <SkeletonCard key={index} lines={3} className="h-48" />
         ))}
       </div>
+    </div>
+  );
+}
+
+function ClassroomDetailSkeleton() {
+  return (
+    <div role="status" aria-label="Loading classroom">
+      <div className="space-y-3">
+        <SkeletonBlock className="h-4 w-56 max-w-full" />
+        <SkeletonBlock className="h-3 w-72 max-w-full" />
+        <SkeletonBlock className="h-10 w-64 max-w-full" />
+        <SkeletonBlock className="h-4 w-48 max-w-full" />
+      </div>
+      <SkeletonBlock className="mt-8 h-32 rounded-xl" />
+      <div className="mt-8 flex gap-6 border-b border-border pb-3">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <SkeletonBlock key={index} className="h-5 w-24" />
+        ))}
+      </div>
+      <div className="mt-6 space-y-3">
+        <SkeletonBlock className="h-12 w-full max-w-xl" />
+        <SkeletonBlock className="h-12 w-full" />
+        <SkeletonBlock className="h-12 w-full" />
+      </div>
+      <div className="mt-5 rounded-lg border border-border">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4 border-b border-border p-4 last:border-b-0">
+            <SkeletonBlock className="h-10 w-10 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <SkeletonBlock className="h-4 w-40" />
+              <SkeletonBlock className="h-3 w-56 max-w-full" />
+            </div>
+            <SkeletonBlock className="h-4 w-10" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExamWorkspaceSkeleton() {
+  return (
+    <div role="status" aria-label="Loading exams">
+      <div className="space-y-3">
+        <SkeletonBlock className="h-3 w-44" />
+        <SkeletonBlock className="h-10 w-80 max-w-full" />
+        <SkeletonBlock className="h-4 w-[30rem] max-w-full" />
+      </div>
+      <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+        <div className="space-y-5">
+          <SkeletonBlock className="h-52 rounded-xl" />
+          <SkeletonBlock className="h-80 rounded-xl" />
+        </div>
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <SkeletonCard key={index} lines={2} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SubmissionsSkeleton() {
+  return (
+    <div className="mt-6 space-y-4" role="status" aria-label="Loading submissions">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <SkeletonCard key={index} lines={4} />
+      ))}
     </div>
   );
 }
@@ -2395,7 +2528,7 @@ function ClassroomDetailView({
     void load();
   }, [load]);
 
-  if (state === "loading" && !detail) return <DashboardSkeleton />;
+  if (state === "loading" && !detail) return <ClassroomDetailSkeleton />;
   if (state === "error" && !detail)
     return <DashboardError message={error} onRetry={() => void load()} />;
   if (!detail) return null;
@@ -4000,7 +4133,11 @@ function ReusePaperDialog({
         marks.
       </p>
       {state === "loading" ? (
-        <p className="mt-5 text-sm text-text-muted">Loading your papers…</p>
+        <div className="mt-5 space-y-2" role="status" aria-label="Loading reusable exams">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <SkeletonCard key={index} lines={2} />
+          ))}
+        </div>
       ) : state === "error" ? (
         <p className="mt-5 text-sm text-destructive">{error}</p>
       ) : papers.length === 0 ? (
@@ -4248,43 +4385,11 @@ function CreateClassroomDialog({
             {error}
           </p>
         ) : null}
-        <details className="rounded-lg border border-border px-4 py-3">
-          <summary className={cn("min-h-10 cursor-pointer text-sm font-medium", interactive)}>
-            Term and meeting details
-          </summary>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="create-classroom-term" className="text-sm font-medium">
-                Term or year
-              </label>
-              <input
-                id="create-classroom-term"
-                value={termKey}
-                onChange={(event) => setTermKey(event.target.value)}
-                maxLength={40}
-                className={cn(inputClass, "mt-2")}
-              />
-            </div>
-            <div>
-              <label htmlFor="create-classroom-meeting" className="text-sm font-medium">
-                Meeting schedule <span className="text-text-muted">(optional)</span>
-              </label>
-              <input
-                id="create-classroom-meeting"
-                value={meetingSchedule}
-                onChange={(event) => setMeetingSchedule(event.target.value)}
-                maxLength={240}
-                placeholder="Sun, Tue · 10:00–11:00"
-                className={cn(inputClass, "mt-2")}
-              />
-            </div>
-          </div>
-        </details>
         <div className="flex justify-end gap-3 border-t border-border pt-5">
           <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" disabled={saving || !termKey.trim()} aria-busy={saving}>
+          <Button type="submit" disabled={saving} aria-busy={saving}>
             {saving ? "Creating…" : subjects.length ? "Create the classroom" : "Add subject first"}
           </Button>
         </div>
@@ -4530,7 +4635,8 @@ function ExamsView({
   if (selectedId) {
     const paper = papers.find((item) => item.id === selectedId);
     if (paper) {
-      if (paperDetailState === "loading" && !paper.questions.length) return <DashboardSkeleton />;
+      if (paperDetailState === "loading" && !paper.questions.length)
+        return <ExamWorkspaceSkeleton />;
       if (paperDetailState === "error" && !paper.questions.length)
         return (
           <DashboardError
@@ -4554,7 +4660,7 @@ function ExamsView({
     }
   }
 
-  if (state === "loading" && !papers.length) return <DashboardSkeleton />;
+  if (state === "loading" && !papers.length) return <ExamWorkspaceSkeleton />;
   if (state === "error" && !papers.length)
     return <DashboardError message={error} onRetry={() => void load()} />;
 
@@ -4631,10 +4737,7 @@ function ExamsView({
             {patternState === "loading" ? (
               <div className="mt-4 space-y-3">
                 {Array.from({ length: 3 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="h-20 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none"
-                  />
+                  <SkeletonBlock key={index} className="h-20" />
                 ))}
               </div>
             ) : (
@@ -5942,9 +6045,7 @@ function PaperSubmissionWorkflow({
         </form>
       ) : null}
 
-      {state === "loading" && !submissions.length ? (
-        <div className="mt-6 h-32 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none" />
-      ) : null}
+      {state === "loading" && !submissions.length ? <SubmissionsSkeleton /> : null}
       {state === "error" && !submissions.length ? (
         <DashboardError message={error} onRetry={() => void load()} />
       ) : null}
@@ -6869,14 +6970,6 @@ function SubjectsView({
                   <span className="rounded-full border border-border px-3 py-1 font-mono text-xs">
                     {documents.length} files
                   </span>
-                  <span className="flex-1" />
-                  <span
-                    className={cn(
-                      "h-2.5 w-2.5 rounded-full",
-                      missing === "Ready for teaching" ? "bg-green-500" : "bg-warning",
-                    )}
-                    aria-label="Setup status"
-                  />
                 </div>
                 <h2 className="mt-4 font-display text-xl font-semibold">{subject.name}</h2>
                 {subject.programme || subject.university ? (
@@ -7195,10 +7288,7 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
     return (
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         {Array.from({ length: 6 }).map((_, index) => (
-          <div
-            key={index}
-            className="h-36 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none"
-          />
+            <SkeletonCard key={index} lines={2} className="h-36" />
         ))}
       </div>
     );
@@ -7871,10 +7961,7 @@ function SyllabusEditor({
       {syllabus.state === "loading" ? (
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {Array.from({ length: 2 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-28 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none"
-            />
+            <SkeletonCard key={index} lines={2} className="h-28" />
           ))}
         </div>
       ) : null}
@@ -9066,7 +9153,18 @@ function DocumentDialog({
   return (
     <Dialog title={document.name} onClose={onClose}>
       {state === "loading" ? (
-        <div className="h-72 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none" />
+        <div className="space-y-4" role="status" aria-label="Loading document preview">
+          <div className="flex items-center gap-2">
+            <SkeletonBlock className="h-8 w-20 rounded-full" />
+            <SkeletonBlock className="h-4 w-36" />
+          </div>
+          <SkeletonBlock className="h-72" />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SkeletonBlock className="h-16" />
+            <SkeletonBlock className="h-16" />
+            <SkeletonBlock className="h-16" />
+          </div>
+        </div>
       ) : null}
       {state === "error" ? (
         <div className="rounded-lg border border-destructive/30 p-5">
@@ -9376,7 +9474,11 @@ function CollectionDialog({
       <section className="mt-7 rounded-lg border border-border p-5">
         <h3 className="font-display text-lg font-semibold">AI usage</h3>
         {usageState === "loading" ? (
-          <div className="mt-4 h-16 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none" />
+          <div className="mt-4 grid gap-3 sm:grid-cols-3" role="status" aria-label="Loading AI usage">
+            <SkeletonBlock className="h-20" />
+            <SkeletonBlock className="h-20" />
+            <SkeletonBlock className="h-20" />
+          </div>
         ) : usageState === "error" ? (
           <p className="mt-3 text-sm text-text-muted">
             Usage is temporarily unavailable. Collection tools still work normally.
