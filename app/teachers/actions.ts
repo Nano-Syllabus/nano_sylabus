@@ -39,11 +39,15 @@ export async function getTeacherProfile(): Promise<TeacherProfile | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
+  return getTeacherProfileForUserId(user.id);
+}
+
+export async function getTeacherProfileForUserId(userId: string): Promise<TeacherProfile | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("teachers")
     .select("id,user_id,handle,collection_sk")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data as TeacherProfile | null;

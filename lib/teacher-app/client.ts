@@ -178,9 +178,13 @@ export async function createTeacherSubject(key: string, subjectName: string) {
   return subject;
 }
 
-export const deleteTeacherSubject = (key: string, slug: string) =>
+export const deleteTeacherSubject = (
+  key: string,
+  slug: string,
+  options: { deleteFolder?: boolean } = {},
+) =>
   teacherRequest<ApiRecord>(
-    `/v1/collection/subjects/${encodeURIComponent(slug)}`,
+    `/v1/collection/subjects/${encodeURIComponent(slug)}?delete_folder=${options.deleteFolder ? "true" : "false"}`,
     key,
     { method: "DELETE" },
   );

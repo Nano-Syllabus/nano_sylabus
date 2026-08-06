@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import {
-  deleteTeacherPath,
   deleteTeacherSubject,
   getTeacherSubjects,
   TeacherApiError,
@@ -22,7 +21,15 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     }
 
     const subjects = await getTeacherSubjects(teacher.collection_sk);
-    const subject = subjects.subjects.find((item) => item.slug === trimmedSlug);
+    const subject = subjects.subjects.find((item) => {
+      const record = item as ApiRecord;
+      return (
+        item.slug === trimmedSlug ||
+        String(record.slug || "").trim() === trimmedSlug ||
+        String(record.name || "").trim() === trimmedSlug ||
+        String(record.folder_path || "").trim() === trimmedSlug
+      );
+    });
     if (!subject) {
       return NextResponse.json({ error: "Subject not found in this teacher collection." }, { status: 404 });
     }
@@ -40,24 +47,25 @@ export async function DELETE(request: Request, { params }: RouteContext) {
           { status: 400 },
         );
       }
-      await deleteTeacherPath(teacher.collection_sk, folderPath);
     }
 
-    await deleteTeacherSubject(teacher.collection_sk, trimmedSlug);
-    return NextResponse.json({ deleted: true, filesDeleted: deleteFiles });
+    const resolvedSlug = String((subject as ApiRecord).slug || subject.slug).trim();
+    await deleteTeacherSubject(teacher.collection_sk, resolvedSlug, { deleteFolder: deleteFiles });
+    return NextResponse.json({ deleted: true, filesDeleted: deleteFiles, subject: resolvedSlug });
   } catch (error) {
     const apiError = error instanceof TeacherApiError ? error : null;
     const status = apiError?.status === 401 ? 409 : apiError?.status === 404 ? 404 : 502;
-    return NextResponse.json(
-      {
-        error:
-          apiError?.status === 401
-            ? "This teacher workspace key is no longer valid."
-            : apiError?.status === 404
-              ? "Subject or source folder was not found."
-              : "Could not remove the subject.",
-      },
-      { status },
-    );
+    const detail =
+      apiError?.status === 401
+        ? "This teacher workspace key is no longer valid."
+        : apiError?.status === 404
+          ? "Subject or source folder was not found on the operator."
+          : apiError
+            ? `Upstream error (${apiError.status}): ${apiError.message}`
+            : error instanceof Error
+              ? error.message
+              : "Could not remove the subject.";
+    console.error("[DELETE /api/teacher/subjects/[slug]]", detail, error);
+    return NextResponse.json({ error: detail }, { status });
   }
 }
