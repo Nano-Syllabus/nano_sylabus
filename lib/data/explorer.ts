@@ -8,6 +8,15 @@ import type {
   SubjectExplorerSummary,
 } from "@/lib/types";
 
+async function listTenantSubjectsForExplorer() {
+  try {
+    return await listTenantSubjects();
+  } catch (error) {
+    console.error("[explore] tenant subject catalog unavailable", error);
+    return [];
+  }
+}
+
 function uniqueSubjects(values: string[]) {
   return normalizeSubjects(values);
 }
@@ -96,7 +105,7 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
       .from("chat_sessions")
       .select("id, updated_at, subject_tags")
       .eq("user_id", userId),
-    listTenantSubjects(),
+    listTenantSubjectsForExplorer(),
     admin
       .from("teacher_classroom_members")
       .select("classroom_id")
