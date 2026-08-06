@@ -33,10 +33,13 @@ export async function GET() {
       getTeacherDocuments(teacher.collection_sk),
     ]);
     const admin = createSupabaseAdminClient();
-    const { data: documentFiles } = await admin
-      .from("teacher_document_files")
-      .select("collection_path")
-      .eq("teacher_id", teacher.id);
+    const [{ data: documentFiles }, { data: subjectProfiles }] = await Promise.all([
+      admin.from("teacher_document_files").select("collection_path").eq("teacher_id", teacher.id),
+      admin
+        .from("teacher_subject_profiles")
+        .select("subject_slug,subject_name,subject_code,university,programme")
+        .eq("teacher_id", teacher.id),
+    ]);
     const { data: profile } = await admin
       .from("student_profiles")
       .select("full_name,language_pref")
@@ -47,14 +50,20 @@ export async function GET() {
       teacher: {
         handle: teacher.handle,
         email: user.email ?? "",
-        fullName: profile?.full_name || (typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : teacher.handle),
+        fullName:
+          profile?.full_name ||
+          (typeof user.user_metadata?.full_name === "string"
+            ? user.user_metadata.full_name
+            : teacher.handle),
         language: profile?.language_pref === "RN" ? "RN" : "EN",
-        answerStyle: user.user_metadata?.teacher_answer_style === "concise" ? "concise" : "exam_focused",
+        answerStyle:
+          user.user_metadata?.teacher_answer_style === "concise" ? "concise" : "exam_focused",
       },
       collection,
       subjects,
       sourceTree,
       documents,
+      subjectProfiles: subjectProfiles || [],
       previewPaths: (documentFiles || []).map((item) => item.collection_path),
     });
   } catch (error) {

@@ -9,11 +9,12 @@ import { getTenantApiEnv } from "@/lib/env";
 type Context = { params: Promise<{ paperId: string }> };
 
 const updateSchema = z.object({
-  title: z.string().trim().min(1).max(160),
-  passMarks: z.number().min(0).max(10_000),
-  kind: z.enum(["exam", "class-test", "assignment", "quiz"]),
-  timeLimitMinutes: z.number().int().min(5).max(300),
-});
+  title: z.string().trim().min(1).max(160).optional(),
+  passMarks: z.number().min(0).max(10_000).optional(),
+  kind: z.enum(["exam", "class-test", "assignment", "quiz"]).optional(),
+  timeLimitMinutes: z.number().int().min(5).max(300).optional(),
+  questions: z.array(z.record(z.unknown())).optional(),
+}).refine((data) => Object.keys(data).length > 0, "Nothing to update.");
 
 export async function GET(_request: Request, context: Context) {
   try {
@@ -52,7 +53,7 @@ export async function GET(_request: Request, context: Context) {
         shareUrl: normalized.shareUrl || new URL(`/exam/paper/${encodeURIComponent(id)}`, baseUrl).toString(),
       };
       const paper = local?.paper && typeof local.paper === "object"
-        ? { ...remotePaper, ...local.paper, questions: remotePaper.questions }
+        ? { ...remotePaper, ...local.paper }
         : remotePaper;
 
       if (!local) {
@@ -122,24 +123,37 @@ export async function PATCH(request: Request, context: Context) {
       .maybeSingle();
     if (readError) throw readError;
     if (!row) return NextResponse.json({ error: "Paper not found." }, { status: 404 });
-    if (parsed.data.passMarks > Number(row.total_marks || 0)) {
+
+    const currentPaper = (row.paper && typeof row.paper === "object" ? row.paper : {}) as Record<string, unknown>;
+    const nextQuestions = parsed.data.questions ?? (Array.isArray(currentPaper.questions) ? currentPaper.questions : []);
+    const newTotalMarks = parsed.data.questions
+      ? nextQuestions.reduce((sum: number, q: unknown) => {
+          const m = q && typeof q === "object" && "marks" in q ? Number((q as { marks: unknown }).marks) || 0 : 0;
+          return sum + m;
+        }, 0)
+      : Number(currentPaper.totalMarks || row.total_marks || 0);
+
+    const nextPassMarks = parsed.data.passMarks ?? Number(currentPaper.passMarks || 0);
+    if (nextPassMarks > newTotalMarks) {
       return NextResponse.json({ error: "Pass marks cannot exceed total marks." }, { status: 400 });
     }
 
     const paper = {
-      ...(row.paper && typeof row.paper === "object" ? row.paper : {}),
-      title: parsed.data.title,
-      passMarks: parsed.data.passMarks,
-      kind: parsed.data.kind,
-      timeLimitMinutes: parsed.data.timeLimitMinutes,
-      attempts: 1,
+      ...currentPaper,
+      ...(parsed.data.title !== undefined && { title: parsed.data.title }),
+      ...(parsed.data.passMarks !== undefined && { passMarks: parsed.data.passMarks }),
+      ...(parsed.data.kind !== undefined && { kind: parsed.data.kind }),
+      ...(parsed.data.timeLimitMinutes !== undefined && { timeLimitMinutes: parsed.data.timeLimitMinutes }),
+      ...(parsed.data.questions !== undefined && { questions: nextQuestions }),
+      totalMarks: newTotalMarks,
     };
     const updatedAt = new Date().toISOString();
     const { error } = await admin
       .from("teacher_exam_papers")
       .update({
-        title: parsed.data.title,
-        pass_marks: parsed.data.passMarks,
+        title: paper.title as string,
+        pass_marks: paper.passMarks as number,
+        total_marks: newTotalMarks,
         paper,
         updated_at: updatedAt,
       })

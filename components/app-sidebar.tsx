@@ -640,6 +640,53 @@ export function AppSidebar({
       {/* Spacer for collapsed state */}
       {isCollapsed && <div className="flex-1" />}
 
+      {/* ── Bottom Links ── */}
+      <div className={cn("mt-auto shrink-0 space-y-0.5 border-t border-border pt-2", isCollapsed ? "px-2 pb-1" : "px-3 pb-1")}>
+        <Link
+          href="/app/settings"
+          onClick={() => onCloseMobile?.()}
+          className={cn(
+            "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            isCollapsed
+              ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
+              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+            pathname.startsWith("/app/settings")
+              ? "bg-bg-secondary text-text-primary"
+              : "hover:bg-bg-secondary hover:text-text-primary",
+          )}
+          title={isCollapsed ? "Settings" : undefined}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          {!isCollapsed && "Settings"}
+        </Link>
+
+        <Link
+          href="/teachers"
+          onClick={() => onCloseMobile?.()}
+          className={cn(
+            "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            isCollapsed
+              ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
+              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+            pathname.startsWith("/teachers")
+              ? "bg-bg-secondary text-text-primary"
+              : "hover:bg-bg-secondary hover:text-text-primary",
+          )}
+          title={isCollapsed ? "Teachers Portal" : undefined}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          {!isCollapsed && "Teachers Portal"}
+        </Link>
+      </div>
+
       {/* ── User Profile ── */}
       <div className={cn("border-t border-border shrink-0 relative", isCollapsed ? "p-2" : "p-3")} ref={profileMenuRef}>
         {isProfileMenuOpen && (

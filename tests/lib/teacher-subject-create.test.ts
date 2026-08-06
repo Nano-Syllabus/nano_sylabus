@@ -23,7 +23,15 @@ describe("createTeacherSubject", () => {
         response.statusCode = 201;
         response.end(
           request.url === "/v1/collection/subjects"
-            ? JSON.stringify({ name: "Physics", slug: "physics", folder_path: "Physics" })
+            ? JSON.stringify({
+                collection: "ramesh-teacher",
+                subject: {
+                  name: "Physics",
+                  slug: "ramesh_teacher_physics",
+                  namespace: "ramesh-teacher",
+                  folder_path: "Physics",
+                },
+              })
             : JSON.stringify({ created: true }),
         );
       });
@@ -39,7 +47,12 @@ describe("createTeacherSubject", () => {
 
       const subject = await createTeacherSubject("collection-secret", "Physics");
 
-      expect(subject).toEqual({ name: "Physics", slug: "physics", folder_path: "Physics" });
+      expect(subject).toEqual({
+        name: "Physics",
+        slug: "ramesh_teacher_physics",
+        namespace: "ramesh-teacher",
+        folder_path: "Physics",
+      });
       expect(calls).toEqual([
         {
           path: "/v1/collection/mkdir",

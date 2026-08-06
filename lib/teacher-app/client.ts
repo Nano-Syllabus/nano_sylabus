@@ -157,10 +157,25 @@ export async function createTeacherSubject(key: string, subjectName: string) {
       if (!(error instanceof TeacherApiError) || error.status !== 409) throw error;
     }
   }
-  return teacherRequest<ApiRecord>("/v1/collection/subjects", key, {
-    method: "POST",
-    body: { name: subjectName, folder_path: subjectName },
-  });
+  const response = await teacherRequest<{ collection: string; subject: ApiRecord }>(
+    "/v1/collection/subjects",
+    key,
+    {
+      method: "POST",
+      body: { name: subjectName, folder_path: subjectName },
+    },
+  );
+
+  const subject = response.subject;
+  if (
+    !subject ||
+    typeof subject.name !== "string" ||
+    typeof subject.slug !== "string" ||
+    typeof subject.folder_path !== "string"
+  ) {
+    throw new Error("Teacher API returned an invalid subject response.");
+  }
+  return subject;
 }
 
 export const deleteTeacherSubject = (key: string, slug: string) =>

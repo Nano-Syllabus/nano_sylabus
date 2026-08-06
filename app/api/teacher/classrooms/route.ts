@@ -11,6 +11,7 @@ const schema = z.object({
   name: z.string().trim().min(1).max(120),
   termKey: z.string().trim().min(1).max(40).default(String(new Date().getFullYear())),
   meetingSchedule: z.string().trim().max(240).default(""),
+  sourceClassroomId: z.string().uuid().optional(),
 });
 
 export async function GET() {
@@ -18,28 +19,45 @@ export async function GET() {
     const teacher = await getTeacherProfile();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const admin = createSupabaseAdminClient();
-    const linksResult = await admin.from("teacher_classroom_teachers").select("classroom_id").eq("teacher_id", teacher.id);
+    const linksResult = await admin
+      .from("teacher_classroom_teachers")
+      .select("classroom_id")
+      .eq("teacher_id", teacher.id);
     if (linksResult.error) throw linksResult.error;
     const helperIds = (linksResult.data || []).map((item) => item.classroom_id);
     const ownResult = await admin
       .from("teacher_classrooms")
-      .select("id,subject_slug,subject_name,name,join_code,created_at,term_key,meeting_schedule,notice")
+      .select(
+        "id,subject_slug,subject_name,name,join_code,created_at,term_key,meeting_schedule,notice",
+      )
       .eq("teacher_id", teacher.id)
       .is("archived_at", null)
       .order("created_at", { ascending: false });
     if (ownResult.error) throw ownResult.error;
     const helperResult = helperIds.length
-      ? await admin.from("teacher_classrooms").select("id,subject_slug,subject_name,name,join_code,created_at,term_key,meeting_schedule,notice").in("id", helperIds).is("archived_at", null)
+      ? await admin
+          .from("teacher_classrooms")
+          .select(
+            "id,subject_slug,subject_name,name,join_code,created_at,term_key,meeting_schedule,notice",
+          )
+          .in("id", helperIds)
+          .is("archived_at", null)
       : { data: [], error: null };
     if (helperResult.error) throw helperResult.error;
-    const byId = new Map([...(ownResult.data || []), ...(helperResult.data || [])].map((row) => [row.id, row]));
-    const data = Array.from(byId.values()).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    const byId = new Map(
+      [...(ownResult.data || []), ...(helperResult.data || [])].map((row) => [row.id, row]),
+    );
+    const data = Array.from(byId.values()).sort((a, b) =>
+      String(b.created_at).localeCompare(String(a.created_at)),
+    );
     const ids = data.map((row) => row.id);
     const { data: members } = ids.length
       ? await admin.from("teacher_classroom_members").select("classroom_id").in("classroom_id", ids)
       : { data: [] };
     const counts = new Map<string, number>();
-    (members || []).forEach((row) => counts.set(row.classroom_id, (counts.get(row.classroom_id) || 0) + 1));
+    (members || []).forEach((row) =>
+      counts.set(row.classroom_id, (counts.get(row.classroom_id) || 0) + 1),
+    );
     return NextResponse.json({
       classrooms: (data || []).map((row) => ({
         id: row.id,
@@ -76,6 +94,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Subject not found." }, { status: 404 });
     }
     const admin = createSupabaseAdminClient();
+    let sourceMembers: { student_id: string }[] = [];
+    if (parsed.data.sourceClassroomId) {
+      const { data: sourceClassroom, error: sourceError } = await admin
+        .from("teacher_classrooms")
+        .select("id")
+        .eq("id", parsed.data.sourceClassroomId)
+        .eq("teacher_id", teacher.id)
+        .is("archived_at", null)
+        .maybeSingle();
+      if (sourceError) throw sourceError;
+      if (!sourceClassroom) {
+        return NextResponse.json(
+          { error: "The selected student batch is no longer available." },
+          { status: 404 },
+        );
+      }
+      const { data: members, error: membersError } = await admin
+        .from("teacher_classroom_members")
+        .select("student_id")
+        .eq("classroom_id", sourceClassroom.id);
+      if (membersError) throw membersError;
+      sourceMembers = members || [];
+    }
     let created = null;
     for (let attempt = 0; attempt < 3 && !created; attempt += 1) {
       const { data, error } = await admin
@@ -89,29 +130,58 @@ export async function POST(request: Request) {
           term_key: parsed.data.termKey,
           meeting_schedule: parsed.data.meetingSchedule,
         })
-        .select("id,subject_slug,subject_name,name,join_code,created_at,term_key,meeting_schedule,notice")
+        .select(
+          "id,subject_slug,subject_name,name,join_code,created_at,term_key,meeting_schedule,notice",
+        )
         .single();
       if (!error) created = data;
       else if (error.code !== "23505") throw error;
     }
     if (!created) throw new Error("Could not allocate a classroom code.");
-    const { error: leadError } = await admin.from("teacher_classroom_teachers").upsert({ classroom_id: created.id, teacher_id: teacher.id, role: "lead" }, { onConflict: "classroom_id,teacher_id" });
+    if (sourceMembers.length) {
+      const { error: copyError } = await admin
+        .from("teacher_classroom_members")
+        .insert(
+          sourceMembers.map((member) => ({
+            classroom_id: created.id,
+            student_id: member.student_id,
+          })),
+        );
+      if (copyError) {
+        await admin.from("teacher_classrooms").delete().eq("id", created.id);
+        throw copyError;
+      }
+    }
+    const { error: leadError } = await admin
+      .from("teacher_classroom_teachers")
+      .upsert(
+        { classroom_id: created.id, teacher_id: teacher.id, role: "lead" },
+        { onConflict: "classroom_id,teacher_id" },
+      );
     if (leadError) throw leadError;
-    await recordTeacherClassroomActivity(admin, { classroomId: created.id, actorId: teacher.id, eventType: "classroom.created", summary: "Classroom created" });
-    return NextResponse.json({
-      classroom: {
-        id: created.id,
-        subjectSlug: created.subject_slug,
-        subjectName: created.subject_name,
-        name: created.name,
-        joinCode: created.join_code,
-        memberCount: 0,
-        createdAt: created.created_at,
-        termKey: created.term_key,
-        meetingSchedule: created.meeting_schedule,
-        notice: created.notice,
+    await recordTeacherClassroomActivity(admin, {
+      classroomId: created.id,
+      actorId: teacher.id,
+      eventType: "classroom.created",
+      summary: "Classroom created",
+    });
+    return NextResponse.json(
+      {
+        classroom: {
+          id: created.id,
+          subjectSlug: created.subject_slug,
+          subjectName: created.subject_name,
+          name: created.name,
+          joinCode: created.join_code,
+          memberCount: sourceMembers.length,
+          createdAt: created.created_at,
+          termKey: created.term_key,
+          meetingSchedule: created.meeting_schedule,
+          notice: created.notice,
+        },
       },
-    }, { status: 201 });
+      { status: 201 },
+    );
   } catch {
     return NextResponse.json({ error: "Could not create the classroom." }, { status: 502 });
   }

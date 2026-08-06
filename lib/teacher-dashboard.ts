@@ -60,33 +60,54 @@ export function submissionPercentage(grade: unknown) {
 }
 
 export function buildTeacherDashboard(input: DashboardInput) {
-  const assignmentClassroom = new Map(input.assignments.map((assignment) => [assignment.id, assignment.classroom_id]));
+  const assignmentClassroom = new Map(
+    input.assignments.map((assignment) => [assignment.id, assignment.classroom_id]),
+  );
   const classroomMemberCounts = new Map<string, number>();
   const uniqueStudentIds = new Set<string>();
   for (const member of input.members) {
-    classroomMemberCounts.set(member.classroom_id, (classroomMemberCounts.get(member.classroom_id) || 0) + 1);
+    classroomMemberCounts.set(
+      member.classroom_id,
+      (classroomMemberCounts.get(member.classroom_id) || 0) + 1,
+    );
     uniqueStudentIds.add(member.student_id);
   }
 
   const classroomSubmissionCounts = new Map<string, number>();
+  const classroomActionRequiredCounts = new Map<string, number>();
   for (const submission of input.submissions) {
     if (!submission.assignment_id) continue;
     const classroomId = assignmentClassroom.get(submission.assignment_id);
     if (!classroomId) continue;
-    classroomSubmissionCounts.set(classroomId, (classroomSubmissionCounts.get(classroomId) || 0) + 1);
+    classroomSubmissionCounts.set(
+      classroomId,
+      (classroomSubmissionCounts.get(classroomId) || 0) + 1,
+    );
+    if (submissionReviewStatus(submission.grade) !== "published") {
+      classroomActionRequiredCounts.set(
+        classroomId,
+        (classroomActionRequiredCounts.get(classroomId) || 0) + 1,
+      );
+    }
   }
 
   const profileNames = new Map(
     input.profiles.map((profile) => [profile.user_id, profile.full_name?.trim() || ""]),
   );
-  const studentScores = new Map<string, { studentId: string | null; name: string; scores: number[]; latestAt: string }>();
+  const studentScores = new Map<
+    string,
+    { studentId: string | null; name: string; scores: number[]; latestAt: string }
+  >();
   for (const submission of input.submissions) {
     const percentage = submissionPercentage(submission.grade);
     if (percentage === null) continue;
     const key = submission.student_id || `name:${submission.student_name}`;
     const current = studentScores.get(key) || {
       studentId: submission.student_id,
-      name: (submission.student_id && profileNames.get(submission.student_id)) || submission.student_name || "Student",
+      name:
+        (submission.student_id && profileNames.get(submission.student_id)) ||
+        submission.student_name ||
+        "Student",
       scores: [],
       latestAt: submission.created_at,
     };
@@ -99,7 +120,9 @@ export function buildTeacherDashboard(input: DashboardInput) {
     .map((student) => ({
       studentId: student.studentId,
       name: student.name,
-      averagePercent: Math.round(student.scores.reduce((sum, score) => sum + score, 0) / student.scores.length),
+      averagePercent: Math.round(
+        student.scores.reduce((sum, score) => sum + score, 0) / student.scores.length,
+      ),
       submissionCount: student.scores.length,
       latestAt: student.latestAt,
     }))
@@ -113,7 +136,9 @@ export function buildTeacherDashboard(input: DashboardInput) {
       studentCount: uniqueStudentIds.size,
       paperCount: input.paperCount,
       submissionCount: input.submissions.length,
-      actionRequiredCount: input.submissions.filter((submission) => submissionReviewStatus(submission.grade) !== "published").length,
+      actionRequiredCount: input.submissions.filter(
+        (submission) => submissionReviewStatus(submission.grade) !== "published",
+      ).length,
       needsAttentionCount: needsAttention.length,
     },
     classrooms: input.classrooms.map((classroom) => ({
@@ -123,8 +148,11 @@ export function buildTeacherDashboard(input: DashboardInput) {
       name: classroom.name,
       joinCode: classroom.join_code,
       memberCount: classroomMemberCounts.get(classroom.id) || 0,
-      assignmentCount: input.assignments.filter((assignment) => assignment.classroom_id === classroom.id).length,
+      assignmentCount: input.assignments.filter(
+        (assignment) => assignment.classroom_id === classroom.id,
+      ).length,
       submissionCount: classroomSubmissionCounts.get(classroom.id) || 0,
+      actionRequiredCount: classroomActionRequiredCounts.get(classroom.id) || 0,
       createdAt: classroom.created_at,
       termKey: classroom.term_key || "2026",
       meetingSchedule: classroom.meeting_schedule || "",
