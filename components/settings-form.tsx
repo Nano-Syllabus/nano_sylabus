@@ -33,9 +33,11 @@ function engineeringLevel(value: string) {
 export function SettingsForm({
   user,
   profile,
+  examsSat,
 }: {
   user: AppUser;
   profile: StudentProfile;
+  examsSat: number;
 }) {
   const router = useRouter();
   const [fullName, setFullName] = useState(profile.fullName);
@@ -57,7 +59,7 @@ export function SettingsForm({
   const [deleting, setDeleting] = useState(false);
   const [catalogBoards, setCatalogBoards] = useState<string[]>([]);
   const [catalogGradesByBoard, setCatalogGradesByBoard] = useState<Record<string, string[]>>({});
-  const [catalogSubjectsByBoardGrade, setCatalogSubjectsByBoardGrade] = useState<Record<string, string[]>>({});
+  const [publishedSubjects, setPublishedSubjects] = useState<string[]>([]);
 
   const normalizedBoard = normalizeBoard(board);
   const normalizedGrade = normalizeGrade(grade);
@@ -84,10 +86,9 @@ export function SettingsForm({
       }),
     [board, catalogBoards.length, grade, suggestedGrades],
   );
-  const suggestedSubjects = useMemo(
-    () => catalogSubjectsByBoardGrade[`${normalizedBoard}::${normalizedGrade}`] ?? [],
-    [catalogSubjectsByBoardGrade, normalizedBoard, normalizedGrade],
-  );
+  // Teachers own the content, so every published subject is pickable — there is
+  // no faculty/level scope left to filter them by.
+  const suggestedSubjects = publishedSubjects;
   const programOptions = useMemo(
     () => defaultProgramOptions(normalizedBoard, normalizedGrade),
     [normalizedBoard, normalizedGrade],
@@ -106,22 +107,12 @@ export function SettingsForm({
       const response = await fetch("/api/tenant/catalog", { cache: "no-store" });
       if (!response.ok) return;
       const payload = (await response.json()) as {
-        faculties?: string[];
-        levelsByFaculty?: Record<string, string[]>;
-        subjectsByPath?: Record<string, Array<{ name: string }>>;
+        subjects?: Array<{ name: string }>;
       };
       if (!active) return;
-      setCatalogBoards(Array.isArray(payload.faculties) ? payload.faculties : []);
-      setCatalogGradesByBoard(payload.levelsByFaculty ?? {});
-      const nextSubjectsByBoardGrade: Record<string, string[]> = {};
-      for (const [key, subjects] of Object.entries(payload.subjectsByPath ?? {})) {
-        const normalizedKey = key.split("::").slice(0, 2).join("::");
-        nextSubjectsByBoardGrade[normalizedKey] = normalizeSubjects([
-          ...(nextSubjectsByBoardGrade[normalizedKey] ?? []),
-          ...subjects.map((subject) => subject.name),
-        ]);
-      }
-      setCatalogSubjectsByBoardGrade(nextSubjectsByBoardGrade);
+      setPublishedSubjects(
+        normalizeSubjects((payload.subjects ?? []).map((subject) => subject.name)),
+      );
     };
     void loadCatalog();
     return () => {
@@ -345,6 +336,13 @@ export function SettingsForm({
                 </button>
               ))}
             </div>
+          </div>
+          <div className="rounded-[14px] border border-border p-4">
+            <p className="text-[13px] text-text-muted">You are a student</p>
+            <p className="mt-2 text-sm">
+              {selectedSubjects.length} subject{selectedSubjects.length === 1 ? "" : "s"} · {examsSat} paper
+              {examsSat === 1 ? "" : "s"} handed in
+            </p>
           </div>
           <Field label="Subjects" hint="Select subjects available in your indexed books.">
             {suggestedSubjects.length > 0 ? (

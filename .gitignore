@@ -36,6 +36,7 @@ playwright-report/
 *.sw?
 .vercel
 .env.vercel.check
+.env*.bak*
 local_keys.txt
 vercel_keys.txt
 test-*.mjs
