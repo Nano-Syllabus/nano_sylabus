@@ -40,6 +40,43 @@ export async function GET() {
     const { data: submittedRows } = assignmentIds.length
       ? await admin.from("teacher_exam_submissions").select("id,assignment_id,attempt_no,grade,created_at").eq("student_id", user.id).in("assignment_id", assignmentIds).order("attempt_no", { ascending: false })
       : { data: [] };
+    // Every published grade on these papers, for the class comparison below.
+    // Only aggregates leave this route — no classmate is ever named.
+    const { data: peerRows } = assignmentIds.length
+      ? await admin
+          .from("teacher_exam_submissions")
+          .select("assignment_id, student_id, grade")
+          .in("assignment_id", assignmentIds)
+      : { data: [] as Array<{ assignment_id: string; student_id: string; grade: unknown }> };
+
+    const peersByAssignment = new Map<string, Array<{ studentId: string; percent: number }>>();
+    for (const row of peerRows || []) {
+      const grade = studentVisibleGrade(row.grade) as { total_score?: number; total_marks?: number } | null;
+      if (!grade?.total_marks) continue;
+
+      const list = peersByAssignment.get(row.assignment_id) || [];
+      list.push({ studentId: row.student_id, percent: (grade.total_score || 0) / grade.total_marks });
+      peersByAssignment.set(row.assignment_id, list);
+    }
+
+    function classSpread(assignmentId: string, myPercent: number | null) {
+      const peers = peersByAssignment.get(assignmentId) || [];
+      // Below three papers the distribution says more about who has handed in
+      // than about the class, so it is withheld.
+      if (peers.length < 3 || myPercent === null) return null;
+
+      const bands = [0, 0, 0, 0, 0];
+      for (const peer of peers) bands[Math.min(4, Math.floor(peer.percent * 5))] += 1;
+
+      return {
+        count: peers.length,
+        averagePercent: peers.reduce((total, peer) => total + peer.percent, 0) / peers.length,
+        bands,
+        myBand: Math.min(4, Math.floor(myPercent * 5)),
+        below: peers.filter((peer) => peer.percent < myPercent).length,
+      };
+    }
+
     const attemptsByAssignment = new Map<string, SubmittedAttempt[]>();
     for (const row of submittedRows || []) {
       const attempts = attemptsByAssignment.get(row.assignment_id) || [];
@@ -72,6 +109,13 @@ export async function GET() {
           attempts: attempts.map((attempt) => ({ id: attempt.id, attemptNo: attempt.attempt_no, reviewStatus: submissionReviewStatus(attempt.grade), grade: studentVisibleGrade(attempt.grade), createdAt: attempt.created_at })),
           reviewStatus: latest ? submissionReviewStatus(latest.grade) : null,
           grade: latestPublished ? studentVisibleGrade(latestPublished.grade) : null,
+          spread: (() => {
+            const mine = latestPublished
+              ? (studentVisibleGrade(latestPublished.grade) as { total_score?: number; total_marks?: number } | null)
+              : null;
+            if (!mine?.total_marks) return null;
+            return classSpread(row.id, (mine.total_score || 0) / mine.total_marks);
+          })(),
         }];
       }),
     });

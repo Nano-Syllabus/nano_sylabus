@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTeacherProfileForUserId } from "@/app/teachers/actions";
+import { getTeacherProfile } from "@/app/teachers/actions";
 import {
   getTeacherDocuments,
   getTeacherMe,
@@ -21,7 +21,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const teacher = await getTeacherProfileForUserId(user.id);
+    const teacher = await getTeacherProfile();
     if (!teacher) {
       return NextResponse.json({ error: "Teacher workspace not found." }, { status: 404 });
     }

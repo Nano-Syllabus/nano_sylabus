@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel, normalizeSubjects } from "@/lib/profile-normalization";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { listTenantSubjects } from "@/lib/tenant/client";
 import type {
   StudentProfile,
@@ -87,32 +88,51 @@ function categorizeSubject(subject: string): SubjectExplorerSummary["category"] 
 
 export async function listExplorerSubjects(userId: string, profile: StudentProfile) {
   const supabase = await createSupabaseServerClient();
+  const admin = createSupabaseAdminClient();
   const normalizedBoard = normalizeBoard(profile.board);
   const normalizedGrade = normalizeGrade(profile.grade);
-  const [sessionResult, tenantSubjects] = await Promise.all([
+  const [sessionResult, tenantSubjects, membershipResult] = await Promise.all([
     supabase
       .from("chat_sessions")
       .select("id, updated_at, subject_tags")
       .eq("user_id", userId),
     listTenantSubjects(),
+    admin
+      .from("teacher_classroom_members")
+      .select("classroom_id")
+      .eq("student_id", userId),
   ]);
 
   if (sessionResult.error) throw sessionResult.error;
+  if (membershipResult.error) throw membershipResult.error;
 
   const sessions = sessionResult.data ?? [];
   const sessionIds = sessions.map((session) => session.id);
+  const classroomIds = (membershipResult.data ?? [])
+    .map((row) => row.classroom_id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
 
-  const { data: messageRows, error: messageError } = sessionIds.length
-    ? await supabase
-        .from("chat_messages")
-        .select("session_id, role")
-        .in("session_id", sessionIds)
-    : { data: [], error: null };
+  const [messageResult, classroomResult] = await Promise.all([
+    sessionIds.length
+      ? supabase
+          .from("chat_messages")
+          .select("session_id, role")
+          .in("session_id", sessionIds)
+      : Promise.resolve({ data: [], error: null }),
+    classroomIds.length
+      ? admin
+          .from("teacher_classrooms")
+          .select("subject_name")
+          .in("id", classroomIds)
+          .is("archived_at", null)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
-  if (messageError) throw messageError;
+  if (messageResult.error) throw messageResult.error;
+  if (classroomResult.error) throw classroomResult.error;
 
   const questionCountBySessionId = new Map<string, number>();
-  (messageRows ?? []).forEach((row) => {
+  (messageResult.data ?? []).forEach((row) => {
     if (row.role !== "user") return;
     questionCountBySessionId.set(
       row.session_id,
@@ -122,8 +142,13 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
 
   const profileSubjects = uniqueSubjects(profile.subjects);
   const tenantSubjectNames = uniqueSubjects(tenantSubjects.map((subject) => subject.name));
+  const classroomSubjectNames = uniqueSubjects(
+    (classroomResult.data ?? [])
+      .map((row) => row.subject_name)
+      .filter((subject): subject is string => typeof subject === "string" && subject.trim().length > 0),
+  );
 
-  const allSubjects = tenantSubjectNames;
+  const allSubjects = uniqueSubjects([...classroomSubjectNames, ...profileSubjects, ...tenantSubjectNames]);
 
   const summaries = allSubjects.map((subject) => {
     const matchingSessions = sessions.filter((session) =>

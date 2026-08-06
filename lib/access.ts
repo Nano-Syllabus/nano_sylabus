@@ -1,14 +1,17 @@
 import type { AppRole, StudentProfile } from "@/lib/types";
 
-export function isProfileComplete(profile: Pick<
+export function isProfileComplete(profile: Partial<Pick<
   StudentProfile,
-  "fullName" | "college" | "board" | "grade" | "targetGrade" | "languagePref"
-> | null) {
+  "fullName" | "college" | "board" | "grade" | "targetGrade" | "languagePref" | "subjects"
+>> | null) {
   if (!profile) return false;
-  return Boolean(
-    profile.board &&
-    profile.grade,
-  );
+
+  // Content is teacher-managed now, so picking a subject is what completes
+  // onboarding. board/grade still count so profiles created under the old
+  // faculty/level flow stay onboarded.
+  if (Array.isArray(profile.subjects) && profile.subjects.length > 0) return true;
+
+  return Boolean(profile.board && profile.grade);
 }
 
 export function resolveAccess(input: {

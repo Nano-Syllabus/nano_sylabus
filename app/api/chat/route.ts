@@ -9,7 +9,7 @@ import { resolveResponseLanguage } from "@/lib/chat-language-mode";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
 import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { chatTenantStream, listTenantSubjects, type TenantChatSource, type TenantSubject, type TenantTokenUsage } from "@/lib/tenant/client";
+import { chatTenantStream, getTenantName, listTenantSubjects, type TenantChatSource, type TenantSubject, type TenantTokenUsage } from "@/lib/tenant/client";
 import { deriveSessionTitle } from "@/lib/utils";
 import type { AssistantAnswerTrace, AssistantCitation } from "@/lib/types";
 
@@ -113,7 +113,9 @@ function normalizeTenantSubjectFromRequest(
     slug: tenantSubject.slug,
     namespace: namespaceFromPath || tenantSubject.namespaceSlug,
     namespace_slug: tenantSubject.namespaceSlug,
-    full_path: `nano-syllabus/${tenantSubject.folderPath}`,
+    // Left tenant-relative: the caller does not know which tenant owns this
+    // subject, and nothing downstream reads full_path for retrieval.
+    full_path: tenantSubject.folderPath,
     folder_path: tenantSubject.folderPath,
     chunk_count: 0,
   };
@@ -677,6 +679,9 @@ export async function POST(request: Request) {
 
     const sessionSubjectContext = normalizeSubjectLabel(tenantSubject.name);
     const tenantNamespaces = [tenantSubject.namespace || tenantSubject.namespace_slug];
+    // Resolved from the API key rather than hardcoded: the namespaces above
+    // only retrieve anything when paired with the tenant that owns them.
+    const tenantName = await getTenantName();
     const sessionPromise = resolveChatSession({
       supabase,
       userId: user.id,
@@ -747,7 +752,7 @@ export async function POST(request: Request) {
         context_summary: tenantContextSummary,
         answer_instruction: answerInstruction,
         subject: tenantSubject.name,
-        tenant: "nano-syllabus",
+        tenant: tenantName,
         namespaces: tenantNamespaces,
         top_k: 8,
         attachment_count: latestUserAttachments.length,
@@ -782,7 +787,7 @@ export async function POST(request: Request) {
               answerInstruction,
               contextSummary: tenantContextSummary,
               subject: tenantSubject.name,
-              tenant: "nano-syllabus",
+              tenant: tenantName,
               namespaces: tenantNamespaces,
               topK: 8,
               attachments: latestUserAttachments,
@@ -867,7 +872,7 @@ export async function POST(request: Request) {
               answer_instruction: answerInstruction,
               context_summary: tenantContextSummary,
               subject: tenantSubject.name,
-              tenant: "nano-syllabus",
+              tenant: tenantName,
               namespaces: tenantNamespaces,
               top_k: 8,
               attachment_count: latestUserAttachments.length,
@@ -1129,7 +1134,7 @@ export async function POST(request: Request) {
           answer_instruction: answerInstruction,
           context_summary: tenantContextSummary,
           subject: tenantSubject.name,
-          tenant: "nano-syllabus",
+          tenant: tenantName,
           namespaces: tenantNamespaces,
           top_k: 8,
           attachment_count: latestUserAttachments.length,

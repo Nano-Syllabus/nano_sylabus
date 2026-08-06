@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import {
+  deleteTeacherPath,
   deleteTeacherSubject,
   getTeacherSubjects,
   TeacherApiError,
@@ -50,8 +51,11 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     }
 
     const resolvedSlug = String((subject as ApiRecord).slug || subject.slug).trim();
-    await deleteTeacherSubject(teacher.collection_sk, resolvedSlug, { deleteFolder: deleteFiles });
-    return NextResponse.json({ deleted: true, filesDeleted: deleteFiles, subject: resolvedSlug });
+    if (deleteFiles) {
+      await deleteTeacherPath(teacher.collection_sk, folderPath);
+    }
+    await deleteTeacherSubject(teacher.collection_sk, resolvedSlug);
+    return NextResponse.json({ deleted: true, filesDeleted: deleteFiles });
   } catch (error) {
     const apiError = error instanceof TeacherApiError ? error : null;
     const status = apiError?.status === 401 ? 409 : apiError?.status === 404 ? 404 : 502;

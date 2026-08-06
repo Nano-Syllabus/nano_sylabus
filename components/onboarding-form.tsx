@@ -1,56 +1,43 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select } from "@/components/ui/field";
-import {
-  defaultBoardOptions,
-  defaultGradeOptions,
-  defaultProgramOptions,
-  mergeDropdownOptions,
-} from "@/lib/onboarding-options";
-import {
-  normalizeBoard,
-  normalizeBoardScore,
-  normalizeCollege,
-  normalizeFullName,
-  normalizeGrade,
-  normalizeSubjects,
-  normalizeTargetGrade,
-  validateBoardScore,
-} from "@/lib/profile-normalization";
+import { Field, Input } from "@/components/ui/field";
+import { normalizeFullName, normalizeSubjects } from "@/lib/profile-normalization";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { StudentProfile } from "@/lib/types";
 
-type TenantCatalogPayload = {
-  faculties?: string[];
-  levelsByFaculty?: Record<string, string[]>;
-  branchesByPath?: Record<string, string[]>;
-  semestersByPath?: Record<string, Array<{ value: string; label: string; code: string }>>;
-  subjectsByPath?: Record<
-    string,
-    Array<{
-      name: string;
-      slug: string;
-      namespaceSlug: string;
-      folderPath: string;
-      semesterValue: string;
-      semesterLabel: string;
-      semesterCode: string;
-      branch: string;
-    }>
-  >;
+type PublishedSubject = {
+  name: string;
+  slug: string;
+  namespace: string;
+  folderPath: string;
+  providerName: string;
+  documentCount: number;
+  unitCount: number;
 };
 
-function engineeringBoard(value: string) {
-  return normalizeBoard(value) === "IOE" ? "IOE" : "IOE";
-}
+type PublishedProvider = {
+  namespace: string;
+  providerName: string;
+  subjects: PublishedSubject[];
+};
 
-function engineeringLevel(value: string) {
-  return normalizeGrade(value) === "Bachelor" ? "Bachelor" : "Bachelor";
-}
+type CatalogPayload = {
+  providers?: PublishedProvider[];
+  subjects?: PublishedSubject[];
+  error?: string;
+};
 
+const TOTAL_STEPS = 2;
+
+/**
+ * Content is teacher-managed, so onboarding no longer walks a faculty →
+ * branch → semester taxonomy. A student picks published subjects directly, or
+ * joins a teacher's classroom with a code. board/grade are still written so
+ * existing profiles and the chat personalisation prompt keep working.
+ */
 export function OnboardingForm({
   userId,
   initialProfile,
@@ -63,204 +50,44 @@ export function OnboardingForm({
   const router = useRouter();
   const draftKey = useMemo(() => `nano:onboarding:draft:${userId}`, [userId]);
   const hasHydratedDraft = useRef(false);
+
   const [step, setStep] = useState(1);
   const [fullName, setFullName] = useState(initialProfile?.fullName || initialName || "");
-  const [college, setCollege] = useState(initialProfile?.college ?? "");
-  const [board, setBoard] = useState(engineeringBoard(initialProfile?.board ?? ""));
-  const [grade, setGrade] = useState(engineeringLevel(initialProfile?.grade ?? ""));
-  const [program, setProgram] = useState("");
-  const [semester, setSemester] = useState<string>("");
-  const isBachelor = grade.toLowerCase().includes("bachelor");
-  const [scoreType, setScoreType] = useState<"%" | "GPA">("%");
-  const [score, setScore] = useState(initialProfile?.boardScore?.replace(/[%A-Z]+$/g, "") ?? "");
+  const [languagePref, setLanguagePref] = useState<"EN" | "RN">(initialProfile?.languagePref ?? "RN");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(
     normalizeSubjects(initialProfile?.subjects ?? []),
   );
-  const [targetGrade, setTargetGrade] = useState(initialProfile?.targetGrade ?? "");
-  const [languagePref, setLanguagePref] = useState<"EN" | "RN">(initialProfile?.languagePref ?? "RN");
+
+  const [providers, setProviders] = useState<PublishedProvider[]>([]);
+  const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
+  const [catalogError, setCatalogError] = useState("");
+
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [joining, setJoining] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [catalogFaculties, setCatalogFaculties] = useState<string[]>([]);
-  const [catalogLevelsByFaculty, setCatalogLevelsByFaculty] = useState<Record<string, string[]>>({});
-  const [catalogBranchesByPath, setCatalogBranchesByPath] = useState<Record<string, string[]>>({});
-  const [catalogSemestersByPath, setCatalogSemestersByPath] = useState<
-    Record<string, Array<{ value: string; label: string; code: string }>>
-  >({});
-  const [catalogSubjectsByPath, setCatalogSubjectsByPath] = useState<Record<string, Array<{ name: string }>>>({});
-
-  const total = 1;
-  const normalizedBoard = normalizeBoard(board);
-  const normalizedGrade = normalizeGrade(grade);
-  const isIoeBachelor = normalizedBoard === "IOE" && normalizedGrade === "Bachelor";
-  const suggestedGrades = useMemo(
-    () => catalogLevelsByFaculty[normalizedBoard] ?? [],
-    [catalogLevelsByFaculty, normalizedBoard],
-  );
-  const boardOptions = useMemo(
-    () =>
-      mergeDropdownOptions({
-        catalogValues: catalogFaculties.filter((item) => normalizeBoard(item) === "IOE"),
-        fallbackValues: defaultBoardOptions(),
-        includeValue: board,
-      }),
-    [board, catalogFaculties],
-  );
-  const gradeOptions = useMemo(
-    () =>
-      mergeDropdownOptions({
-        catalogValues: suggestedGrades,
-        fallbackValues: catalogFaculties.length ? [] : defaultGradeOptions(board),
-        includeValue: grade,
-      }),
-    [board, catalogFaculties.length, grade, suggestedGrades],
-  );
-  const branchCatalogKey = `${normalizedBoard}::${normalizedGrade}`;
-  const suggestedSubjects = useMemo(
-    () =>
-      (catalogSubjectsByPath[`${normalizedBoard}::${normalizedGrade}::${program}::${semester}`] ?? []).map(
-        (subject) => subject.name,
-      ),
-    [catalogSubjectsByPath, normalizedBoard, normalizedGrade, program, semester],
-  );
-  const programOptions = useMemo(
-    () =>
-      mergeDropdownOptions({
-        catalogValues: catalogBranchesByPath[branchCatalogKey] ?? [],
-        fallbackValues: catalogFaculties.length ? [] : defaultProgramOptions(normalizedBoard, normalizedGrade),
-        includeValue: program,
-      }),
-    [branchCatalogKey, catalogBranchesByPath, catalogFaculties.length, normalizedBoard, normalizedGrade, program],
-  );
-  const semesterOptions = useMemo(
-    () => catalogSemestersByPath[`${normalizedBoard}::${normalizedGrade}::${program}`] ?? [],
-    [catalogSemestersByPath, normalizedBoard, normalizedGrade, program],
-  );
-  const showBranchField = programOptions.length > 0;
-
-  useEffect(() => {
-    if (programOptions.length === 1 && program !== programOptions[0]) {
-      setProgram(programOptions[0]);
-    }
-  }, [program, programOptions]);
-
-  useEffect(() => {
-    if (semesterOptions.length === 1 && semester !== semesterOptions[0]?.value) {
-      setSemester(semesterOptions[0].value);
-    }
-  }, [semester, semesterOptions]);
-
-  useEffect(() => {
-    if (semester && semesterOptions.length > 0 && !semesterOptions.some((option) => option.value === semester)) {
-      setSemester("");
-    }
-  }, [semester, semesterOptions]);
-
-  useEffect(() => {
-    if (!program || !semester) return;
-    setSelectedSubjects((current) =>
-      current.filter((item) =>
-        suggestedSubjects.some((subject) => subject.toLowerCase() === item.toLowerCase()),
-      ),
-    );
-  }, [program, semester, suggestedSubjects]);
-
-  useEffect(() => {
-    if (initialProfile || hasHydratedDraft.current) return;
-    hasHydratedDraft.current = true;
-    try {
-      const raw = window.localStorage.getItem(draftKey);
-      if (!raw) return;
-      const draft = JSON.parse(raw) as {
-        step?: number;
-        fullName?: string;
-        college?: string;
-        board?: string;
-        grade?: string;
-        program?: string;
-        semester?: string;
-        scoreType?: "%" | "GPA";
-        score?: string;
-        selectedSubjects?: string[];
-        targetGrade?: string;
-        languagePref?: "EN" | "RN";
-      };
-      if (typeof draft.step === "number" && Number.isFinite(draft.step)) {
-        setStep(Math.min(total, Math.max(1, Math.trunc(draft.step))));
-      }
-      if (typeof draft.fullName === "string") setFullName(draft.fullName);
-      if (typeof draft.college === "string") setCollege(draft.college);
-      if (typeof draft.board === "string") setBoard(engineeringBoard(draft.board));
-      if (typeof draft.grade === "string") setGrade(engineeringLevel(draft.grade));
-      if (typeof draft.program === "string") setProgram(draft.program);
-      if (typeof draft.semester === "string") setSemester(draft.semester);
-      if (draft.scoreType === "%" || draft.scoreType === "GPA") setScoreType(draft.scoreType);
-      if (typeof draft.score === "string") setScore(draft.score);
-      if (Array.isArray(draft.selectedSubjects)) {
-        setSelectedSubjects(
-          normalizeSubjects(
-            draft.selectedSubjects.filter((item): item is string => typeof item === "string"),
-          ),
-        );
-      }
-      if (typeof draft.targetGrade === "string") setTargetGrade(draft.targetGrade);
-      if (draft.languagePref === "EN" || draft.languagePref === "RN") setLanguagePref(draft.languagePref);
-    } catch {
-      // Ignore malformed local draft.
-    }
-  }, [draftKey, initialProfile, total]);
-
-  useEffect(() => {
-    if (initialProfile) return;
-    try {
-      window.localStorage.setItem(
-        draftKey,
-        JSON.stringify({
-          step,
-          fullName,
-          college,
-          board,
-          grade,
-          program,
-          semester,
-          scoreType,
-          score,
-          selectedSubjects,
-          targetGrade,
-          languagePref,
-        }),
-      );
-    } catch {
-      // Ignore storage write failures.
-    }
-  }, [
-    board,
-    college,
-    draftKey,
-    fullName,
-    grade,
-    program,
-    semester,
-    initialProfile,
-    languagePref,
-    score,
-    scoreType,
-    selectedSubjects,
-    step,
-    targetGrade,
-  ]);
 
   useEffect(() => {
     let active = true;
+
     const loadCatalog = async () => {
-      const response = await fetch("/api/tenant/catalog", { cache: "no-store" });
-      if (!response.ok) return;
-      const payload = (await response.json()) as TenantCatalogPayload;
-      if (!active) return;
-      setCatalogFaculties(Array.isArray(payload.faculties) ? payload.faculties : []);
-      setCatalogLevelsByFaculty(payload.levelsByFaculty ?? {});
-      setCatalogBranchesByPath(payload.branchesByPath ?? {});
-      setCatalogSemestersByPath(payload.semestersByPath ?? {});
-      setCatalogSubjectsByPath(payload.subjectsByPath ?? {});
+      try {
+        const response = await fetch("/api/tenant/catalog", { cache: "no-store" });
+        const payload = (await response.json()) as CatalogPayload;
+        if (!active) return;
+
+        if (!response.ok) throw new Error(payload.error || "Could not load subjects.");
+
+        setProviders(Array.isArray(payload.providers) ? payload.providers : []);
+        setCatalogState("ready");
+      } catch (caught) {
+        if (!active) return;
+        setCatalogError(caught instanceof Error ? caught.message : "Could not load subjects.");
+        setCatalogState("error");
+      }
     };
 
     void loadCatalog();
@@ -269,48 +96,113 @@ export function OnboardingForm({
     };
   }, []);
 
-  function validateStep(nextStep = step) {
-    if (nextStep === 1) {
-      if (!normalizeBoard(board) || !normalizeGrade(grade)) {
-        return "Please complete your IOE Bachelor path.";
+  useEffect(() => {
+    if (initialProfile || hasHydratedDraft.current) return;
+    hasHydratedDraft.current = true;
+
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      if (!raw) return;
+
+      const draft = JSON.parse(raw) as {
+        step?: number;
+        fullName?: string;
+        selectedSubjects?: string[];
+        languagePref?: "EN" | "RN";
+      };
+
+      if (typeof draft.step === "number" && Number.isFinite(draft.step)) {
+        setStep(Math.min(TOTAL_STEPS, Math.max(1, Math.trunc(draft.step))));
       }
-      if (isIoeBachelor && !program) {
-        return "Please select your branch.";
+      if (typeof draft.fullName === "string") setFullName(draft.fullName);
+      if (Array.isArray(draft.selectedSubjects)) {
+        setSelectedSubjects(
+          normalizeSubjects(draft.selectedSubjects.filter((item): item is string => typeof item === "string")),
+        );
       }
-
+      if (draft.languagePref === "EN" || draft.languagePref === "RN") setLanguagePref(draft.languagePref);
+    } catch {
+      // Ignore malformed local draft.
     }
-    return null;
-  }
+  }, [draftKey, initialProfile]);
 
-  function goNext() {
-    const nextError = validateStep(step);
-    if (nextError) {
-      setError(nextError);
-      return;
+  useEffect(() => {
+    if (initialProfile) return;
+    try {
+      window.localStorage.setItem(
+        draftKey,
+        JSON.stringify({ step, fullName, selectedSubjects, languagePref }),
+      );
+    } catch {
+      // Ignore storage write failures.
     }
-    finish();
-  }
+  }, [draftKey, fullName, initialProfile, languagePref, selectedSubjects, step]);
 
-  function toggleSubject(subject: string) {
+  function toggleSubject(name: string) {
     setSelectedSubjects((current) => {
-      const exists = current.some((item) => item.toLowerCase() === subject.toLowerCase());
-      if (exists) return current.filter((item) => item.toLowerCase() !== subject.toLowerCase());
-      return [...current, subject];
+      const exists = current.some((item) => item.toLowerCase() === name.toLowerCase());
+      if (exists) return current.filter((item) => item.toLowerCase() !== name.toLowerCase());
+      return [...current, name];
     });
   }
 
-  async function finish() {
-    const semesterSubjectSet = normalizeSubjects(suggestedSubjects);
-    const subjects = semesterSubjectSet.length > 0 ? semesterSubjectSet : [];
-    const normalizedBoard = normalizeBoard(board);
-    const normalizedGrade = normalizeGrade(grade);
-
-    if (!normalizedBoard || !normalizedGrade) {
-      setError("Please complete your IOE Bachelor path.");
+  async function submitJoinCode() {
+    const code = joinCode.trim().toUpperCase();
+    if (!code) {
+      setJoinError("Enter the code your teacher shared.");
       return;
     }
 
+    setJoining(true);
+    setJoinError("");
 
+    try {
+      const response = await fetch("/api/student/teacher-classrooms/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        classroom?: { subjectName?: string; name?: string };
+        error?: string;
+      };
+
+      if (!response.ok) throw new Error(payload.error || "Could not join the classroom.");
+
+      const subjectName = payload.classroom?.subjectName;
+      if (subjectName) {
+        setSelectedSubjects((current) =>
+          current.some((item) => item.toLowerCase() === subjectName.toLowerCase())
+            ? current
+            : [...current, subjectName],
+        );
+      }
+
+      setJoinOpen(false);
+      setJoinCode("");
+    } catch (caught) {
+      setJoinError(caught instanceof Error ? caught.message : "Could not join the classroom.");
+    } finally {
+      setJoining(false);
+    }
+  }
+
+  function goNext() {
+    if (step === 1 && !normalizeFullName(fullName)) {
+      setError("Please tell us your name.");
+      return;
+    }
+    setError("");
+    setStep((value) => Math.min(TOTAL_STEPS, value + 1));
+  }
+
+  async function finish() {
+    const subjects = normalizeSubjects(selectedSubjects);
+
+    if (!subjects.length) {
+      setError("Pick at least one subject, or join your teacher's classroom with a code.");
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -318,14 +210,16 @@ export function OnboardingForm({
     const supabase = createSupabaseBrowserClient();
     const { error: upsertError } = await supabase.from("student_profiles").upsert({
       user_id: userId,
-      full_name: fullName || "Student",
+      full_name: normalizeFullName(fullName) || "Student",
       college: "",
-      board: normalizedBoard,
-      grade: normalizedGrade,
+      // Retained so existing profiles and the chat prompt keep their shape;
+      // the onboarding gate is the subject picks above.
+      board: "IOE",
+      grade: "Bachelor",
       board_score: null,
       subjects,
       target_grade: "Pass",
-      language_pref: "EN",
+      language_pref: languagePref,
     });
 
     if (upsertError) {
@@ -347,7 +241,7 @@ export function OnboardingForm({
   if (loading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center animate-fade-in pb-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-text-primary"></div>
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-text-primary" />
         <h2 className="mt-6 text-lg font-medium">Setting up your profile...</h2>
         <p className="mt-2 text-sm text-text-muted">Personalizing your learning experience</p>
       </div>
@@ -356,108 +250,150 @@ export function OnboardingForm({
 
   return (
     <form
-      className="mx-auto flex flex-1 w-full max-w-2xl flex-col px-5 py-10"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (step < total) {
-          goNext();
-        } else {
-          void finish();
-        }
+      className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-5 py-10"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (step < TOTAL_STEPS) goNext();
+        else void finish();
       }}
     >
       <div className="border-b border-border bg-bg-secondary px-5 py-3">
         <div className="flex items-center justify-between text-xs font-mono-ui text-text-muted">
-          <span>Step {step} of {total}</span>
-          <span>{Math.round((step / total) * 100)}%</span>
+          <span>
+            Step {step} of {TOTAL_STEPS}
+          </span>
+          <span>{Math.round((step / TOTAL_STEPS) * 100)}%</span>
         </div>
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-bg-tertiary">
-          <div className="h-full bg-text-primary transition-all" style={{ width: `${(step / total) * 100}%` }} />
+          <div
+            className="h-full bg-text-primary transition-all"
+            style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
+          />
         </div>
       </div>
 
       <main className="flex flex-1 flex-col py-12">
         {step === 1 ? (
-          <Step title="Select your academic path" subtitle="Set your TU IOE Bachelor context before choosing subjects.">
-            {/*
-            <Field label="University / academic authority">
-              <Select value="Tribhuvan University" disabled>
-                <option value="Tribhuvan University">Tribhuvan University</option>
-              </Select>
+          <Step title="Let's get you set up" subtitle="Just your name and how you like to read answers.">
+            <Field label="Your name">
+              <Input
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                placeholder="Prashant Giri"
+                autoComplete="name"
+              />
             </Field>
-            */}
-            <Field label="Faculty">
-              <Select
-                value={board}
-                onChange={(event) => {
-                  const nextBoard = event.target.value;
-                  if (nextBoard !== board) {
-                    setGrade("");
-                    setProgram("");
-                    setSemester("");
-                  }
-                  setBoard(nextBoard);
-                }}
-              >
-                <option value="">Select faculty</option>
-                {boardOptions.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
+            <Field label="Answer language">
+              <div className="flex gap-2">
+                {(
+                  [
+                    { value: "RN", label: "Roman Nepali" },
+                    { value: "EN", label: "English" },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setLanguagePref(option.value)}
+                    aria-pressed={languagePref === option.value}
+                    className={`min-h-10 rounded-lg border px-4 text-sm font-medium transition ${
+                      languagePref === option.value
+                        ? "border-text-primary bg-text-primary text-text-inverse"
+                        : "border-border hover:bg-bg-secondary"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
                 ))}
-              </Select>
+              </div>
             </Field>
-            <Field label="Level">
-              <Select
-                value={grade}
-                onChange={(event) => {
-                  const nextGrade = event.target.value;
-                  if (!nextGrade.toLowerCase().includes("bachelor")) {
-                    setSemester("");
-                    setProgram("");
-                  }
-                  setGrade(nextGrade);
-                }}
-                disabled={!board}
-              >
-                <option value="">{board ? "Select level" : "Select faculty first"}</option>
-                {gradeOptions.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            {isIoeBachelor && showBranchField ? (
-              <Field label="Branch">
-                <Select
-                  value={program}
-                  onChange={(event) => setProgram(event.target.value)}
-                >
-                  <option value="">Select branch</option>
-                  {programOptions.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+          </Step>
+        ) : null}
+
+        {step === 2 ? (
+          <Step
+            title="Pick your subjects"
+            subtitle="These are published by teachers. Answers and practice come from their material."
+          >
+            {catalogState === "loading" ? (
+              <p className="text-sm text-text-secondary">Loading published subjects…</p>
             ) : null}
 
-            <StepTrap onFocusForward={goNext} onFocusBack={() => setStep((v) => Math.max(1, v - 1))} />
+            {catalogState === "error" ? (
+              <div className="rounded-[14px] border border-border p-4">
+                <p className="text-sm font-medium">Could not load subjects</p>
+                <p className="mt-1 text-sm text-text-secondary">{catalogError}</p>
+              </div>
+            ) : null}
+
+            {catalogState === "ready" && !providers.length ? (
+              <div className="rounded-[14px] border border-border p-4">
+                <p className="text-sm font-medium">No published subjects yet</p>
+                <p className="mt-1 text-sm text-text-secondary">
+                  Join your teacher&apos;s classroom with a code to get started.
+                </p>
+              </div>
+            ) : null}
+
+            <div className="space-y-6">
+              {providers.map((provider) => (
+                <section key={provider.namespace}>
+                  <p className="text-xs font-mono-ui uppercase tracking-wider text-text-muted">
+                    {provider.providerName}
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {provider.subjects.map((subject) => {
+                      const active = selectedSubjects.some(
+                        (item) => item.toLowerCase() === subject.name.toLowerCase(),
+                      );
+                      return (
+                        <button
+                          key={subject.slug}
+                          type="button"
+                          onClick={() => toggleSubject(subject.name)}
+                          aria-pressed={active}
+                          className={`rounded-[14px] border px-4 py-3 text-left transition ${
+                            active
+                              ? "border-text-primary bg-bg-secondary"
+                              : "border-border hover:border-border-strong"
+                          }`}
+                        >
+                          <span className="block text-[15px] font-medium">{subject.name}</span>
+                          <span className="mt-1 block text-[13px] text-text-muted">
+                            {subject.providerName} · {subject.documentCount} file
+                            {subject.documentCount === 1 ? "" : "s"} · {subject.unitCount} unit
+                            {subject.unitCount === 1 ? "" : "s"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
+              <p className="text-sm text-text-secondary">Got a classroom code from your teacher?</p>
+              <Button type="button" variant="outline" size="sm" onClick={() => setJoinOpen(true)}>
+                Join with a code
+              </Button>
+            </div>
           </Step>
         ) : null}
 
         {error ? <p className="mt-6 text-sm text-destructive">{error}</p> : null}
 
         <div className="mt-auto flex items-center justify-between pt-10">
-          <Button variant="ghost" type="button" onClick={() => setStep((value) => Math.max(1, value - 1))} disabled={step === 1}>
+          <Button
+            variant="ghost"
+            type="button"
+            onClick={() => setStep((value) => Math.max(1, value - 1))}
+            disabled={step === 1}
+          >
             ← Back
           </Button>
-          {step < total ? (
-            <Button type="submit">
-              Next →
-            </Button>
+          {step < TOTAL_STEPS ? (
+            <Button type="submit">Next →</Button>
           ) : (
             <Button type="submit" disabled={loading}>
               {loading ? "Saving..." : "Start learning →"}
@@ -465,6 +401,51 @@ export function OnboardingForm({
           )}
         </div>
       </main>
+
+      {joinOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Close join dialog"
+            className="absolute inset-0 bg-black/45"
+            onClick={() => setJoinOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="onboarding-join-title"
+            className="relative w-full max-w-md rounded-2xl border border-border bg-bg-primary p-6 shadow-xl"
+          >
+            <h2 id="onboarding-join-title" className="font-display text-2xl font-semibold">
+              Join with a code
+            </h2>
+            <p className="mt-2 text-sm text-text-secondary">
+              Your class code brings in the subject your teacher is running.
+            </p>
+            <Input
+              className="mt-5 uppercase"
+              value={joinCode}
+              onChange={(event) => {
+                setJoinCode(event.target.value);
+                setJoinError("");
+              }}
+              placeholder="BEI-4K2M"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {joinError ? <p className="mt-2 text-sm text-destructive">{joinError}</p> : null}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setJoinOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={() => void submitJoinCode()} disabled={joining}>
+                {joining ? "Joining…" : "Join"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </form>
   );
 }
@@ -485,28 +466,5 @@ function Step({
       <p className="mt-2 text-sm text-text-secondary">{subtitle}</p>
       <div className="mt-8 space-y-6">{children}</div>
     </div>
-  );
-}
-
-/** Hidden focusable element placed after the last field in each step.
- *  When the mobile keyboard "Next" arrow navigates past the last input,
- *  this trap catches focus and auto-advances to the next step.
- *  Similarly for "Previous" arrow → goes back. */
-function StepTrap({
-  onFocusForward,
-  onFocusBack,
-}: {
-  onFocusForward: () => void;
-  onFocusBack: () => void;
-}) {
-  return (
-    <>
-      <input
-        aria-hidden
-        tabIndex={0}
-        onFocus={onFocusForward}
-        className="pointer-events-none absolute h-0 w-0 opacity-0"
-      />
-    </>
   );
 }

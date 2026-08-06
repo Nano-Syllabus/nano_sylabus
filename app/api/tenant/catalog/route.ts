@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { buildTenantEngineeringCatalog } from "@/lib/tenant/catalog";
-import { getTenantSourceTree, listTenantNamespaces, listTenantSubjects } from "@/lib/tenant/client";
+import { getPublishedCatalog } from "@/lib/tenant/marketplace-catalog";
 
 export async function GET() {
   try {
@@ -14,33 +13,17 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [namespaces, subjects, sourceTree] = await Promise.all([
-      listTenantNamespaces(),
-      listTenantSubjects(),
-      getTenantSourceTree(),
-    ]);
-
-    const catalog = buildTenantEngineeringCatalog(sourceTree.tree ?? [], subjects);
+    const catalog = await getPublishedCatalog();
 
     return NextResponse.json({
-      namespaces:
-        catalog.namespaces.length > 0
-          ? catalog.namespaces
-          : namespaces.map((namespace) => ({
-              label: namespace.namespace,
-              value: namespace.namespace_slug,
-            })),
-      faculties: catalog.faculties,
-      levelsByFaculty: catalog.levelsByFaculty,
-      branchesByPath: catalog.branchesByPath,
-      semestersByPath: catalog.semestersByPath,
-      subjectsByPath: catalog.subjectsByPath,
+      providers: catalog.providers,
+      subjects: catalog.subjects,
     });
   } catch (error) {
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : "Failed to load tenant onboarding catalog.",
+          error instanceof Error ? error.message : "Failed to load the published subject catalog.",
       },
       { status: 500 },
     );

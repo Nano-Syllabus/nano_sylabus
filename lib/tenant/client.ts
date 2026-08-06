@@ -196,6 +196,151 @@ export type TeacherGradeResponse = {
   total_score: number;
   total_marks: number;
   graded?: boolean;
+  evaluation?: PracticeEvaluation;
+};
+
+/**
+ * Published catalog. Teachers own the content now, so this — not the source
+ * tree folder taxonomy — is what decides which subjects a student may pick.
+ */
+export type MarketplaceSubject = {
+  subject: string;
+  chunk_count: number;
+  word_count: number;
+  document_count: number;
+  unit_count: number;
+};
+
+export type MarketplaceProvider = {
+  tenant: string;
+  tenant_name: string;
+  namespace: string;
+  provider_name: string;
+  provider_kind: string;
+  is_default_tenant: boolean;
+  chunk_count: number;
+  word_count: number;
+  document_count: number;
+  subjects: MarketplaceSubject[];
+};
+
+export type MarketplaceResponse = {
+  default_tenant: string;
+  providers: MarketplaceProvider[];
+};
+
+export type PracticeTopic = {
+  topic_id: string;
+  topic_key: string;
+  title: string;
+  blurb?: string;
+  order_index: number;
+  syllabus_weight: number;
+  /** Share of the subject's question bank this chapter accounts for. */
+  weight: number;
+  weight_source: string;
+  qb_question_count: number;
+  qb_marks: number;
+};
+
+export type PracticePlanItem = {
+  topic_key: string;
+  title: string;
+  marks_each: number;
+  count: number;
+};
+
+export type PracticeTopicsResponse = {
+  subject: string;
+  namespaces: string[];
+  topic_source: string;
+  weightage_basis: string;
+  question_bank_questions: number;
+  marks_bands: number[];
+  topics: PracticeTopic[];
+  suggested_plan: PracticePlanItem[];
+  suggested_total_marks?: number;
+  suggested_question_count?: number;
+  note?: string | null;
+};
+
+export type PracticeSessionQuestion = {
+  id: string;
+  topic_key: string;
+  topic: string;
+  marks: number;
+  question_type?: string;
+  text: string;
+};
+
+export type PracticeSessionResponse = {
+  session_id: string;
+  subject: string;
+  topic_source: string;
+  questions: PracticeSessionQuestion[];
+  total_marks: number;
+  /** Sessions are ephemeral — the tenant drops them after this timestamp. */
+  expires_at: string;
+  plan: PracticePlanItem[];
+  warning?: string | null;
+};
+
+export type PracticeTopicStatus = "strong" | "developing" | "weak" | "not_attempted";
+
+export type PracticeChapterEvaluation = {
+  chapter: string;
+  topic_key: string;
+  questions: number;
+  questions_answered: number;
+  marks: number;
+  score: number;
+  marks_lost: number;
+  percentage: number;
+  /** Share of this paper's marks that sat in this chapter. */
+  weightage: number;
+  /** Share of the whole paper's marks dropped in this chapter. */
+  lost_weightage: number;
+  status: PracticeTopicStatus;
+};
+
+/**
+ * The tenant computes this per grade call and stores nothing, so anything that
+ * needs to survive the request has to be persisted on our side.
+ */
+export type PracticeEvaluation = {
+  total_score: number;
+  total_marks: number;
+  percentage: number;
+  marks_lost: number;
+  questions: number;
+  questions_answered: number;
+  chapters: PracticeChapterEvaluation[];
+  strong_topics: PracticeChapterEvaluation[];
+  weak_topics: PracticeChapterEvaluation[];
+  not_attempted: PracticeChapterEvaluation[];
+  summary: string;
+};
+
+export type PracticeGradeResult = {
+  question_id: string;
+  topic_key?: string;
+  topic?: string;
+  question: string;
+  marks: number;
+  student_answer?: string;
+  score: number;
+  feedback: string;
+};
+
+export type PracticeSessionGradeResponse = {
+  session_id: string;
+  subject: string;
+  results: PracticeGradeResult[];
+  total_score: number;
+  total_marks: number;
+  graded: boolean;
+  stored: boolean;
+  evaluation: PracticeEvaluation;
 };
 
 function requestJson<T>(
@@ -303,8 +448,114 @@ export async function listTenantSubjects() {
   return payload.subjects ?? [];
 }
 
+let cachedTenantName: string | null = null;
+
+/**
+ * The tenant that owns this API key's content. Chat has to send it explicitly,
+ * and it moves with the key — hardcoding it silently retrieves nothing when
+ * the content lives under a different tenant.
+ */
+export async function getTenantName() {
+  if (cachedTenantName) return cachedTenantName;
+
+  const payload = await requestJson<TenantSubjectsResponse>("/api/v1/subjects");
+  if (!payload.tenant) {
+    throw new Error("Tenant API did not report which tenant this key belongs to.");
+  }
+
+  cachedTenantName = payload.tenant;
+  return cachedTenantName;
+}
+
 export async function getTenantSourceTree() {
   return requestJson<TenantSourceTreeResponse>("/api/v1/source-tree");
+}
+
+export async function getMarketplace() {
+  return requestJson<MarketplaceResponse>("/api/marketplace");
+}
+
+/**
+ * Downloads a source file as bytes. Uses node:https directly because the tenant
+ * is served over a self-signed certificate that global fetch will not accept.
+ */
+export function fetchTenantDocumentRaw(documentId: string) {
+  const { baseUrl, token, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
+  const url = new URL(`/api/v1/documents/${encodeURIComponent(documentId)}/raw`, baseUrl);
+  const transport = url.protocol === "https:" ? https : http;
+
+  return new Promise<{ body: Buffer; contentType: string }>((resolve, reject) => {
+    const request = transport.request(
+      url,
+      { method: "GET", rejectUnauthorized, headers: { Authorization: `Bearer ${token}` } },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("error", reject);
+        response.on("end", () => {
+          if ((response.statusCode ?? 500) >= 400) {
+            reject(new Error(`Tenant API ${url.pathname} failed with ${response.statusCode}`));
+            return;
+          }
+          resolve({
+            body: Buffer.concat(chunks),
+            contentType: response.headers["content-type"] || "application/octet-stream",
+          });
+        });
+      },
+    );
+
+    request.setTimeout(timeoutMs, () => request.destroy(new Error("Document download timed out.")));
+    request.on("error", reject);
+    request.end();
+  });
+}
+
+export async function listPracticeTopics(input: {
+  subject: string;
+  namespaces?: string[];
+  totalMarks?: number;
+  maxQuestions?: number;
+  /** Re-parse the syllabus document instead of serving the cached topic list. */
+  refresh?: boolean;
+}) {
+  const params = new URLSearchParams({ subject: input.subject });
+  for (const namespace of input.namespaces ?? []) params.append("namespaces", namespace);
+  if (input.totalMarks) params.set("total_marks", String(input.totalMarks));
+  if (input.maxQuestions) params.set("max_questions", String(input.maxQuestions));
+  if (input.refresh) params.set("refresh", "true");
+
+  return requestJson<PracticeTopicsResponse>(`/api/v1/practice/topics?${params.toString()}`, {
+    timeoutMs: 120000,
+  });
+}
+
+export async function startPracticeSession(input: {
+  subject: string;
+  topics?: string[];
+  namespaces?: string[];
+  total_marks?: number;
+  max_questions?: number;
+}) {
+  return requestJson<PracticeSessionResponse>("/api/v1/practice/session", {
+    method: "POST",
+    body: input,
+    timeoutMs: 240000,
+  });
+}
+
+export async function gradePracticeSession(
+  sessionId: string,
+  input: { answers: Array<{ question_id: string; answer_text: string }>; instruction?: string },
+) {
+  return requestJson<PracticeSessionGradeResponse>(
+    `/api/v1/practice/session/${encodeURIComponent(sessionId)}/grade`,
+    {
+      method: "POST",
+      body: input,
+      timeoutMs: 240000,
+    },
+  );
 }
 
 export async function generateTeacherPaper(input: TeacherGenerateRequest) {
