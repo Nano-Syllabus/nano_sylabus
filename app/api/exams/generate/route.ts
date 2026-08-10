@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findTenantSubject, generateTeacherPaper, listTenantSubjects } from "@/lib/tenant/client";
+import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
 
 const bandSchema = z.object({
   label: z.string().trim().min(1).max(80),
@@ -45,6 +46,12 @@ export async function POST(request: Request) {
     const subject = findTenantSubject(subjects, payload.subject);
     if (!subject) {
       return NextResponse.json({ error: "That subject is not available." }, { status: 404 });
+    }
+    if (!(await studentHasCourseSubjectAccess(user.id, subject.slug))) {
+      return NextResponse.json(
+        { error: "Enroll in a course containing this subject first." },
+        { status: 403 },
+      );
     }
     if (subject.chunk_count <= 0) {
       return NextResponse.json(

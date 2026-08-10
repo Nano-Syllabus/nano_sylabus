@@ -86,9 +86,9 @@ export function StudentClassroomsClient() {
       <div className="mb-5 flex flex-wrap items-start gap-4">
         <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">Classrooms</h1>
         <span className="flex-1" />
-        <Link href="/app/explore" className={`${button} border-border-strong bg-text-primary text-text-inverse`}>
+        {/* <Link href="/app/explore" className={`${button} border-border-strong bg-text-primary text-text-inverse`}>
           Join with a code
-        </Link>
+        </Link> */}
       </div>
 
       {state === "loading" ? <p className="text-sm text-text-secondary">Loading your classrooms…</p> : null}
@@ -104,7 +104,7 @@ export function StudentClassroomsClient() {
         <section className="rounded-[18px] border border-dashed border-border px-6 py-16 text-center">
           <h2 className="font-display text-xl font-semibold">No classrooms yet</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm text-text-secondary">
-            Your teacher shares a code. Joining brings in their subject and any exams they set.
+            When your teacher adds you to a classroom, it will appear here.
           </p>
         </section>
       ) : null}

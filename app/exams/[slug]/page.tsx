@@ -6,46 +6,27 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
+  CalendarDays,
   CheckCircle2,
-  Clock,
   Signal,
   Sparkles,
   Users,
 } from "lucide-react";
-import { PUBLIC_APP_URL, getPublicExam, publicExams, type PublicExam } from "@/lib/public-exams";
+import { getPublishedCourse, listPublishedCourses } from "@/lib/student-courses";
+import type { TeacherCourse } from "@/lib/teacher-courses";
 
-type PageProps = {
-  params: Promise<{ slug: string }>;
-};
+type PageProps = { params: Promise<{ slug: string }> };
 
-function examEnrollUrl(exam: PublicExam) {
-  return `${PUBLIC_APP_URL}?next=${encodeURIComponent(`/app/today?exam=${exam.slug}`)}`;
-}
-
-export function generateStaticParams() {
-  return publicExams.map((exam) => ({ slug: exam.slug }));
-}
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const exam = getPublicExam(slug);
-
-  if (!exam) {
-    return {
-      title: "Exam not found - nanosyllabus",
-      robots: { index: false, follow: false },
-    };
-  }
-
-  const title = `${exam.name} preparation - nanosyllabus`;
-
+  const course = await getPublishedCourse(slug).catch(() => null);
+  if (!course) return { title: "Course not found - nanosyllabus", robots: { index: false } };
   return {
-    title,
-    description: exam.tagline,
-    openGraph: {
-      title,
-      description: exam.tagline,
-    },
+    title: `${course.name} - nanosyllabus`,
+    description: course.tagline,
+    openGraph: { title: `${course.name} - nanosyllabus`, description: course.tagline },
   };
 }
 
@@ -53,298 +34,158 @@ function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-        <Link
-          href="/"
-          className="flex min-h-10 items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
+        <Link href="/" className="flex min-h-10 items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <span className="flex size-8 items-center justify-center rounded-lg bg-primary">
             <Sparkles className="size-4 text-primary-foreground" aria-hidden="true" />
           </span>
-          <span className="font-display text-lg font-semibold tracking-tight">nanosyllabus</span>
+          <span className="font-display text-lg font-semibold">nanosyllabus</span>
         </Link>
         <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
-          <Link href="/exams" className="transition-colors hover:text-foreground">
-            Exams
-          </Link>
-          <Link href="/#how" className="transition-colors hover:text-foreground">
-            How it works
-          </Link>
-          <Link href="/#why" className="transition-colors hover:text-foreground">
-            Why nanosyllabus
-          </Link>
+          <Link href="/exams" className="hover:text-foreground">Exams</Link>
+          <Link href="/#how" className="hover:text-foreground">How it works</Link>
+          <Link href="/#why" className="hover:text-foreground">Why nanosyllabus</Link>
         </nav>
         <div className="flex items-center gap-2">
-          <Link
-            href={PUBLIC_APP_URL}
-            className="inline-flex h-8 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/exams"
-            className="glow-shadow inline-flex h-8 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Start free
-          </Link>
+          <Link href="/login" className="inline-flex h-8 items-center px-3 text-xs font-medium text-foreground hover:text-white">Log in</Link>
+          <Link href="/exams" className="glow-shadow inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:brightness-110">Start free</Link>
         </div>
       </div>
     </header>
   );
 }
 
-function SiteFooter() {
+function RelatedCourseCard({ course }: { course: TeacherCourse }) {
   return (
-    <footer className="border-t border-border/60 py-10">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-        <p>© {new Date().getFullYear()} nanosyllabus - AI exam prep built for Nepal.</p>
-        <div className="flex gap-6">
-          <Link href="/exams" className="hover:text-foreground">
-            Browse exams
-          </Link>
-          <Link href={PUBLIC_APP_URL} className="hover:text-foreground">
-            Study space
-          </Link>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-function RelatedExamCard({ exam }: { exam: PublicExam }) {
-  return (
-    <Link
-      href={`/exams/${exam.slug}`}
-      className="glass-card group flex flex-col justify-between rounded-2xl border border-border p-5 transition-all hover:-translate-y-0.5 hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-    >
+    <Link href={`/exams/${course.slug}`} className="glass-card group flex min-h-48 flex-col justify-between rounded-2xl border border-border p-5 transition hover:border-primary/60">
       <div>
-        <div className="flex items-start justify-between gap-3">
-          <span className="rounded-full border border-border px-2.5 py-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-            {exam.category}
-          </span>
-          <ArrowUpRight
-            className="size-4 text-muted-foreground transition-colors group-hover:text-primary"
-            aria-hidden="true"
-          />
+        <div className="flex justify-between gap-3">
+          <span className="rounded-full border border-border px-2.5 py-0.5 text-[11px] uppercase text-muted-foreground">{course.category}</span>
+          <ArrowUpRight className="size-4 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
         </div>
-        <h3 className="mt-4 text-base font-semibold leading-snug">{exam.name}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{exam.tagline}</p>
+        <h3 className="mt-4 font-semibold">{course.name}</h3>
+        <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{course.tagline}</p>
       </div>
-      <div className="mt-5 flex items-center gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <BookOpen className="size-3.5" aria-hidden="true" /> {exam.questions} questions
-        </span>
-        <span className="flex items-center gap-1.5">
-          <Users className="size-3.5" aria-hidden="true" /> {exam.learners}
-        </span>
-      </div>
+      <p className="mt-4 text-xs text-muted-foreground">{course.subjects.length} indexed subjects</p>
     </Link>
   );
 }
 
-export default async function ExamDetailPage({ params }: PageProps) {
+export default async function CourseDetailPage({ params }: PageProps) {
   const { slug } = await params;
-  const exam = getPublicExam(slug);
+  const [course, published] = await Promise.all([
+    getPublishedCourse(slug),
+    listPublishedCourses(),
+  ]);
+  if (!course) notFound();
 
-  if (!exam) {
-    notFound();
-  }
-
-  const related = publicExams
-    .filter((candidate) => candidate.slug !== exam.slug && candidate.category === exam.category)
+  const related = published
+    .filter((item) => item.id !== course.id && item.category === course.category)
     .slice(0, 3);
+  const enrollHref = `/enroll/${course.slug}`;
 
   return (
     <div className="exam-prep-theme min-h-screen bg-background text-foreground">
       <SiteHeader />
       <main>
         <section className="hero-glow border-b border-border/60">
-          <div className="mx-auto max-w-6xl px-5 py-14">
-            <Link
-              href="/exams"
-              className="inline-flex min-h-10 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            >
-              <ArrowLeft className="size-4" aria-hidden="true" /> All exams
+          <div className="mx-auto max-w-6xl px-5 py-14 sm:py-20">
+            <Link href="/exams" className="inline-flex min-h-10 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="size-4" aria-hidden="true" /> All courses
             </Link>
-            <div className="mt-6 grid gap-10 lg:grid-cols-[1.6fr_1fr]">
+
+            <div className="mt-8 grid gap-10 lg:grid-cols-[1.55fr_0.85fr]">
               <div>
-                <span className="rounded-full border border-border px-2.5 py-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-                  {exam.category} · {exam.authority}
+                <span className="rounded-full border border-border px-2.5 py-1 text-[11px] uppercase text-muted-foreground">
+                  {course.category} · {course.authority}
                 </span>
-                <h1 className="mt-5 font-display text-3xl font-semibold leading-tight sm:text-5xl">
-                  {exam.name}
+                <h1 className="mt-7 max-w-4xl font-display text-4xl font-semibold leading-tight sm:text-5xl">
+                  {course.name}
                 </h1>
-                <p className="mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground">
-                  {exam.about}
-                </p>
-                <div className="mt-7 flex flex-wrap gap-x-6 gap-y-3 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1.5">
-                    <BookOpen className="size-4" aria-hidden="true" /> {exam.questions} questions
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Clock className="size-4" aria-hidden="true" /> {exam.durationWeeks}-week plan
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Signal className="size-4" aria-hidden="true" /> {exam.level}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Users className="size-4" aria-hidden="true" /> {exam.learners} learners
-                  </span>
+                <p className="mt-6 max-w-3xl text-base leading-7 text-muted-foreground">{course.description}</p>
+                <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-2"><BookOpen className="size-4" aria-hidden="true" /> {course.subjects.length} subjects</span>
+                  <span className="inline-flex items-center gap-2"><CalendarDays className="size-4" aria-hidden="true" /> {course.durationWeeks}-week plan</span>
+                  <span className="inline-flex items-center gap-2"><Signal className="size-4" aria-hidden="true" /> {course.level}</span>
+                  <span className="inline-flex items-center gap-2"><Users className="size-4" aria-hidden="true" /> {course.enrollmentCount} enrolled</span>
                 </div>
               </div>
 
-              <aside className="glass-card h-fit rounded-2xl border border-border p-6 lg:sticky lg:top-24">
+              <aside className="glass-card rounded-2xl border border-border p-6">
                 <p className="text-sm text-muted-foreground">Enrollment</p>
-                <p className="mt-1 font-display text-2xl font-semibold">Free to start</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Enrolling opens your study space with today&apos;s plan already built.
+                <h2 className="mt-2 font-display text-2xl font-semibold">
+                  {course.accessModel === "free" ? "Free to start" : `NPR ${course.priceNpr.toLocaleString()}`}
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  Enrolling opens one study space with every subject connected to this course.
                 </p>
-                <a
-                  href={examEnrollUrl(exam)}
-                  className="glow-shadow mt-6 inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-primary px-7 text-[15px] font-semibold text-primary-foreground transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring [&_svg]:size-4 [&_svg]:shrink-0"
-                >
-                  Enroll & open study space <ArrowRight aria-hidden="true" />
-                </a>
-                <ul className="mt-5 space-y-2 text-sm text-muted-foreground">
-                  {["Adaptive daily plan", "AI doubt solving", "Full-length mock tests"].map(
-                    (feature) => (
-                      <li key={feature} className="flex items-center gap-2">
-                        <CheckCircle2 className="size-4 text-highlight" aria-hidden="true" />{" "}
-                        {feature}
-                      </li>
-                    ),
-                  )}
+                <Link href={enrollHref} className="glow-shadow mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:brightness-110">
+                  Enroll & open study space <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+                <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-highlight" aria-hidden="true" /> {course.diagnosticQuestionCount}-question diagnostic</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-highlight" aria-hidden="true" /> {course.dailyMinutes}-minute daily target</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-highlight" aria-hidden="true" /> {course.languageModes.join(" and ")} instruction</li>
                 </ul>
               </aside>
             </div>
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-5 py-14">
-          <div className="grid gap-10 lg:grid-cols-[1.6fr_1fr]">
-            <div>
-              <h2 className="font-display text-2xl font-semibold">Syllabus coverage</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                These units follow the syllabus published by {exam.authority}. Each one carries its
-                own question pool, worked explanations and revision cards, and your accuracy is
-                tracked separately per unit so you can see which one is holding your score down.
-              </p>
-              <div className="mt-6 space-y-3">
-                {exam.syllabus.map((item, index) => (
-                  <div
-                    key={item.unit}
-                    className="flex gap-4 rounded-xl border border-border bg-card p-5"
-                  >
-                    <span className="font-display text-sm text-muted-foreground">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <div>
-                      <h3 className="text-base font-semibold">{item.unit}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">{item.topics}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <h2 className="mt-12 font-display text-2xl font-semibold">
-                How this {exam.short} track works
-              </h2>
-              <div className="mt-4 space-y-4 text-sm leading-relaxed text-muted-foreground">
-                <p>
-                  You begin with a short diagnostic drawn from all {exam.syllabus.length} units. It
-                  is not a score you are judged on - it exists to place you correctly, so a{" "}
-                  {exam.level.toLowerCase()}-level plan starts where you actually are rather than at
-                  chapter one of everything.
-                </p>
-                <p>
-                  From there the planner spreads the syllabus across {exam.durationWeeks} weeks. A
-                  daily session mixes new practice from the current unit with revision questions you
-                  previously got wrong, scheduled just before you would normally forget them.
-                  Full-length papers appear once your accuracy in a unit is stable, so mocks measure
-                  readiness instead of demoralising you early.
-                </p>
-                <p>
-                  Every explanation is written against the source material for this exam and is
-                  available in Nepali and English. If an answer looks wrong, flag it from the
-                  question - flagged items are reviewed and corrected, and you will see the update.
-                </p>
-              </div>
-
-              <h2 className="mt-12 font-display text-2xl font-semibold">Who this track suits</h2>
-              <ul className="mt-4 space-y-2 text-sm leading-relaxed text-muted-foreground">
-                <li>
-                  Aspirants targeting the next {exam.authority} cycle who want a schedule instead of
-                  a pile of PDFs.
-                </li>
-                <li>
-                  Repeat candidates who cleared some sections before and need targeted work on the
-                  units that cost them the cutoff.
-                </li>
-                <li>
-                  Working or studying candidates with roughly 20-60 focused minutes a day, on a
-                  phone, often on a slow connection.
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h2 className="font-display text-2xl font-semibold">What you get</h2>
-              <ul className="mt-6 space-y-3">
-                {exam.outcomes.map((outcome) => (
-                  <li
-                    key={outcome}
-                    className="flex gap-3 rounded-xl border border-border bg-surface/40 p-4 text-sm"
-                  >
-                    <CheckCircle2
-                      className="mt-0.5 size-4 shrink-0 text-highlight"
-                      aria-hidden="true"
-                    />
-                    <span className="text-muted-foreground">{outcome}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-8 rounded-2xl border border-border bg-card p-6">
-                <h2 className="font-display text-base font-semibold">Straight answers</h2>
-                <dl className="mt-4 space-y-4 text-sm">
+        <section className="mx-auto grid max-w-6xl gap-12 px-5 py-16 lg:grid-cols-[1.35fr_0.75fr]">
+          <div>
+            <h2 className="font-display text-2xl font-semibold">Subjects in this course</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+              These are the teacher-published indexed sources used by the tutor, practice generator, and grading flow.
+            </p>
+            <div className="mt-7 divide-y divide-border border-y border-border">
+              {course.subjects.map((subject, index) => (
+                <div key={subject.slug} className="flex gap-4 py-5">
+                  <span className="w-8 shrink-0 font-mono text-xs text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
                   <div>
-                    <dt className="font-medium">Do I pay to enroll?</dt>
-                    <dd className="mt-1 text-muted-foreground">
-                      No. Enrolling is free and needs no card. Paid plans only add extras like
-                      unlimited full-length mocks.
-                    </dd>
+                    <h3 className="font-medium">{subject.name}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">Indexed course subject</p>
                   </div>
-                  <div>
-                    <dt className="font-medium">Can I switch exams later?</dt>
-                    <dd className="mt-1 text-muted-foreground">
-                      Yes. You can enroll in another track any time and your progress in this one is
-                      kept.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="font-medium">Is a result guaranteed?</dt>
-                    <dd className="mt-1 text-muted-foreground">
-                      No, and we will not claim it. This is a preparation tool that makes your study
-                      time count - the exam is still yours to sit.
-                    </dd>
-                  </div>
-                </dl>
-              </div>
+                </div>
+              ))}
+              {!course.subjects.length ? <p className="py-7 text-sm text-muted-foreground">No subjects are connected yet.</p> : null}
             </div>
           </div>
+
+          <aside>
+            <h2 className="font-display text-2xl font-semibold">Study settings</h2>
+            <dl className="mt-6 divide-y divide-border border-y border-border text-sm">
+              <div className="flex justify-between gap-4 py-4"><dt className="text-muted-foreground">Daily target</dt><dd className="font-medium">{course.dailyMinutes} minutes</dd></div>
+              <div className="flex justify-between gap-4 py-4"><dt className="text-muted-foreground">Pass target</dt><dd className="font-medium">{course.passPercentage}%</dd></div>
+              <div className="flex justify-between gap-4 py-4"><dt className="text-muted-foreground">Negative marking</dt><dd className="font-medium">{course.negativeMarking}%</dd></div>
+              <div className="flex justify-between gap-4 py-4"><dt className="text-muted-foreground">Exam date</dt><dd className="font-medium">{course.examDate || "Not set"}</dd></div>
+            </dl>
+            {course.outcomes.length ? (
+              <div className="mt-8">
+                <h2 className="font-display text-xl font-semibold">What you get</h2>
+                <ul className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
+                  {course.outcomes.map((outcome) => <li key={outcome} className="flex gap-2"><CheckCircle2 className="mt-1 size-4 shrink-0 text-highlight" aria-hidden="true" /> {outcome}</li>)}
+                </ul>
+              </div>
+            ) : null}
+          </aside>
         </section>
 
-        {related.length > 0 && (
-          <section className="mx-auto max-w-6xl px-5 pb-20">
-            <h2 className="font-display text-xl font-semibold">Related tracks</h2>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {related.map((candidate) => (
-                <RelatedExamCard key={candidate.slug} exam={candidate} />
-              ))}
+        {related.length ? (
+          <section className="border-t border-border/60 bg-surface/40 py-16">
+            <div className="mx-auto max-w-6xl px-5">
+              <h2 className="font-display text-2xl font-semibold">More {course.category} courses</h2>
+              <div className="mt-7 grid gap-4 md:grid-cols-3">{related.map((item) => <RelatedCourseCard key={item.id} course={item} />)}</div>
             </div>
           </section>
-        )}
+        ) : null}
       </main>
-      <SiteFooter />
+
+      <footer className="border-t border-border/60 py-10">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 text-sm text-muted-foreground">
+          <p>© {new Date().getFullYear()} nanosyllabus</p>
+          <Link href="/exams" className="hover:text-foreground">Browse courses</Link>
+        </div>
+      </footer>
     </div>
   );
 }

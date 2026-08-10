@@ -3,6 +3,7 @@ import { z } from "zod";
 import { recordPracticeEvaluation } from "@/lib/data/student-mastery";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findTenantSubject, gradePracticeSession, listTenantSubjects } from "@/lib/tenant/client";
+import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -37,6 +38,12 @@ export async function POST(
     const subject = findTenantSubject(subjects, parsed.subject);
     if (!subject) {
       return NextResponse.json({ error: "That subject is not available." }, { status: 404 });
+    }
+    if (!(await studentHasCourseSubjectAccess(user.id, subject.slug))) {
+      return NextResponse.json(
+        { error: "Enroll in a course containing this subject first." },
+        { status: 403 },
+      );
     }
 
     const graded = await gradePracticeSession(sessionId, {

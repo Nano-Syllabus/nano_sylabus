@@ -164,7 +164,10 @@ export function LoginForm({
 
       <p className="mt-6 text-center text-sm text-text-secondary">
         Don&apos;t have an account?{" "}
-        <Link href="/signup" className="inline-flex min-h-10 items-center font-medium text-text-primary underline underline-offset-4">
+        <Link
+          href={nextPath ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"}
+          className="inline-flex min-h-10 items-center font-medium text-text-primary underline underline-offset-4"
+        >
           Sign up
         </Link>
       </p>

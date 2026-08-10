@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   listTenantSubjects: vi.fn(),
   listPracticeTopics: vi.fn(),
   listTopicMastery: vi.fn(),
+  studentHasCourseSubjectAccess: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -19,6 +20,9 @@ vi.mock("@/lib/tenant/client", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/data/student-mastery", () => ({ listTopicMastery: mocks.listTopicMastery }));
+vi.mock("@/lib/student-courses", () => ({
+  studentHasCourseSubjectAccess: mocks.studentHasCourseSubjectAccess,
+}));
 
 import { GET } from "@/app/api/student/practice/topics/route";
 
@@ -56,6 +60,7 @@ describe("GET /api/student/practice/topics", () => {
       suggested_plan: [],
     });
     mocks.listTopicMastery.mockResolvedValue([]);
+    mocks.studentHasCourseSubjectAccess.mockResolvedValue(true);
   });
 
   it("passes selected quick drill size to the tenant topics planner", async () => {
@@ -98,6 +103,19 @@ describe("GET /api/student/practice/topics", () => {
       questionBankQuestions: 0,
       topics: [],
     });
+    expect(mocks.listPracticeTopics).not.toHaveBeenCalled();
+  });
+
+  it("rejects practice for a subject outside the student's enrolled courses", async () => {
+    mocks.studentHasCourseSubjectAccess.mockResolvedValueOnce(false);
+
+    const response = await GET(
+      new Request("http://localhost/api/student/practice/topics?subject=Digital%20Logic"),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(payload.error).toBe("Enroll in a course containing this subject first.");
     expect(mocks.listPracticeTopics).not.toHaveBeenCalled();
   });
 });

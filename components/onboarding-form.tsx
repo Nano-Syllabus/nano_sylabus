@@ -6,46 +6,30 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { normalizeFullName, normalizeSubjects } from "@/lib/profile-normalization";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { TeacherCourse } from "@/lib/teacher-courses";
 import type { StudentProfile } from "@/lib/types";
 
-type PublishedSubject = {
-  name: string;
-  slug: string;
-  namespace: string;
-  folderPath: string;
-  providerName: string;
-  documentCount: number;
-  unitCount: number;
-};
-
-type PublishedProvider = {
-  namespace: string;
-  providerName: string;
-  subjects: PublishedSubject[];
-};
-
 type CatalogPayload = {
-  providers?: PublishedProvider[];
-  subjects?: PublishedSubject[];
+  courses?: TeacherCourse[];
   error?: string;
 };
 
 const TOTAL_STEPS = 2;
 
 /**
- * Content is teacher-managed, so onboarding no longer walks a faculty →
- * branch → semester taxonomy. A student picks published subjects directly, or
- * joins a teacher's classroom with a code. board/grade are still written so
- * existing profiles and the chat personalisation prompt keep working.
+ * Students enroll in a teacher-authored course. Subject names are mirrored to
+ * the legacy profile so existing chat and practice APIs retain their context.
  */
 export function OnboardingForm({
   userId,
   initialProfile,
   initialName,
+  nextPath,
 }: {
   userId: string;
   initialProfile: StudentProfile | null;
   initialName?: string;
+  nextPath?: string;
 }) {
   const router = useRouter();
   const draftKey = useMemo(() => `nano:onboarding:draft:${userId}`, [userId]);
@@ -57,8 +41,9 @@ export function OnboardingForm({
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(
     normalizeSubjects(initialProfile?.subjects ?? []),
   );
+  const [selectedCourseSlug, setSelectedCourseSlug] = useState("");
 
-  const [providers, setProviders] = useState<PublishedProvider[]>([]);
+  const [courses, setCourses] = useState<TeacherCourse[]>([]);
   const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
   const [catalogError, setCatalogError] = useState("");
 
@@ -75,17 +60,17 @@ export function OnboardingForm({
 
     const loadCatalog = async () => {
       try {
-        const response = await fetch("/api/tenant/catalog", { cache: "no-store" });
+        const response = await fetch("/api/public/courses", { cache: "no-store" });
         const payload = (await response.json()) as CatalogPayload;
         if (!active) return;
 
-        if (!response.ok) throw new Error(payload.error || "Could not load subjects.");
+        if (!response.ok) throw new Error(payload.error || "Could not load courses.");
 
-        setProviders(Array.isArray(payload.providers) ? payload.providers : []);
+        setCourses(Array.isArray(payload.courses) ? payload.courses : []);
         setCatalogState("ready");
       } catch (caught) {
         if (!active) return;
-        setCatalogError(caught instanceof Error ? caught.message : "Could not load subjects.");
+        setCatalogError(caught instanceof Error ? caught.message : "Could not load courses.");
         setCatalogState("error");
       }
     };
@@ -108,6 +93,7 @@ export function OnboardingForm({
         step?: number;
         fullName?: string;
         selectedSubjects?: string[];
+        selectedCourseSlug?: string;
         languagePref?: "EN" | "RN";
       };
 
@@ -120,6 +106,9 @@ export function OnboardingForm({
           normalizeSubjects(draft.selectedSubjects.filter((item): item is string => typeof item === "string")),
         );
       }
+      if (typeof draft.selectedCourseSlug === "string") {
+        setSelectedCourseSlug(draft.selectedCourseSlug);
+      }
       if (draft.languagePref === "EN" || draft.languagePref === "RN") setLanguagePref(draft.languagePref);
     } catch {
       // Ignore malformed local draft.
@@ -131,19 +120,17 @@ export function OnboardingForm({
     try {
       window.localStorage.setItem(
         draftKey,
-        JSON.stringify({ step, fullName, selectedSubjects, languagePref }),
+        JSON.stringify({ step, fullName, selectedSubjects, selectedCourseSlug, languagePref }),
       );
     } catch {
       // Ignore storage write failures.
     }
-  }, [draftKey, fullName, initialProfile, languagePref, selectedSubjects, step]);
+  }, [draftKey, fullName, initialProfile, languagePref, selectedCourseSlug, selectedSubjects, step]);
 
-  function toggleSubject(name: string) {
-    setSelectedSubjects((current) => {
-      const exists = current.some((item) => item.toLowerCase() === name.toLowerCase());
-      if (exists) return current.filter((item) => item.toLowerCase() !== name.toLowerCase());
-      return [...current, name];
-    });
+  function selectCourse(course: TeacherCourse) {
+    setSelectedCourseSlug(course.slug);
+    setSelectedSubjects(normalizeSubjects(course.subjects.map((subject) => subject.name)));
+    setError("");
   }
 
   async function submitJoinCode() {
@@ -164,6 +151,7 @@ export function OnboardingForm({
       });
       const payload = (await response.json().catch(() => ({}))) as {
         classroom?: { subjectName?: string; name?: string };
+        course?: { slug?: string; name?: string } | null;
         error?: string;
       };
 
@@ -176,6 +164,13 @@ export function OnboardingForm({
             ? current
             : [...current, subjectName],
         );
+      }
+      if (payload.course?.slug) {
+        setSelectedCourseSlug(payload.course.slug);
+        const joinedCourse = courses.find((course) => course.slug === payload.course?.slug);
+        if (joinedCourse) {
+          setSelectedSubjects(normalizeSubjects(joinedCourse.subjects.map((subject) => subject.name)));
+        }
       }
 
       setJoinOpen(false);
@@ -197,15 +192,33 @@ export function OnboardingForm({
   }
 
   async function finish() {
-    const subjects = normalizeSubjects(selectedSubjects);
+    const selectedCourse = courses.find((course) => course.slug === selectedCourseSlug);
+    const subjects = normalizeSubjects(
+      selectedCourse?.subjects.map((subject) => subject.name) ?? selectedSubjects,
+    );
 
-    if (!subjects.length) {
-      setError("Pick at least one subject, or join your teacher's classroom with a code.");
+    if (!selectedCourseSlug && !subjects.length) {
+      setError("Choose a course, or join with the code your teacher shared.");
       return;
     }
 
     setLoading(true);
     setError("");
+
+    if (selectedCourseSlug) {
+      const enrollmentResponse = await fetch(
+        `/api/student/courses/${encodeURIComponent(selectedCourseSlug)}/enroll`,
+        { method: "POST", headers: { Accept: "application/json" } },
+      );
+      const enrollmentPayload = (await enrollmentResponse.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!enrollmentResponse.ok) {
+        setLoading(false);
+        setError(enrollmentPayload.error || "Could not enroll in that course.");
+        return;
+      }
+    }
 
     const supabase = createSupabaseBrowserClient();
     const { error: upsertError } = await supabase.from("student_profiles").upsert({
@@ -234,7 +247,9 @@ export function OnboardingForm({
       // Ignore storage delete failures.
     }
 
-    router.replace("/app/today");
+    router.replace(
+      nextPath || (selectedCourseSlug ? `/app/courses/${selectedCourseSlug}` : "/app/courses"),
+    );
     router.refresh();
   }
 
@@ -312,72 +327,78 @@ export function OnboardingForm({
 
         {step === 2 ? (
           <Step
-            title="Pick your subjects"
-            subtitle="These are published by teachers. Answers and practice come from their material."
+            title="Choose your course"
+            subtitle="A course brings its full set of indexed subjects, practice, and exams into one study space."
           >
             {catalogState === "loading" ? (
-              <p className="text-sm text-text-secondary">Loading published subjects…</p>
+              <p className="text-sm text-text-secondary">Loading published courses...</p>
             ) : null}
 
             {catalogState === "error" ? (
-              <div className="rounded-[14px] border border-border p-4">
-                <p className="text-sm font-medium">Could not load subjects</p>
+              <div className="rounded-lg border border-border p-4">
+                <p className="text-sm font-medium">Could not load courses</p>
                 <p className="mt-1 text-sm text-text-secondary">{catalogError}</p>
               </div>
             ) : null}
 
-            {catalogState === "ready" && !providers.length ? (
-              <div className="rounded-[14px] border border-border p-4">
-                <p className="text-sm font-medium">No published subjects yet</p>
+            {catalogState === "ready" && !courses.length ? (
+              <div className="rounded-lg border border-border p-4">
+                <p className="text-sm font-medium">No published courses yet</p>
                 <p className="mt-1 text-sm text-text-secondary">
-                  Join your teacher&apos;s classroom with a code to get started.
+                  Join with the code your teacher shared to get started.
                 </p>
               </div>
             ) : null}
 
-            <div className="space-y-6">
-              {providers.map((provider) => (
-                <section key={provider.namespace}>
-                  <p className="text-xs font-mono-ui uppercase tracking-wider text-text-muted">
-                    {provider.providerName}
-                  </p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {provider.subjects.map((subject) => {
-                      const active = selectedSubjects.some(
-                        (item) => item.toLowerCase() === subject.name.toLowerCase(),
-                      );
-                      return (
-                        <button
-                          key={subject.slug}
-                          type="button"
-                          onClick={() => toggleSubject(subject.name)}
-                          aria-pressed={active}
-                          className={`rounded-[14px] border px-4 py-3 text-left transition ${
-                            active
-                              ? "border-text-primary bg-bg-secondary"
-                              : "border-border hover:border-border-strong"
-                          }`}
-                        >
-                          <span className="block text-[15px] font-medium">{subject.name}</span>
-                          <span className="mt-1 block text-[13px] text-text-muted">
-                            {subject.providerName} · {subject.documentCount} file
-                            {subject.documentCount === 1 ? "" : "s"} · {subject.unitCount} unit
-                            {subject.unitCount === 1 ? "" : "s"}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {courses.map((course) => {
+                const active = selectedCourseSlug === course.slug;
+                const canEnroll = course.accessModel === "free";
+                return (
+                  <button
+                    key={course.id}
+                    type="button"
+                    onClick={() => {
+                      if (canEnroll) selectCourse(course);
+                    }}
+                    aria-pressed={active}
+                    disabled={!canEnroll}
+                    className={`min-h-40 rounded-lg border p-4 text-left transition ${
+                      active
+                        ? "border-text-primary bg-bg-secondary"
+                        : canEnroll
+                          ? "border-border hover:border-border-strong"
+                          : "cursor-not-allowed border-border opacity-55"
+                    }`}
+                  >
+                    <span className="text-xs text-text-muted">
+                      {course.category} · {course.authority}
+                    </span>
+                    <span className="mt-3 block font-display text-lg font-semibold">
+                      {course.name}
+                    </span>
+                    <span className="mt-2 line-clamp-2 block text-sm leading-6 text-text-secondary">
+                      {course.tagline}
+                    </span>
+                    <span className="mt-3 block text-xs text-text-muted">
+                      {course.subjects.length} subject{course.subjects.length === 1 ? "" : "s"} · {course.dailyMinutes} min daily
+                    </span>
+                    {!canEnroll ? (
+                      <span className="mt-2 block text-xs font-medium text-text-secondary">
+                        Enrollment opening soon
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
-              <p className="text-sm text-text-secondary">Got a classroom code from your teacher?</p>
+            {/* <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
+              <p className="text-sm text-text-secondary">Got a course code from your teacher?</p>
               <Button type="button" variant="outline" size="sm" onClick={() => setJoinOpen(true)}>
                 Join with a code
               </Button>
-            </div>
+            </div> */}
           </Step>
         ) : null}
 
@@ -402,6 +423,7 @@ export function OnboardingForm({
         </div>
       </main>
 
+      {/* joinOpen dialog commented out
       {joinOpen ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <button
@@ -421,7 +443,7 @@ export function OnboardingForm({
               Join with a code
             </h2>
             <p className="mt-2 text-sm text-text-secondary">
-              Your class code brings in the subject your teacher is running.
+              Your code enrolls you in the connected course and its subjects.
             </p>
             <Input
               className="mt-5 uppercase"
@@ -446,6 +468,7 @@ export function OnboardingForm({
           </div>
         </div>
       ) : null}
+      */}
     </form>
   );
 }

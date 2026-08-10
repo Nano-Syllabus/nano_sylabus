@@ -14,7 +14,6 @@ describe("sanitizeNextPath", () => {
 });
 
 describe("resolvePostAuthDestination", () => {
-
   it("sends onboarded student to Today when next is missing", () => {
     expect(resolvePostAuthDestination({ role: "student", onboarded: true })).toBe("/app/today");
   });
@@ -23,4 +22,13 @@ describe("resolvePostAuthDestination", () => {
     expect(resolvePostAuthDestination({ role: "student", onboarded: false })).toBe("/onboarding");
   });
 
+  it("preserves a safe destination through onboarding", () => {
+    expect(
+      resolvePostAuthDestination({
+        role: "student",
+        onboarded: false,
+        nextPath: "/app/enroll/ioe-entrance",
+      }),
+    ).toBe("/onboarding?next=%2Fapp%2Fenroll%2Fioe-entrance");
+  });
 });

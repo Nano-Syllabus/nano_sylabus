@@ -17,7 +17,7 @@ describe("resolveAccess", () => {
     });
   });
 
-  it("protects the standalone exam workspace and preserves its destination", () => {
+  it("keeps the public course catalog available to guests", () => {
     expect(
       resolveAccess({
         pathname: "/exams",
@@ -25,11 +25,7 @@ describe("resolveAccess", () => {
         onboarded: false,
         role: "student",
       }),
-    ).toEqual({
-      allow: false,
-      redirectTo: "/login",
-      includeNext: true,
-    });
+    ).toEqual({ allow: true });
   });
 
   it("redirects non-onboarded students to onboarding", () => {
@@ -47,7 +43,7 @@ describe("resolveAccess", () => {
     });
   });
 
-  it("requires onboarding before entering the standalone exam workspace", () => {
+  it("keeps the public course catalog available before onboarding", () => {
     expect(
       resolveAccess({
         pathname: "/exams",
@@ -55,11 +51,7 @@ describe("resolveAccess", () => {
         onboarded: false,
         role: "student",
       }),
-    ).toEqual({
-      allow: false,
-      redirectTo: "/onboarding",
-      includeNext: false,
-    });
+    ).toEqual({ allow: true });
   });
 
   it("blocks non-admin users from admin routes", () => {

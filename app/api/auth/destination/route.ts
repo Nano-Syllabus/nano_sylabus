@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   const { data: profile } = await supabase
     .from("student_profiles")
-    .select("full_name, college, board, grade, target_grade, language_pref, role")
+    .select("full_name, college, board, grade, target_grade, language_pref, subjects, role")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -31,6 +31,7 @@ export async function GET(request: Request) {
           grade: profile.grade ?? "",
           targetGrade: profile.target_grade ?? "",
           languagePref: profile.language_pref ?? "EN",
+          subjects: Array.isArray(profile.subjects) ? profile.subjects : [],
         }
       : null,
   );

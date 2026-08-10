@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordPracticeEvaluation } from "@/lib/data/student-mastery";
+import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findTenantSubject, gradeTeacherPaper, listTenantSubjects } from "@/lib/tenant/client";
 
@@ -33,6 +34,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
     const { setId } = await params;
     const payload = requestSchema.parse(await request.json());
     const { subject: subjectName, ...gradePayload } = payload;
+    if (subjectName && !(await studentHasCourseSubjectAccess(user.id, subjectName))) {
+      return NextResponse.json(
+        { error: "Enroll in a course containing this subject first." },
+        { status: 403 },
+      );
+    }
     const grade = await gradeTeacherPaper(setId, gradePayload);
     if (grade.graded === false) {
       return NextResponse.json(

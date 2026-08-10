@@ -5,7 +5,7 @@ import {
   normalizeSubjectLabel,
   normalizeSubjects,
 } from "@/lib/profile-normalization";
-import { listTenantSubjectNames, listTenantSubjects } from "@/lib/tenant/client";
+import { findTenantSubject, listTenantSubjectNames, listTenantSubjects } from "@/lib/tenant/client";
 import type {
   StudentProfile,
   SubjectExplorerSessionSummary,
@@ -84,7 +84,11 @@ function categorizeSubject(subject: string): SubjectExplorerSummary["category"] 
   return "General";
 }
 
-export async function listExplorerSubjects(userId: string, profile: StudentProfile) {
+export async function listExplorerSubjects(
+  userId: string,
+  profile: StudentProfile,
+  allowedSubjects?: string[],
+) {
   const supabase = await createSupabaseServerClient();
   const normalizedBoard = normalizeBoard(profile.board);
   const normalizedGrade = normalizeGrade(profile.grade);
@@ -114,7 +118,14 @@ export async function listExplorerSubjects(userId: string, profile: StudentProfi
 
   const profileSubjects = uniqueSubjects(profile.subjects);
   const profileSubjectKeys = new Set(profileSubjects.map((subject) => subject.toLowerCase()));
-  const allSubjects = listTenantSubjectNames(tenantSubjects, profileSubjects);
+  const allSubjects = allowedSubjects
+    ? uniqueSubjects(
+        allowedSubjects.flatMap((value) => {
+          const subject = findTenantSubject(tenantSubjects, value);
+          return subject ? [subject.name] : [];
+        }),
+      )
+    : listTenantSubjectNames(tenantSubjects, profileSubjects);
 
   const summaries = allSubjects.map((subject) => {
     const subjectKey = normalizeSubjectLabel(subject).toLowerCase();

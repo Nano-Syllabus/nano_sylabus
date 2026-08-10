@@ -18,7 +18,8 @@ import {
   Users,
 } from "lucide-react";
 
-import { PUBLIC_APP_URL, publicExams, type PublicExam } from "@/lib/public-exams";
+import { listPublishedCourses } from "@/lib/student-courses";
+import type { TeacherCourse } from "@/lib/teacher-courses";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -35,7 +36,9 @@ export const metadata = {
   },
 };
 
-const APP_URL = PUBLIC_APP_URL;
+const APP_URL = "/login";
+
+export const dynamic = "force-dynamic";
 
 const steps = [
   {
@@ -228,7 +231,7 @@ function SiteFooter() {
   );
 }
 
-function ExamCard({ exam }: { exam: PublicExam }) {
+function ExamCard({ exam }: { exam: TeacherCourse }) {
   return (
     <Link
       href={`/exams/${exam.slug}`}
@@ -246,18 +249,26 @@ function ExamCard({ exam }: { exam: PublicExam }) {
       </div>
       <div className="mt-5 flex items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <BookOpen className="size-3.5" /> {exam.questions} questions
+          <BookOpen className="size-3.5" /> {exam.subjects.length} subjects
         </span>
         <span className="flex items-center gap-1.5">
-          <Users className="size-3.5" /> {exam.learners}
+          <Users className="size-3.5" /> {exam.enrollmentCount} enrolled
         </span>
       </div>
     </Link>
   );
 }
 
-export default function Index() {
-  const featured = publicExams.slice(0, 8);
+export default async function Index() {
+  const courses = await listPublishedCourses().catch(() => []);
+  const featured = courses.slice(0, 8);
+  const subjectCount = new Set(
+    courses.flatMap((course) => course.subjects.map((subject) => subject.slug)),
+  ).size;
+  const enrollmentCount = courses.reduce((total, course) => total + course.enrollmentCount, 0);
+  const averageDailyMinutes = courses.length
+    ? Math.round(courses.reduce((total, course) => total + course.dailyMinutes, 0) / courses.length)
+    : 0;
 
   return (
     <div className="exam-prep-theme min-h-screen bg-background text-foreground">
@@ -270,7 +281,7 @@ export default function Index() {
           <div className="relative mx-auto max-w-4xl px-5 pb-20 pt-20 text-center sm:pt-28">
             <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface/70 px-3 py-1 text-xs text-muted-foreground">
               <span className="size-1.5 rounded-full bg-highlight" />
-              Built for Nepal&apos;s exams · 12 tracks live
+              Built for Nepal&apos;s exams · {courses.length} course{courses.length === 1 ? "" : "s"} live
             </span>
             <h1 className="mt-6 font-display text-4xl font-semibold leading-[1.05] sm:text-6xl">
               Crack your exam with a <span className="text-gradient">tutor that adapts</span> every
@@ -291,9 +302,9 @@ export default function Index() {
             </div>
             <dl className="mx-auto mt-14 grid max-w-2xl grid-cols-3 gap-4 text-left">
               {[
-                ["3.2 lakh+", "questions attempted weekly"],
-                ["12", "exam tracks with official syllabus"],
-                ["18 min", "average daily session"],
+                [String(subjectCount), "indexed subjects in live courses"],
+                [String(enrollmentCount), "active course enrollments"],
+                [`${averageDailyMinutes} min`, "average daily target"],
               ].map(([stat, label]) => (
                 <div key={label} className="glass-card rounded-xl border border-border p-4">
                   <dt className="font-display text-xl font-semibold sm:text-2xl">{stat}</dt>
@@ -312,18 +323,24 @@ export default function Index() {
                 Start from an exam
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Every track is mapped unit-by-unit to the official syllabus and past papers.
+                Every live course is published by a teacher and backed by its connected indexed subjects.
               </p>
             </div>
             <ButtonLink href="/exams" variant="soft">
               <Search /> Show all exams
             </ButtonLink>
           </div>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {featured.map((exam) => (
-              <ExamCard key={exam.slug} exam={exam} />
-            ))}
-          </div>
+          {featured.length ? (
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {featured.map((exam) => (
+                <ExamCard key={exam.id} exam={exam} />
+              ))}
+            </div>
+          ) : (
+            <div className="glass-card mt-8 rounded-2xl border border-border p-8 text-sm text-muted-foreground">
+              Published courses will appear here as soon as a teacher makes one live.
+            </div>
+          )}
         </section>
 
         {/* How it works */}

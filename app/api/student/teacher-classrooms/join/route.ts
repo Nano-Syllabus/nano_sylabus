@@ -22,14 +22,14 @@ export async function GET(request: Request) {
     const admin = createSupabaseAdminClient();
     const { data: classroom, error } = await admin
       .from("teacher_classrooms")
-      .select("id,name,subject_name,teacher_id")
+      .select("id,name,subject_name,teacher_id,course_id")
       .eq("join_code", parsed.data.code.toUpperCase())
       .is("archived_at", null)
       .maybeSingle();
     if (error) throw error;
     if (!classroom) return NextResponse.json({ error: "Classroom code not found." }, { status: 404 });
 
-    const [{ count: memberCount }, { data: teacher }, { data: membership }] = await Promise.all([
+    const [{ count: memberCount }, { data: teacher }, { data: membership }, { data: course }] = await Promise.all([
       admin
         .from("teacher_classroom_members")
         .select("student_id", { count: "exact", head: true })
@@ -41,6 +41,14 @@ export async function GET(request: Request) {
         .eq("classroom_id", classroom.id)
         .eq("student_id", user.id)
         .maybeSingle(),
+      classroom.course_id
+        ? admin
+            .from("teacher_courses")
+            .select("slug,name")
+            .eq("id", classroom.course_id)
+            .is("archived_at", null)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
     ]);
 
     return NextResponse.json({
@@ -50,6 +58,7 @@ export async function GET(request: Request) {
         teacherHandle: teacher?.handle ?? "",
         memberCount: memberCount ?? 0,
         alreadyJoined: Boolean(membership),
+        course: course ? { slug: course.slug, name: course.name } : null,
       },
     });
   } catch {
@@ -67,7 +76,7 @@ export async function POST(request: Request) {
     const admin = createSupabaseAdminClient();
     const { data: classroom, error } = await admin
       .from("teacher_classrooms")
-      .select("id,name,subject_name")
+      .select("id,name,subject_name,course_id")
       .eq("join_code", parsed.data.code.toUpperCase())
       .is("archived_at", null)
       .maybeSingle();
@@ -78,8 +87,37 @@ export async function POST(request: Request) {
       { onConflict: "classroom_id,student_id" },
     );
     if (joinError) throw joinError;
+
+    let course: { slug: string; name: string } | null = null;
+    if (classroom.course_id) {
+      const courseResult = await admin
+        .from("teacher_courses")
+        .select("id,slug,name")
+        .eq("id", classroom.course_id)
+        .is("archived_at", null)
+        .maybeSingle();
+      if (courseResult.error) throw courseResult.error;
+
+      if (courseResult.data) {
+        const enrollmentResult = await admin.from("teacher_course_enrollments").upsert(
+          {
+            course_id: courseResult.data.id,
+            student_id: user.id,
+            status: "active",
+            completed_at: null,
+          },
+          { onConflict: "course_id,student_id" },
+        );
+        if (enrollmentResult.error) throw enrollmentResult.error;
+        course = { slug: courseResult.data.slug, name: courseResult.data.name };
+      }
+    }
+
     await recordTeacherClassroomActivity(admin, { classroomId: classroom.id, actorId: user.id, actorKind: "student", eventType: "student.joined", summary: "A student joined the classroom" });
-    return NextResponse.json({ classroom: { id: classroom.id, name: classroom.name, subjectName: classroom.subject_name } });
+    return NextResponse.json({
+      classroom: { id: classroom.id, name: classroom.name, subjectName: classroom.subject_name },
+      course,
+    });
   } catch {
     return NextResponse.json({ error: "Could not join the classroom." }, { status: 502 });
   }

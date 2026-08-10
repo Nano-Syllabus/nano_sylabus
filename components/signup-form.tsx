@@ -19,7 +19,7 @@ function passwordStrength(password: string) {
   };
 }
 
-export function SignupForm() {
+export function SignupForm({ nextPath }: { nextPath?: string }) {
   const googleAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true";
   const router = useRouter();
   const [name, setName] = useState("");
@@ -31,6 +31,16 @@ export function SignupForm() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const strength = passwordStrength(password);
+
+  async function resolveDestination() {
+    const query = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
+    const response = await fetch(`/api/auth/destination${query}`);
+    const payload = (await response.json()) as { destination?: string; error?: string };
+    if (!response.ok || !payload.destination) {
+      throw new Error(payload.error || "Failed to resolve your destination.");
+    }
+    return payload.destination;
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -62,8 +72,17 @@ export function SignupForm() {
     }
 
     if (data.session) {
-      router.replace("/app/chat");
-      router.refresh();
+      try {
+        const destination = await resolveDestination();
+        router.replace(destination);
+        router.refresh();
+      } catch (destinationError) {
+        setError(
+          destinationError instanceof Error
+            ? destinationError.message
+            : "Failed to continue after signup.",
+        );
+      }
       return;
     }
 
@@ -83,8 +102,13 @@ export function SignupForm() {
     const supabase = createSupabaseBrowserClient();
     const redirectTo =
       typeof window !== "undefined"
-        ? `${window.location.origin}/auth/callback?next=${encodeURIComponent("/app/chat")}`
+        ? `${window.location.origin}/auth/callback`
         : undefined;
+
+    if (typeof document !== "undefined") {
+      const encodedNext = encodeURIComponent(nextPath || "");
+      document.cookie = `oauth_next=${encodedNext}; Path=/; Max-Age=600; SameSite=Lax`;
+    }
 
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -193,7 +217,10 @@ export function SignupForm() {
 
       <p className="mt-6 text-center text-sm text-text-secondary">
         Already have an account?{" "}
-        <Link href="/login" className="inline-flex min-h-10 items-center font-medium text-text-primary underline underline-offset-4">
+        <Link
+          href={nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login"}
+          className="inline-flex min-h-10 items-center font-medium text-text-primary underline underline-offset-4"
+        >
           Login
         </Link>
       </p>

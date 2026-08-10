@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { recordPracticeEvaluation } from "@/lib/data/student-mastery";
+import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findTenantSubject, gradeTeacherPaperFile, listTenantSubjects } from "@/lib/tenant/client";
 
@@ -21,6 +22,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
     const formData = await request.formData();
     const file = formData.get("file");
     const subjectName = String(formData.get("subject") ?? "").trim();
+
+    if (subjectName && !(await studentHasCourseSubjectAccess(user.id, subjectName))) {
+      return NextResponse.json(
+        { error: "Enroll in a course containing this subject first." },
+        { status: 403 },
+      );
+    }
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Answer sheet file is required." }, { status: 400 });

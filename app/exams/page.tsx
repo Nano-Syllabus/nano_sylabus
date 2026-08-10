@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PublicExamsClient } from "@/components/public-exams-client";
+import { listPublishedCourses } from "@/lib/student-courses";
 
 const TITLE = "Browse all exams - nanosyllabus";
 const DESC =
@@ -14,6 +15,9 @@ export const metadata: Metadata = {
   },
 };
 
-export default function ExamsPage() {
-  return <PublicExamsClient />;
+export const dynamic = "force-dynamic";
+
+export default async function ExamsPage() {
+  const courses = await listPublishedCourses();
+  return <PublicExamsClient courses={courses} />;
 }

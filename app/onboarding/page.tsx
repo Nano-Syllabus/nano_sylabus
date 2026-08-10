@@ -3,12 +3,19 @@ import { Logo } from "@/components/marketing-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { OnboardingForm } from "@/components/onboarding-form";
 import { requireAuthenticatedUser } from "@/lib/auth";
+import { sanitizeNextPath } from "@/lib/post-auth";
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const { user, profile } = await requireAuthenticatedUser();
+  const { next } = await searchParams;
+  const nextPath = sanitizeNextPath(next);
 
   if (user.onboarded) {
-    redirect("/app/today");
+    redirect(nextPath || "/app/today");
   }
 
   return (
@@ -17,7 +24,12 @@ export default async function OnboardingPage() {
         <Logo />
         <ThemeToggle />
       </header>
-      <OnboardingForm userId={user.id} initialProfile={profile} initialName={user.fullName} />
+      <OnboardingForm
+        userId={user.id}
+        initialProfile={profile}
+        initialName={user.fullName}
+        nextPath={nextPath || undefined}
+      />
     </div>
   );
 }

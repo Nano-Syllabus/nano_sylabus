@@ -8,6 +8,7 @@ import { canSpendCredits, CHAT_MESSAGE_CREDIT_COST, computeNextBalance } from "@
 import { resolveResponseLanguage } from "@/lib/chat-language-mode";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
 import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
+import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { chatTenantStream, getTenantName, listTenantSubjects, type TenantChatSource, type TenantSubject, type TenantTokenUsage } from "@/lib/tenant/client";
 import { deriveSessionTitle } from "@/lib/utils";
@@ -674,6 +675,17 @@ export async function POST(request: Request) {
           requestId,
         },
         { status: 400 },
+      );
+    }
+
+    if (!(await studentHasCourseSubjectAccess(user.id, tenantSubject.slug))) {
+      return NextResponse.json(
+        {
+          error: "Enroll in a course containing this subject first.",
+          code: "COURSE_SUBJECT_ACCESS_REQUIRED",
+          requestId,
+        },
+        { status: 403 },
       );
     }
 

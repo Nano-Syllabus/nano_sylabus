@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   findTenantSubject,
@@ -142,6 +143,13 @@ export async function GET(request: Request) {
       return NextResponse.json(
         { error: "That subject is not available." },
         { status: 404, headers: NO_STORE_HEADERS },
+      );
+    }
+
+    if (!(await studentHasCourseSubjectAccess(user.id, subject.slug))) {
+      return NextResponse.json(
+        { error: "Enroll in a course containing this subject first." },
+        { status: 403, headers: NO_STORE_HEADERS },
       );
     }
 

@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { TeacherCoursesClient, TeacherCoursesOverview } from "@/components/teacher-courses-client";
 import {
   aheadOfCount,
   gradeTopicEvaluation,
@@ -22,8 +23,15 @@ type ApiRecord = Record<string, unknown>;
 type WorkspaceState = "loading" | "ready" | "error";
 type RecoveryState = "idle" | "recovering" | "missing" | "recreating";
 type DashboardState = "loading" | "ready" | "error";
-type MainView = "today" | "subjects" | "classrooms" | "exams" | "settings";
-type SubjectTab = "overview" | "syllabus" | "material" | "bank" | "source-search" | "test-chat" | "classrooms";
+type MainView = "today" | "subjects" | "courses" | "classrooms" | "exams" | "settings";
+type SubjectTab =
+  | "overview"
+  | "syllabus"
+  | "material"
+  | "bank"
+  | "source-search"
+  | "test-chat"
+  | "classrooms";
 type ClassroomTab = "students" | "exams" | "performance" | "material" | "activity" | "settings";
 type Shelf = "Syllabus" | "Notes" | "Question Bank";
 
@@ -667,7 +675,9 @@ function normalizeClassroomDetail(payload: ApiRecord): ClassroomDetail {
           {
             id: text(topic.id) || topicName,
             name: topicName,
-            after: list(topic.after).map((item) => text(item)).filter(Boolean),
+            after: list(topic.after)
+              .map((item) => text(item))
+              .filter(Boolean),
             percentage: topic.percentage === null ? null : numberValue(topic.percentage),
             testedStudentCount: numberValue(topic.testedStudentCount),
             askedStudentCount: numberValue(topic.askedStudentCount),
@@ -861,13 +871,7 @@ function SkeletonBlock({ className }: { className?: string }) {
   );
 }
 
-function SkeletonCard({
-  lines = 3,
-  className,
-}: {
-  lines?: number;
-  className?: string;
-}) {
+function SkeletonCard({ lines = 3, className }: { lines?: number; className?: string }) {
   return (
     <div className={cn("rounded-lg border border-border p-5", className)} aria-hidden="true">
       <div className="flex items-start gap-3">
@@ -919,7 +923,7 @@ function WorkspaceSkeleton() {
             Loading your workspace…
           </h1>
           <p className="mt-2 text-sm text-text-secondary">
-            Fetching your subjects, classrooms, exams, and material.
+            Fetching your subjects, courses, exams, and material.
           </p>
         </div>
         <div className="flex items-start gap-4">
@@ -1275,7 +1279,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             [
               ["today", "Today"],
               ["subjects", "Subjects"],
-              ["classrooms", "Classrooms"],
+              ["courses", "Courses"],
               ["settings", "Settings"],
             ] as const
           ).map(([value, label]) => (
@@ -1330,7 +1334,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             [
               ["today", "Today"],
               ["subjects", "Subjects"],
-              ["classrooms", "Classrooms"],
+              ["courses", "Courses"],
               ["settings", "Settings"],
             ] as const
           ).map(([value, label]) => (
@@ -1355,12 +1359,19 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           {view === "today" ? (
             <TodayView
               teacherHandle={workspace.teacher.fullName}
+              subjectCount={workspace.subjects.length}
               dashboard={dashboard}
               state={dashboardState}
               error={dashboardError}
               onSetExam={() => navigate("exams")}
-              onClassrooms={() => navigate("classrooms")}
+              onCourses={() => navigate("courses")}
               onRetry={() => void loadDashboard()}
+            />
+          ) : null}
+          {view === "courses" ? (
+            <TeacherCoursesClient
+              subjects={workspace.subjects}
+              onCreateSubject={() => setDialog({ type: "create-subject" })}
             />
           ) : null}
           {view === "classrooms" ? (
@@ -1587,19 +1598,21 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
 
 function TodayView({
   teacherHandle,
+  subjectCount,
   dashboard,
   state,
   error,
   onSetExam,
-  onClassrooms,
+  onCourses,
   onRetry,
 }: {
   teacherHandle: string;
+  subjectCount: number;
   dashboard: TeacherDashboard | null;
   state: DashboardState;
   error: string;
   onSetExam: () => void;
-  onClassrooms: () => void;
+  onCourses: () => void;
   onRetry: () => void;
 }) {
   if (state === "loading" && !dashboard) return <DashboardSkeleton />;
@@ -1608,7 +1621,7 @@ function TodayView({
   }
   if (!dashboard) return null;
 
-  const { summary, classrooms, needsAttention } = dashboard;
+  const { summary, needsAttention } = dashboard;
   return (
     <>
       <div className="flex flex-wrap items-end gap-4">
@@ -1618,7 +1631,7 @@ function TodayView({
             Good morning, {teacherHandle}
           </h1>
           <p className="mt-[7px] text-text-secondary">
-            {summary.classroomCount} {summary.classroomCount === 1 ? "classroom" : "classrooms"},{" "}
+            {subjectCount} indexed {subjectCount === 1 ? "subject" : "subjects"},{" "}
             {summary.studentCount} {summary.studentCount === 1 ? "student" : "students"}.
           </p>
         </div>
@@ -1640,38 +1653,27 @@ function TodayView({
           </p>
         </div>
         <span className="flex-1" />
-        <Button size="lg" variant="inverse" className="shrink-0" onClick={onClassrooms}>
-          Check classrooms
+        <Button size="lg" variant="inverse" className="shrink-0" onClick={onCourses}>
+          Open courses
         </Button>
       </section>
 
       <section className="mt-[26px]">
         <div className="flex items-baseline gap-3">
-          <h2 className="font-display text-lg font-semibold">Your classrooms</h2>
-          <span className="text-sm text-text-muted">{summary.classroomCount}</span>
+          <h2 className="font-display text-lg font-semibold">Your courses</h2>
           <span className="flex-1" />
-          {classrooms.length ? (
-            <button
-              type="button"
-              onClick={onClassrooms}
-              className={cn(
-                "min-h-10 text-sm text-text-secondary hover:text-text-primary",
-                interactive,
-              )}
-            >
-              See all
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={onCourses}
+            className={cn(
+              "min-h-10 text-sm text-text-secondary hover:text-text-primary",
+              interactive,
+            )}
+          >
+            See all
+          </button>
         </div>
-        {classrooms.length ? (
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {classrooms.slice(0, 6).map((classroom) => (
-              <ClassroomCard key={classroom.id} classroom={classroom} onOpen={onClassrooms} />
-            ))}
-          </div>
-        ) : (
-          <EmptyClassrooms onClassrooms={onClassrooms} />
-        )}
+        <TeacherCoursesOverview onOpen={onCourses} />
       </section>
 
       <section className="mt-[26px]">
@@ -1771,7 +1773,10 @@ function ClassroomDetailSkeleton() {
       </div>
       <div className="mt-5 rounded-lg border border-border">
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="flex items-center gap-4 border-b border-border p-4 last:border-b-0">
+          <div
+            key={index}
+            className="flex items-center gap-4 border-b border-border p-4 last:border-b-0"
+          >
             <SkeletonBlock className="h-10 w-10 rounded-full" />
             <div className="flex-1 space-y-2">
               <SkeletonBlock className="h-4 w-40" />
@@ -1855,12 +1860,16 @@ function EmptyClassrooms({ onClassrooms }: { onClassrooms: () => void }) {
   );
 }
 
-function humanizedExamWindowChip(opensAt: string | null, closesAt: string | null): { label: string; badgeClass: string } {
+function humanizedExamWindowChip(
+  opensAt: string | null,
+  closesAt: string | null,
+): { label: string; badgeClass: string } {
   const now = Date.now();
   if (opensAt && new Date(opensAt).getTime() > now) {
     const openTime = new Date(opensAt).getTime();
     const diffHours = Math.round((openTime - now) / 3600000);
-    const label = diffHours > 24 ? `Opens ${new Date(opensAt).toLocaleDateString()}` : `Opens in ${diffHours}h`;
+    const label =
+      diffHours > 24 ? `Opens ${new Date(opensAt).toLocaleDateString()}` : `Opens in ${diffHours}h`;
     return { label, badgeClass: "border-warning/40 text-warning bg-warning/10" };
   }
   if (closesAt) {
@@ -1870,15 +1879,25 @@ function humanizedExamWindowChip(opensAt: string | null, closesAt: string | null
     }
     const diffHours = Math.round((closeTime - now) / 3600000);
     if (diffHours <= 24) {
-      return { label: `Closes today (${diffHours}h left)`, badgeClass: "border-destructive/40 text-destructive bg-destructive/10" };
+      return {
+        label: `Closes today (${diffHours}h left)`,
+        badgeClass: "border-destructive/40 text-destructive bg-destructive/10",
+      };
     }
     const diffDays = Math.ceil(diffHours / 24);
-    return { label: `Closes in ${diffDays}d`, badgeClass: "border-success/40 text-success bg-success/10" };
+    return {
+      label: `Closes in ${diffDays}d`,
+      badgeClass: "border-success/40 text-success bg-success/10",
+    };
   }
   return { label: "Open anytime", badgeClass: "border-success/40 text-success bg-success/10" };
 }
 
-function masteryLabelAndColor(percentage: number | null): { label: string; color: string; bgDot: string } {
+function masteryLabelAndColor(percentage: number | null): {
+  label: string;
+  color: string;
+  bgDot: string;
+} {
   if (percentage === null || percentage === undefined) {
     return { label: "Not tested", color: "text-text-muted", bgDot: "bg-text-muted/40" };
   }
@@ -1986,8 +2005,12 @@ function ClassroomConceptMapSVG({
   const allTopics = chapterNodes.flatMap((ch) => ch.topics);
 
   const solidCount = allTopics.filter((t) => t.percentage !== null && t.percentage >= 70).length;
-  const gettingThereCount = allTopics.filter((t) => t.percentage !== null && t.percentage >= 40 && t.percentage < 70).length;
-  const strugglingCount = allTopics.filter((t) => t.percentage !== null && t.percentage < 40).length;
+  const gettingThereCount = allTopics.filter(
+    (t) => t.percentage !== null && t.percentage >= 40 && t.percentage < 70,
+  ).length;
+  const strugglingCount = allTopics.filter(
+    (t) => t.percentage !== null && t.percentage < 40,
+  ).length;
   const notStartedCount = allTopics.filter((t) => t.percentage === null).length;
 
   const selectedNode = allTopics.find((t) => t.name === selectedTopic) || null;
@@ -2001,7 +2024,9 @@ function ClassroomConceptMapSVG({
             onClick={() => onSourceChange("tests")}
             className={cn(
               "min-h-9 rounded-md px-3 text-xs font-medium transition",
-              source === "tests" ? "bg-text-primary text-bg-primary" : "bg-bg-secondary text-text-secondary hover:text-text-primary",
+              source === "tests"
+                ? "bg-text-primary text-bg-primary"
+                : "bg-bg-secondary text-text-secondary hover:text-text-primary",
             )}
           >
             From class tests
@@ -2011,7 +2036,9 @@ function ClassroomConceptMapSVG({
             onClick={() => onSourceChange("chat")}
             className={cn(
               "min-h-9 rounded-md px-3 text-xs font-medium transition",
-              source === "chat" ? "bg-text-primary text-bg-primary" : "bg-bg-secondary text-text-secondary hover:text-text-primary",
+              source === "chat"
+                ? "bg-text-primary text-bg-primary"
+                : "bg-bg-secondary text-text-secondary hover:text-text-primary",
             )}
           >
             From what they ask
@@ -2052,12 +2079,14 @@ function ClassroomConceptMapSVG({
                   strokeWidth="1"
                   strokeOpacity="0.2"
                 />
-              ))
+              )),
             )}
 
             {allTopics.flatMap((t) =>
               (t.after || []).flatMap((afterName) => {
-                const target = allTopics.find((item) => item.name === afterName || item.id === afterName);
+                const target = allTopics.find(
+                  (item) => item.name === afterName || item.id === afterName,
+                );
                 if (!target) return [];
                 return (
                   <line
@@ -2072,7 +2101,7 @@ function ClassroomConceptMapSVG({
                     strokeOpacity="0.4"
                   />
                 );
-              })
+              }),
             )}
 
             <g transform={`translate(${cx}, ${cy})`}>
@@ -2092,13 +2121,7 @@ function ClassroomConceptMapSVG({
             {chapterNodes.map((ch) => (
               <g key={`ch-node-${ch.name}`} transform={`translate(${ch.chx}, ${ch.chy})`}>
                 <circle r="15" fill="#FFFFFF" stroke="#0B0B0B" strokeWidth="1.6" />
-                <text
-                  textAnchor="middle"
-                  dy="28"
-                  fill="#0B0B0B"
-                  fontSize="12.5"
-                  fontWeight="600"
-                >
+                <text textAnchor="middle" dy="28" fill="#0B0B0B" fontSize="12.5" fontWeight="600">
                   {ch.name.length > 17 ? `${ch.name.slice(0, 15)}…` : ch.name}
                 </text>
               </g>
@@ -2158,14 +2181,26 @@ function ClassroomConceptMapSVG({
               <div className="space-y-2 border-t border-border pt-3 text-xs">
                 <div className="flex items-center justify-between py-1.5 border-b border-border">
                   <span className="flex items-center gap-1.5">
-                    <span className={cn("h-2.5 w-2.5 rounded-full", masteryLabelAndColor(selectedNode.percentage).bgDot)} />
+                    <span
+                      className={cn(
+                        "h-2.5 w-2.5 rounded-full",
+                        masteryLabelAndColor(selectedNode.percentage).bgDot,
+                      )}
+                    />
                     From class tests
                   </span>
-                  <strong className="font-mono">{selectedNode.percentage === null ? "—" : `${selectedNode.percentage}%`}</strong>
+                  <strong className="font-mono">
+                    {selectedNode.percentage === null ? "—" : `${selectedNode.percentage}%`}
+                  </strong>
                 </div>
                 <div className="flex items-center justify-between py-1.5">
                   <span className="flex items-center gap-1.5">
-                    <span className={cn("h-2.5 w-2.5 rounded-full", selectedNode.askedCount > 0 ? "bg-warning" : "bg-text-muted/40")} />
+                    <span
+                      className={cn(
+                        "h-2.5 w-2.5 rounded-full",
+                        selectedNode.askedCount > 0 ? "bg-warning" : "bg-text-muted/40",
+                      )}
+                    />
                     From what they ask
                   </span>
                   <strong>{selectedNode.askedCount} asked</strong>
@@ -2184,12 +2219,16 @@ function ClassroomConceptMapSVG({
                         className="flex items-center justify-between rounded bg-bg-secondary px-3 py-2 text-xs"
                       >
                         <span>{student.name}</span>
-                        <span className="font-mono font-semibold text-destructive">{student.percentage}%</span>
+                        <span className="font-mono font-semibold text-destructive">
+                          {student.percentage}%
+                        </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-text-muted">No student scoring below 40% on this topic.</p>
+                  <p className="text-xs text-text-muted">
+                    No student scoring below 40% on this topic.
+                  </p>
                 )}
               </div>
             </div>
@@ -2198,10 +2237,18 @@ function ClassroomConceptMapSVG({
               <div className="rounded-lg border border-border p-4">
                 <h3 className="font-display text-sm font-semibold">How to read it</h3>
                 <div className="mt-3 flex flex-wrap gap-3 text-xs">
-                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#2E7D4F]" /> Solid</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#E0A800]" /> Getting there</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#C43D2E]" /> Struggling</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-[#C8C8C5]" /> Not started</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#2E7D4F]" /> Solid
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#E0A800]" /> Getting there
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#C43D2E]" /> Struggling
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#C8C8C5]" /> Not started
+                  </span>
                 </div>
                 <p className="mt-3 text-xs text-text-muted">
                   Dotted lines join topics that build on each other. Tap any topic for detail.
@@ -2212,19 +2259,27 @@ function ClassroomConceptMapSVG({
                 <h3 className="font-display text-sm font-semibold">Where the classroom stands</h3>
                 <div className="mt-3 space-y-2 text-xs">
                   <div className="flex justify-between items-center p-2 rounded bg-bg-secondary">
-                    <span className="flex items-center gap-2 font-medium"><span className="h-2.5 w-2.5 rounded-full bg-[#2E7D4F]" /> Solid</span>
+                    <span className="flex items-center gap-2 font-medium">
+                      <span className="h-2.5 w-2.5 rounded-full bg-[#2E7D4F]" /> Solid
+                    </span>
                     <strong>{solidCount}</strong>
                   </div>
                   <div className="flex justify-between items-center p-2 rounded bg-bg-secondary">
-                    <span className="flex items-center gap-2 font-medium"><span className="h-2.5 w-2.5 rounded-full bg-[#E0A800]" /> Getting there</span>
+                    <span className="flex items-center gap-2 font-medium">
+                      <span className="h-2.5 w-2.5 rounded-full bg-[#E0A800]" /> Getting there
+                    </span>
                     <strong>{gettingThereCount}</strong>
                   </div>
                   <div className="flex justify-between items-center p-2 rounded bg-bg-secondary">
-                    <span className="flex items-center gap-2 font-medium"><span className="h-2.5 w-2.5 rounded-full bg-[#C43D2E]" /> Struggling</span>
+                    <span className="flex items-center gap-2 font-medium">
+                      <span className="h-2.5 w-2.5 rounded-full bg-[#C43D2E]" /> Struggling
+                    </span>
                     <strong>{strugglingCount}</strong>
                   </div>
                   <div className="flex justify-between items-center p-2 rounded bg-bg-secondary">
-                    <span className="flex items-center gap-2 font-medium"><span className="h-2.5 w-2.5 rounded-full bg-[#C8C8C5]" /> Not started</span>
+                    <span className="flex items-center gap-2 font-medium">
+                      <span className="h-2.5 w-2.5 rounded-full bg-[#C8C8C5]" /> Not started
+                    </span>
                     <strong>{notStartedCount}</strong>
                   </div>
                 </div>
@@ -2352,9 +2407,7 @@ function ClassroomsView({
     <>
       <div className="flex flex-wrap items-end gap-4">
         <div>
-          <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
-            Classrooms
-          </p>
+          <p className="font-mono text-xs uppercase tracking-widest text-text-muted">Classrooms</p>
           <h1 className="mt-3 font-display text-3xl font-semibold">Classrooms</h1>
           <p className="mt-2 text-text-secondary">
             Join codes, members, assignments and submissions come from Supabase.
@@ -3198,8 +3251,8 @@ function ClassroomDetailView({
           <div className="rounded-lg border border-border p-5">
             <h2 className="font-display text-xl font-semibold">Topic and chapter map</h2>
             <p className="mt-2 text-sm text-text-secondary mb-4">
-              Scores come from graded question results. Asked counts come from student
-              study-chat messages for this subject.
+              Scores come from graded question results. Asked counts come from student study-chat
+              messages for this subject.
             </p>
             {conceptMapChapters.length ? (
               <ClassroomConceptMapSVG
@@ -3286,10 +3339,7 @@ function ClassroomDetailView({
       {tab === "material" ? (
         <section className="mt-6">
           <div className="flex flex-wrap items-center gap-4">
-            <Button
-              onClick={() => setShowUploadMaterialModal(true)}
-              disabled={!subject}
-            >
+            <Button onClick={() => setShowUploadMaterialModal(true)} disabled={!subject}>
               Add material
             </Button>
             <p className="text-sm text-text-muted">
@@ -3431,7 +3481,12 @@ function ClassroomDetailView({
                 return (
                   <article key={exam.assignmentId} className="rounded-lg border border-border p-5">
                     <div className="flex items-center gap-2">
-                      <span className={cn("rounded-full border px-3 py-1 text-xs font-medium", chip.badgeClass)}>
+                      <span
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-xs font-medium",
+                          chip.badgeClass,
+                        )}
+                      >
                         {chip.label}
                       </span>
                       <span className="flex-1" />
@@ -3450,7 +3505,11 @@ function ClassroomDetailView({
                           ? "No graded submissions yet"
                           : `Class average ${exam.averagePercent}%`}
                     </p>
-                    <Button className="mt-4" variant="outline" onClick={() => manageAssignment(exam)}>
+                    <Button
+                      className="mt-4"
+                      variant="outline"
+                      onClick={() => manageAssignment(exam)}
+                    >
                       Manage dates
                     </Button>
                   </article>
@@ -4123,8 +4182,7 @@ function ReusePaperDialog({
     }
   }
 
-  const kindLabel = (k: string) =>
-    k === "class-test" ? "class test" : k;
+  const kindLabel = (k: string) => (k === "class-test" ? "class test" : k);
 
   return (
     <Dialog title={`Reuse an exam for ${classroomName}`} onClose={onClose}>
@@ -7120,10 +7178,7 @@ function SubjectView({
           {subjectClassrooms.length ? (
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {subjectClassrooms.map((classroom) => (
-                <div
-                  key={classroom.id}
-                  className="rounded-lg border border-border p-5"
-                >
+                <div key={classroom.id} className="rounded-lg border border-border p-5">
                   <div className="flex items-center gap-2">
                     <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-medium">
                       {classroom.memberCount} students
@@ -7288,7 +7343,7 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
     return (
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         {Array.from({ length: 6 }).map((_, index) => (
-            <SkeletonCard key={index} lines={2} className="h-36" />
+          <SkeletonCard key={index} lines={2} className="h-36" />
         ))}
       </div>
     );
@@ -8269,8 +8324,7 @@ function TestChat({
       <aside className="rounded-lg border border-border p-5">
         <h2 className="font-display text-lg font-semibold">Grounding check</h2>
         <p className="mt-3 text-sm leading-6 text-text-secondary">
-          Answers use only this subject&apos;s indexed material. Sources appear
-          under each response.
+          Answers use only this subject&apos;s indexed material. Sources appear under each response.
         </p>
         {messages.length ? (
           <Button className="mt-5" variant="outline" onClick={() => setMessages([])}>
@@ -9474,7 +9528,11 @@ function CollectionDialog({
       <section className="mt-7 rounded-lg border border-border p-5">
         <h3 className="font-display text-lg font-semibold">AI usage</h3>
         {usageState === "loading" ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-3" role="status" aria-label="Loading AI usage">
+          <div
+            className="mt-4 grid gap-3 sm:grid-cols-3"
+            role="status"
+            aria-label="Loading AI usage"
+          >
             <SkeletonBlock className="h-20" />
             <SkeletonBlock className="h-20" />
             <SkeletonBlock className="h-20" />

@@ -26,5 +26,9 @@ export function resolvePostAuthDestination(input: {
     return "/app/today";
   }
 
+  if (!input.onboarded && safeNext !== "/onboarding") {
+    return `/onboarding?next=${encodeURIComponent(safeNext)}`;
+  }
+
   return safeNext;
 }

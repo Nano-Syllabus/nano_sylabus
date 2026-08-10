@@ -196,6 +196,17 @@ export async function POST(req: Request) {
       indexBody,
     );
 
+    const indexedDocumentId = (() => {
+      const direct = indexRes.document_id;
+      if (typeof direct === "string") return direct;
+      const document = indexRes.document;
+      if (document && typeof document === "object") {
+        const id = (document as Record<string, unknown>).id;
+        if (typeof id === "string") return id;
+      }
+      return "";
+    })();
+
     let previewWarning = "";
     try {
       const admin = createSupabaseAdminClient();
@@ -210,6 +221,7 @@ export async function POST(req: Request) {
       const { error: mirrorError } = await admin.from("teacher_document_files").upsert(
         {
           teacher_id: teacher.id,
+          external_document_id: indexedDocumentId || null,
           collection_path: uploadedFilePath,
           storage_path: storagePath,
           original_name: file.name || safeFilename,
