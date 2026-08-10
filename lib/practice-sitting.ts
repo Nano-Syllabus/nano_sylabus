@@ -1,6 +1,8 @@
 export type StudentExamQuestion = {
   id: string;
   type: "choice" | "short" | "long";
+  /** The tenant's own question classification, such as theory or numerical. */
+  questionType?: string;
   marks: number;
   topic: string;
   prompt: string;
@@ -17,6 +19,8 @@ export type StudentExam = {
   kind: string;
   counts: boolean;
   marks: number;
+  /** The generated paper's saved threshold, when the tenant supplied one. */
+  passMarks?: number;
   minutes: number;
   attempts: number | null;
   window: "before" | "open" | "done" | "practice";
@@ -36,6 +40,12 @@ export const SITTING_KEY = "nano:practice:sitting";
 export type SavedSitting = {
   exam: StudentExam;
   sessionId: string;
+  /** Older saved sittings omit this and are treated as quick sessions. */
+  practiceKind?: "session" | "paper";
+  /** Personal paper grading guidance must survive a refresh with the sitting. */
+  gradingInstruction?: string;
+  /** Personal papers can be typed in-app or submitted as one handwritten sheet. */
+  answerMode?: "type" | "upload";
   subject: string;
   answers: Record<string, Answer>;
   questionIndex: number;

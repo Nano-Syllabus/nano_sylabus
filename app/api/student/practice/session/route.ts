@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { startPracticeSession } from "@/lib/tenant/client";
-import { getPublishedCatalog, findPublishedSubject } from "@/lib/tenant/marketplace-catalog";
+import { findTenantSubject, listTenantSubjects, startPracticeSession } from "@/lib/tenant/client";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -24,10 +23,16 @@ export async function POST(request: Request) {
 
     const parsed = requestSchema.parse(await request.json());
 
-    const catalog = await getPublishedCatalog();
-    const subject = findPublishedSubject(catalog, parsed.subject);
+    const subjects = await listTenantSubjects();
+    const subject = findTenantSubject(subjects, parsed.subject);
     if (!subject) {
-      return NextResponse.json({ error: "That subject is not published." }, { status: 404 });
+      return NextResponse.json({ error: "That subject is not available." }, { status: 404 });
+    }
+    if (subject.chunk_count <= 0) {
+      return NextResponse.json(
+        { error: "This subject does not have indexed practice content yet." },
+        { status: 409 },
+      );
     }
 
     const session = await startPracticeSession({

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import type { StudentToday, TodayChapter, TodayExam } from "@/lib/data/student-today";
 import { countAnswered, readSavedSitting, type SavedSitting } from "@/lib/practice-sitting";
@@ -37,6 +37,27 @@ const STATUS_DOT: Record<TodayChapter["status"], string> = {
   developing: "bg-amber-500",
   strong: "bg-emerald-600",
   not_attempted: "bg-border-strong",
+};
+
+const focusRing =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
+
+type OpenCourse = {
+  name: string;
+  slug: string;
+  code?: string;
+  university?: string;
+  programme?: string;
+  providerName: string;
+  documentCount: number;
+  unitCount: number;
+  chunkCount: number;
+};
+
+type PublishedProvider = {
+  namespace: string;
+  providerName: string;
+  subjects: OpenCourse[];
 };
 
 function ExamCard({ exam, compact = false }: { exam: TodayExam; compact?: boolean }) {
@@ -87,12 +108,21 @@ export function StudentTodayDashboard({
 }) {
   const router = useRouter();
   const [joinOpen, setJoinOpen] = useState(false);
+  const [browseOpen, setBrowseOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState("");
   const [joinMessage, setJoinMessage] = useState("");
   const [joining, setJoining] = useState(false);
+  const [providers, setProviders] = useState<PublishedProvider[]>([]);
+  const [browseState, setBrowseState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [browseError, setBrowseError] = useState("");
+  const [browseQuery, setBrowseQuery] = useState("");
+  const [browseUniversity, setBrowseUniversity] = useState("");
+  const [browseProgramme, setBrowseProgramme] = useState("");
+  const [addingSubject, setAddingSubject] = useState("");
   const joinInputRef = useRef<HTMLInputElement>(null);
   const joinTriggerRef = useRef<HTMLButtonElement>(null);
+  const browseCloseRef = useRef<HTMLButtonElement>(null);
 
   const firstSubject = today.subjects[0] ?? "";
   // An unfinished sitting outranks everything else in the hero, the way it did
@@ -118,10 +148,82 @@ export function StudentTodayDashboard({
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [joinOpen]);
 
+  useEffect(() => {
+    if (!browseOpen) return;
+    browseCloseRef.current?.focus();
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeBrowse();
+    };
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [browseOpen]);
+
+  useEffect(() => {
+    if (!browseOpen || browseState !== "idle") return;
+    void loadCourses();
+  }, [browseOpen, browseState]);
+
   function closeJoin() {
     setJoinOpen(false);
     setJoinError("");
     joinTriggerRef.current?.focus();
+  }
+
+  function openBrowse() {
+    setJoinOpen(false);
+    setBrowseOpen(true);
+  }
+
+  function closeBrowse() {
+    setBrowseOpen(false);
+    joinTriggerRef.current?.focus();
+  }
+
+  async function loadCourses() {
+    setBrowseState("loading");
+    setBrowseError("");
+
+    try {
+      const response = await fetch("/api/tenant/catalog", {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      const payload = (await response.json()) as {
+        providers?: PublishedProvider[];
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error || "Could not load published courses.");
+
+      setProviders(Array.isArray(payload.providers) ? payload.providers : []);
+      setBrowseState("ready");
+    } catch (error) {
+      setBrowseError(error instanceof Error ? error.message : "Could not load published courses.");
+      setBrowseState("error");
+    }
+  }
+
+  async function addCourse(course: OpenCourse) {
+    setAddingSubject(course.slug);
+    setBrowseError("");
+
+    try {
+      const response = await fetch("/api/student/profile/subjects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ subject: course.slug, action: "add" }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Could not join that course.");
+
+      setBrowseOpen(false);
+      router.refresh();
+    } catch (error) {
+      setBrowseError(error instanceof Error ? error.message : "Could not join that course.");
+    } finally {
+      setAddingSubject("");
+    }
   }
 
   async function submitJoin(event: FormEvent<HTMLFormElement>) {
@@ -148,6 +250,56 @@ export function StudentTodayDashboard({
   }`;
 
   const topWeak = today.weakestChapters[0];
+  const ownedSubjects = useMemo(
+    () => new Set(today.subjects.map((subject) => subject.trim().toLowerCase())),
+    [today.subjects],
+  );
+  const allCourses = useMemo(
+    () =>
+      providers.flatMap((provider) =>
+        provider.subjects.map((subject) => ({
+          ...subject,
+          providerName: subject.providerName || provider.providerName,
+        })),
+      ),
+    [providers],
+  );
+  const universities = useMemo(
+    () =>
+      Array.from(
+        new Set(allCourses.map((course) => course.university).filter(Boolean) as string[]),
+      ).sort(),
+    [allCourses],
+  );
+  const programmes = useMemo(
+    () =>
+      Array.from(
+        new Set(allCourses.map((course) => course.programme).filter(Boolean) as string[]),
+      ).sort(),
+    [allCourses],
+  );
+  const visibleCourses = useMemo(() => {
+    const needle = browseQuery.trim().toLowerCase();
+
+    return allCourses.filter((course) => {
+      const haystack = [
+        course.name,
+        course.code,
+        course.university,
+        course.programme,
+        course.providerName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return (
+        (!needle || haystack.includes(needle)) &&
+        (!browseUniversity || course.university === browseUniversity) &&
+        (!browseProgramme || course.programme === browseProgramme)
+      );
+    });
+  }, [allCourses, browseProgramme, browseQuery, browseUniversity]);
 
   return (
     <div className="w-full max-w-[1240px] px-4 pb-10 pt-6 sm:px-[26px]">
@@ -159,14 +311,14 @@ export function StudentTodayDashboard({
           </h1>
           <p className="mt-2 text-[15px] text-text-secondary">{subjectLine}</p>
         </div>
-        <button
+        {/* <button
           ref={joinTriggerRef}
           type="button"
           className="inline-flex min-h-10 w-fit items-center justify-center rounded-lg border border-border-strong px-4 text-sm font-medium transition hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2"
           onClick={() => setJoinOpen(true)}
         >
           Join with a code
-        </button>
+        </button> */}
       </section>
 
       {/* Hero mirrors the three states: an exam waiting, else the weakest
@@ -242,7 +394,7 @@ export function StudentTodayDashboard({
               >
                 Practise
               </Link>
-            ) : (
+            ) : null /* (
               <button
                 type="button"
                 onClick={() => setJoinOpen(true)}
@@ -250,7 +402,7 @@ export function StudentTodayDashboard({
               >
                 Join with a code
               </button>
-            )}
+            ) */}
           </>
         )}
       </section>
@@ -367,6 +519,7 @@ export function StudentTodayDashboard({
         </section>
       ) : null}
 
+      {/* joinOpen dialog commented out
       {joinOpen ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <button
@@ -386,11 +539,12 @@ export function StudentTodayDashboard({
               Join with a code
             </h2>
             <p className="mt-2 text-sm text-text-secondary">
-              Your class code brings in the subject your teacher is running.
+              Your class code can bring in a whole classroom. A single subject or a single exam
+              can also be joined from open courses.
             </p>
             <form className="mt-6" onSubmit={submitJoin}>
               <label htmlFor="classroom-code" className="text-sm font-medium">
-                Classroom code
+                Type the code you were given
               </label>
               <input
                 ref={joinInputRef}
@@ -422,6 +576,9 @@ export function StudentTodayDashboard({
                 </p>
               ) : null}
               <div className="mt-6 flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={openBrowse}>
+                  Browse courses
+                </Button>
                 <Button type="button" variant="ghost" onClick={closeJoin}>
                   {joinMessage ? "Done" : "Cancel"}
                 </Button>
@@ -431,6 +588,176 @@ export function StudentTodayDashboard({
               </div>
             </form>
           </div>
+        </div>
+      ) : null}
+      */}
+
+      {browseOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Close course browser"
+            className="absolute inset-0 bg-black/45"
+            onClick={closeBrowse}
+          />
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="browse-title"
+            className="relative flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border bg-bg-primary shadow-xl"
+          >
+            <header className="border-b border-border px-5 py-4 sm:px-6">
+              <div className="flex items-start gap-3">
+                <div>
+                  <h2 id="browse-title" className="font-display text-2xl font-semibold">
+                    Browse courses
+                  </h2>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    No code needed. You get the notes, the practice and the chapter map. Marks in
+                    an open course stay private to you.
+                  </p>
+                </div>
+                <span className="flex-1" />
+                <button
+                  ref={browseCloseRef}
+                  type="button"
+                  className={`inline-flex min-h-10 items-center rounded-lg border border-border-strong px-4 text-sm font-medium transition hover:bg-bg-secondary ${focusRing}`}
+                  onClick={closeBrowse}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-[1fr_180px_180px]">
+                <label className="block">
+                  <span className="sr-only">Search courses</span>
+                  <input
+                    type="search"
+                    value={browseQuery}
+                    onChange={(event) => setBrowseQuery(event.target.value)}
+                    placeholder="Search subject, code, teacher"
+                    className={`h-11 w-full rounded-lg border border-border bg-bg-primary px-3 text-sm ${focusRing}`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="sr-only">University</span>
+                  <select
+                    value={browseUniversity}
+                    onChange={(event) => setBrowseUniversity(event.target.value)}
+                    className={`h-11 w-full rounded-lg border border-border bg-bg-primary px-3 text-sm ${focusRing}`}
+                  >
+                    <option value="">All universities</option>
+                    {universities.map((university) => (
+                      <option key={university} value={university}>
+                        {university}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="sr-only">Programme</span>
+                  <select
+                    value={browseProgramme}
+                    onChange={(event) => setBrowseProgramme(event.target.value)}
+                    className={`h-11 w-full rounded-lg border border-border bg-bg-primary px-3 text-sm ${focusRing}`}
+                  >
+                    <option value="">All programmes</option>
+                    {programmes.map((programme) => (
+                      <option key={programme} value={programme}>
+                        {programme}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">
+              {browseState === "loading" ? (
+                <p className="text-sm text-text-secondary">Loading published courses...</p>
+              ) : null}
+
+              {browseState === "error" ? (
+                <div className="rounded-[14px] border border-destructive/40 p-4">
+                  <p className="font-medium text-destructive">Could not load courses</p>
+                  <p className="mt-1 text-sm text-text-secondary">{browseError}</p>
+                  <button
+                    type="button"
+                    className={`mt-3 inline-flex min-h-10 items-center rounded-lg border border-border-strong px-4 text-sm font-medium ${focusRing}`}
+                    onClick={() => void loadCourses()}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : null}
+
+              {browseState === "ready" && !visibleCourses.length ? (
+                <div className="rounded-[14px] border border-border p-5 text-sm text-text-secondary">
+                  No matching courses found.
+                </div>
+              ) : null}
+
+              {browseState === "ready" && visibleCourses.length ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {visibleCourses.map((course) => {
+                    const owned = ownedSubjects.has(course.name.trim().toLowerCase());
+                    return (
+                      <article
+                        key={`${course.providerName}-${course.slug}`}
+                        className="rounded-[14px] border border-border px-4 py-[15px]"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          {course.code ? (
+                            <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
+                              {course.code}
+                            </span>
+                          ) : null}
+                          {course.university ? (
+                            <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
+                              {course.university}
+                            </span>
+                          ) : null}
+                          <span className="ml-auto rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
+                            {course.providerName}
+                          </span>
+                        </div>
+                        <h3 className="mt-3 font-display text-[17px] font-semibold">
+                          {course.name}
+                        </h3>
+                        <p className="mt-1 text-[13px] text-text-muted">
+                          {[
+                            course.programme,
+                            `${course.documentCount} document${course.documentCount === 1 ? "" : "s"}`,
+                            `${course.unitCount} unit${course.unitCount === 1 ? "" : "s"}`,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            type="button"
+                            className={`inline-flex min-h-10 items-center rounded-lg px-4 text-sm font-medium transition ${
+                              owned
+                                ? "border border-border text-text-secondary"
+                                : "bg-text-primary text-text-inverse hover:opacity-85"
+                            } ${focusRing}`}
+                            disabled={owned || addingSubject === course.slug}
+                            onClick={() => void addCourse(course)}
+                          >
+                            {owned
+                              ? "Joined"
+                              : addingSubject === course.slug
+                                ? "Joining..."
+                                : "Join course"}
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          </section>
         </div>
       ) : null}
     </div>

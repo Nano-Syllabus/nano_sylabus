@@ -6,9 +6,7 @@ function extractErrorMessage(url: URL, statusCode: number, raw: string): string 
   try {
     const parsed = JSON.parse(raw);
     if (parsed.detail) {
-      return typeof parsed.detail === "string"
-        ? parsed.detail
-        : JSON.stringify(parsed.detail);
+      return typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
     }
   } catch {}
   return `Tenant API ${url.pathname} failed with ${statusCode}: ${raw.slice(0, 500)}`;
@@ -30,6 +28,21 @@ export type TenantSourceTreeNode = {
   indexed?: boolean;
   chunk_count?: number;
   children?: TenantSourceTreeNode[];
+};
+
+export type TenantDocumentDetail = {
+  document_id?: string;
+  id?: string;
+  status?: string;
+  indexed?: boolean;
+  subject?: string;
+  namespace?: string;
+  source_path?: string;
+  filename?: string;
+  word_count?: number;
+  chunk_count?: number;
+  indexed_at?: string | null;
+  indexing_cost?: number | string | null;
 };
 
 export type TenantPromptCitation = {
@@ -196,6 +209,23 @@ export type TeacherGradeResponse = {
   total_score: number;
   total_marks: number;
   graded?: boolean;
+  evaluation?: PracticeEvaluation;
+};
+
+export type PracticeGradeItem = {
+  question_id: string;
+  question: string;
+  chapter?: string;
+  marks: number;
+  reference_answer?: string;
+  student_answer: string;
+};
+
+export type PracticeGradeResponse = {
+  results: PracticeGradeResult[];
+  total_score: number;
+  total_marks: number;
+  graded: boolean;
   evaluation?: PracticeEvaluation;
 };
 
@@ -448,6 +478,55 @@ export async function listTenantSubjects() {
   return payload.subjects ?? [];
 }
 
+function tenantSubjectKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/** Resolves the name, slug, or URL form used across student subject surfaces. */
+export function findTenantSubject(subjects: TenantSubject[], value: string) {
+  const key = tenantSubjectKey(value);
+  if (!key) return null;
+
+  return (
+    subjects.find((subject) => tenantSubjectKey(subject.slug) === key) ??
+    subjects.find((subject) => tenantSubjectKey(subject.name) === key) ??
+    null
+  );
+}
+
+/** Every API-available subject, with profile choices ordered first. */
+export function listTenantSubjectNames(
+  subjects: TenantSubject[],
+  preferredSubjects: string[] = [],
+) {
+  const namesByKey = new Map<string, string>();
+  for (const subject of subjects) {
+    const key = tenantSubjectKey(subject.name);
+    if (key && !namesByKey.has(key)) namesByKey.set(key, subject.name.trim());
+  }
+
+  const ordered: string[] = [];
+  const included = new Set<string>();
+  for (const preferred of preferredSubjects) {
+    const key = tenantSubjectKey(preferred);
+    const name = namesByKey.get(key);
+    if (!name || included.has(key)) continue;
+    ordered.push(name);
+    included.add(key);
+  }
+
+  const remaining = [...namesByKey.entries()]
+    .filter(([key]) => !included.has(key))
+    .map(([, name]) => name)
+    .sort((left, right) => left.localeCompare(right));
+
+  return [...ordered, ...remaining];
+}
+
 let cachedTenantName: string | null = null;
 
 /**
@@ -469,6 +548,10 @@ export async function getTenantName() {
 
 export async function getTenantSourceTree() {
   return requestJson<TenantSourceTreeResponse>("/api/v1/source-tree");
+}
+
+export async function getTenantDocument(documentId: string) {
+  return requestJson<TenantDocumentDetail>(`/api/v1/documents/${encodeURIComponent(documentId)}`);
 }
 
 export async function getMarketplace() {
@@ -563,6 +646,14 @@ export async function generateTeacherPaper(input: TeacherGenerateRequest) {
     method: "POST",
     body: input,
     timeoutMs: 120000,
+  });
+}
+
+export async function gradePracticeItems(input: { items: PracticeGradeItem[] }) {
+  return requestJson<PracticeGradeResponse>("/api/v1/practice/grade", {
+    method: "POST",
+    body: input,
+    timeoutMs: 240000,
   });
 }
 

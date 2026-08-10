@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Mono, Inter, Outfit } from "next/font/google";
+import { Bricolage_Grotesque, DM_Mono, Inter, Inter_Tight, Outfit } from "next/font/google";
 import { ReactNode } from "react";
 import "katex/dist/katex.min.css";
 import "./globals.css";
@@ -25,6 +25,20 @@ const dmMono = DM_Mono({
   display: "swap",
 });
 
+const examDisplay = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-exam-display",
+  display: "swap",
+});
+
+const examSans = Inter_Tight({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-exam-sans",
+  display: "swap",
+});
+
 const themeBootScript = `
 (function(){try{
   var k='ns-theme-v2';
@@ -46,7 +60,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${outfit.variable} ${inter.variable} ${dmMono.variable} font-sans antialiased`}>
+      <body
+        className={`${outfit.variable} ${inter.variable} ${dmMono.variable} ${examDisplay.variable} ${examSans.variable} font-sans antialiased`}
+      >
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         {children}
       </body>

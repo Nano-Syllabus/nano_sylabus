@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { listTopicMastery } from "@/lib/data/student-mastery";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { listPracticeTopics } from "@/lib/tenant/client";
-import { getPublishedCatalog, findPublishedSubject } from "@/lib/tenant/marketplace-catalog";
+import { findTenantSubject, listPracticeTopics, listTenantSubjects } from "@/lib/tenant/client";
 
 export const dynamic = "force-dynamic";
 
@@ -14,19 +13,41 @@ export async function GET(request: Request) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const requested = new URL(request.url).searchParams.get("subject")?.trim();
+    const searchParams = new URL(request.url).searchParams;
+    const requested = searchParams.get("subject")?.trim();
     if (!requested) {
       return NextResponse.json({ error: "A subject is required." }, { status: 400 });
     }
+    const totalMarks = Number(searchParams.get("totalMarks") || searchParams.get("total_marks"));
+    const maxQuestions = Number(
+      searchParams.get("maxQuestions") || searchParams.get("max_questions"),
+    );
 
-    const catalog = await getPublishedCatalog();
-    const subject = findPublishedSubject(catalog, requested);
+    const subjects = await listTenantSubjects();
+    const subject = findTenantSubject(subjects, requested);
     if (!subject) {
-      return NextResponse.json({ error: "That subject is not published." }, { status: 404 });
+      return NextResponse.json({ error: "That subject is not available." }, { status: 404 });
+    }
+
+    if (subject.chunk_count <= 0) {
+      return NextResponse.json({
+        subject: { name: subject.name, slug: subject.slug, providerName: subject.namespace },
+        practiceAvailable: false,
+        topicSource: "",
+        questionBankQuestions: 0,
+        weightageBasis: "",
+        topics: [],
+        suggestedPlan: [],
+      });
     }
 
     const [topics, mastery] = await Promise.all([
-      listPracticeTopics({ subject: subject.slug, namespaces: [subject.namespace] }),
+      listPracticeTopics({
+        subject: subject.slug,
+        namespaces: [subject.namespace],
+        totalMarks: Number.isFinite(totalMarks) && totalMarks > 0 ? totalMarks : undefined,
+        maxQuestions: Number.isFinite(maxQuestions) && maxQuestions > 0 ? maxQuestions : undefined,
+      }),
       listTopicMastery(user.id),
     ]);
 
@@ -37,7 +58,8 @@ export async function GET(request: Request) {
     );
 
     return NextResponse.json({
-      subject: { name: subject.name, slug: subject.slug, providerName: subject.providerName },
+      subject: { name: subject.name, slug: subject.slug, providerName: subject.namespace },
+      practiceAvailable: true,
       topicSource: topics.topic_source,
       questionBankQuestions: topics.question_bank_questions ?? 0,
       weightageBasis: topics.weightage_basis ?? "",

@@ -1,4 +1,5 @@
 import { listTopicMastery, type TopicMastery } from "@/lib/data/student-mastery";
+import { findTenantSubject, listTenantSubjects } from "@/lib/tenant/client";
 import { findPublishedSubject, getPublishedCatalog } from "@/lib/tenant/marketplace-catalog";
 
 export type StudentSubjectDetail = {
@@ -16,19 +17,23 @@ export async function getStudentSubjectDetail(
   userId: string,
   requestedSubject: string,
 ): Promise<StudentSubjectDetail | null> {
-  const catalog = await getPublishedCatalog();
-  const subject = findPublishedSubject(catalog, requestedSubject);
+  const [tenantSubjects, catalog] = await Promise.all([
+    listTenantSubjects(),
+    getPublishedCatalog(),
+  ]);
+  const subject = findTenantSubject(tenantSubjects, requestedSubject);
   if (!subject) return null;
+  const published = findPublishedSubject(catalog, subject.slug);
 
   const mastery = await listTopicMastery(userId);
 
   return {
     name: subject.name,
     slug: subject.slug,
-    providerName: subject.providerName,
-    documentCount: subject.documentCount,
-    unitCount: subject.unitCount,
-    chunkCount: subject.chunkCount,
+    providerName: published?.providerName || subject.namespace,
+    documentCount: published?.documentCount ?? 0,
+    unitCount: published?.unitCount ?? 0,
+    chunkCount: subject.chunk_count,
     mastery: mastery.filter((row) => row.subjectSlug === subject.slug),
   };
 }

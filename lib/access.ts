@@ -1,9 +1,13 @@
 import type { AppRole, StudentProfile } from "@/lib/types";
 
-export function isProfileComplete(profile: Partial<Pick<
-  StudentProfile,
-  "fullName" | "college" | "board" | "grade" | "targetGrade" | "languagePref" | "subjects"
->> | null) {
+export function isProfileComplete(
+  profile: Partial<
+    Pick<
+      StudentProfile,
+      "fullName" | "college" | "board" | "grade" | "targetGrade" | "languagePref" | "subjects"
+    >
+  > | null,
+) {
   if (!profile) return false;
 
   // Content is teacher-managed now, so picking a subject is what completes
@@ -22,7 +26,7 @@ export function resolveAccess(input: {
 }) {
   const { pathname, hasUser, onboarded, role } = input;
   const isAdminRoute = pathname.startsWith("/admin");
-  const isStudentRoute = pathname.startsWith("/app") || pathname.startsWith("/exams");
+  const isStudentRoute = pathname.startsWith("/app");
   const isOnboarding = pathname === "/onboarding";
   const isGuestPage = pathname === "/login" || pathname === "/signup";
 

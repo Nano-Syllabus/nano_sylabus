@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordPracticeEvaluation } from "@/lib/data/student-mastery";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { gradePracticeSession } from "@/lib/tenant/client";
-import { getPublishedCatalog, findPublishedSubject } from "@/lib/tenant/marketplace-catalog";
+import { findTenantSubject, gradePracticeSession, listTenantSubjects } from "@/lib/tenant/client";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -34,10 +33,10 @@ export async function POST(
     const { sessionId } = await params;
     const parsed = requestSchema.parse(await request.json());
 
-    const catalog = await getPublishedCatalog();
-    const subject = findPublishedSubject(catalog, parsed.subject);
+    const subjects = await listTenantSubjects();
+    const subject = findTenantSubject(subjects, parsed.subject);
     if (!subject) {
-      return NextResponse.json({ error: "That subject is not published." }, { status: 404 });
+      return NextResponse.json({ error: "That subject is not available." }, { status: 404 });
     }
 
     const graded = await gradePracticeSession(sessionId, {

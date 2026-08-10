@@ -5,6 +5,22 @@ import { studentVisibleGrade, submissionReviewStatus } from "@/lib/teacher-submi
 
 type SubmittedAttempt = { id: string; assignment_id: string; attempt_no: number; grade: unknown; created_at: string };
 
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Timed out.")), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
+
 function studentPaper(value: unknown) {
   if (!value || typeof value !== "object") return null;
   const paper = value as Record<string, unknown>;
@@ -23,30 +39,42 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const admin = createSupabaseAdminClient();
-    const { data: memberships, error: memberError } = await admin
-      .from("teacher_classroom_members")
-      .select("classroom_id")
-      .eq("student_id", user.id);
+    const { data: memberships, error: memberError } = await withTimeout(
+      admin
+        .from("teacher_classroom_members")
+        .select("classroom_id")
+        .eq("student_id", user.id),
+      6_000,
+    );
     if (memberError) throw memberError;
     const classroomIds = (memberships || []).map((item) => item.classroom_id);
     if (!classroomIds.length) return NextResponse.json({ assignments: [] });
-    const { data, error } = await admin
-      .from("teacher_exam_assignments")
-      .select("id,opens_at,closes_at,created_at,max_attempts,teacher_exam_papers!inner(external_paper_id,paper),teacher_classrooms!inner(name,subject_name)")
-      .in("classroom_id", classroomIds)
-      .order("created_at", { ascending: false });
+    const { data, error } = await withTimeout(
+      admin
+        .from("teacher_exam_assignments")
+        .select("id,opens_at,closes_at,created_at,max_attempts,teacher_exam_papers!inner(external_paper_id,paper),teacher_classrooms!inner(name,subject_name,subject_slug)")
+        .in("classroom_id", classroomIds)
+        .order("created_at", { ascending: false }),
+      6_000,
+    );
     if (error) throw error;
     const assignmentIds = (data || []).map((row) => row.id);
     const { data: submittedRows } = assignmentIds.length
-      ? await admin.from("teacher_exam_submissions").select("id,assignment_id,attempt_no,grade,created_at").eq("student_id", user.id).in("assignment_id", assignmentIds).order("attempt_no", { ascending: false })
+      ? await withTimeout(
+          admin.from("teacher_exam_submissions").select("id,assignment_id,attempt_no,grade,created_at").eq("student_id", user.id).in("assignment_id", assignmentIds).order("attempt_no", { ascending: false }),
+          6_000,
+        )
       : { data: [] };
     // Every published grade on these papers, for the class comparison below.
     // Only aggregates leave this route — no classmate is ever named.
     const { data: peerRows } = assignmentIds.length
-      ? await admin
-          .from("teacher_exam_submissions")
-          .select("assignment_id, student_id, grade")
-          .in("assignment_id", assignmentIds)
+      ? await withTimeout(
+          admin
+            .from("teacher_exam_submissions")
+            .select("assignment_id, student_id, grade")
+            .in("assignment_id", assignmentIds),
+          6_000,
+        )
       : { data: [] as Array<{ assignment_id: string; student_id: string; grade: unknown }> };
 
     const peersByAssignment = new Map<string, Array<{ studentId: string; percent: number }>>();
@@ -99,6 +127,7 @@ export async function GET() {
           paper,
           classroomName: classroom?.name || "Classroom",
           subjectName: classroom?.subject_name || "Subject",
+          subjectSlug: classroom?.subject_slug || "",
           opensAt: row.opens_at,
           closesAt: row.closes_at,
           createdAt: row.created_at,

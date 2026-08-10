@@ -107,12 +107,49 @@ export function joinMarketplaceWithSubjects(
 
 export async function getPublishedCatalog(): Promise<PublishedCatalog> {
   try {
-    const [marketplace, tenantSubjects] = await Promise.all([getMarketplace(), listTenantSubjects()]);
+    const [marketplace, tenantSubjects] = await Promise.all([
+      getMarketplace(),
+      listTenantSubjects(),
+    ]);
     return joinMarketplaceWithSubjects(marketplace, tenantSubjects);
   } catch (error) {
     console.error("[marketplace] published catalog unavailable", error);
     return { providers: [], subjects: [] };
   }
+}
+
+/**
+ * One canonical pick-list for every student surface. Profile subjects are
+ * preferences, so they are ordered first; they never hide the rest of the
+ * published, indexed catalog.
+ */
+export function listPublishedSubjectNames(
+  catalog: PublishedCatalog,
+  preferredSubjects: string[] = [],
+) {
+  const publishedByName = new Map<string, string>();
+  for (const subject of catalog.subjects) {
+    const name = subject.name.trim();
+    if (!name) continue;
+    publishedByName.set(name.toLowerCase(), name);
+  }
+
+  const preferred: string[] = [];
+  const included = new Set<string>();
+  for (const value of preferredSubjects) {
+    const key = value.trim().toLowerCase();
+    const publishedName = publishedByName.get(key);
+    if (!publishedName || included.has(key)) continue;
+    preferred.push(publishedName);
+    included.add(key);
+  }
+
+  const remaining = [...publishedByName.entries()]
+    .filter(([key]) => !included.has(key))
+    .map(([, name]) => name)
+    .sort((left, right) => left.localeCompare(right));
+
+  return [...preferred, ...remaining];
 }
 
 /** "Engineering Physics" and "engineering-physics" have to land on one key. */

@@ -64,10 +64,169 @@ type Material = {
   sizeBytes: number;
 };
 
+type DocumentDetail = {
+  status?: string;
+  indexed?: boolean;
+  subject?: string;
+  namespace?: string;
+  word_count?: number;
+  chunk_count?: number;
+  indexed_at?: string | null;
+  indexing_cost?: number | string | null;
+};
+
 function formatSize(bytes: number) {
   if (!bytes) return "";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatIndexedDate(value?: string | null) {
+  if (!value) return "Not indexed yet";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatIndexingCost(value?: number | string | null) {
+  if (value === undefined || value === null || value === "") return "Not reported";
+  if (typeof value === "number") return value === 0 ? "No charge" : `$${value.toFixed(4)}`;
+  return value;
+}
+
+function MaterialItem({ item }: { item: Material }) {
+  const [expanded, setExpanded] = useState(false);
+  const [detail, setDetail] = useState<DocumentDetail | null>(null);
+  const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [error, setError] = useState("");
+
+  async function loadDetail() {
+    if (!item.documentId) return;
+    setExpanded(true);
+    if (detail) return;
+
+    setState("loading");
+    setError("");
+    try {
+      const payload = await fetchJsonWithTimeout<{ document?: DocumentDetail; error?: string }>(
+        `/api/student/materials/${encodeURIComponent(item.documentId)}?metadata=1`,
+      );
+      if (!payload.document)
+        throw new Error(payload.error || "Document details were not returned.");
+      setDetail(payload.document);
+      setState("ready");
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load document details.");
+      setState("error");
+    }
+  }
+
+  const status =
+    detail?.status?.replaceAll("_", " ") ||
+    ((detail?.indexed ?? item.indexed) ? "Indexed" : "Not indexed");
+
+  return (
+    <li className="border-b border-border-strong/10 py-2 last:border-b-0">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+        {item.documentId ? (
+          <a
+            href={`/api/student/materials/${encodeURIComponent(item.documentId)}`}
+            target="_blank"
+            rel="noreferrer"
+            className={`min-w-0 flex-1 truncate underline-offset-4 hover:underline ${focusRing}`}
+          >
+            {item.name}
+          </a>
+        ) : (
+          <span className="min-w-0 flex-1 truncate">{item.name}</span>
+        )}
+        {item.sizeBytes ? (
+          <span className="text-xs text-text-muted">{formatSize(item.sizeBytes)}</span>
+        ) : null}
+        <span className="text-xs text-text-muted">
+          {item.indexed ? "searchable" : "not indexed yet"}
+        </span>
+        {item.documentId ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (expanded) setExpanded(false);
+              else void loadDetail();
+            }}
+            aria-expanded={expanded}
+            aria-busy={state === "loading"}
+            className={`min-h-10 rounded-md px-2.5 text-xs font-medium text-text-secondary hover:bg-bg-secondary ${focusRing}`}
+          >
+            {expanded ? "Hide details" : "Details"}
+          </button>
+        ) : null}
+      </div>
+
+      {expanded ? (
+        <div className="mt-2 rounded-md bg-bg-secondary px-3 py-3" aria-live="polite">
+          {state === "loading" ? (
+            <div
+              className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+              aria-label="Loading document details"
+            >
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="h-10 animate-pulse rounded bg-bg-tertiary motion-reduce:animate-none"
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {state === "error" ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="min-w-0 flex-1 text-xs text-destructive">{error}</p>
+              <button
+                type="button"
+                onClick={() => void loadDetail()}
+                className={`min-h-10 rounded-md px-3 text-xs font-medium hover:bg-bg-tertiary ${focusRing}`}
+              >
+                Try again
+              </button>
+            </div>
+          ) : null}
+
+          {state === "ready" && detail ? (
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
+              <div>
+                <dt className="text-text-muted">Status</dt>
+                <dd className="mt-1 font-medium capitalize">{status}</dd>
+              </div>
+              <div>
+                <dt className="text-text-muted">Words</dt>
+                <dd className="mt-1 font-medium">{(detail.word_count ?? 0).toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-text-muted">Search chunks</dt>
+                <dd className="mt-1 font-medium">{(detail.chunk_count ?? 0).toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-text-muted">Indexed</dt>
+                <dd className="mt-1 font-medium">{formatIndexedDate(detail.indexed_at)}</dd>
+              </div>
+              <div>
+                <dt className="text-text-muted">Subject</dt>
+                <dd className="mt-1 font-medium">{detail.subject || "Not reported"}</dd>
+              </div>
+              <div>
+                <dt className="text-text-muted">Namespace</dt>
+                <dd className="mt-1 font-medium">{detail.namespace || "Not reported"}</dd>
+              </div>
+              <div>
+                <dt className="text-text-muted">Indexing cost</dt>
+                <dd className="mt-1 font-medium">{formatIndexingCost(detail.indexing_cost)}</dd>
+              </div>
+            </dl>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  );
 }
 
 type SubjectExam = {
@@ -80,35 +239,80 @@ type SubjectExam = {
   outOf: number | null;
 };
 
+async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 7_000): Promise<T> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    let payload: unknown = {};
+    try {
+      payload = await response.json();
+    } catch {
+      payload = {};
+    }
+
+    if (!response.ok) {
+      const message =
+        payload && typeof payload === "object" && "error" in payload
+          ? String((payload as { error?: unknown }).error || "Request failed.")
+          : "Request failed.";
+      throw new Error(message);
+    }
+
+    return payload as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("The request took too long. Please try again.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }) {
-  const [tab, setTab] = useState<"progress" | "exams" | "syllabus" | "material" | "bank">("progress");
+  const [tab, setTab] = useState<"progress" | "exams" | "syllabus" | "material" | "bank">(
+    "progress",
+  );
   const [exams, setExams] = useState<SubjectExam[]>([]);
-  const [examsState, setExamsState] = useState<"idle" | "loading" | "ready">("idle");
+  const [examsState, setExamsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [examsError, setExamsError] = useState("");
+  const [examsReloadKey, setExamsReloadKey] = useState(0);
 
   useEffect(() => {
-    if (tab !== "exams" || examsState !== "idle") return;
+    if (tab !== "exams") return;
 
     let active = true;
     setExamsState("loading");
+    setExamsError("");
 
     const load = async () => {
       try {
-        const response = await fetch("/api/student/teacher-exams", { headers: { Accept: "application/json" } });
-        const payload = (await response.json()) as {
+        const payload = await fetchJsonWithTimeout<{
           assignments?: Array<{
             id: string;
             subjectName: string;
+            subjectSlug?: string;
             classroomName: string;
             submitted?: boolean;
             grade?: { total_score?: number; total_marks?: number } | null;
             paper: { title: string; totalMarks: number };
           }>;
-        };
+        }>("/api/student/teacher-exams");
         if (!active) return;
 
         setExams(
           (payload.assignments ?? [])
-            .filter((item) => item.subjectName?.toLowerCase() === detail.name.toLowerCase())
+            .filter((item) =>
+              item.subjectSlug
+                ? item.subjectSlug.toLowerCase() === detail.slug.toLowerCase()
+                : item.subjectName?.toLowerCase() === detail.name.toLowerCase(),
+            )
             .map((item) => ({
               id: item.id,
               title: item.paper.title,
@@ -119,10 +323,13 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
               outOf: item.grade?.total_marks ?? null,
             })),
         );
-      } catch {
-        // The tab simply shows nothing if the list cannot be loaded.
+        setExamsState("ready");
+      } catch (error) {
+        if (!active) return;
+        setExams([]);
+        setExamsError(error instanceof Error ? error.message : "Could not load exams.");
+        setExamsState("error");
       } finally {
-        if (active) setExamsState("ready");
       }
     };
 
@@ -130,37 +337,43 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
     return () => {
       active = false;
     };
-  }, [detail.name, examsState, tab]);
+  }, [detail.name, detail.slug, examsReloadKey, tab]);
+
   const [topics, setTopics] = useState<PracticeTopic[]>([]);
   const [topicsState, setTopicsState] = useState<"loading" | "ready" | "error">("loading");
   const [topicsError, setTopicsError] = useState("");
   const [bankQuestions, setBankQuestions] = useState(0);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [materialState, setMaterialState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [materialState, setMaterialState] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle",
+  );
   const [materialError, setMaterialError] = useState("");
+  const [materialReloadKey, setMaterialReloadKey] = useState(0);
 
   useEffect(() => {
-    if ((tab !== "material" && tab !== "bank") || materialState !== "idle") return;
+    if (tab !== "material" && tab !== "bank") return;
 
     let active = true;
     setMaterialState("loading");
+    setMaterialError("");
 
     const load = async () => {
       try {
-        const response = await fetch(
-          `/api/student/materials?subject=${encodeURIComponent(detail.name)}`,
-          { headers: { Accept: "application/json" } },
+        const payload = await fetchJsonWithTimeout<{ materials?: Material[]; error?: string }>(
+          `/api/student/materials?subject=${encodeURIComponent(detail.slug)}`,
         );
-        const payload = (await response.json()) as { materials?: Material[]; error?: string };
         if (!active) return;
-        if (!response.ok) throw new Error(payload.error || "Could not load the material.");
 
         setMaterials(Array.isArray(payload.materials) ? payload.materials : []);
         setMaterialState("ready");
       } catch (error) {
         if (!active) return;
-        setMaterialError(error instanceof Error ? error.message : "Could not load the material.");
+        setMaterials([]);
+        setMaterialError(
+          error instanceof Error ? error.message : "Could not load this subject's material.",
+        );
         setMaterialState("error");
+      } finally {
       }
     };
 
@@ -168,7 +381,7 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
     return () => {
       active = false;
     };
-  }, [detail.name, materialState, tab]);
+  }, [detail.slug, materialReloadKey, tab]);
 
   useEffect(() => {
     let active = true;
@@ -250,7 +463,9 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
           <div className="mb-2 flex flex-wrap items-center gap-3 font-mono-ui text-xs uppercase tracking-[0.12em] text-text-secondary">
             <span>{detail.providerName}</span>
           </div>
-          <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">{detail.name}</h1>
+          <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">
+            {detail.name}
+          </h1>
           <p className="mt-3 text-sm text-text-secondary">
             {topicsState === "ready" ? `${chapters.length} chapters · ` : ""}
             {detail.documentCount} file{detail.documentCount === 1 ? "" : "s"}
@@ -258,7 +473,10 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
           </p>
         </div>
         <span className="flex-1" />
-        <Link href={`/app/exams?subject=${encodeURIComponent(detail.name)}`} className={`${button} border-border-strong bg-text-primary text-text-inverse`}>
+        <Link
+          href={`/app/exams?subject=${encodeURIComponent(detail.name)}`}
+          className={`${button} border-border-strong bg-text-primary text-text-inverse`}
+        >
           Practise
         </Link>
       </div>
@@ -290,7 +508,9 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
             }`}
           >
             {label}
-            {count !== undefined ? <span className="ml-1.5 text-xs opacity-65">{count}</span> : null}
+            {count !== undefined ? (
+              <span className="ml-1.5 text-xs opacity-65">{count}</span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -299,6 +519,23 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
         <div>
           {examsState === "loading" ? (
             <p className="text-sm text-text-secondary">Loading exams…</p>
+          ) : null}
+
+          {examsState === "error" ? (
+            <div className="rounded-[14px] border border-border p-4">
+              <p className="text-sm font-medium">Could not load the exams</p>
+              <p className="mt-1 text-sm text-text-secondary">{examsError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setExamsState("idle");
+                  setExamsReloadKey((key) => key + 1);
+                }}
+                className={`${button} mt-4 border-border-strong bg-text-primary text-text-inverse`}
+              >
+                Try again
+              </button>
+            </div>
           ) : null}
 
           {examsState === "ready" && !exams.length ? (
@@ -386,23 +623,7 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
               </p>
               <ul className="mt-3 space-y-2">
                 {bankFiles.map((item) => (
-                  <li key={item.path} className="flex flex-wrap items-center gap-2 text-sm">
-                    {item.documentId ? (
-                      <a
-                        href={`/api/student/materials/${encodeURIComponent(item.documentId)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={`min-w-0 flex-1 truncate underline-offset-4 hover:underline ${focusRing}`}
-                      >
-                        {item.name}
-                      </a>
-                    ) : (
-                      <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                    )}
-                    {item.sizeBytes ? (
-                      <span className="text-xs text-text-muted">{formatSize(item.sizeBytes)}</span>
-                    ) : null}
-                  </li>
+                  <MaterialItem key={item.path} item={item} />
                 ))}
               </ul>
             </section>
@@ -435,6 +656,16 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
             <div className="rounded-[14px] border border-border p-4">
               <p className="text-sm font-medium">Could not load the material</p>
               <p className="mt-1 text-sm text-text-secondary">{materialError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setMaterialState("idle");
+                  setMaterialReloadKey((key) => key + 1);
+                }}
+                className={`${button} mt-4 border-border-strong bg-text-primary text-text-inverse`}
+              >
+                Try again
+              </button>
             </div>
           ) : null}
 
@@ -459,33 +690,14 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
                   </p>
                   <ul className="mt-3 space-y-2">
                     {items.map((item) => (
-                      <li key={item.path} className="flex flex-wrap items-center gap-2 text-sm">
-                        {item.documentId ? (
-                          <a
-                            href={`/api/student/materials/${encodeURIComponent(item.documentId)}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className={`min-w-0 flex-1 truncate underline-offset-4 hover:underline ${focusRing}`}
-                          >
-                            {item.name}
-                          </a>
-                        ) : (
-                          <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                        )}
-                        {item.sizeBytes ? (
-                          <span className="text-xs text-text-muted">{formatSize(item.sizeBytes)}</span>
-                        ) : null}
-                        <span className="text-xs text-text-muted">
-                          {item.indexed ? "searchable" : "not indexed yet"}
-                        </span>
-                      </li>
+                      <MaterialItem key={item.path} item={item} />
                     ))}
                   </ul>
                 </section>
               ))}
               <p className="text-[13px] text-text-muted">
-                Uploaded by {detail.providerName}. Answers and practice questions are drawn from these
-                files.
+                Uploaded by {detail.providerName}. Answers and practice questions are drawn from
+                these files.
               </p>
             </div>
           ) : null}
@@ -548,7 +760,9 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
                 >
                   <div className="flex items-center gap-2">
                     <Dot status={chapter.status} />
-                    <span className="text-[13px] text-text-muted">{STATUS_WORD[chapter.status]}</span>
+                    <span className="text-[13px] text-text-muted">
+                      {STATUS_WORD[chapter.status]}
+                    </span>
                     <span className="flex-1" />
                     <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
                       {Math.round(chapter.weight * 100)}% of exam
@@ -595,7 +809,9 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
                   >
                     <div className="flex items-center gap-2">
                       <Dot status={chapter.status} />
-                      <span className="text-[13px] text-text-muted">{STATUS_WORD[chapter.status]}</span>
+                      <span className="text-[13px] text-text-muted">
+                        {STATUS_WORD[chapter.status]}
+                      </span>
                       <span className="flex-1" />
                       <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
                         {Math.round(chapter.percentage * 100)}%

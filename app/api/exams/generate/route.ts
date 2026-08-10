@@ -1,24 +1,33 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { generateTeacherPaper } from "@/lib/tenant/client";
+import { findTenantSubject, generateTeacherPaper, listTenantSubjects } from "@/lib/tenant/client";
 
 const bandSchema = z.object({
-  label: z.string().min(1),
-  question_type: z.string().min(1),
-  count: z.number().int().min(1).max(50),
-  marks_each: z.number().min(1).max(100),
+  label: z.string().trim().min(1).max(80),
+  question_type: z.string().trim().min(1).max(80),
+  count: z.number().int().min(1).max(10),
+  marks_each: z.number().min(1).max(25),
 });
 
-const requestSchema = z.object({
-  namespaces: z.array(z.string().min(1)).min(1),
-  subject: z.string().min(1),
-  bands: z.array(bandSchema).min(1),
-  title: z.string().optional(),
-  instruction: z.string().optional(),
-  university: z.string().optional(),
-  pass_marks: z.number().min(0).optional(),
-});
+const requestSchema = z
+  .object({
+    namespaces: z.array(z.string().min(1)).optional(),
+    subject: z.string().trim().min(1).max(200),
+    bands: z.array(bandSchema).min(1).max(5),
+    title: z.string().trim().max(200).optional(),
+    instruction: z.string().trim().max(2_000).optional(),
+    university: z.string().trim().max(200).optional(),
+    pass_marks: z.number().min(0).max(100).optional(),
+  })
+  .refine((payload) => payload.bands.reduce((sum, band) => sum + band.count, 0) <= 16, {
+    message: "A student paper can contain at most 16 questions.",
+    path: ["bands"],
+  })
+  .refine(
+    (payload) => payload.bands.reduce((sum, band) => sum + band.count * band.marks_each, 0) <= 100,
+    { message: "A student paper can be worth at most 100 marks.", path: ["bands"] },
+  );
 
 export async function POST(request: Request) {
   try {
@@ -32,8 +41,31 @@ export async function POST(request: Request) {
     }
 
     const payload = requestSchema.parse(await request.json());
-    const paper = await generateTeacherPaper(payload);
-    return NextResponse.json({ paper });
+    const subjects = await listTenantSubjects();
+    const subject = findTenantSubject(subjects, payload.subject);
+    if (!subject) {
+      return NextResponse.json({ error: "That subject is not available." }, { status: 404 });
+    }
+    if (subject.chunk_count <= 0) {
+      return NextResponse.json(
+        { error: "This subject does not have indexed material for a paper yet." },
+        { status: 409 },
+      );
+    }
+
+    const paper = await generateTeacherPaper({
+      ...payload,
+      subject: subject.slug,
+      namespaces: [subject.namespace],
+    });
+    return NextResponse.json({
+      paper: {
+        ...paper,
+        questions: paper.questions.map(
+          ({ reference_answer: _referenceAnswer, ...question }) => question,
+        ),
+      },
+    });
   } catch (error) {
     const message =
       error instanceof z.ZodError
@@ -42,6 +74,6 @@ export async function POST(request: Request) {
           ? error.message
           : "Failed to generate exam paper.";
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }

@@ -266,6 +266,7 @@ function questionMetadata(question: GeneratedQuestion) {
 
 function gradeTypedAnswers(
   paperId: string,
+  subject: string,
   questions: GeneratedQuestion[],
   typedAnswers: Record<string, string>,
   studentName: string,
@@ -275,6 +276,7 @@ function gradeTypedAnswers(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      subject,
       student_name: studentName.trim() || "Student",
       instruction,
       answers: questions.map((question) => ({
@@ -287,6 +289,7 @@ function gradeTypedAnswers(
 
 function gradeUploadedAnswer(
   paperId: string,
+  subject: string,
   uploadedFile: File | null,
   studentName: string,
   instruction: string,
@@ -297,6 +300,7 @@ function gradeUploadedAnswer(
 
   const formData = new FormData();
   formData.append("file", uploadedFile);
+  formData.append("subject", subject);
   formData.append("student_name", studentName.trim() || "Student");
   formData.append("instruction", instruction);
 
@@ -805,8 +809,8 @@ export function ExamPracticeClient({
         : "Grade this practice exam answer according to the marks assigned to each question.";
       const response =
         answerMode === "upload"
-          ? await gradeUploadedAnswer(paperId, uploadedFile, "", instruction)
-          : await gradeTypedAnswers(paperId, questions, typedAnswers, "", instruction);
+          ? await gradeUploadedAnswer(paperId, subject, uploadedFile, "", instruction)
+          : await gradeTypedAnswers(paperId, subject, questions, typedAnswers, "", instruction);
       const payload = (await response.json()) as { grade?: ApiGrade; error?: string };
 
       if (!response.ok || !payload.grade) {

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getPublishedCatalog } from "@/lib/tenant/marketplace-catalog";
 import {
   fetchTenantDocumentRaw,
+  getTenantDocument,
   getTenantSourceTree,
+  listTenantSubjects,
   type TenantSourceTreeNode,
 } from "@/lib/tenant/client";
 
@@ -31,10 +32,10 @@ function findDocumentPath(nodes: TenantSourceTreeNode[], documentId: string): st
 /**
  * Streams one of a teacher's files back to the student. The tenant key never
  * reaches the browser, and a document is only served when it sits inside a
- * subject that teacher has actually published.
+ * subject exposed by the tenant subject API.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ documentId: string }> },
 ) {
   try {
@@ -49,13 +50,21 @@ export async function GET(
       return NextResponse.json({ error: "A document id is required." }, { status: 400 });
     }
 
-    const [tree, catalog] = await Promise.all([getTenantSourceTree(), getPublishedCatalog()]);
+    const [tree, subjects] = await Promise.all([getTenantSourceTree(), listTenantSubjects()]);
     const path = findDocumentPath(tree.tree ?? [], documentId);
     if (path === null) return NextResponse.json({ error: "File not found." }, { status: 404 });
 
-    const published = catalog.subjects.some((subject) => path.startsWith(`${subject.folderPath}/`));
-    if (!published) {
-      return NextResponse.json({ error: "That file is not published." }, { status: 403 });
+    const available = subjects.some((subject) => path.startsWith(`${subject.folder_path}/`));
+    if (!available) {
+      return NextResponse.json({ error: "That file is not available." }, { status: 403 });
+    }
+
+    if (new URL(request.url).searchParams.get("metadata") === "1") {
+      const document = await getTenantDocument(documentId);
+      return NextResponse.json(
+        { document },
+        { headers: { "Cache-Control": "private, max-age=60" } },
+      );
     }
 
     const file = await fetchTenantDocumentRaw(documentId);
@@ -69,9 +78,14 @@ export async function GET(
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not fetch that file." },
-      { status: 502 },
-    );
+    const message = error instanceof Error ? error.message : "";
+    if (/missing tenant API scope:\s*documents:read/i.test(message)) {
+      return NextResponse.json(
+        { error: "Document details are not enabled for this app yet." },
+        { status: 503 },
+      );
+    }
+
+    return NextResponse.json({ error: message || "Could not fetch that file." }, { status: 502 });
   }
 }

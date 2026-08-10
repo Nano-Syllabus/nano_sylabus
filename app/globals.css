@@ -19,6 +19,16 @@
 
   --color-background: var(--bg-primary);
   --color-foreground: var(--text-primary);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-border: var(--border);
   --color-ring: var(--border-strong);
   --color-bg-primary: var(--bg-primary);
@@ -48,6 +58,16 @@
   --text-inverse: #ffffff;
   --border: rgba(0, 0, 0, 0.12);
   --border-strong: #0a0a0a;
+  --surface: #f4f4f5;
+  --surface-2: #e5e5e5;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+  --highlight: #f5c542;
+  --highlight-foreground: #171717;
   --red: #c53030;
   --green: #15803d;
   --yellow: #b7791f;
@@ -67,6 +87,16 @@
   --text-inverse: #000000;
   --border: rgba(255, 255, 255, 0.1);
   --border-strong: #f7f7f8;
+  --surface: #101010;
+  --surface-2: #1c1c1f;
+  --card: #101010;
+  --card-foreground: #f7f7f8;
+  --primary: #f7f7f8;
+  --primary-foreground: #000000;
+  --muted: #1c1c1f;
+  --muted-foreground: #c9c9cf;
+  --highlight: #fbbf24;
+  --highlight-foreground: #171717;
   --red: #f87171;
   --green: #4ade80;
   --yellow: #fbbf24;
@@ -82,6 +112,7 @@
 
   html {
     font-family: var(--font-sans);
+    background-color: var(--bg-primary);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -105,6 +136,12 @@
   }
 }
 
+html:has(.exam-prep-theme),
+body:has(.exam-prep-theme) {
+  background-color: oklch(0.16 0.018 264);
+  color-scheme: dark;
+}
+
 @utility font-display {
   font-family: var(--font-display);
   letter-spacing: -0.01em;
@@ -116,14 +153,8 @@
 
 @utility font-sidebar-ui {
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    "Helvetica Neue",
-    Arial,
-    ui-sans-serif,
-    system-ui,
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, ui-sans-serif,
+    system-ui, sans-serif;
   letter-spacing: -0.01em;
 }
 
@@ -143,6 +174,118 @@
     transparent 1px
   );
   background-size: 22px 22px;
+}
+
+.exam-prep-theme {
+  --radius: 0.875rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --background: oklch(0.16 0.018 264);
+  --foreground: oklch(0.97 0.008 90);
+  --bg-primary: oklch(0.16 0.018 264);
+  --text-primary: oklch(0.97 0.008 90);
+  --text-secondary: oklch(0.7 0.018 264);
+  --text-muted: oklch(0.7 0.018 264);
+  --text-inverse: oklch(0.2 0.03 60);
+  --border: oklch(1 0 0 / 10%);
+  --border-strong: oklch(0.6 0.207 20);
+  --surface: oklch(0.2 0.02 264);
+  --surface-2: oklch(0.245 0.022 264);
+  --card: oklch(0.205 0.02 264);
+  --card-foreground: oklch(0.97 0.008 90);
+  --popover: oklch(0.205 0.02 264);
+  --popover-foreground: oklch(0.97 0.008 90);
+  --primary: oklch(0.6 0.207 20);
+  --primary-foreground: oklch(0.99 0.005 90);
+  --secondary: oklch(0.26 0.022 264);
+  --secondary-foreground: oklch(0.95 0.008 90);
+  --muted: oklch(0.26 0.02 264);
+  --muted-foreground: oklch(0.7 0.018 264);
+  --accent: oklch(0.3 0.03 264);
+  --accent-foreground: oklch(0.97 0.008 90);
+  --highlight: oklch(0.83 0.16 82);
+  --highlight-foreground: oklch(0.2 0.03 60);
+  --destructive: oklch(0.6 0.22 25);
+  --destructive-foreground: oklch(0.99 0.005 90);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.6 0.207 20);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --gradient-hero:
+    radial-gradient(120% 80% at 50% -10%, oklch(0.6 0.207 20 / 0.28) 0%, transparent 60%),
+    radial-gradient(80% 60% at 85% 10%, oklch(0.83 0.16 82 / 0.16) 0%, transparent 70%);
+  --gradient-card: linear-gradient(160deg, oklch(1 0 0 / 0.07) 0%, oklch(1 0 0 / 0.015) 100%);
+  --shadow-glow: 0 20px 60px -20px oklch(0.6 0.207 20 / 0.55);
+  --shadow-card: 0 1px 0 0 oklch(1 0 0 / 0.06) inset, 0 24px 50px -30px oklch(0 0 0 / 0.8);
+  font-family: var(--font-exam-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.exam-prep-theme h1,
+.exam-prep-theme h2,
+.exam-prep-theme h3,
+.exam-prep-theme .font-display {
+  font-family: var(--font-exam-display), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+@utility hero-glow {
+  background-image: var(--gradient-hero);
+}
+
+@utility glass-card {
+  background-image: var(--gradient-card);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+}
+
+@utility glow-shadow {
+  box-shadow: var(--shadow-glow);
+}
+
+@utility text-gradient {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-foreground) 0%,
+    var(--color-highlight) 55%,
+    var(--color-primary) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility grid-lines {
+  background-image:
+    linear-gradient(to right, oklch(1 0 0 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(1 0 0 / 0.045) 1px, transparent 1px);
+  background-size: 64px 64px;
 }
 
 @keyframes fade-in {

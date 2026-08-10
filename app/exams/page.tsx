@@ -1,10 +1,19 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { PublicExamsClient } from "@/components/public-exams-client";
 
-export const dynamic = "force-dynamic";
+const TITLE = "Browse all exams - nanosyllabus";
+const DESC =
+  "Search every exam track on nanosyllabus: Loksewa Na.Su. and Kharidar, IOE, CEE MBBS, CMAT, KUUMAT, NRB banking, IELTS, NEB and license exams.";
 
-export default async function ExamsPage() {
-  // The previous ExamPracticeClient workspace is intentionally left in the
-  // codebase as the inactive legacy implementation. Student navigation now
-  // uses the NanoSyllabus reference flow mounted inside the app shell.
-  redirect("/app/exams");
+export const metadata: Metadata = {
+  title: TITLE,
+  description: DESC,
+  openGraph: {
+    title: TITLE,
+    description: DESC,
+  },
+};
+
+export default function ExamsPage() {
+  return <PublicExamsClient />;
 }
