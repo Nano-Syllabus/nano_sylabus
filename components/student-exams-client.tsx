@@ -41,6 +41,11 @@ type Result = {
 };
 type PracticeLength = 5 | 10;
 type PracticeMode = "quick" | "paper" | "checker";
+type PracticeSubjectOption = {
+  name: string;
+  slug: string;
+  practiceAvailable: boolean;
+};
 type FullPaperMarks = 20 | 40 | 60 | 80 | 100;
 type FullPaperDuration = 60 | 120 | 180;
 type PaperCoverage = "full" | "weak";
@@ -366,7 +371,7 @@ function PracticeDialog({
   onStart,
 }: {
   mode: PracticeMode;
-  subjects: string[];
+  subjects: PracticeSubjectOption[];
   subjectUnavailable: boolean;
   subject: string;
   topics: PracticeTopic[];
@@ -477,8 +482,8 @@ function PracticeDialog({
             <div className="mb-4 rounded-lg border border-border bg-bg-secondary p-4">
               <p className="text-sm font-medium">Practice content is not indexed yet</p>
               <p className="mt-1 text-[13px] text-text-muted">
-                This subject is available, but its teacher has not indexed material or a question
-                bank for API-generated practice yet.
+                This course subject has no indexed material or question bank yet. Ask the course
+                creator to upload and index source files before starting practice.
               </p>
             </div>
           ) : null}
@@ -492,17 +497,17 @@ function PracticeDialog({
                 <div className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {subjects.map((item) => (
                     <button
-                      key={item}
+                      key={item.slug}
                       type="button"
-                      onClick={() => onSubject(item)}
+                      onClick={() => onSubject(item.slug)}
                       className={cn(
                         "min-h-10 shrink-0 whitespace-nowrap rounded-full border px-3 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
-                        item === subject
+                        item.slug === subject
                           ? "border-border-strong bg-text-primary font-medium text-text-inverse"
                           : "border-border bg-bg-primary text-text-secondary hover:border-border-strong",
                       )}
                     >
-                      {item}
+                      {item.name}
                     </button>
                   ))}
                 </div>
@@ -943,11 +948,9 @@ function PracticeDialog({
 
 export function StudentExamsClient({
   subjects,
-  unavailableSubjects,
   fullName,
 }: {
-  subjects: string[];
-  unavailableSubjects: string[];
+  subjects: PracticeSubjectOption[];
   fullName: string;
 }) {
   const router = useRouter();
@@ -976,7 +979,7 @@ export function StudentExamsClient({
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
   const [resultTab, setResultTab] = useState<"answers" | "summary">("answers");
-  const [practiceSubject, setPracticeSubject] = useState<string>(subjects[0] ?? "");
+  const [practiceSubject, setPracticeSubject] = useState<string>(subjects[0]?.slug ?? "");
   const [practiceMode, setPracticeMode] = useState<PracticeMode>("quick");
   const [practiceTopics, setPracticeTopics] = useState<string[]>([]);
   const [practiceLength, setPracticeLength] = useState<PracticeLength>(5);
@@ -1019,11 +1022,12 @@ export function StudentExamsClient({
   const [uploadingSheet, setUploadingSheet] = useState(false);
   const joinInput = useRef<HTMLInputElement>(null);
   const handledPracticeLink = useRef("");
-  const unavailableSubjectKeys = useMemo(
-    () => new Set(unavailableSubjects.map(subjectUrlKey)),
-    [unavailableSubjects],
+  const practiceSubjectOption = useMemo(
+    () => subjects.find((subject) => subject.slug === practiceSubject) ?? null,
+    [practiceSubject, subjects],
   );
-  const practiceSubjectUnavailable = unavailableSubjectKeys.has(subjectUrlKey(practiceSubject));
+  const practiceSubjectName = practiceSubjectOption?.name ?? "";
+  const practiceSubjectUnavailable = practiceSubjectOption?.practiceAvailable === false;
   const teacherExams = useMemo(() => teacherAssignments.map(assignmentExam), [teacherAssignments]);
   const selectedExam = teacherExams.find((exam) => exam.id === examId) ?? null;
 
@@ -1247,14 +1251,17 @@ export function StudentExamsClient({
     if (!requestedPracticeSubject || !subjects.length) return;
 
     const requestedKey = subjectUrlKey(requestedPracticeSubject);
-    const matchedSubject = subjects.find((subject) => subjectUrlKey(subject) === requestedKey);
+    const matchedSubject = subjects.find(
+      (subject) =>
+        subjectUrlKey(subject.slug) === requestedKey || subjectUrlKey(subject.name) === requestedKey,
+    );
     if (!matchedSubject) return;
 
     const requestKey = `${requestedKey}::${requestedPracticeTopic ?? ""}`;
     if (handledPracticeLink.current === requestKey) return;
     handledPracticeLink.current = requestKey;
 
-    setPracticeSubject(matchedSubject);
+    setPracticeSubject(matchedSubject.slug);
     setPracticeTopics([]);
     setPracticeMode("quick");
     setPracticeStartError("");
@@ -1633,7 +1640,13 @@ export function StudentExamsClient({
   }
 
   function choosePracticeSubject(subject: string) {
-    setPracticeSubject(subject);
+    const requestedKey = subjectUrlKey(subject);
+    const match = subjects.find(
+      (option) =>
+        subjectUrlKey(option.slug) === requestedKey || subjectUrlKey(option.name) === requestedKey,
+    );
+    if (!match) return;
+    setPracticeSubject(match.slug);
     setPracticeTopics([]);
     setPracticeStartError("");
   }
@@ -1703,8 +1716,9 @@ export function StudentExamsClient({
       );
       const exam: StudentExam = {
         id: `practice_${payload.sessionId}`,
-        subject: practiceSubject,
-        title: chapters.length === 1 ? `${chapters[0]} practice` : `${practiceSubject} practice`,
+        subject: practiceSubjectName,
+        title:
+          chapters.length === 1 ? `${chapters[0]} practice` : `${practiceSubjectName} practice`,
         kind: "practice",
         counts: false,
         marks:
@@ -1779,7 +1793,7 @@ export function StudentExamsClient({
         body: JSON.stringify({
           subject: practiceSubject,
           bands,
-          title: `${practiceSubject} ${paperMarks}-mark mock exam`,
+          title: `${practiceSubjectName} ${paperMarks}-mark mock exam`,
           instruction: examinerInstruction,
           pass_marks: paperMarks * 0.4,
         }),
@@ -1810,7 +1824,7 @@ export function StudentExamsClient({
         type: question.marks >= 10 ? "long" : "short",
         questionType: question.question_type,
         marks: question.marks,
-        topic: question.chapter || practiceSubject,
+        topic: question.chapter || practiceSubjectName,
         prompt: question.text,
       }));
       if (!questions.length) throw new Error("The paper came back without any questions.");
@@ -1819,8 +1833,8 @@ export function StudentExamsClient({
         payload.paper.total_marks || questions.reduce((sum, question) => sum + question.marks, 0);
       const exam: StudentExam = {
         id: `paper_${payload.paper.id}`,
-        subject: practiceSubject,
-        title: payload.paper.title || `${practiceSubject} ${paperMarks}-mark mock exam`,
+        subject: practiceSubjectName,
+        title: payload.paper.title || `${practiceSubjectName} ${paperMarks}-mark mock exam`,
         kind: "practice-paper",
         counts: false,
         marks: totalMarks,

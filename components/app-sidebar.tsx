@@ -307,7 +307,12 @@ export function AppSidebar({
       {/* ── Brand ── */}
       <div className={cn("flex items-center pt-3.5 pb-2", isCollapsed ? "justify-center px-0" : "justify-between px-3")}>
         {!isCollapsed && (
-          <Link href="/app/today" className="font-display text-lg font-semibold tracking-tight">
+          <Link
+            href="/"
+            onClick={() => onCloseMobile?.()}
+            className="font-display text-lg font-semibold tracking-tight transition hover:text-text-secondary"
+            aria-label="Go to Nano Syllabus site"
+          >
             Nano Syllabus
           </Link>
         )}
@@ -644,6 +649,23 @@ export function AppSidebar({
 
       {/* ── Bottom Links ── */}
       <div className={cn("mt-auto shrink-0 space-y-0.5 border-t border-border pt-2", isCollapsed ? "px-2 pb-1" : "px-3 pb-1")}>
+        <Link
+          href="/"
+          onClick={() => onCloseMobile?.()}
+          className={cn(
+            "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            isCollapsed
+              ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
+              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+            "hover:bg-bg-secondary hover:text-text-primary",
+          )}
+          title={isCollapsed ? "Site" : undefined}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          {!isCollapsed && "Site"}
+        </Link>
         <Link
           href="/teachers"
           onClick={() => onCloseMobile?.()}

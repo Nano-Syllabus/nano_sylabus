@@ -498,6 +498,32 @@ export function findTenantSubject(subjects: TenantSubject[], value: string) {
   );
 }
 
+/**
+ * Resolves a course-owned subject without crossing into another teacher's
+ * collection when multiple teachers publish the same display name.
+ */
+export function findTenantSubjectForCourseSubject(
+  subjects: TenantSubject[],
+  courseSubject: { subjectSlug: string; subjectName: string; folderPath?: string },
+) {
+  const slug = courseSubject.subjectSlug.trim().toLowerCase();
+  if (slug) {
+    const exactSlug = subjects.find((subject) => subject.slug.trim().toLowerCase() === slug);
+    if (exactSlug) return exactSlug;
+  }
+
+  const folderPath = courseSubject.folderPath?.trim().toLowerCase().replace(/^\/+|\/+$/g, "");
+  if (folderPath) {
+    const exactPath = subjects.find((subject) => {
+      const tenantPath = subject.folder_path.trim().toLowerCase().replace(/^\/+|\/+$/g, "");
+      return tenantPath === folderPath;
+    });
+    if (exactPath) return exactPath;
+  }
+
+  return slug ? null : findTenantSubject(subjects, courseSubject.subjectName);
+}
+
 /** Every API-available subject, with profile choices ordered first. */
 export function listTenantSubjectNames(
   subjects: TenantSubject[],

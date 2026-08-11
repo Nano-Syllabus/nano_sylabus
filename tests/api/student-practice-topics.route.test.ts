@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   listTenantSubjects: vi.fn(),
   listPracticeTopics: vi.fn(),
   listTopicMastery: vi.fn(),
-  studentHasCourseSubjectAccess: vi.fn(),
+  getStudentCourseSubjectAccess: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -21,7 +21,7 @@ vi.mock("@/lib/tenant/client", async (importOriginal) => {
 });
 vi.mock("@/lib/data/student-mastery", () => ({ listTopicMastery: mocks.listTopicMastery }));
 vi.mock("@/lib/student-courses", () => ({
-  studentHasCourseSubjectAccess: mocks.studentHasCourseSubjectAccess,
+  getStudentCourseSubjectAccess: mocks.getStudentCourseSubjectAccess,
 }));
 
 import { GET } from "@/app/api/student/practice/topics/route";
@@ -60,7 +60,13 @@ describe("GET /api/student/practice/topics", () => {
       suggested_plan: [],
     });
     mocks.listTopicMastery.mockResolvedValue([]);
-    mocks.studentHasCourseSubjectAccess.mockResolvedValue(true);
+    mocks.getStudentCourseSubjectAccess.mockResolvedValue({
+      courseId: "course-1",
+      teacherId: "teacher-a",
+      subjectSlug: "digital-logic",
+      subjectName: "Digital Logic",
+      folderPath: "teacher-a/Digital Logic",
+    });
   });
 
   it("passes selected quick drill size to the tenant topics planner", async () => {
@@ -80,6 +86,13 @@ describe("GET /api/student/practice/topics", () => {
   });
 
   it("keeps an available subject visible when its teacher has not indexed content", async () => {
+    mocks.getStudentCourseSubjectAccess.mockResolvedValueOnce({
+      courseId: "course-2",
+      teacherId: "teacher-b",
+      subjectSlug: "nepali",
+      subjectName: "Nepali",
+      folderPath: "teacher-b/Nepali",
+    });
     mocks.listTenantSubjects.mockResolvedValueOnce([
       {
         name: "Nepali",
@@ -107,7 +120,7 @@ describe("GET /api/student/practice/topics", () => {
   });
 
   it("rejects practice for a subject outside the student's enrolled courses", async () => {
-    mocks.studentHasCourseSubjectAccess.mockResolvedValueOnce(false);
+    mocks.getStudentCourseSubjectAccess.mockResolvedValueOnce(null);
 
     const response = await GET(
       new Request("http://localhost/api/student/practice/topics?subject=Digital%20Logic"),

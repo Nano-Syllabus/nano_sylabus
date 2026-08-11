@@ -5,7 +5,6 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const updateSchema = z.object({
   title: z.string().min(1).max(160),
-  subjectTag: z.string().min(1).max(120),
   chapterTag: z.string().max(120).optional().nullable(),
   annotation: z.string().max(500).optional().nullable(),
   colorLabel: z.enum(["red", "yellow", "green"]),
@@ -61,7 +60,6 @@ export async function PATCH(
       .from("revision_notes")
       .update({
         title: payload.title,
-        subject_tag: payload.subjectTag,
         chapter_tag: payload.chapterTag || null,
         annotation: payload.annotation || null,
         colour_label: payload.colorLabel,

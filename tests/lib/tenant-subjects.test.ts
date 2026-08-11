@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { findTenantSubject, listTenantSubjectNames, type TenantSubject } from "@/lib/tenant/client";
+import {
+  findTenantSubject,
+  findTenantSubjectForCourseSubject,
+  listTenantSubjectNames,
+  type TenantSubject,
+} from "@/lib/tenant/client";
 
 const subjects: TenantSubject[] = [
   {
@@ -44,5 +49,36 @@ describe("tenant subject access", () => {
     expect(findTenantSubject(subjects, "Digital Logic")?.slug).toBe("digital-logic");
     expect(findTenantSubject(subjects, "engineering-physics")?.name).toBe("Engineering Physics");
     expect(findTenantSubject(subjects, "nepaliii")?.namespace).toBe("teacher-c");
+  });
+
+  it("keeps duplicate names scoped to the course-owned teacher subject", () => {
+    const duplicateSubjects: TenantSubject[] = [
+      {
+        name: "MBA",
+        slug: "teacher-a-mba",
+        namespace: "teacher-a",
+        namespace_slug: "teacher_a",
+        full_path: "teacher-a/MBA",
+        folder_path: "teacher-a/MBA",
+        chunk_count: 4,
+      },
+      {
+        name: "mba",
+        slug: "teacher-b-mba",
+        namespace: "teacher-b",
+        namespace_slug: "teacher_b",
+        full_path: "teacher-b/mba",
+        folder_path: "teacher-b/mba",
+        chunk_count: 0,
+      },
+    ];
+
+    expect(
+      findTenantSubjectForCourseSubject(duplicateSubjects, {
+        subjectSlug: "teacher-b-mba",
+        subjectName: "mba",
+        folderPath: "teacher-b/mba",
+      }),
+    ).toMatchObject({ slug: "teacher-b-mba", namespace: "teacher-b", chunk_count: 0 });
   });
 });

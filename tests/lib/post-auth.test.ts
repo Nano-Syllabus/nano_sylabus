@@ -27,8 +27,8 @@ describe("resolvePostAuthDestination", () => {
       resolvePostAuthDestination({
         role: "student",
         onboarded: false,
-        nextPath: "/app/enroll/ioe-entrance",
+        nextPath: "/app/payment/ioe-entrance",
       }),
-    ).toBe("/onboarding?next=%2Fapp%2Fenroll%2Fioe-entrance");
+    ).toBe("/onboarding?next=%2Fapp%2Fpayment%2Fioe-entrance");
   });
 });

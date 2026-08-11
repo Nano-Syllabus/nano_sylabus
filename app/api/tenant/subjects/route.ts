@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { filterTenantSubjectsForCourses } from "@/lib/chat-subjects";
+import { listStudentCourses } from "@/lib/student-courses";
 import { listTenantSubjects } from "@/lib/tenant/client";
 
 export async function GET() {
@@ -13,7 +15,11 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const subjects = await listTenantSubjects();
+    const [tenantSubjects, courses] = await Promise.all([
+      listTenantSubjects(),
+      listStudentCourses(user.id),
+    ]);
+    const subjects = filterTenantSubjectsForCourses(tenantSubjects, courses);
 
     return NextResponse.json({
       subjects: subjects.map((subject) => ({

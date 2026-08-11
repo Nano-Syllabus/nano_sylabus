@@ -4,6 +4,7 @@ import { requireOnboardedUser } from "@/lib/auth";
 import { getChatSessionDetail, listChatSessions } from "@/lib/data/chat";
 import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 import { getRevisionNoteDetail } from "@/lib/data/notes";
+import { listStudentCourses } from "@/lib/student-courses";
 
 export const dynamic = "force-dynamic";
 const INITIAL_CHAT_MESSAGE_LIMIT = 10;
@@ -22,6 +23,15 @@ export default async function ChatPage({
   const activeSession = params.session
     ? await getChatSessionDetail(params.session, user.id, { limit: INITIAL_CHAT_MESSAGE_LIMIT })
     : null;
+  const studentCourses = await listStudentCourses(user.id);
+  const noteSubjectOptions = studentCourses.flatMap((course) =>
+    course.subjects.map((subject) => ({
+      courseId: course.id,
+      courseName: course.name,
+      subjectSlug: subject.slug,
+      subjectName: subject.name,
+    })),
+  );
 
   let referenceNote = null;
   if (params.referenceNoteId && !params.session) {
@@ -47,6 +57,7 @@ export default async function ChatPage({
         initialSubjectContext={params.subject ? normalizeSubjectLabel(decodeURIComponent(params.subject)) : null}
         initialPrompt={params.prompt ? decodeURIComponent(params.prompt) : null}
         initialReferenceNote={referenceNote}
+        noteSubjectOptions={noteSubjectOptions}
       />
     </>
   );

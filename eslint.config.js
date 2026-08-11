@@ -9,7 +9,14 @@ const compat = new FlatCompat({
 
 module.exports = [
   {
-    ignores: [".next/**", "node_modules/**", "src/**", "dist/**"],
+    ignores: [
+      ".next/**",
+      ".next-dev/**",
+      "node_modules/**",
+      "src/**",
+      "dist/**",
+      "exam-prep-hub/**",
+    ],
   },
   ...compat.extends("next/core-web-vitals"),
 ];

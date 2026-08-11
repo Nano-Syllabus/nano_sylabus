@@ -1,17 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createSupabaseServerClient } = vi.hoisted(() => ({
+const { createSupabaseServerClient, revisionNoteUpsert } = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
+  revisionNoteUpsert: vi.fn(),
+}));
+
+const { getStudentCourseSubjectAccessForCourse } = vi.hoisted(() => ({
+  getStudentCourseSubjectAccessForCourse: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient,
 }));
 
+vi.mock("@/lib/student-courses", () => ({
+  getStudentCourseSubjectAccessForCourse,
+}));
+
 import { POST } from "@/app/api/notes/route";
 
 describe("POST /api/notes", () => {
   beforeEach(() => {
+    getStudentCourseSubjectAccessForCourse.mockResolvedValue({
+      courseId: "33333333-3333-3333-3333-333333333333",
+      teacherId: "teacher-1",
+      subjectSlug: "biology",
+      subjectName: "Biology",
+      folderPath: "biology",
+    });
+
     const sessionChain = {
       select: vi.fn(),
       eq: vi.fn(),
@@ -59,9 +76,8 @@ describe("POST /api/notes", () => {
 
     const single = vi.fn(async () => ({ data: { id: "note-1" }, error: null }));
     const select = vi.fn(() => ({ single }));
-    const revisionNotesTable = {
-      upsert: vi.fn(() => ({ select })),
-    };
+    revisionNoteUpsert.mockImplementation(() => ({ select }));
+    const revisionNotesTable = { upsert: revisionNoteUpsert };
     let revisionNotesReadCount = 0;
 
     createSupabaseServerClient.mockResolvedValue({
@@ -94,7 +110,8 @@ describe("POST /api/notes", () => {
           sessionId: "11111111-1111-1111-1111-111111111111",
           messageId: "22222222-2222-2222-2222-222222222222",
           title: "Photosynthesis basics",
-          subjectTag: "Biology",
+          courseId: "33333333-3333-3333-3333-333333333333",
+          subjectSlug: "biology",
           chapterTag: "Plant Physiology",
           annotation: "Revise before exam",
           colorLabel: "yellow",
@@ -104,6 +121,15 @@ describe("POST /api/notes", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ id: "note-1" });
+    expect(revisionNoteUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        course_id: "33333333-3333-3333-3333-333333333333",
+        subject_slug: "biology",
+        subject_name: "Biology",
+        subject_tag: "Biology",
+      }),
+      { onConflict: "user_id,message_id" },
+    );
   });
 
   it("blocks new note save when free-plan note limit is reached", async () => {
@@ -180,7 +206,8 @@ describe("POST /api/notes", () => {
           sessionId: "11111111-1111-1111-1111-111111111111",
           messageId: "22222222-2222-2222-2222-222222222222",
           title: "Photosynthesis basics",
-          subjectTag: "Biology",
+          courseId: "33333333-3333-3333-3333-333333333333",
+          subjectSlug: "biology",
           chapterTag: "Plant Physiology",
           annotation: "Revise before exam",
           colorLabel: "yellow",

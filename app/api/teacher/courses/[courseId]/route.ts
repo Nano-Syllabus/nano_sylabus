@@ -143,11 +143,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const admin = createSupabaseAdminClient();
     const result = await admin
       .from("teacher_courses")
-      .update({
-        status: "archived",
-        archived_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .delete()
       .eq("id", courseId)
       .eq("teacher_id", teacher.id)
       .is("archived_at", null)
@@ -155,8 +151,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
       .maybeSingle();
     if (result.error) throw result.error;
     if (!result.data) return NextResponse.json({ error: "Course not found." }, { status: 404 });
-    return NextResponse.json({ archived: true });
+    return NextResponse.json({ deleted: true });
   } catch (error) {
-    return NextResponse.json({ error: courseStorageError(error) }, { status: 502 });
+    return NextResponse.json(
+      { error: courseStorageError(error, "Could not delete the course.") },
+      { status: 502 },
+    );
   }
 }

@@ -1,7 +1,7 @@
 import { SetAppShell } from "@/components/set-app-shell";
 import { StudentExamsClient } from "@/components/student-exams-client";
 import { requireOnboardedUser } from "@/lib/auth";
-import { findTenantSubject, listTenantSubjects } from "@/lib/tenant/client";
+import { findTenantSubjectForCourseSubject, listTenantSubjects } from "@/lib/tenant/client";
 import { listStudentCourses } from "@/lib/student-courses";
 
 export const dynamic = "force-dynamic";
@@ -12,29 +12,35 @@ export default async function ExamsPage() {
     listTenantSubjects(),
     listStudentCourses(user.id),
   ]);
-  const subjects = Array.from(
-    new Set(
-      courses.flatMap((course) =>
-        course.subjects.flatMap((courseSubject) => {
-          const tenantSubject = findTenantSubject(tenantSubjects, courseSubject.slug);
-          return tenantSubject ? [tenantSubject.name] : [];
-        }),
-      ),
+  const subjectsBySlug = new Map(
+    courses.flatMap((course) =>
+      course.subjects.flatMap((courseSubject) => {
+        const tenantSubject = findTenantSubjectForCourseSubject(tenantSubjects, {
+          subjectSlug: courseSubject.slug,
+          subjectName: courseSubject.name,
+          folderPath: courseSubject.folderPath,
+        });
+        return tenantSubject
+          ? [
+              [
+                tenantSubject.slug,
+                {
+                  name: tenantSubject.name,
+                  slug: tenantSubject.slug,
+                  practiceAvailable: tenantSubject.chunk_count > 0,
+                },
+              ] as const,
+            ]
+          : [];
+      }),
     ),
   );
-  const subjectKeys = new Set(subjects.map((subject) => subject.toLowerCase()));
-  const unavailableSubjects = tenantSubjects
-    .filter((subject) => subjectKeys.has(subject.name.toLowerCase()) && subject.chunk_count <= 0)
-    .map((subject) => subject.name);
+  const subjects = Array.from(subjectsBySlug.values());
 
   return (
     <>
       <SetAppShell title="Exams" />
-      <StudentExamsClient
-        subjects={subjects}
-        unavailableSubjects={unavailableSubjects}
-        fullName={user.fullName}
-      />
+      <StudentExamsClient subjects={subjects} fullName={user.fullName} />
     </>
   );
 }

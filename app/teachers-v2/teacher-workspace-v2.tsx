@@ -12,6 +12,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { TeacherCoursesClient, TeacherCoursesOverview } from "@/components/teacher-courses-client";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   aheadOfCount,
   gradeTopicEvaluation,
@@ -32,7 +33,7 @@ type SubjectTab =
   | "bank"
   | "source-search"
   | "test-chat"
-  | "classrooms";
+  | "config";
 type ClassroomTab = "students" | "exams" | "performance" | "material" | "activity" | "settings";
 type Shelf = "Syllabus" | "Notes" | "Question Bank";
 
@@ -262,8 +263,7 @@ type DialogState =
   | { type: "upload"; shelf: Shelf }
   | { type: "create-folder"; shelf: Shelf }
   | { type: "document"; document: TeacherDocument }
-  | { type: "subject-settings" }
-  | { type: "collection-settings" }
+  | { type: "collection-overview" }
   | null;
 
 type SubjectCreationResult = {
@@ -1262,7 +1262,11 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   return (
     <div className="min-h-screen bg-bg-secondary text-text-primary lg:grid lg:grid-cols-[250px_1fr]">
       <aside className="sticky top-0 hidden h-screen flex-col border-r border-border bg-bg-primary px-[13px] pb-10 pt-[18px] lg:flex">
-        <div className="flex items-center gap-[10px] px-2 pb-[18px] pt-0.5">
+        <Link
+          href="/"
+          aria-label="Go to Nano Syllabus site"
+          className="flex items-center gap-[10px] rounded-[9px] px-2 pb-[18px] pt-0.5 transition hover:opacity-70"
+        >
           <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-text-primary font-display text-sm font-extrabold text-text-inverse">
             n
           </span>
@@ -1271,7 +1275,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               NanoSyllabus
             </p>
           </div>
-        </div>
+        </Link>
         <p className="mx-[9px] mb-[17px] mt-[-7px] font-mono text-[9.5px] uppercase tracking-[0.14em] text-text-muted">
           Creator portal
         </p>
@@ -1302,6 +1306,28 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
         </nav>
         <div className="mt-auto border-t border-border pt-4">
           <Link
+            href="/"
+            className={cn(
+              "mb-2 flex min-h-10 w-full items-center gap-2 rounded-[9px] px-[11px] text-sm font-medium text-text-secondary transition hover:bg-bg-secondary hover:text-text-primary",
+              interactive,
+            )}
+          >
+            <svg
+              aria-hidden="true"
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+            Site
+          </Link>
+          <Link
             href="/app/today"
             className={cn(
               "mb-4 flex min-h-10 w-full items-center gap-2 rounded-[9px] border border-border bg-bg-primary px-[11px] text-sm font-medium text-text-primary transition hover:border-border-strong hover:bg-bg-secondary",
@@ -1331,15 +1357,43 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       <div className="min-w-0">
         <header className="sticky top-0 z-20 flex min-h-[53px] items-center gap-3 border-b border-border bg-bg-secondary/95 px-4 backdrop-blur md:px-[26px]">
           <div className="lg:hidden">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-text-primary font-display font-semibold text-text-inverse">
+            <Link
+              href="/"
+              aria-label="Go to Nano Syllabus site"
+              className="grid h-10 w-10 place-items-center rounded-full bg-text-primary font-display font-semibold text-text-inverse transition hover:opacity-80"
+            >
               n
-            </span>
+            </Link>
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{collectionName}</p>
             <p className="truncate text-xs text-text-muted">Creator collection</p>
           </div>
           <span className="flex-1" />
+          <ThemeToggle className="shrink-0 bg-bg-primary" />
+          <Link
+            href="/"
+            aria-label="Open site"
+            title="Site"
+            className={cn(
+              "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[9px] border border-border bg-bg-primary text-text-primary transition hover:border-border-strong hover:bg-bg-secondary",
+              interactive,
+            )}
+          >
+            <svg
+              aria-hidden="true"
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </Link>
           <Link
             href="/app/today"
             className={cn(
@@ -1363,14 +1417,6 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             <span className="sm:hidden">Student</span>
             <span className="hidden sm:inline">Student portal</span>
           </Link>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setDialog({ type: "collection-settings" })}
-          >
-            <span className="sm:hidden">Settings</span>
-            <span className="hidden sm:inline">Collection settings</span>
-          </Button>
         </header>
 
         <nav
@@ -1462,6 +1508,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               workspace={workspace}
               onCreate={() => setDialog({ type: "create-subject" })}
               onOpen={openSubject}
+              onCollectionOverview={() => setDialog({ type: "collection-overview" })}
             />
           ) : null}
           {view === "subjects" && selectedSubject ? (
@@ -1475,7 +1522,6 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               onUpload={(shelf) => setDialog({ type: "upload", shelf })}
               onCreateFolder={(shelf) => setDialog({ type: "create-folder", shelf })}
               onDocument={(document) => setDialog({ type: "document", document })}
-              onSettings={() => setDialog({ type: "subject-settings" })}
               syllabus={
                 syllabi[selectedSubject.slug] || {
                   state: "idle",
@@ -1491,10 +1537,11 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               setChat={(next) =>
                 setChatMessages((current) => ({ ...current, [selectedSubject.slug]: next }))
               }
-              classrooms={dashboard?.classrooms || []}
-              onCreateClassroom={() =>
-                setDialog({ type: "create-classroom", subjectSlug: selectedSubject.slug })
-              }
+              onSubjectRemoved={async (message) => {
+                setSelectedSlug("");
+                setToast(message);
+                await loadWorkspace();
+              }}
             />
           ) : null}
           {view === "settings" ? (
@@ -1591,21 +1638,8 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           }}
         />
       ) : null}
-      {dialog?.type === "subject-settings" && selectedSubject ? (
-        <SubjectSettingsDialog
-          subject={selectedSubject}
-          documentCount={subjectDocuments.length}
-          onClose={() => setDialog(null)}
-          onRemoved={async (message) => {
-            setDialog(null);
-            setSelectedSlug("");
-            setToast(message);
-            await loadWorkspace();
-          }}
-        />
-      ) : null}
-      {dialog?.type === "collection-settings" ? (
-        <CollectionDialog
+      {dialog?.type === "collection-overview" ? (
+        <CollectionOverviewDialog
           workspace={workspace}
           onClose={() => setDialog(null)}
           onChanged={async (message, jobId, jobLabel) => {
@@ -7020,10 +7054,12 @@ function SubjectsView({
   workspace,
   onCreate,
   onOpen,
+  onCollectionOverview,
 }: {
   workspace: Workspace;
   onCreate: () => void;
   onOpen: (subject: TeacherSubject) => void;
+  onCollectionOverview: () => void;
 }) {
   return (
     <>
@@ -7038,6 +7074,9 @@ function SubjectsView({
           </p>
         </div>
         <span className="flex-1" />
+        <Button variant="outline" onClick={onCollectionOverview}>
+          Collection overview
+        </Button>
         <Button onClick={onCreate}>Create subject</Button>
       </div>
 
@@ -7115,13 +7154,11 @@ function SubjectView({
   onUpload,
   onCreateFolder,
   onDocument,
-  onSettings,
   syllabus,
   setSyllabus,
   chat,
   setChat,
-  classrooms,
-  onCreateClassroom,
+  onSubjectRemoved,
 }: {
   subject: TeacherSubject;
   documents: TeacherDocument[];
@@ -7132,17 +7169,12 @@ function SubjectView({
   onUpload: (shelf: Shelf) => void;
   onCreateFolder: (shelf: Shelf) => void;
   onDocument: (document: TeacherDocument) => void;
-  onSettings: () => void;
   syllabus: SyllabusState;
   setSyllabus: (next: SyllabusState) => void;
   chat: ChatMessage[];
   setChat: (next: ChatMessage[]) => void;
-  classrooms: TeacherDashboard["classrooms"];
-  onCreateClassroom: () => void;
+  onSubjectRemoved: (message: string) => void;
 }) {
-  const subjectClassrooms = classrooms.filter(
-    (classroom) => classroom.subjectSlug === subject.slug,
-  );
   const tabs: [SubjectTab, string, number | null][] = [
     ["overview", "Overview", null],
     ["syllabus", "Syllabus", documents.filter((document) => document.shelf === "Syllabus").length],
@@ -7154,7 +7186,7 @@ function SubjectView({
     ],
     ["source-search", "Search sources", null],
     ["test-chat", "Test chat", null],
-    ["classrooms", "Running classroom", subjectClassrooms.length],
+    ["config", "Config", null],
   ];
   const shelf = tab === "syllabus" ? "Syllabus" : tab === "material" ? "Notes" : "Question Bank";
   const chapterFolders = sourceTreeFolderPaths(sourceTree, subject, shelf);
@@ -7176,11 +7208,6 @@ function SubjectView({
           <h1 className="mt-3 font-display text-3xl font-semibold">{subject.name}</h1>
           <p className="mt-2 text-text-secondary">{documents.length} source files</p>
         </div>
-        <span className="flex-1" />
-        <Button variant="outline" onClick={onSettings}>
-          Subject settings
-        </Button>
-        <Button onClick={onCreateClassroom}>Run as a classroom</Button>
       </div>
       <div
         role="tablist"
@@ -7214,43 +7241,12 @@ function SubjectView({
         <TestChat subject={subject} messages={chat} setMessages={setChat} syllabus={syllabus} />
       ) : tab === "source-search" ? (
         <SourceSearch subject={subject} />
-      ) : tab === "classrooms" ? (
-        <div className="mt-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={onCreateClassroom}>Run as a classroom</Button>
-            <p className="text-sm text-text-muted">
-              Each classroom is one batch taught this subject — its own students, exams and marks.
-            </p>
-          </div>
-          {subjectClassrooms.length ? (
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {subjectClassrooms.map((classroom) => (
-                <div key={classroom.id} className="rounded-lg border border-border p-5">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-medium">
-                      {classroom.memberCount} students
-                    </span>
-                    <span className="flex-1" />
-                    <span className="text-xs text-text-muted">
-                      {classroom.assignmentCount} exams
-                    </span>
-                  </div>
-                  <h3 className="mt-3 font-semibold">{classroom.name}</h3>
-                  <p className="mt-1 font-mono text-xs text-text-muted">
-                    Code: {classroom.joinCode}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-5 rounded-lg border border-dashed border-border p-8 text-center">
-              <p className="font-medium">Not run for anyone yet</p>
-              <p className="mt-1 text-sm text-text-muted">
-                Start a classroom for a batch and hand out the join code.
-              </p>
-            </div>
-          )}
-        </div>
+      ) : tab === "config" ? (
+        <SubjectConfig
+          subject={subject}
+          documentCount={documents.length}
+          onRemoved={onSubjectRemoved}
+        />
       ) : (
         <div className="mt-6">
           <div className="flex flex-wrap items-center gap-3">
@@ -9360,15 +9356,13 @@ function DocumentDialog({
   );
 }
 
-function SubjectSettingsDialog({
+function SubjectConfig({
   subject,
   documentCount,
-  onClose,
   onRemoved,
 }: {
   subject: TeacherSubject;
   documentCount: number;
-  onClose: () => void;
   onRemoved: (message: string) => void;
 }) {
   const [confirmation, setConfirmation] = useState("");
@@ -9397,8 +9391,14 @@ function SubjectSettingsDialog({
   }
 
   return (
-    <Dialog title="Subject settings" onClose={onClose}>
-      <div className="rounded-lg border border-border p-4">
+    <div className="mt-6 max-w-2xl">
+      <div>
+        <h2 className="font-display text-xl font-semibold">Subject settings</h2>
+        <p className="mt-1 text-sm text-text-secondary">
+          Review this subject and manage its stored source files.
+        </p>
+      </div>
+      <div className="mt-5 rounded-lg border border-border p-4">
         <p className="font-medium">{subject.name}</p>
         <p className="mt-1 text-sm text-text-muted">
           {documentCount} files in {subject.folderPath}
@@ -9422,10 +9422,10 @@ function SubjectSettingsDialog({
           spellCheck={false}
           onChange={(event) => setConfirmation(event.target.value)}
           aria-invalid={error ? "true" : undefined}
-          aria-describedby={error ? "subject-settings-error" : undefined}
+          aria-describedby={error ? "subject-config-error" : undefined}
         />
         {error ? (
-          <p id="subject-settings-error" role="alert" className="mt-3 text-sm text-destructive">
+          <p id="subject-config-error" role="alert" className="mt-3 text-sm text-destructive">
             {error}
           </p>
         ) : null}
@@ -9438,7 +9438,7 @@ function SubjectSettingsDialog({
           {busy === "delete" ? "Deleting…" : "Delete subject and files"}
         </Button>
       </section>
-    </Dialog>
+    </div>
   );
 }
 
@@ -9485,7 +9485,7 @@ function SourceTree({ tree }: { tree: ApiRecord }) {
   );
 }
 
-function CollectionDialog({
+function CollectionOverviewDialog({
   workspace,
   onClose,
   onChanged,
@@ -9535,7 +9535,7 @@ function CollectionDialog({
   }
 
   return (
-    <Dialog title="Collection settings" onClose={onClose}>
+    <Dialog title="Collection overview" onClose={onClose}>
       <div className="grid gap-3 sm:grid-cols-3">
         {[
           ["Files", numberValue(workspace.collection.files || workspace.collection.indexed_files)],
@@ -9619,7 +9619,7 @@ function CollectionDialog({
         </div>
       </section>
       {error ? (
-        <p id="collection-settings-error" role="alert" className="mt-5 text-sm text-destructive">
+        <p id="collection-overview-error" role="alert" className="mt-5 text-sm text-destructive">
           {error}
         </p>
       ) : null}

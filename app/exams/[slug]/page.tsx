@@ -46,7 +46,6 @@ function SiteHeader() {
           <Link href="/#why" className="hover:text-foreground">Why nanosyllabus</Link>
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/login" className="inline-flex h-8 items-center px-3 text-xs font-medium text-foreground hover:text-white">Log in</Link>
           <Link href="/exams" className="glow-shadow inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:brightness-110">Start free</Link>
         </div>
       </div>
@@ -81,7 +80,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
   const related = published
     .filter((item) => item.id !== course.id && item.category === course.category)
     .slice(0, 3);
-  const enrollHref = `/enroll/${course.slug}`;
+  const paymentHref = `/app/payment/${course.slug}`;
 
   return (
     <div className="exam-prep-theme min-h-screen bg-background text-foreground">
@@ -118,9 +117,9 @@ export default async function CourseDetailPage({ params }: PageProps) {
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
                   Enrolling opens one study space with every subject connected to this course.
                 </p>
-                <Link href={enrollHref} className="glow-shadow mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:brightness-110">
+                <a href={paymentHref} className="glow-shadow mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:brightness-110">
                   Enroll & open study space <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
+                </a>
                 <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
                   <li className="flex gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-highlight" aria-hidden="true" /> {course.diagnosticQuestionCount}-question diagnostic</li>
                   <li className="flex gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-highlight" aria-hidden="true" /> {course.dailyMinutes}-minute daily target</li>

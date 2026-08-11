@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getNoteAccessPolicy } from "@/lib/data/note-access";
+import { getStudentCourseSubjectAccessForCourse } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const noteSchema = z.object({
   sessionId: z.string().uuid(),
   messageId: z.string().uuid(),
   title: z.string().min(1).max(160),
-  subjectTag: z.string().min(1).max(120),
+  courseId: z.string().uuid(),
+  subjectSlug: z.string().min(1).max(200),
   chapterTag: z.string().max(120).optional().nullable(),
   annotation: z.string().max(500).optional().nullable(),
   colorLabel: z.enum(["red", "yellow", "green"]),
@@ -26,6 +28,18 @@ export async function POST(request: Request) {
 
     const payload = noteSchema.parse(await request.json());
     const access = await getNoteAccessPolicy(user.id);
+    const subjectAccess = await getStudentCourseSubjectAccessForCourse(
+      user.id,
+      payload.courseId,
+      payload.subjectSlug,
+    );
+
+    if (!subjectAccess) {
+      return NextResponse.json(
+        { error: "Choose a subject from one of your enrolled courses." },
+        { status: 403 },
+      );
+    }
 
     const { data: session } = await supabase
       .from("chat_sessions")
@@ -85,7 +99,10 @@ export async function POST(request: Request) {
           session_id: payload.sessionId,
           message_id: payload.messageId,
           title: payload.title,
-          subject_tag: payload.subjectTag,
+          course_id: subjectAccess.courseId,
+          subject_slug: subjectAccess.subjectSlug,
+          subject_name: subjectAccess.subjectName,
+          subject_tag: subjectAccess.subjectName,
           chapter_tag: payload.chapterTag || null,
           annotation: payload.annotation || null,
           colour_label: payload.colorLabel,

@@ -171,6 +171,49 @@ export type StudentCourseSubjectAccess = {
   folderPath: string;
 };
 
+export async function getStudentCourseSubjectAccessForCourse(
+  studentId: string,
+  courseId: string,
+  subjectSlug: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+): Promise<StudentCourseSubjectAccess | null> {
+  const enrollmentResult = await admin
+    .from("teacher_course_enrollments")
+    .select("course_id")
+    .eq("student_id", studentId)
+    .eq("course_id", courseId)
+    .in("status", ["active", "completed"])
+    .maybeSingle();
+  if (enrollmentResult.error) throw enrollmentResult.error;
+  if (!enrollmentResult.data) return null;
+
+  const courseResult = await admin
+    .from("teacher_courses")
+    .select("id,teacher_id")
+    .eq("id", courseId)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (courseResult.error) throw courseResult.error;
+  if (!courseResult.data) return null;
+
+  const subjectResult = await admin
+    .from("teacher_course_subjects")
+    .select("course_id,teacher_id,subject_slug,subject_name,folder_path")
+    .eq("course_id", courseId)
+    .eq("subject_slug", subjectSlug)
+    .maybeSingle();
+  if (subjectResult.error) throw subjectResult.error;
+  if (!subjectResult.data) return null;
+
+  return {
+    courseId: String(subjectResult.data.course_id || courseId),
+    teacherId: String(subjectResult.data.teacher_id || courseResult.data.teacher_id || ""),
+    subjectSlug: String(subjectResult.data.subject_slug || ""),
+    subjectName: String(subjectResult.data.subject_name || ""),
+    folderPath: String(subjectResult.data.folder_path || ""),
+  };
+}
+
 export async function getStudentCourseSubjectAccess(
   studentId: string,
   subject: string,

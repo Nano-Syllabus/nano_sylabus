@@ -65,6 +65,13 @@ type TenantChatSubject = {
   folderPath: string;
 };
 
+type NoteSubjectOption = {
+  courseId: string;
+  courseName: string;
+  subjectSlug: string;
+  subjectName: string;
+};
+
 type Message = {
   id: string;
   role: "user" | "assistant";
@@ -128,23 +135,13 @@ async function readJsonResponse<T>(response: Response): Promise<T | null> {
   }
 }
 
-let tenantSubjectMetadataPromise: Promise<TenantCatalogPayload> | null = null;
-
-function loadTenantSubjectMetadata(): Promise<TenantCatalogPayload> {
-  if (!tenantSubjectMetadataPromise) {
-    tenantSubjectMetadataPromise = fetch("/api/tenant/subjects", { cache: "no-store" }).then(
-      async (response): Promise<TenantCatalogPayload> => {
-      if (!response.ok) {
-        tenantSubjectMetadataPromise = null;
-        return {};
-      }
-
-      return (await response.json()) as TenantCatalogPayload;
-      },
-    );
+async function loadTenantSubjectMetadata(): Promise<TenantCatalogPayload> {
+  const response = await fetch("/api/tenant/subjects", { cache: "no-store" });
+  if (!response.ok) {
+    return {};
   }
 
-  return tenantSubjectMetadataPromise;
+  return (await response.json()) as TenantCatalogPayload;
 }
 
 type ThinkingTrace = {
@@ -556,6 +553,7 @@ export function ChatPageClient({
   initialSubjectContext,
   initialPrompt,
   initialReferenceNote,
+  noteSubjectOptions,
 }: {
   user: AppUser;
   defaultLanguage: Language;
@@ -568,6 +566,7 @@ export function ChatPageClient({
   initialSubjectContext: string | null;
   initialPrompt: string | null;
   initialReferenceNote?: RevisionNoteDetail | null;
+  noteSubjectOptions: NoteSubjectOption[];
 }) {
   const [sessions, setSessions] = useState(initialSessions);
   const [hasMoreSessions, setHasMoreSessions] = useState(initialHasMore);
@@ -612,7 +611,6 @@ export function ChatPageClient({
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [copyingMessageId, setCopyingMessageId] = useState<string | null>(null);
   const [feedbackSavingMessageId, setFeedbackSavingMessageId] = useState<string | null>(null);
-  const [noteSavingMessageId, setNoteSavingMessageId] = useState<string | null>(null);
   const [shareState, setShareState] = useState<{
     url: string;
     copied: boolean;
@@ -2012,60 +2010,6 @@ export function ChatPageClient({
     }
   }
 
-  async function saveAssistantNote(message: ChatMessageRecord, question: string) {
-    if (message.savedNoteId || noteSavingMessageId === message.id) {
-      return;
-    }
-
-    setNoteSavingMessageId(message.id);
-    setChatError("");
-
-    try {
-      const title = (question || message.content.slice(0, 80) || "Saved answer").trim();
-      const response = await fetch("/api/notes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          sessionId: message.sessionId,
-          messageId: message.id,
-          title,
-          subjectTag: message.citations[0]?.subject || subjectContext || "General",
-          chapterTag: message.citations[0]?.chapter || message.citations[0]?.topic || "",
-          annotation: "",
-          colorLabel: "yellow",
-        }),
-      });
-      const payload = await readJsonResponse<{ id?: string; error?: string }>(response);
-
-      if (!response.ok || !payload?.id) {
-        throw new Error(payload?.error || `Failed to save note. (${response.status})`);
-      }
-
-      setSessionDetail((previous) =>
-        previous
-          ? {
-              ...previous,
-              messages: previous.messages.map((item) =>
-                item.id === message.id ? { ...item, savedNoteId: payload.id ?? item.savedNoteId } : item,
-              ),
-            }
-          : previous,
-      );
-      setUiFeedback("Note saved.");
-
-      const resolvedSessionId = currentSessionIdRef.current;
-      if (resolvedSessionId) {
-        void refreshSession(resolvedSessionId);
-      }
-    } catch (error) {
-      setChatError(error instanceof Error ? error.message : "Failed to save note.");
-    } finally {
-      setNoteSavingMessageId(null);
-    }
-  }
-
   const shareCurrentSession = useCallback(async () => {
     const sessionId = currentSessionIdRef.current;
     if (!sessionId || shareLoading) return;
@@ -2300,7 +2244,7 @@ export function ChatPageClient({
               value={stripSubjectChapter(subjectContext) ?? ""}
               onChange={(value) => void updateSessionSubjectContext(value || null)}
               options={subjectActionOptions}
-              placeholder="Subjects"
+              placeholder={subjectActionOptions.length ? "Subjects" : "No subjects"}
               direction="up"
               pulseButton={!subjectContext}
             />
@@ -2610,8 +2554,11 @@ export function ChatPageClient({
                             <div className="relative group/btn flex items-center justify-center">
                               <button
                                 type="button"
-                                onClick={() => persistedAssistant && void saveAssistantNote(persistedAssistant, question)}
-                                disabled={!persistedAssistant || noteSavingMessageId === persistedAssistant.id || Boolean(persistedAssistant.savedNoteId)}
+                                onClick={() =>
+                                  persistedAssistant &&
+                                  setSaveState({ message: persistedAssistant, question })
+                                }
+                                disabled={!persistedAssistant || Boolean(persistedAssistant.savedNoteId)}
                                 className={cn(
                                   "flex h-8 w-8 items-center justify-center rounded-md hover:bg-bg-tertiary transition-colors disabled:opacity-50",
                                   persistedAssistant?.savedNoteId ? "text-text-primary" : "hover:text-text-primary"
@@ -2724,6 +2671,8 @@ export function ChatPageClient({
         <SaveNoteModal
           initialMessage={saveState.message}
           initialQuestion={saveState.question}
+          subjectContext={subjectContext}
+          subjectOptions={noteSubjectOptions}
           onClose={() => setSaveState(null)}
           onSaved={async (text) => {
             setUiFeedback(text);
@@ -2815,17 +2764,29 @@ export function ChatPageClient({
 function SaveNoteModal({
   initialMessage,
   initialQuestion,
+  subjectContext,
+  subjectOptions,
   onClose,
   onSaved,
 }: {
   initialMessage: ChatMessageRecord;
   initialQuestion: string;
+  subjectContext: string | null;
+  subjectOptions: NoteSubjectOption[];
   onClose: () => void;
   onSaved: (message: string) => Promise<void>;
 }) {
   const [title, setTitle] = useState(initialQuestion || initialMessage.content.slice(0, 80));
-  const [subjectTag, setSubjectTag] = useState(
-    initialMessage.citations[0]?.subject || "General",
+  const preferredSubject =
+    initialMessage.citations[0]?.subject || subjectContext || "";
+  const initialSubject =
+    subjectOptions.find(
+      (option) =>
+        normalizeSubjectLabel(option.subjectName) === normalizeSubjectLabel(preferredSubject) ||
+        option.subjectSlug === preferredSubject,
+    ) || subjectOptions[0] || null;
+  const [selectedSubjectKey, setSelectedSubjectKey] = useState(
+    initialSubject ? `${initialSubject.courseId}:${initialSubject.subjectSlug}` : "",
   );
   const [chapterTag, setChapterTag] = useState(
     initialMessage.citations[0]?.chapter || initialMessage.citations[0]?.topic || "",
@@ -2863,7 +2824,8 @@ function SaveNoteModal({
 
       const note = (await response.json()) as {
         title: string;
-        subjectTag: string;
+        courseId: string | null;
+        subjectSlug: string | null;
         chapterTag: string | null;
         annotation: string | null;
         colorLabel: NoteColor;
@@ -2872,7 +2834,12 @@ function SaveNoteModal({
       if (ignore) return;
 
       setTitle(note.title);
-      setSubjectTag(note.subjectTag);
+      const existingSubject = subjectOptions.find(
+        (option) => option.courseId === note.courseId && option.subjectSlug === note.subjectSlug,
+      );
+      if (existingSubject) {
+        setSelectedSubjectKey(`${existingSubject.courseId}:${existingSubject.subjectSlug}`);
+      }
       setChapterTag(note.chapterTag ?? "");
       setAnnotation(note.annotation ?? "");
       setColorLabel(note.colorLabel);
@@ -2884,12 +2851,20 @@ function SaveNoteModal({
     return () => {
       ignore = true;
     };
-  }, [initialMessage.savedNoteId]);
+  }, [initialMessage.savedNoteId, subjectOptions]);
 
   async function handleSave() {
     if (hydratingExistingNote) return;
     setLoading(true);
     setError("");
+    const selectedSubject = subjectOptions.find(
+      (option) => `${option.courseId}:${option.subjectSlug}` === selectedSubjectKey,
+    );
+    if (!selectedSubject) {
+      setLoading(false);
+      setError("Choose a subject from one of your enrolled courses.");
+      return;
+    }
 
     const response = await fetch("/api/notes", {
       method: "POST",
@@ -2900,7 +2875,8 @@ function SaveNoteModal({
         sessionId: initialMessage.sessionId,
         messageId: initialMessage.id,
         title,
-        subjectTag,
+        courseId: selectedSubject.courseId,
+        subjectSlug: selectedSubject.subjectSlug,
         chapterTag,
         annotation,
         colorLabel,
@@ -2938,12 +2914,30 @@ function SaveNoteModal({
             <Input value={title} onChange={(event) => setTitle(event.target.value)} />
           </Field>
           <Field label="Subject">
-            <Input
+            <select
               data-testid="save-note-subject"
-              value={subjectTag}
-              onChange={(event) => setSubjectTag(event.target.value)}
-            />
+              value={selectedSubjectKey}
+              onChange={(event) => setSelectedSubjectKey(event.target.value)}
+              className="h-10 w-full rounded-md border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none focus:border-border-strong"
+            >
+              {subjectOptions.length === 0 ? (
+                <option value="">No enrolled course subjects</option>
+              ) : null}
+              {subjectOptions.map((option) => (
+                <option
+                  key={`${option.courseId}:${option.subjectSlug}`}
+                  value={`${option.courseId}:${option.subjectSlug}`}
+                >
+                  {option.subjectName} · {option.courseName}
+                </option>
+              ))}
+            </select>
           </Field>
+          {subjectOptions.length === 0 ? (
+            <p className="text-sm text-text-muted">
+              Enroll in a course with an indexed subject before saving notes.
+            </p>
+          ) : null}
           <Field label="Chapter / topic">
             <Input value={chapterTag} onChange={(event) => setChapterTag(event.target.value)} />
           </Field>
@@ -2979,7 +2973,10 @@ function SaveNoteModal({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={loading || hydratingExistingNote}>
+          <Button
+            onClick={handleSave}
+            disabled={loading || hydratingExistingNote || subjectOptions.length === 0}
+          >
             {loading ? "Saving..." : initialMessage.savedNoteId ? "Update note" : "Save note"}
           </Button>
         </div>

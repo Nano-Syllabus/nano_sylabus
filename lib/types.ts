@@ -160,6 +160,9 @@ export interface RevisionNoteSummary {
   messageId: string;
   title: string;
   subjectTag: string;
+  courseId: string | null;
+  subjectSlug: string | null;
+  subjectName: string | null;
   chapterTag: string | null;
   annotation: string | null;
   colorLabel: NoteColor;

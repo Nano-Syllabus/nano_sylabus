@@ -70,7 +70,29 @@ export async function findAssignedCourseSubjects(
   return (result.data || []) as { course_id: string; subject_slug: string }[];
 }
 
-export function courseStorageError(error: unknown) {
+export async function detachTeacherSubjectFromCourses(
+  admin: SupabaseClient,
+  teacherId: string,
+  subjectSlug: string,
+) {
+  const result = await admin
+    .from("teacher_course_subjects")
+    .delete()
+    .eq("teacher_id", teacherId)
+    .eq("subject_slug", subjectSlug)
+    .select("course_id");
+  if (result.error) throw result.error;
+
+  return Array.from(
+    new Set(
+      ((result.data || []) as Array<{ course_id?: unknown }>)
+        .map((row) => String(row.course_id || ""))
+        .filter(Boolean),
+    ),
+  );
+}
+
+export function courseStorageError(error: unknown, fallback = "Could not save the course.") {
   const message =
     error instanceof Error
       ? error.message
@@ -80,7 +102,7 @@ export function courseStorageError(error: unknown) {
   if (message.includes("teacher_courses") || message.includes("teacher_course_subjects")) {
     return "Course storage is not ready. Apply the latest Supabase migration, then try again.";
   }
-  return "Could not save the course.";
+  return fallback;
 }
 
 export function isCourseSubjectOwnershipConflict(error: unknown) {

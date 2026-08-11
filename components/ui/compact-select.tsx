@@ -41,8 +41,11 @@ export function CompactSelect({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex h-8 max-w-[46vw] items-center gap-1.5 rounded-full border border-transparent bg-bg-tertiary px-3 py-1 text-[12px] font-medium text-text-primary outline-none transition hover:bg-bg-tertiary/80 focus-visible:ring-2 focus-visible:ring-white/35 sm:h-7 sm:max-w-[220px] ${
-          pulseButton && !isOpen ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-bg-secondary shadow-[0_0_15px_rgba(59,130,246,0.5)] animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]" : ""
+        disabled={!options.length}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        className={`flex h-8 max-w-[46vw] items-center gap-1.5 rounded-full border border-transparent bg-bg-tertiary px-3 py-1 text-[12px] font-medium text-text-primary outline-none transition hover:bg-bg-tertiary/80 focus-visible:ring-2 focus-visible:ring-white/35 disabled:cursor-not-allowed disabled:opacity-60 sm:h-7 sm:max-w-[220px] ${
+          pulseButton && options.length > 0 && !isOpen ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-bg-secondary shadow-[0_0_15px_rgba(59,130,246,0.5)] animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]" : ""
         }`}
       >
         <span className="truncate">{selectedLabel}</span>
@@ -63,7 +66,8 @@ export function CompactSelect({
       
       {isOpen && (
         <div 
-          className={`absolute left-0 z-50 max-h-[45dvh] w-max min-w-full max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-black/10 bg-white dark:bg-[#1E1E1E] p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-100 dark:border-white/10 ${
+          role="listbox"
+          className={`absolute left-0 z-50 max-h-[45dvh] w-56 min-w-full max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-black/10 bg-white dark:bg-[#1E1E1E] p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-100 dark:border-white/10 ${
             direction === "up" 
               ? "bottom-full mb-1.5 origin-bottom-left" 
               : "top-full mt-1.5 origin-top-left"
@@ -73,12 +77,13 @@ export function CompactSelect({
             <button
               key={opt.value}
               type="button"
-              onPointerDown={(e) => { 
-                e.preventDefault();
+              role="option"
+              aria-selected={value === opt.value}
+              onClick={() => {
                 onChange(opt.value); 
                 setIsOpen(false); 
               }}
-              className={`w-full rounded-md px-3 py-2 text-left text-[13px] transition sm:py-1.5 ${
+              className={`w-full rounded-md px-3 py-2 text-left text-[13px] outline-none transition focus-visible:ring-2 focus-visible:ring-border-strong sm:py-1.5 ${
                 value === opt.value 
                   ? "bg-black/5 dark:bg-white/10 font-medium text-black dark:text-white" 
                   : "text-gray-700 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white"

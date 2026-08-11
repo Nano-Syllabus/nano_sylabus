@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { BookOpen, CalendarDays, Check, Globe2, Pencil, Plus, Users, X } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  Check,
+  Globe2,
+  Pencil,
+  Plus,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   teacherCourseCategories,
@@ -107,7 +117,15 @@ function CourseStatus({ course }: { course: TeacherCourse }) {
   );
 }
 
-function CourseCard({ course, onEdit }: { course: TeacherCourse; onEdit: () => void }) {
+function CourseCard({
+  course,
+  onEdit,
+  onDelete,
+}: {
+  course: TeacherCourse;
+  onEdit: () => void;
+  onDelete?: () => void;
+}) {
   return (
     <article className="flex min-h-64 flex-col rounded-lg border border-border bg-bg-primary p-5">
       <div className="flex items-start gap-3">
@@ -147,6 +165,18 @@ function CourseCard({ course, onEdit }: { course: TeacherCourse; onEdit: () => v
           <CalendarDays className="size-3.5" aria-hidden="true" /> {course.durationWeeks} weeks
         </span>
         <span className="flex-1" />
+        {onDelete ? (
+          <Button
+            type="button"
+            variant="danger"
+            onClick={onDelete}
+            className="size-10 shrink-0 px-0"
+            aria-label={`Delete ${course.name}`}
+            title="Delete course"
+          >
+            <Trash2 className="size-4" aria-hidden="true" />
+          </Button>
+        ) : null}
         <Button type="button" size="sm" variant="outline" onClick={onEdit}>
           <Pencil className="size-3.5" aria-hidden="true" /> Edit
         </Button>
@@ -166,6 +196,7 @@ export function TeacherCoursesClient({
   const [error, setError] = useState("");
   const [courses, setCourses] = useState<TeacherCourse[]>([]);
   const [editingCourse, setEditingCourse] = useState<TeacherCourse | "new" | null>(null);
+  const [deletingCourse, setDeletingCourse] = useState<TeacherCourse | null>(null);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -244,17 +275,17 @@ export function TeacherCoursesClient({
       ) : null}
       {state === "ready" && !subjects.length ? (
         <section className="mt-7 rounded-lg border border-dashed border-border p-10 text-center">
-          <h2 className="font-display text-xl font-semibold">Create an indexed subject first</h2>
+          <h2 className="font-display text-xl font-semibold">No indexed subjects available</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-text-secondary">
-            A course needs at least one subject backed by your collection material and question
-            bank.
+            Your existing courses are still saved. Create a subject before adding a new course or
+            updating its subject list.
           </p>
           <Button className="mt-5" type="button" variant="outline" onClick={onCreateSubject}>
             Create subject
           </Button>
         </section>
       ) : null}
-      {state === "ready" && subjects.length && !courses.length ? (
+      {state === "ready" && subjects.length > 0 && !courses.length ? (
         <section className="mt-7 rounded-lg border border-dashed border-border p-10 text-center">
           <h2 className="font-display text-xl font-semibold">No courses yet</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-text-secondary">
@@ -269,7 +300,12 @@ export function TeacherCoursesClient({
       {state === "ready" && courses.length ? (
         <div className="mt-7 grid gap-4 md:grid-cols-2">
           {courses.map((course) => (
-            <CourseCard key={course.id} course={course} onEdit={() => setEditingCourse(course)} />
+            <CourseCard
+              key={course.id}
+              course={course}
+              onEdit={() => setEditingCourse(course)}
+              onDelete={() => setDeletingCourse(course)}
+            />
           ))}
         </div>
       ) : null}
@@ -286,7 +322,120 @@ export function TeacherCoursesClient({
           }}
         />
       ) : null}
+
+      {deletingCourse ? (
+        <DeleteCourseDialog
+          course={deletingCourse}
+          onClose={() => setDeletingCourse(null)}
+          onDeleted={async () => {
+            setDeletingCourse(null);
+            await load();
+          }}
+        />
+      ) : null}
     </>
+  );
+}
+
+function DeleteCourseDialog({
+  course,
+  onClose,
+  onDeleted,
+}: {
+  course: TeacherCourse;
+  onClose: () => void;
+  onDeleted: () => Promise<void>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !deleting) onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deleting, onClose]);
+
+  async function deleteCourse() {
+    setDeleting(true);
+    setError("");
+    try {
+      await apiPayload(
+        await fetch(`/api/teacher/courses/${course.id}`, {
+          method: "DELETE",
+          headers: { Accept: "application/json" },
+        }),
+      );
+      await onDeleted();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not delete the course.");
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] grid place-items-center bg-black/55 p-3 sm:p-6"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !deleting) onClose();
+      }}
+    >
+      <section
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-course-title"
+        aria-describedby="delete-course-description"
+        className="w-full max-w-lg rounded-lg border border-border bg-bg-primary p-5 shadow-xl sm:p-6"
+      >
+        <div className="flex items-start gap-4">
+          <div className="grid size-10 shrink-0 place-items-center rounded-full border border-destructive/30 text-destructive">
+            <Trash2 className="size-4" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-text-muted">
+              {course.status === "published" ? "Published course" : "Draft course"}
+            </p>
+            <h2 id="delete-course-title" className="mt-1 font-display text-xl font-semibold">
+              Delete {course.name}?
+            </h2>
+          </div>
+        </div>
+
+        <p id="delete-course-description" className="mt-5 text-sm leading-6 text-text-secondary">
+          This permanently deletes the course, its subject links, and its student enrollments.
+          The original subjects and their files stay available in Subjects.
+        </p>
+        {course.enrollmentCount > 0 ? (
+          <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            {course.enrollmentCount} enrolled {course.enrollmentCount === 1 ? "student" : "students"}
+            {" "}will lose access to this course.
+          </p>
+        ) : null}
+        {error ? (
+          <p className="mt-4 text-sm text-destructive" role="alert">
+            {error} Try again.
+          </p>
+        ) : null}
+
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="outline" disabled={deleting} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            disabled={deleting}
+            aria-busy={deleting}
+            onClick={() => void deleteCourse()}
+          >
+            <Trash2 className="size-4" aria-hidden="true" />
+            {deleting ? "Deleting…" : "Delete course"}
+          </Button>
+        </div>
+      </section>
+    </div>
   );
 }
 

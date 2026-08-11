@@ -39,7 +39,7 @@ export function CourseEnrollmentCard({
   if (accessModel === "paid") {
     return (
       <div className="rounded-lg border border-border bg-bg-secondary p-4">
-        <p className="text-sm font-medium">Paid enrollment is not open yet</p>
+        <p className="text-sm font-medium">Payment is not open yet</p>
         <p className="mt-1 text-sm text-text-secondary">
           This course is published, but checkout has not been connected.
         </p>
@@ -58,4 +58,3 @@ export function CourseEnrollmentCard({
     </div>
   );
 }
-

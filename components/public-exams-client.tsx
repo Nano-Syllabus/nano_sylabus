@@ -58,7 +58,6 @@ function SiteHeader() {
           <Link href="/#why" className="transition-colors hover:text-foreground">Why nanosyllabus</Link>
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/login" className="inline-flex h-8 items-center px-3 text-xs font-medium text-foreground hover:text-white">Log in</Link>
           <Link href="/exams" className="glow-shadow inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:brightness-110">Start free</Link>
         </div>
       </div>

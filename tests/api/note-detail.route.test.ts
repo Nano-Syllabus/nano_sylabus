@@ -104,7 +104,6 @@ describe("note detail API", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: "Updated note",
-          subjectTag: "Biology",
           chapterTag: "Plants",
           annotation: "Updated annotation",
           colorLabel: "green",

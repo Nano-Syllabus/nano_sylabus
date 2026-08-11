@@ -11,11 +11,15 @@ const mocks = vi.hoisted(() => {
     getTeacherSubjects: vi.fn(),
     deleteTeacherSubject: vi.fn(),
     deleteTeacherPath: vi.fn(),
+    createSupabaseAdminClient: vi.fn(),
     MockTeacherApiError,
   };
 });
 
 vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: mocks.createSupabaseAdminClient,
+}));
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherSubjects: mocks.getTeacherSubjects,
   deleteTeacherSubject: mocks.deleteTeacherSubject,
@@ -42,6 +46,16 @@ describe("DELETE /api/teacher/subjects/[slug]", () => {
     });
     mocks.deleteTeacherSubject.mockResolvedValue({ deleted: true });
     mocks.deleteTeacherPath.mockResolvedValue({ deleted: true });
+    const courseLinkQuery = {
+      delete: vi.fn(),
+      eq: vi.fn(),
+      select: vi.fn(async () => ({ data: [{ course_id: "course-1" }], error: null })),
+    };
+    courseLinkQuery.delete.mockReturnValue(courseLinkQuery);
+    courseLinkQuery.eq.mockReturnValue(courseLinkQuery);
+    mocks.createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn(() => courseLinkQuery),
+    });
   });
 
   it("can unpin a subject while keeping its files", async () => {
@@ -53,12 +67,41 @@ describe("DELETE /api/teacher/subjects/[slug]", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ deleted: true, filesDeleted: false });
+    await expect(response.json()).resolves.toEqual({
+      deleted: true,
+      filesDeleted: false,
+      coursesUpdated: 1,
+    });
     expect(mocks.deleteTeacherPath).not.toHaveBeenCalled();
     expect(mocks.deleteTeacherSubject).toHaveBeenCalledWith(
       "collection-secret",
       "ramesh-teacher-physics",
     );
+  });
+
+  it("detaches only the deleted subject while keeping its multi-subject course", async () => {
+    mocks.getTeacherSubjects.mockResolvedValue({
+      subjects: [
+        { name: "Physics", slug: "ramesh-teacher-physics", folder_path: "Physics" },
+        { name: "Chemistry", slug: "ramesh-teacher-chemistry", folder_path: "Chemistry" },
+      ],
+    });
+
+    const response = await DELETE(
+      new Request("http://localhost/api/teacher/subjects/ramesh-teacher-physics", {
+        method: "DELETE",
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(200);
+    const admin = mocks.createSupabaseAdminClient.mock.results[0].value;
+    expect(admin.from).toHaveBeenCalledTimes(1);
+    expect(admin.from).toHaveBeenCalledWith("teacher_course_subjects");
+    const query = admin.from.mock.results[0].value;
+    expect(query.eq).toHaveBeenCalledWith("teacher_id", "teacher-1");
+    expect(query.eq).toHaveBeenCalledWith("subject_slug", "ramesh-teacher-physics");
+    expect(admin.from).not.toHaveBeenCalledWith("teacher_courses");
   });
 
   it("deletes the verified source folder before unpinning when explicitly requested", async () => {
@@ -86,6 +129,7 @@ describe("DELETE /api/teacher/subjects/[slug]", () => {
     expect(response.status).toBe(404);
     expect(mocks.deleteTeacherSubject).not.toHaveBeenCalled();
     expect(mocks.deleteTeacherPath).not.toHaveBeenCalled();
+    expect(mocks.createSupabaseAdminClient).not.toHaveBeenCalled();
   });
 
   it("refuses to delete an unsafe folder path returned by the backend", async () => {
@@ -106,5 +150,6 @@ describe("DELETE /api/teacher/subjects/[slug]", () => {
     expect(response.status).toBe(400);
     expect(mocks.deleteTeacherPath).not.toHaveBeenCalled();
     expect(mocks.deleteTeacherSubject).not.toHaveBeenCalled();
+    expect(mocks.createSupabaseAdminClient).not.toHaveBeenCalled();
   });
 });

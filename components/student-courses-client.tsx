@@ -42,7 +42,7 @@ function CourseCard({ course }: { course: StudentCourse }) {
           href={`/app/courses/${course.slug}`}
           className="inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2"
         >
-          Open study space <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          Details
         </Link>
         <CourseLeaveButton slug={course.slug} courseName={course.name} />
       </div>

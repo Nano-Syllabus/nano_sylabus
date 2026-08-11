@@ -193,14 +193,14 @@ body:has(.exam-prep-theme) {
   --text-muted: oklch(0.7 0.018 264);
   --text-inverse: oklch(0.2 0.03 60);
   --border: oklch(1 0 0 / 10%);
-  --border-strong: oklch(0.6 0.207 20);
+  --border-strong: oklch(0.707 0.165 254.624);
   --surface: oklch(0.2 0.02 264);
   --surface-2: oklch(0.245 0.022 264);
   --card: oklch(0.205 0.02 264);
   --card-foreground: oklch(0.97 0.008 90);
   --popover: oklch(0.205 0.02 264);
   --popover-foreground: oklch(0.97 0.008 90);
-  --primary: oklch(0.6 0.207 20);
+  --primary: oklch(0.546 0.245 262.881);
   --primary-foreground: oklch(0.99 0.005 90);
   --secondary: oklch(0.26 0.022 264);
   --secondary-foreground: oklch(0.95 0.008 90);
@@ -208,12 +208,12 @@ body:has(.exam-prep-theme) {
   --muted-foreground: oklch(0.7 0.018 264);
   --accent: oklch(0.3 0.03 264);
   --accent-foreground: oklch(0.97 0.008 90);
-  --highlight: oklch(0.83 0.16 82);
-  --highlight-foreground: oklch(0.2 0.03 60);
+  --highlight: oklch(0.707 0.165 254.624);
+  --highlight-foreground: oklch(0.2 0.04 264);
   --destructive: oklch(0.6 0.22 25);
   --destructive-foreground: oklch(0.99 0.005 90);
   --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.6 0.207 20);
+  --ring: oklch(0.707 0.165 254.624);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -239,10 +239,10 @@ body:has(.exam-prep-theme) {
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --gradient-hero:
-    radial-gradient(120% 80% at 50% -10%, oklch(0.6 0.207 20 / 0.28) 0%, transparent 60%),
-    radial-gradient(80% 60% at 85% 10%, oklch(0.83 0.16 82 / 0.16) 0%, transparent 70%);
+    radial-gradient(120% 80% at 50% -10%, oklch(0.546 0.245 262.881 / 0.32) 0%, transparent 60%),
+    radial-gradient(80% 60% at 85% 10%, oklch(0.707 0.165 254.624 / 0.18) 0%, transparent 70%);
   --gradient-card: linear-gradient(160deg, oklch(1 0 0 / 0.07) 0%, oklch(1 0 0 / 0.015) 100%);
-  --shadow-glow: 0 20px 60px -20px oklch(0.6 0.207 20 / 0.55);
+  --shadow-glow: 0 20px 60px -20px oklch(0.546 0.245 262.881 / 0.58);
   --shadow-card: 0 1px 0 0 oklch(1 0 0 / 0.06) inset, 0 24px 50px -30px oklch(0 0 0 / 0.8);
   font-family: var(--font-exam-sans), ui-sans-serif, system-ui, sans-serif;
 }
@@ -394,7 +394,23 @@ body:has(.exam-prep-theme) {
 
 /* The React teacher workspace intentionally mirrors the approved HTML prototype. */
 .teacher-html-parity {
-  color-scheme: light;
+  color-scheme: inherit;
+  --font-display: var(--font-teacher-display), "Trebuchet MS", sans-serif;
+  --font-sans: var(--font-teacher-body), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-teacher-mono), ui-monospace, Menlo, monospace;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+  min-height: 100vh;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+[data-theme="light"] .teacher-html-parity {
   --bg-primary: #ffffff;
   --bg-secondary: #f7f7f6;
   --bg-tertiary: #efefec;
@@ -410,19 +426,6 @@ body:has(.exam-prep-theme) {
   --note-red: rgb(196 61 46 / 12%);
   --note-yellow: rgb(224 168 0 / 12%);
   --note-green: rgb(46 125 79 / 12%);
-  --font-display: var(--font-teacher-display), "Trebuchet MS", sans-serif;
-  --font-sans: var(--font-teacher-body), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-teacher-mono), ui-monospace, Menlo, monospace;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 16px;
-  min-height: 100vh;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.55;
 }
 
 .teacher-html-parity .font-display {
@@ -460,7 +463,7 @@ body:has(.exam-prep-theme) {
 }
 
 .teacher-html-parity .admin-btn[data-variant="filled"]:hover {
-  background: #282826;
+  opacity: 0.84;
 }
 
 .teacher-html-parity .admin-btn[data-variant="outline"] {
@@ -470,7 +473,7 @@ body:has(.exam-prep-theme) {
 }
 
 .teacher-html-parity .admin-btn[data-variant="outline"]:hover {
-  border-color: #8c8c89;
+  border-color: var(--border-strong);
   background: var(--bg-secondary);
 }
 
@@ -481,7 +484,7 @@ body:has(.exam-prep-theme) {
 }
 
 .teacher-html-parity .admin-btn[data-variant="inverse"]:hover {
-  background: #ededea;
+  background: var(--bg-tertiary);
 }
 
 .teacher-html-parity :focus-visible {

@@ -1,11 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   mapTeacherCourse,
   teacherCourseInputSchema,
   teacherCourseRow,
   teacherCourseSlug,
 } from "@/lib/teacher-courses";
-import { isCourseSubjectOwnershipConflict } from "@/lib/teacher-course-store";
+import {
+  detachTeacherSubjectFromCourses,
+  isCourseSubjectOwnershipConflict,
+} from "@/lib/teacher-course-store";
 
 const validCourse = {
   name: "IOE Engineering Entrance",
@@ -106,5 +109,32 @@ describe("teacher courses", () => {
     expect(isCourseSubjectOwnershipConflict({ code: "23505", message: "another constraint" })).toBe(
       false,
     );
+  });
+
+  it("detaches a subject relation without deleting or archiving its course", async () => {
+    const query = {
+      delete: vi.fn(),
+      eq: vi.fn(),
+      select: vi.fn(async () => ({
+        data: [{ course_id: "course-1" }, { course_id: "course-1" }],
+        error: null,
+      })),
+    };
+    query.delete.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const admin = { from: vi.fn(() => query) };
+
+    const courseIds = await detachTeacherSubjectFromCourses(
+      admin as never,
+      "teacher-1",
+      "physics",
+    );
+
+    expect(courseIds).toEqual(["course-1"]);
+    expect(admin.from).toHaveBeenCalledTimes(1);
+    expect(admin.from).toHaveBeenCalledWith("teacher_course_subjects");
+    expect(query.delete).toHaveBeenCalledTimes(1);
+    expect(query.eq).toHaveBeenNthCalledWith(1, "teacher_id", "teacher-1");
+    expect(query.eq).toHaveBeenNthCalledWith(2, "subject_slug", "physics");
   });
 });

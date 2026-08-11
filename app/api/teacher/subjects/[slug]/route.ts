@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   deleteTeacherPath,
   deleteTeacherSubject,
@@ -7,6 +8,7 @@ import {
   TeacherApiError,
   type ApiRecord,
 } from "@/lib/teacher-app/client";
+import { detachTeacherSubjectFromCourses } from "@/lib/teacher-course-store";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
@@ -55,7 +57,16 @@ export async function DELETE(request: Request, { params }: RouteContext) {
       await deleteTeacherPath(teacher.collection_sk, folderPath);
     }
     await deleteTeacherSubject(teacher.collection_sk, resolvedSlug);
-    return NextResponse.json({ deleted: true, filesDeleted: deleteFiles });
+    const detachedCourseIds = await detachTeacherSubjectFromCourses(
+      createSupabaseAdminClient(),
+      teacher.id,
+      resolvedSlug,
+    );
+    return NextResponse.json({
+      deleted: true,
+      filesDeleted: deleteFiles,
+      coursesUpdated: detachedCourseIds.length,
+    });
   } catch (error) {
     const apiError = error instanceof TeacherApiError ? error : null;
     const status = apiError?.status === 401 ? 409 : apiError?.status === 404 ? 404 : 502;

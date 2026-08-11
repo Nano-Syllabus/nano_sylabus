@@ -201,9 +201,6 @@ function SiteHeader() {
           </a>
         </nav>
         <div className="flex items-center gap-2">
-          <ButtonLink href={APP_URL} variant="ghost" size="sm">
-            Log in
-          </ButtonLink>
           <ButtonLink href="/exams" variant="hero" size="sm">
             Start free
           </ButtonLink>

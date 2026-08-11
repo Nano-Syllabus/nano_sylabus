@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { applyTheme, getInitialTheme, setTheme, type Theme } from "@/lib/theme";
+import {
+  applyTheme,
+  getInitialTheme,
+  setTheme,
+  subscribeToTheme,
+  type Theme,
+} from "@/lib/theme";
 
 export function ThemeToggle({ className = "" }: { className?: string }) {
   const [theme, setLocalTheme] = useState<Theme>("light");
@@ -10,6 +16,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
     const initial = getInitialTheme();
     setLocalTheme(initial);
     applyTheme(initial);
+    return subscribeToTheme(setLocalTheme);
   }, []);
 
   const toggle = () => {
@@ -21,7 +28,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
   return (
     <button
       type="button"
-      aria-label="Toggle theme"
+      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       onClick={toggle}
       className={
         "inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-secondary transition hover:border-border-strong hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 " +
