@@ -3,7 +3,7 @@
 import { FileText, Image as ImageIcon, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   clearSavedSitting,
   readSavedSitting,
@@ -36,6 +36,8 @@ type Result = {
   spread?: ClassSpread | null;
   handedInAt?: string;
   studentName?: string;
+  detailsAvailable?: boolean;
+  answerSheet?: { name: string; mimeType: string; sizeBytes: number; url: string } | null;
 };
 type PracticeLength = 5 | 10;
 type PracticeMode = "quick" | "paper" | "checker";
@@ -107,6 +109,16 @@ const DEFAULT_PAPER_INSTRUCTION =
   "Mark strictly. Award credit for correct working, but penalize missing derivations, units, and diagrams.";
 const MAX_ANSWER_SHEET_BYTES = 15 * 1024 * 1024;
 const ANSWER_SHEET_TYPES = new Set(["application/pdf", "image/png", "image/jpeg"]);
+
+function submittedAnswer(question: StudentExamQuestion, answer?: Answer) {
+  const selectedChoice = answer?.choice;
+  return {
+    answerText:
+      answer?.text?.trim() ||
+      (selectedChoice === undefined ? "" : question.options?.[selectedChoice] ?? String(selectedChoice)),
+    ...(selectedChoice === undefined ? {} : { selectedChoice }),
+  };
+}
 
 function Chip({ children, strong = false }: { children: React.ReactNode; strong?: boolean }) {
   return (
@@ -203,6 +215,7 @@ type PracticeAttempt = {
   totalScore: number;
   totalMarks: number;
   evaluation: PracticeEvaluation | null;
+  hasDetails: boolean;
   createdAt: string;
 };
 
@@ -940,6 +953,7 @@ export function StudentExamsClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const examId = searchParams.get("exam");
+  const attemptId = searchParams.get("attempt");
   const mode = searchParams.get("mode");
   const inviteCode = searchParams.get("join");
   const requestedPracticeSubject = searchParams.get("subject");
@@ -947,6 +961,8 @@ export function StudentExamsClient({
   const [practiceAttempts, setPracticeAttempts] = useState<PracticeAttempt[]>([]);
   const [attemptsState, setAttemptsState] = useState<"loading" | "ready" | "error">("loading");
   const [attemptsError, setAttemptsError] = useState("");
+  const [openingAttemptId, setOpeningAttemptId] = useState("");
+  const [historyOpenError, setHistoryOpenError] = useState("");
   /** True when an unfinished sitting was found on this device. */
   const [resumable, setResumable] = useState(false);
   const [dialog, setDialog] = useState<"join" | "practice" | "writing" | "submit" | "sheet" | null>(
@@ -1046,9 +1062,53 @@ export function StudentExamsClient({
     }
   }
 
+  const loadPracticeAttemptResult = useCallback(
+    async (id: string, navigate: boolean) => {
+      if (!id) return;
+      setOpeningAttemptId(id);
+      setHistoryOpenError("");
+      try {
+        const response = await fetch(`/api/student/practice/attempts/${encodeURIComponent(id)}`, {
+          headers: { Accept: "application/json" },
+        });
+        const payload = (await response.json()) as {
+          result?: Result;
+          detailsAvailable?: boolean;
+          error?: string;
+        };
+        if (!response.ok || !payload.result) {
+          throw new Error(payload.error || "Could not open this practice result.");
+        }
+        const nextResult = {
+          ...payload.result,
+          detailsAvailable: payload.detailsAvailable ?? payload.result.lines.length > 0,
+        };
+        setResult(nextResult);
+        setResultTab(nextResult.lines.length ? "answers" : "summary");
+        if (navigate) {
+          router.push(`/app/exams?attempt=${encodeURIComponent(id)}&mode=result`, {
+            scroll: false,
+          });
+        }
+      } catch (error) {
+        setHistoryOpenError(
+          error instanceof Error ? error.message : "Could not open this practice result.",
+        );
+      } finally {
+        setOpeningAttemptId("");
+      }
+    },
+    [router],
+  );
+
   useEffect(() => {
     void loadPracticeAttempts();
   }, []);
+
+  useEffect(() => {
+    if (mode !== "result" || !attemptId || result || openingAttemptId) return;
+    void loadPracticeAttemptResult(attemptId, false);
+  }, [attemptId, loadPracticeAttemptResult, mode, openingAttemptId, result]);
 
   // Chapter mastery for whichever exam is open, so "What it covers" shows how
   // this student actually stands on each chapter.
@@ -1356,6 +1416,7 @@ export function StudentExamsClient({
         body.append("subject", practiceSession.subject);
         body.append("student_name", fullName);
         body.append("instruction", practiceSession.gradingInstruction || "");
+        body.append("exam", JSON.stringify(attemptExam));
       }
 
       const response = await fetch(
@@ -1438,7 +1499,7 @@ export function StudentExamsClient({
             body: JSON.stringify({
               answers: attemptExam.questions.map((question) => ({
                 questionId: question.id,
-                answerText: answers[question.id]?.text || "",
+                ...submittedAnswer(question, answers[question.id]),
               })),
             }),
           },
@@ -1481,17 +1542,23 @@ export function StudentExamsClient({
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({
             subject: practiceSession.subject,
+            exam: attemptExam,
             ...(isPersonalPaper
               ? {
                   student_name: fullName,
                   instruction: practiceSession.gradingInstruction || undefined,
                 }
               : {}),
-            answers: attemptExam.questions.map((question) => ({
-              ...(isPersonalPaper
-                ? { question_id: question.id, answer_text: answers[question.id]?.text || "" }
-                : { questionId: question.id, answerText: answers[question.id]?.text || "" }),
-            })),
+            answers: attemptExam.questions.map((question) => {
+              const submitted = submittedAnswer(question, answers[question.id]);
+              return isPersonalPaper
+                ? {
+                    question_id: question.id,
+                    answer_text: submitted.answerText,
+                    selected_choice: submitted.selectedChoice,
+                  }
+                : { questionId: question.id, ...submitted };
+            }),
           }),
         },
       );
@@ -1831,6 +1898,36 @@ export function StudentExamsClient({
   if (mode === "marking" && attemptExam) return <MarkingView exam={attemptExam} />;
   if (mode === "result" && result)
     return <ResultView result={result} tab={resultTab} onTab={setResultTab} />;
+  if (mode === "result" && attemptId) {
+    return (
+      <div className="w-full max-w-[760px] px-4 pb-10 pt-10 sm:px-6">
+        <Link href="/app/exams" className="text-sm text-text-muted hover:text-text-primary">
+          Back to practice
+        </Link>
+        <div className="mt-5 rounded-lg border border-border p-6">
+          <h1 className="font-display text-xl font-semibold">
+            {historyOpenError ? "Could not open this result" : "Opening your result"}
+          </h1>
+          <p className="mt-2 text-sm text-text-secondary">
+            {historyOpenError || "Loading the paper, your answers, and marker feedback…"}
+          </p>
+          {historyOpenError ? (
+            <button
+              type="button"
+              className={`${secondaryButton} mt-5`}
+              onClick={() => void loadPracticeAttemptResult(attemptId, false)}
+            >
+              Try again
+            </button>
+          ) : (
+            <div className="mt-5 h-2 overflow-hidden rounded-full bg-bg-secondary">
+              <div className="h-full w-2/3 animate-pulse rounded-full bg-text-primary motion-reduce:animate-none" />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
   if (mode === "sit" && attemptExam) {
     const question = attemptExam.questions[questionIndex];
     const timeExpired = secondsLeft === 0;
@@ -2146,11 +2243,14 @@ export function StudentExamsClient({
         </div>
 
         {attemptsState === "loading" ? (
-          <div className="mt-4 flex flex-wrap gap-3" aria-label="Loading practice history">
+          <div
+            className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+            aria-label="Loading practice history"
+          >
             {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="h-64 w-full animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none sm:max-w-[395px]"
+                className="h-52 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none"
               />
             ))}
           </div>
@@ -2177,61 +2277,63 @@ export function StudentExamsClient({
               onQuick={() => openRecommendedPractice("quick")}
               onPaper={() => openRecommendedPractice("paper")}
             />
-            <div className="mt-4 flex flex-wrap gap-3">
-              {practiceAttempts.map((attempt) => (
-                <article
-                  key={attempt.id}
-                  className="w-full rounded-lg border border-border p-5 sm:max-w-[395px]"
-                >
-                  <div className="flex items-center gap-2">
-                    <Chip>{attempt.subjectName}</Chip>
-                    <span className="flex-1" />
-                    <Chip>practice</Chip>
-                  </div>
-                  <h2 className="mt-3 font-display text-lg font-semibold">
-                    {attempt.evaluation?.chapters.length === 1
-                      ? `${attempt.evaluation.chapters[0].chapter} practice`
-                      : `${attempt.subjectName} practice`}
-                  </h2>
-                  <p className="mt-2 text-sm text-text-secondary">
-                    {new Date(attempt.createdAt).toLocaleString("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                  <p className="mt-5 font-display text-3xl font-semibold">
-                    {attempt.totalScore}
-                    <small className="ml-1 text-sm text-text-muted">of {attempt.totalMarks}</small>
-                  </p>
-                  {attempt.evaluation?.summary ? (
-                    <p className="mt-3 text-[13px] text-text-muted">{attempt.evaluation.summary}</p>
-                  ) : null}
-                  {attempt.evaluation?.chapters.length ? (
-                    <ul className="mt-4 space-y-1.5">
-                      {attempt.evaluation.chapters.map((chapter, index) => (
-                        <li
-                          key={`${chapter.topic_key || chapter.chapter || "chapter"}-${index}`}
-                          className="flex items-center gap-2 text-[13px]"
-                        >
-                          <span
-                            className={cn(
-                              "h-2 w-2 shrink-0 rounded-full",
-                              CHAPTER_STATUS_DOT[chapter.status],
-                            )}
-                            aria-hidden="true"
-                          />
-                          <span className="min-w-0 flex-1 truncate">{chapter.chapter}</span>
-                          <span className="text-text-muted">
-                            {chapter.score}/{chapter.marks}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </article>
-              ))}
+            {historyOpenError ? (
+              <p className="mt-4 rounded-lg border border-destructive/40 px-4 py-3 text-sm text-destructive">
+                {historyOpenError}
+              </p>
+            ) : null}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {practiceAttempts.map((attempt) => {
+                const percentage = Math.round(
+                  (attempt.totalScore / Math.max(1, attempt.totalMarks)) * 100,
+                );
+                const opening = openingAttemptId === attempt.id;
+                return (
+                  <button
+                    key={attempt.id}
+                    type="button"
+                    className="flex min-h-[210px] w-full flex-col rounded-lg border border-border p-5 text-left transition-colors hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+                    aria-label={`Open ${attempt.subjectName} practice result`}
+                    disabled={Boolean(openingAttemptId)}
+                    onClick={() => void loadPracticeAttemptResult(attempt.id, true)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Chip>{attempt.subjectName}</Chip>
+                      <span className="flex-1" />
+                      <span className="text-xs text-text-muted">
+                        {new Date(attempt.createdAt).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </span>
+                    </div>
+                    <h2 className="mt-3 font-display text-lg font-semibold">
+                      {attempt.evaluation?.chapters.length === 1
+                        ? `${attempt.evaluation.chapters[0].chapter} practice`
+                        : `${attempt.subjectName} practice`}
+                    </h2>
+                    <p className="mt-4 font-display text-3xl font-semibold">
+                      {attempt.totalScore}
+                      <small className="ml-1 text-sm text-text-muted">
+                        of {attempt.totalMarks}
+                      </small>
+                    </p>
+                    <p className="mt-1 text-sm text-text-muted">{percentage}% scored</p>
+                    {attempt.evaluation?.summary ? (
+                      <p className="mt-3 line-clamp-2 text-[13px] leading-5 text-text-muted">
+                        {attempt.evaluation.summary}
+                      </p>
+                    ) : null}
+                    <span className="mt-auto pt-4 text-sm font-medium">
+                      {opening
+                        ? "Opening…"
+                        : attempt.hasDetails
+                          ? "View full result →"
+                          : "View summary →"}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </>
         ) : null}
@@ -3055,18 +3157,20 @@ function ResultView({
         </div>
       </div>
       <div role="tablist" className="mt-7 flex border-b border-border">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "answers"}
-          className={cn(
-            "min-h-11 border-b-2 px-4 text-sm font-medium",
-            tab === "answers" ? "border-text-primary" : "border-transparent text-text-muted",
-          )}
-          onClick={() => onTab("answers")}
-        >
-          Answers &amp; Feedback
-        </button>
+        {result.lines.length ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "answers"}
+            className={cn(
+              "min-h-11 border-b-2 px-4 text-sm font-medium",
+              tab === "answers" ? "border-text-primary" : "border-transparent text-text-muted",
+            )}
+            onClick={() => onTab("answers")}
+          >
+            Answers &amp; Feedback
+          </button>
+        ) : null}
         <button
           type="button"
           role="tab"
@@ -3080,7 +3184,29 @@ function ResultView({
           Summary
         </button>
       </div>
-      {tab === "answers" ? (
+      {result.detailsAvailable === false ? (
+        <p className="mt-4 rounded-lg border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+          This older attempt was saved before detailed answer history was available, so only its
+          score and chapter summary can be shown.
+        </p>
+      ) : null}
+      {result.answerSheet ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-bg-secondary px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Submitted answer sheet</p>
+            <p className="truncate text-xs text-text-muted">{result.answerSheet.name}</p>
+          </div>
+          <a
+            className={secondaryButton}
+            href={result.answerSheet.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open answer sheet
+          </a>
+        </div>
+      ) : null}
+      {tab === "answers" && result.lines.length ? (
         <div className="mt-4 space-y-3">
           {result.lines.map((line, index) => {
             const scorePercent = Math.round((line.got / Math.max(1, line.question.marks)) * 100);

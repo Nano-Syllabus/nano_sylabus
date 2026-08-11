@@ -30,7 +30,7 @@ export default function TeachersV2Loading() {
     <div
       className="grid min-h-screen lg:grid-cols-[280px_1fr]"
       role="status"
-      aria-label="Loading teacher workspace"
+      aria-label="Loading creator workspace"
     >
       <aside className="hidden border-r border-border p-6 lg:block">
         <div className="flex items-center gap-3">
@@ -49,7 +49,7 @@ export default function TeachersV2Loading() {
       <main className="p-5 md:p-8">
         <div className="mb-8 rounded-xl border border-border bg-bg-primary p-5">
           <p className="font-mono-ui text-xs uppercase tracking-[0.28em] text-text-muted">
-            Teacher workspace
+            Creator workspace
           </p>
           <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight">
             Loading your workspace…

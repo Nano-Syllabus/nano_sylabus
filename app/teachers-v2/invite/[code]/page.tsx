@@ -18,7 +18,7 @@ export default async function ClassroomInvitePage({
   return (
     <main className="min-h-screen bg-white px-6 py-10 text-black print:p-0">
       <div className="mx-auto max-w-2xl rounded-2xl border border-black/15 p-8 text-center shadow-sm print:border-0 print:shadow-none sm:p-12">
-        <p className="font-mono text-xs uppercase tracking-[0.24em] text-black/50">NanoSyllabus · Teacher portal</p>
+        <p className="font-mono text-xs uppercase tracking-[0.24em] text-black/50">NanoSyllabus · Creator portal</p>
         <h1 className="mt-5 font-display text-4xl font-semibold">Join our classroom</h1>
         <p className="mt-4 text-lg text-black/60">{query.subject || "Classroom"}</p>
         <h2 className="mt-1 font-display text-2xl font-semibold">{query.classroom || "Teacher classroom"}</h2>

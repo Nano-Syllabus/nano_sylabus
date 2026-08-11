@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordPracticeEvaluation } from "@/lib/data/student-mastery";
+import { createPracticeAttemptHistory, studentExamHistorySchema } from "@/lib/practice-history";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findTenantSubject, gradePracticeSession, listTenantSubjects } from "@/lib/tenant/client";
 import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
@@ -10,11 +11,13 @@ export const maxDuration = 300;
 
 const requestSchema = z.object({
   subject: z.string().trim().min(1),
+  exam: studentExamHistorySchema.optional(),
   answers: z
     .array(
       z.object({
         questionId: z.string().trim().min(1),
         answerText: z.string().default(""),
+        selectedChoice: z.number().int().nonnegative().optional(),
       }),
     )
     .min(1),
@@ -68,6 +71,17 @@ export async function POST(
           totalScore: graded.total_score,
           totalMarks: graded.total_marks,
           evaluation: graded.evaluation,
+          history: parsed.exam
+            ? createPracticeAttemptHistory({
+                exam: parsed.exam,
+                results: graded.results,
+                answers: parsed.answers.map((answer) => ({
+                  questionId: answer.questionId,
+                  answerText: answer.answerText,
+                  selectedChoice: answer.selectedChoice,
+                })),
+              })
+            : undefined,
         });
       } catch {
         saved = false;

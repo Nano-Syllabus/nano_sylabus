@@ -1,5 +1,19 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import type { StudentExam } from "@/lib/practice-sitting";
 import type { PracticeEvaluation, PracticeTopicStatus } from "@/lib/tenant/client";
+
+export type PracticeAttemptHistory = {
+  exam: StudentExam;
+  results: Array<{
+    question_id: string;
+    score: number;
+    feedback: string;
+    student_answer: string;
+    selected_choice?: number;
+  }>;
+  studentName?: string;
+  handedInAt: string;
+};
 
 export type TopicMastery = {
   subjectSlug: string;
@@ -35,6 +49,77 @@ const UNDEFINED_TABLE = "42P01";
 
 function isMissingTable(error: { code?: string } | null) {
   return error?.code === UNDEFINED_TABLE;
+}
+
+async function storePracticeAttemptDetails(input: {
+  admin: ReturnType<typeof createSupabaseAdminClient>;
+  attemptId: string;
+  userId: string;
+  history: PracticeAttemptHistory;
+}) {
+  const { admin, attemptId, userId, history } = input;
+  const resultByQuestion = new Map(
+    history.results.map((result) => [result.question_id, result]),
+  );
+
+  const { error: paperError } = await admin.from("student_practice_attempt_papers").insert({
+    attempt_id: attemptId,
+    user_id: userId,
+    external_exam_id: history.exam.id,
+    title: history.exam.title,
+    exam_kind: history.exam.kind,
+    duration_minutes: history.exam.minutes,
+    pass_marks: history.exam.passMarks ?? null,
+    student_name: history.studentName ?? "",
+    handed_in_at: history.handedInAt,
+  });
+  // Deploying application code before its migration must not break grading.
+  // The complete JSON snapshot on the parent attempt remains the fallback.
+  if (isMissingTable(paperError)) return;
+  if (paperError) throw paperError;
+
+  const questionRows = history.exam.questions.map((question, position) => ({
+    attempt_id: attemptId,
+    user_id: userId,
+    external_question_id: question.id,
+    position,
+    response_type: question.type,
+    question_type: question.questionType ?? "",
+    topic: question.topic,
+    prompt: question.prompt,
+    marks: question.marks,
+    options: question.options ?? null,
+    expected_choice: question.answer ?? null,
+    marking_scheme: question.marking ?? null,
+  }));
+
+  const { data: storedQuestions, error: questionError } = await admin
+    .from("student_practice_attempt_questions")
+    .insert(questionRows)
+    .select("id, external_question_id");
+  if (questionError) throw questionError;
+
+  const answerRows = (storedQuestions ?? []).map((question) => {
+    const result = resultByQuestion.get(String(question.external_question_id));
+    return {
+      attempt_id: attemptId,
+      question_id: question.id,
+      user_id: userId,
+      answer_text: result?.student_answer ?? "",
+      selected_choice: result?.selected_choice ?? null,
+      score: Number(result?.score ?? 0),
+      feedback: result?.feedback ?? "No feedback returned.",
+      grading_metadata: {},
+      graded_at: history.handedInAt,
+    };
+  });
+
+  if (answerRows.length) {
+    const { error: answerError } = await admin
+      .from("student_practice_attempt_answers")
+      .insert(answerRows);
+    if (answerError) throw answerError;
+  }
 }
 
 function toMastery(row: Record<string, unknown>): TopicMastery {
@@ -107,26 +192,42 @@ export async function recordPracticeEvaluation(input: {
   totalScore: number;
   totalMarks: number;
   evaluation: PracticeEvaluation;
+  history?: PracticeAttemptHistory;
 }) {
   const admin = createSupabaseAdminClient();
   const now = new Date().toISOString();
 
-  const { error: attemptError } = await admin.from("student_practice_attempts").insert({
-    user_id: input.userId,
-    subject_slug: input.subjectSlug,
-    subject_name: input.subjectName,
-    source: input.source,
-    session_id: input.sessionId ?? "",
-    total_score: input.totalScore,
-    total_marks: input.totalMarks,
-    evaluation: input.evaluation,
-  });
+  const { data: attempt, error: attemptError } = await admin
+    .from("student_practice_attempts")
+    .insert({
+      user_id: input.userId,
+      subject_slug: input.subjectSlug,
+      subject_name: input.subjectName,
+      source: input.source,
+      session_id: input.sessionId ?? "",
+      total_score: input.totalScore,
+      total_marks: input.totalMarks,
+      evaluation: input.history
+        ? { ...input.evaluation, attempt_history: input.history }
+        : input.evaluation,
+    })
+    .select("id")
+    .single();
   if (attemptError) throw attemptError;
+
+  if (input.history) {
+    await storePracticeAttemptDetails({
+      admin,
+      attemptId: String(attempt.id),
+      userId: input.userId,
+      history: input.history,
+    });
+  }
 
   const attempted = (input.evaluation.chapters ?? []).filter(
     (chapter) => chapter.status !== "not_attempted" && chapter.topic_key,
   );
-  if (!attempted.length) return;
+  if (!attempted.length) return String(attempt.id);
 
   const { data: existingRows, error: existingError } = await admin
     .from("student_topic_mastery")
@@ -172,4 +273,37 @@ export async function recordPracticeEvaluation(input: {
     .from("student_topic_mastery")
     .upsert(rows, { onConflict: "user_id,subject_slug,topic_key" });
   if (upsertError) throw upsertError;
+
+  return String(attempt.id);
+}
+
+export async function savePracticeAnswerSheet(input: {
+  attemptId: string;
+  userId: string;
+  fileName: string;
+  mimeType: string;
+  buffer: Buffer;
+}) {
+  const admin = createSupabaseAdminClient();
+  const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, "_") || "answer-sheet";
+  const storagePath = `${input.userId}/${input.attemptId}/${crypto.randomUUID()}-${safeName}`;
+  const bucket = admin.storage.from("student-practice-answer-sheets");
+  const { error: uploadError } = await bucket.upload(storagePath, input.buffer, {
+    contentType: input.mimeType,
+    upsert: false,
+  });
+  if (uploadError) throw uploadError;
+
+  const { error: saveError } = await admin.from("student_practice_answer_sheets").insert({
+    attempt_id: input.attemptId,
+    user_id: input.userId,
+    storage_path: storagePath,
+    original_name: input.fileName || "answer-sheet",
+    mime_type: input.mimeType,
+    size_bytes: input.buffer.byteLength,
+  });
+  if (saveError) {
+    await bucket.remove([storagePath]);
+    throw saveError;
+  }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { recordPracticeEvaluation } from "@/lib/data/student-mastery";
+import { recordPracticeEvaluation, savePracticeAnswerSheet } from "@/lib/data/student-mastery";
+import { createPracticeAttemptHistory, studentExamHistorySchema } from "@/lib/practice-history";
 import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findTenantSubject, gradeTeacherPaperFile, listTenantSubjects } from "@/lib/tenant/client";
@@ -22,6 +23,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
     const formData = await request.formData();
     const file = formData.get("file");
     const subjectName = String(formData.get("subject") ?? "").trim();
+    const studentName = String(formData.get("student_name") ?? "");
+    const examValue = String(formData.get("exam") ?? "").trim();
+    const exam = examValue ? studentExamHistorySchema.parse(JSON.parse(examValue)) : null;
 
     if (subjectName && !(await studentHasCourseSubjectAccess(user.id, subjectName))) {
       return NextResponse.json(
@@ -43,13 +47,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
       );
     }
 
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
     const grade = await gradeTeacherPaperFile(setId, {
-      studentName: String(formData.get("student_name") ?? ""),
+      studentName,
       instruction: String(formData.get("instruction") ?? ""),
       file: {
         name: file.name || "answer-sheet",
         mimeType: file.type || "application/octet-stream",
-        buffer: Buffer.from(await file.arrayBuffer()),
+        buffer: fileBuffer,
       },
     });
     if (grade.graded === false) {
@@ -65,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
         const subjects = await listTenantSubjects();
         const subject = findTenantSubject(subjects, subjectName);
         if (subject) {
-          await recordPracticeEvaluation({
+          const attemptId = await recordPracticeEvaluation({
             userId: user.id,
             subjectSlug: subject.slug,
             subjectName: subject.name,
@@ -74,6 +79,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
             totalScore: grade.total_score,
             totalMarks: grade.total_marks,
             evaluation: grade.evaluation,
+            history: exam
+              ? createPracticeAttemptHistory({
+                  exam,
+                  results: grade.results,
+                  studentName,
+                })
+              : undefined,
+          });
+          await savePracticeAnswerSheet({
+            attemptId,
+            userId: user.id,
+            fileName: file.name || "answer-sheet",
+            mimeType: file.type,
+            buffer: fileBuffer,
           });
           progressSaved = true;
         }

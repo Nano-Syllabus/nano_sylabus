@@ -254,3 +254,39 @@ export async function enrollStudentInCourse(
 
   return course;
 }
+
+export async function leaveStudentCourse(
+  studentId: string,
+  slug: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+) {
+  const courseResult = await admin
+    .from("teacher_courses")
+    .select("id,slug,name")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (courseResult.error) throw courseResult.error;
+  if (!courseResult.data) throw new StudentCourseError("Course not found.", 404);
+
+  const result = await admin
+    .from("teacher_course_enrollments")
+    .update({
+      status: "cancelled",
+      completed_at: null,
+    })
+    .eq("course_id", String(courseResult.data.id || ""))
+    .eq("student_id", studentId)
+    .in("status", ["active", "completed"])
+    .select("course_id")
+    .maybeSingle();
+  if (result.error) throw result.error;
+  if (!result.data) {
+    throw new StudentCourseError("You are not enrolled in this course.", 404);
+  }
+
+  return {
+    id: String(courseResult.data.id || ""),
+    slug: String(courseResult.data.slug || slug),
+    name: String(courseResult.data.name || ""),
+  };
+}

@@ -4460,7 +4460,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
                     <div>
                       <p className="text-sm leading-6 text-text-secondary">
                         Subjects, classrooms, exams and marking changes in this browser will return
-                        to the sample teacher workspace.
+                        to the sample creator workspace.
                       </p>
                       <div className="mt-5 flex justify-end gap-2">
                         <Button variant="secondary" onClick={() => setModal(null)}>
@@ -4472,7 +4472,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
                             window.localStorage.removeItem(workspaceStorageKey(teacherHandle));
                             setWorkspace(createInitialTeacherWorkspace(teacherHandle));
                             setModal(null);
-                            setToast("Local teacher workspace reset.");
+                            setToast("Local creator workspace reset.");
                             navigate({ name: "today" });
                           }}
                         >
@@ -4575,11 +4575,11 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
             <span>
               <span className="block font-display font-semibold">Nano Syllabus</span>
               <span className="block text-xs uppercase tracking-[0.14em] text-text-muted">
-                Teachers Portal
+                Creator portal
               </span>
             </span>
           </button>
-          <nav className="mt-8 space-y-1" aria-label="Teacher workspace navigation">
+          <nav className="mt-8 space-y-1" aria-label="Creator workspace navigation">
             {nav.map((item) => (
               <WorkspaceNavButton
                 key={item.label}
@@ -4621,13 +4621,13 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
                 n
               </span>
               <div>
-                <p className="font-display text-sm font-semibold">Teacher workspace</p>
+                <p className="font-display text-sm font-semibold">Creator workspace</p>
                 <p className="text-xs text-text-muted">{workspace.teacher.name}</p>
               </div>
             </div>
             <nav
               className="mt-3 flex gap-1 overflow-x-auto"
-              aria-label="Teacher workspace navigation"
+              aria-label="Creator workspace navigation"
             >
               {nav.map((item) => (
                 <button

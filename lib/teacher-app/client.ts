@@ -140,6 +140,56 @@ export const getTeacherDocument = (key: string, documentId: string) =>
     key,
   );
 
+export function fetchTeacherDocumentRaw(key: string, documentId: string) {
+  const { baseUrl, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
+
+  const readRaw = (path: string) =>
+    new Promise<{ body: Buffer; contentType: string }>((resolve, reject) => {
+    const url = new URL(path, baseUrl);
+    const transport = url.protocol === "https:" ? https : http;
+    const request = transport.request(
+      url,
+      { method: "GET", rejectUnauthorized, headers: { Authorization: `Bearer ${key}` } },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("error", reject);
+        response.on("end", () => {
+          const status = response.statusCode ?? 502;
+          if (status >= 400) {
+            reject(
+              new TeacherApiError(
+                `Teacher API ${url.pathname} failed with ${status}`,
+                status,
+              ),
+            );
+            return;
+          }
+          resolve({
+            body: Buffer.concat(chunks),
+            contentType:
+              String(response.headers["content-type"] || "") ||
+              "application/octet-stream",
+          });
+        });
+      },
+    );
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error(`Teacher API timed out after ${timeoutMs}ms`));
+    });
+    request.on("error", reject);
+    request.end();
+  });
+
+  const encodedId = encodeURIComponent(documentId);
+  return readRaw(`/api/v1/documents/${encodedId}/raw`).catch((error) => {
+    if (error instanceof TeacherApiError && [401, 403, 404].includes(error.status)) {
+      return readRaw(`/v1/collection/documents/${encodedId}/raw`);
+    }
+    throw error;
+  });
+}
+
 export const getTeacherJob = (key: string, jobId: string) =>
   teacherRequest<ApiRecord>(`/v1/jobs/${encodeURIComponent(jobId)}`, key);
 

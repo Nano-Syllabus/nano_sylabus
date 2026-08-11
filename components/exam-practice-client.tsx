@@ -1121,7 +1121,7 @@ export function ExamPracticeClient({
                   <div className="text-sm text-text-muted">
                     <p>
                       {currentSubject
-                        ? `${currentSubject.namespace} · ${currentSubject.chunkCount} indexed chunks`
+                        ? `${currentSubject.namespace} · ${currentSubject.chunkCount} indexed sections`
                         : "Subjects are loaded from the tenant API."}
                       {paperStyle !== "custom" ? ` · ${requestedMarks} marks · ${paperStyle}` : ""}
                     </p>

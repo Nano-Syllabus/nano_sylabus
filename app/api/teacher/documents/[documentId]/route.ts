@@ -45,10 +45,63 @@ function apiFailure(error: unknown, fallback: string) {
 }
 
 function documentPath(value: ApiRecord) {
-  for (const key of ["source_path", "path"] as const) {
+  for (const key of ["source_path", "path", "source_file"] as const) {
     if (typeof value[key] === "string") return value[key];
   }
   return "";
+}
+
+function backendDocumentId(value: ApiRecord) {
+  for (const key of ["document_id", "id"] as const) {
+    if (typeof value[key] === "string") return value[key];
+  }
+  return "";
+}
+
+function normalizedPath(value: string) {
+  return value.replace(/^\/+|\/+$/g, "");
+}
+
+function pathCandidates(path: string) {
+  const clean = normalizedPath(path);
+  const candidates = new Set([clean]);
+  const segments = clean.split("/").filter(Boolean);
+  if (segments.length > 1) candidates.add(segments.slice(1).join("/"));
+  if (segments.length > 2) candidates.add(segments.slice(-3).join("/"));
+  return [...candidates].filter(Boolean);
+}
+
+async function findMirror(teacherId: string, documentId: string, path: string) {
+  const admin = createSupabaseAdminClient();
+  const columns = "id,storage_path,original_name,mime_type,size_bytes";
+  const byExternalId = await admin
+    .from("teacher_document_files")
+    .select(columns)
+    .eq("teacher_id", teacherId)
+    .eq("external_document_id", documentId)
+    .maybeSingle();
+  if (byExternalId.error) throw byExternalId.error;
+  if (byExternalId.data) return byExternalId.data;
+
+  for (const candidate of pathCandidates(path)) {
+    const byPath = await admin
+      .from("teacher_document_files")
+      .select(columns)
+      .eq("teacher_id", teacherId)
+      .eq("collection_path", candidate)
+      .maybeSingle();
+    if (byPath.error) throw byPath.error;
+    if (byPath.data) return byPath.data;
+  }
+
+  const byMirrorId = await admin
+    .from("teacher_document_files")
+    .select(columns)
+    .eq("teacher_id", teacherId)
+    .eq("id", documentId)
+    .maybeSingle();
+  if (byMirrorId.error) throw byMirrorId.error;
+  return byMirrorId.data;
 }
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -58,15 +111,11 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!id) return NextResponse.json({ error: "Invalid document." }, { status: 400 });
     const document = await getTeacherDocument(teacher.collection_sk, id);
     const path = documentPath(document);
-    const admin = createSupabaseAdminClient();
-    const { data: mirror } = await admin
-      .from("teacher_document_files")
-      .select("storage_path,original_name,mime_type,size_bytes")
-      .eq("teacher_id", teacher.id)
-      .eq("collection_path", path)
-      .maybeSingle();
+    const documentId = backendDocumentId(document) || id;
+    const mirror = await findMirror(teacher.id, documentId, path);
     let previewUrl = "";
     if (mirror?.storage_path) {
+      const admin = createSupabaseAdminClient();
       const { data } = await admin.storage
         .from("teacher-documents")
         .createSignedUrl(mirror.storage_path, 300, { download: false });
@@ -79,7 +128,25 @@ export async function GET(_request: Request, context: RouteContext) {
         mimeType: mirror.mime_type,
         size: mirror.size_bytes,
         previewUrl,
-      } : null,
+      } : {
+        name:
+          typeof document.name === "string"
+            ? document.name
+            : path.split("/").pop() || "file",
+        mimeType:
+          typeof document.mime_type === "string"
+            ? document.mime_type
+            : typeof document.content_type === "string"
+              ? document.content_type
+              : "application/pdf",
+        size:
+          typeof document.size_bytes === "number"
+            ? document.size_bytes
+            : typeof document.size === "number"
+              ? document.size
+              : 0,
+        previewUrl: `/api/teacher/documents/${encodeURIComponent(documentId)}/raw`,
+      },
     });
   } catch (error) {
     return apiFailure(error, "Could not load the document.");

@@ -202,7 +202,7 @@ function MaterialItem({ item }: { item: Material }) {
                 <dd className="mt-1 font-medium">{(detail.word_count ?? 0).toLocaleString()}</dd>
               </div>
               <div>
-                <dt className="text-text-muted">Search chunks</dt>
+                <dt className="text-text-muted">Indexed sections</dt>
                 <dd className="mt-1 font-medium">{(detail.chunk_count ?? 0).toLocaleString()}</dd>
               </div>
               <div>

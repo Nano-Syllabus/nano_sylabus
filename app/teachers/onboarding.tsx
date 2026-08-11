@@ -25,10 +25,10 @@ export function TeacherOnboarding({ userEmail }: { userEmail: string }) {
   return (
     <div className="mx-auto flex min-h-[60vh] max-w-xl flex-col justify-center px-5">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">
-        Teacher workspace
+        Creator workspace
       </p>
       <h1 className="mt-3 text-3xl font-semibold text-text-primary">
-        Create your isolated teaching collection
+        Create your creator workspace
       </h1>
       <p className="mt-4 leading-7 text-text-secondary">
         You are logged in as <span className="font-medium text-text-primary">{userEmail}</span>.
@@ -43,7 +43,7 @@ export function TeacherOnboarding({ userEmail }: { userEmail: string }) {
       )}
 
       <Button className="mt-8 w-fit rounded-md px-6" onClick={handleOnboard} disabled={loading}>
-        {loading ? "Activating workspace..." : "Activate teacher workspace"}
+        {loading ? "Activating workspace..." : "Activate creator workspace"}
       </Button>
     </div>
   );

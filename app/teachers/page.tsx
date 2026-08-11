@@ -29,13 +29,13 @@ function TeacherLoginRequired() {
     <main className="flex min-h-screen items-center justify-center bg-bg-primary px-6 text-text-primary">
       <div className="w-full max-w-[520px]">
         <p className="font-mono-ui text-xs uppercase tracking-[0.28em] text-text-muted">
-          Teacher workspace
+          Creator workspace
         </p>
         <h1 className="mt-4 font-display text-4xl font-semibold tracking-tight">
           Sign in to load your workspace
         </h1>
         <p className="mt-4 text-lg leading-8 text-text-secondary">
-          Your teacher session is missing or expired. Sign in again and we’ll bring you straight
+          Your creator session is missing or expired. Sign in again and we’ll bring you straight
           back here.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
@@ -43,7 +43,7 @@ function TeacherLoginRequired() {
             href="/login?next=/teachers"
             className="inline-flex h-12 items-center justify-center rounded-lg bg-text-primary px-6 font-medium text-bg-primary transition hover:opacity-90"
           >
-            Login to teacher workspace
+            Login to creator workspace
           </Link>
           <Link
             href="/"

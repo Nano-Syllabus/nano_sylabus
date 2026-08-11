@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -489,7 +490,7 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
         sizeBytes: numberValue(document.size_bytes || document.size),
         status,
         chunks: numberValue(document.chunk_count || document.chunks_indexed),
-        previewAvailable: previewPaths.has(path),
+        previewAvailable: previewPaths.has(path) || previewPaths.has(id),
       },
     ];
   });
@@ -898,7 +899,7 @@ function WorkspaceSkeleton() {
     <div
       className="grid min-h-screen lg:grid-cols-[280px_1fr]"
       role="status"
-      aria-label="Loading teacher workspace"
+      aria-label="Loading creator workspace"
     >
       <aside className="hidden border-r border-border p-6 lg:block">
         <div className="flex items-center gap-3">
@@ -917,7 +918,7 @@ function WorkspaceSkeleton() {
       <main className="p-5 md:p-8">
         <div className="mb-8 rounded-xl border border-border bg-bg-primary p-5">
           <p className="font-mono-ui text-xs uppercase tracking-[0.28em] text-text-muted">
-            Teacher workspace
+            Creator workspace
           </p>
           <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight">
             Loading your workspace…
@@ -984,7 +985,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       return next;
     } catch (error) {
       setWorkspaceError(
-        error instanceof Error ? error.message : "Could not load the teacher workspace.",
+        error instanceof Error ? error.message : "Could not load the creator workspace.",
       );
       setWorkspaceState("error");
       return null;
@@ -1075,7 +1076,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             setRecoveryError(text(payload.error));
             return;
           }
-          throw new Error(text(payload.error) || "Could not reconnect the teacher workspace.");
+          throw new Error(text(payload.error) || "Could not reconnect the creator workspace.");
         }
 
         setRecoveryState("idle");
@@ -1084,7 +1085,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       } catch (error) {
         setRecoveryState(recreate ? "missing" : "idle");
         setRecoveryError(
-          error instanceof Error ? error.message : "Could not reconnect the teacher workspace.",
+          error instanceof Error ? error.message : "Could not reconnect the creator workspace.",
         );
       }
     },
@@ -1183,7 +1184,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
     return (
       <main className="mx-auto flex min-h-[70vh] max-w-xl flex-col justify-center px-5">
         <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
-          Teacher workspace
+          Creator workspace
         </p>
         <h1 className="mt-4 font-display text-3xl font-semibold">
           Couldn&apos;t load your workspace
@@ -1272,9 +1273,9 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           </div>
         </div>
         <p className="mx-[9px] mb-[17px] mt-[-7px] font-mono text-[9.5px] uppercase tracking-[0.14em] text-text-muted">
-          Teachers portal
+          Creator portal
         </p>
-        <nav className="space-y-1" aria-label="Teacher workspace">
+        <nav className="space-y-1" aria-label="Creator workspace">
           {(
             [
               ["today", "Today"],
@@ -1299,7 +1300,29 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             </button>
           ))}
         </nav>
-        <div className="mt-auto border-t border-border pt-5">
+        <div className="mt-auto border-t border-border pt-4">
+          <Link
+            href="/app/today"
+            className={cn(
+              "mb-4 flex min-h-10 w-full items-center gap-2 rounded-[9px] border border-border bg-bg-primary px-[11px] text-sm font-medium text-text-primary transition hover:border-border-strong hover:bg-bg-secondary",
+              interactive,
+            )}
+          >
+            <svg
+              aria-hidden="true"
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+            Back to student portal
+          </Link>
           <p className="truncate text-sm font-medium">{workspace.teacher.fullName}</p>
           <p className="mt-1 truncate text-xs text-text-muted">{workspace.teacher.email}</p>
         </div>
@@ -1314,21 +1337,45 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{collectionName}</p>
-            <p className="truncate text-xs text-text-muted">Teacher collection</p>
+            <p className="truncate text-xs text-text-muted">Creator collection</p>
           </div>
           <span className="flex-1" />
+          <Link
+            href="/app/today"
+            className={cn(
+              "inline-flex min-h-10 items-center gap-1.5 rounded-[9px] border border-border bg-bg-primary px-3 text-sm font-medium text-text-primary transition hover:border-border-strong hover:bg-bg-secondary lg:hidden",
+              interactive,
+            )}
+          >
+            <svg
+              aria-hidden="true"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+            <span className="sm:hidden">Student</span>
+            <span className="hidden sm:inline">Student portal</span>
+          </Link>
           <Button
             type="button"
             variant="outline"
             onClick={() => setDialog({ type: "collection-settings" })}
           >
-            Collection settings
+            <span className="sm:hidden">Settings</span>
+            <span className="hidden sm:inline">Collection settings</span>
           </Button>
         </header>
 
         <nav
           className="flex gap-2 overflow-x-auto border-b border-border p-3 lg:hidden"
-          aria-label="Teacher workspace mobile navigation"
+          aria-label="Creator workspace mobile navigation"
         >
           {(
             [
@@ -1649,7 +1696,7 @@ function TodayView({
           <p className="mt-1 text-[13.5px] text-text-inverse/70">
             {summary.actionRequiredCount
               ? "These submissions stay private until you review and publish them."
-              : "No graded submissions are waiting in this teacher workspace."}
+              : "No graded submissions are waiting in this creator workspace."}
           </p>
         </div>
         <span className="flex-1" />
@@ -3368,7 +3415,7 @@ function ClassroomDetailView({
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     {doc.status === "ready" ? (
                       <span className="rounded-full border border-border bg-bg-secondary px-2.5 py-0.5 text-xs">
-                        ready{doc.chunks ? ` · ${doc.chunks} chunks` : ""}
+                        ready{doc.chunks ? ` · ${doc.chunks} sections` : ""}
                       </span>
                     ) : doc.status === "processing" ? (
                       <span className="rounded-full border border-warning/40 bg-warning/10 px-2.5 py-0.5 text-xs font-medium text-warning">
@@ -7374,15 +7421,7 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
   const units = namedItems(readiness, ["units", "chapters"]);
   const ready = readiness.ready === true || readiness.publishable === true;
   const coverage = namedItems(capture, ["coverage", "shelves", "kinds"]);
-  const captureWarnings = stringItems(capture.warnings);
   const misfiled = namedItems(capture, ["misfiled", "misfiled_documents"]);
-  const totalBankQuestions = numberValue(
-    capture.bank_questions || capture.question_count || capture.questions_found,
-  );
-  const markedBankQuestions = numberValue(
-    capture.bank_marked_questions || capture.marked_questions,
-  );
-  const bankPapers = numberValue(capture.bank_papers || capture.paper_count);
   const notesCoverage = numberValue(readiness.notes_coverage);
   const bankCoverage = numberValue(readiness.bank_coverage);
   const unitCount = numberValue(readiness.unit_count) || units.length;
@@ -7455,7 +7494,7 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
                     {numberValue(item.documents || item.document_count).toLocaleString()} docs
                   </p>
                   <p className="mt-1 text-sm text-text-secondary">
-                    {numberValue(item.chunks || item.chunk_count).toLocaleString()} chunks
+                    {numberValue(item.chunks || item.chunk_count).toLocaleString()} sections
                   </p>
                 </div>
               );
@@ -7465,30 +7504,6 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
           <p className="mt-4 text-sm text-text-muted">No shelf-level capture data was returned.</p>
         )}
 
-        <div className="mt-4 rounded-lg border border-border p-4">
-          <p className="text-xs uppercase tracking-wider text-text-muted">Question bank yield</p>
-          <p className="mt-2 font-medium">
-            {markedBankQuestions.toLocaleString()} of {totalBankQuestions.toLocaleString()} detected
-            questions carry marks, across {bankPapers.toLocaleString()} papers.
-          </p>
-          <p className="mt-2 text-sm leading-6 text-text-secondary">
-            Weightage is measured only from questions that state their marks. Add marks to past
-            papers to improve the suggestion.
-          </p>
-        </div>
-
-        {captureWarnings.length ? (
-          <ul className="mt-4 space-y-3">
-            {captureWarnings.map((warning) => (
-              <li
-                key={warning}
-                className="rounded-lg border border-warning/40 p-4 text-sm leading-6 text-text-secondary"
-              >
-                {warning}
-              </li>
-            ))}
-          </ul>
-        ) : null}
         {misfiled.length ? (
           <div className="mt-4 rounded-lg border border-warning/40 p-4">
             <p className="font-medium text-warning">Files may be on the wrong shelf</p>
@@ -7894,7 +7909,7 @@ function DocumentList({
             <span className="text-xs text-text-muted">{bytesLabel(document.sizeBytes)}</span>
           </div>
           <h2 className="mt-4 break-words font-display text-lg font-semibold">{document.name}</h2>
-          <p className="mt-2 text-sm text-text-muted">{document.chunks} indexed chunks</p>
+          <p className="mt-2 text-sm text-text-muted">{document.chunks} indexed sections</p>
           <Button className="mt-5" variant="outline" onClick={() => onOpen(document)}>
             {document.previewAvailable ? "Preview document" : "Document details"}
           </Button>
@@ -8336,25 +8351,6 @@ function TestChat({
   );
 }
 
-const SUBJECT_UNIVERSITIES = [
-  "Tribhuvan University",
-  "Pokhara University",
-  "Kathmandu University",
-  "Purbanchal University",
-  "Mid-West University",
-  "Other",
-];
-const SUBJECT_PROGRAMMES = [
-  "BE Electronics (BEI)",
-  "BE Computer (BCT)",
-  "BE Civil",
-  "BE Electrical",
-  "BE Mechanical",
-  "BSc CSIT",
-  "BCA",
-  "Other",
-];
-
 function CreateSubjectDialog({
   onClose,
   onCreated,
@@ -8364,17 +8360,17 @@ function CreateSubjectDialog({
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [university, setUniversity] = useState(SUBJECT_UNIVERSITIES[0]);
-  const [universityOther, setUniversityOther] = useState("");
-  const [programme, setProgramme] = useState(SUBJECT_PROGRAMMES[0]);
-  const [programmeOther, setProgrammeOther] = useState("");
+  const [university, setUniversity] = useState("");
+  const [programme, setProgramme] = useState("");
   const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
   const [syllabusDropActive, setSyllabusDropActive] = useState(false);
   const [syllabusText, setSyllabusText] = useState("");
   const [structure, setStructure] = useState<SyllabusUnit[]>([]);
   const [materialFiles, setMaterialFiles] = useState<File[]>([]);
   const [bankFiles, setBankFiles] = useState<File[]>([]);
+  const [materialDropActive, setMaterialDropActive] = useState(false);
+  const [bankDropActive, setBankDropActive] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState({ current: 0, total: 0, shelf: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
@@ -8444,9 +8440,8 @@ function CreateSubjectDialog({
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({
             name: clean,
-            code: code.trim().toUpperCase(),
-            university: university === "Other" ? universityOther.trim() : university,
-            programme: programme === "Other" ? programmeOther.trim() : programme,
+            university: university.trim(),
+            programme: programme.trim(),
           }),
         }),
       );
@@ -8488,7 +8483,9 @@ function CreateSubjectDialog({
       ];
       const jobs: SubjectCreationResult["jobs"] = [];
       const failedUploads: string[] = [];
+      setUploadStatus({ current: 0, total: uploads.length, shelf: "" });
       for (const [index, upload] of uploads.entries()) {
+        setUploadStatus({ current: index + 1, total: uploads.length, shelf: upload.shelf });
         setProgress(
           `Uploading and indexing ${index + 1} of ${uploads.length}: ${upload.file.name}`,
         );
@@ -8505,6 +8502,7 @@ function CreateSubjectDialog({
       setError(caught instanceof Error ? caught.message : "Could not create the subject.");
       setBusy(false);
       setProgress("");
+      setUploadStatus({ current: 0, total: 0, shelf: "" });
     }
   }
 
@@ -8559,14 +8557,6 @@ function CreateSubjectDialog({
               setError("Give the subject a name before continuing.");
               return;
             }
-            if (university === "Other" && !universityOther.trim()) {
-              setError("Enter the university name.");
-              return;
-            }
-            if (programme === "Other" && !programmeOther.trim()) {
-              setError("Enter the programme name.");
-              return;
-            }
             setError("");
             setStep(2);
           }}
@@ -8590,71 +8580,32 @@ function CreateSubjectDialog({
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="new-subject-university" className="text-sm font-medium">
-                University
+                University <span className="text-text-muted">(optional)</span>
               </label>
-              <select
+              <input
                 id="new-subject-university"
                 value={university}
                 onChange={(event) => setUniversity(event.target.value)}
                 className={cn(inputClass, "mt-2")}
-              >
-                {SUBJECT_UNIVERSITIES.map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-              {university === "Other" ? (
-                <input
-                  aria-label="University name"
-                  value={universityOther}
-                  onChange={(event) => setUniversityOther(event.target.value)}
-                  className={cn(inputClass, "mt-2")}
-                  placeholder="University name"
-                  autoComplete="organization"
-                  required
-                />
-              ) : null}
+                placeholder="Tribhuvan University"
+                maxLength={120}
+                autoComplete="organization"
+              />
             </div>
             <div>
               <label htmlFor="new-subject-programme" className="text-sm font-medium">
-                Programme
+                Programme <span className="text-text-muted">(optional)</span>
               </label>
-              <select
+              <input
                 id="new-subject-programme"
                 value={programme}
                 onChange={(event) => setProgramme(event.target.value)}
                 className={cn(inputClass, "mt-2")}
-              >
-                {SUBJECT_PROGRAMMES.map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-              {programme === "Other" ? (
-                <input
-                  aria-label="Programme name"
-                  value={programmeOther}
-                  onChange={(event) => setProgrammeOther(event.target.value)}
-                  className={cn(inputClass, "mt-2")}
-                  placeholder="Programme name"
-                  autoComplete="off"
-                  required
-                />
-              ) : null}
+                placeholder="BE Electronics (BEI)"
+                maxLength={120}
+                autoComplete="off"
+              />
             </div>
-          </div>
-          <div className="mt-4">
-            <label htmlFor="new-subject-code" className="text-sm font-medium">
-              Subject code <span className="text-text-muted">(optional)</span>
-            </label>
-            <input
-              id="new-subject-code"
-              value={code}
-              onChange={(event) => setCode(event.target.value.toUpperCase())}
-              className={cn(inputClass, "mt-2 font-mono uppercase")}
-              placeholder="SH 401"
-              maxLength={40}
-              autoComplete="off"
-              spellCheck={false}
-            />
           </div>
           <div className="mt-6 flex justify-end gap-2 border-t border-border pt-5">
             <Button type="button" variant="outline" onClick={onClose}>
@@ -8834,15 +8785,12 @@ function CreateSubjectDialog({
             Notes, slides and textbooks ground answers. Past papers guide question style and
             weightage. Every selected file is uploaded and indexed into the correct shelf.
           </p>
-          <label htmlFor="new-subject-material" className="text-sm font-medium">
-            Notes and content
-          </label>
           <input
             id="new-subject-material"
             type="file"
             multiple
             accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg"
-            className={cn(inputClass, "mt-2 py-2")}
+            className="peer sr-only"
             onChange={(event) => {
               setMaterialFiles((current) =>
                 addFiles(current, Array.from(event.target.files || [])),
@@ -8850,6 +8798,43 @@ function CreateSubjectDialog({
               event.currentTarget.value = "";
             }}
           />
+          <label
+            htmlFor="new-subject-material"
+            className={cn(
+              "flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-6 text-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-border-strong peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-bg-primary",
+              materialDropActive
+                ? "border-border-strong bg-bg-secondary"
+                : "border-border-strong hover:bg-bg-secondary",
+            )}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setMaterialDropActive(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setMaterialDropActive(true);
+            }}
+            onDragLeave={(event) => {
+              if (event.currentTarget === event.target) setMaterialDropActive(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setMaterialDropActive(false);
+              setMaterialFiles((current) =>
+                addFiles(current, Array.from(event.dataTransfer.files || [])),
+              );
+            }}
+          >
+            <span className="font-display text-base font-semibold">
+              {materialDropActive
+                ? "Drop notes here"
+                : "Drop notes and study content here, or tap to choose"}
+            </span>
+            <span className="mt-2 text-sm text-text-muted">
+              PDF, Word, PowerPoint, text, or image files
+            </span>
+          </label>
           <SelectedFileRows
             label="Notes"
             files={materialFiles}
@@ -8858,20 +8843,54 @@ function CreateSubjectDialog({
             }
           />
           <div className="mt-5">
-            <label htmlFor="new-subject-bank" className="text-sm font-medium">
-              Question bank and past papers
-            </label>
             <input
               id="new-subject-bank"
               type="file"
               multiple
               accept=".pdf,.doc,.docx,.txt,.md"
-              className={cn(inputClass, "mt-2 py-2")}
+              className="peer sr-only"
               onChange={(event) => {
                 setBankFiles((current) => addFiles(current, Array.from(event.target.files || [])));
                 event.currentTarget.value = "";
               }}
             />
+            <label
+              htmlFor="new-subject-bank"
+              className={cn(
+                "flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-6 text-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-border-strong peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-bg-primary",
+                bankDropActive
+                  ? "border-border-strong bg-bg-secondary"
+                  : "border-border-strong hover:bg-bg-secondary",
+              )}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setBankDropActive(true);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+                setBankDropActive(true);
+              }}
+              onDragLeave={(event) => {
+                if (event.currentTarget === event.target) setBankDropActive(false);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setBankDropActive(false);
+                setBankFiles((current) =>
+                  addFiles(current, Array.from(event.dataTransfer.files || [])),
+                );
+              }}
+            >
+              <span className="font-display text-base font-semibold">
+                {bankDropActive
+                  ? "Drop question papers here"
+                  : "Drop question bank and past papers here, or tap to choose"}
+              </span>
+              <span className="mt-2 text-sm text-text-muted">
+                PDF, Word, Markdown, or plain-text files
+              </span>
+            </label>
             <SelectedFileRows
               label="Questions"
               files={bankFiles}
@@ -8883,9 +8902,41 @@ function CreateSubjectDialog({
           {busy ? (
             <div
               role="status"
-              className="mt-5 rounded-lg border border-border bg-bg-secondary p-4 text-sm"
+              className="mt-5 rounded-lg border border-border bg-bg-secondary p-4"
             >
-              {progress || "Creating…"}
+              {uploadStatus.total ? (
+                <>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="font-medium">
+                      Uploading and indexing {uploadStatus.shelf || "subject files"}
+                    </span>
+                    <span className="shrink-0 text-text-secondary">
+                      {uploadStatus.current} of {uploadStatus.total}
+                    </span>
+                  </div>
+                  <div
+                    className="mt-3 h-2 overflow-hidden rounded-full bg-border"
+                    role="progressbar"
+                    aria-label={`Uploading ${uploadStatus.shelf || "subject files"}`}
+                    aria-valuemin={0}
+                    aria-valuemax={uploadStatus.total}
+                    aria-valuenow={uploadStatus.current}
+                  >
+                    <div
+                      className="h-full rounded-full bg-text-primary transition-[width] duration-300"
+                      style={{
+                        width: `${Math.max(
+                          8,
+                          Math.round((uploadStatus.current / uploadStatus.total) * 100),
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="mt-3 text-sm text-text-secondary">{progress}</p>
+                </>
+              ) : (
+                <p className="text-sm">{progress || "Creating…"}</p>
+              )}
             </div>
           ) : null}
           <div className="mt-6 flex justify-end gap-2 border-t border-border pt-5">
@@ -9236,7 +9287,7 @@ function DocumentDialog({
             <StatusChip status={document.status} />
             <span className="text-sm text-text-muted">
               {numberValue(detail.word_count)} words ·{" "}
-              {numberValue(detail.chunk_count) || document.chunks} chunks
+              {numberValue(detail.chunk_count) || document.chunks} sections
             </span>
           </div>
           <div className="mt-5 min-h-64 overflow-hidden rounded-lg border border-border">
@@ -9321,28 +9372,24 @@ function SubjectSettingsDialog({
   onRemoved: (message: string) => void;
 }) {
   const [confirmation, setConfirmation] = useState("");
-  const [busy, setBusy] = useState<"unpin" | "delete" | "">("");
+  const [busy, setBusy] = useState<"delete" | "">("");
   const [error, setError] = useState("");
 
-  async function remove(deleteFiles: boolean) {
-    if (deleteFiles && confirmation.trim() !== subject.name) {
+  async function remove() {
+    if (confirmation.trim() !== subject.name) {
       setError("Type the exact subject name before permanent deletion.");
       return;
     }
-    setBusy(deleteFiles ? "delete" : "unpin");
+    setBusy("delete");
     setError("");
     try {
       await responsePayload(
         await fetch(
-          `/api/teacher/subjects/${encodeURIComponent(subject.slug)}${deleteFiles ? "?deleteFiles=1" : ""}`,
+          `/api/teacher/subjects/${encodeURIComponent(subject.slug)}?deleteFiles=1`,
           { method: "DELETE", headers: { Accept: "application/json" } },
         ),
       );
-      onRemoved(
-        deleteFiles
-          ? `${subject.name} and its files deleted`
-          : `${subject.name} unpinned; files kept`,
-      );
+      onRemoved(`${subject.name} and its files deleted`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not remove the subject.");
       setBusy("");
@@ -9358,25 +9405,11 @@ function SubjectSettingsDialog({
         </p>
       </div>
       <section className="mt-6">
-        <h3 className="font-display text-lg font-semibold">Unpin subject</h3>
-        <p className="mt-2 text-sm leading-6 text-text-secondary">
-          Removes it from Subjects but leaves its collection folder and files available.
-        </p>
-        <Button
-          className="mt-4"
-          variant="outline"
-          onClick={() => void remove(false)}
-          disabled={Boolean(busy)}
-        >
-          {busy === "unpin" ? "Unpinning…" : "Unpin only"}
-        </Button>
-      </section>
-      <section className="mt-8 border-t border-border pt-6">
         <h3 className="font-display text-lg font-semibold text-destructive">
           Delete subject and files
         </h3>
         <p className="mt-2 text-sm leading-6 text-text-secondary">
-          Permanently removes the source folder, documents, cleaned text, and indexed chunks.
+          Permanently removes the source folder, documents, cleaned text, and indexed sections.
         </p>
         <label htmlFor="subject-delete-confirmation" className="mt-4 block text-sm font-medium">
           Type {subject.name} to confirm
@@ -9399,7 +9432,7 @@ function SubjectSettingsDialog({
         <Button
           className="mt-4"
           variant="danger"
-          onClick={() => void remove(true)}
+          onClick={() => void remove()}
           disabled={Boolean(busy)}
         >
           {busy === "delete" ? "Deleting…" : "Delete subject and files"}
@@ -9461,8 +9494,7 @@ function CollectionDialog({
   onClose: () => void;
   onChanged: (message: string, jobId?: string, jobLabel?: string) => void;
 }) {
-  const [confirmation, setConfirmation] = useState("");
-  const [busy, setBusy] = useState<"index" | "rotate" | "">("");
+  const [busy, setBusy] = useState<"index" | "">("");
   const [error, setError] = useState("");
   const [usageState, setUsageState] = useState<WorkspaceState>("loading");
   const [usage, setUsage] = useState<ApiRecord>({});
@@ -9480,27 +9512,21 @@ function CollectionDialog({
       .catch(() => setUsageState("error"));
   }, []);
 
-  async function action(type: "index-all" | "rotate-key") {
-    if (type === "rotate-key" && confirmation !== "ROTATE") {
-      setError("Type ROTATE exactly to continue.");
-      return;
-    }
-    setBusy(type === "index-all" ? "index" : "rotate");
+  async function action(type: "index-all") {
+    setBusy("index");
     setError("");
     try {
       const payload = await responsePayload(
         await fetch("/api/teacher/collection", {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ action: type, confirmation }),
+          body: JSON.stringify({ action: type }),
         }),
       );
       onChanged(
-        type === "index-all"
-          ? "All pending documents queued for indexing"
-          : "Collection key rotated and saved securely",
-        type === "index-all" ? text(payload.jobId) : "",
-        type === "index-all" ? "Collection documents" : "",
+        "All pending documents queued for indexing",
+        text(payload.jobId),
+        "Collection documents",
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not update the collection.");
@@ -9514,7 +9540,7 @@ function CollectionDialog({
         {[
           ["Files", numberValue(workspace.collection.files || workspace.collection.indexed_files)],
           [
-            "Chunks",
+            "Indexed sections",
             numberValue(workspace.collection.chunks || workspace.collection.indexed_chunks),
           ],
           ["Subjects", workspace.subjects.length],
@@ -9592,39 +9618,11 @@ function CollectionDialog({
           <SourceTree tree={workspace.sourceTree} />
         </div>
       </section>
-      <section className="mt-8 border-t border-border pt-6">
-        <h3 className="font-display text-lg font-semibold">Rotate collection API key</h3>
-        <p className="mt-2 text-sm leading-6 text-text-secondary">
-          The current key stops working immediately. The replacement stays server-side and is never
-          shown here.
+      {error ? (
+        <p id="collection-settings-error" role="alert" className="mt-5 text-sm text-destructive">
+          {error}
         </p>
-        <label htmlFor="rotate-key-confirmation" className="mt-4 block text-sm font-medium">
-          Type ROTATE to confirm
-        </label>
-        <input
-          id="rotate-key-confirmation"
-          className={cn(inputClass, "mt-2")}
-          value={confirmation}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(event) => setConfirmation(event.target.value)}
-          aria-invalid={error ? "true" : undefined}
-          aria-describedby={error ? "collection-settings-error" : undefined}
-        />
-        {error ? (
-          <p id="collection-settings-error" role="alert" className="mt-3 text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
-        <Button
-          className="mt-4"
-          variant="danger"
-          onClick={() => void action("rotate-key")}
-          disabled={Boolean(busy)}
-        >
-          {busy === "rotate" ? "Rotating…" : "Rotate key"}
-        </Button>
-      </section>
+      ) : null}
     </Dialog>
   );
 }

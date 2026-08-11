@@ -34,7 +34,10 @@ export async function GET() {
     ]);
     const admin = createSupabaseAdminClient();
     const [{ data: documentFiles }, { data: subjectProfiles }] = await Promise.all([
-      admin.from("teacher_document_files").select("collection_path").eq("teacher_id", teacher.id),
+      admin
+        .from("teacher_document_files")
+        .select("id,collection_path,external_document_id")
+        .eq("teacher_id", teacher.id),
       admin
         .from("teacher_subject_profiles")
         .select("subject_slug,subject_name,subject_code,university,programme")
@@ -64,7 +67,11 @@ export async function GET() {
       sourceTree,
       documents,
       subjectProfiles: subjectProfiles || [],
-      previewPaths: (documentFiles || []).map((item) => item.collection_path),
+      previewPaths: (documentFiles || []).flatMap((item) =>
+        [item.collection_path, item.external_document_id, item.id].filter(
+          (value): value is string => typeof value === "string" && Boolean(value),
+        ),
+      ),
     });
   } catch (error) {
     const invalidKey = error instanceof TeacherApiError && error.status === 401;

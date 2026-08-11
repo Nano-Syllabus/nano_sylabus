@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordPracticeEvaluation } from "@/lib/data/student-mastery";
+import { createPracticeAttemptHistory, studentExamHistorySchema } from "@/lib/practice-history";
 import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findTenantSubject, gradeTeacherPaper, listTenantSubjects } from "@/lib/tenant/client";
@@ -9,11 +10,13 @@ const requestSchema = z.object({
   subject: z.string().trim().min(1).max(200).optional(),
   student_name: z.string().trim().max(200).optional(),
   instruction: z.string().trim().max(2_000).optional(),
+  exam: studentExamHistorySchema.optional(),
   answers: z
     .array(
       z.object({
         question_id: z.string().trim().min(1).max(200),
         answer_text: z.string().max(20_000),
+        selected_choice: z.number().int().nonnegative().optional(),
       }),
     )
     .min(1)
@@ -33,14 +36,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
 
     const { setId } = await params;
     const payload = requestSchema.parse(await request.json());
-    const { subject: subjectName, ...gradePayload } = payload;
+    const { subject: subjectName, exam, answers, ...gradePayload } = payload;
     if (subjectName && !(await studentHasCourseSubjectAccess(user.id, subjectName))) {
       return NextResponse.json(
         { error: "Enroll in a course containing this subject first." },
         { status: 403 },
       );
     }
-    const grade = await gradeTeacherPaper(setId, gradePayload);
+    const grade = await gradeTeacherPaper(setId, {
+      ...gradePayload,
+      answers: answers.map((answer) => ({
+        question_id: answer.question_id,
+        answer_text: answer.answer_text,
+      })),
+    });
     if (grade.graded === false) {
       return NextResponse.json(
         { error: "The strict examiner could not grade this paper. Please try again." },
@@ -63,6 +72,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
             totalScore: grade.total_score,
             totalMarks: grade.total_marks,
             evaluation: grade.evaluation,
+            history: exam
+              ? createPracticeAttemptHistory({
+                  exam,
+                  results: grade.results,
+                  answers: answers.map((answer) => ({
+                    questionId: answer.question_id,
+                    answerText: answer.answer_text,
+                    selectedChoice: answer.selected_choice,
+                  })),
+                  studentName: payload.student_name,
+                })
+              : undefined,
           });
           progressSaved = true;
         }
