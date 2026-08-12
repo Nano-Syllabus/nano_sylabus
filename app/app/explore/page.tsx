@@ -8,7 +8,7 @@ export default async function ExplorePage() {
   const { user, profile } = await requireOnboardedUser();
   const courses = await listStudentCourses(user.id);
   const courseSubjects = courses.flatMap((course) =>
-    course.subjects.map((subject) => subject.name),
+    course.subjects.flatMap((subject) => [subject.slug, subject.name]),
   );
   const subjects = profile
     ? await listExplorerSubjects(user.id, profile, courseSubjects)

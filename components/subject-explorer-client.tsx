@@ -49,11 +49,10 @@ function Dot({ level, label }: { level: SubjectLevel; label: string }) {
 
 function SubjectCard({ subject, courseName }: { subject: SubjectExplorerSummary; courseName: string }) {
   const level = subjectLevel(subject);
-  const slug = slugify(subject.subject);
 
   return (
     <Link
-      href={`/app/explore/${slug}`}
+      href={`/app/explore/${encodeURIComponent(subject.slug)}`}
       className={`flex flex-col gap-[7px] rounded-lg border border-border bg-bg-primary px-4 py-[15px] text-left no-underline shadow-sm transition-transform hover:-translate-y-px hover:border-border-strong ${focusRing}`}
     >
       <div className="flex items-center gap-2">
@@ -160,7 +159,7 @@ export function SubjectExplorerClient({
               course.subjects.flatMap((subject) => [slugify(subject.slug), slugify(subject.name)]),
             );
             const courseSubjects = subjects.filter((subject) =>
-              subjectKeys.has(slugify(subject.subject)),
+              subjectKeys.has(slugify(subject.slug)) || subjectKeys.has(slugify(subject.subject)),
             );
 
             return (
@@ -179,7 +178,7 @@ export function SubjectExplorerClient({
                 {courseSubjects.length ? (
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(266px,1fr))] gap-3">
                     {courseSubjects.map((subject) => (
-                      <SubjectCard key={`${course.slug}-${subject.subject}`} subject={subject} courseName={course.name} />
+                      <SubjectCard key={`${course.slug}-${subject.slug}`} subject={subject} courseName={course.name} />
                     ))}
                   </div>
                 ) : (

@@ -139,6 +139,7 @@ export interface PublicChatSession {
 }
 
 export interface SubjectExplorerSummary {
+  slug: string;
   subject: string;
   board: string;
   grade: string;

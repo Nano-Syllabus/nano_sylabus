@@ -16,6 +16,27 @@ function uniqueSubjects(values: string[]) {
   return normalizeSubjects(values);
 }
 
+type ExplorerSubjectEntry = {
+  name: string;
+  slug: string;
+};
+
+function uniqueSubjectEntries(entries: ExplorerSubjectEntry[]) {
+  const seen = new Set<string>();
+  const unique: ExplorerSubjectEntry[] = [];
+
+  for (const entry of entries) {
+    const name = entry.name.trim();
+    const slug = entry.slug.trim() || name;
+    const key = slug.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    unique.push({ name, slug });
+  }
+
+  return unique;
+}
+
 function categorizeSubject(subject: string): SubjectExplorerSummary["category"] {
   const normalized = subject.toLowerCase();
   if (
@@ -118,16 +139,21 @@ export async function listExplorerSubjects(
 
   const profileSubjects = uniqueSubjects(profile.subjects);
   const profileSubjectKeys = new Set(profileSubjects.map((subject) => subject.toLowerCase()));
-  const allSubjects = allowedSubjects
-    ? uniqueSubjects(
+  const subjectEntries = allowedSubjects
+    ? uniqueSubjectEntries(
         allowedSubjects.flatMap((value) => {
           const subject = findTenantSubject(tenantSubjects, value);
-          return subject ? [subject.name] : [];
+          return subject ? [{ name: subject.name, slug: subject.slug }] : [];
         }),
       )
-    : listTenantSubjectNames(tenantSubjects, profileSubjects);
+    : uniqueSubjectEntries(
+        listTenantSubjectNames(tenantSubjects, profileSubjects).map((name) => {
+          const subject = findTenantSubject(tenantSubjects, name);
+          return subject ? { name: subject.name, slug: subject.slug } : { name, slug: name };
+        }),
+      );
 
-  const summaries = allSubjects.map((subject) => {
+  const summaries = subjectEntries.map(({ name: subject, slug }) => {
     const subjectKey = normalizeSubjectLabel(subject).toLowerCase();
     const matchingSessions = sessions.filter(
       (session) =>
@@ -138,6 +164,7 @@ export async function listExplorerSubjects(
     );
 
     return {
+      slug,
       subject,
       board: normalizedBoard,
       grade: normalizedGrade,
