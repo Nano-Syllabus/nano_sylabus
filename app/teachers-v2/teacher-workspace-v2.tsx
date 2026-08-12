@@ -293,6 +293,25 @@ function fileSizeLabel(file: File) {
   return `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function selectedFilesTitle(files: File[], singular: string, plural: string) {
+  if (!files.length) return "";
+  return `${files.length} ${files.length === 1 ? singular : plural} selected`;
+}
+
+function selectedFilesHint(files: File[]) {
+  if (!files.length) return "";
+  const latest = files[files.length - 1];
+  const more = files.length > 1 ? ` + ${files.length - 1} more` : "";
+  return `${latest.name}${more} · ${fileSizeLabel(latest)} · Tap to add more`;
+}
+
+function uploadShelfLabel(shelf: string) {
+  if (shelf === "Question Bank") return "Question bank";
+  if (shelf === "Notes") return "Notes";
+  if (shelf === "Syllabus") return "Syllabus";
+  return "subject files";
+}
+
 function parseSyllabusOutline(raw: string): SyllabusUnit[] {
   return raw
     .trim()
@@ -8437,6 +8456,7 @@ function CreateSubjectDialog({
     const accepted = incoming.filter((file) => !teacherUploadSizeError(file.size));
     const rejected = incoming.find((file) => teacherUploadSizeError(file.size));
     if (rejected) setError(`${rejected.name}: ${teacherUploadSizeError(rejected.size)}`);
+    else if (accepted.length) setError("");
     const seen = new Set(current.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
     return [
       ...current,
@@ -8546,10 +8566,9 @@ function CreateSubjectDialog({
       const failedUploads: string[] = [];
       setUploadStatus({ current: 0, total: uploads.length, shelf: "" });
       for (const [index, upload] of uploads.entries()) {
-        setUploadStatus({ current: index + 1, total: uploads.length, shelf: upload.shelf });
-        setProgress(
-          `Uploading and indexing ${index + 1} of ${uploads.length}: ${upload.file.name}`,
-        );
+        const shelfLabel = uploadShelfLabel(upload.shelf);
+        setUploadStatus({ current: index + 1, total: uploads.length, shelf: shelfLabel });
+        setProgress(`Uploading ${shelfLabel}: ${upload.file.name}`);
         try {
           const jobId = await uploadSubjectFile(upload.file, `${folderPath}/${upload.shelf}`);
           if (jobId) jobs.push({ id: jobId, label: upload.file.name });
@@ -8888,12 +8907,16 @@ function CreateSubjectDialog({
             }}
           >
             <span className="font-display text-base font-semibold">
-              {materialDropActive
-                ? "Drop notes here"
-                : "Drop notes and study content here, or tap to choose"}
+              {materialFiles.length
+                ? selectedFilesTitle(materialFiles, "notes file", "notes files")
+                : materialDropActive
+                  ? "Drop notes here"
+                  : "Drop notes and study content here, or tap to choose"}
             </span>
             <span className="mt-2 text-sm text-text-muted">
-              PDF, Word, PowerPoint, text, or image files · maximum {TEACHER_UPLOAD_MAX_LABEL} each
+              {materialFiles.length
+                ? selectedFilesHint(materialFiles)
+                : `PDF, Word, PowerPoint, text, or image files · maximum ${TEACHER_UPLOAD_MAX_LABEL} each`}
             </span>
           </label>
           <SelectedFileRows
@@ -8944,16 +8967,20 @@ function CreateSubjectDialog({
               }}
             >
               <span className="font-display text-base font-semibold">
-                {bankDropActive
-                  ? "Drop question papers here"
-                  : "Drop question bank and past papers here, or tap to choose"}
+                {bankFiles.length
+                  ? selectedFilesTitle(bankFiles, "question bank file", "question bank files")
+                  : bankDropActive
+                    ? "Drop question papers here"
+                    : "Drop question bank and past papers here, or tap to choose"}
               </span>
               <span className="mt-2 text-sm text-text-muted">
-                PDF, Word, Markdown, or plain-text files · maximum {TEACHER_UPLOAD_MAX_LABEL} each
+                {bankFiles.length
+                  ? selectedFilesHint(bankFiles)
+                  : `PDF, Word, Markdown, or plain-text files · maximum ${TEACHER_UPLOAD_MAX_LABEL} each`}
               </span>
             </label>
             <SelectedFileRows
-              label="Questions"
+              label="Question bank"
               files={bankFiles}
               onRemove={(index) =>
                 setBankFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))
@@ -8990,7 +9017,9 @@ function CreateSubjectDialog({
                       }}
                     />
                   </div>
-                  <p className="mt-3 text-sm text-text-secondary">{progress}</p>
+                  <p className="mt-3 text-sm text-text-secondary">
+                    {progress || `Uploading ${uploadStatus.shelf || "subject files"}…`}
+                  </p>
                 </>
               ) : (
                 <p className="text-sm">{progress || "Creating…"}</p>
@@ -9027,7 +9056,7 @@ function SelectedFileRows({
 }) {
   if (!files.length) return null;
   return (
-    <div className="mt-3 divide-y divide-border rounded-lg border border-border">
+    <div className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border bg-bg-secondary/70">
       {files.map((file, index) => (
         <div
           key={`${file.name}-${file.lastModified}`}
