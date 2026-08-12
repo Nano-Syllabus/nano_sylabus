@@ -8,7 +8,7 @@ import {
   TeacherApiError,
   type ApiRecord,
 } from "@/lib/teacher-app/client";
-import { detachTeacherSubjectFromCourses } from "@/lib/teacher-course-store";
+import { detachTeacherSubjectFromCourses } from "@/lib/teacher-course-links";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 

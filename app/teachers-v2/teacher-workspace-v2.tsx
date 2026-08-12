@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type MouseEvent,
@@ -272,7 +273,7 @@ type SubjectCreationResult = {
   name: string;
   slug: string;
   jobs: { id: string; label: string }[];
-  failedUploads: string[];
+  failedUploads: { name: string; shelf: Shelf; error: string }[];
 };
 
 const interactive =
@@ -815,16 +816,24 @@ function normalizeSubmission(value: unknown): ExamSubmission | null {
 async function responsePayload(response: Response) {
   const raw = await response.text();
   let payload: ApiRecord = {};
+  const contentType = response.headers.get("content-type") || "";
   try {
-    payload = raw ? (JSON.parse(raw) as ApiRecord) : {};
+    payload = raw && contentType.includes("application/json") ? (JSON.parse(raw) as ApiRecord) : {};
   } catch {
     payload = {};
   }
   if (!response.ok) {
+    const plainError = raw.trim();
+    const isHtmlError =
+      contentType.includes("text/html") ||
+      /^<!doctype html/i.test(plainError) ||
+      /<html[\s>]/i.test(plainError);
     const fallback =
       response.status === 413
         ? `This file is too large. Upload a file up to ${TEACHER_UPLOAD_MAX_LABEL}.`
-        : raw.trim() || `The request could not be completed (${response.status}).`;
+        : isHtmlError
+          ? `The request could not be completed (${response.status}).`
+          : plainError || `The request could not be completed (${response.status}).`;
     throw new Error(text(payload.error) || fallback);
   }
   return payload;
@@ -1655,7 +1664,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             result.jobs.forEach((job) => void pollIndexingJob(job.id, job.label));
             setToast(
               result.failedUploads.length
-                ? `${result.name} created. Add ${result.failedUploads.join(", ")} again from the subject.`
+                ? `${result.name} created. ${result.failedUploads.length} file upload${result.failedUploads.length === 1 ? "" : "s"} failed.`
                 : `${result.name} created`,
             );
           }}
@@ -8451,6 +8460,11 @@ function CreateSubjectDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
+  const materialInputRef = useRef<HTMLInputElement>(null);
+  const bankInputRef = useRef<HTMLInputElement>(null);
+  const createdSubjectRef = useRef<{ slug: string; folderPath: string } | null>(null);
+  const completedUploadKeysRef = useRef(new Set<string>());
+  const indexingJobsRef = useRef<SubjectCreationResult["jobs"]>([]);
 
   function addFiles(current: File[], incoming: File[]) {
     const accepted = incoming.filter((file) => !teacherUploadSizeError(file.size));
@@ -8462,6 +8476,28 @@ function CreateSubjectDialog({
       ...current,
       ...accepted.filter((file) => !seen.has(`${file.name}:${file.size}:${file.lastModified}`)),
     ];
+  }
+
+  function chooseMaterialFiles(files: FileList | null) {
+    const selected = Array.from(files || []);
+    if (!selected.length) return;
+    setMaterialFiles((current) => addFiles(current, selected));
+  }
+
+  function chooseBankFiles(files: FileList | null) {
+    const selected = Array.from(files || []);
+    if (!selected.length) return;
+    setBankFiles((current) => addFiles(current, selected));
+  }
+
+  function handleMaterialInput(event: FormEvent<HTMLInputElement>) {
+    chooseMaterialFiles(event.currentTarget.files);
+    event.currentTarget.value = "";
+  }
+
+  function handleBankInput(event: FormEvent<HTMLInputElement>) {
+    chooseBankFiles(event.currentTarget.files);
+    event.currentTarget.value = "";
   }
 
   async function readSyllabus(file?: File | null) {
@@ -8514,23 +8550,29 @@ function CreateSubjectDialog({
     setBusy(true);
     setError("");
     try {
-      setProgress("Creating the subject and its shelves…");
-      const payload = await responsePayload(
-        await fetch("/api/teacher/subjects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({
-            name: clean,
-            university: university.trim(),
-            programme: programme.trim(),
+      let createdSubject = createdSubjectRef.current;
+      if (!createdSubject) {
+        setProgress("Creating the subject and its shelves…");
+        const payload = await responsePayload(
+          await fetch("/api/teacher/subjects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              name: clean,
+              university: university.trim(),
+              programme: programme.trim(),
+            }),
           }),
-        }),
-      );
-      const subject = asRecord(payload.subject);
-      const slug = text(subject.slug);
-      const folderPath = text(subject.folder_path) || clean;
-      if (!slug)
-        throw new Error("The subject was created but its collection slug was not returned.");
+        );
+        const subject = asRecord(payload.subject);
+        const slug = text(subject.slug);
+        const folderPath = text(subject.folder_path) || clean;
+        if (!slug)
+          throw new Error("The subject was created but its collection slug was not returned.");
+        createdSubject = { slug, folderPath };
+        createdSubjectRef.current = createdSubject;
+      }
+      const { slug, folderPath } = createdSubject;
 
       if (structure.length) {
         setProgress("Saving the syllabus map…");
@@ -8561,9 +8603,11 @@ function CreateSubjectDialog({
         ...(syllabusUpload ? [{ file: syllabusUpload, shelf: "Syllabus" as const }] : []),
         ...materialFiles.map((file) => ({ file, shelf: "Notes" as const })),
         ...bankFiles.map((file) => ({ file, shelf: "Question Bank" as const })),
-      ];
-      const jobs: SubjectCreationResult["jobs"] = [];
-      const failedUploads: string[] = [];
+      ].filter(
+        ({ file, shelf }) =>
+          !completedUploadKeysRef.current.has(`${shelf}:${file.name}:${file.size}`),
+      );
+      const failedUploads: SubjectCreationResult["failedUploads"] = [];
       setUploadStatus({ current: 0, total: uploads.length, shelf: "" });
       for (const [index, upload] of uploads.entries()) {
         const shelfLabel = uploadShelfLabel(upload.shelf);
@@ -8571,13 +8615,35 @@ function CreateSubjectDialog({
         setProgress(`Uploading ${shelfLabel}: ${upload.file.name}`);
         try {
           const jobId = await uploadSubjectFile(upload.file, `${folderPath}/${upload.shelf}`);
-          if (jobId) jobs.push({ id: jobId, label: upload.file.name });
-        } catch {
-          failedUploads.push(upload.file.name);
+          completedUploadKeysRef.current.add(
+            `${upload.shelf}:${upload.file.name}:${upload.file.size}`,
+          );
+          if (jobId) indexingJobsRef.current.push({ id: jobId, label: upload.file.name });
+        } catch (caught) {
+          failedUploads.push({
+            name: upload.file.name,
+            shelf: upload.shelf,
+            error: caught instanceof Error ? caught.message : "The upload failed.",
+          });
         }
       }
+      if (failedUploads.length) {
+        const details = failedUploads
+          .map(
+            (failure) =>
+              `${uploadShelfLabel(failure.shelf)} — ${failure.name}: ${failure.error}`,
+          )
+          .join("\n");
+        setError(
+          `The subject was created, but ${failedUploads.length} selected file${failedUploads.length === 1 ? "" : "s"} did not finish uploading:\n${details}\n\nYour file selections are still here. Try again; only failed files will be retried.`,
+        );
+        setBusy(false);
+        setProgress("");
+        setUploadStatus({ current: 0, total: 0, shelf: "" });
+        return;
+      }
       setProgress("Opening the subject workspace…");
-      await onCreated({ name: clean, slug, jobs, failedUploads });
+      await onCreated({ name: clean, slug, jobs: indexingJobsRef.current, failedUploads });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create the subject.");
       setBusy(false);
@@ -8587,6 +8653,7 @@ function CreateSubjectDialog({
   }
 
   const stages = ["What it is", "Syllabus", "Material"];
+  const selectedFileCount = (syllabusFile || syllabusText.trim() ? 1 : 0) + materialFiles.length + bankFiles.length;
   return (
     <Dialog title="Add a subject" onClose={busy ? () => undefined : onClose}>
       <ol className="mb-7 grid grid-cols-3 gap-2" aria-label="Create subject progress">
@@ -8623,7 +8690,7 @@ function CreateSubjectDialog({
       {error ? (
         <p
           role="alert"
-          className="mb-4 rounded-lg border border-destructive/30 bg-bg-secondary p-3 text-sm text-destructive"
+          className="mb-4 whitespace-pre-line rounded-lg border border-destructive/30 bg-bg-secondary p-3 text-sm text-destructive"
         >
           {error}
         </p>
@@ -8866,24 +8933,25 @@ function CreateSubjectDialog({
             weightage. Every selected file is uploaded and indexed into the correct shelf.
           </p>
           <input
+            ref={materialInputRef}
             id="new-subject-material"
             type="file"
             multiple
             accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg"
             className="peer sr-only"
-            onChange={(event) => {
-              setMaterialFiles((current) =>
-                addFiles(current, Array.from(event.target.files || [])),
-              );
-              event.currentTarget.value = "";
-            }}
+            onInput={handleMaterialInput}
+            onChange={handleMaterialInput}
           />
-          <label
-            htmlFor="new-subject-material"
+          <button
+            type="button"
+            onClick={() => materialInputRef.current?.click()}
+            aria-live="polite"
             className={cn(
-              "flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-6 text-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-border-strong peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-bg-primary",
+              "flex min-h-28 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-6 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary",
               materialDropActive
                 ? "border-border-strong bg-bg-secondary"
+                : materialFiles.length
+                  ? "border-success bg-success/5"
                 : "border-border-strong hover:bg-bg-secondary",
             )}
             onDragEnter={(event) => {
@@ -8901,24 +8969,47 @@ function CreateSubjectDialog({
             onDrop={(event) => {
               event.preventDefault();
               setMaterialDropActive(false);
-              setMaterialFiles((current) =>
-                addFiles(current, Array.from(event.dataTransfer.files || [])),
-              );
+              chooseMaterialFiles(event.dataTransfer.files);
             }}
           >
             <span className="font-display text-base font-semibold">
-              {materialFiles.length
-                ? selectedFilesTitle(materialFiles, "notes file", "notes files")
+              {materialFiles.length === 1
+                ? materialFiles[0].name
+                : materialFiles.length > 1
+                  ? selectedFilesTitle(materialFiles, "notes file", "notes files")
                 : materialDropActive
                   ? "Drop notes here"
                   : "Drop notes and study content here, or tap to choose"}
             </span>
             <span className="mt-2 text-sm text-text-muted">
               {materialFiles.length
-                ? selectedFilesHint(materialFiles)
+                ? `${selectedFilesHint(materialFiles)} · Selected as Notes · tap to add more`
                 : `PDF, Word, PowerPoint, text, or image files · maximum ${TEACHER_UPLOAD_MAX_LABEL} each`}
             </span>
-          </label>
+            {materialFiles.length ? (
+              <span className="mt-4 w-full rounded-md border border-success/40 bg-bg-primary p-3 text-left">
+                <span className="mb-2 inline-flex rounded-full border border-success/40 px-2.5 py-1 text-xs font-semibold text-success">
+                  Selected as Notes
+                </span>
+                <span className="block space-y-1">
+                  {materialFiles.slice(0, 3).map((file) => (
+                    <span
+                      key={`${file.name}-${file.size}-${file.lastModified}`}
+                      className="block truncate text-sm font-medium"
+                    >
+                      {file.name} · {fileSizeLabel(file)}
+                    </span>
+                  ))}
+                  {materialFiles.length > 3 ? (
+                    <span className="block text-xs text-text-muted">
+                      +{materialFiles.length - 3} more file
+                      {materialFiles.length - 3 === 1 ? "" : "s"}
+                    </span>
+                  ) : null}
+                </span>
+              </span>
+            ) : null}
+          </button>
           <SelectedFileRows
             label="Notes"
             files={materialFiles}
@@ -8928,22 +9019,25 @@ function CreateSubjectDialog({
           />
           <div className="mt-5">
             <input
+              ref={bankInputRef}
               id="new-subject-bank"
               type="file"
               multiple
               accept=".pdf,.doc,.docx,.txt,.md"
               className="peer sr-only"
-              onChange={(event) => {
-                setBankFiles((current) => addFiles(current, Array.from(event.target.files || [])));
-                event.currentTarget.value = "";
-              }}
+              onInput={handleBankInput}
+              onChange={handleBankInput}
             />
-            <label
-              htmlFor="new-subject-bank"
+            <button
+              type="button"
+              onClick={() => bankInputRef.current?.click()}
+              aria-live="polite"
               className={cn(
-                "flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-6 text-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-border-strong peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-bg-primary",
+                "flex min-h-28 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-6 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary",
                 bankDropActive
                   ? "border-border-strong bg-bg-secondary"
+                  : bankFiles.length
+                    ? "border-success bg-success/5"
                   : "border-border-strong hover:bg-bg-secondary",
               )}
               onDragEnter={(event) => {
@@ -8961,24 +9055,47 @@ function CreateSubjectDialog({
               onDrop={(event) => {
                 event.preventDefault();
                 setBankDropActive(false);
-                setBankFiles((current) =>
-                  addFiles(current, Array.from(event.dataTransfer.files || [])),
-                );
+                chooseBankFiles(event.dataTransfer.files);
               }}
             >
               <span className="font-display text-base font-semibold">
-                {bankFiles.length
-                  ? selectedFilesTitle(bankFiles, "question bank file", "question bank files")
+                {bankFiles.length === 1
+                  ? bankFiles[0].name
+                  : bankFiles.length > 1
+                    ? selectedFilesTitle(bankFiles, "question bank file", "question bank files")
                   : bankDropActive
                     ? "Drop question papers here"
                     : "Drop question bank and past papers here, or tap to choose"}
               </span>
               <span className="mt-2 text-sm text-text-muted">
                 {bankFiles.length
-                  ? selectedFilesHint(bankFiles)
+                  ? `${selectedFilesHint(bankFiles)} · Selected as Question Bank · tap to add more`
                   : `PDF, Word, Markdown, or plain-text files · maximum ${TEACHER_UPLOAD_MAX_LABEL} each`}
               </span>
-            </label>
+              {bankFiles.length ? (
+                <span className="mt-4 w-full rounded-md border border-success/40 bg-bg-primary p-3 text-left">
+                  <span className="mb-2 inline-flex rounded-full border border-success/40 px-2.5 py-1 text-xs font-semibold text-success">
+                    Selected as Question Bank
+                  </span>
+                  <span className="block space-y-1">
+                    {bankFiles.slice(0, 3).map((file) => (
+                      <span
+                        key={`${file.name}-${file.size}-${file.lastModified}`}
+                        className="block truncate text-sm font-medium"
+                      >
+                        {file.name} · {fileSizeLabel(file)}
+                      </span>
+                    ))}
+                    {bankFiles.length > 3 ? (
+                      <span className="block text-xs text-text-muted">
+                        +{bankFiles.length - 3} more file
+                        {bankFiles.length - 3 === 1 ? "" : "s"}
+                      </span>
+                    ) : null}
+                  </span>
+                </span>
+              ) : null}
+            </button>
             <SelectedFileRows
               label="Question bank"
               files={bankFiles}
@@ -8987,6 +9104,20 @@ function CreateSubjectDialog({
               }
             />
           </div>
+          {materialFiles.length || bankFiles.length ? (
+            <div
+              role="status"
+              className="mt-5 rounded-lg border border-success/40 bg-success/5 p-4 text-sm"
+            >
+              <p className="font-semibold">
+                ✓ {materialFiles.length + bankFiles.length} material file
+                {materialFiles.length + bankFiles.length === 1 ? "" : "s"} selected and ready
+              </p>
+              <p className="mt-1 text-text-secondary">
+                {materialFiles.length} Notes · {bankFiles.length} Question Bank
+              </p>
+            </div>
+          ) : null}
           {busy ? (
             <div role="status" className="mt-5 rounded-lg border border-border bg-bg-secondary p-4">
               {uploadStatus.total ? (
@@ -9036,7 +9167,11 @@ function CreateSubjectDialog({
               disabled={busy}
               aria-busy={busy}
             >
-              {busy ? "Creating…" : "Create the subject"}
+              {busy
+                ? "Creating…"
+                : selectedFileCount
+                  ? `Create subject · upload ${selectedFileCount} file${selectedFileCount === 1 ? "" : "s"}`
+                  : "Create the subject"}
             </Button>
           </div>
         </div>
@@ -9060,8 +9195,11 @@ function SelectedFileRows({
       {files.map((file, index) => (
         <div
           key={`${file.name}-${file.lastModified}`}
-          className="flex min-h-12 items-center gap-3 px-3 py-2"
+          className="flex min-h-12 items-center gap-3 bg-bg-primary px-3 py-2"
         >
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-xs text-success">
+            ✓
+          </span>
           <span className="rounded-full border border-border px-2.5 py-1 text-xs">{label}</span>
           <span className="min-w-0 flex-1 truncate text-sm">{file.name}</span>
           <span className="text-xs text-text-muted">{fileSizeLabel(file)}</span>

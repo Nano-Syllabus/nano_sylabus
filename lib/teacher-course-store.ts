@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapTeacherCourse, type TeacherCourse } from "@/lib/teacher-courses";
+export { detachTeacherSubjectFromCourses } from "@/lib/teacher-course-links";
 
 const courseColumns =
   "id,teacher_id,slug,name,short_name,category,authority,tagline,description,duration_weeks,level,language_modes,access_model,price_paisa,visibility,status,diagnostic_question_count,daily_minutes,pass_percentage,negative_marking,exam_date,outcomes,created_at,updated_at,published_at";
@@ -68,28 +69,6 @@ export async function findAssignedCourseSubjects(
   const result = await query;
   if (result.error) throw result.error;
   return (result.data || []) as { course_id: string; subject_slug: string }[];
-}
-
-export async function detachTeacherSubjectFromCourses(
-  admin: SupabaseClient,
-  teacherId: string,
-  subjectSlug: string,
-) {
-  const result = await admin
-    .from("teacher_course_subjects")
-    .delete()
-    .eq("teacher_id", teacherId)
-    .eq("subject_slug", subjectSlug)
-    .select("course_id");
-  if (result.error) throw result.error;
-
-  return Array.from(
-    new Set(
-      ((result.data || []) as Array<{ course_id?: unknown }>)
-        .map((row) => String(row.course_id || ""))
-        .filter(Boolean),
-    ),
-  );
 }
 
 export function courseStorageError(error: unknown, fallback = "Could not save the course.") {

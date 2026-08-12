@@ -20,6 +20,11 @@ type ApiRecord = Record<string, unknown>;
 
 export const maxDuration = 300;
 
+// Uploading the bytes is quick, but PDF/OCR indexing is currently synchronous in
+// the tenant service. Large notes and question banks routinely need longer than
+// the general API timeout, so keep this below the route's five-minute ceiling.
+const DOCUMENT_INDEX_TIMEOUT_MS = 270_000;
+
 class UpstreamUploadError extends Error {
   constructor(
     message: string,
@@ -132,13 +137,7 @@ async function sendTenantRequest(
           try {
             if (raw.trim()) parsed = JSON.parse(raw);
           } catch {
-            reject(
-              new UpstreamUploadError(
-                `The document service returned an invalid response (${response.statusCode ?? 502}).`,
-                response.statusCode ?? 502,
-              ),
-            );
-            return;
+            parsed = {};
           }
           const status = response.statusCode ?? 502;
           if (status >= 400) {
@@ -147,6 +146,15 @@ async function sendTenantRequest(
                 ? `The document service rejected this file as too large. The creator portal accepts up to ${TEACHER_UPLOAD_MAX_LABEL}.`
                 : `Document service request failed (${status}).`;
             reject(new UpstreamUploadError(apiMessage(parsed, fallback), status));
+            return;
+          }
+          if (raw.trim() && !Object.keys(parsed as ApiRecord).length) {
+            reject(
+              new UpstreamUploadError(
+                `The document service returned an invalid response (${status}).`,
+                status,
+              ),
+            );
             return;
           }
           resolve((parsed ?? {}) as ApiRecord);
@@ -214,7 +222,7 @@ async function uploadAndIndex(input: {
   const index = await sendTenantRequest(
     new URL("/v1/collection/index-document", baseUrl),
     rejectUnauthorized,
-    timeoutMs,
+    Math.max(timeoutMs, DOCUMENT_INDEX_TIMEOUT_MS),
     {
       Authorization: `Bearer ${input.collectionKey}`,
       "Content-Type": "application/json",
