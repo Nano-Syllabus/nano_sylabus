@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   listStudentCourses: vi.fn(),
-  listTenantSubjects: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -11,9 +10,6 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/student-courses", () => ({
   listStudentCourses: mocks.listStudentCourses,
-}));
-vi.mock("@/lib/tenant/client", () => ({
-  listTenantSubjects: mocks.listTenantSubjects,
 }));
 
 import { GET } from "@/app/api/tenant/subjects/route";
@@ -24,24 +20,9 @@ describe("GET /api/tenant/subjects", () => {
     mocks.createSupabaseServerClient.mockResolvedValue({
       auth: { getUser: vi.fn(async () => ({ data: { user: { id: "student-1" } } })) },
     });
-    mocks.listTenantSubjects.mockResolvedValue([
-      {
-        name: "Digital Logic",
-        slug: "digital-logic",
-        namespace_slug: "digital-logic",
-        folder_path: "Digital Logic",
-      },
-      {
-        name: "Engineering Physics",
-        slug: "engineering-physics",
-        namespace_slug: "engineering-physics",
-        folder_path: "Engineering Physics",
-      },
-      { name: "MBA", slug: "mba", namespace_slug: "mba", folder_path: "MBA" },
-    ]);
     mocks.listStudentCourses.mockResolvedValue([
       {
-        id: "course-1",
+        id: "9fb2bc93-e80f-4c2a-a298-488253b33a3b",
         subjects: [
           { slug: "engineering-physics", name: "Engineering Physics", folderPath: "Engineering Physics" },
           { slug: "mba", name: "MBA", folderPath: "MBA" },
@@ -57,12 +38,19 @@ describe("GET /api/tenant/subjects", () => {
     await expect(response.json()).resolves.toEqual({
       subjects: [
         {
+          courseId: "9fb2bc93-e80f-4c2a-a298-488253b33a3b",
           name: "Engineering Physics",
           slug: "engineering-physics",
           namespaceSlug: "engineering-physics",
           folderPath: "Engineering Physics",
         },
-        { name: "MBA", slug: "mba", namespaceSlug: "mba", folderPath: "MBA" },
+        {
+          courseId: "9fb2bc93-e80f-4c2a-a298-488253b33a3b",
+          name: "MBA",
+          slug: "mba",
+          namespaceSlug: "mba",
+          folderPath: "MBA",
+        },
       ],
     });
     expect(mocks.listStudentCourses).toHaveBeenCalledWith("student-1");
@@ -86,6 +74,5 @@ describe("GET /api/tenant/subjects", () => {
 
     expect(response.status).toBe(401);
     expect(mocks.listStudentCourses).not.toHaveBeenCalled();
-    expect(mocks.listTenantSubjects).not.toHaveBeenCalled();
   });
 });

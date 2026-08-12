@@ -59,6 +59,7 @@ const CHAT_DISPLAY_MODE_LABELS: Record<ChatDisplayMode, string> = {
 };
 
 type TenantChatSubject = {
+  courseId: string;
   name: string;
   slug: string;
   namespaceSlug: string;
@@ -1370,7 +1371,7 @@ export function ChatPageClient({
     } catch {}
 
     if (parsedCode === "TENANT_PROMPT_TIMEOUT" || rawMessage.includes("TENANT_PROMPT_TIMEOUT")) {
-      setChatError(parsedError || "Tenant answer API timed out. Please retry once.");
+      setChatError(parsedError || "Course answer API timed out. Please retry once.");
       return;
     }
 

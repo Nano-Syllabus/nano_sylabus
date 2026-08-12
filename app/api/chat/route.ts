@@ -8,9 +8,15 @@ import { canSpendCredits, CHAT_MESSAGE_CREDIT_COST, computeNextBalance } from "@
 import { resolveResponseLanguage } from "@/lib/chat-language-mode";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
 import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
-import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
+import {
+  getStudentCourseSubjectAccess,
+  getStudentCourseSubjectAccessForCourse,
+  type StudentCourseSubjectAccess,
+} from "@/lib/student-courses";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { chatTenantStream, getTenantName, listTenantSubjects, type TenantChatSource, type TenantSubject, type TenantTokenUsage } from "@/lib/tenant/client";
+import { askTeacherSubject, type ApiRecord } from "@/lib/teacher-app/client";
+import { type TenantChatSource, type TenantSubject, type TenantTokenUsage } from "@/lib/tenant/client";
 import { deriveSessionTitle } from "@/lib/utils";
 import type { AssistantAnswerTrace, AssistantCitation } from "@/lib/types";
 
@@ -27,6 +33,7 @@ const requestSchema = z.object({
   subjectContext: z.string().trim().min(1).max(120).nullable().optional(),
   tenantSubject: z
     .object({
+      courseId: z.string().uuid().optional(),
       name: z.string().trim().min(1).max(160),
       slug: z.string().trim().min(1).max(200),
       namespaceSlug: z.string().trim().min(1).max(200),
@@ -104,63 +111,60 @@ function logTenantChatDebug(
   console.log("[TENANT_CHAT]", payload);
 }
 
-function normalizeTenantSubjectFromRequest(
-  tenantSubject: NonNullable<z.infer<typeof requestSchema>["tenantSubject"]>,
-): TenantSubject {
-  const namespaceFromPath = tenantSubject.folderPath.split("/")[0]?.trim();
-
+function trustedTenantSubject(access: StudentCourseSubjectAccess): TenantSubject {
+  const namespaceFromPath = access.folderPath.split("/")[0]?.trim();
   return {
-    name: tenantSubject.name,
-    slug: tenantSubject.slug,
-    namespace: namespaceFromPath || tenantSubject.namespaceSlug,
-    namespace_slug: tenantSubject.namespaceSlug,
-    // Left tenant-relative: the caller does not know which tenant owns this
-    // subject, and nothing downstream reads full_path for retrieval.
-    full_path: tenantSubject.folderPath,
-    folder_path: tenantSubject.folderPath,
+    name: access.subjectName,
+    slug: access.subjectSlug,
+    namespace: namespaceFromPath || access.subjectSlug,
+    namespace_slug: access.subjectSlug,
+    full_path: access.folderPath,
+    folder_path: access.folderPath,
     chunk_count: 0,
   };
 }
 
-function matchesRequestedSubject(subject: TenantSubject, requestedSubject: string | null) {
-  if (!requestedSubject?.trim()) return true;
-  return normalizeSubjectLabel(subject.name) === normalizeSubjectLabel(requestedSubject);
+function creatorChatHistory(
+  messages: z.infer<typeof requestSchema>["messages"],
+): Array<{ role: "user" | "assistant"; content: string }> {
+  return messages.slice(0, -1).slice(-10).flatMap((message) => {
+    const content = message.content.trim().slice(0, 4_000);
+    return content ? [{ role: message.role, content }] : [];
+  });
 }
 
-async function resolveTenantSubjectForChat({
-  requestedSubject,
-  tenantSubject,
-}: {
-  requestedSubject: string | null;
-  tenantSubject?: NonNullable<z.infer<typeof requestSchema>["tenantSubject"]> | null;
-}) {
-  if (tenantSubject) {
-    const normalizedTenantSubjectName = normalizeSubjectLabel(tenantSubject.name);
-    const requestedMatches = !requestedSubject || normalizeSubjectLabel(requestedSubject) === normalizedTenantSubjectName;
-
-    if (requestedMatches) {
-      const match = normalizeTenantSubjectFromRequest(tenantSubject);
-      return {
-        match,
-        scopedSubjects: [match],
-        source: "request_metadata" as const,
-      };
-    }
-  }
-
-  const tenantSubjects = await listTenantSubjects();
-  const scopedSubjects = requestedSubject
-    ? tenantSubjects.filter((subject) => matchesRequestedSubject(subject, requestedSubject))
-    : tenantSubjects;
-  const match =
-    scopedSubjects.find((subject) => matchesRequestedSubject(subject, requestedSubject)) ??
-    (scopedSubjects.length === 1 ? scopedSubjects[0] : null);
+function creatorSourceFromChunk(value: unknown, index: number): TenantChatSource | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const chunk = value as ApiRecord;
+  const source = chunk.source && typeof chunk.source === "object" && !Array.isArray(chunk.source)
+    ? chunk.source as ApiRecord
+    : {};
+  const sourcePath = String(source.source_path || source.path || source.filename || source.doc || "").trim();
+  const title = String(source.filename || source.doc || source.title || sourcePath || "Course material").trim();
+  const page = Number(source.page);
+  const excerpt = String(chunk.text || chunk.content || chunk.excerpt || source.excerpt || "").trim();
 
   return {
-    match,
-    scopedSubjects,
-    source: "tenant_subjects_lookup" as const,
+    rank: index + 1,
+    title,
+    subject: typeof source.subject === "string" ? source.subject : undefined,
+    semester: String(source.section || source.chapter || "").trim() || undefined,
+    source_path: sourcePath || undefined,
+    clean_path: typeof source.clean_path === "string" ? source.clean_path : undefined,
+    excerpt: excerpt || undefined,
+    score: typeof chunk.score === "number" ? chunk.score : undefined,
+    pages: Number.isFinite(page) && page > 0 ? [page] : null,
   };
+}
+
+function creatorTokenUsage(result: ApiRecord): TenantTokenUsage {
+  const usage = result.usage && typeof result.usage === "object" && !Array.isArray(result.usage)
+    ? result.usage as ApiRecord
+    : {};
+  const inputTokens = Number(usage.input_tokens ?? usage.inputTokens ?? 0) || 0;
+  const outputTokens = Number(usage.output_tokens ?? usage.outputTokens ?? 0) || 0;
+  const totalTokens = Number(usage.total_tokens ?? usage.totalTokens ?? inputTokens + outputTokens) || 0;
+  return { inputTokens, outputTokens, totalTokens };
 }
 
 function normalizeContextSummary(value: unknown) {
@@ -623,12 +627,17 @@ export async function POST(request: Request) {
       hasTenantSubjectMetadata: Boolean(parsed.tenantSubject),
     });
 
-    let tenantSubjectResolution: Awaited<ReturnType<typeof resolveTenantSubjectForChat>>;
+    const requestedSubjectValue =
+      parsed.tenantSubject?.slug || parsed.tenantSubject?.name || requestedSubject || "";
+    let subjectAccess: StudentCourseSubjectAccess | null;
     try {
-      tenantSubjectResolution = await resolveTenantSubjectForChat({
-        requestedSubject,
-        tenantSubject: parsed.tenantSubject ?? null,
-      });
+      subjectAccess = parsed.tenantSubject?.courseId
+        ? await getStudentCourseSubjectAccessForCourse(
+            user.id,
+            parsed.tenantSubject.courseId,
+            parsed.tenantSubject.slug,
+          )
+        : await getStudentCourseSubjectAccess(user.id, requestedSubjectValue);
     } catch (error) {
       logTenantChatDebug(
         "tenant_subject_lookup_failed",
@@ -642,43 +651,28 @@ export async function POST(request: Request) {
       );
       return NextResponse.json(
         {
-          error: "Tenant subject lookup failed.",
-          code: "TENANT_SUBJECT_LOOKUP_FAILED",
+          error: "Course subject lookup failed.",
+          code: "COURSE_SUBJECT_LOOKUP_FAILED",
           requestId,
         },
         { status: 502 },
       );
     }
 
-    const { match: tenantSubject, scopedSubjects } = tenantSubjectResolution;
-
     logTenantChatDebug("tenant_subject_lookup_succeeded", {
       requestId,
       requestedSubject,
       lookupMs: Date.now() - subjectLookupStartedAt,
-      source: tenantSubjectResolution.source,
-      scopedSubjectCount: scopedSubjects.length,
-      matchedSubject: tenantSubject?.name ?? null,
+      source: parsed.tenantSubject?.courseId ? "enrolled_course_subject" : "enrolled_subject_lookup",
+      matchedSubject: subjectAccess?.subjectName ?? null,
     });
 
-    if (!tenantSubject) {
+    if (!subjectAccess) {
       logTenantChatDebug("tenant_subject_not_matched", {
         requestId,
         requestedSubject,
         profileSubjects: profile.subjects,
-        scopedSubjects: scopedSubjects.map((subject) => subject.name),
       });
-      return NextResponse.json(
-        {
-          error: "Selected subject could not be matched to an available tenant subject.",
-          code: "TENANT_SUBJECT_NOT_MATCHED",
-          requestId,
-        },
-        { status: 400 },
-      );
-    }
-
-    if (!(await studentHasCourseSubjectAccess(user.id, tenantSubject.slug))) {
       return NextResponse.json(
         {
           error: "Enroll in a course containing this subject first.",
@@ -689,11 +683,49 @@ export async function POST(request: Request) {
       );
     }
 
+    const tenantSubject = trustedTenantSubject(subjectAccess);
+    const admin = createSupabaseAdminClient();
+    const { data: creator, error: creatorError } = await admin
+      .from("teachers")
+      .select("collection_sk")
+      .eq("id", subjectAccess.teacherId)
+      .maybeSingle();
+
+    if (creatorError) {
+      return NextResponse.json(
+        {
+          error: "Course creator lookup failed.",
+          code: "COURSE_CREATOR_LOOKUP_FAILED",
+          requestId,
+        },
+        { status: 502 },
+      );
+    }
+
+    const creatorCollectionKey = String(creator?.collection_sk || "").trim();
+    if (!creatorCollectionKey) {
+      return NextResponse.json(
+        {
+          error: "This course creator's study collection is not ready.",
+          code: "COURSE_COLLECTION_NOT_READY",
+          requestId,
+        },
+        { status: 409 },
+      );
+    }
+
+    if (latestUserAttachments.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Image questions are not available for creator course chat yet.",
+          code: "COURSE_CHAT_IMAGE_UNSUPPORTED",
+          requestId,
+        },
+        { status: 400 },
+      );
+    }
+
     const sessionSubjectContext = normalizeSubjectLabel(tenantSubject.name);
-    const tenantNamespaces = [tenantSubject.namespace || tenantSubject.namespace_slug];
-    // Resolved from the API key rather than hardcoded: the namespaces above
-    // only retrieve anything when paired with the tenant that owns them.
-    const tenantName = await getTenantName();
     const sessionPromise = resolveChatSession({
       supabase,
       userId: user.id,
@@ -758,16 +790,14 @@ export async function POST(request: Request) {
       question: tenantQuestion,
       questionHash: tenantQuestionHash,
       attachmentCount: latestUserAttachments.length,
-      transport: hasAttachments ? "multipart/form-data" : "application/json",
+      transport: "creator_collection_ask",
       payloadHash: hashDebugValue({
         question: tenantQuestion,
         context_summary: tenantContextSummary,
         answer_instruction: answerInstruction,
         subject: tenantSubject.name,
-        tenant: tenantName,
-        namespaces: tenantNamespaces,
+        course_id: subjectAccess.courseId,
         top_k: 8,
-        attachment_count: latestUserAttachments.length,
       }),
       promptLength: tenantQuestion.length,
     });
@@ -789,66 +819,42 @@ export async function POST(request: Request) {
         let tenantTokenUsage = normalizeTokenUsage(null);
 
         try {
-          enqueue("status", {
-            message: "Connecting to syllabus stream...",
-          });
+          enqueue("status", { message: "Reading your course material..." });
 
-          await chatTenantStream(
-            {
-              question: tenantQuestion,
-              answerInstruction,
-              contextSummary: tenantContextSummary,
-              subject: tenantSubject.name,
-              tenant: tenantName,
-              namespaces: tenantNamespaces,
-              topK: 8,
-              attachments: latestUserAttachments,
-            },
-            (event) => {
-              if (event.type === "status") {
-                enqueue("status", {
-                  message: event.message,
-                  query: event.query,
-                  served_from: event.served_from,
-                });
-                return;
-              }
-
-              if (event.type === "token") {
-                answerParts.push(event.text);
-                enqueue("token", { text: event.text });
-                return;
-              }
-
-              if (event.type === "sources") {
-                tenantSources = event.sources;
-                chunksRetrieved = event.chunks_retrieved ?? null;
-                servedFrom = event.served_from ?? null;
-                returnedContextSummary = normalizeContextSummary(event.context_summary);
-                tenantNextTopic =
-                  event.next_topic?.trim() ||
-                  event.next_context_chunk?.title?.trim() ||
-                  "";
-                enqueue("sources", {
-                  sources: tenantSources,
-                  chunks_retrieved: chunksRetrieved,
-                  served_from: servedFrom,
-                  context_summary: returnedContextSummary ? "1" : "0",
-                  next_topic: tenantNextTopic || undefined,
-                });
-                return;
-              }
-
-              if (event.type === "error") {
-                enqueue("error", { message: event.message });
-                return;
-              }
-
-              if (event.type === "done") {
-                tenantTokenUsage = normalizeTokenUsage(event.usage);
-              }
-            },
+          const creatorResult = await askTeacherSubject(
+            creatorCollectionKey,
+            tenantSubject.name,
+            tenantQuestion,
+            8,
+            answerInstruction,
+            creatorChatHistory(parsed.messages),
           );
+          const creatorAnswer = String(creatorResult.answer || "").trim();
+          if (creatorAnswer) {
+            answerParts.push(creatorAnswer);
+            enqueue("token", { text: creatorAnswer });
+          }
+          const creatorChunks = Array.isArray(creatorResult.chunks) ? creatorResult.chunks : [];
+          tenantSources = creatorChunks
+            .map(creatorSourceFromChunk)
+            .filter((source): source is TenantChatSource => Boolean(source));
+          chunksRetrieved = tenantSources.length;
+          servedFrom = "creator_collection";
+          returnedContextSummary = normalizeContextSummary(creatorResult.context_summary);
+          if (!returnedContextSummary) {
+            returnedContextSummary = normalizeContextSummary(
+              `${tenantContextSummary ? `${tenantContextSummary}\n` : ""}User: ${tenantQuestion}\nAssistant: ${creatorAnswer}`,
+            );
+          }
+          tenantNextTopic = String(creatorResult.next_topic || "").trim();
+          tenantTokenUsage = creatorTokenUsage(creatorResult);
+          enqueue("sources", {
+            sources: tenantSources,
+            chunks_retrieved: chunksRetrieved,
+            served_from: servedFrom,
+            context_summary: returnedContextSummary ? "1" : "0",
+            next_topic: tenantNextTopic || undefined,
+          });
 
           generationMs = Date.now() - tenantStartedAt;
           const answer = answerParts.join("").trim();
@@ -867,7 +873,7 @@ export async function POST(request: Request) {
             });
             enqueue("error", {
               code: "TENANT_EMPTY_ANSWER",
-              message: "Tenant API returned no answer.",
+              message: "Course material API returned no answer.",
             });
             controller.close();
             return;
@@ -884,10 +890,8 @@ export async function POST(request: Request) {
               answer_instruction: answerInstruction,
               context_summary: tenantContextSummary,
               subject: tenantSubject.name,
-              tenant: tenantName,
-              namespaces: tenantNamespaces,
+              course_id: subjectAccess.courseId,
               top_k: 8,
-              attachment_count: latestUserAttachments.length,
             }),
             generationMs,
             answerLength: answer.length,
@@ -929,13 +933,13 @@ export async function POST(request: Request) {
           const totalMs = Date.now() - requestStartedAt;
           const subjectTags = [session.subjectContext ?? sessionSubjectContext];
           const answerTrace = buildAnswerTrace({
-            routePath: "tenant_chat_stream",
+            routePath: "creator_collection_ask",
             routeScopeDebug: tenantSubject.folder_path,
             retrievalMode,
-            answerMode: "tenant_chat_stream",
-            answerModeReason: "raw_question_answer_instruction_and_context_summary_sent_to_tenant_stream",
+            answerMode: "tenant_prompt",
+            answerModeReason: "enrolled_course_subject_answered_from_creator_collection",
             matchedScope: tenantSubject.name,
-            answerModel: "tenant:/api/chat/stream",
+            answerModel: "creator:/v1/collection/ask",
             grounded: citations.length > 0,
             citationCount: citations.length,
             lookupMs: 0,
@@ -1105,7 +1109,7 @@ export async function POST(request: Request) {
             code: failureReason === "timeout" ? "TENANT_PROMPT_TIMEOUT" : "TENANT_PROMPT_FAILED",
             message:
               failureReason === "timeout"
-                ? "Tenant answer API timed out. Please retry once."
+                ? "Course answer API timed out. Please retry once."
                 : errorToDebugMessage(error),
           });
           controller.close();
@@ -1130,13 +1134,13 @@ export async function POST(request: Request) {
         "x-retrieval-mode": retrievalMode,
         "x-subject-context": session.subjectContext ?? sessionSubjectContext,
         "x-thinking-enabled": "1",
-        "x-answer-mode": "tenant_chat_stream",
-        "x-answer-mode-reason": "raw_question_answer_instruction_and_context_summary_sent_to_tenant_stream",
-        "x-answer-model": "tenant:/api/chat/stream",
+        "x-answer-mode": "tenant_prompt",
+        "x-answer-mode-reason": "enrolled_course_subject_answered_from_creator_collection",
+        "x-answer-model": "creator:/v1/collection/ask",
         "x-matched-scope": tenantSubject.name,
-        "x-route-path": "tenant_chat_stream",
+        "x-route-path": "creator_collection_ask",
         "x-route-scope-debug": tenantSubject.folder_path,
-        "x-history-strategy": "tenant_context_summary",
+        "x-history-strategy": "creator_conversation_history",
         "x-history-messages": "1",
         "x-tenant-lookup-ms": "0",
         "x-generation-ms": String(generationMs),
@@ -1146,10 +1150,8 @@ export async function POST(request: Request) {
           answer_instruction: answerInstruction,
           context_summary: tenantContextSummary,
           subject: tenantSubject.name,
-          tenant: tenantName,
-          namespaces: tenantNamespaces,
+          course_id: subjectAccess.courseId,
           top_k: 8,
-          attachment_count: latestUserAttachments.length,
         }),
         "x-subject-slug": tenantSubject.slug,
         "x-namespace-slug": tenantSubject.namespace_slug,

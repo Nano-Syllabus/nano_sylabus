@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import {
-  askTeacherQuestion,
-  getTeacherSubjects,
-  TeacherApiError,
-} from "@/lib/teacher-app/client";
+import { askTeacherSubject, getTeacherSubjects, TeacherApiError } from "@/lib/teacher-app/client";
 
 type Context = { params: Promise<{ slug: string }> };
 
@@ -51,7 +47,10 @@ export async function GET(_request: Request, context: Context) {
       .eq("subject_slug", slug)
       .maybeSingle();
     if (error) throw error;
-    return NextResponse.json({ structure: data?.structure || [], updatedAt: data?.updated_at || null });
+    return NextResponse.json({
+      structure: data?.structure || [],
+      updatedAt: data?.updated_at || null,
+    });
   } catch {
     return NextResponse.json({ error: "Could not load the editable syllabus." }, { status: 502 });
   }
@@ -71,10 +70,17 @@ export async function PUT(request: Request, context: Context) {
     }
     const admin = createSupabaseAdminClient();
     const updatedAt = new Date().toISOString();
-    const { error } = await admin.from("teacher_subject_syllabi").upsert(
-      { teacher_id: teacher.id, subject_slug: slug, structure: parsed.data, updated_at: updatedAt },
-      { onConflict: "teacher_id,subject_slug" },
-    );
+    const { error } = await admin
+      .from("teacher_subject_syllabi")
+      .upsert(
+        {
+          teacher_id: teacher.id,
+          subject_slug: slug,
+          structure: parsed.data,
+          updated_at: updatedAt,
+        },
+        { onConflict: "teacher_id,subject_slug" },
+      );
     if (error) throw error;
     return NextResponse.json({ structure: parsed.data, updatedAt });
   } catch {
@@ -87,11 +93,12 @@ export async function POST(_request: Request, context: Context) {
     const { teacher, subject, slug } = await teacherAndSubject(context);
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (!subject) return NextResponse.json({ error: "Subject not found." }, { status: 404 });
-    const result = await askTeacherQuestion(
+    const result = await askTeacherSubject(
       teacher.collection_sk,
-      "Read the indexed syllabus for this subject and extract its units or chapters and topics. Return ONLY valid JSON in this exact shape: [{\"title\":\"Unit title\",\"topics\":[{\"name\":\"Topic\"}]}]. Do not add markdown or commentary. Preserve the syllabus order and wording. If no syllabus structure is present, return [].",
+      typeof subject.name === "string" && subject.name.trim() ? subject.name.trim() : slug,
+      'Read the indexed syllabus for this subject and extract its units or chapters and topics. Return ONLY valid JSON in this exact shape: [{"title":"Unit title","topics":[{"name":"Topic"}]}]. Do not add markdown or commentary. Preserve the syllabus order and wording. If no syllabus structure is present, return [].',
       15,
-      slug,
+      "Use the indexed Syllabus shelf as the source. Return only the requested JSON array and no markdown.",
     );
     const answer = typeof result.answer === "string" ? result.answer : "";
     const structure = parseStructure(answer);
@@ -103,17 +110,23 @@ export async function POST(_request: Request, context: Context) {
     }
     const admin = createSupabaseAdminClient();
     const updatedAt = new Date().toISOString();
-    const { error } = await admin.from("teacher_subject_syllabi").upsert(
-      { teacher_id: teacher.id, subject_slug: slug, structure, updated_at: updatedAt },
-      { onConflict: "teacher_id,subject_slug" },
-    );
+    const { error } = await admin
+      .from("teacher_subject_syllabi")
+      .upsert(
+        { teacher_id: teacher.id, subject_slug: slug, structure, updated_at: updatedAt },
+        { onConflict: "teacher_id,subject_slug" },
+      );
     if (error) throw error;
     return NextResponse.json({ structure, updatedAt });
   } catch (error) {
     const apiError = error instanceof TeacherApiError ? error : null;
-    return NextResponse.json(
-      { error: apiError?.status === 404 ? "Index a syllabus file before extracting units." : "Could not extract the syllabus structure." },
-      { status: apiError?.status === 404 ? 404 : 502 },
-    );
+    const status = apiError?.status === 404 ? 404 : apiError?.status === 408 ? 504 : 502;
+    const message =
+      apiError?.status === 404
+        ? "Index a syllabus file before extracting units."
+        : apiError?.message
+          ? `Could not extract the syllabus structure: ${apiError.message}`
+          : "Could not extract the syllabus structure.";
+    return NextResponse.json({ error: message }, { status });
   }
 }

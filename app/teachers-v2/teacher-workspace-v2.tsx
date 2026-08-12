@@ -13,11 +13,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { TeacherCoursesClient, TeacherCoursesOverview } from "@/components/teacher-courses-client";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   aheadOfCount,
   gradeTopicEvaluation,
   scoreDistribution,
 } from "@/lib/teacher-score-insights";
+import { TEACHER_UPLOAD_MAX_LABEL, teacherUploadSizeError } from "@/lib/teacher-upload";
 import { cn } from "@/lib/utils";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -792,9 +794,69 @@ function normalizeSubmission(value: unknown): ExamSubmission | null {
 }
 
 async function responsePayload(response: Response) {
-  const payload = (await response.json().catch(() => ({}))) as ApiRecord;
-  if (!response.ok) throw new Error(text(payload.error) || "The request could not be completed.");
+  const raw = await response.text();
+  let payload: ApiRecord = {};
+  try {
+    payload = raw ? (JSON.parse(raw) as ApiRecord) : {};
+  } catch {
+    payload = {};
+  }
+  if (!response.ok) {
+    const fallback =
+      response.status === 413
+        ? `This file is too large. Upload a file up to ${TEACHER_UPLOAD_MAX_LABEL}.`
+        : raw.trim() || `The request could not be completed (${response.status}).`;
+    throw new Error(text(payload.error) || fallback);
+  }
   return payload;
+}
+
+async function uploadTeacherDocument(file: File, path: string) {
+  const sizeError = teacherUploadSizeError(file.size);
+  if (sizeError) throw new Error(sizeError);
+
+  const prepared = await responsePayload(
+    await fetch("/api/teacher/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        action: "prepare",
+        path,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+      }),
+    }),
+  );
+  const bucket = text(prepared.bucket);
+  const storagePath = text(prepared.storagePath);
+  const token = text(prepared.token);
+  if (!bucket || !storagePath || !token) {
+    throw new Error("Private upload storage was not prepared correctly.");
+  }
+
+  const supabase = createSupabaseBrowserClient();
+  const { error } = await supabase.storage
+    .from(bucket)
+    .uploadToSignedUrl(storagePath, token, file, {
+      contentType: file.type || "application/octet-stream",
+    });
+  if (error) throw new Error(`The file could not be uploaded: ${error.message}`);
+
+  return responsePayload(
+    await fetch("/api/teacher/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        action: "complete",
+        path,
+        storagePath,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+      }),
+    }),
+  );
 }
 
 function Dialog({
@@ -8372,10 +8434,13 @@ function CreateSubjectDialog({
   const [progress, setProgress] = useState("");
 
   function addFiles(current: File[], incoming: File[]) {
+    const accepted = incoming.filter((file) => !teacherUploadSizeError(file.size));
+    const rejected = incoming.find((file) => teacherUploadSizeError(file.size));
+    if (rejected) setError(`${rejected.name}: ${teacherUploadSizeError(rejected.size)}`);
     const seen = new Set(current.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
     return [
       ...current,
-      ...incoming.filter((file) => !seen.has(`${file.name}:${file.size}:${file.lastModified}`)),
+      ...accepted.filter((file) => !seen.has(`${file.name}:${file.size}:${file.lastModified}`)),
     ];
   }
 
@@ -8400,6 +8465,11 @@ function CreateSubjectDialog({
 
   function chooseSyllabusFile(file: File | null) {
     if (!file) return;
+    const sizeError = teacherUploadSizeError(file.size);
+    if (sizeError) {
+      setError(`${file.name}: ${sizeError}`);
+      return;
+    }
     if (!/\.(pdf|doc|docx|txt|md)$/i.test(file.name)) {
       setError("Choose a PDF, Word document, Markdown, or plain-text syllabus.");
       return;
@@ -8411,12 +8481,7 @@ function CreateSubjectDialog({
   }
 
   async function uploadSubjectFile(file: File, path: string) {
-    const form = new FormData();
-    form.set("file", file);
-    form.set("path", path);
-    const payload = await responsePayload(
-      await fetch("/api/teacher/upload", { method: "POST", body: form }),
-    );
+    const payload = await uploadTeacherDocument(file, path);
     return text(payload.jobId);
   }
 
@@ -8828,7 +8893,7 @@ function CreateSubjectDialog({
                 : "Drop notes and study content here, or tap to choose"}
             </span>
             <span className="mt-2 text-sm text-text-muted">
-              PDF, Word, PowerPoint, text, or image files
+              PDF, Word, PowerPoint, text, or image files · maximum {TEACHER_UPLOAD_MAX_LABEL} each
             </span>
           </label>
           <SelectedFileRows
@@ -8884,7 +8949,7 @@ function CreateSubjectDialog({
                   : "Drop question bank and past papers here, or tap to choose"}
               </span>
               <span className="mt-2 text-sm text-text-muted">
-                PDF, Word, Markdown, or plain-text files
+                PDF, Word, Markdown, or plain-text files · maximum {TEACHER_UPLOAD_MAX_LABEL} each
               </span>
             </label>
             <SelectedFileRows
@@ -8896,10 +8961,7 @@ function CreateSubjectDialog({
             />
           </div>
           {busy ? (
-            <div
-              role="status"
-              className="mt-5 rounded-lg border border-border bg-bg-secondary p-4"
-            >
+            <div role="status" className="mt-5 rounded-lg border border-border bg-bg-secondary p-4">
               {uploadStatus.total ? (
                 <>
                   <div className="flex items-center justify-between gap-3 text-sm">
@@ -9100,12 +9162,7 @@ function UploadDialog({
     setBusy(true);
     setError("");
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("path", destination);
-      const payload = await responsePayload(
-        await fetch("/api/teacher/upload", { method: "POST", body: form }),
-      );
+      const payload = await uploadTeacherDocument(file, destination);
       onUploaded({
         message: text(payload.previewWarning) || `${file.name} uploaded and indexing started`,
         jobId: text(payload.jobId),
@@ -9156,13 +9213,19 @@ function UploadDialog({
             inputClass,
             "mt-2 file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-medium",
           )}
-          onChange={(event) => setFile(event.target.files?.[0] || null)}
+          onChange={(event) => {
+            const selected = event.target.files?.[0] || null;
+            const sizeError = selected ? teacherUploadSizeError(selected.size) : "";
+            setFile(sizeError ? null : selected);
+            setError(sizeError);
+            if (sizeError) event.currentTarget.value = "";
+          }}
           aria-invalid={error ? "true" : undefined}
           aria-describedby={error ? "teacher-upload-error" : "teacher-upload-hint"}
         />
         <p id="teacher-upload-hint" className="mt-2 text-xs text-text-muted">
           The file uploads to the teacher collection, queues indexing, and keeps a private preview
-          copy.
+          copy. Maximum file size: {TEACHER_UPLOAD_MAX_LABEL}.
         </p>
         {error ? (
           <p id="teacher-upload-error" role="alert" className="mt-3 text-sm text-destructive">
@@ -9378,10 +9441,10 @@ function SubjectConfig({
     setError("");
     try {
       await responsePayload(
-        await fetch(
-          `/api/teacher/subjects/${encodeURIComponent(subject.slug)}?deleteFiles=1`,
-          { method: "DELETE", headers: { Accept: "application/json" } },
-        ),
+        await fetch(`/api/teacher/subjects/${encodeURIComponent(subject.slug)}?deleteFiles=1`, {
+          method: "DELETE",
+          headers: { Accept: "application/json" },
+        }),
       );
       onRemoved(`${subject.name} and its files deleted`);
     } catch (caught) {
