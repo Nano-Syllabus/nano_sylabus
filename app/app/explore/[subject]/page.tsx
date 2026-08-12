@@ -7,6 +7,14 @@ import { listStudentCourses } from "@/lib/student-courses";
 
 export const dynamic = "force-dynamic";
 
+function subjectUrlKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 export default async function SubjectDetailPage({
   params,
 }: {
@@ -19,16 +27,22 @@ export default async function SubjectDetailPage({
   if (!decodedSubject.trim()) notFound();
 
   const courses = await listStudentCourses(user.id);
-  const canAccess = courses.some((course) =>
-    course.subjects.some(
-      (item) =>
-        item.slug.toLowerCase() === decodedSubject.toLowerCase() ||
-        item.name.toLowerCase() === decodedSubject.toLowerCase(),
-    ),
-  );
-  if (!canAccess) notFound();
+  const decodedKey = subjectUrlKey(decodedSubject);
+  const accessibleSubject = courses
+    .flatMap((course) => course.subjects)
+    .find((item) => {
+      const slug = item.slug.trim();
+      const name = item.name.trim();
+      return (
+        slug.toLowerCase() === decodedSubject.toLowerCase() ||
+        name.toLowerCase() === decodedSubject.toLowerCase() ||
+        subjectUrlKey(slug) === decodedKey ||
+        subjectUrlKey(name) === decodedKey
+      );
+    });
+  if (!accessibleSubject) notFound();
 
-  const detail = await getStudentSubjectDetail(user.id, decodedSubject);
+  const detail = await getStudentSubjectDetail(user.id, accessibleSubject.slug);
   if (!detail) notFound();
 
   return (
