@@ -469,9 +469,12 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
   const profiles = new Map(
     list(payload.subjectProfiles).map((profile) => [text(profile.subject_slug), profile]),
   );
-  const subjects = list(subjectsPayload.subjects).flatMap((subject) => {
-    const slug = text(subject.slug);
-    const name = text(subject.name);
+  let subjects = (Array.isArray(payload.subjects)
+    ? payload.subjects
+    : list(subjectsPayload.subjects)
+  ).flatMap((subject) => {
+    const slug = text(subject.slug) || (text(subject.name) ? text(subject.name).toLowerCase().replace(/[^a-z0-9]+/g, "-") : "");
+    const name = text(subject.name) || text(subject.slug);
     if (!slug || !name) return [];
     const profile = profiles.get(slug) || {};
     return [
@@ -488,6 +491,41 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
   const rawDocuments = Array.isArray(payload.documents)
     ? list(payload.documents)
     : list(asRecord(payload.documents).documents);
+
+  if (!subjects.length) {
+    const discovered = new Set<string>();
+    const tree = asRecord(payload.sourceTree);
+    if (Array.isArray(tree.children)) {
+      for (const child of tree.children as ApiRecord[]) {
+        const folderName = text(child.name);
+        if (folderName) discovered.add(folderName);
+      }
+    } else {
+      for (const key of Object.keys(tree)) {
+        if (key && !key.startsWith(".") && key !== "files" && key !== "folders") {
+          discovered.add(key);
+        }
+      }
+    }
+    for (const doc of rawDocuments) {
+      const p = text(doc.path) || text(doc.source_path) || text(doc.source_file);
+      const top = p.split("/")[0];
+      if (top && top !== "root") discovered.add(top);
+    }
+    subjects = Array.from(discovered).map((name) => {
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const profile = profiles.get(slug) || {};
+      return {
+        slug,
+        name: titleCase(name),
+        folderPath: name,
+        code: text(profile.subject_code),
+        university: text(profile.university),
+        programme: text(profile.programme),
+      };
+    });
+  }
+
   const previewPaths = new Set(
     Array.isArray(payload.previewPaths)
       ? payload.previewPaths.filter((item): item is string => typeof item === "string")
@@ -526,7 +564,7 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
         shelf,
         sizeBytes: numberValue(document.size_bytes || document.size),
         status,
-        chunks: numberValue(document.chunk_count || document.chunks_indexed),
+        chunks: numberValue(document.chunk_count || document.chunks_indexed || document.chunks),
         previewAvailable: previewPaths.has(path) || previewPaths.has(id),
       },
     ];
@@ -1569,6 +1607,8 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             <TodayView
               teacherHandle={workspace.teacher.fullName}
               subjectCount={workspace.subjects.length}
+              documentCount={workspace.documents.length}
+              sectionCount={workspace.documents.reduce((acc, doc) => acc + (doc.chunks || 0), 0)}
               dashboard={dashboard}
               state={dashboardState}
               error={dashboardError}
@@ -1798,6 +1838,8 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
 function TodayView({
   teacherHandle,
   subjectCount,
+  documentCount = 0,
+  sectionCount = 0,
   dashboard,
   state,
   error,
@@ -1809,6 +1851,8 @@ function TodayView({
 }: {
   teacherHandle: string;
   subjectCount: number;
+  documentCount?: number;
+  sectionCount?: number;
   dashboard: TeacherDashboard | null;
   state: DashboardState;
   error: string;
@@ -1818,6 +1862,29 @@ function TodayView({
   onSettings: () => void;
   onRetry: () => void;
 }) {
+  const [usage, setUsage] = useState<ApiRecord>({});
+  const [usageState, setUsageState] = useState<WorkspaceState>("loading");
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/teacher/collection/usage", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    })
+      .then(responsePayload)
+      .then((payload) => {
+        if (!active) return;
+        setUsage(asRecord(payload.usage));
+        setUsageState("ready");
+      })
+      .catch(() => {
+        if (active) setUsageState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   if (state === "loading" && !dashboard) return <DashboardSkeleton />;
   if (state === "error" && !dashboard) {
     return <DashboardError message={error} onRetry={onRetry} />;
@@ -1825,6 +1892,14 @@ function TodayView({
   if (!dashboard) return null;
 
   const { summary, needsAttention } = dashboard;
+  const totalTokens = numberValue(usage.total_tokens || asRecord(usage.totals).total_tokens);
+  const inputTokens = numberValue(
+    usage.input_tokens || usage.prompt_tokens || asRecord(usage.totals).input_tokens,
+  );
+  const outputTokens = numberValue(
+    usage.output_tokens || usage.completion_tokens || asRecord(usage.totals).output_tokens,
+  );
+
   return (
     <>
       <div className="flex flex-wrap items-end gap-4">
@@ -1838,8 +1913,6 @@ function TodayView({
             {summary.studentCount} {summary.studentCount === 1 ? "student" : "students"}.
           </p>
         </div>
-        <span className="flex-1" />
-        <Button onClick={onSetExam}>Set an exam</Button>
       </div>
 
       {!profileComplete ? (
@@ -1876,6 +1949,54 @@ function TodayView({
         </Button>
       </section>
 
+      {/* Real Live Collection & Teacher Stats Grid */}
+      <section className="mt-5 grid grid-cols-2 gap-3.5 sm:grid-cols-4" aria-label="Collection summary">
+        <div className="rounded-xl border border-border bg-bg-surface p-4">
+          <p className="text-xs font-medium text-text-muted">Indexed subjects</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">{subjectCount}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-bg-surface p-4">
+          <p className="text-xs font-medium text-text-muted">Files</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">{documentCount}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-bg-surface p-4">
+          <p className="text-xs font-medium text-text-muted">Indexed sections</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">{sectionCount}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-bg-surface p-4">
+          <p className="text-xs font-medium text-text-muted">Enrolled students</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">{summary.studentCount}</p>
+        </div>
+      </section>
+
+      {/* Real Live AI Usage Tokens Grid */}
+      <section className="mt-4 rounded-xl border border-border bg-bg-surface p-5" aria-label="AI usage">
+        <div className="flex items-center justify-between">
+          <h3 className="font-display text-base font-semibold text-text-primary">AI processing & token usage</h3>
+          <span className="text-xs text-text-muted">Live from collection</span>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="rounded-lg bg-bg-secondary p-3.5">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-text-muted">Total tokens</p>
+            <p className="mt-1.5 font-display text-xl font-semibold text-text-primary">
+              {usageState === "loading" ? "…" : Number(totalTokens).toLocaleString()}
+            </p>
+          </div>
+          <div className="rounded-lg bg-bg-secondary p-3.5">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-text-muted">Input tokens</p>
+            <p className="mt-1.5 font-display text-xl font-semibold text-text-primary">
+              {usageState === "loading" ? "…" : Number(inputTokens).toLocaleString()}
+            </p>
+          </div>
+          <div className="rounded-lg bg-bg-secondary p-3.5">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-text-muted">Output tokens</p>
+            <p className="mt-1.5 font-display text-xl font-semibold text-text-primary">
+              {usageState === "loading" ? "…" : Number(outputTokens).toLocaleString()}
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section className="mt-[26px]">
         <div className="flex items-baseline gap-3">
           <h2 className="font-display text-lg font-semibold">Your courses</h2>
@@ -1894,59 +2015,7 @@ function TodayView({
         <TeacherCoursesOverview onOpen={onCourses} />
       </section>
 
-      <section className="mt-[26px]">
-        <div className="flex items-baseline gap-3">
-          <h2 className="font-display text-lg font-semibold">Needs attention</h2>
-          <span className="text-sm text-text-muted">{summary.needsAttentionCount} students</span>
-        </div>
-        {needsAttention.length ? (
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {needsAttention.slice(0, 6).map((student) => (
-              <article
-                key={student.studentId || student.name}
-                className="rounded-lg border border-border p-5"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-border font-mono text-xs"
-                    aria-hidden="true"
-                  >
-                    {initials(student.name)}
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="truncate font-display text-lg font-semibold">{student.name}</h3>
-                    <p className="mt-1 text-sm text-text-muted">
-                      {student.submissionCount} graded{" "}
-                      {student.submissionCount === 1 ? "paper" : "papers"}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-5 flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "h-2.5 w-2.5 rounded-full",
-                      student.averagePercent < 40 ? "bg-destructive" : "bg-warning",
-                    )}
-                    aria-hidden="true"
-                  />
-                  <span className="text-sm text-text-secondary">
-                    {student.averagePercent < 40 ? "Struggling" : "Getting there"}
-                  </span>
-                  <span className="flex-1" />
-                  <strong className="font-display text-lg">{student.averagePercent}%</strong>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-5 rounded-lg border border-dashed border-border p-8 text-center">
-            <h3 className="font-display text-lg font-semibold">No students need attention yet</h3>
-            <p className="mt-2 text-sm text-text-secondary">
-              Students below 70% will appear here after submissions are graded.
-            </p>
-          </div>
-        )}
-      </section>
+
     </>
   );
 }
@@ -7306,9 +7375,6 @@ function SubjectsView({
           </p>
         </div>
         <span className="flex-1" />
-        <Button variant="outline" onClick={onCollectionOverview}>
-          Collection overview
-        </Button>
         <Button onClick={onCreate}>Create subject</Button>
       </div>
 
@@ -7354,9 +7420,6 @@ function SubjectsView({
                   </p>
                 ) : null}
                 <p className="mt-2 text-sm text-text-muted">{missing}</p>
-                <p className="mt-4 truncate font-mono text-xs text-text-muted">
-                  {subject.folderPath}
-                </p>
               </button>
             );
           })}
@@ -7434,10 +7497,7 @@ function SubjectView({
       </button>
       <div className="mt-4 flex flex-wrap items-end gap-4">
         <div>
-          <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
-            {subject.folderPath}
-          </p>
-          <h1 className="mt-3 font-display text-3xl font-semibold">{titleCase(subject.name)}</h1>
+          <h1 className="font-display text-3xl font-semibold">{titleCase(subject.name)}</h1>
           <p className="mt-2 text-text-secondary">{documents.length} source files</p>
         </div>
       </div>
@@ -7821,49 +7881,33 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
         </div>
 
         {units.length ? (
-          <div className="mt-5 overflow-x-auto rounded-lg border border-border">
-            <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+          <div className="mt-5 overflow-hidden rounded-xl border border-border">
+            <table className="w-full table-fixed border-collapse text-sm">
               <thead className="bg-bg-secondary text-xs uppercase tracking-wider text-text-muted">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Unit</th>
-                  <th className="px-4 py-3 font-medium">Notes</th>
-                  <th className="px-4 py-3 font-medium">Past questions</th>
-                  <th className="px-4 py-3 font-medium">Marks</th>
-                  <th className="px-4 py-3 font-medium">Mapping</th>
+                  <th className="w-2/5 px-5 py-3.5 text-left font-medium">Unit</th>
+                  <th className="w-1/5 px-5 py-3.5 text-center font-medium">Notes</th>
+                  <th className="w-1/5 px-5 py-3.5 text-center font-medium">Past questions</th>
+                  <th className="w-1/5 px-5 py-3.5 text-center font-medium">Marks</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border">
                 {units.map((unit, index) => {
                   const notes = numberValue(unit.notes_chunks || unit.notes);
                   const questions = numberValue(unit.bank_questions || unit.past_questions);
                   const marks = numberValue(unit.bank_marks || unit.marks);
-                  const status =
-                    text(unit.status) ||
-                    (notes ? (questions ? "covered" : "unassessed") : "untaught");
                   return (
                     <tr
                       key={`${text(unit.number)}-${insightName(unit)}-${index}`}
-                      className="border-t border-border"
+                      className="transition-colors hover:bg-bg-secondary/40"
                     >
-                      <td className="px-4 py-3 font-medium">
+                      <td className="w-2/5 truncate px-5 py-3.5 font-medium text-text-primary">
                         {[text(unit.number), insightName(unit)].filter(Boolean).join(" ") ||
                           `Unit ${index + 1}`}
                       </td>
-                      <td className="px-4 py-3 text-text-secondary">{notes}</td>
-                      <td className="px-4 py-3 text-text-secondary">{questions}</td>
-                      <td className="px-4 py-3 text-text-secondary">{marks || "—"}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={cn(
-                            "rounded-full border px-2 py-1 text-xs",
-                            status === "covered"
-                              ? "border-success/30 text-success"
-                              : "border-warning/40 text-warning",
-                          )}
-                        >
-                          {status === "untaught" ? "No notes" : status.replaceAll("_", " ")}
-                        </span>
-                      </td>
+                      <td className="w-1/5 px-5 py-3.5 text-center font-mono text-xs text-text-secondary">{notes}</td>
+                      <td className="w-1/5 px-5 py-3.5 text-center font-mono text-xs text-text-secondary">{questions}</td>
+                      <td className="w-1/5 px-5 py-3.5 text-center font-mono text-xs text-text-secondary">{marks || "—"}</td>
                     </tr>
                   );
                 })}
@@ -7900,38 +7944,6 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
             </div>
           ))}
         </div>
-        {usageRows.length ? (
-          <div className="mt-5 overflow-x-auto rounded-lg border border-border">
-            <table className="min-w-[520px] w-full border-collapse text-left text-sm">
-              <thead className="bg-bg-secondary text-xs uppercase tracking-wider text-text-muted">
-                <tr>
-                  <th className="px-4 py-3 font-medium">What</th>
-                  <th className="px-4 py-3 text-right font-medium">Calls</th>
-                  <th className="px-4 py-3 text-right font-medium">Tokens</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usageRows.map((row, index) => (
-                  <tr key={`${text(row.endpoint)}-${index}`} className="border-t border-border">
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {text(row.endpoint || row.name) || `operation-${index + 1}`}
-                    </td>
-                    <td className="px-4 py-3 text-right text-text-secondary">
-                      {numberValue(row.calls).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right text-text-secondary">
-                      {metricLabel(numberValue(row.total_tokens || row.tokens))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-text-muted">
-            No AI calls have been recorded for this collection key yet.
-          </p>
-        )}
       </article>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -9906,16 +9918,31 @@ function CollectionOverviewDialog({
     }
   }
 
+  const fileCount =
+    numberValue(
+      workspace.collection.files ||
+        workspace.collection.indexed_files ||
+        workspace.collection.total_files ||
+        workspace.collection.file_count,
+    ) || workspace.documents.length;
+
+  const indexedSectionCount =
+    numberValue(
+      workspace.collection.chunks ||
+        workspace.collection.indexed_chunks ||
+        workspace.collection.total_chunks ||
+        workspace.collection.chunk_count,
+    ) || workspace.documents.reduce((acc, doc) => acc + (doc.chunks || 0), 0);
+
+  const subjectCount = workspace.subjects.length;
+
   return (
     <Dialog title="Collection overview" onClose={onClose}>
       <div className="grid gap-3 sm:grid-cols-3">
         {[
-          ["Files", numberValue(workspace.collection.files || workspace.collection.indexed_files)],
-          [
-            "Indexed sections",
-            numberValue(workspace.collection.chunks || workspace.collection.indexed_chunks),
-          ],
-          ["Subjects", workspace.subjects.length],
+          ["Files", fileCount],
+          ["Indexed sections", indexedSectionCount],
+          ["Subjects", subjectCount],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg border border-border p-4">
             <p className="text-xs text-text-muted">{label}</p>

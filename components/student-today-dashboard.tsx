@@ -302,110 +302,116 @@ export function StudentTodayDashboard({
     });
   }, [allCourses, browseProgramme, browseQuery, browseUniversity]);
 
+  const overallPercentage =
+    today.averagePercentage !== null
+      ? Math.round(today.averagePercentage * 100)
+      : 0;
+
   return (
     <div className="w-full max-w-[1240px] px-4 pb-10 pt-6 sm:px-[26px]">
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[13px] font-medium text-text-secondary">Today</p>
-          <h1 className="mt-3 font-display text-[28px] font-semibold tracking-[-0.04em]">
+      {/* Unified Hero Card matching reference */}
+      <section className="flex flex-col justify-between gap-6 rounded-[24px] border border-border bg-bg-surface p-6 shadow-xs sm:p-8 md:flex-row md:items-center">
+        {/* Left Side: Greeting, Subtitle, CTA Button */}
+        <div className="flex flex-col items-start">
+          <h1 className="font-display text-2xl font-semibold tracking-[-0.03em] text-text-primary sm:text-[28px]">
             Good morning, {firstName(fullName)}
           </h1>
-          <p className="mt-2 text-[15px] text-text-secondary">{subjectLine}</p>
-        </div>
-        {/* <button
-          ref={joinTriggerRef}
-          type="button"
-          className="inline-flex min-h-10 w-fit items-center justify-center rounded-lg border border-border-strong px-4 text-sm font-medium transition hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2"
-          onClick={() => setJoinOpen(true)}
-        >
-          Join with a code
-        </button> */}
-      </section>
+          <p className="mt-1.5 text-sm text-text-secondary sm:text-[15px]">
+            {sitting
+              ? `You have an exam in progress: ${sitting.exam.title}`
+              : today.nextExam
+                ? `${today.nextExam.title} · ${today.nextExam.windowLabel}`
+                : "Here's how your learning is progressing."}
+          </p>
 
-      {/* Hero mirrors the three states: an exam waiting, else the weakest
-          chapter, else nothing to do yet. */}
-      <section className="mt-5 flex flex-col gap-4 rounded-2xl bg-text-primary px-5 py-[22px] text-text-inverse sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        {sitting ? (
-          <>
-            <div>
-              <h2 className="font-display text-[22px] font-semibold">{sitting.exam.title}</h2>
-              <p className="mt-1 text-[13.5px] opacity-70">
-                Half done · {countAnswered(sitting.answers)} of {sitting.exam.questions.length} answered ·{" "}
-                {Math.max(0, Math.round((sitting.deadline - Date.now()) / 60000))} min left
-              </p>
-            </div>
-            <Link
-              href={`/app/exams?exam=${sitting.exam.id}&mode=sit`}
-              className="inline-flex min-h-10 w-fit items-center justify-center rounded-[10px] border border-current/40 px-5 text-[15px] font-medium transition hover:bg-bg-primary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bg-primary"
-            >
-              Carry on
-            </Link>
-          </>
-        ) : today.nextExam ? (
-          <>
-            <div>
-              <h2 className="font-display text-[22px] font-semibold">{today.nextExam.title}</h2>
-              <p className="mt-1 text-[13.5px] opacity-70">
-                {today.nextExam.subjectName} · {today.nextExam.windowLabel}
-                {today.nextExam.totalMarks ? ` · ${today.nextExam.totalMarks} marks` : ""}
-              </p>
-            </div>
-            <Link
-              href={
-                today.nextExam.windowState === "open"
-                  ? `/app/exams?exam=teacher_${today.nextExam.assignmentId}&mode=sit`
-                  : "/app/exams"
-              }
-              className="inline-flex min-h-10 w-fit items-center justify-center rounded-[10px] border border-current/40 px-5 text-[15px] font-medium transition hover:bg-bg-primary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bg-primary"
-            >
-              {today.nextExam.windowState === "open" ? "Start" : "See what it covers"}
-            </Link>
-          </>
-        ) : topWeak ? (
-          <>
-            <div>
-              <h2 className="font-display text-[22px] font-semibold">
-                Nothing due. {topWeak.topicTitle} is your weakest chapter.
-              </h2>
-              <p className="mt-1 text-[13.5px] opacity-70">
-                {topWeak.subjectName} · you keep losing marks here
-              </p>
-            </div>
-            <Link
-              href={practiceHref(topWeak.subjectName, topWeak.topicKey)}
-              className="inline-flex min-h-10 w-fit items-center justify-center rounded-[10px] border border-current/40 px-5 text-[15px] font-medium transition hover:bg-bg-primary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bg-primary"
-            >
-              Practise it
-            </Link>
-          </>
-        ) : (
-          <>
-            <div>
-              <h2 className="font-display text-[22px] font-semibold">All quiet</h2>
-              <p className="mt-1 text-[13.5px] opacity-70">
-                {today.subjectCount
-                  ? "Sit a practice paper and your weak chapters will show up here."
-                  : "Join a subject with the code your teacher gave you."}
-              </p>
-            </div>
-            {today.subjectCount ? (
+          <div className="mt-5">
+            {sitting ? (
+              <Link
+                href={`/app/exams?exam=${sitting.exam.id}&mode=sit`}
+                className="inline-flex min-h-10 items-center justify-center rounded-[10px] border border-border-strong bg-text-primary px-5 text-sm font-medium text-text-inverse transition hover:opacity-90"
+              >
+                Carry on
+              </Link>
+            ) : today.nextExam ? (
+              <Link
+                href={
+                  today.nextExam.windowState === "open"
+                    ? `/app/exams?exam=teacher_${today.nextExam.assignmentId}&mode=sit`
+                    : "/app/exams"
+                }
+                className="inline-flex min-h-10 items-center justify-center rounded-[10px] border border-border-strong bg-text-primary px-5 text-sm font-medium text-text-inverse transition hover:opacity-90"
+              >
+                {today.nextExam.windowState === "open" ? "Start exam" : "See exam"}
+              </Link>
+            ) : topWeak ? (
+              <Link
+                href={practiceHref(topWeak.subjectName, topWeak.topicKey)}
+                className="inline-flex min-h-10 items-center justify-center rounded-[10px] border border-border-strong bg-text-primary px-5 text-sm font-medium text-text-inverse transition hover:opacity-90"
+              >
+                Continue learning
+              </Link>
+            ) : today.subjectCount ? (
               <Link
                 href={practiceHref(firstSubject)}
-                className="inline-flex min-h-10 w-fit items-center justify-center rounded-[10px] border border-current/40 px-5 text-[15px] font-medium transition hover:bg-bg-primary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bg-primary"
+                className="inline-flex min-h-10 items-center justify-center rounded-[10px] border border-border-strong bg-text-primary px-5 text-sm font-medium text-text-inverse transition hover:opacity-90"
               >
-                Practise
+                Continue learning
               </Link>
-            ) : null /* (
-              <button
-                type="button"
-                onClick={() => setJoinOpen(true)}
-                className="inline-flex min-h-10 w-fit items-center justify-center rounded-[10px] border border-current/40 px-5 text-[15px] font-medium transition hover:bg-bg-primary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bg-primary"
+            ) : (
+              <Link
+                href="/app/explore"
+                className="inline-flex min-h-10 items-center justify-center rounded-[10px] border border-border-strong bg-text-primary px-5 text-sm font-medium text-text-inverse transition hover:opacity-90"
               >
-                Join with a code
-              </button>
-            ) */}
-          </>
-        )}
+                Explore courses
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {/* Right Side: Circular Progress Ring + Overall Learning Label */}
+        <div className="flex items-center gap-4 border-t border-border pt-4 sm:gap-5 md:border-t-0 md:pt-0">
+          <div
+            className="relative grid size-20 place-items-center rounded-full text-primary sm:size-[88px]"
+            role="img"
+            aria-label={`${overallPercentage} percent overall learning`}
+          >
+            <svg className="absolute inset-0 size-full -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                fill="none"
+                stroke="currentColor"
+                strokeOpacity="0.12"
+                strokeWidth="8"
+              />
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                pathLength="100"
+                fill="none"
+                stroke="#3b82f6"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeDasharray={`${overallPercentage} 100`}
+                className="transition-all duration-700 ease-out"
+              />
+            </svg>
+            <span className="font-display text-xl font-bold tracking-tight text-text-primary sm:text-2xl">
+              {overallPercentage}%
+            </span>
+          </div>
+
+          <div>
+            <h3 className="font-display text-base font-semibold tracking-tight text-text-primary sm:text-lg">
+              Overall learning
+            </h3>
+            <p className="text-xs text-text-muted sm:text-sm">
+              Across all subjects
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="mt-4 grid gap-3 md:grid-cols-2">

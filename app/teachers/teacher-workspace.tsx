@@ -1808,7 +1808,6 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
           eyebrow="Today"
           title={`Good morning, ${workspace.teacher.name.split(" ")[0]}`}
           description={`${currentClassrooms.length} classes, ${currentEnrollmentCount} students.`}
-          action={<Button onClick={() => openCreateExam()}>Set an exam</Button>}
         />
         <Card className="flex flex-col gap-5 bg-text-primary p-6 text-text-inverse md:flex-row md:items-center">
           <div className="min-w-0 flex-1">
