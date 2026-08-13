@@ -76,7 +76,26 @@ describe("GET /api/teacher/workspace", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(payload.teacher).toEqual({ handle: "ramesh", email: "teacher@example.com", fullName: "ramesh", language: "EN", answerStyle: "exam_focused" });
+    expect(payload.teacher).toEqual({
+      handle: "ramesh",
+      email: "teacher@example.com",
+      fullName: "ramesh",
+      language: "EN",
+      answerStyle: "exam_focused",
+      publicProfile: {
+        displayName: "ramesh",
+        headline: "",
+        bio: "",
+        institution: "",
+        location: "",
+        expertise: [],
+        yearsExperience: 0,
+        website: "",
+        avatarPath: "",
+        avatarUrl: "",
+        complete: false,
+      },
+    });
     expect(payload.subjects.subjects[0].name).toBe("Physics");
     expect(JSON.stringify(payload)).not.toContain("collection-secret");
     expect(mocks.getTeacherMe).toHaveBeenCalledWith("collection-secret");

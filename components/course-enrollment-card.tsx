@@ -28,7 +28,7 @@ export function CourseEnrollmentCard({
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Could not enroll in this course.");
 
-      router.replace(`/app/courses/${encodeURIComponent(slug)}`);
+      router.replace("/app/courses");
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not enroll in this course.");
@@ -49,7 +49,14 @@ export function CourseEnrollmentCard({
 
   return (
     <div>
-      <Button type="button" size="lg" className="w-full sm:w-auto" onClick={() => void enroll()} disabled={loading}>
+      <Button
+        type="button"
+        size="lg"
+        className="w-full sm:w-auto"
+        onClick={() => void enroll()}
+        disabled={loading}
+        aria-busy={loading}
+      >
         {loading ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
         {loading ? "Opening course..." : "Enroll free"}
         {!loading ? <ArrowRight className="h-4 w-4" aria-hidden="true" /> : null}

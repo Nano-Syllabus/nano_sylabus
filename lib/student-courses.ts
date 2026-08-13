@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { mapTeacherCourse, type TeacherCourse } from "@/lib/teacher-courses";
+import { profileFromUser, withTeacherAvatar } from "@/lib/teacher-public-profile";
 
 const courseColumns =
   "id,teacher_id,slug,name,short_name,category,authority,tagline,description,duration_weeks,level,language_modes,access_model,price_paisa,visibility,status,diagnostic_question_count,daily_minutes,pass_percentage,negative_marking,exam_date,outcomes,created_at,updated_at,published_at";
@@ -21,23 +22,117 @@ export class StudentCourseError extends Error {
   }
 }
 
+type TeacherDocumentFileRow = {
+  teacher_id: string | null;
+  collection_path: string | null;
+  size_bytes: number | string | null;
+};
+
+function normalizeCollectionPath(value: string) {
+  return value.replace(/^\/+|\/+$/g, "").replace(/\/+/g, "/");
+}
+
+function documentBelongsToSubject(documentPath: string, subjectFolderPath: string) {
+  const document = normalizeCollectionPath(documentPath).toLowerCase();
+  const subject = normalizeCollectionPath(subjectFolderPath).toLowerCase();
+  return Boolean(subject) && (document === subject || document.startsWith(`${subject}/`));
+}
+
+function documentShelf(documentPath: string, subjectFolderPath: string) {
+  const document = normalizeCollectionPath(documentPath);
+  const subject = normalizeCollectionPath(subjectFolderPath);
+  if (!subject || !documentBelongsToSubject(document, subject)) return "";
+  return document.slice(subject.length).replace(/^\/+/, "").split("/")[0] || "";
+}
+
+function courseSourceStats(
+  subjects: Record<string, unknown>[],
+  documents: TeacherDocumentFileRow[],
+): TeacherCourse["sourceStats"] {
+  const matchedPaths = new Set<string>();
+  let syllabusFileCount = 0;
+  let notesFileCount = 0;
+  let questionBankFileCount = 0;
+  let totalBytes = 0;
+
+  for (const document of documents) {
+    const path = String(document.collection_path || "");
+    if (!path || matchedPaths.has(path)) continue;
+
+    const subject = subjects.find((item) =>
+      documentBelongsToSubject(path, String(item.folder_path || "")),
+    );
+    if (!subject) continue;
+
+    matchedPaths.add(path);
+    totalBytes += Number(document.size_bytes) || 0;
+
+    const shelf = documentShelf(path, String(subject.folder_path || ""));
+    if (shelf === "Syllabus") syllabusFileCount += 1;
+    if (shelf === "Notes") notesFileCount += 1;
+    if (shelf === "Question Bank") questionBankFileCount += 1;
+  }
+
+  return {
+    subjectCount: subjects.length,
+    sourceFileCount: matchedPaths.size,
+    syllabusFileCount,
+    notesFileCount,
+    questionBankFileCount,
+    totalBytes,
+  };
+}
+
 async function mapCourseRows(admin: SupabaseClient, rows: Record<string, unknown>[]) {
   const ids = rows.map((row) => String(row.id || "")).filter(Boolean);
   if (!ids.length) return [];
 
-  const [subjectsResult, enrollmentsResult] = await Promise.all([
-    admin
-      .from("teacher_course_subjects")
-      .select("course_id,subject_slug,subject_name,folder_path,position")
-      .in("course_id", ids),
-    admin
-      .from("teacher_course_enrollments")
-      .select("course_id")
-      .in("course_id", ids)
-      .eq("status", "active"),
-  ]);
+  const teacherIds = [...new Set(rows.map((row) => String(row.teacher_id || "")).filter(Boolean))];
+  const [subjectsResult, enrollmentsResult, teachersResult, documentFilesResult] =
+    await Promise.all([
+      admin
+        .from("teacher_course_subjects")
+        .select("course_id,subject_slug,subject_name,folder_path,position")
+        .in("course_id", ids),
+      admin
+        .from("teacher_course_enrollments")
+        .select("course_id")
+        .in("course_id", ids)
+        .eq("status", "active"),
+      admin.from("teachers").select("id,user_id,handle").in("id", teacherIds),
+      admin
+        .from("teacher_document_files")
+        .select("teacher_id,collection_path,size_bytes")
+        .in("teacher_id", teacherIds),
+    ]);
   if (subjectsResult.error) throw subjectsResult.error;
   if (enrollmentsResult.error) throw enrollmentsResult.error;
+  if (teachersResult.error) throw teachersResult.error;
+  if (documentFilesResult.error) throw documentFilesResult.error;
+
+  const authorsByTeacher = new Map<string, TeacherCourse["author"]>();
+  await Promise.all(
+    ((teachersResult.data || []) as Array<{ id: string; user_id: string; handle: string }>).map(
+      async (teacher) => {
+        const authResult = await admin.auth.admin.getUserById(teacher.user_id);
+        const base = profileFromUser(authResult.data.user, teacher.handle);
+        const profile = await withTeacherAvatar(admin, base);
+        authorsByTeacher.set(teacher.id, {
+          handle: teacher.handle,
+          displayName: profile.displayName,
+          headline: profile.headline,
+          bio: profile.bio,
+          institution: profile.institution,
+          location: profile.location,
+          expertise: profile.expertise,
+          yearsExperience: profile.yearsExperience,
+          website: profile.website,
+          avatarUrl: profile.avatarUrl,
+          complete: profile.complete,
+        });
+      },
+    ),
+  );
 
   const subjectsByCourse = new Map<string, Record<string, unknown>[]>();
   for (const subject of (subjectsResult.data || []) as Record<string, unknown>[]) {
@@ -51,12 +146,34 @@ async function mapCourseRows(admin: SupabaseClient, rows: Record<string, unknown
     enrollmentCounts.set(courseId, (enrollmentCounts.get(courseId) || 0) + 1);
   }
 
+  const documentsByTeacher = new Map<string, TeacherDocumentFileRow[]>();
+  for (const document of (documentFilesResult.data || []) as TeacherDocumentFileRow[]) {
+    const teacherId = String(document.teacher_id || "");
+    documentsByTeacher.set(teacherId, [...(documentsByTeacher.get(teacherId) || []), document]);
+  }
+
   return rows.map((row) => {
     const courseId = String(row.id || "");
+    const teacherId = String(row.teacher_id || "");
+    const subjects = subjectsByCourse.get(courseId) || [];
     return mapTeacherCourse(
       row,
-      subjectsByCourse.get(courseId) || [],
+      subjects,
       enrollmentCounts.get(courseId) || 0,
+      authorsByTeacher.get(teacherId) || {
+        handle: "teacher",
+        displayName: "Course teacher",
+        headline: "",
+        bio: "",
+        institution: "",
+        location: "",
+        expertise: [],
+        yearsExperience: 0,
+        website: "",
+        avatarUrl: "",
+        complete: false,
+      },
+      courseSourceStats(subjects, documentsByTeacher.get(teacherId) || []),
     );
   });
 }

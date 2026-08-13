@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { TeacherPublicProfile } from "@/lib/teacher-public-profile";
 
 export const teacherCourseCategories = [
   "Loksewa",
@@ -88,10 +89,19 @@ export type TeacherCourse = {
   examDate: string | null;
   outcomes: string[];
   subjects: { slug: string; name: string; folderPath: string; position: number }[];
+  sourceStats: {
+    subjectCount: number;
+    sourceFileCount: number;
+    syllabusFileCount: number;
+    notesFileCount: number;
+    questionBankFileCount: number;
+    totalBytes: number;
+  };
   enrollmentCount: number;
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;
+  author: Omit<TeacherPublicProfile, "avatarPath"> & { handle: string };
 };
 
 export function teacherCourseSlug(value: string) {
@@ -136,7 +146,30 @@ export function mapTeacherCourse(
   row: Record<string, unknown>,
   subjects: Record<string, unknown>[],
   enrollmentCount: number,
+  author: TeacherCourse["author"] = {
+    handle: "teacher",
+    displayName: "Course teacher",
+    headline: "",
+    bio: "",
+    institution: "",
+    location: "",
+    expertise: [],
+    yearsExperience: 0,
+    website: "",
+    avatarUrl: "",
+    complete: false,
+  },
+  sourceStats?: TeacherCourse["sourceStats"],
 ): TeacherCourse {
+  const mappedSubjects = subjects
+    .map((subject) => ({
+      slug: String(subject.subject_slug || ""),
+      name: String(subject.subject_name || ""),
+      folderPath: String(subject.folder_path || ""),
+      position: Number(subject.position) || 0,
+    }))
+    .sort((a, b) => a.position - b.position);
+
   return {
     id: String(row.id || ""),
     slug: String(row.slug || ""),
@@ -161,17 +194,19 @@ export function mapTeacherCourse(
     negativeMarking: Number(row.negative_marking) || 0,
     examDate: typeof row.exam_date === "string" ? row.exam_date : null,
     outcomes: Array.isArray(row.outcomes) ? row.outcomes.map(String) : [],
-    subjects: subjects
-      .map((subject) => ({
-        slug: String(subject.subject_slug || ""),
-        name: String(subject.subject_name || ""),
-        folderPath: String(subject.folder_path || ""),
-        position: Number(subject.position) || 0,
-      }))
-      .sort((a, b) => a.position - b.position),
+    subjects: mappedSubjects,
+    sourceStats: sourceStats || {
+      subjectCount: mappedSubjects.length,
+      sourceFileCount: 0,
+      syllabusFileCount: 0,
+      notesFileCount: 0,
+      questionBankFileCount: 0,
+      totalBytes: 0,
+    },
     enrollmentCount,
     createdAt: String(row.created_at || ""),
     updatedAt: String(row.updated_at || ""),
     publishedAt: typeof row.published_at === "string" ? row.published_at : null,
+    author,
   };
 }

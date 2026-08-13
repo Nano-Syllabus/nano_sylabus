@@ -14,22 +14,9 @@ import {
 } from "lucide-react";
 import type { TeacherCourse } from "@/lib/teacher-courses";
 
-const PER_PAGE = 6;
+const PER_PAGE = 3;
 
-const notes = [
-  {
-    title: "Built from indexed subjects",
-    body: "Every published course is connected to the teacher's indexed material, which powers chat, practice, and exam generation.",
-  },
-  {
-    title: "Inspect before enrolling",
-    body: "Open a course to see its subjects, study settings, outcomes, access model, and teaching language.",
-  },
-  {
-    title: "One course, one study space",
-    body: "Enrollment keeps the full subject set and its learning tools together instead of making you collect subjects one at a time.",
-  },
-];
+
 
 function ButtonLink({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -58,7 +45,7 @@ function SiteHeader() {
           <Link href="/#why" className="transition-colors hover:text-foreground">Why nanosyllabus</Link>
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/exams" className="glow-shadow inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:brightness-110">Start free</Link>
+          <Link href="/exams" className="glow-shadow inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:brightness-110">Open study space</Link>
         </div>
       </div>
     </header>
@@ -135,10 +122,16 @@ export function PublicExamsClient({ courses }: { courses: TeacherCourse[] }) {
           <Link href="/" className="inline-flex min-h-10 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="size-4" aria-hidden="true" /> Back home
           </Link>
-          <h1 className="mt-6 font-display text-3xl font-semibold sm:text-4xl">Find your course</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Browse {courses.length} teacher-published course{courses.length === 1 ? "" : "s"}. Open one to inspect its indexed subjects, study plan, and access before enrolling.
-          </p>
+
+          <div className="hero-glow glass-card relative mt-8 overflow-hidden rounded-3xl border border-border px-6 py-14 text-center">
+            <h1 className="font-display text-3xl font-semibold leading-tight sm:text-5xl">
+              Find your course
+            </h1>
+            <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Browse {courses.length} teacher-published course{courses.length === 1 ? "" : "s"}.
+              Open one to inspect its indexed subjects, study plan, and access before enrolling.
+            </p>
+          </div>
 
           <div className="relative mt-8 max-w-xl">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -203,20 +196,12 @@ export function PublicExamsClient({ courses }: { courses: TeacherCourse[] }) {
             </div>
           )}
 
-          <section className="mt-16 grid gap-4 md:grid-cols-3">
-            {notes.map((note) => (
-              <div key={note.title} className="rounded-2xl border border-border bg-card p-6">
-                <h2 className="font-display text-base font-semibold">{note.title}</h2>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{note.body}</p>
-              </div>
-            ))}
-          </section>
+
         </div>
       </main>
       <footer className="border-t border-border/60 py-10">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} nanosyllabus - AI exam prep built for Nepal.</p>
-          <ButtonLink href="/login">Open study space</ButtonLink>
         </div>
       </footer>
     </div>

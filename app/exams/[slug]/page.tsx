@@ -6,8 +6,11 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
+  BriefcaseBusiness,
+  Building2,
   CalendarDays,
   CheckCircle2,
+  MapPin,
   Signal,
   Sparkles,
   Users,
@@ -46,7 +49,7 @@ function SiteHeader() {
           <Link href="/#why" className="hover:text-foreground">Why nanosyllabus</Link>
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/exams" className="glow-shadow inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:brightness-110">Start free</Link>
+          <Link href="/exams" className="glow-shadow inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:brightness-110">Open study space</Link>
         </div>
       </div>
     </header>
@@ -80,7 +83,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
   const related = published
     .filter((item) => item.id !== course.id && item.category === course.category)
     .slice(0, 3);
-  const paymentHref = `/app/payment/${course.slug}`;
+  const paymentHref = `/payment/${course.slug}`;
 
   return (
     <div className="exam-prep-theme min-h-screen bg-background text-foreground">
@@ -111,14 +114,27 @@ export default async function CourseDetailPage({ params }: PageProps) {
 
               <aside className="glass-card rounded-2xl border border-border p-6">
                 <p className="text-sm text-muted-foreground">Enrollment</p>
-                <h2 className="mt-2 font-display text-2xl font-semibold">
-                  {course.accessModel === "free" ? "Free to start" : `NPR ${course.priceNpr.toLocaleString()}`}
-                </h2>
+                {course.accessModel === "free" ? (
+                  <div className="mt-2">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-display text-4xl font-semibold tracking-tight">$0</span>
+                      <span className="text-sm font-medium text-muted-foreground">USD</span>
+                    </div>
+                    <p className="mt-1 text-sm font-medium text-muted-foreground">NPR 0 · No payment required</p>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="font-display text-4xl font-semibold tracking-tight">
+                      NPR {course.priceNpr.toLocaleString()}
+                    </span>
+                    <span className="text-sm font-medium text-muted-foreground">one time</span>
+                  </div>
+                )}
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
                   Enrolling opens one study space with every subject connected to this course.
                 </p>
-                <a href={paymentHref} className="glow-shadow mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:brightness-110">
-                  Enroll & open study space <ArrowRight className="size-4" aria-hidden="true" />
+                <a href={paymentHref} className="glow-shadow mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-[filter] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+                  Buy now <ArrowRight className="size-4" aria-hidden="true" />
                 </a>
                 <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
                   <li className="flex gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-highlight" aria-hidden="true" /> {course.diagnosticQuestionCount}-question diagnostic</li>
@@ -149,22 +165,80 @@ export default async function CourseDetailPage({ params }: PageProps) {
               {!course.subjects.length ? <p className="py-7 text-sm text-muted-foreground">No subjects are connected yet.</p> : null}
             </div>
           </div>
-
-          <aside>
-            <h2 className="font-display text-2xl font-semibold">Study settings</h2>
-            <dl className="mt-6 divide-y divide-border border-y border-border text-sm">
-              <div className="flex justify-between gap-4 py-4"><dt className="text-muted-foreground">Daily target</dt><dd className="font-medium">{course.dailyMinutes} minutes</dd></div>
-              <div className="flex justify-between gap-4 py-4"><dt className="text-muted-foreground">Pass target</dt><dd className="font-medium">{course.passPercentage}%</dd></div>
-              <div className="flex justify-between gap-4 py-4"><dt className="text-muted-foreground">Negative marking</dt><dd className="font-medium">{course.negativeMarking}%</dd></div>
-              <div className="flex justify-between gap-4 py-4"><dt className="text-muted-foreground">Exam date</dt><dd className="font-medium">{course.examDate || "Not set"}</dd></div>
-            </dl>
-            {course.outcomes.length ? (
-              <div className="mt-8">
-                <h2 className="font-display text-xl font-semibold">What you get</h2>
-                <ul className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
-                  {course.outcomes.map((outcome) => <li key={outcome} className="flex gap-2"><CheckCircle2 className="mt-1 size-4 shrink-0 text-highlight" aria-hidden="true" /> {outcome}</li>)}
-                </ul>
+          <aside className="h-fit rounded-2xl border border-border bg-card p-6">
+            <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Your instructor</p>
+            <div className="mt-5 flex items-center gap-4">
+              <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-full border border-border bg-surface">
+                {course.author.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={course.author.avatarUrl}
+                    alt={`${course.author.displayName} profile`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="font-display text-xl font-semibold" aria-hidden="true">
+                    {course.author.displayName
+                      .split(/\s+/)
+                      .slice(0, 2)
+                      .map((part) => part[0])
+                      .join("")
+                      .toUpperCase() || "T"}
+                  </span>
+                )}
               </div>
+              <div className="min-w-0">
+                <h2 className="font-display text-xl font-semibold">{course.author.displayName}</h2>
+                <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                  {course.author.headline || "Course creator and instructor"}
+                </p>
+              </div>
+            </div>
+
+            {course.author.bio ? (
+              <p className="mt-5 text-sm leading-6 text-muted-foreground">{course.author.bio}</p>
+            ) : null}
+
+            <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
+              {course.author.institution ? (
+                <li className="flex gap-2.5">
+                  <Building2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  <span>{course.author.institution}</span>
+                </li>
+              ) : null}
+              {course.author.location ? (
+                <li className="flex gap-2.5">
+                  <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  <span>{course.author.location}</span>
+                </li>
+              ) : null}
+              {course.author.yearsExperience ? (
+                <li className="flex gap-2.5">
+                  <BriefcaseBusiness className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  <span>{course.author.yearsExperience} years teaching experience</span>
+                </li>
+              ) : null}
+            </ul>
+
+            {course.author.expertise.length ? (
+              <div className="mt-5 flex flex-wrap gap-2" aria-label="Areas of expertise">
+                {course.author.expertise.map((item) => (
+                  <span key={item} className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground">
+                    {item}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {course.author.website ? (
+              <a
+                href={course.author.website}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-6 inline-flex min-h-10 items-center gap-2 rounded-md text-sm font-medium text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Visit instructor website <ArrowUpRight className="size-4" aria-hidden="true" />
+              </a>
             ) : null}
           </aside>
         </section>

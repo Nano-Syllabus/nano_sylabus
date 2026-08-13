@@ -193,16 +193,20 @@ function ButtonLink({
   href,
   variant,
   size = "sm",
+  target,
   children,
 }: {
   href: string;
   variant: keyof typeof buttonVariants;
   size?: keyof typeof buttonSizes;
+  target?: string;
   children: ReactNode;
 }) {
   return (
     <Link
       href={href}
+      target={target}
+      rel={target === "_blank" ? "noopener noreferrer" : undefined}
       className={`inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 ${buttonVariants[variant]} ${buttonSizes[size]}`}
     >
       {children}
@@ -256,8 +260,8 @@ function SiteHeader() {
           </a>
         </nav>
         <div className="flex items-center gap-2">
-          <ButtonLink href="/exams" variant="hero" size="sm">
-            Start free
+          <ButtonLink href="/app" variant="hero" size="sm" target="_blank">
+            Open study space <ArrowRight className="size-4" aria-hidden="true" />
           </ButtonLink>
         </div>
       </div>
@@ -346,7 +350,7 @@ export default async function Index() {
             </p>
             <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <ButtonLink href="/exams" variant="hero" size="xl">
-                Start Free <ArrowRight />
+                Browse Courses <ArrowRight />
               </ButtonLink>
               <AnchorButton href="#how" variant="soft" size="xl">
                 See how it works
@@ -397,7 +401,7 @@ export default async function Index() {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="font-display text-2xl font-semibold sm:text-3xl">
-                Start from an exam
+                What are you preparing for?
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
                 Every live course is published by a teacher and backed by its connected indexed

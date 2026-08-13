@@ -9,6 +9,7 @@ import {
 } from "@/lib/teacher-app/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { profileFromUser, withTeacherAvatar } from "@/lib/teacher-public-profile";
 
 export async function GET() {
   try {
@@ -48,6 +49,10 @@ export async function GET() {
       .select("full_name,language_pref")
       .eq("user_id", user.id)
       .maybeSingle();
+    const publicProfile = await withTeacherAvatar(
+      admin,
+      profileFromUser(user, teacher.handle),
+    );
 
     return NextResponse.json({
       teacher: {
@@ -61,6 +66,7 @@ export async function GET() {
         language: profile?.language_pref === "RN" ? "RN" : "EN",
         answerStyle:
           user.user_metadata?.teacher_answer_style === "concise" ? "concise" : "exam_focused",
+        publicProfile,
       },
       collection,
       subjects,
