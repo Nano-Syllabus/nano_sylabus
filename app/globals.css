@@ -288,6 +288,33 @@ body:has(.exam-prep-theme) {
   background-size: 64px 64px;
 }
 
+.readiness-ring {
+  display: grid;
+  width: 9rem;
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 9999px;
+  background: conic-gradient(var(--highlight) 0 68%, var(--surface-2) 68% 100%);
+  position: relative;
+}
+
+.readiness-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0.875rem;
+  border-radius: inherit;
+  background: var(--card);
+}
+
+.readiness-ring span {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-exam-display), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--highlight);
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
