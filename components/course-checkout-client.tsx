@@ -266,140 +266,143 @@ export function CourseCheckoutClient({ course, user }: CourseCheckoutClientProps
                   </div>
                 </div>
 
-              {/* Order Breakdown */}
-              <div className="mt-6 space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Course Enrollment Plan</span>
-                  <span className="font-medium">NPR {originalPrice.toLocaleString("en-NP")}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm text-emerald-400">
-                  <span className="flex items-center gap-1.5">
-                    <Zap className="size-3.5" aria-hidden="true" />{" "}
-                    {isFree ? "Early Access Scholarship (100% Off)" : "Scholarship"}
-                  </span>
-                  <span>- NPR {scholarshipDiscount.toLocaleString("en-NP")}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Platform & Processing Fee</span>
-                  <span className="font-medium">NPR 0</span>
-                </div>
-                <div className="border-t border-dashed border-border/80 pt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-display text-base font-semibold text-foreground">
-                      Total Due Now
+                {/* Order Breakdown */}
+                <div className="mt-6 space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Course Enrollment Plan</span>
+                    <span className="font-medium">NPR {originalPrice.toLocaleString("en-NP")}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-emerald-400">
+                    <span className="flex items-center gap-1.5">
+                      <Zap className="size-3.5" aria-hidden="true" />{" "}
+                      {isFree ? "Early Access Scholarship (100% Off)" : "Scholarship"}
                     </span>
-                    <div className="text-right">
-                      <span className="font-display text-2xl font-extrabold text-foreground">
-                        NPR {totalDueNpr.toLocaleString("en-NP")}
+                    <span>- NPR {scholarshipDiscount.toLocaleString("en-NP")}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Platform & Processing Fee</span>
+                    <span className="font-medium">NPR 0</span>
+                  </div>
+                  <div className="border-t border-dashed border-border/80 pt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-display text-base font-semibold text-foreground">
+                        Total Due Now
                       </span>
-                      <span className="block text-[11px] text-muted-foreground">($0.00 USD)</span>
+                      <div className="text-right">
+                        <span className="font-display text-2xl font-extrabold text-foreground">
+                          NPR {totalDueNpr.toLocaleString("en-NP")}
+                        </span>
+                        <span className="block text-[11px] text-muted-foreground">($0.00 USD)</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Payment Method Selector */}
-              <div className="mt-7">
-                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Select Payment Method
-                </label>
-                <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("free")}
-                    className={`flex items-center gap-3 rounded-xl border p-3.5 text-left transition-all ${
-                      paymentMethod === "free"
-                        ? "border-primary bg-primary/10 shadow-sm"
-                        : "border-border bg-surface/50 hover:bg-surface"
-                    } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background`}
-                  >
-                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full border border-primary">
-                      {paymentMethod === "free" ? (
-                        <div className="size-2.5 rounded-full bg-primary" />
-                      ) : null}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">Free Activation</p>
-                      <p className="text-[11px] text-muted-foreground">Instant 1-Click Access</p>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled
-                    className="flex cursor-not-allowed items-center gap-3 rounded-xl border border-border bg-surface/30 p-3.5 text-left opacity-45 select-none"
-                    title="Online payment not required for free courses"
-                  >
-                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border">
-                      {/* Unselected & disabled */}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="truncate text-sm font-semibold text-muted-foreground">
-                          Card / Wallet
-                        </p>
-                        <span className="rounded bg-surface-2 px-1.5 py-0.2 text-[9px] font-medium text-muted-foreground">
-                          Inactive
-                        </span>
+                {/* Payment Method Selector */}
+                <div className="mt-7">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Select Payment Method
+                  </label>
+                  <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("free")}
+                      className={`flex items-center gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                        paymentMethod === "free"
+                          ? "border-primary bg-primary/10 shadow-sm"
+                          : "border-border bg-surface/50 hover:bg-surface"
+                      } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background`}
+                    >
+                      <div className="flex size-5 shrink-0 items-center justify-center rounded-full border border-primary">
+                        {paymentMethod === "free" ? (
+                          <div className="size-2.5 rounded-full bg-primary" />
+                        ) : null}
                       </div>
-                      <p className="text-[11px] text-muted-foreground">eSewa · Khalti · Card</p>
-                    </div>
-                  </button>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Free Activation</p>
+                        <p className="text-[11px] text-muted-foreground">Instant 1-Click Access</p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled
+                      className="flex cursor-not-allowed items-center gap-3 rounded-xl border border-border bg-surface/30 p-3.5 text-left opacity-45 select-none"
+                      title="Online payment not required for free courses"
+                    >
+                      <div className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border">
+                        {/* Unselected & disabled */}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate text-sm font-semibold text-muted-foreground">
+                            Card / Wallet
+                          </p>
+                          <span className="rounded bg-surface-2 px-1.5 py-0.2 text-[9px] font-medium text-muted-foreground">
+                            Inactive
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">eSewa · Khalti · Card</p>
+                      </div>
+                    </button>
+                  </div>
                 </div>
+
+                {/* Free Status Box */}
+                <div className="mt-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                  <div className="flex items-center gap-2.5 text-xs text-emerald-400">
+                    <Check className="size-4 shrink-0" aria-hidden="true" />
+                    <span className="font-semibold">No card or transaction required</span>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                    Click the button below to immediately activate your student study space with all
+                    study materials and test series.
+                  </p>
+                </div>
+
+                {/* Error display */}
+                {error ? (
+                  <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5 text-sm text-destructive">
+                    {error}
+                  </div>
+                ) : null}
               </div>
 
-              {/* Free Status Box */}
-              <div className="mt-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-                <div className="flex items-center gap-2.5 text-xs text-emerald-400">
-                  <Check className="size-4 shrink-0" aria-hidden="true" />
-                  <span className="font-semibold">No card or transaction required</span>
+              {/* Submit CTA Button & Guarantees (Anchored at the bottom) */}
+              <div className="mt-8">
+                <button
+                  type="button"
+                  onClick={() => void handleEnroll()}
+                  disabled={loading}
+                  className="glow-shadow inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2.5 rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? (
+                    <>
+                      <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                      Setting up your study space...
+                    </>
+                  ) : (
+                    <>
+                      Enroll Free & Start Learning
+                      <ArrowRight className="size-4" aria-hidden="true" />
+                    </>
+                  )}
+                </button>
+
+                {/* Guarantees & Terms */}
+                <div className="mt-5 flex items-center justify-center gap-6 text-center text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <Zap className="size-3.5 text-primary" aria-hidden="true" /> Instant access
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <GraduationCap className="size-3.5 text-primary" aria-hidden="true" />{" "}
+                    {stats.syllabusFileCount ? "Indexed syllabus" : "Teacher course"}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <ShieldCheck className="size-3.5 text-emerald-400" aria-hidden="true" />{" "}
+                    Lifetime free
+                  </span>
                 </div>
-                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                  Click the button below to immediately activate your student study space with all
-                  study materials and test series.
-                </p>
-              </div>
-
-              {/* Error display */}
-              {error ? (
-                <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5 text-sm text-destructive">
-                  {error}
-                </div>
-              ) : null}
-
-              {/* Submit CTA Button */}
-              <button
-                type="button"
-                onClick={() => void handleEnroll()}
-                disabled={loading}
-                className="glow-shadow mt-7 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2.5 rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading ? (
-                  <>
-                    <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-                    Setting up your study space...
-                  </>
-                ) : (
-                  <>
-                    Enroll Free & Start Learning
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  </>
-                )}
-              </button>
-
-              {/* Guarantees & Terms */}
-              <div className="mt-5 flex items-center justify-center gap-6 text-center text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1">
-                  <Zap className="size-3.5 text-primary" aria-hidden="true" /> Instant access
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <GraduationCap className="size-3.5 text-primary" aria-hidden="true" />{" "}
-                  {stats.syllabusFileCount ? "Indexed syllabus" : "Teacher course"}
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <ShieldCheck className="size-3.5 text-emerald-400" aria-hidden="true" /> Lifetime
-                  free
-                </span>
               </div>
             </div>
           </div>
