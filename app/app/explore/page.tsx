@@ -13,19 +13,10 @@ export default async function ExplorePage() {
   const subjects = profile
     ? await listExplorerSubjects(user.id, profile, courseSubjects)
     : [];
-  const courseGroups = courses.map((course) => ({
-    slug: course.slug,
-    name: course.name,
-    subjects: course.subjects.map((subject) => ({
-      slug: subject.slug,
-      name: subject.name,
-    })),
-  }));
-
   return (
     <>
-      <SetAppShell title="Subjects" />
-      <SubjectExplorerClient subjects={subjects} courses={courseGroups} />
+      <SetAppShell title="My courses" />
+      <SubjectExplorerClient subjects={subjects} courses={courses} />
     </>
   );
 }

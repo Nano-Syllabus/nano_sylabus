@@ -3,7 +3,7 @@
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { cn } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
 import {
   createInitialTeacherWorkspace,
   workspaceStorageKey,
@@ -597,7 +597,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
             >
               {workspace.subjects.map((subject) => (
                 <option key={subject.id} value={subject.id}>
-                  {subject.name}
+                  {titleCase(subject.name)}
                 </option>
               ))}
             </select>
@@ -695,7 +695,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
               <select className={inputClass} name="subjectId" required>
                 {workspace.subjects.map((subject) => (
                   <option key={subject.id} value={subject.id}>
-                    {subject.name}
+                    {titleCase(subject.name)}
                   </option>
                 ))}
               </select>
@@ -1186,7 +1186,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
               <div className="mx-auto max-w-3xl rounded-lg border border-border bg-bg-primary p-6 sm:p-10">
                 <h3 className="font-display text-2xl font-semibold">{material.name}</h3>
                 <p className="mt-2 text-sm text-text-muted">
-                  {subject.name} · {subject.code}
+                  {titleCase(subject.name)} · {subject.code}
                 </p>
                 {material.previewText ? (
                   <pre className="mt-7 whitespace-pre-wrap font-mono-ui text-sm leading-7 text-text-secondary">
@@ -1936,7 +1936,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
                     <span className="flex-1" />
                     <span className="text-xs text-text-muted">Semester {subject.semester}</span>
                   </div>
-                  <h2 className="mt-4 font-display text-lg font-semibold">{subject.name}</h2>
+                  <h2 className="mt-4 font-display text-lg font-semibold">{titleCase(subject.name)}</h2>
                   <p className="mt-1 text-sm text-text-secondary">
                     {subject.programme} · {subject.university}
                   </p>
@@ -1991,7 +1991,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
           eyebrow={[subject.code, subject.programme, `Semester ${subject.semester}`]
             .filter(Boolean)
             .join(" · ")}
-          title={subject.name}
+          title={titleCase(subject.name)}
           description={`${subject.chapters.length} units · ${topicCount} topics · ${subject.materials.length} files · ${classrooms.length} classrooms`}
           action={<Button onClick={() => openCreateClassroom(subject.id)}>Run as classroom</Button>}
         />
@@ -2185,7 +2185,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
         ) : (
           <EmptyState
             title="Not running yet"
-            body={`${subject.name} is ready. Create a classroom for a batch and share its join code.`}
+            body={`${titleCase(subject.name)} is ready. Create a classroom for a batch and share its join code.`}
             action={
               <Button onClick={() => openCreateClassroom(subject.id)}>Create classroom</Button>
             }
@@ -2455,7 +2455,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
           ]}
         />
         <PageHeader
-          eyebrow={`${subject.name} · ${classroom.schedule}`}
+          eyebrow={`${titleCase(subject.name)} · ${classroom.schedule}`}
           title={classroom.name}
           description={`${students.length} students${classAverage !== null ? ` · class average ${percent(classAverage)}` : ""}${results.length ? ` · ${results.length} submissions` : ""}`}
           action={
@@ -5459,7 +5459,7 @@ function TestTutor({
         { from: "teacher", text: clean },
         {
           from: "tutor",
-          text: `Draft answer for ${subject.name}: ${topic ? `start with ${topic.name}, state the governing idea, then show the method step by step.` : "state the key idea first, then show one worked step."}${source ? ` Source preview: ${source.name}.` : " Add material before enabling this for students."}`,
+          text: `Draft answer for ${titleCase(subject.name)}: ${topic ? `start with ${topic.name}, state the governing idea, then show the method step by step.` : "state the key idea first, then show one worked step."}${source ? ` Source preview: ${source.name}.` : " Add material before enabling this for students."}`,
           sources: source ? [`${source.name} · ${source.kind}`] : [subject.name],
         },
       ];

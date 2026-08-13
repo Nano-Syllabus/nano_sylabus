@@ -103,7 +103,7 @@ const MIN_SESSION_TITLE_WORDS = 3;
 const MAX_SESSION_TITLE_WORDS = 4;
 const MAX_SESSION_TITLE_LENGTH = 44;
 
-function titleCase(value: string) {
+export function titleCase(value: string) {
   return value
     .trim()
     .replace(/\s+/g, " ")

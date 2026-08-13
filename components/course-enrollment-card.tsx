@@ -28,7 +28,7 @@ export function CourseEnrollmentCard({
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Could not enroll in this course.");
 
-      router.replace("/app/courses");
+      router.replace("/app/explore");
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not enroll in this course.");

@@ -5,6 +5,7 @@ import { CourseLeaveButton } from "@/components/course-leave-button";
 import { SetAppShell } from "@/components/set-app-shell";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getStudentCourse } from "@/lib/student-courses";
+import { titleCase } from "@/lib/utils";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -43,7 +44,7 @@ export default async function CourseStudySpacePage({ params }: PageProps) {
           <div className="flex flex-wrap items-start gap-6">
             <div className="min-w-0 flex-1">
               <p className="text-sm text-text-secondary">{course.category} · {course.authority}</p>
-              <h1 className="mt-2 max-w-3xl font-display text-3xl font-semibold">{course.name}</h1>
+              <h1 className="mt-2 max-w-3xl font-display text-3xl font-semibold">{titleCase(course.name)}</h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
                 {course.description}
               </p>
@@ -75,7 +76,7 @@ export default async function CourseStudySpacePage({ params }: PageProps) {
               </Link>
               <CourseLeaveButton
                 slug={course.slug}
-                courseName={course.name}
+                courseName={titleCase(course.name)}
                 redirectTo="/app/courses"
               />
             </div>
@@ -100,7 +101,7 @@ export default async function CourseStudySpacePage({ params }: PageProps) {
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block font-medium">{subject.name}</span>
+                      <span className="block font-medium">{titleCase(subject.name)}</span>
                       <span className="mt-1 block truncate text-sm text-text-muted">
                         Indexed teacher material
                       </span>

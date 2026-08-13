@@ -7,7 +7,7 @@ import { Markdown } from "@/components/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { NoteColor, RevisionNoteDetail } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { formatDate, titleCase } from "@/lib/utils";
 
 const COLOR_DOT: Record<NoteColor, string> = {
   red: "bg-destructive",
@@ -42,7 +42,16 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
     <>
       <article className="mx-auto max-w-3xl px-5 py-10 animate-fade-in">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">{current.subjectTag}</Badge>
+          {current.subjectSlug ? (
+            <Link
+              href={`/app/explore/${encodeURIComponent(current.subjectSlug)}`}
+              className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+            >
+              <Badge variant="outline">{titleCase(current.subjectTag)}</Badge>
+            </Link>
+          ) : (
+            <Badge variant="outline">{titleCase(current.subjectTag)}</Badge>
+          )}
           {current.chapterTag ? <Badge>{current.chapterTag}</Badge> : null}
           <span className="ml-auto text-[11px] font-mono-ui text-text-muted">
             {formatDate(current.createdAt)}
@@ -72,6 +81,11 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
         ) : null}
 
         <div className="mt-10 flex flex-wrap gap-2">
+          {current.subjectSlug ? (
+            <Link href={`/app/explore/${encodeURIComponent(current.subjectSlug)}`}>
+              <Button variant="outline" size="sm">Open subject</Button>
+            </Link>
+          ) : null}
           <Link href={`/app/chat?session=${current.sessionId}`}>
             <Button variant="outline" size="sm">
               ↑ Jump to chat

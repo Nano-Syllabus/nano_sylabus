@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import type { StudentToday, TodayChapter, TodayExam } from "@/lib/data/student-today";
 import { countAnswered, readSavedSitting, type SavedSitting } from "@/lib/practice-sitting";
+import { titleCase } from "@/lib/utils";
 
 function firstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] || "Student";
@@ -722,7 +723,7 @@ export function StudentTodayDashboard({
                           </span>
                         </div>
                         <h3 className="mt-3 font-display text-[17px] font-semibold">
-                          {course.name}
+                          {titleCase(course.name)}
                         </h3>
                         <p className="mt-1 text-[13px] text-text-muted">
                           {[

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { StudentSubjectDetail } from "@/lib/data/student-subject";
 import type { PracticeTopicStatus } from "@/lib/tenant/client";
+import { titleCase } from "@/lib/utils";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -36,6 +37,13 @@ const STATUS_DOT: Record<PracticeTopicStatus, string> = {
   developing: "bg-amber-500",
   weak: "bg-destructive",
   not_attempted: "bg-bg-tertiary",
+};
+
+const STATUS_BAR: Record<PracticeTopicStatus, string> = {
+  strong: "bg-[var(--readiness-green)]",
+  developing: "bg-[var(--readiness-yellow)]",
+  weak: "bg-[var(--readiness-red)]",
+  not_attempted: "bg-[var(--readiness-border)]",
 };
 
 function Dot({ status }: { status: PracticeTopicStatus }) {
@@ -142,23 +150,6 @@ function MaterialItem({ item }: { item: Material }) {
         )}
         {item.sizeBytes ? (
           <span className="text-xs text-text-muted">{formatSize(item.sizeBytes)}</span>
-        ) : null}
-        <span className="text-xs text-text-muted">
-          {item.indexed ? "searchable" : "not indexed yet"}
-        </span>
-        {item.documentId ? (
-          <button
-            type="button"
-            onClick={() => {
-              if (expanded) setExpanded(false);
-              else void loadDetail();
-            }}
-            aria-expanded={expanded}
-            aria-busy={state === "loading"}
-            className={`min-h-10 rounded-md px-2.5 text-xs font-medium text-text-secondary hover:bg-bg-secondary ${focusRing}`}
-          >
-            {expanded ? "Hide details" : "Details"}
-          </button>
         ) : null}
       </div>
 
@@ -275,7 +266,15 @@ async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 7_000): Promise<
   }
 }
 
-export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }) {
+export function SubjectDetailClient({
+  detail,
+  courseName,
+  readinessTarget,
+}: {
+  detail: StudentSubjectDetail;
+  courseName: string;
+  readinessTarget: number | null;
+}) {
   const [tab, setTab] = useState<"progress" | "exams" | "syllabus" | "material" | "bank">(
     "progress",
   );
@@ -443,6 +442,20 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
 
   const attemptedCount = chapters.filter((chapter) => chapter.attempts > 0).length;
 
+  const overallReadiness = useMemo(() => {
+    if (!chapters.length) return 0;
+    const totalWeight = chapters.reduce(
+      (sum, chapter) => sum + Math.max(0, chapter.weight),
+      0,
+    );
+    const weightedScore = chapters.reduce((sum, chapter) => {
+      const weight = totalWeight > 0 ? Math.max(0, chapter.weight) : 1;
+      return sum + Math.max(0, Math.min(1, chapter.percentage)) * weight;
+    }, 0);
+    const denominator = totalWeight > 0 ? totalWeight : chapters.length;
+    return denominator > 0 ? Math.round((weightedScore / denominator) * 100) : 0;
+  }, [chapters]);
+
   // The prototype kept the question bank on its own tab; the teacher files it on
   // its own shelf, so the split is theirs, not ours.
   const isBankShelf = (shelf: string) => shelf.toLowerCase().includes("question");
@@ -453,18 +466,15 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
     <main className="w-full max-w-[1240px] px-[14px] pb-24 pt-[18px] lg:p-[26px]">
       <p className="mb-4 text-[13px] text-text-muted">
         <Link href="/app/explore" className={`hover:underline ${focusRing}`}>
-          Subjects
+          My courses
         </Link>{" "}
-        / <b className="text-text-secondary">{detail.name}</b>
+        / <b className="text-text-secondary">{titleCase(detail.name)}</b>
       </p>
 
       <div className="mb-7 flex flex-wrap items-start gap-4">
         <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-center gap-3 font-mono-ui text-xs uppercase tracking-[0.12em] text-text-secondary">
-            <span>{detail.providerName}</span>
-          </div>
           <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">
-            {detail.name}
+            {titleCase(detail.name)}
           </h1>
           <p className="mt-3 text-sm text-text-secondary">
             {topicsState === "ready" ? `${chapters.length} chapters · ` : ""}
@@ -473,6 +483,12 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
           </p>
         </div>
         <span className="flex-1" />
+        <Link
+          href={`/app/notes?subject=${encodeURIComponent(detail.slug)}`}
+          className={`${button} border-border bg-bg-primary text-text-primary`}
+        >
+          My notes{detail.revisionNoteCount ? ` (${detail.revisionNoteCount})` : ""}
+        </Link>
         <Link
           href={`/app/exams?subject=${encodeURIComponent(detail.name)}`}
           className={`${button} border-border-strong bg-text-primary text-text-inverse`}
@@ -634,15 +650,6 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
               {detail.providerName} has not uploaded a question bank file for this subject.
             </p>
           ) : null}
-
-          <div className="mt-4">
-            <Link
-              href={`/app/exams?subject=${encodeURIComponent(detail.name)}`}
-              className={`${button} border-border-strong bg-text-primary text-text-inverse`}
-            >
-              Practise from this bank
-            </Link>
-          </div>
         </div>
       ) : null}
 
@@ -695,10 +702,6 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
                   </ul>
                 </section>
               ))}
-              <p className="text-[13px] text-text-muted">
-                Uploaded by {detail.providerName}. Answers and practice questions are drawn from
-                these files.
-              </p>
             </div>
           ) : null}
         </div>
@@ -717,76 +720,175 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
 
       {topicsState === "ready" && tab === "progress" ? (
         <>
-          {!attemptedCount ? (
-            <div className="mb-6 rounded-[14px] border border-border px-4 py-5">
-              <p className="text-[15px] font-medium">Nothing measured yet</p>
-              <p className="mt-1 text-[13px] text-text-muted">
-                Sit a practice paper and each chapter below fills in with how you actually did.
-              </p>
+          <section
+            className="subject-readiness-card relative mx-auto mb-8 flex w-full max-w-4xl flex-col rounded-[24px] border p-6 sm:p-7 shadow-sm transition-all"
+            aria-labelledby="subject-readiness-title"
+          >
+            {/* Header: Course Pill & Overall Readiness Title */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--readiness-border)] pb-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center rounded-full border border-[var(--readiness-border)] bg-[var(--readiness-track)]/50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--readiness-muted)]">
+                  {titleCase(courseName)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="flex size-2 rounded-full bg-[var(--readiness-blue)] animate-pulse" />
+                <h2 id="subject-readiness-title" className="font-display text-base font-semibold tracking-tight text-[var(--readiness-text)] sm:text-lg">
+                  Overall Readiness
+                </h2>
+              </div>
             </div>
-          ) : null}
 
-          <section className="mb-6 rounded-[14px] border border-border p-4">
-            <h2 className="font-display text-lg font-semibold">Where you stand</h2>
-            <ul className="mt-3 space-y-1">
-              {(["strong", "developing", "weak", "not_attempted"] as const).map((status) => (
-                <li
-                  key={status}
-                  className="flex items-center gap-2 border-b border-border-strong/10 py-2 text-sm last:border-b-0"
+            {/* Grid Layout: Gauge Card on Left, Chapter Progress on Right */}
+            <div className="mt-5 grid gap-6 lg:grid-cols-[15.5rem_1fr] lg:items-stretch">
+              {/* Left Column: Polished Gauge Card */}
+              <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-[var(--readiness-border)]/60 bg-[var(--readiness-panel)] p-5 shadow-xs sm:p-6">
+                <div
+                  className="relative grid size-36 place-items-center rounded-full text-[var(--readiness-blue)] sm:size-40"
+                  role="img"
+                  aria-label={`${overallReadiness} percent overall readiness`}
                 >
-                  <Dot status={status} />
-                  <span className="flex-1">{STATUS_WORD[status]}</span>
-                  <b>{chapters.filter((chapter) => chapter.status === status).length}</b>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-3 text-[13px] text-text-muted">
-              Measured from the practice papers and exams you have sat in this subject.
-            </p>
+                  <svg className="absolute inset-0 size-full -rotate-90" viewBox="0 0 120 120" aria-hidden="true">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="var(--readiness-track)" strokeWidth="10" />
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r="50"
+                      pathLength="100"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="10"
+                      strokeLinecap="round"
+                      strokeDasharray={`${overallReadiness} 100`}
+                      className="transition-all duration-700 ease-out"
+                    />
+                  </svg>
+                  <div className="relative text-center">
+                    <span className="font-display text-4xl font-bold tracking-tight text-[var(--readiness-text)] sm:text-5xl">
+                      {overallReadiness}%
+                    </span>
+                    <span className="block text-[11px] font-medium uppercase tracking-wider text-[var(--readiness-muted)]">
+                      Mastery
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-4 inline-flex items-center justify-center whitespace-nowrap rounded-full border border-[var(--readiness-border)] bg-[var(--readiness-track)]/40 px-3.5 py-1 text-xs text-[var(--readiness-muted)]">
+                  <span>
+                    <strong className="font-semibold text-[var(--readiness-text)]">{attemptedCount}</strong> of {chapters.length} chapters measured
+                  </span>
+                </div>
+              </div>
+
+              {/* Right Column: Syllabus Chapter Progress + CTA */}
+              <div className="flex flex-col justify-between">
+                <div>
+                  <p className="text-xs text-[var(--readiness-muted)] sm:text-sm">
+                    {attemptedCount
+                      ? readinessTarget
+                        ? `Your course target is ${readinessTarget}%. Focus on the lowest chapters next.`
+                        : "Based on your graded practice and exam attempts. Focus on the lowest chapters next."
+                      : "Complete your first practice paper to measure every syllabus chapter."}
+                  </p>
+
+                  <div
+                    className="mt-3.5 max-h-48 space-y-3 overflow-y-auto pr-2 sm:max-h-52"
+                    aria-label="Chapter readiness scores"
+                  >
+                    {chapters.map((chapter) => {
+                      const score = Math.round(Math.max(0, Math.min(1, chapter.percentage)) * 100);
+                      return (
+                        <div key={chapter.topic_key} className="group">
+                          <div className="flex items-center justify-between gap-4 text-xs sm:text-[13px]">
+                            <span className="min-w-0 truncate font-medium text-[var(--readiness-text)] transition-colors group-hover:text-primary">
+                              {chapter.title}
+                            </span>
+                            <span className="shrink-0 font-medium text-[var(--readiness-muted)]">
+                              {chapter.attempts ? `${score}%` : "Not started"}
+                            </span>
+                          </div>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--readiness-track)]">
+                            <span
+                              className={`block h-full rounded-full transition-all duration-500 ${STATUS_BAR[chapter.status]}`}
+                              style={{ width: `${score}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {!attemptedCount ? (
+                  <div className="mt-4 pt-1">
+                    <Link
+                      href={`/app/exams?subject=${encodeURIComponent(detail.name)}`}
+                      className={`${button} min-h-11 w-full border-border-strong bg-text-primary text-text-inverse hover:opacity-90 dark:border-[var(--readiness-blue)] dark:bg-[var(--readiness-blue)] dark:text-black dark:hover:brightness-110`}
+                    >
+                      Start first practice →
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </section>
 
+
+
           <section>
-            <div className="mb-[11px] flex items-baseline gap-[10px]">
+            <div className="mb-3 flex items-baseline gap-2.5">
               <h2 className="font-display text-lg font-semibold">Every chapter</h2>
-              <span className="text-[13px] text-text-muted">
+              <span className="text-xs text-text-muted">
                 percentage is its share of the question bank
               </span>
             </div>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(266px,1fr))] gap-3">
+            <div className="flex flex-col gap-2.5">
               {chapters.map((chapter) => (
                 <article
                   key={chapter.topic_key}
-                  className="rounded-[14px] border border-border bg-bg-primary p-4 shadow-sm"
+                  className="flex flex-col gap-3 rounded-2xl border border-border bg-bg-primary p-4 shadow-sm transition-all hover:border-border-strong sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-3.5"
                 >
-                  <div className="flex items-center gap-2">
-                    <Dot status={chapter.status} />
-                    <span className="text-[13px] text-text-muted">
-                      {STATUS_WORD[chapter.status]}
-                    </span>
-                    <span className="flex-1" />
-                    <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
+                  {/* Left part: Status dot + label, Chapter Title & Question Info */}
+                  <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
+                    {/* Status Indicator */}
+                    <div className="flex shrink-0 items-center gap-2 sm:w-28">
+                      <Dot status={chapter.status} />
+                      <span className="text-xs text-text-muted">
+                        {STATUS_WORD[chapter.status]}
+                      </span>
+                    </div>
+
+                    {/* Chapter Title & Questions count */}
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-display text-[15.5px] font-semibold leading-snug text-text-primary">
+                        {chapter.title}
+                      </h3>
+                      <p className="mt-0.5 text-xs text-text-muted">
+                        {chapter.attempts
+                          ? `${Math.round(chapter.percentage * 100)}% over ${chapter.attempts} attempt${chapter.attempts === 1 ? "" : "s"}`
+                          : `${chapter.qb_question_count} questions in the bank`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right part: Exam Weight Pill & Action Buttons */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                    <span className="shrink-0 rounded-full border border-border bg-bg-secondary px-3 py-1 text-xs font-medium text-text-secondary">
                       {Math.round(chapter.weight * 100)}% of exam
                     </span>
-                  </div>
-                  <h3 className="mt-3 font-display text-[17px] font-semibold">{chapter.title}</h3>
-                  <p className="mt-1 text-[13px] text-text-muted">
-                    {chapter.attempts
-                      ? `${Math.round(chapter.percentage * 100)}% over ${chapter.attempts} attempt${chapter.attempts === 1 ? "" : "s"}`
-                      : `${chapter.qb_question_count} questions in the bank`}
-                  </p>
-                  <div className="mt-4 flex gap-2">
-                    <Link
-                      href={`/app/exams?subject=${encodeURIComponent(detail.name)}&topic=${encodeURIComponent(chapter.topic_key)}`}
-                      className={`${button} min-h-9 border-border-strong bg-text-primary px-3 text-xs text-text-inverse`}
-                    >
-                      Practise
-                    </Link>
-                    <Link
-                      href={chatHref(detail.name, chapter.title)}
-                      className={`${button} min-h-9 border-border bg-bg-primary px-3 text-xs`}
-                    >
-                      Ask a doubt
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/app/exams?subject=${encodeURIComponent(detail.name)}&topic=${encodeURIComponent(chapter.topic_key)}`}
+                        className={`${button} min-h-9 border-border-strong bg-text-primary px-4 text-xs font-medium text-text-inverse transition hover:opacity-85`}
+                      >
+                        Practise
+                      </Link>
+                      <Link
+                        href={chatHref(detail.name, chapter.title)}
+                        className={`${button} min-h-9 border-border bg-bg-primary px-4 text-xs font-medium text-text-primary transition hover:bg-bg-secondary`}
+                      >
+                        Ask a doubt
+                      </Link>
+                    </div>
                   </div>
                 </article>
               ))}
@@ -795,42 +897,52 @@ export function SubjectDetailClient({ detail }: { detail: StudentSubjectDetail }
 
           {needsWork.length ? (
             <section className="mt-8">
-              <div className="mb-[11px] flex items-baseline gap-[10px]">
+              <div className="mb-3 flex items-baseline gap-2.5">
                 <h2 className="font-display text-lg font-semibold">Needs work</h2>
-                <span className="text-[13px] text-text-muted">
+                <span className="text-xs text-text-muted">
                   weakest {needsWork.length} chapter{needsWork.length === 1 ? "" : "s"}
                 </span>
               </div>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(266px,1fr))] gap-3">
+              <div className="flex flex-col gap-2.5">
                 {needsWork.map((chapter) => (
                   <article
                     key={chapter.topic_key}
-                    className="rounded-[14px] border border-border-strong bg-bg-primary p-4 shadow-sm"
+                    className="flex flex-col gap-3 rounded-2xl border border-border-strong bg-bg-primary p-4 shadow-sm transition-all sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-3.5"
                   >
-                    <div className="flex items-center gap-2">
-                      <Dot status={chapter.status} />
-                      <span className="text-[13px] text-text-muted">
-                        {STATUS_WORD[chapter.status]}
-                      </span>
-                      <span className="flex-1" />
-                      <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
+                    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
+                      <div className="flex shrink-0 items-center gap-2 sm:w-28">
+                        <Dot status={chapter.status} />
+                        <span className="text-xs text-text-muted">
+                          {STATUS_WORD[chapter.status]}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-display text-[15.5px] font-semibold leading-snug text-text-primary">
+                          {chapter.title}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-text-muted">
+                          {Math.round(chapter.percentage * 100)}% accuracy
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                      <span className="shrink-0 rounded-full border border-border bg-bg-secondary px-3 py-1 text-xs font-medium text-text-secondary">
                         {Math.round(chapter.percentage * 100)}%
                       </span>
-                    </div>
-                    <h3 className="mt-3 font-display text-[17px] font-semibold">{chapter.title}</h3>
-                    <div className="mt-4 flex gap-2">
-                      <Link
-                        href={`/app/exams?subject=${encodeURIComponent(detail.name)}&topic=${encodeURIComponent(chapter.topic_key)}`}
-                        className={`${button} min-h-9 border-border-strong bg-text-primary px-3 text-xs text-text-inverse`}
-                      >
-                        Practise
-                      </Link>
-                      <Link
-                        href={chatHref(detail.name, chapter.title)}
-                        className={`${button} min-h-9 border-border bg-bg-primary px-3 text-xs`}
-                      >
-                        Ask a doubt
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/app/exams?subject=${encodeURIComponent(detail.name)}&topic=${encodeURIComponent(chapter.topic_key)}`}
+                          className={`${button} min-h-9 border-border-strong bg-text-primary px-4 text-xs font-medium text-text-inverse transition hover:opacity-85`}
+                        >
+                          Practise
+                        </Link>
+                        <Link
+                          href={chatHref(detail.name, chapter.title)}
+                          className={`${button} min-h-9 border-border bg-bg-primary px-4 text-xs font-medium text-text-primary transition hover:bg-bg-secondary`}
+                        >
+                          Ask a doubt
+                        </Link>
+                      </div>
                     </div>
                   </article>
                 ))}

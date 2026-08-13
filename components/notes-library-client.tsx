@@ -6,22 +6,46 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { RevisionNoteSummary } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { formatDate, titleCase } from "@/lib/utils";
 
-export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) {
+type NotesLibraryClientProps = {
+  notes: RevisionNoteSummary[];
+  initialSubjectSlug?: string | null;
+};
+
+function subjectKey(note: RevisionNoteSummary) {
+  return note.subjectSlug || `legacy:${note.subjectTag}`;
+}
+
+function subjectHref(note: RevisionNoteSummary) {
+  return note.subjectSlug ? `/app/explore/${encodeURIComponent(note.subjectSlug)}` : null;
+}
+
+export function NotesLibraryClient({ notes, initialSubjectSlug = null }: NotesLibraryClientProps) {
   const router = useRouter();
   const [view, setView] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
-  const [subjectFilter, setSubjectFilter] = useState<string>("All");
+  const [subjectFilter, setSubjectFilter] = useState(initialSubjectSlug || "all");
 
   const subjects = useMemo(
-    () => ["All", ...Array.from(new Set(notes.map((note) => note.subjectTag)))],
+    () => {
+      const options = new Map<string, string>();
+      for (const note of notes) options.set(subjectKey(note), titleCase(note.subjectTag));
+      return [{ key: "all", label: "All subjects" }, ...Array.from(options, ([key, label]) => ({ key, label }))];
+    },
     [notes],
   );
 
+  const activeSubjectLabel = subjects.find((subject) => subject.key === subjectFilter)?.label ?? null;
+
+  function updateSubjectFilter(value: string) {
+    setSubjectFilter(value);
+    router.replace(value === "all" ? "/app/notes" : `/app/notes?subject=${encodeURIComponent(value)}`);
+  }
+
   const filtered = useMemo(() => {
     return notes.filter((note) => {
-      if (subjectFilter !== "All" && note.subjectTag !== subjectFilter) return false;
+      if (subjectFilter !== "all" && subjectKey(note) !== subjectFilter) return false;
       if (search) {
         const query = search.toLowerCase();
         if (
@@ -44,7 +68,7 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search notes..."
-              className="h-9 w-full rounded-full border border-border bg-bg-primary pl-9 pr-3 text-sm placeholder:text-text-muted focus:outline-none focus:border-border-strong"
+              className="h-10 w-full rounded-full border border-border bg-bg-primary pl-9 pr-3 text-sm placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
             />
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
               ⌕
@@ -52,12 +76,13 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
           </div>
 
           <select
+            aria-label="Filter notes by subject"
             value={subjectFilter}
-            onChange={(event) => setSubjectFilter(event.target.value)}
-            className="h-9 rounded-full border border-border bg-bg-primary px-3 text-xs focus:outline-none"
+            onChange={(event) => updateSubjectFilter(event.target.value)}
+            className="h-10 rounded-full border border-border bg-bg-primary px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
           >
             {subjects.map((subject) => (
-              <option key={subject}>{subject}</option>
+              <option key={subject.key} value={subject.key}>{subject.label}</option>
             ))}
           </select>
 
@@ -68,7 +93,7 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
                 type="button"
                 onClick={() => setView(value)}
                 className={
-                  "rounded-full px-2.5 py-1 text-[11px] font-mono-ui transition " +
+                  "rounded-full px-2.5 py-1 text-[11px] font-mono-ui transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong " +
                   (view === value ? "bg-text-primary text-text-inverse" : "text-text-secondary")
                 }
               >
@@ -80,52 +105,85 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
       </div>
 
       <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
+        {activeSubjectLabel && subjectFilter !== "all" ? (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-bg-secondary px-4 py-3">
+            <p className="text-sm text-text-secondary">
+              Showing notes for <span className="font-medium text-text-primary">{activeSubjectLabel}</span>
+            </p>
+            <Link
+              href="/app/notes"
+              className="text-sm font-medium text-text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+            >
+              View all notes
+            </Link>
+          </div>
+        ) : null}
         {filtered.length === 0 ? (
-          <EmptyState />
+          <EmptyState subjectLabel={activeSubjectLabel} />
         ) : view === "grid" ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((note) => (
-              <Link
+              <article
                 key={note.id}
-                href={`/app/notes/${note.id}`}
-                onPointerEnter={() => router.prefetch(`/app/notes/${note.id}`)}
-                onFocus={() => router.prefetch(`/app/notes/${note.id}`)}
-                className="group relative block overflow-hidden rounded-2xl border border-white/15 bg-[linear-gradient(145deg,rgba(255,255,255,0.055),rgba(255,255,255,0.012)_38%,rgba(255,255,255,0.035))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_45px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:border-white/30 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_22px_60px_rgba(0,0,0,0.28)]"
+                className="group relative overflow-hidden rounded-2xl border border-border bg-bg-primary p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-border-strong hover:shadow-md"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <Badge variant="outline">{note.subjectTag}</Badge>
+                  {subjectHref(note) ? (
+                    <Link
+                      href={subjectHref(note)!}
+                      className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                    >
+                      <Badge variant="outline">{titleCase(note.subjectTag)}</Badge>
+                    </Link>
+                  ) : (
+                    <Badge variant="outline">{titleCase(note.subjectTag)}</Badge>
+                  )}
                   <span className="text-[10px] text-text-muted">{formatDate(note.createdAt)}</span>
                 </div>
-                <h3 className="mt-3 line-clamp-2 font-display text-xl leading-snug">{note.title}</h3>
-                <p className="mt-2 line-clamp-3 text-xs text-text-secondary">
-                  {note.answerContent.replace(/[*_`#]/g, "")}
-                </p>
+                <Link
+                  href={`/app/notes/${note.id}`}
+                  onPointerEnter={() => router.prefetch(`/app/notes/${note.id}`)}
+                  onFocus={() => router.prefetch(`/app/notes/${note.id}`)}
+                  className="mt-3 block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                >
+                  <h3 className="line-clamp-2 font-display text-xl leading-snug">{note.title}</h3>
+                  <p className="mt-2 line-clamp-3 text-xs text-text-secondary">
+                    {note.answerContent.replace(/[*_`#]/g, "")}
+                  </p>
+                </Link>
                 <div className="mt-4 flex justify-end text-[11px] text-text-muted">
                   <span className="opacity-0 transition group-hover:opacity-100">Open →</span>
                 </div>
-              </Link>
+              </article>
             ))}
           </div>
         ) : (
           <ul className="overflow-hidden rounded-lg border border-border divide-y divide-border">
             {filtered.map((note) => (
-              <li key={note.id}>
+              <li key={note.id} className="flex items-center gap-4 px-4 py-3 transition hover:bg-bg-secondary">
                 <Link
                   href={`/app/notes/${note.id}`}
                   onPointerEnter={() => router.prefetch(`/app/notes/${note.id}`)}
                   onFocus={() => router.prefetch(`/app/notes/${note.id}`)}
-                  className="flex items-center gap-4 px-4 py-3 transition hover:bg-bg-secondary"
+                  className="min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{note.title}</p>
-                    <p className="truncate text-xs text-text-muted">
-                      {note.subjectTag}
-                      {note.chapterTag ? ` · ${note.chapterTag}` : ""}
-                    </p>
+                    {note.chapterTag ? <p className="truncate text-xs text-text-muted">{note.chapterTag}</p> : null}
                   </div>
-                  <span className="text-xs text-text-muted">{formatDate(note.createdAt)}</span>
-                  <span className="text-text-muted">→</span>
                 </Link>
+                {subjectHref(note) ? (
+                  <Link
+                    href={subjectHref(note)!}
+                    className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                  >
+                    <Badge variant="outline">{titleCase(note.subjectTag)}</Badge>
+                  </Link>
+                ) : (
+                  <Badge variant="outline">{titleCase(note.subjectTag)}</Badge>
+                )}
+                <span className="shrink-0 text-xs text-text-muted">{formatDate(note.createdAt)}</span>
+                <span className="text-text-muted" aria-hidden="true">→</span>
               </li>
             ))}
           </ul>
@@ -135,11 +193,13 @@ export function NotesLibraryClient({ notes }: { notes: RevisionNoteSummary[] }) 
   );
 }
 
-function EmptyState() {
+function EmptyState({ subjectLabel }: { subjectLabel: string | null }) {
   return (
     <div className="rounded-xl border border-dashed border-border p-12 text-center">
       <p className="text-3xl">📭</p>
-      <h3 className="mt-3 font-display text-2xl">No notes match these filters</h3>
+      <h3 className="mt-3 font-display text-2xl">
+        {subjectLabel ? `No notes for ${subjectLabel}` : "No notes match these filters"}
+      </h3>
       <p className="mt-2 text-sm text-text-muted">
         Save grounded AI answers from the chat to build your revision set.
       </p>

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { getPublishedCourse, listPublishedCourses } from "@/lib/student-courses";
 import type { TeacherCourse } from "@/lib/teacher-courses";
+import { titleCase } from "@/lib/utils";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -27,9 +28,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const course = await getPublishedCourse(slug).catch(() => null);
   if (!course) return { title: "Course not found - nanosyllabus", robots: { index: false } };
   return {
-    title: `${course.name} - nanosyllabus`,
+    title: `${titleCase(course.name)} - nanosyllabus`,
     description: course.tagline,
-    openGraph: { title: `${course.name} - nanosyllabus`, description: course.tagline },
+    openGraph: { title: `${titleCase(course.name)} - nanosyllabus`, description: course.tagline },
   };
 }
 
@@ -64,7 +65,7 @@ function RelatedCourseCard({ course }: { course: TeacherCourse }) {
           <span className="rounded-full border border-border px-2.5 py-0.5 text-[11px] uppercase text-muted-foreground">{course.category}</span>
           <ArrowUpRight className="size-4 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
         </div>
-        <h3 className="mt-4 font-semibold">{course.name}</h3>
+        <h3 className="mt-4 font-semibold">{titleCase(course.name)}</h3>
         <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{course.tagline}</p>
       </div>
       <p className="mt-4 text-xs text-muted-foreground">{course.subjects.length} indexed subjects</p>
@@ -101,7 +102,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
                   {course.category} · {course.authority}
                 </span>
                 <h1 className="mt-7 max-w-4xl font-display text-4xl font-semibold leading-tight sm:text-5xl">
-                  {course.name}
+                  {titleCase(course.name)}
                 </h1>
                 <p className="mt-6 max-w-3xl text-base leading-7 text-muted-foreground">{course.description}</p>
                 <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm text-muted-foreground">
@@ -157,7 +158,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
                 <div key={subject.slug} className="flex gap-4 py-5">
                   <span className="w-8 shrink-0 font-mono text-xs text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
                   <div>
-                    <h3 className="font-medium">{subject.name}</h3>
+                    <h3 className="font-medium">{titleCase(subject.name)}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">Indexed course subject</p>
                   </div>
                 </div>

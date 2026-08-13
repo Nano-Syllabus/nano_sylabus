@@ -8,6 +8,7 @@ import { normalizeFullName, normalizeSubjects } from "@/lib/profile-normalizatio
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { TeacherCourse } from "@/lib/teacher-courses";
 import type { StudentProfile } from "@/lib/types";
+import { titleCase } from "@/lib/utils";
 
 type CatalogPayload = {
   courses?: TeacherCourse[];
@@ -248,7 +249,7 @@ export function OnboardingForm({
     }
 
     router.replace(
-      nextPath || (selectedCourseSlug ? `/app/courses/${selectedCourseSlug}` : "/app/courses"),
+      nextPath || "/app/explore",
     );
     router.refresh();
   }
@@ -375,7 +376,7 @@ export function OnboardingForm({
                       {course.category} · {course.authority}
                     </span>
                     <span className="mt-3 block font-display text-lg font-semibold">
-                      {course.name}
+                      {titleCase(course.name)}
                     </span>
                     <span className="mt-2 line-clamp-2 block text-sm leading-6 text-text-secondary">
                       {course.tagline}

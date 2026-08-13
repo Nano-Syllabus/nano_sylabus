@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import type { TeacherCourse } from "@/lib/teacher-courses";
+import { titleCase } from "@/lib/utils";
 
 const PER_PAGE = 3;
 
@@ -65,7 +66,7 @@ function CourseCard({ course }: { course: TeacherCourse }) {
           </span>
           <ArrowUpRight className="size-4 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
         </div>
-        <h2 className="mt-4 text-base font-semibold leading-snug">{course.name}</h2>
+        <h2 className="mt-4 text-base font-semibold leading-snug">{titleCase(course.name)}</h2>
         <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-muted-foreground">{course.tagline}</p>
       </div>
       <div className="mt-5 flex items-center gap-4 text-xs text-muted-foreground">

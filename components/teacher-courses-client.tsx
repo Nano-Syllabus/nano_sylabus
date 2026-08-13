@@ -19,7 +19,7 @@ import {
   type TeacherCourse,
   type TeacherCourseInput,
 } from "@/lib/teacher-courses";
-import { cn } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
 
 type TeacherSubject = {
   slug: string;
@@ -133,7 +133,7 @@ function CourseCard({
           <p className="font-mono text-[11px] uppercase tracking-widest text-text-muted">
             {course.category} · {course.authority}
           </p>
-          <h2 className="mt-3 font-display text-xl font-semibold leading-tight">{course.name}</h2>
+          <h2 className="mt-3 font-display text-xl font-semibold leading-tight">{titleCase(course.name)}</h2>
         </div>
         <span className="flex-1" />
         <CourseStatus course={course} />
@@ -145,7 +145,7 @@ function CourseCard({
             key={subject.slug}
             className="inline-flex min-h-7 items-center rounded-full border border-border px-2.5 text-xs text-text-secondary"
           >
-            {subject.name}
+            {titleCase(subject.name)}
           </span>
         ))}
         {course.subjects.length > 4 ? (
@@ -171,7 +171,7 @@ function CourseCard({
             variant="danger"
             onClick={onDelete}
             className="size-10 shrink-0 px-0"
-            aria-label={`Delete ${course.name}`}
+            aria-label={`Delete ${titleCase(course.name)}`}
             title="Delete course"
           >
             <Trash2 className="size-4" aria-hidden="true" />
@@ -398,7 +398,7 @@ function DeleteCourseDialog({
               {course.status === "published" ? "Published course" : "Draft course"}
             </p>
             <h2 id="delete-course-title" className="mt-1 font-display text-xl font-semibold">
-              Delete {course.name}?
+              Delete {titleCase(course.name)}?
             </h2>
           </div>
         </div>
@@ -749,7 +749,7 @@ function CourseEditor({
                         className="mt-0.5 size-4 accent-current"
                       />
                       <span>
-                        <span className="block text-sm font-medium">{subject.name}</span>
+                        <span className="block text-sm font-medium">{titleCase(subject.name)}</span>
                         <span className="mt-1 block text-xs text-text-muted">
                           {unavailable
                             ? `Already in ${owner?.name}`

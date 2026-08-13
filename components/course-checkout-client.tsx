@@ -17,6 +17,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { TeacherCourse } from "@/lib/teacher-courses";
+import { titleCase } from "@/lib/utils";
 
 type CourseCheckoutClientProps = {
   course: TeacherCourse;
@@ -61,7 +62,7 @@ export function CourseCheckoutClient({ course, user }: CourseCheckoutClientProps
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Could not complete enrollment.");
 
-      router.replace("/app/courses");
+      router.replace("/app/explore");
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not complete enrollment.");
@@ -127,7 +128,7 @@ export function CourseCheckoutClient({ course, user }: CourseCheckoutClientProps
                 </div>
 
                 <h1 className="mt-5 font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                  {course.name}
+                  {titleCase(course.name)}
                 </h1>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                   {course.tagline || course.description}
@@ -255,10 +256,10 @@ export function CourseCheckoutClient({ course, user }: CourseCheckoutClientProps
                 <div className="flex items-center justify-between border-b border-border/70 pb-5">
                   <div>
                     <h2 className="font-display text-xl font-bold tracking-tight text-foreground">
-                      Payment Page
+                      Study Space Activation
                     </h2>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Review summary and activate your course
+                      Review details & activate your course
                     </p>
                   </div>
                   <div className="flex size-9 items-center justify-center rounded-xl bg-surface-2">

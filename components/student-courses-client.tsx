@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, BookOpen, CheckCircle2 } from "lucide-react";
 import { CourseLeaveButton } from "@/components/course-leave-button";
 import type { StudentCourse } from "@/lib/student-courses";
+import { titleCase } from "@/lib/utils";
 
 function enrollmentDate(value: string) {
   if (!value) return "Recently enrolled";
@@ -27,7 +28,7 @@ function CourseCard({ course }: { course: StudentCourse }) {
           {course.enrollmentStatus === "completed" ? "Completed" : "Active"}
         </span>
       </div>
-      <h2 className="mt-4 font-display text-xl font-semibold">{course.name}</h2>
+      <h2 className="mt-4 font-display text-xl font-semibold">{titleCase(course.name)}</h2>
       <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-secondary">{course.tagline}</p>
       <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm text-text-muted">
         <span className="inline-flex items-center gap-1.5">
@@ -44,7 +45,7 @@ function CourseCard({ course }: { course: StudentCourse }) {
         >
           Details
         </Link>
-        <CourseLeaveButton slug={course.slug} courseName={course.name} />
+        <CourseLeaveButton slug={course.slug} courseName={titleCase(course.name)} />
       </div>
     </article>
   );

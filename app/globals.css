@@ -315,6 +315,38 @@ body:has(.exam-prep-theme) {
   color: var(--highlight);
 }
 
+/* The readiness visualization follows the app theme while keeping its data colors vivid. */
+.subject-readiness-card {
+  --readiness-panel: #ffffff;
+  --readiness-border: #d8dce3;
+  --readiness-track: #e9edf3;
+  --readiness-blue: #287ee8;
+  --readiness-green: #0aa879;
+  --readiness-yellow: #d99100;
+  --readiness-red: #e5486b;
+  --readiness-text: #111318;
+  --readiness-muted: #626874;
+  background: var(--readiness-panel);
+  border-color: var(--readiness-border);
+  color: var(--readiness-text);
+}
+
+[data-theme="dark"] .subject-readiness-card {
+  --readiness-panel: #161b24;
+  --readiness-border: #333a46;
+  --readiness-track: #202633;
+  --readiness-blue: #4d9fff;
+  --readiness-green: #12d7a0;
+  --readiness-yellow: #ffb800;
+  --readiness-red: #ff5b7f;
+  --readiness-text: #f7f7f8;
+  --readiness-muted: #a5a9b3;
+}
+
+.subject-readiness-card * {
+  scrollbar-color: var(--readiness-border) transparent;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

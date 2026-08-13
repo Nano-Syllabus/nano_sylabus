@@ -6,8 +6,13 @@ import { requireOnboardedUser } from "@/lib/auth";
 import { getNoteAccessPolicy } from "@/lib/data/note-access";
 import { listRevisionNotes } from "@/lib/data/notes";
 
-export default async function NotesPage() {
+export default async function NotesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ subject?: string }>;
+}) {
   const { user } = await requireOnboardedUser();
+  const { subject } = await searchParams;
   const [notes, access] = await Promise.all([
     listRevisionNotes(user.id),
     getNoteAccessPolicy(user.id),
@@ -26,16 +31,10 @@ export default async function NotesPage() {
             <Link href="/app/notes/revision">
               <Button size="sm">Start revision →</Button>
             </Link>
-          ) : (
-            <Link href="/app/billing">
-              <Button size="sm" variant="outline">
-                Upgrade for revision
-              </Button>
-            </Link>
-          )
+          ) : null
         }
       />
-      <NotesLibraryClient notes={notes} />
+      <NotesLibraryClient notes={notes} initialSubjectSlug={subject?.trim() || null} />
     </>
   );
 }

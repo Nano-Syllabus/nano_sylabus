@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { titleCase } from "@/lib/utils";
 
 export function CourseLeaveButton({
   slug,
@@ -52,7 +53,7 @@ export function CourseLeaveButton({
 
   return (
     <div className="rounded-lg border border-border bg-bg-secondary p-3">
-      <p className="text-sm font-medium">Leave {courseName}?</p>
+      <p className="text-sm font-medium">Leave {titleCase(courseName)}?</p>
       <p className="mt-1 text-xs leading-5 text-text-secondary">
         This removes the course and its subjects from your study space. You can enroll again later.
       </p>

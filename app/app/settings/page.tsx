@@ -15,13 +15,6 @@ export default async function SettingsPage() {
     <>
       <SetAppShell
         title="Settings"
-        actions={
-          <Link href="/app/billing">
-            <Button variant="outline" size="sm">
-              Billing →
-            </Button>
-          </Link>
-        }
       />
       <SettingsForm user={user} profile={profile!} examsSat={examsSat} />
     </>

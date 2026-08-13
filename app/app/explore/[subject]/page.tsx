@@ -28,9 +28,7 @@ export default async function SubjectDetailPage({
 
   const courses = await listStudentCourses(user.id);
   const decodedKey = subjectUrlKey(decodedSubject);
-  const accessibleSubject = courses
-    .flatMap((course) => course.subjects)
-    .find((item) => {
+  const subjectMatches = (item: { slug: string; name: string }) => {
       const slug = item.slug.trim();
       const name = item.name.trim();
       return (
@@ -39,7 +37,9 @@ export default async function SubjectDetailPage({
         subjectUrlKey(slug) === decodedKey ||
         subjectUrlKey(name) === decodedKey
       );
-    });
+  };
+  const accessibleCourse = courses.find((course) => course.subjects.some(subjectMatches));
+  const accessibleSubject = accessibleCourse?.subjects.find(subjectMatches);
   if (!accessibleSubject) notFound();
 
   const detail = await getStudentSubjectDetail(user.id, accessibleSubject.slug);
@@ -48,7 +48,15 @@ export default async function SubjectDetailPage({
   return (
     <>
       <SetAppShell title={null} />
-      <SubjectDetailClient detail={detail} />
+      <SubjectDetailClient
+        detail={detail}
+        courseName={accessibleCourse?.name || detail.name}
+        readinessTarget={
+          accessibleCourse && accessibleCourse.passPercentage > 0
+            ? accessibleCourse.passPercentage
+            : null
+        }
+      />
     </>
   );
 }

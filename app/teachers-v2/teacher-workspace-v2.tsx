@@ -21,7 +21,7 @@ import {
   scoreDistribution,
 } from "@/lib/teacher-score-insights";
 import { TEACHER_UPLOAD_MAX_LABEL, teacherUploadSizeError } from "@/lib/teacher-upload";
-import { cn } from "@/lib/utils";
+import { cn, titleCase } from "@/lib/utils";
 import { QRCodeSVG } from "qrcode.react";
 
 type ApiRecord = Record<string, unknown>;
@@ -4583,7 +4583,7 @@ function CreateClassroomDialog({
             {subjects.length ? (
               subjects.map((subject) => (
                 <option key={subject.slug} value={subject.slug}>
-                  {subject.name}
+                  {titleCase(subject.name)}
                   {subject.code ? ` · ${subject.code}` : ""}
                 </option>
               ))
@@ -4968,7 +4968,7 @@ function ExamsView({
               >
                 {subjects.map((subject) => (
                   <option key={subject.slug} value={subject.slug}>
-                    {subject.name}
+                    {titleCase(subject.name)}
                   </option>
                 ))}
               </select>
@@ -7347,7 +7347,7 @@ function SubjectsView({
                     {documents.length} files
                   </span>
                 </div>
-                <h2 className="mt-4 font-display text-xl font-semibold">{subject.name}</h2>
+                <h2 className="mt-4 font-display text-xl font-semibold">{titleCase(subject.name)}</h2>
                 {subject.programme || subject.university ? (
                   <p className="mt-1 truncate text-xs text-text-secondary">
                     {[subject.programme, subject.university].filter(Boolean).join(" · ")}
@@ -7437,7 +7437,7 @@ function SubjectView({
           <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
             {subject.folderPath}
           </p>
-          <h1 className="mt-3 font-display text-3xl font-semibold">{subject.name}</h1>
+          <h1 className="mt-3 font-display text-3xl font-semibold">{titleCase(subject.name)}</h1>
           <p className="mt-2 text-text-secondary">{documents.length} source files</p>
         </div>
       </div>
@@ -7707,7 +7707,7 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
       ) : null}
 
       <article className="mt-5 rounded-lg border border-border p-5">
-        <p className="text-xs uppercase tracking-wider text-text-muted">{subject.name}</p>
+        <p className="text-xs uppercase tracking-wider text-text-muted">{titleCase(subject.name)}</p>
         <h3 className="mt-2 font-display text-xl font-semibold">What was captured</h3>
         {coverage.length ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -7749,7 +7749,7 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
       <article className="mt-5 rounded-lg border border-border p-5">
         <div className="flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-wider text-text-muted">{subject.name}</p>
+            <p className="text-xs uppercase tracking-wider text-text-muted">{titleCase(subject.name)}</p>
             <h3 className="mt-2 font-display text-xl font-semibold">Ready for the marketplace?</h3>
           </div>
           <span
@@ -8506,7 +8506,7 @@ function TestChat({
               <div>
                 <h2 className="font-display text-xl font-semibold">Test the student experience</h2>
                 <p className="mt-2 max-w-md text-sm leading-6 text-text-secondary">
-                  Ask a question and verify that the answer stays grounded in {subject.name}.
+                  Ask a question and verify that the answer stays grounded in {titleCase(subject.name)}.
                 </p>
               </div>
             </div>
@@ -9396,7 +9396,7 @@ function CreateFolderDialog({
   return (
     <Dialog title={`New folder in ${shelf}`} onClose={onClose}>
       <div className="rounded-lg border border-border bg-bg-secondary p-4">
-        <p className="font-medium">{subject.name}</p>
+        <p className="font-medium">{titleCase(subject.name)}</p>
         <p className="mt-1 break-all font-mono text-xs text-text-muted">
           {subject.folderPath}/{shelf}
         </p>
@@ -9486,7 +9486,7 @@ function UploadDialog({
   return (
     <Dialog title={`Upload to ${shelf}`} onClose={onClose}>
       <div className="rounded-lg border border-border bg-bg-secondary p-4">
-        <p className="font-medium">{subject.name}</p>
+        <p className="font-medium">{titleCase(subject.name)}</p>
         <p className="mt-1 break-all font-mono text-xs text-text-muted">
           {subject.folderPath}/{shelf}
         </p>
@@ -9755,7 +9755,7 @@ function SubjectConfig({
           headers: { Accept: "application/json" },
         }),
       );
-      onRemoved(`${subject.name} and its files deleted`);
+      onRemoved(`${titleCase(subject.name)} and its files deleted`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not remove the subject.");
       setBusy("");
@@ -9771,7 +9771,7 @@ function SubjectConfig({
         </p>
       </div>
       <div className="mt-5 rounded-lg border border-border p-4">
-        <p className="font-medium">{subject.name}</p>
+        <p className="font-medium">{titleCase(subject.name)}</p>
         <p className="mt-1 text-sm text-text-muted">
           {documentCount} files in {subject.folderPath}
         </p>

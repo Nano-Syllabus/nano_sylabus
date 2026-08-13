@@ -16,7 +16,7 @@ export default async function CoursePaymentPage({ params }: PageProps) {
   if (!user.onboarded) redirect(`/onboarding?next=${encodeURIComponent(paymentPath)}`);
 
   const enrolled = await getStudentCourse(user.id, slug);
-  if (enrolled) redirect("/app/courses");
+  if (enrolled) redirect("/app/explore");
 
   const course = await getPublishedCourse(slug);
   if (!course) redirect("/exams");
