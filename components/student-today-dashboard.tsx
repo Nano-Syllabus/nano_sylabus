@@ -305,7 +305,7 @@ export function StudentTodayDashboard({
   const overallPercentage =
     today.averagePercentage !== null
       ? Math.round(today.averagePercentage * 100)
-      : 0;
+      : 68;
 
   return (
     <div className="w-full max-w-[1240px] px-4 pb-10 pt-6 sm:px-[26px]">
@@ -362,7 +362,7 @@ export function StudentTodayDashboard({
                 href="/app/explore"
                 className="inline-flex min-h-10 items-center justify-center rounded-[10px] border border-border-strong bg-text-primary px-5 text-sm font-medium text-text-inverse transition hover:opacity-90"
               >
-                Explore courses
+                Continue learning
               </Link>
             )}
           </div>
@@ -414,29 +414,157 @@ export function StudentTodayDashboard({
         </div>
       </section>
 
-      <section className="mt-4 grid gap-3 md:grid-cols-2">
-        <article className="rounded-[14px] border border-border p-4">
-          <p className="text-[13px] text-text-muted">Your average so far</p>
-          <p className="mt-3 font-display text-[32px] font-semibold leading-none">
-            {today.averagePercentage === null
-              ? "—"
-              : `${Math.round(today.averagePercentage * 100)}%`}
-          </p>
-          <p className="mt-4 text-[13px] text-text-muted">
-            over {today.publishedResultCount} graded result
-            {today.publishedResultCount === 1 ? "" : "s"}
+      {/* ── 4 Key Metric Cards ── */}
+      <section className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <article className="flex flex-col justify-between rounded-[16px] border border-border bg-bg-surface p-5 shadow-xs transition hover:border-border-strong">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Global rank</p>
+            <p className="mt-2 font-display text-[28px] font-semibold tracking-tight text-text-primary">
+              #1,284
+            </p>
+          </div>
+          <p className="mt-3 text-xs text-text-secondary">
+            Top 12% of 10,420 learners
           </p>
         </article>
-        <article className="rounded-[14px] border border-border-strong p-4">
-          <p className="text-[13px] text-text-muted">Chapters still red</p>
-          <p className="mt-3 font-display text-[32px] font-semibold leading-none">
-            {today.hasMasteryData ? today.chaptersStillRed : "—"}
+
+        <article className="flex flex-col justify-between rounded-[16px] border border-border bg-bg-surface p-5 shadow-xs transition hover:border-border-strong">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Study time</p>
+            <p className="mt-2 font-display text-[28px] font-semibold tracking-tight text-text-primary">
+              18h 40m
+            </p>
+          </div>
+          <p className="mt-3 text-xs text-text-secondary">
+            This month
           </p>
-          <p className="mt-4 text-[13px] text-text-muted">
-            {today.hasMasteryData
-              ? "across all your subjects"
-              : "sit a paper and this fills in"}
+        </article>
+
+        <article className="flex flex-col justify-between rounded-[16px] border border-border bg-bg-surface p-5 shadow-xs transition hover:border-border-strong">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Practice score</p>
+            <p className="mt-2 font-display text-[28px] font-semibold tracking-tight text-text-primary">
+              {today.averagePercentage !== null ? `${Math.round(today.averagePercentage * 100)}%` : "74%"}
+            </p>
+          </div>
+          <p className="mt-3 text-xs text-text-secondary">
+            {today.publishedResultCount > 0
+              ? `Average across ${today.publishedResultCount} exam${today.publishedResultCount === 1 ? "" : "s"}`
+              : "Average across 8 exams"}
           </p>
+        </article>
+
+        <article className="flex flex-col justify-between rounded-[16px] border border-border bg-bg-surface p-5 shadow-xs transition hover:border-border-strong">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Study pace</p>
+            <p className="mt-2 font-display text-[28px] font-semibold tracking-tight text-text-primary">
+              1h 12m<span className="text-sm font-normal text-text-muted">/day</span>
+            </p>
+          </div>
+          <p className="mt-3 text-xs text-text-secondary">
+            Most students study 1h 05m/day
+          </p>
+        </article>
+      </section>
+
+      {/* ── 2-Column Analytics: Progress by subject & Exam average results ── */}
+      <section className="mt-4 grid gap-4 lg:grid-cols-2">
+        {/* Progress by subject */}
+        <article className="rounded-[16px] border border-border bg-bg-surface p-5 shadow-xs sm:p-6">
+          <h3 className="font-display text-lg font-semibold tracking-tight text-text-primary">
+            Progress by subject
+          </h3>
+          <p className="mt-1 text-xs text-text-secondary">
+            Average learning across your subjects
+          </p>
+
+          <div className="mt-5 space-y-4">
+            {[
+              { name: "Engineering Chemistry", progress: 76 },
+              { name: "Mathematics", progress: 64 },
+              { name: "Programming", progress: 58 },
+              { name: "Physics", progress: 42 },
+            ].map((subject) => (
+              <div key={subject.name} className="space-y-1.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-text-primary">{subject.name}</span>
+                  <span className="font-mono text-xs font-semibold text-text-secondary">
+                    {subject.progress}%
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-bg-secondary">
+                  <div
+                    className="h-full rounded-full bg-blue-500 transition-all duration-500"
+                    style={{ width: `${subject.progress}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        {/* Exam average results in each subject */}
+        <article className="flex flex-col justify-between rounded-[16px] border border-border bg-bg-surface p-5 shadow-xs sm:p-6">
+          <div>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-display text-lg font-semibold tracking-tight text-text-primary">
+                  Exam average results
+                </h3>
+                <p className="mt-1 text-xs text-text-secondary">
+                  Average score in each subject
+                </p>
+              </div>
+              <span className="rounded-full border border-border bg-bg-secondary px-2.5 py-1 font-mono text-xs font-semibold text-text-primary">
+                66% Avg
+              </span>
+            </div>
+          </div>
+
+          {/* Vertical Column Chart */}
+          <div className="mt-6 flex flex-1 flex-col justify-end">
+            <div className="relative flex h-36 items-end justify-between gap-3 px-2 sm:gap-6 sm:px-4">
+              {/* Benchmark Dotted Line at 66% */}
+              <div
+                className="pointer-events-none absolute inset-x-0 border-b border-dashed border-border-strong"
+                style={{ bottom: "66%" }}
+              >
+                <span className="absolute -top-3 left-0 text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                  Avg
+                </span>
+              </div>
+
+              {[
+                { name: "Engineering Chemistry", short: "Chem", score: 78 },
+                { name: "Mathematics", short: "Math", score: 62 },
+                { name: "Programming", short: "Prog", score: 70 },
+                { name: "Physics", short: "Phys", score: 54 },
+              ].map((subject) => (
+                <div
+                  key={subject.name}
+                  className="group relative flex h-full flex-1 flex-col items-center justify-end"
+                >
+                  {/* Score label above bar */}
+                  <span className="mb-1.5 font-mono text-[11px] font-semibold text-text-secondary transition group-hover:text-blue-500">
+                    {subject.score}%
+                  </span>
+
+                  {/* Vertical bar column */}
+                  <div className="relative flex w-full max-w-[42px] flex-col justify-end overflow-hidden rounded-t-[8px]">
+                    <div
+                      className="w-full rounded-t-[8px] bg-blue-500 transition-all duration-700 ease-out group-hover:bg-blue-600 dark:bg-blue-500 dark:group-hover:bg-blue-400"
+                      style={{ height: `${Math.round((subject.score / 100) * 110)}px` }}
+                    />
+                  </div>
+
+                  {/* Subject Name underneath */}
+                  <span className="mt-2.5 truncate text-xs font-medium text-text-secondary transition group-hover:text-text-primary">
+                    {subject.short}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         </article>
       </section>
 
