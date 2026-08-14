@@ -2072,17 +2072,6 @@ export function ChatPageClient({
   useEffect(() => {
     shell.setActions(
       <div className="flex items-center gap-2 select-none">
-        {currentSessionId ? (
-          <Button
-            type="button"
-            size="sm"
-            className="rounded-full h-8 px-4 text-xs font-medium bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition"
-            onClick={() => void shareCurrentSession()}
-            disabled={shareLoading}
-          >
-            {shareLoading ? "Sharing..." : "Share"}
-          </Button>
-        ) : null}
         <Badge variant={creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
           {creditBalance} MESSAGES
         </Badge>
@@ -2094,6 +2083,17 @@ export function ChatPageClient({
             { label: "Roman Nepali", value: "RN" }
           ]}
         />
+        {currentSessionId ? (
+          <Button
+            type="button"
+            size="sm"
+            className="rounded-full h-8 px-4 text-xs font-medium bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition"
+            onClick={() => void shareCurrentSession()}
+            disabled={shareLoading}
+          >
+            {shareLoading ? "Sharing..." : "Share"}
+          </Button>
+        ) : null}
       </div>
     );
     return () => shell.setActions(null);

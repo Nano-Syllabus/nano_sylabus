@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   BookOpen,
-  CalendarDays,
   Check,
   Globe2,
   Pencil,
@@ -161,9 +160,6 @@ function CourseCard({
         <span className="inline-flex items-center gap-1.5">
           <Users className="size-3.5" aria-hidden="true" /> {course.enrollmentCount} students
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <CalendarDays className="size-3.5" aria-hidden="true" /> {course.durationWeeks} weeks
-        </span>
         <span className="flex-1" />
         {onDelete ? (
           <Button
@@ -234,7 +230,7 @@ export function TeacherCoursesClient({
             Courses
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
-            Package multiple indexed subjects into the exam tracks students discover and enroll in.
+            Package multiple subjects into the exam tracks students discover and enroll in.
           </p>
         </div>
         <span className="flex-1" />
@@ -275,7 +271,7 @@ export function TeacherCoursesClient({
       ) : null}
       {state === "ready" && !subjects.length ? (
         <section className="mt-7 rounded-lg border border-dashed border-border p-10 text-center">
-          <h2 className="font-display text-xl font-semibold">No indexed subjects available</h2>
+          <h2 className="font-display text-xl font-semibold">No subjects available</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-text-secondary">
             Your existing courses are still saved. Create a subject before adding a new course or
             updating its subject list.
@@ -625,12 +621,8 @@ function CourseEditor({
               </p>
             ) : null}
 
-            <fieldset>
-              <legend className="font-display text-lg font-semibold">Exam identity</legend>
-              <p className="mt-1 text-sm text-text-secondary">
-                This becomes the public exam-track page students discover.
-              </p>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <fieldset className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Course name" id="course-name">
                   <input
                     id="course-name"
@@ -639,88 +631,67 @@ function CourseEditor({
                     value={draft.name}
                     onChange={(event) => setDraft({ ...draft, name: event.target.value })}
                     className={inputClass}
-                    placeholder="IOE Engineering Entrance"
+                    placeholder="e.g. Computer Programming"
                     autoComplete="off"
                   />
                 </Field>
-                <Field label="Short name" id="course-short-name" optional>
-                  <input
-                    id="course-short-name"
-                    value={draft.shortName}
-                    onChange={(event) => setDraft({ ...draft, shortName: event.target.value })}
-                    className={inputClass}
-                    placeholder="IOE Entrance"
-                    autoComplete="off"
-                  />
-                </Field>
+
                 <Field label="Category" id="course-category">
                   <select
                     id="course-category"
-                    value={draft.category}
-                    onChange={(event) =>
+                    value={
+                      (teacherCourseCategories as readonly string[]).includes(draft.category)
+                        ? draft.category
+                        : "Other"
+                    }
+                    onChange={(event) => {
+                      const value = event.target.value;
                       setDraft({
                         ...draft,
-                        category: event.target.value as TeacherCourseInput["category"],
-                      })
-                    }
+                        category: value === "Other" ? "" : value,
+                      });
+                    }}
                     className={inputClass}
                   >
                     {teacherCourseCategories.map((category) => (
                       <option key={category}>{category}</option>
                     ))}
                   </select>
-                </Field>
-                <Field label="Conducting authority" id="course-authority">
-                  <input
-                    id="course-authority"
-                    required
-                    value={draft.authority}
-                    onChange={(event) => setDraft({ ...draft, authority: event.target.value })}
-                    className={inputClass}
-                    placeholder="Institute of Engineering, TU"
-                    autoComplete="organization"
-                  />
-                </Field>
-              </div>
-              <div className="mt-4">
-                <Field label="Course promise" id="course-tagline">
-                  <input
-                    id="course-tagline"
-                    required
-                    minLength={10}
-                    value={draft.tagline}
-                    onChange={(event) => setDraft({ ...draft, tagline: event.target.value })}
-                    className={inputClass}
-                    placeholder="Physics, Chemistry, Maths and English at entrance difficulty."
-                    autoComplete="off"
-                  />
+                  {(!(teacherCourseCategories as readonly string[]).includes(draft.category)) ? (
+                    <input
+                      id="course-category-other"
+                      required
+                      value={draft.category}
+                      onChange={(event) =>
+                        setDraft({ ...draft, category: event.target.value })
+                      }
+                      className={cn(inputClass, "mt-2")}
+                      placeholder="Type your category…"
+                      autoComplete="off"
+                    />
+                  ) : null}
                 </Field>
               </div>
-              <div className="mt-4">
-                <Field label="Description" id="course-description">
-                  <textarea
-                    id="course-description"
-                    required
-                    minLength={30}
-                    rows={4}
-                    value={draft.description}
-                    onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-                    className={cn(inputClass, "py-3")}
-                    placeholder="Explain who this course is for and how it prepares them."
-                  />
-                </Field>
-              </div>
+
+              <Field label="Description" id="course-description">
+                <textarea
+                  id="course-description"
+                  required
+                  minLength={30}
+                  rows={4}
+                  value={draft.description}
+                  onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                  className={cn(inputClass, "py-3 resize-y")}
+                  placeholder="Explain who this course is for and how it prepares them."
+                />
+              </Field>
             </fieldset>
 
-            <fieldset className="mt-8 border-t border-border pt-7">
-              <legend className="font-display text-lg font-semibold">
+            <fieldset className="mt-6 border-t border-border pt-5">
+              <legend className="font-display text-base font-semibold">
                 Subjects in this course
               </legend>
-              <p className="mt-1 text-sm text-text-secondary">
-                Each indexed subject belongs to one course only. Create a separate subject when an
-                exam uses a different syllabus.
-              </p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
                 {subjects.map((subject) => {
                   const checked = draft.subjectSlugs.includes(subject.slug);
                   const owner = subjectOwners.get(subject.slug);
@@ -729,7 +700,7 @@ function CourseEditor({
                     <label
                       key={subject.slug}
                       className={cn(
-                        "flex min-h-16 items-start gap-3 rounded-lg border p-4",
+                        "flex items-center gap-3 rounded-lg border p-3",
                         unavailable ? "cursor-not-allowed opacity-55" : "cursor-pointer",
                         checked ? "border-border-strong bg-bg-secondary" : "border-border",
                       )}
@@ -746,195 +717,56 @@ function CourseEditor({
                               : draft.subjectSlugs.filter((slug) => slug !== subject.slug),
                           })
                         }
-                        className="mt-0.5 size-4 accent-current"
+                        className="size-4 accent-current"
                       />
-                      <span>
-                        <span className="block text-sm font-medium">{titleCase(subject.name)}</span>
-                        <span className="mt-1 block text-xs text-text-muted">
-                          {unavailable
-                            ? `Already in ${owner?.name}`
-                            : subject.code || subject.university || "Indexed subject"}
-                        </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{titleCase(subject.name)}</span>
+                        {unavailable ? (
+                          <span className="mt-0.5 block text-xs text-text-muted">
+                            Already in {owner?.name}
+                          </span>
+                        ) : null}
                       </span>
                     </label>
                   );
                 })}
               </div>
-              <p className="mt-3 text-xs text-text-muted">
+              <p className="mt-2 text-xs text-text-muted">
                 {selectedNames.length
                   ? `${selectedNames.length} selected: ${selectedNames.join(", ")}`
                   : "Choose at least one subject."}
               </p>
             </fieldset>
 
-            <fieldset className="mt-8 border-t border-border pt-7">
-              <legend className="font-display text-lg font-semibold">Study plan</legend>
-              <p className="mt-1 text-sm text-text-secondary">
-                These settings drive the diagnostic, daily plan and readiness target.
-              </p>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Field label="Duration (weeks)" id="course-duration">
-                  <input
-                    id="course-duration"
-                    required
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={draft.durationWeeks}
-                    onChange={(event) =>
-                      setDraft({ ...draft, durationWeeks: numeric(event.target.value, 12) })
-                    }
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="Daily minutes" id="course-daily-minutes">
-                  <input
-                    id="course-daily-minutes"
-                    required
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={draft.dailyMinutes}
-                    onChange={(event) =>
-                      setDraft({ ...draft, dailyMinutes: numeric(event.target.value, 20) })
-                    }
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="Diagnostic questions" id="course-diagnostic">
-                  <input
-                    id="course-diagnostic"
-                    required
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={draft.diagnosticQuestionCount}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        diagnosticQuestionCount: numeric(event.target.value, 10),
-                      })
-                    }
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="Pass percentage" id="course-pass">
-                  <input
-                    id="course-pass"
-                    required
-                    inputMode="decimal"
-                    value={draft.passPercentage}
-                    onChange={(event) =>
-                      setDraft({ ...draft, passPercentage: numeric(event.target.value, 40) })
-                    }
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="Level" id="course-level">
-                  <select
-                    id="course-level"
-                    value={draft.level}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        level: event.target.value as TeacherCourseInput["level"],
-                      })
-                    }
-                    className={inputClass}
-                  >
-                    {teacherCourseLevels.map((level) => (
-                      <option key={level}>{level}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Negative marking (%)" id="course-negative-marking">
-                  <input
-                    id="course-negative-marking"
-                    inputMode="decimal"
-                    value={draft.negativeMarking}
-                    onChange={(event) =>
-                      setDraft({ ...draft, negativeMarking: numeric(event.target.value, 0) })
-                    }
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="Target exam date" id="course-exam-date" optional>
-                  <input
-                    id="course-exam-date"
-                    type="date"
-                    value={draft.examDate || ""}
-                    onChange={(event) =>
-                      setDraft({ ...draft, examDate: event.target.value || null })
-                    }
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="Visibility" id="course-visibility">
-                  <select
-                    id="course-visibility"
-                    value={draft.visibility}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        visibility: event.target.value as TeacherCourseInput["visibility"],
-                      })
-                    }
-                    className={inputClass}
-                  >
-                    <option value="public">Public</option>
-                    <option value="unlisted">Unlisted</option>
-                    <option value="private">Private</option>
-                  </select>
-                </Field>
-              </div>
-
-              <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <fieldset>
-                  <legend className="text-sm font-medium">Teaching language</legend>
-                  <div className="mt-2 flex gap-3">
-                    {(["English", "Nepali"] as const).map((language) => (
-                      <label
-                        key={language}
-                        className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={draft.languageModes.includes(language)}
-                          onChange={(event) =>
-                            setDraft({
-                              ...draft,
-                              languageModes: event.target.checked
-                                ? [...draft.languageModes, language]
-                                : draft.languageModes.filter((item) => item !== language),
-                            })
-                          }
-                          className="size-4 accent-current"
-                        />
-                        {language}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-                <fieldset>
-                  <legend className="text-sm font-medium">Access</legend>
-                  <div className="mt-2 flex gap-3">
-                    {(["free", "paid"] as const).map((model) => (
-                      <label
-                        key={model}
-                        className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm capitalize"
-                      >
-                        <input
-                          type="radio"
-                          name="access-model"
-                          checked={draft.accessModel === model}
-                          onChange={() => setDraft({ ...draft, accessModel: model })}
-                          className="size-4 accent-current"
-                        />
-                        {model}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
+            <fieldset className="mt-5 border-t border-border pt-4">
+              <legend className="font-display text-base font-semibold">Payment plan</legend>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <span className="text-sm text-text-secondary">Access:</span>
+                <div className="flex gap-2">
+                  {(["free", "paid"] as const).map((model) => (
+                    <label
+                      key={model}
+                      className={cn(
+                        "inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border px-3.5 text-sm font-medium capitalize transition",
+                        draft.accessModel === model
+                          ? "border-border-strong bg-bg-secondary"
+                          : "border-border hover:bg-bg-secondary/50",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="access-model"
+                        checked={draft.accessModel === model}
+                        onChange={() => setDraft({ ...draft, accessModel: model })}
+                        className="size-3.5 accent-current"
+                      />
+                      {model}
+                    </label>
+                  ))}
+                </div>
               </div>
               {draft.accessModel === "paid" ? (
-                <div className="mt-4 max-w-xs">
+                <div className="mt-3 max-w-xs">
                   <Field label="Price (NPR)" id="course-price">
                     <input
                       id="course-price"
@@ -946,24 +778,11 @@ function CourseEditor({
                         setDraft({ ...draft, priceNpr: numeric(event.target.value, 0) })
                       }
                       className={inputClass}
+                      placeholder="e.g. 500"
                     />
                   </Field>
                 </div>
               ) : null}
-              <div className="mt-4">
-                <Field label="Student outcomes" id="course-outcomes" optional>
-                  <textarea
-                    id="course-outcomes"
-                    rows={4}
-                    value={outcomesText}
-                    onChange={(event) => setOutcomesText(event.target.value)}
-                    className={cn(inputClass, "py-3")}
-                    placeholder={
-                      "One outcome per line\nPast-paper mock tests\nDaily weak-topic revision"
-                    }
-                  />
-                </Field>
-              </div>
             </fieldset>
           </div>
 

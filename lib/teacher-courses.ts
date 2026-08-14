@@ -2,12 +2,13 @@ import { z } from "zod";
 import type { TeacherPublicProfile } from "@/lib/teacher-public-profile";
 
 export const teacherCourseCategories = [
-  "Loksewa",
+  "Grade 11",
+  "Grade 12",
+  "Bachelor",
+  "Master",
   "Entrance",
-  "Banking",
-  "Language",
-  "School",
   "License",
+  "Other",
 ] as const;
 
 export const teacherCourseLevels = ["Beginner", "Intermediate", "Advanced"] as const;
@@ -16,9 +17,9 @@ export const teacherCourseInputSchema = z
   .object({
     name: z.string().trim().min(3, "Course name is required.").max(120),
     shortName: z.string().trim().max(60).default(""),
-    category: z.enum(teacherCourseCategories),
-    authority: z.string().trim().min(2, "Conducting authority is required.").max(120),
-    tagline: z.string().trim().min(10, "Add a short course promise.").max(180),
+    category: z.string().trim().min(1, "Category is required.").max(60),
+    authority: z.string().trim().max(120).default(""),
+    tagline: z.string().trim().max(180).default(""),
     description: z
       .string()
       .trim()
@@ -43,7 +44,7 @@ export const teacherCourseInputSchema = z
     outcomes: z.array(z.string().trim().min(2).max(180)).max(8).default([]),
     subjectSlugs: z
       .array(z.string().trim().min(1).max(200))
-      .min(1, "Choose at least one indexed subject.")
+      .min(1, "Choose at least one subject.")
       .refine((slugs) => new Set(slugs).size === slugs.length, "Choose each subject once."),
     status: z.enum(["draft", "published"]).default("draft"),
   })
@@ -71,7 +72,7 @@ export type TeacherCourse = {
   slug: string;
   name: string;
   shortName: string;
-  category: (typeof teacherCourseCategories)[number];
+  category: string;
   authority: string;
   tagline: string;
   description: string;

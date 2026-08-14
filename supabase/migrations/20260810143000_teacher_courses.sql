@@ -4,7 +4,7 @@ create table if not exists public.teacher_courses (
   slug text not null unique,
   name text not null,
   short_name text not null default '',
-  category text not null check (category in ('Loksewa', 'Entrance', 'Banking', 'Language', 'School', 'License')),
+  category text not null,
   authority text not null,
   tagline text not null,
   description text not null,

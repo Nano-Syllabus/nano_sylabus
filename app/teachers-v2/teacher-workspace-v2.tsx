@@ -1419,7 +1419,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
         <Link
           href="/"
           aria-label="Go to Nano Syllabus site"
-          className="flex items-center gap-[10px] rounded-[9px] px-2 pb-[18px] pt-0.5 transition hover:opacity-70"
+          className="mb-3 flex items-center gap-[10px] rounded-[9px] px-2 pt-0.5 transition hover:opacity-70"
         >
           <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-text-primary font-display text-sm font-extrabold text-text-inverse">
             n
@@ -1430,16 +1430,13 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             </p>
           </div>
         </Link>
-        <p className="mx-[9px] mb-[17px] mt-[-7px] font-mono text-[9.5px] uppercase tracking-[0.14em] text-text-muted">
-          Creator portal
-        </p>
         <nav className="space-y-1" aria-label="Creator workspace">
           {(
             [
               ["today", "Today"],
               ["subjects", "Subjects"],
               ["courses", "Courses"],
-              ["settings", "Settings"],
+              ["settings", "Teacher profile"],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -1521,33 +1518,9 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{collectionName}</p>
-            <p className="truncate text-xs text-text-muted">Creator collection</p>
           </div>
           <span className="flex-1" />
           <ThemeToggle className="shrink-0 bg-bg-primary" />
-          <Link
-            href="/"
-            aria-label="Open site"
-            title="Site"
-            className={cn(
-              "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[9px] border border-border bg-bg-primary text-text-primary transition hover:border-border-strong hover:bg-bg-secondary",
-              interactive,
-            )}
-          >
-            <svg
-              aria-hidden="true"
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-          </Link>
           <Link
             href="/app/today"
             className={cn(
@@ -1582,7 +1555,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               ["today", "Today"],
               ["subjects", "Subjects"],
               ["courses", "Courses"],
-              ["settings", "Settings"],
+              ["settings", "Teacher profile"],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -7207,9 +7180,9 @@ function TeacherSettingsView({
   return (
     <form onSubmit={save} className="max-w-3xl">
       <p className="font-mono text-xs uppercase tracking-widest text-text-muted">You</p>
-      <h1 className="mt-3 font-display text-3xl font-semibold">Teacher settings</h1>
+      <h1 className="mt-3 font-display text-3xl font-semibold">Teacher profile</h1>
       <p className="mt-2 text-text-secondary">
-        Your public profile appears beside every course you publish. AI preferences stay private.
+        Your public profile appears beside every course you publish.
       </p>
       <div className="mt-8 space-y-5">
         <section className="rounded-lg border border-border p-5">
@@ -7288,51 +7261,6 @@ function TeacherSettingsView({
           </div>
           <p className="mt-5 text-xs text-text-muted">Signed in as {teacher.email}</p>
         </section>
-        <fieldset className="rounded-lg border border-border p-5">
-          <legend className="px-1 font-display text-xl font-semibold">Language of answers</legend>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              type="button"
-              className={choiceClass(language === "EN")}
-              onClick={() => setLanguage("EN")}
-            >
-              English
-            </button>
-            <button
-              type="button"
-              className={choiceClass(language === "RN")}
-              onClick={() => setLanguage("RN")}
-            >
-              नेपाली
-            </button>
-          </div>
-        </fieldset>
-        <fieldset className="rounded-lg border border-border p-5">
-          <legend className="px-1 font-display text-xl font-semibold">
-            How answers are written
-          </legend>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              type="button"
-              className={choiceClass(answerStyle === "concise")}
-              onClick={() => setAnswerStyle("concise")}
-            >
-              Explain it simply
-            </button>
-            <button
-              type="button"
-              className={choiceClass(answerStyle === "exam_focused")}
-              onClick={() => setAnswerStyle("exam_focused")}
-            >
-              The way the exam wants it
-            </button>
-          </div>
-          <p className="mt-3 text-sm text-text-secondary">
-            {answerStyle === "exam_focused"
-              ? "Steps, marks and the wording examiners look for."
-              : "Plain language first, formulas after."}
-          </p>
-        </fieldset>
       </div>
       {error ? (
         <p className="mt-4 text-sm text-destructive" role="alert">
@@ -7345,7 +7273,7 @@ function TeacherSettingsView({
         disabled={saving || !fullName.trim()}
         aria-busy={saving}
       >
-        {saving ? "Saving profile…" : "Save profile and settings"}
+        {saving ? "Saving profile…" : "Save profile"}
       </Button>
     </form>
   );
@@ -7549,12 +7477,6 @@ function SubjectView({
                   ? "Add material"
                   : "Add past paper"}
             </Button>
-            <Button variant="outline" onClick={() => onCreateFolder(shelf)}>
-              New chapter folder
-            </Button>
-            <p className="text-sm text-text-muted">
-              Uploads go to {subject.folderPath}/{shelf} and index automatically.
-            </p>
           </div>
           {chapterFolders.length ? (
             <div className="mt-4 flex flex-wrap gap-2" aria-label={`${shelf} chapter folders`}>
@@ -7767,8 +7689,7 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
       ) : null}
 
       <article className="mt-5 rounded-lg border border-border p-5">
-        <p className="text-xs uppercase tracking-wider text-text-muted">{titleCase(subject.name)}</p>
-        <h3 className="mt-2 font-display text-xl font-semibold">What was captured</h3>
+        <h3 className="font-display text-xl font-semibold">What was captured</h3>
         {coverage.length ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {coverage.map((item, index) => {
@@ -7809,8 +7730,7 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
       <article className="mt-5 rounded-lg border border-border p-5">
         <div className="flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-wider text-text-muted">{titleCase(subject.name)}</p>
-            <h3 className="mt-2 font-display text-xl font-semibold">Ready for the marketplace?</h3>
+            <h3 className="font-display text-xl font-semibold">Ready for the marketplace?</h3>
           </div>
           <span
             className={cn(
@@ -7924,30 +7844,32 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
         )}
       </article>
 
-      <article className="mt-5 rounded-lg border border-border p-5">
-        <p className="text-xs uppercase tracking-wider text-text-muted">This collection key</p>
-        <h3 className="mt-2 font-display text-xl font-semibold">Token spend</h3>
-        <p className="mt-2 max-w-prose text-sm leading-6 text-text-secondary">
-          Every AI call made for asking, generating, grading, and parsing is recorded for this
-          teacher collection only.
-        </p>
-        <p className="mt-4 font-display text-2xl font-semibold">{metricLabel(totalTokens)} total</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          {[
-            ["Calls", calls],
-            ["Prompt", metricLabel(promptTokens)],
-            ["Completion", metricLabel(completionTokens)],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-lg bg-bg-secondary p-4">
-              <p className="text-xs uppercase tracking-wider text-text-muted">{label}</p>
-              <p className="mt-2 font-display text-xl font-semibold">{value}</p>
-            </div>
-          ))}
-        </div>
-      </article>
-
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <article className="rounded-lg border border-border p-5">
+        <article className="flex flex-col justify-between rounded-lg border border-border p-5">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-text-muted">This collection key</p>
+            <h3 className="mt-2 font-display text-xl font-semibold">Token spend</h3>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Every AI call made for asking, generating, grading, and parsing is recorded for this
+              teacher collection only.
+            </p>
+            <p className="mt-4 font-display text-2xl font-semibold">{metricLabel(totalTokens)} total</p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {[
+              ["Calls", calls],
+              ["Prompt", metricLabel(promptTokens)],
+              ["Completion", metricLabel(completionTokens)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg bg-bg-secondary p-4">
+                <p className="text-xs uppercase tracking-wider text-text-muted">{label}</p>
+                <p className="mt-2 font-display text-xl font-semibold">{value}</p>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="flex flex-col rounded-lg border border-border p-5">
           <h3 className="font-display text-xl font-semibold">Exam weightage</h3>
           <p className="mt-2 text-sm text-text-secondary">
             The grounded paper generator can use this measured mix.
@@ -7976,29 +7898,6 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
             <p className="mt-5 text-sm text-text-muted">
               No measured bands yet. Upload marked past papers to Question Bank.
             </p>
-          )}
-        </article>
-        <article className="rounded-lg border border-border p-5">
-          <h3 className="font-display text-xl font-semibold">Syllabus topics</h3>
-          <p className="mt-2 text-sm text-text-secondary">
-            Available for chapter-scoped paper generation.
-          </p>
-          {topics.length ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {topics.slice(0, 24).map((topic, index) => {
-                const label = insightName(topic) || `Topic ${index + 1}`;
-                return (
-                  <span
-                    key={`${label}-${index}`}
-                    className="rounded-full border border-border px-3 py-2 text-sm"
-                  >
-                    {label}
-                  </span>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="mt-5 text-sm text-text-muted">No syllabus topics have been parsed yet.</p>
           )}
         </article>
       </div>
