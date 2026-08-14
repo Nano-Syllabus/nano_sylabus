@@ -18,10 +18,19 @@ describe("chat language mode rules", () => {
   it("keeps answer language in Roman Nepali mode even when question is English", () => {
     const resolved = resolveResponseLanguage({
       chatLanguage: "RN",
-      messageLanguage: "RN",
+      messageLanguage: "EN",
     });
     expect(resolved).toBe("RN");
     expect(describeModeRule(resolved)).toContain("Roman Nepali");
+  });
+
+  it("keeps English selected even when the latest message is detected as Roman Nepali", () => {
+    expect(
+      resolveResponseLanguage({
+        chatLanguage: "EN",
+        messageLanguage: "RN",
+      }),
+    ).toBe("EN");
   });
 
   it("falls back to chat language when message language is not sent", () => {

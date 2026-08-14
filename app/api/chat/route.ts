@@ -7,7 +7,16 @@ import { z } from "zod";
 import { canSpendCredits, CHAT_MESSAGE_CREDIT_COST, computeNextBalance } from "@/lib/billing";
 import { resolveResponseLanguage } from "@/lib/chat-language-mode";
 import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
-import { normalizeBoard, normalizeBoardScore, normalizeCollege, normalizeFullName, normalizeGrade, normalizeSubjectLabel, normalizeSubjects, normalizeTargetGrade } from "@/lib/profile-normalization";
+import {
+  normalizeBoard,
+  normalizeBoardScore,
+  normalizeCollege,
+  normalizeFullName,
+  normalizeGrade,
+  normalizeSubjectLabel,
+  normalizeSubjects,
+  normalizeTargetGrade,
+} from "@/lib/profile-normalization";
 import {
   getStudentCourseSubjectAccess,
   getStudentCourseSubjectAccessForCourse,
@@ -15,8 +24,13 @@ import {
 } from "@/lib/student-courses";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { askTeacherSubject, type ApiRecord } from "@/lib/teacher-app/client";
-import { type TenantChatSource, type TenantSubject, type TenantTokenUsage } from "@/lib/tenant/client";
+import {
+  chatTenantStream,
+  getTenantName,
+  type TenantChatSource,
+  type TenantSubject,
+  type TenantTokenUsage,
+} from "@/lib/tenant/client";
 import { deriveSessionTitle } from "@/lib/utils";
 import type { AssistantAnswerTrace, AssistantCitation } from "@/lib/types";
 
@@ -53,9 +67,23 @@ const requestSchema = z.object({
             z.object({
               id: z.string().trim().min(1).max(120),
               name: z.string().trim().min(1).max(180),
-              mimeType: z.string().trim().min(1).max(120).refine((value) => value.startsWith("image/")),
-              size: z.number().int().nonnegative().max(5 * 1024 * 1024),
-              dataUrl: z.string().trim().min(1).max(7_000_000).refine((value) => value.startsWith("data:image/")),
+              mimeType: z
+                .string()
+                .trim()
+                .min(1)
+                .max(120)
+                .refine((value) => value.startsWith("image/")),
+              size: z
+                .number()
+                .int()
+                .nonnegative()
+                .max(5 * 1024 * 1024),
+              dataUrl: z
+                .string()
+                .trim()
+                .min(1)
+                .max(7_000_000)
+                .refine((value) => value.startsWith("data:image/")),
             }),
           )
           .max(4)
@@ -80,10 +108,18 @@ function hashDebugValue(value: unknown) {
 
 function summarizeTenantFailure(error: unknown) {
   const normalized = errorToDebugMessage(error).toLowerCase();
-  if (normalized.includes("timeout") || normalized.includes("timed out") || normalized.includes("deadline")) {
+  if (
+    normalized.includes("timeout") ||
+    normalized.includes("timed out") ||
+    normalized.includes("deadline")
+  ) {
     return "timeout";
   }
-  if (normalized.includes("401") || normalized.includes("403") || normalized.includes("unauthorized")) {
+  if (
+    normalized.includes("401") ||
+    normalized.includes("403") ||
+    normalized.includes("unauthorized")
+  ) {
     return "auth";
   }
   if (normalized.includes("404") || normalized.includes("not found")) {
@@ -92,18 +128,19 @@ function summarizeTenantFailure(error: unknown) {
   return "unknown";
 }
 
-function logTenantChatDebug(
-  stage: string,
-  details: Record<string, unknown>,
-  error?: unknown,
-) {
+function logTenantChatDebug(stage: string, details: Record<string, unknown>, error?: unknown) {
   const payload = {
     stage,
     ...details,
     ...(error ? { error: errorToDebugMessage(error) } : {}),
   };
 
-  if (error || stage.includes("failed") || stage.includes("not_matched") || stage.includes("empty_answer")) {
+  if (
+    error ||
+    stage.includes("failed") ||
+    stage.includes("not_matched") ||
+    stage.includes("empty_answer")
+  ) {
     console.error("[TENANT_CHAT]", payload);
     return;
   }
@@ -124,47 +161,15 @@ function trustedTenantSubject(access: StudentCourseSubjectAccess): TenantSubject
   };
 }
 
-function creatorChatHistory(
-  messages: z.infer<typeof requestSchema>["messages"],
-): Array<{ role: "user" | "assistant"; content: string }> {
-  return messages.slice(0, -1).slice(-10).flatMap((message) => {
-    const content = message.content.trim().slice(0, 4_000);
-    return content ? [{ role: message.role, content }] : [];
-  });
-}
+function teacherCollectionNamespace(handle: string) {
+  const normalizedHandle = handle
+    .trim()
+    .toLowerCase()
+    .replace(/-teacher$/, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
-function creatorSourceFromChunk(value: unknown, index: number): TenantChatSource | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const chunk = value as ApiRecord;
-  const source = chunk.source && typeof chunk.source === "object" && !Array.isArray(chunk.source)
-    ? chunk.source as ApiRecord
-    : {};
-  const sourcePath = String(source.source_path || source.path || source.filename || source.doc || "").trim();
-  const title = String(source.filename || source.doc || source.title || sourcePath || "Course material").trim();
-  const page = Number(source.page);
-  const excerpt = String(chunk.text || chunk.content || chunk.excerpt || source.excerpt || "").trim();
-
-  return {
-    rank: index + 1,
-    title,
-    subject: typeof source.subject === "string" ? source.subject : undefined,
-    semester: String(source.section || source.chapter || "").trim() || undefined,
-    source_path: sourcePath || undefined,
-    clean_path: typeof source.clean_path === "string" ? source.clean_path : undefined,
-    excerpt: excerpt || undefined,
-    score: typeof chunk.score === "number" ? chunk.score : undefined,
-    pages: Number.isFinite(page) && page > 0 ? [page] : null,
-  };
-}
-
-function creatorTokenUsage(result: ApiRecord): TenantTokenUsage {
-  const usage = result.usage && typeof result.usage === "object" && !Array.isArray(result.usage)
-    ? result.usage as ApiRecord
-    : {};
-  const inputTokens = Number(usage.input_tokens ?? usage.inputTokens ?? 0) || 0;
-  const outputTokens = Number(usage.output_tokens ?? usage.outputTokens ?? 0) || 0;
-  const totalTokens = Number(usage.total_tokens ?? usage.totalTokens ?? inputTokens + outputTokens) || 0;
-  return { inputTokens, outputTokens, totalTokens };
+  return normalizedHandle ? `${normalizedHandle}-teacher` : "";
 }
 
 function normalizeContextSummary(value: unknown) {
@@ -174,12 +179,20 @@ function normalizeContextSummary(value: unknown) {
   if (normalized.length <= MAX_TENANT_CONTEXT_SUMMARY_CHARS) return normalized;
 
   const clipped = normalized.slice(0, MAX_TENANT_CONTEXT_SUMMARY_CHARS);
-  const lastBoundary = Math.max(clipped.lastIndexOf("\n"), clipped.lastIndexOf(". "), clipped.lastIndexOf(" "));
-  return clipped.slice(0, lastBoundary > 3_000 ? lastBoundary : MAX_TENANT_CONTEXT_SUMMARY_CHARS).trim();
+  const lastBoundary = Math.max(
+    clipped.lastIndexOf("\n"),
+    clipped.lastIndexOf(". "),
+    clipped.lastIndexOf(" "),
+  );
+  return clipped
+    .slice(0, lastBoundary > 3_000 ? lastBoundary : MAX_TENANT_CONTEXT_SUMMARY_CHARS)
+    .trim();
 }
 
 function normalizeRequestAttachments(
-  attachments: NonNullable<z.infer<typeof requestSchema>["messages"][number]["attachments"]> | undefined,
+  attachments:
+    | NonNullable<z.infer<typeof requestSchema>["messages"][number]["attachments"]>
+    | undefined,
 ) {
   return (attachments ?? []).map((attachment) => ({
     id: attachment.id,
@@ -190,7 +203,10 @@ function normalizeRequestAttachments(
   }));
 }
 
-function hasMissingColumnError(error: { message?: string; details?: string } | null, columnName: string) {
+function hasMissingColumnError(
+  error: { message?: string; details?: string } | null,
+  columnName: string,
+) {
   const message = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
   return message.includes("column") && message.includes(columnName.toLowerCase());
 }
@@ -207,14 +223,16 @@ function normalizeTokenUsage(usage?: TenantTokenUsage | null): TenantTokenUsage 
   };
 }
 
-function shouldRetryMessageInsertWithoutTokenUsage(error: { message?: string; details?: string } | null) {
+function shouldRetryMessageInsertWithoutTokenUsage(
+  error: { message?: string; details?: string } | null,
+) {
   const message = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
   return Boolean(
     message &&
-      message.includes("column") &&
-      (message.includes("input_tokens") ||
-        message.includes("output_tokens") ||
-        message.includes("total_tokens")),
+    message.includes("column") &&
+    (message.includes("input_tokens") ||
+      message.includes("output_tokens") ||
+      message.includes("total_tokens")),
   );
 }
 
@@ -350,10 +368,11 @@ function buildAnswerInstruction({
 }) {
   const languageRule =
     language === "EN"
-      ? "Answer in English."
-      : "Answer in Roman Nepali.";
+      ? "Answer only in clear English, even when the question or retrieved source is in Nepali."
+      : "Answer only in natural Roman Nepali written with Latin letters, even when the question or retrieved source is in English. Do not write English prose or Devanagari script; keep only unavoidable technical terms in English.";
 
   return [
+    languageRule,
     "You are an expert IOE Electronics and Communication Engineering professor and exam mentor.",
     `Teach the subject: ${subjectName}.`,
     board ? `Academic authority/context: ${board}.` : null,
@@ -380,7 +399,9 @@ function toSse(event: string, payload: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
-function shouldRetryAssistantInsertWithoutMetadata(error: { message?: string; details?: string } | null) {
+function shouldRetryAssistantInsertWithoutMetadata(
+  error: { message?: string; details?: string } | null,
+) {
   const message = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
   return Boolean(message && message.includes("column") && message.includes("metadata"));
 }
@@ -571,7 +592,9 @@ export async function POST(request: Request) {
       chatLanguage: parsed.language,
       messageLanguage: parsed.messageLanguage,
     });
-    const latestUserMessage = [...parsed.messages].reverse().find((message) => message.role === "user");
+    const latestUserMessage = [...parsed.messages]
+      .reverse()
+      .find((message) => message.role === "user");
     const question = latestUserMessage?.content.trim() ?? "";
     const latestUserAttachments = normalizeRequestAttachments(latestUserMessage?.attachments);
     const questionHash = hashDebugValue(question);
@@ -614,7 +637,9 @@ export async function POST(request: Request) {
     void profile.boardScore;
     void profile.targetGrade;
 
-    const requestedSubject = parsed.subjectContext ? normalizeSubjectLabel(parsed.subjectContext) : null;
+    const requestedSubject = parsed.subjectContext
+      ? normalizeSubjectLabel(parsed.subjectContext)
+      : null;
 
     const subjectLookupStartedAt = Date.now();
 
@@ -663,7 +688,9 @@ export async function POST(request: Request) {
       requestId,
       requestedSubject,
       lookupMs: Date.now() - subjectLookupStartedAt,
-      source: parsed.tenantSubject?.courseId ? "enrolled_course_subject" : "enrolled_subject_lookup",
+      source: parsed.tenantSubject?.courseId
+        ? "enrolled_course_subject"
+        : "enrolled_subject_lookup",
       matchedSubject: subjectAccess?.subjectName ?? null,
     });
 
@@ -687,7 +714,7 @@ export async function POST(request: Request) {
     const admin = createSupabaseAdminClient();
     const { data: creator, error: creatorError } = await admin
       .from("teachers")
-      .select("collection_sk")
+      .select("handle")
       .eq("id", subjectAccess.teacherId)
       .maybeSingle();
 
@@ -702,8 +729,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const creatorCollectionKey = String(creator?.collection_sk || "").trim();
-    if (!creatorCollectionKey) {
+    const creatorHandle = String(creator?.handle || "").trim();
+    if (!creatorHandle) {
       return NextResponse.json(
         {
           error: "This course creator's study collection is not ready.",
@@ -714,14 +741,23 @@ export async function POST(request: Request) {
       );
     }
 
-    if (latestUserAttachments.length > 0) {
+    const teacherNamespace = teacherCollectionNamespace(creatorHandle);
+    let tenantName = "";
+    try {
+      tenantName = await getTenantName();
+    } catch (error) {
+      logTenantChatDebug(
+        "tenant_identity_lookup_failed",
+        { requestId, teacherNamespace, subject: tenantSubject.name },
+        error,
+      );
       return NextResponse.json(
         {
-          error: "Image questions are not available for creator course chat yet.",
-          code: "COURSE_CHAT_IMAGE_UNSUPPORTED",
+          error: "Study chat service is not ready.",
+          code: "TENANT_IDENTITY_LOOKUP_FAILED",
           requestId,
         },
-        { status: 400 },
+        { status: 502 },
       );
     }
 
@@ -790,14 +826,16 @@ export async function POST(request: Request) {
       question: tenantQuestion,
       questionHash: tenantQuestionHash,
       attachmentCount: latestUserAttachments.length,
-      transport: "creator_collection_ask",
+      transport: latestUserAttachments.length > 0 ? "multipart/form-data" : "application/json",
       payloadHash: hashDebugValue({
         question: tenantQuestion,
         context_summary: tenantContextSummary,
         answer_instruction: answerInstruction,
         subject: tenantSubject.name,
-        course_id: subjectAccess.courseId,
+        tenant: tenantName,
+        namespaces: [teacherNamespace],
         top_k: 8,
+        attachment_count: latestUserAttachments.length,
       }),
       promptLength: tenantQuestion.length,
     });
@@ -805,315 +843,363 @@ export async function POST(request: Request) {
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         void (async () => {
-        const encoder = new TextEncoder();
-        const enqueue = (event: string, payload: unknown) => {
-          controller.enqueue(encoder.encode(toSse(event, payload)));
-        };
+          const encoder = new TextEncoder();
+          const enqueue = (event: string, payload: unknown) => {
+            controller.enqueue(encoder.encode(toSse(event, payload)));
+          };
 
-        const answerParts: string[] = [];
-        let tenantSources: TenantChatSource[] = [];
-        let returnedContextSummary = "";
-        let tenantNextTopic = "";
-        let chunksRetrieved: number | null = null;
-        let servedFrom: string | null = null;
-        let tenantTokenUsage = normalizeTokenUsage(null);
+          const answerParts: string[] = [];
+          let tenantSources: TenantChatSource[] = [];
+          let returnedContextSummary = "";
+          let tenantNextTopic = "";
+          let chunksRetrieved: number | null = null;
+          let servedFrom: string | null = null;
+          let tenantTokenUsage = normalizeTokenUsage(null);
 
-        try {
-          enqueue("status", { message: "Reading your course material..." });
+          try {
+            enqueue("status", { message: "Connecting to syllabus stream..." });
 
-          const creatorResult = await askTeacherSubject(
-            creatorCollectionKey,
-            tenantSubject.name,
-            tenantQuestion,
-            8,
-            answerInstruction,
-            creatorChatHistory(parsed.messages),
-          );
-          const creatorAnswer = String(creatorResult.answer || "").trim();
-          if (creatorAnswer) {
-            answerParts.push(creatorAnswer);
-            enqueue("token", { text: creatorAnswer });
-          }
-          const creatorChunks = Array.isArray(creatorResult.chunks) ? creatorResult.chunks : [];
-          tenantSources = creatorChunks
-            .map(creatorSourceFromChunk)
-            .filter((source): source is TenantChatSource => Boolean(source));
-          chunksRetrieved = tenantSources.length;
-          servedFrom = "creator_collection";
-          returnedContextSummary = normalizeContextSummary(creatorResult.context_summary);
-          if (!returnedContextSummary) {
-            returnedContextSummary = normalizeContextSummary(
-              `${tenantContextSummary ? `${tenantContextSummary}\n` : ""}User: ${tenantQuestion}\nAssistant: ${creatorAnswer}`,
+            await chatTenantStream(
+              {
+                question: tenantQuestion,
+                answerInstruction,
+                contextSummary: tenantContextSummary,
+                subject: tenantSubject.name,
+                tenant: tenantName,
+                namespaces: [teacherNamespace],
+                topK: 8,
+                attachments: latestUserAttachments,
+              },
+              (event) => {
+                if (event.type === "status") {
+                  enqueue("status", {
+                    message: event.message,
+                    query: event.query,
+                    served_from: event.served_from,
+                  });
+                  return;
+                }
+
+                if (event.type === "token") {
+                  answerParts.push(event.text);
+                  enqueue("token", { text: event.text });
+                  return;
+                }
+
+                if (event.type === "sources") {
+                  tenantSources = event.sources;
+                  chunksRetrieved = event.chunks_retrieved ?? null;
+                  servedFrom = event.served_from ?? null;
+                  returnedContextSummary = normalizeContextSummary(event.context_summary);
+                  tenantNextTopic =
+                    event.next_topic?.trim() || event.next_context_chunk?.title?.trim() || "";
+                  enqueue("sources", {
+                    sources: tenantSources,
+                    chunks_retrieved: chunksRetrieved,
+                    served_from: servedFrom,
+                    context_summary: returnedContextSummary ? "1" : "0",
+                    next_topic: tenantNextTopic || undefined,
+                  });
+                  return;
+                }
+
+                if (event.type === "error") {
+                  throw new Error(event.message);
+                }
+
+                if (event.type === "done") {
+                  tenantTokenUsage = normalizeTokenUsage(event.usage);
+                }
+              },
             );
-          }
-          tenantNextTopic = String(creatorResult.next_topic || "").trim();
-          tenantTokenUsage = creatorTokenUsage(creatorResult);
-          enqueue("sources", {
-            sources: tenantSources,
-            chunks_retrieved: chunksRetrieved,
-            served_from: servedFrom,
-            context_summary: returnedContextSummary ? "1" : "0",
-            next_topic: tenantNextTopic || undefined,
-          });
 
-          generationMs = Date.now() - tenantStartedAt;
-          const answer = answerParts.join("").trim();
-          if (!answer) {
-            logTenantChatDebug("tenant_empty_answer", {
+            generationMs = Date.now() - tenantStartedAt;
+            const answer = answerParts.join("").trim();
+            if (!answer) {
+              logTenantChatDebug("tenant_empty_answer", {
+                requestId,
+                sessionId: session.id,
+                subject: tenantSubject.name,
+                subjectName: tenantSubject.name,
+                folderPath: tenantSubject.folder_path,
+                namespace: tenantSubject.namespace_slug,
+                question: tenantQuestion,
+                questionHash: tenantQuestionHash,
+                promptLength: tenantQuestion.length,
+                citationCount: tenantSources.length,
+              });
+              enqueue("error", {
+                code: "TENANT_EMPTY_ANSWER",
+                message: "Course material API returned no answer.",
+              });
+              controller.close();
+              return;
+            }
+
+            if (!returnedContextSummary) {
+              returnedContextSummary = normalizeContextSummary(
+                `${tenantContextSummary ? `${tenantContextSummary}\n` : ""}User: ${tenantQuestion}\nAssistant: ${answer}`,
+              );
+            }
+
+            logTenantChatDebug("tenant_chat_succeeded", {
               requestId,
               sessionId: session.id,
               subject: tenantSubject.name,
+              subjectName: tenantSubject.name,
+              questionHash: tenantQuestionHash,
+              payloadHash: hashDebugValue({
+                question: tenantQuestion,
+                answer_instruction: answerInstruction,
+                context_summary: tenantContextSummary,
+                subject: tenantSubject.name,
+                tenant: tenantName,
+                namespaces: [teacherNamespace],
+                top_k: 8,
+                attachment_count: latestUserAttachments.length,
+              }),
+              generationMs,
+              answerLength: answer.length,
+              citationCount: tenantSources.length,
+              chunksRetrieved,
+              servedFrom,
+              returnedContextSummaryHash: returnedContextSummary
+                ? hashDebugValue(returnedContextSummary)
+                : null,
+              returnedContextSummaryLength: returnedContextSummary.length,
+              inputTokens: tenantTokenUsage.inputTokens,
+              outputTokens: tenantTokenUsage.outputTokens,
+              totalTokens: tenantTokenUsage.totalTokens,
+            });
+
+            const citations = buildTenantCitations({
               subjectName: tenantSubject.name,
               folderPath: tenantSubject.folder_path,
-              namespace: tenantSubject.namespace_slug,
-              question: tenantQuestion,
-              questionHash: tenantQuestionHash,
-              promptLength: tenantQuestion.length,
-              citationCount: tenantSources.length,
+              sources: tenantSources,
             });
-            enqueue("error", {
-              code: "TENANT_EMPTY_ANSWER",
-              message: "Course material API returned no answer.",
-            });
-            controller.close();
-            return;
-          }
+            const followUpSuggestions = buildTenantNextSuggestion(tenantNextTopic);
 
-          logTenantChatDebug("tenant_chat_succeeded", {
-            requestId,
-            sessionId: session.id,
-            subject: tenantSubject.name,
-            subjectName: tenantSubject.name,
-            questionHash: tenantQuestionHash,
-            payloadHash: hashDebugValue({
-              question: tenantQuestion,
-              answer_instruction: answerInstruction,
-              context_summary: tenantContextSummary,
-              subject: tenantSubject.name,
-              course_id: subjectAccess.courseId,
-              top_k: 8,
-            }),
-            generationMs,
-            answerLength: answer.length,
-            citationCount: tenantSources.length,
-            chunksRetrieved,
-            servedFrom,
-            returnedContextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
-            returnedContextSummaryLength: returnedContextSummary.length,
-            inputTokens: tenantTokenUsage.inputTokens,
-            outputTokens: tenantTokenUsage.outputTokens,
-            totalTokens: tenantTokenUsage.totalTokens,
-          });
-
-          const citations = buildTenantCitations({
-            subjectName: tenantSubject.name,
-            folderPath: tenantSubject.folder_path,
-            sources: tenantSources,
-          });
-          const followUpSuggestions = buildTenantNextSuggestion(tenantNextTopic);
-
-          const sessionContextPersist = await persistSessionContextSummary({
-            supabase,
-            sessionId: session.id,
-            userId: user.id,
-            contextSummary: returnedContextSummary,
-          });
-
-          if (!sessionContextPersist.ok && !sessionContextPersist.missingColumn) {
-            logTenantChatDebug("tenant_session_context_persist_failed", {
-              requestId,
+            const sessionContextPersist = await persistSessionContextSummary({
+              supabase,
               sessionId: session.id,
-              subject: tenantSubject.name,
-              subjectName: tenantSubject.name,
-              contextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
-              contextSummaryLength: returnedContextSummary.length,
-            }, sessionContextPersist.error);
-          }
+              userId: user.id,
+              contextSummary: returnedContextSummary,
+            });
 
-          const totalMs = Date.now() - requestStartedAt;
-          const subjectTags = [session.subjectContext ?? sessionSubjectContext];
-          const answerTrace = buildAnswerTrace({
-            routePath: "creator_collection_ask",
-            routeScopeDebug: tenantSubject.folder_path,
-            retrievalMode,
-            answerMode: "tenant_prompt",
-            answerModeReason: "enrolled_course_subject_answered_from_creator_collection",
-            matchedScope: tenantSubject.name,
-            answerModel: "creator:/v1/collection/ask",
-            grounded: citations.length > 0,
-            citationCount: citations.length,
-            lookupMs: 0,
-            generationMs,
-            rewriteMs: 0,
-            followupMs: 0,
-            totalMs,
-          });
-
-          const persistStartedAt = Date.now();
-
-          if (parsed.truncateFromId && !parsed.truncateFromId.startsWith("local-")) {
-            const { data: targetMessage } = await supabase
-              .from("chat_messages")
-              .select("created_at")
-              .eq("id", parsed.truncateFromId)
-              .eq("session_id", session.id)
-              .maybeSingle();
-
-            if (targetMessage) {
-              await supabase
-                .from("chat_messages")
-                .delete()
-                .eq("session_id", session.id)
-                .gte("created_at", targetMessage.created_at);
+            if (!sessionContextPersist.ok && !sessionContextPersist.missingColumn) {
+              logTenantChatDebug(
+                "tenant_session_context_persist_failed",
+                {
+                  requestId,
+                  sessionId: session.id,
+                  subject: tenantSubject.name,
+                  subjectName: tenantSubject.name,
+                  contextSummaryHash: returnedContextSummary
+                    ? hashDebugValue(returnedContextSummary)
+                    : null,
+                  contextSummaryLength: returnedContextSummary.length,
+                },
+                sessionContextPersist.error,
+              );
             }
-          }
 
-          const userMessagePayload = {
-            session_id: session.id,
-            role: "user",
-            content: question,
-            language: resolvedLanguage,
-            created_at: parsed.messages[parsed.messages.length - 1].createdAt || undefined,
-            metadata: latestUserAttachments.length > 0 ? { attachments: latestUserAttachments } : {},
-            input_tokens: tenantTokenUsage.inputTokens,
-            output_tokens: 0,
-            total_tokens: tenantTokenUsage.inputTokens,
-          };
-          const userMessageInsert = await supabase
-            .from("chat_messages")
-            .insert(userMessagePayload)
-            .select("id")
-            .single();
-          let userMessageError = userMessageInsert.error;
+            const totalMs = Date.now() - requestStartedAt;
+            const subjectTags = [session.subjectContext ?? sessionSubjectContext];
+            const answerTrace = buildAnswerTrace({
+              routePath: "tenant_chat_stream",
+              routeScopeDebug: teacherNamespace,
+              retrievalMode,
+              answerMode: "tenant_chat_stream",
+              answerModeReason: "enrolled_course_subject_streamed_from_scoped_teacher_namespace",
+              matchedScope: tenantSubject.name,
+              answerModel: "tenant:/api/chat/stream",
+              grounded: citations.length > 0,
+              citationCount: citations.length,
+              lookupMs: 0,
+              generationMs,
+              rewriteMs: 0,
+              followupMs: 0,
+              totalMs,
+            });
 
-          if (
-            shouldRetryMessageInsertWithoutTokenUsage(userMessageError) ||
-            shouldRetryAssistantInsertWithoutMetadata(userMessageError)
-          ) {
-            const { input_tokens, output_tokens, total_tokens, metadata, ...tokenAndMetadataFreeUserMessagePayload } = userMessagePayload;
-            void input_tokens;
-            void output_tokens;
-            void total_tokens;
-            void metadata;
-            const tokenFreeUserMessagePayload = {
-              ...tokenAndMetadataFreeUserMessagePayload,
-              metadata,
+            const persistStartedAt = Date.now();
+
+            if (parsed.truncateFromId && !parsed.truncateFromId.startsWith("local-")) {
+              const { data: targetMessage } = await supabase
+                .from("chat_messages")
+                .select("created_at")
+                .eq("id", parsed.truncateFromId)
+                .eq("session_id", session.id)
+                .maybeSingle();
+
+              if (targetMessage) {
+                await supabase
+                  .from("chat_messages")
+                  .delete()
+                  .eq("session_id", session.id)
+                  .gte("created_at", targetMessage.created_at);
+              }
+            }
+
+            const userMessagePayload = {
+              session_id: session.id,
+              role: "user",
+              content: question,
+              language: resolvedLanguage,
+              created_at: parsed.messages[parsed.messages.length - 1].createdAt || undefined,
+              metadata:
+                latestUserAttachments.length > 0 ? { attachments: latestUserAttachments } : {},
+              input_tokens: tenantTokenUsage.inputTokens,
+              output_tokens: 0,
+              total_tokens: tenantTokenUsage.inputTokens,
             };
-            const retryUserMessagePayload = shouldRetryAssistantInsertWithoutMetadata(userMessageError)
-              ? tokenAndMetadataFreeUserMessagePayload
-              : tokenFreeUserMessagePayload;
-            const retryUserMessageInsert = await supabase
+            const userMessageInsert = await supabase
               .from("chat_messages")
-              .insert(retryUserMessagePayload)
+              .insert(userMessagePayload)
               .select("id")
               .single();
-            userMessageError = retryUserMessageInsert.error;
-          }
+            let userMessageError = userMessageInsert.error;
 
-          if (userMessageError) {
-            logTenantChatDebug(
-              "user_message_persist_failed_after_response",
-              {
+            if (
+              shouldRetryMessageInsertWithoutTokenUsage(userMessageError) ||
+              shouldRetryAssistantInsertWithoutMetadata(userMessageError)
+            ) {
+              const {
+                input_tokens,
+                output_tokens,
+                total_tokens,
+                metadata,
+                ...tokenAndMetadataFreeUserMessagePayload
+              } = userMessagePayload;
+              void input_tokens;
+              void output_tokens;
+              void total_tokens;
+              void metadata;
+              const tokenFreeUserMessagePayload = {
+                ...tokenAndMetadataFreeUserMessagePayload,
+                metadata,
+              };
+              const retryUserMessagePayload = shouldRetryAssistantInsertWithoutMetadata(
+                userMessageError,
+              )
+                ? tokenAndMetadataFreeUserMessagePayload
+                : tokenFreeUserMessagePayload;
+              const retryUserMessageInsert = await supabase
+                .from("chat_messages")
+                .insert(retryUserMessagePayload)
+                .select("id")
+                .single();
+              userMessageError = retryUserMessageInsert.error;
+            }
+
+            if (userMessageError) {
+              logTenantChatDebug(
+                "user_message_persist_failed_after_response",
+                {
+                  requestId,
+                  sessionId: session.id,
+                  subject: tenantSubject.name,
+                  subjectName: tenantSubject.name,
+                  persistMs: Date.now() - persistStartedAt,
+                },
+                userMessageError,
+              );
+              enqueue("error", { message: "Answer generated, but saving your message failed." });
+              controller.close();
+              return;
+            }
+
+            const assistantMessageId = await persistAssistantCompletion({
+              supabase,
+              sessionId: session.id,
+              userId: user.id,
+              answer,
+              language: resolvedLanguage,
+              citations,
+              subjectTags,
+              subjectContext: session.subjectContext ?? sessionSubjectContext,
+              answerTrace,
+              contextSummary: returnedContextSummary,
+              tokenUsage: tenantTokenUsage,
+              followUpSuggestions,
+            });
+
+            if (!assistantMessageId) {
+              logTenantChatDebug("assistant_message_persist_failed_after_response", {
                 requestId,
                 sessionId: session.id,
                 subject: tenantSubject.name,
                 subjectName: tenantSubject.name,
                 persistMs: Date.now() - persistStartedAt,
-              },
-              userMessageError,
-            );
-            enqueue("error", { message: "Answer generated, but saving your message failed." });
-            controller.close();
-            return;
-          }
+              });
+              enqueue("error", { message: "Answer generated, but saving the response failed." });
+              controller.close();
+              return;
+            }
 
-          const assistantMessageId = await persistAssistantCompletion({
-            supabase,
-            sessionId: session.id,
-            userId: user.id,
-            answer,
-            language: resolvedLanguage,
-            citations,
-            subjectTags,
-            subjectContext: session.subjectContext ?? sessionSubjectContext,
-            answerTrace,
-            contextSummary: returnedContextSummary,
-            tokenUsage: tenantTokenUsage,
-            followUpSuggestions,
-          });
-
-          if (!assistantMessageId) {
-            logTenantChatDebug("assistant_message_persist_failed_after_response", {
+            logTenantChatDebug("tenant_persist_succeeded_after_response", {
               requestId,
               sessionId: session.id,
               subject: tenantSubject.name,
               subjectName: tenantSubject.name,
+              assistantMessageId,
               persistMs: Date.now() - persistStartedAt,
+              contextSummaryHash: returnedContextSummary
+                ? hashDebugValue(returnedContextSummary)
+                : null,
+              contextSummaryLength: returnedContextSummary.length,
+              inputTokens: tenantTokenUsage.inputTokens,
+              outputTokens: tenantTokenUsage.outputTokens,
+              totalTokens: tenantTokenUsage.totalTokens,
             });
-            enqueue("error", { message: "Answer generated, but saving the response failed." });
-            controller.close();
-            return;
-          }
 
-          logTenantChatDebug("tenant_persist_succeeded_after_response", {
-            requestId,
-            sessionId: session.id,
-            subject: tenantSubject.name,
-            subjectName: tenantSubject.name,
-            assistantMessageId,
-            persistMs: Date.now() - persistStartedAt,
-            contextSummaryHash: returnedContextSummary ? hashDebugValue(returnedContextSummary) : null,
-            contextSummaryLength: returnedContextSummary.length,
-            inputTokens: tenantTokenUsage.inputTokens,
-            outputTokens: tenantTokenUsage.outputTokens,
-            totalTokens: tenantTokenUsage.totalTokens,
-          });
-
-          enqueue("done", {
-            ok: true,
-            sessionId: session.id,
-            requestId,
-            generationMs,
-            totalMs,
-            citationCount: citations.length,
-            chunksRetrieved,
-            servedFrom,
-            tokenUsage: tenantTokenUsage,
-          });
-          controller.close();
-        } catch (error) {
-          generationMs = Date.now() - tenantStartedAt;
-          const failureReason = summarizeTenantFailure(error);
-          logTenantChatDebug(
-            "tenant_chat_failed",
-            {
-              requestId,
+            enqueue("done", {
+              ok: true,
               sessionId: session.id,
-              subject: tenantSubject.name,
-              subjectName: tenantSubject.name,
-              folderPath: tenantSubject.folder_path,
-              namespace: tenantSubject.namespace_slug,
-              responseLanguage: resolvedLanguage,
-              contextSummaryHash: tenantContextSummary ? hashDebugValue(tenantContextSummary) : null,
-              contextSummaryLength: tenantContextSummary.length,
-              question: tenantQuestion,
-              questionHash: tenantQuestionHash,
-              promptLength: tenantQuestion.length,
-              failureReason,
+              requestId,
               generationMs,
-              attachmentCount: latestUserAttachments.length,
-            },
-            error,
-          );
-          enqueue("error", {
-            code: failureReason === "timeout" ? "TENANT_PROMPT_TIMEOUT" : "TENANT_PROMPT_FAILED",
-            message:
-              failureReason === "timeout"
-                ? "Course answer API timed out. Please retry once."
-                : errorToDebugMessage(error),
-          });
-          controller.close();
-        }
+              totalMs,
+              citationCount: citations.length,
+              chunksRetrieved,
+              servedFrom,
+              tokenUsage: tenantTokenUsage,
+            });
+            controller.close();
+          } catch (error) {
+            generationMs = Date.now() - tenantStartedAt;
+            const failureReason = summarizeTenantFailure(error);
+            logTenantChatDebug(
+              "tenant_chat_failed",
+              {
+                requestId,
+                sessionId: session.id,
+                subject: tenantSubject.name,
+                subjectName: tenantSubject.name,
+                folderPath: tenantSubject.folder_path,
+                namespace: tenantSubject.namespace_slug,
+                responseLanguage: resolvedLanguage,
+                contextSummaryHash: tenantContextSummary
+                  ? hashDebugValue(tenantContextSummary)
+                  : null,
+                contextSummaryLength: tenantContextSummary.length,
+                question: tenantQuestion,
+                questionHash: tenantQuestionHash,
+                promptLength: tenantQuestion.length,
+                failureReason,
+                generationMs,
+                attachmentCount: latestUserAttachments.length,
+              },
+              error,
+            );
+            enqueue("error", {
+              code: failureReason === "timeout" ? "TENANT_PROMPT_TIMEOUT" : "TENANT_PROMPT_FAILED",
+              message:
+                failureReason === "timeout"
+                  ? "Course answer API timed out. Please retry once."
+                  : errorToDebugMessage(error),
+            });
+            controller.close();
+          }
         })();
       },
     });
@@ -1134,14 +1220,14 @@ export async function POST(request: Request) {
         "x-retrieval-mode": retrievalMode,
         "x-subject-context": session.subjectContext ?? sessionSubjectContext,
         "x-thinking-enabled": "1",
-        "x-answer-mode": "tenant_prompt",
-        "x-answer-mode-reason": "enrolled_course_subject_answered_from_creator_collection",
-        "x-answer-model": "creator:/v1/collection/ask",
+        "x-answer-mode": "tenant_chat_stream",
+        "x-answer-mode-reason": "enrolled_course_subject_streamed_from_scoped_teacher_namespace",
+        "x-answer-model": "tenant:/api/chat/stream",
         "x-matched-scope": tenantSubject.name,
-        "x-route-path": "creator_collection_ask",
-        "x-route-scope-debug": tenantSubject.folder_path,
-        "x-history-strategy": "creator_conversation_history",
-        "x-history-messages": "1",
+        "x-route-path": "tenant_chat_stream",
+        "x-route-scope-debug": teacherNamespace,
+        "x-history-strategy": "rolling_context_summary",
+        "x-history-messages": "0",
         "x-tenant-lookup-ms": "0",
         "x-generation-ms": String(generationMs),
         "x-question-sha": tenantQuestionHash,
@@ -1150,11 +1236,13 @@ export async function POST(request: Request) {
           answer_instruction: answerInstruction,
           context_summary: tenantContextSummary,
           subject: tenantSubject.name,
-          course_id: subjectAccess.courseId,
+          tenant: tenantName,
+          namespaces: [teacherNamespace],
           top_k: 8,
+          attachment_count: latestUserAttachments.length,
         }),
         "x-subject-slug": tenantSubject.slug,
-        "x-namespace-slug": tenantSubject.namespace_slug,
+        "x-namespace-slug": teacherNamespace,
         "x-tenant-context-summary": "0",
         "x-tenant-context-summary-length": "0",
         "x-rewrite-ms": "0",

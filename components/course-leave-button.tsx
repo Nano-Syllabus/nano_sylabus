@@ -10,10 +10,14 @@ export function CourseLeaveButton({
   slug,
   courseName,
   redirectTo,
+  label = "Leave",
+  onLeft,
 }: {
   slug: string;
   courseName: string;
   redirectTo?: string;
+  label?: string;
+  onLeft?: () => void;
 }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
@@ -32,6 +36,7 @@ export function CourseLeaveButton({
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Could not leave this course.");
 
+      onLeft?.();
       if (redirectTo) {
         router.replace(redirectTo);
       } else {
@@ -46,7 +51,7 @@ export function CourseLeaveButton({
   if (!confirming) {
     return (
       <Button type="button" variant="ghost" size="md" onClick={() => setConfirming(true)}>
-        <LogOut className="h-4 w-4" aria-hidden="true" /> Leave
+        <LogOut className="h-4 w-4" aria-hidden="true" /> {label}
       </Button>
     );
   }
@@ -66,7 +71,7 @@ export function CourseLeaveButton({
           disabled={leaving}
           aria-busy={leaving}
         >
-          {leaving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+          {leaving ? <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
           {leaving ? "Leaving..." : "Leave course"}
         </Button>
         <Button
@@ -82,7 +87,7 @@ export function CourseLeaveButton({
           Keep it
         </Button>
       </div>
-      {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+      {error ? <p role="alert" className="mt-2 text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

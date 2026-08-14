@@ -3,12 +3,16 @@ import { needsEnglishRewrite, needsRomanNepaliRewrite } from "@/lib/roman-nepali
 
 export function resolveResponseLanguage({
   chatLanguage,
-  messageLanguage,
+  messageLanguage: _messageLanguage,
 }: {
   chatLanguage: Language;
   messageLanguage?: Language;
 }): Language {
-  return messageLanguage ?? chatLanguage;
+  // The language picker is an explicit user preference for the answer. The
+  // detected language of the latest question is input metadata only and must
+  // never override the selected chat mode (for example, an English question
+  // asked while Roman Nepali is selected).
+  return chatLanguage;
 }
 
 export function isAnswerCompliantWithMode(answer: string, language: Language) {

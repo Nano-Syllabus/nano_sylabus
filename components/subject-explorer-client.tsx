@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, BookOpen, CalendarDays, Clock3, FileText, MessageSquareText, UserRound } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CourseLeaveButton } from "@/components/course-leave-button";
 import type { StudentCourse } from "@/lib/student-courses";
 import type { SubjectExplorerSummary } from "@/lib/types";
 import { titleCase } from "@/lib/utils";
@@ -144,7 +145,7 @@ function Modal({ title, children, footer, onClose }: { title: string; children: 
   );
 }
 
-function CourseDetails({ course }: { course: StudentCourse }) {
+function CourseDetails({ course, onLeft }: { course: StudentCourse; onLeft: () => void }) {
   const firstSubject = course.subjects[0];
   const chatHref = firstSubject
     ? `/app/chat?subject=${encodeURIComponent(firstSubject.name)}`
@@ -215,6 +216,14 @@ function CourseDetails({ course }: { course: StudentCourse }) {
         <div className="mt-5 grid gap-2">
           <Link href={chatHref} className={`${button} gap-2 border-border bg-bg-primary hover:bg-bg-tertiary`}><MessageSquareText className="h-4 w-4" aria-hidden="true" /> Ask tutor</Link>
           <Link href={practiceHref} className={`${button} gap-2 border-text-primary bg-text-primary text-text-inverse hover:opacity-90`}>Start practice <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+          <div className="mt-2 border-t border-border pt-2">
+            <CourseLeaveButton
+              slug={course.slug}
+              courseName={course.name}
+              label="Leave course"
+              onLeft={onLeft}
+            />
+          </div>
         </div>
       </aside>
     </div>
@@ -228,7 +237,12 @@ export function SubjectExplorerClient({
   subjects: SubjectExplorerSummary[];
   courses: StudentCourse[];
 }) {
+  const [enrolledCourses, setEnrolledCourses] = useState(courses);
   const [selectedCourse, setSelectedCourse] = useState<StudentCourse | null>(null);
+
+  useEffect(() => {
+    setEnrolledCourses(courses);
+  }, [courses]);
 
   return (
     <main className="w-full max-w-[1240px] px-[14px] pb-24 pt-[18px] lg:p-[26px]">
@@ -243,9 +257,9 @@ export function SubjectExplorerClient({
         Your enrolled courses and their indexed subjects appear here. Open a course to review its full details.
       </p>
 
-      {courses.length ? (
+      {enrolledCourses.length ? (
         <div className="space-y-8">
-          {courses.map((course) => {
+          {enrolledCourses.map((course) => {
             const subjectKeys = new Set(
               course.subjects.flatMap((subject) => [slugify(subject.slug), slugify(subject.name)]),
             );
@@ -296,7 +310,13 @@ export function SubjectExplorerClient({
 
       {selectedCourse ? (
         <Modal title={selectedCourse.name} onClose={() => setSelectedCourse(null)}>
-          <CourseDetails course={selectedCourse} />
+          <CourseDetails
+            course={selectedCourse}
+            onLeft={() => {
+              setEnrolledCourses((current) => current.filter((course) => course.id !== selectedCourse.id));
+              setSelectedCourse(null);
+            }}
+          />
         </Modal>
       ) : null}
     </main>
