@@ -15,6 +15,7 @@ import {
 } from "@/lib/practice-sitting";
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 import { cn } from "@/lib/utils";
+import { McqCheckerDialog } from "@/components/mcq-checker-dialog";
 
 type ResultLine = { question: StudentExamQuestion; got: number; note: string; answer: string };
 /** How the rest of the classroom did — aggregate only, nobody is named. */
@@ -37,10 +38,11 @@ type Result = {
   handedInAt?: string;
   studentName?: string;
   detailsAvailable?: boolean;
+  penalty?: number;
   answerSheet?: { name: string; mimeType: string; sizeBytes: number; url: string } | null;
 };
 type PracticeLength = 5 | 10;
-type PracticeMode = "quick" | "paper" | "checker";
+type PracticeMode = "quick" | "mcq" | "paper" | "checker";
 type PracticeSubjectOption = {
   name: string;
   slug: string;
@@ -114,6 +116,18 @@ const DEFAULT_PAPER_INSTRUCTION =
   "Mark strictly. Award credit for correct working, but penalize missing derivations, units, and diagrams.";
 const MAX_ANSWER_SHEET_BYTES = 15 * 1024 * 1024;
 const ANSWER_SHEET_TYPES = new Set(["application/pdf", "image/png", "image/jpeg"]);
+
+async function readApiJson<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new Error(
+      response.status === 404
+        ? "The MCQ hand-in route is not available in this deployment. Refresh after the latest deployment finishes."
+        : `The server returned an invalid response while handing in (HTTP ${response.status}). Please try again.`,
+    );
+  }
+  return response.json() as Promise<T>;
+}
 
 function submittedAnswer(question: StudentExamQuestion, answer?: Answer) {
   const selectedChoice = answer?.choice;
@@ -294,6 +308,29 @@ type PracticeSessionQuestion = {
   text: string;
 };
 
+type McqApiOption = string | {
+  key?: string;
+  text?: string;
+  label?: string;
+  value?: string;
+};
+
+type McqApiQuestion = {
+  id?: string;
+  question_id?: string;
+  chapter?: string;
+  topic?: string;
+  marks?: number;
+  text?: string;
+  question?: string;
+  options?: McqApiOption[];
+};
+
+function mcqOptionText(option: McqApiOption) {
+  if (typeof option === "string") return option;
+  return option.text || option.label || option.value || option.key || "";
+}
+
 function assignmentExam(assignment: TeacherAssignment): StudentExam {
   const now = Date.now();
   const opens = assignment.opensAt ? new Date(assignment.opensAt).getTime() : null;
@@ -337,6 +374,13 @@ function PracticeDialog({
   selectedTopics,
   length,
   quickMarks,
+  mcqOneMarkCount,
+  mcqTwoMarkCount,
+  mcqPerChapter,
+  mcqOptionsPerQuestion,
+  mcqNegativeMarks,
+  mcqInstruction,
+  sharedMcqSetId,
   paperMarks,
   paperDuration,
   paperCoverage,
@@ -356,6 +400,14 @@ function PracticeDialog({
   onTopic,
   onLength,
   onQuickMarks,
+  onMcqOneMarkCount,
+  onMcqTwoMarkCount,
+  onMcqPerChapter,
+  onMcqOptionsPerQuestion,
+  onMcqNegativeMarks,
+  onMcqInstruction,
+  onSharedMcqSetId,
+  onOpenSharedMcq,
   onPaperMarks,
   onPaperDuration,
   onPaperCoverage,
@@ -380,6 +432,13 @@ function PracticeDialog({
   selectedTopics: string[];
   length: PracticeLength;
   quickMarks: 10 | 20 | 40;
+  mcqOneMarkCount: number;
+  mcqTwoMarkCount: number;
+  mcqPerChapter: boolean;
+  mcqOptionsPerQuestion: number;
+  mcqNegativeMarks: string;
+  mcqInstruction: string;
+  sharedMcqSetId: string;
   paperMarks: FullPaperMarks;
   paperDuration: FullPaperDuration;
   paperCoverage: PaperCoverage;
@@ -399,6 +458,14 @@ function PracticeDialog({
   onTopic: (topicKey: string) => void;
   onLength: (length: PracticeLength) => void;
   onQuickMarks: (marks: 10 | 20 | 40) => void;
+  onMcqOneMarkCount: (count: number) => void;
+  onMcqTwoMarkCount: (count: number) => void;
+  onMcqPerChapter: (value: boolean) => void;
+  onMcqOptionsPerQuestion: (count: number) => void;
+  onMcqNegativeMarks: (marks: string) => void;
+  onMcqInstruction: (value: string) => void;
+  onSharedMcqSetId: (value: string) => void;
+  onOpenSharedMcq: () => void;
   onPaperMarks: (marks: FullPaperMarks) => void;
   onPaperDuration: (minutes: FullPaperDuration) => void;
   onPaperCoverage: (coverage: PaperCoverage) => void;
@@ -451,11 +518,12 @@ function PracticeDialog({
             <div
               role="tablist"
               aria-label="Practice type"
-              className="mb-5 grid grid-cols-2 rounded-xl border border-border p-1"
+              className="mb-5 grid grid-cols-3 rounded-xl border border-border p-1"
             >
               {(
                 [
                   ["quick", "Quick drill"],
+                  ["mcq", "MCQ quiz"],
                   ["paper", "Full paper"],
                 ] as const
               ).map(([value, label]) => (
@@ -522,10 +590,12 @@ function PracticeDialog({
             )
           ) : null}
 
-          {mode === "quick" ? (
+          {mode === "quick" || mode === "mcq" ? (
             <fieldset>
               <legend className="mb-2 text-[13px] text-text-muted">
-                Which chapters? Leave all unticked and the most heavily examined ones are used.
+                {mode === "mcq"
+                  ? "Which chapters? Leave all unticked to quiz the whole subject."
+                  : "Which chapters? Leave all unticked and the most heavily examined ones are used."}
               </legend>
 
               {topicsState === "loading" ? (
@@ -631,6 +701,97 @@ function PracticeDialog({
                 ))}
               </div>
             </fieldset>
+          ) : null}
+
+          {mode === "mcq" ? (
+            <div className="space-y-4">
+              <fieldset>
+                <legend className="mb-2 text-[13px] text-text-muted">Question mix</legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {([
+                    [1, mcqOneMarkCount, onMcqOneMarkCount],
+                    [2, mcqTwoMarkCount, onMcqTwoMarkCount],
+                  ] as const).map(([marks, value, change]) => (
+                    <label key={marks} className="rounded-xl border border-border p-3 text-[13px] text-text-muted">
+                      {marks}-mark questions
+                      <input type="number" min={0} max={60} value={value} onChange={(event) => change(Math.max(0, Math.min(60, Number(event.target.value) || 0)))} className="mt-2 h-11 w-full rounded-lg border border-border bg-bg-primary px-3 text-base text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-border-strong" />
+                    </label>
+                  ))}
+                </div>
+                <label className="mt-3 flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm">
+                  <input type="checkbox" checked={mcqPerChapter} disabled={!selectedTopics.length} onChange={(event) => onMcqPerChapter(event.target.checked)} />
+                  Repeat this mix for each selected chapter
+                </label>
+                <p className="mt-2 text-[13px] text-text-muted">
+                  {(mcqOneMarkCount + mcqTwoMarkCount) * (mcqPerChapter ? selectedTopics.length : 1)} questions · {(mcqOneMarkCount + mcqTwoMarkCount * 2) * (mcqPerChapter ? selectedTopics.length : 1)} marks
+                  {((mcqOneMarkCount + mcqTwoMarkCount) * (mcqPerChapter ? selectedTopics.length : 1)) > 60 ? " · Reduce the mix to stay under 60." : ""}
+                </p>
+              </fieldset>
+
+              <fieldset>
+                <legend className="mb-1.5 text-[13px] text-text-muted">Options per question</legend>
+                <div className="grid grid-cols-5 rounded-xl border border-border p-1">
+                  {[2, 3, 4, 5, 6].map((count) => <button key={count} type="button" onClick={() => onMcqOptionsPerQuestion(count)} className={cn("min-h-10 rounded-lg text-sm", mcqOptionsPerQuestion === count ? "bg-text-primary font-semibold text-text-inverse" : "text-text-secondary")}>{count}</button>)}
+                </div>
+              </fieldset>
+
+              <fieldset>
+              <legend className="mb-1.5 text-[13px] text-text-muted">Wrong-answer penalty</legend>
+              <div className="grid grid-cols-4 rounded-xl border border-border bg-bg-primary p-1 shadow-sm">
+                {(
+                  [
+                    [0, "No penalty"],
+                    [0.25, "−0.25 marks"],
+                    [0.5, "−0.5 marks"],
+                    [1, "−1 mark"],
+                  ] as const
+                ).map(([marks, label]) => (
+                  <button
+                    key={marks}
+                    type="button"
+                    onClick={() => onMcqNegativeMarks(String(marks))}
+                    className={cn(
+                      "min-h-10 rounded-[9px] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
+                      Number(mcqNegativeMarks) === marks
+                        ? "bg-text-primary font-semibold text-text-inverse"
+                        : "text-text-secondary",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="mt-3 block text-[13px] text-text-muted">
+                Custom penalty
+                <input
+                  value={mcqNegativeMarks}
+                  onChange={(event) => onMcqNegativeMarks(event.target.value)}
+                  inputMode="decimal"
+                  placeholder="0"
+                  aria-label="Custom wrong-answer penalty"
+                  aria-invalid={!Number.isFinite(Number(mcqNegativeMarks)) || Number(mcqNegativeMarks) < 0}
+                  className="mt-1.5 h-10 w-full rounded-lg border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+                />
+              </label>
+              <p className="mb-4 text-[13px] leading-5 text-text-muted">
+                Unanswered questions are never penalised. Answers are checked instantly without an
+                AI examiner.
+              </p>
+              </fieldset>
+
+              <label className="block text-[13px] text-text-muted">Examiner instruction (optional)
+                <textarea value={mcqInstruction} maxLength={1000} rows={3} onChange={(event) => onMcqInstruction(event.target.value)} placeholder="For example: Focus on conceptual traps and keep distractors plausible." className="mt-1.5 w-full resize-y rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-border-strong" />
+              </label>
+
+              <div className="rounded-xl border border-border bg-bg-secondary p-4">
+                <p className="text-sm font-medium">Open a shared quiz</p>
+                <p className="mt-1 text-[13px] text-text-muted">Quiz codes work until the tenant set expires.</p>
+                <div className="mt-3 flex gap-2">
+                  <input value={sharedMcqSetId} onChange={(event) => onSharedMcqSetId(event.target.value)} placeholder="Paste set ID" className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-bg-primary px-3 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-border-strong" />
+                  <button type="button" disabled={!sharedMcqSetId.trim() || starting} className={secondaryButton} onClick={onOpenSharedMcq}>Open</button>
+                </div>
+              </div>
+            </div>
           ) : null}
 
           {mode === "paper" ? (
@@ -907,6 +1068,13 @@ function PracticeDialog({
             </p>
           ) : null}
 
+          {mode === "mcq" ? (
+            <p className="text-[13px] text-text-muted">
+              Options are shuffled by the server. Correct answers and explanations stay hidden
+              until you submit the quiz.
+            </p>
+          ) : null}
+
           {startError ? <p className="mt-3 text-[13px] text-destructive">{startError}</p> : null}
         </div>
 
@@ -926,7 +1094,14 @@ function PracticeDialog({
             disabled={
               starting ||
               checking ||
-              (mode !== "checker" && (!subject || subjectUnavailable || topicsState === "loading"))
+              (mode !== "checker" && (!subject || subjectUnavailable || topicsState === "loading")) ||
+              (mode === "mcq" && (
+                mcqOneMarkCount + mcqTwoMarkCount < 1 ||
+                (mcqOneMarkCount + mcqTwoMarkCount) * (mcqPerChapter ? selectedTopics.length : 1) > 60 ||
+                (mcqPerChapter && selectedTopics.length < 1) ||
+                !Number.isFinite(Number(mcqNegativeMarks)) ||
+                Number(mcqNegativeMarks) < 0
+              ))
             }
             onClick={mode === "checker" ? undefined : onStart}
           >
@@ -938,6 +1113,8 @@ function PracticeDialog({
                   ? "Check my answer"
                   : mode === "paper"
                     ? "Generate paper"
+                    : mode === "mcq"
+                      ? "Start MCQ quiz"
                     : "Start practising"}
           </button>
         </footer>
@@ -968,7 +1145,7 @@ export function StudentExamsClient({
   const [historyOpenError, setHistoryOpenError] = useState("");
   /** True when an unfinished sitting was found on this device. */
   const [resumable, setResumable] = useState(false);
-  const [dialog, setDialog] = useState<"join" | "practice" | "writing" | "submit" | "sheet" | null>(
+  const [dialog, setDialog] = useState<"join" | "practice" | "mcq-checker" | "writing" | "submit" | "sheet" | null>(
     null,
   );
   const [joinCode, setJoinCode] = useState("");
@@ -984,6 +1161,13 @@ export function StudentExamsClient({
   const [practiceTopics, setPracticeTopics] = useState<string[]>([]);
   const [practiceLength, setPracticeLength] = useState<PracticeLength>(5);
   const [quickMarks, setQuickMarks] = useState<10 | 20 | 40>(20);
+  const [mcqOneMarkCount, setMcqOneMarkCount] = useState(4);
+  const [mcqTwoMarkCount, setMcqTwoMarkCount] = useState(1);
+  const [mcqPerChapter, setMcqPerChapter] = useState(false);
+  const [mcqOptionsPerQuestion, setMcqOptionsPerQuestion] = useState(4);
+  const [mcqNegativeMarks, setMcqNegativeMarks] = useState("0");
+  const [mcqInstruction, setMcqInstruction] = useState("");
+  const [sharedMcqSetId, setSharedMcqSetId] = useState("");
   const [paperMarks, setPaperMarks] = useState<FullPaperMarks>(40);
   const [paperDuration, setPaperDuration] = useState<FullPaperDuration>(120);
   const [paperCoverage, setPaperCoverage] = useState<PaperCoverage>("full");
@@ -1006,7 +1190,7 @@ export function StudentExamsClient({
   const [practiceSession, setPracticeSession] = useState<{
     sessionId: string;
     subject: string;
-    kind: "session" | "paper";
+    kind: "session" | "paper" | "mcq";
     gradingInstruction?: string;
     answerMode?: PaperAnswerMode;
     expiresAt?: string;
@@ -1540,14 +1724,18 @@ export function StudentExamsClient({
 
     try {
       const isPersonalPaper = practiceSession.kind === "paper";
+      const isMcq = practiceSession.kind === "mcq";
       const response = await fetch(
         isPersonalPaper
           ? `/api/exams/${encodeURIComponent(practiceSession.sessionId)}/grade`
+          : isMcq
+            ? "/api/student/practice/mcq/set-check"
           : `/api/student/practice/session/${encodeURIComponent(practiceSession.sessionId)}/grade`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({
+            ...(isMcq ? { setId: practiceSession.sessionId } : {}),
             subject: practiceSession.subject,
             exam: attemptExam,
             ...(isPersonalPaper
@@ -1556,20 +1744,33 @@ export function StudentExamsClient({
                   instruction: practiceSession.gradingInstruction || undefined,
                 }
               : {}),
-            answers: attemptExam.questions.map((question) => {
-              const submitted = submittedAnswer(question, answers[question.id]);
-              return isPersonalPaper
-                ? {
-                    question_id: question.id,
-                    answer_text: submitted.answerText,
-                    selected_choice: submitted.selectedChoice,
-                  }
-                : { questionId: question.id, ...submitted };
-            }),
+            answers: isMcq
+              ? attemptExam.questions.flatMap((question) => {
+                  const submitted = submittedAnswer(question, answers[question.id]);
+                  return submitted.selectedChoice === undefined
+                    ? []
+                    : [
+                        {
+                          questionId: question.id,
+                          selected: submitted.answerText,
+                          selectedChoice: submitted.selectedChoice,
+                        },
+                      ];
+                })
+              : attemptExam.questions.map((question) => {
+                  const submitted = submittedAnswer(question, answers[question.id]);
+                  return isPersonalPaper
+                    ? {
+                        question_id: question.id,
+                        answer_text: submitted.answerText,
+                        selected_choice: submitted.selectedChoice,
+                      }
+                    : { questionId: question.id, ...submitted };
+                }),
           }),
         },
       );
-      const payload = (await response.json()) as {
+      const payload = await readApiJson<{
         grade?: {
           results?: Array<{
             question_id: string;
@@ -1589,9 +1790,10 @@ export function StudentExamsClient({
         }>;
         totalScore?: number;
         totalMarks?: number;
+        penalty?: number;
         evaluation?: PracticeEvaluation;
         error?: string;
-      };
+      }>(response);
 
       if (!response.ok) throw new Error(payload.error || "Could not grade this practice sitting.");
       const gradedPayload =
@@ -1610,7 +1812,8 @@ export function StudentExamsClient({
           question,
           got: graded?.score ?? 0,
           note: graded?.feedback || "No feedback returned.",
-          answer: graded?.student_answer ?? answers[question.id]?.text ?? "",
+          answer:
+            graded?.student_answer ?? submittedAnswer(question, answers[question.id]).answerText,
         };
       });
 
@@ -1620,10 +1823,12 @@ export function StudentExamsClient({
         outOf: gradedPayload.totalMarks ?? attemptExam.marks,
         lines,
         evaluation: gradedPayload.evaluation ?? null,
+        penalty: isMcq ? payload.penalty ?? 0 : 0,
         handedInAt: new Date().toISOString(),
         studentName: fullName,
       });
-      // Graded — the sitting is consumed on the tenant, so drop the local copy.
+      // This local attempt is complete. Written sessions are consumed; MCQ sets
+      // remain reusable on the tenant, but this student's saved sitting is done.
       clearSavedSitting();
       setPracticeSession(null);
       setResumable(false);
@@ -1743,6 +1948,155 @@ export function StudentExamsClient({
       startExam(exam);
     } catch (error) {
       setPracticeStartError(error instanceof Error ? error.message : "Could not start practice.");
+      setDialog("practice");
+    } finally {
+      setStartingPractice(false);
+    }
+  }
+
+  async function startMcqQuiz() {
+    if (!practiceSubject) return;
+
+    const chapters = practiceTopics
+      .map((topicKey) => availableTopics.find((topic) => topic.topic_key === topicKey)?.title)
+      .filter((title): title is string => Boolean(title));
+
+    setStartingPractice(true);
+    setPracticeStartError("");
+    setDialog("writing");
+
+    try {
+      const response = await fetch("/api/student/practice/mcq", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          subject: practiceSubject,
+          chapters: chapters.length ? chapters : undefined,
+          bands: [
+            { marksEach: 1, count: mcqOneMarkCount },
+            { marksEach: 2, count: mcqTwoMarkCount },
+          ],
+          perChapter: mcqPerChapter,
+          optionsPerQuestion: mcqOptionsPerQuestion,
+          negativeMarks: Number(mcqNegativeMarks),
+          instruction: mcqInstruction.trim() || undefined,
+        }),
+      });
+      const payload = (await response.json()) as {
+        setId?: string;
+        questions?: McqApiQuestion[];
+        totalMarks?: number;
+        expiresAt?: string;
+        warning?: string | null;
+        error?: string;
+      };
+      if (!response.ok || !payload.setId) {
+        throw new Error(payload.error || "Could not start the MCQ quiz.");
+      }
+
+      const questions: StudentExamQuestion[] = (payload.questions ?? []).map((question, index) => {
+        const options = (question.options ?? []).map(mcqOptionText).filter(Boolean);
+        return {
+          id: question.id || question.question_id || `mcq-${index + 1}`,
+          type: "choice",
+          questionType: "MCQ",
+          marks: Number(question.marks) || 1,
+          topic: question.chapter || question.topic || practiceSubjectName,
+          prompt: question.text || question.question || "Question",
+          options,
+        };
+      });
+      if (!questions.length || questions.some((question) => (question.options?.length ?? 0) < 2)) {
+        throw new Error("The MCQ service returned an incomplete quiz. Please try again.");
+      }
+
+      const tenantSecondsLeft = payload.expiresAt
+        ? Math.max(0, Math.floor((new Date(payload.expiresAt).getTime() - Date.now()) / 1000))
+        : Number.POSITIVE_INFINITY;
+      const requestedMinutes = Math.max(5, questions.length);
+      const exam: StudentExam = {
+        id: `mcq_${payload.setId}`,
+        subject: practiceSubjectName,
+        title: `${practiceSubjectName} MCQ quiz`,
+        kind: "practice-mcq",
+        counts: false,
+        marks:
+          payload.totalMarks ?? questions.reduce((total, question) => total + question.marks, 0),
+        minutes: Math.max(1, Math.min(requestedMinutes, Math.ceil(tenantSecondsLeft / 60))),
+        attempts: null,
+        window: "practice",
+        windowLabel: Number(mcqNegativeMarks) ? `−${mcqNegativeMarks} for a wrong answer` : "No penalty",
+        questions,
+      };
+
+      setPracticeSession({
+        sessionId: payload.setId,
+        subject: practiceSubject,
+        kind: "mcq",
+        expiresAt: payload.expiresAt,
+        warning: payload.warning ?? null,
+      });
+      setResumable(true);
+      setDialog(null);
+      startExam(exam);
+    } catch (error) {
+      setPracticeStartError(
+        error instanceof Error ? error.message : "Could not start the MCQ quiz.",
+      );
+      setDialog("practice");
+    } finally {
+      setStartingPractice(false);
+    }
+  }
+
+  async function openSharedMcqQuiz() {
+    if (!practiceSubject || !sharedMcqSetId.trim()) return;
+    setStartingPractice(true);
+    setPracticeStartError("");
+    setDialog("writing");
+    try {
+      const response = await fetch(`/api/student/practice/mcq/${encodeURIComponent(sharedMcqSetId.trim())}?subject=${encodeURIComponent(practiceSubject)}`, { headers: { Accept: "application/json" } });
+      const payload = (await response.json()) as {
+        setId?: string;
+        questions?: McqApiQuestion[];
+        totalMarks?: number;
+        negativeMarks?: number;
+        expiresAt?: string;
+        warning?: string | null;
+        error?: string;
+      };
+      if (!response.ok || !payload.setId) throw new Error(payload.error || "Could not open that MCQ quiz.");
+      const questions: StudentExamQuestion[] = (payload.questions ?? []).map((question, index) => ({
+        id: question.id || question.question_id || `mcq-${index + 1}`,
+        type: "choice",
+        questionType: "MCQ",
+        marks: Number(question.marks) || 1,
+        topic: question.chapter || question.topic || practiceSubjectName,
+        prompt: question.text || question.question || "Question",
+        options: (question.options ?? []).map(mcqOptionText).filter(Boolean),
+      }));
+      if (!questions.length || questions.some((question) => (question.options?.length ?? 0) < 2)) throw new Error("That shared quiz is incomplete or has expired.");
+      const tenantSecondsLeft = payload.expiresAt ? Math.max(0, Math.floor((new Date(payload.expiresAt).getTime() - Date.now()) / 1000)) : Number.POSITIVE_INFINITY;
+      const exam: StudentExam = {
+        id: `mcq_${payload.setId}`,
+        subject: practiceSubjectName,
+        title: `${practiceSubjectName} shared MCQ quiz`,
+        kind: "practice-mcq",
+        counts: false,
+        marks: payload.totalMarks ?? questions.reduce((total, question) => total + question.marks, 0),
+        minutes: Math.max(1, Math.min(Math.max(5, questions.length), Math.ceil(tenantSecondsLeft / 60))),
+        attempts: null,
+        window: "practice",
+        windowLabel: payload.negativeMarks ? `−${payload.negativeMarks} for a wrong answer` : "No penalty",
+        questions,
+      };
+      setMcqNegativeMarks(String(payload.negativeMarks ?? 0));
+      setPracticeSession({ sessionId: payload.setId, subject: practiceSubject, kind: "mcq", expiresAt: payload.expiresAt, warning: payload.warning ?? null });
+      setResumable(true);
+      setDialog(null);
+      startExam(exam);
+    } catch (error) {
+      setPracticeStartError(error instanceof Error ? error.message : "Could not open that MCQ quiz.");
       setDialog("practice");
     } finally {
       setStartingPractice(false);
@@ -1965,6 +2319,7 @@ export function StudentExamsClient({
           practiceSession?.kind === "paper" ? (practiceSession.answerMode ?? "type") : "type"
         }
         sessionWarning={practiceSession?.warning ?? null}
+        shareCode={practiceSession?.kind === "mcq" ? practiceSession.sessionId : undefined}
         onSheet={
           attemptExam.id.startsWith("teacher_") ||
           (practiceSession?.kind === "paper" && practiceSession.answerMode === "upload")
@@ -2205,6 +2560,9 @@ export function StudentExamsClient({
         <button type="button" className={secondaryButton} onClick={() => openPractice("checker")}>
           Quick check
         </button>
+        <button type="button" className={secondaryButton} onClick={() => setDialog("mcq-checker")}>
+          MCQ checker
+        </button>
         <button type="button" className={primaryButton} onClick={() => openPractice("quick")}>
           Practise
         </button>
@@ -2367,6 +2725,9 @@ export function StudentExamsClient({
               >
                 Quick check
               </button>
+              <button type="button" className={secondaryButton} onClick={() => setDialog("mcq-checker")}>
+                MCQ checker
+              </button>
               <button type="button" className={primaryButton} onClick={() => openPractice("quick")}>
                 Start practising
               </button>
@@ -2442,6 +2803,13 @@ export function StudentExamsClient({
           selectedTopics={practiceTopics}
           length={practiceLength}
           quickMarks={quickMarks}
+          mcqOneMarkCount={mcqOneMarkCount}
+          mcqTwoMarkCount={mcqTwoMarkCount}
+          mcqPerChapter={mcqPerChapter}
+          mcqOptionsPerQuestion={mcqOptionsPerQuestion}
+          mcqNegativeMarks={mcqNegativeMarks}
+          mcqInstruction={mcqInstruction}
+          sharedMcqSetId={sharedMcqSetId}
           paperMarks={paperMarks}
           paperDuration={paperDuration}
           paperCoverage={paperCoverage}
@@ -2465,6 +2833,14 @@ export function StudentExamsClient({
           onTopic={togglePracticeTopic}
           onLength={setPracticeLength}
           onQuickMarks={setQuickMarks}
+          onMcqOneMarkCount={setMcqOneMarkCount}
+          onMcqTwoMarkCount={setMcqTwoMarkCount}
+          onMcqPerChapter={setMcqPerChapter}
+          onMcqOptionsPerQuestion={setMcqOptionsPerQuestion}
+          onMcqNegativeMarks={setMcqNegativeMarks}
+          onMcqInstruction={setMcqInstruction}
+          onSharedMcqSetId={setSharedMcqSetId}
+          onOpenSharedMcq={() => void openSharedMcqQuiz()}
           onPaperMarks={setPaperMarks}
           onPaperDuration={setPaperDuration}
           onPaperCoverage={setPaperCoverage}
@@ -2494,15 +2870,29 @@ export function StudentExamsClient({
           }}
           onCheck={(event) => void checkAnswer(event)}
           onClose={() => setDialog(null)}
-          onStart={() => void (practiceMode === "paper" ? startFullPaper() : startPractice())}
+          onStart={() =>
+            void (practiceMode === "paper"
+              ? startFullPaper()
+              : practiceMode === "mcq"
+                ? startMcqQuiz()
+                : startPractice())
+          }
         />
       ) : null}
 
+      {dialog === "mcq-checker" ? <McqCheckerDialog onClose={() => setDialog(null)} /> : null}
+
       {dialog === "writing" ? (
-        <Dialog title="Writing your questions" onClose={() => setDialog(null)} footer={null}>
+        <Dialog
+          title={practiceMode === "mcq" ? "Building your MCQ quiz" : "Writing your questions"}
+          onClose={() => setDialog(null)}
+          footer={null}
+        >
           <b>
             {practiceMode === "paper"
               ? `${paperMarks} mark personal paper · ${paperDuration / 60} hour${paperDuration === 60 ? "" : "s"}`
+              : practiceMode === "mcq"
+                ? `${(mcqOneMarkCount + mcqTwoMarkCount) * (mcqPerChapter ? practiceTopics.length : 1)} MCQs · ${Number(mcqNegativeMarks) ? `−${mcqNegativeMarks} wrong-answer penalty` : "no penalty"}`
               : `${practiceLength} questions from ${practiceTopics.length} chapter${practiceTopics.length === 1 ? "" : "s"}`}
           </b>
           <p className="mt-1 text-[13px] text-text-muted">
@@ -2894,6 +3284,7 @@ function AttemptView({
   onSubmit,
   answerMode,
   sessionWarning,
+  shareCode,
   onSheet,
   children,
 }: {
@@ -2908,6 +3299,7 @@ function AttemptView({
   onSubmit: () => void;
   answerMode: PaperAnswerMode;
   sessionWarning?: string | null;
+  shareCode?: string;
   onSheet?: () => void;
   children: React.ReactNode;
 }) {
@@ -2945,6 +3337,11 @@ function AttemptView({
             <p className="mt-2 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-[13px] text-text-secondary">
               {sessionWarning}
             </p>
+          ) : null}
+          {shareCode ? (
+            <button type="button" className="mt-2 inline-flex min-h-10 items-center rounded-lg border border-border px-3 font-mono text-xs hover:bg-bg-secondary" onClick={() => void navigator.clipboard.writeText(shareCode)} title="Copy this quiz code for another enrolled student">
+              Quiz code · {shareCode} · Copy
+            </button>
           ) : null}
         </div>
         <span className="flex-1" />
@@ -2992,7 +3389,7 @@ function AttemptView({
                     onChange={() => onAnswer({ choice: index })}
                   />
                   <span className="grid h-7 w-7 place-items-center rounded-full border border-border text-xs">
-                    {String.fromCharCode(97 + index)}
+                    {String.fromCharCode(65 + index)}
                   </span>
                   {option}
                 </label>
@@ -3105,18 +3502,25 @@ function AttemptView({
 }
 
 function MarkingView({ exam }: { exam: StudentExam }) {
+  const isMcq = exam.kind === "practice-mcq";
   return (
     <div className="w-full max-w-[900px] px-4 pb-10 pt-10 sm:px-6">
-      <h1 className="font-display text-[28px] font-semibold">Marking your paper</h1>
+      <h1 className="font-display text-[28px] font-semibold">
+        {isMcq ? "Checking your quiz" : "Marking your paper"}
+      </h1>
       <p className="mt-2 text-text-secondary">
-        Reading your answers against what each question was looking for.
+        {isMcq
+          ? "Comparing your selections with the protected answer key."
+          : "Reading your answers against what each question was looking for."}
       </p>
       <div className="mt-6 rounded-[14px] border border-border p-5">
         <div className="h-2 overflow-hidden rounded-full bg-bg-secondary">
           <div className="h-full w-3/4 animate-pulse rounded-full bg-text-primary motion-reduce:animate-none" />
         </div>
         <p className="mt-3 text-sm text-text-muted">
-          Checking each answer against the marking points…
+          {isMcq
+            ? "Scoring every selection…"
+            : "Checking each answer against the marking points…"}
         </p>
       </div>
     </div>
@@ -3146,6 +3550,7 @@ function ResultView({
               {result.exam.counts ? "counts towards the record" : "practice only"}
             </Chip>
             <Chip>published</Chip>
+            {result.penalty ? <Chip>−{result.penalty} penalty</Chip> : null}
           </div>
           <h1 className="mt-4 font-display text-[28px] font-semibold">{result.exam.title}</h1>
           <p className="mt-2 text-sm text-text-secondary">

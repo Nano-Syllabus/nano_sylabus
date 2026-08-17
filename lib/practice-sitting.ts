@@ -41,7 +41,7 @@ export type SavedSitting = {
   exam: StudentExam;
   sessionId: string;
   /** Older saved sittings omit this and are treated as quick sessions. */
-  practiceKind?: "session" | "paper";
+  practiceKind?: "session" | "paper" | "mcq";
   /** Personal paper grading guidance must survive a refresh with the sitting. */
   gradingInstruction?: string;
   /** Personal papers can be typed in-app or submitted as one handwritten sheet. */

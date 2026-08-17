@@ -315,6 +315,32 @@ export type PracticeSessionResponse = {
   warning?: string | null;
 };
 
+export type McqOption = {
+  key: string;
+  text: string;
+};
+
+export type McqQuestion = {
+  id: string;
+  question_id?: string;
+  chapter?: string;
+  topic?: string;
+  marks: number;
+  text?: string;
+  question?: string;
+  options: Array<McqOption | string>;
+};
+
+export type McqSetResponse = {
+  set_id: string;
+  subject: string;
+  questions: McqQuestion[];
+  total_marks: number;
+  negative_marks?: number;
+  expires_at: string;
+  warning?: string | null;
+};
+
 export type PracticeTopicStatus = "strong" | "developing" | "weak" | "not_attempted";
 
 export type PracticeChapterEvaluation = {
@@ -371,6 +397,47 @@ export type PracticeSessionGradeResponse = {
   graded: boolean;
   stored: boolean;
   evaluation: PracticeEvaluation;
+};
+
+export type McqCheckResult = {
+  question_id: string;
+  question?: string;
+  chapter?: string;
+  topic_key?: string;
+  marks: number;
+  score: number;
+  selected?: string | null;
+  correct?: string | null;
+  selected_option?: string | null;
+  correct_option?: string | null;
+  is_correct?: boolean;
+  attempted?: boolean;
+  explanation?: string;
+};
+
+export type McqCheckResponse = {
+  set_id: string;
+  results: McqCheckResult[];
+  total_score: number;
+  total_marks: number;
+  penalty?: number;
+  negative_marks?: number;
+  correct_count?: number;
+  wrong_count?: number;
+  unattempted_count?: number;
+  stored?: boolean;
+  evaluation?: PracticeEvaluation;
+};
+
+export type McqSelfCheckItem = {
+  question_id: string;
+  question?: string;
+  chapter?: string;
+  marks: number;
+  options?: McqOption[];
+  correct: string;
+  selected?: string;
+  explanation?: string;
 };
 
 function requestJson<T>(
@@ -650,6 +717,54 @@ export async function startPracticeSession(input: {
     method: "POST",
     body: input,
     timeoutMs: 240000,
+  });
+}
+
+export async function generateMcqSet(input: {
+  subject: string;
+  namespaces?: string[];
+  chapters?: string[];
+  bands: Array<{ marks_each: 1 | 2; count: number }>;
+  per_chapter?: boolean;
+  options_per_question?: number;
+  negative_marks?: number;
+  instruction?: string;
+}) {
+  return requestJson<McqSetResponse>("/api/v1/mcq/generate", {
+    method: "POST",
+    body: input,
+    timeoutMs: 120000,
+  });
+}
+
+export async function getMcqSet(setId: string) {
+  return requestJson<McqSetResponse>(`/api/v1/mcq/sets/${encodeURIComponent(setId)}`, {
+    timeoutMs: 120000,
+  });
+}
+
+export async function checkMcqSet(
+  setId: string,
+  input: { answers: Array<{ question_id: string; selected: string }> },
+) {
+  return requestJson<McqCheckResponse>(
+    `/api/v1/mcq/sets/${encodeURIComponent(setId)}/check`,
+    {
+      method: "POST",
+      body: input,
+      timeoutMs: 120000,
+    },
+  );
+}
+
+export async function checkMcqItems(input: {
+  items: McqSelfCheckItem[];
+  negative_marks?: number;
+}) {
+  return requestJson<McqCheckResponse>("/api/v1/mcq/check", {
+    method: "POST",
+    body: input,
+    timeoutMs: 120000,
   });
 }
 
