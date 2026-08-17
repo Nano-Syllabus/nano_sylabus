@@ -633,6 +633,7 @@ export function ChatPageClient({
   const [selectionPopover, setSelectionPopover] = useState<{ top: number; left: number; text: string } | null>(null);
   const [tenantSubjectsByName, setTenantSubjectsByName] = useState<Record<string, TenantChatSubject>>({});
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryShowAllSubjects, setLibraryShowAllSubjects] = useState(false);
   const [libraryWidth, setLibraryWidth] = useState(520);
   const [viewportWidth, setViewportWidth] = useState(1440);
   const [composerElement, setComposerElement] = useState<HTMLFormElement | null>(null);
@@ -797,15 +798,34 @@ export function ChatPageClient({
 
   const closeLibrary = useCallback(() => {
     setLibraryOpen(false);
+    setLibraryShowAllSubjects(false);
     window.requestAnimationFrame(() => {
       document.getElementById("chat-library-trigger")?.focus();
     });
   }, []);
 
+  const toggleLibrary = useCallback(() => {
+    if (libraryOpen) {
+      setLibraryOpen(false);
+      setLibraryShowAllSubjects(false);
+      return;
+    }
+    // Re-opening the library should always start from the full subject index.
+    // Selecting a subject can still narrow the view for the current visit.
+    setLibraryShowAllSubjects(true);
+    setLibraryOpen(true);
+  }, [libraryOpen]);
+
   useEffect(() => {
-    shell.setSidebarSuppressed(libraryOpen);
-    return () => shell.setSidebarSuppressed(false);
+    shell.setSidebarCollapsed(libraryOpen);
+    return () => shell.setSidebarCollapsed(false);
   }, [libraryOpen, shell]);
+
+  useEffect(() => {
+    const desktopRailWidth = libraryOpen && viewportWidth >= 1024 ? libraryWidth : 0;
+    shell.setRightRailWidth(desktopRailWidth);
+    return () => shell.setRightRailWidth(0);
+  }, [libraryOpen, libraryWidth, shell, viewportWidth]);
 
   useEffect(() => {
     let active = true;
@@ -2000,6 +2020,34 @@ export function ChatPageClient({
     );
   }, [activeSessionSummary, isLoading, messages.length, subjectContext]);
 
+  const handleLibrarySubjectSelect = useCallback(
+    (nextSubject: ChatLibrarySubject) => {
+      const nextSubjectContext = normalizeSubjectLabel(stripSubjectChapter(nextSubject.name) || nextSubject.name);
+      const currentSubjectContext = normalizeSubjectLabel(stripSubjectChapter(subjectContext) || "");
+      if (!nextSubjectContext) return;
+
+      // Keep the library in all-subject mode after a selection so another
+      // subject can be chosen without closing the panel first.
+      setLibraryShowAllSubjects(true);
+      if (currentSubjectContext === nextSubjectContext) return;
+
+      const chatHasStarted = Boolean(
+        currentSessionIdRef.current || messages.length > 0 || isLoading,
+      );
+      if (!chatHasStarted) {
+        void updateSessionSubjectContext(nextSubjectContext);
+        return;
+      }
+
+      // A session is intentionally locked to its subject once it has begun.
+      // Start a clean conversation so the previous subject's answers remain
+      // coherent and the old chat stays available in history.
+      window.dispatchEvent(new Event("app:new-chat"));
+      window.requestAnimationFrame(() => setSubjectContext(nextSubjectContext));
+    },
+    [isLoading, messages.length, subjectContext, updateSessionSubjectContext],
+  );
+
   async function copyAssistantMessage(message: { id: string; content: string }) {
     setCopyingMessageId(message.id);
     try {
@@ -2130,36 +2178,34 @@ export function ChatPageClient({
 
   useEffect(() => {
     shell.setActions(
-      <div className="flex items-center gap-2 select-none">
-        {!compactHeaderActions ? (
-          <>
-            <Badge variant={creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
-              {creditBalance} MESSAGES
-            </Badge>
-            <CompactSelect
-              value={composerLanguage}
-              onChange={(v) => updateGlobalLanguage(v as "EN" | "RN")}
-              options={[
-                { label: "English", value: "EN" },
-                { label: "Roman Nepali", value: "RN" }
-              ]}
-            />
-          </>
+      <div className="flex min-w-0 items-center gap-1.5 select-none sm:gap-2">
+        <Badge variant={creditBalance > 0 ? "success" : "warning"} className="hidden shrink-0 sm:inline-flex">
+          {creditBalance} MESSAGES
+        </Badge>
+        <CompactSelect
+          value={composerLanguage}
+          onChange={(v) => updateGlobalLanguage(v as "EN" | "RN")}
+          options={[
+            { label: "English", value: "EN" },
+            { label: "Roman Nepali", value: "RN" }
+          ]}
+        />
+        {!libraryOpen ? (
+          <Button
+            id="chat-library-trigger"
+            type="button"
+            size="sm"
+            variant="ghost"
+            className={cn("rounded-full", compactHeaderActions ? "h-10 w-10 px-0" : "h-9 px-3")}
+            onClick={toggleLibrary}
+            aria-expanded={false}
+            aria-controls="chat-course-library"
+            aria-label="Open course library"
+          >
+            <LibraryBig className="h-4 w-4" aria-hidden="true" />
+            {!compactHeaderActions ? <span>Library</span> : null}
+          </Button>
         ) : null}
-        <Button
-          id="chat-library-trigger"
-          type="button"
-          size="sm"
-          variant={libraryOpen ? "outline" : "ghost"}
-          className={cn("rounded-full", compactHeaderActions ? "h-10 w-10 px-0" : "h-9 px-3")}
-          onClick={() => setLibraryOpen((current) => !current)}
-          aria-expanded={libraryOpen}
-          aria-controls="chat-course-library"
-          aria-label={libraryOpen ? "Close course library" : "Open course library"}
-        >
-          <LibraryBig className="h-4 w-4" aria-hidden="true" />
-          {!compactHeaderActions ? <span>Library</span> : null}
-        </Button>
         {currentSessionId ? (
           <Button
             type="button"
@@ -2180,7 +2226,7 @@ export function ChatPageClient({
       </div>
     );
     return () => shell.setActions(null);
-  }, [shell, composerLanguage, updateGlobalLanguage, creditBalance, currentSessionId, shareCurrentSession, shareLoading, compactHeaderActions, libraryOpen]);
+  }, [shell, composerLanguage, updateGlobalLanguage, creditBalance, currentSessionId, shareCurrentSession, shareLoading, compactHeaderActions, libraryOpen, toggleLibrary]);
 
   useEffect(() => {
     stopChatRef.current = stop;
@@ -2777,11 +2823,13 @@ export function ChatPageClient({
       </section>
 
       <ChatMaterialsLibrary
-        subject={chatLibrarySubject}
+        subject={libraryShowAllSubjects ? null : chatLibrarySubject}
+        activeSubject={chatLibrarySubject}
         open={libraryOpen}
         width={libraryWidth}
         onWidthChange={updateLibraryWidth}
         onClose={closeLibrary}
+        onSubjectSelect={handleLibrarySubjectSelect}
       />
 
       {saveState ? (

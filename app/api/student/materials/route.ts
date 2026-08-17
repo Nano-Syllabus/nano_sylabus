@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
+import {
+  getStudentCourseSubjectAccess,
+  getStudentCourseSubjectAccessForCourse,
+  listStudentCourses,
+  type StudentCourseSubjectAccess,
+} from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   getTenantSourceTree,
@@ -121,6 +126,80 @@ function findFolder(
   return findByName(nodes);
 }
 
+async function loadSubjectMaterials(
+  access: StudentCourseSubjectAccess,
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  sourceTreePromise: Promise<TenantSourceTreeNode[]> | null,
+): Promise<Material[]> {
+  let files: Material[] = [];
+
+  // Private upload mirrors are the source of truth for student previews. Read
+  // them first so the library remains available if the indexing service is slow.
+  try {
+    const normalizedFolder = access.folderPath.replace(/^\/+|\/+$/g, "");
+    const { data, error } = await withTimeout(
+      admin
+        .from("teacher_document_files")
+        .select(
+          "id, external_document_id, collection_path, storage_path, original_name, mime_type, size_bytes",
+        )
+        .eq("teacher_id", access.teacherId)
+        .ilike("collection_path", `${normalizedFolder}/%`)
+        .order("created_at", { ascending: false }),
+      6_000,
+    );
+    if (error) throw error;
+
+    const normalizedFolderLower = normalizedFolder.toLowerCase();
+    files = ((data || []) as DbMaterialFile[])
+      .filter((row) => {
+        const candidate = (row.collection_path || "")
+          .replace(/^\/+|\/+$/g, "")
+          .toLowerCase();
+        return candidate.startsWith(`${normalizedFolderLower}/`);
+      })
+      .map((row) => {
+        const collectionPath = row.collection_path || "";
+        const relativePath = collectionPath
+          .slice(normalizedFolder.length)
+          .replace(/^\/+/, "");
+        const parts = relativePath.split("/").filter(Boolean);
+        const fileName = row.original_name || parts.at(-1) || "Document.pdf";
+        return {
+          name: fileName,
+          shelf: parts.length > 1 ? parts[0] : "Materials",
+          path: collectionPath || fileName,
+          indexed: Boolean(row.external_document_id),
+          documentId: row.id,
+          sizeBytes: Number(row.size_bytes || 0),
+          mimeType: row.mime_type || "application/octet-stream",
+          previewAvailable: Boolean(row.storage_path),
+        };
+      });
+  } catch {
+    // Fall through to the indexing service tree for older external-only files.
+  }
+
+  // Older documents may exist only in the indexing service. They can still be
+  // listed, although the UI will explain when a private preview is unavailable.
+  if (!files.length) {
+    try {
+      const tree = sourceTreePromise
+        ? await sourceTreePromise
+        : (await withTimeout(getTenantSourceTree(), 6_000)).tree ?? [];
+      const folder = findFolder(tree, access.folderPath.split("/").filter(Boolean));
+      if (folder && folder.length > 0) {
+        files = collectFiles(folder);
+      }
+    } catch {
+      // The empty state below is more useful than turning a missing upstream
+      // source tree into a broken chat screen.
+    }
+  }
+
+  return files;
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
@@ -133,15 +212,48 @@ export async function GET(request: Request) {
         { status: 401, headers: NO_STORE_HEADERS },
       );
 
+    const admin = createSupabaseAdminClient();
     const requested = new URL(request.url).searchParams.get("subject")?.trim();
+
+    // With no subject selected, return the complete library for every enrolled
+    // course subject. This keeps the library useful before the chat composer
+    // has a subject context.
     if (!requested) {
+      const courses = await listStudentCourses(user.id, admin);
+      const sourceTreePromise = getTenantSourceTree()
+        .then((result) => result.tree ?? [])
+        .catch(() => [] as TenantSourceTreeNode[]);
+      const entries = (
+        await Promise.all(
+          courses.flatMap((course) =>
+            course.subjects.map(async (courseSubject) => {
+              const access = await getStudentCourseSubjectAccessForCourse(
+                user.id,
+                course.id,
+                courseSubject.slug,
+                admin,
+              );
+              if (!access) return null;
+              return {
+                courseId: course.id,
+                courseName: course.name,
+                subject: {
+                  name: access.subjectName || courseSubject.name,
+                  slug: access.subjectSlug || courseSubject.slug,
+                },
+                materials: await loadSubjectMaterials(access, admin, sourceTreePromise),
+              };
+            }),
+          ),
+        )
+      ).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
       return NextResponse.json(
-        { error: "A subject is required." },
-        { status: 400, headers: NO_STORE_HEADERS },
+        { subjects: entries },
+        { headers: NO_STORE_HEADERS },
       );
     }
 
-    const admin = createSupabaseAdminClient();
     const access = await getStudentCourseSubjectAccess(user.id, requested, admin);
     if (!access) {
       return NextResponse.json(
@@ -150,69 +262,7 @@ export async function GET(request: Request) {
       );
     }
 
-    let files: Material[] = [];
-
-    // Private upload mirrors are the source of truth for student previews. Read
-    // them first so the library remains available if the indexing service is slow.
-    try {
-      const normalizedFolder = access.folderPath.replace(/^\/+|\/+$/g, "");
-      const { data, error } = await withTimeout(
-        admin
-          .from("teacher_document_files")
-          .select(
-            "id, external_document_id, collection_path, storage_path, original_name, mime_type, size_bytes",
-          )
-          .eq("teacher_id", access.teacherId)
-          .ilike("collection_path", `${normalizedFolder}/%`)
-          .order("created_at", { ascending: false }),
-        6_000,
-      );
-      if (error) throw error;
-
-      const normalizedFolderLower = normalizedFolder.toLowerCase();
-      files = ((data || []) as DbMaterialFile[])
-        .filter((row) => {
-          const candidate = (row.collection_path || "")
-            .replace(/^\/+|\/+$/g, "")
-            .toLowerCase();
-          return candidate.startsWith(`${normalizedFolderLower}/`);
-        })
-        .map((row) => {
-          const collectionPath = row.collection_path || "";
-          const relativePath = collectionPath
-            .slice(normalizedFolder.length)
-            .replace(/^\/+/, "");
-          const parts = relativePath.split("/").filter(Boolean);
-          const fileName = row.original_name || parts.at(-1) || "Document.pdf";
-          return {
-            name: fileName,
-            shelf: parts.length > 1 ? parts[0] : "Materials",
-            path: collectionPath || fileName,
-            indexed: Boolean(row.external_document_id),
-            documentId: row.id,
-            sizeBytes: Number(row.size_bytes || 0),
-            mimeType: row.mime_type || "application/octet-stream",
-            previewAvailable: Boolean(row.storage_path),
-          };
-        });
-    } catch {
-      // Fall through to the indexing service tree for older external-only files.
-    }
-
-    // Older documents may exist only in the indexing service. They can still be
-    // listed, although the UI will explain when a private preview is unavailable.
-    if (!files.length) {
-      try {
-        const tree = await withTimeout(getTenantSourceTree(), 6_000);
-        const folder = findFolder(tree.tree ?? [], access.folderPath.split("/").filter(Boolean));
-        if (folder && folder.length > 0) {
-          files = collectFiles(folder);
-        }
-      } catch {
-        // The empty state below is more useful than turning a missing upstream
-        // source tree into a broken chat screen.
-      }
-    }
+    const files = await loadSubjectMaterials(access, admin, null);
 
     return NextResponse.json(
       {

@@ -30,6 +30,8 @@ export function AppShell({
   const [dynamicTitle, setDynamicTitle] = useState<ReactNode>(null);
   const [dynamicActions, setDynamicActions] = useState<ReactNode>(null);
   const [sidebarSuppressed, setSidebarSuppressed] = useState(false);
+  const [sidebarCollapsedOverride, setSidebarCollapsedOverride] = useState(false);
+  const [rightRailWidth, setRightRailWidth] = useState(0);
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
 
 
@@ -71,6 +73,8 @@ export function AppShell({
       setTitle: setDynamicTitle,
       setActions: setDynamicActions,
       setSidebarSuppressed,
+      setSidebarCollapsed: setSidebarCollapsedOverride,
+      setRightRailWidth,
     }),
     [],
   );
@@ -86,12 +90,14 @@ export function AppShell({
             (sidebarSuppressed
               ? "w-0 -translate-x-full overflow-hidden border-transparent opacity-0 md:w-0 "
               : (open ? "translate-x-0 " : "-translate-x-full ") +
-                (isCollapsed ? "w-[68px] border-border opacity-100" : "w-[min(86vw,320px)] border-border opacity-100 md:w-[260px]"))
+                (sidebarCollapsedOverride || isCollapsed
+                  ? "w-[68px] border-border opacity-100"
+                  : "w-[min(86vw,320px)] border-border opacity-100 md:w-[260px]"))
           }
         >
           <AppSidebar 
             user={user} 
-            isCollapsed={isCollapsed} 
+            isCollapsed={sidebarCollapsedOverride || isCollapsed}
             onToggleCollapse={() => setIsCollapsed(!isCollapsed)} 
             onCloseMobile={() => setOpen(false)}
           />
@@ -105,7 +111,10 @@ export function AppShell({
           />
         ) : null}
 
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <main
+          className="flex min-w-0 flex-1 flex-col overflow-hidden"
+          style={{ paddingRight: rightRailWidth > 0 ? `${rightRailWidth}px` : undefined }}
+        >
           <header className="flex min-h-12 items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4 md:px-8">
             <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
               {!sidebarSuppressed ? (
