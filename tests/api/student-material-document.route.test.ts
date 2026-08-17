@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => {
     createSupabaseServerClient: vi.fn(),
     createSupabaseAdminClient: vi.fn(),
     getStudentCourseSubjectAccess: vi.fn(),
+    getStudentCourseSubjectAccessForDocumentPath: vi.fn(),
     getTeacherDocument: vi.fn(),
     getTeacherDocuments: vi.fn(),
     getTenantSourceTree: vi.fn(),
@@ -26,6 +27,8 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("@/lib/student-courses", () => ({
   getStudentCourseSubjectAccess: mocks.getStudentCourseSubjectAccess,
+  getStudentCourseSubjectAccessForDocumentPath:
+    mocks.getStudentCourseSubjectAccessForDocumentPath,
 }));
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherDocument: mocks.getTeacherDocument,
@@ -95,6 +98,13 @@ describe("GET /api/student/materials/[documentId]", () => {
       subjectName: "Physics",
       folderPath: "Physics",
     });
+    mocks.getStudentCourseSubjectAccessForDocumentPath.mockResolvedValue({
+      courseId: "course-1",
+      teacherId: "teacher-1",
+      subjectSlug: "physics",
+      subjectName: "Physics",
+      folderPath: "Physics",
+    });
     mocks.getTeacherDocument.mockResolvedValue({
       id: "document-1",
       status: "indexed",
@@ -105,6 +115,7 @@ describe("GET /api/student/materials/[documentId]", () => {
     const teacherQuery = query({ collection_sk: "collection-secret" });
     const mirrorQuery = query({
       id: "mirror-1",
+      teacher_id: "teacher-1",
       external_document_id: "document-1",
       collection_path: "Physics/Notes/notes.pdf",
       storage_path: "teacher-1/notes.pdf",
@@ -147,7 +158,7 @@ describe("GET /api/student/materials/[documentId]", () => {
   });
 
   it("rejects a student who is not enrolled in the subject's course", async () => {
-    mocks.getStudentCourseSubjectAccess.mockResolvedValueOnce(null);
+    mocks.getStudentCourseSubjectAccessForDocumentPath.mockResolvedValueOnce(null);
     const response = await GET(
       new Request("http://localhost/api/student/materials/document-1?metadata=1"),
       context,

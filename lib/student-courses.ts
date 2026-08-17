@@ -389,6 +389,57 @@ export async function getStudentCourseSubjectAccess(
   };
 }
 
+export async function getStudentCourseSubjectAccessForDocumentPath(
+  studentId: string,
+  teacherId: string,
+  collectionPath: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+): Promise<StudentCourseSubjectAccess | null> {
+  const normalizedDocumentPath = normalizeCollectionPath(collectionPath).toLowerCase();
+  if (!teacherId || !normalizedDocumentPath) return null;
+
+  const enrollmentResult = await admin
+    .from("teacher_course_enrollments")
+    .select("course_id")
+    .eq("student_id", studentId)
+    .in("status", ["active", "completed"]);
+  if (enrollmentResult.error) throw enrollmentResult.error;
+
+  const enrolledCourseIds = (enrollmentResult.data || [])
+    .map((row) => String(row.course_id || ""))
+    .filter(Boolean);
+  if (!enrolledCourseIds.length) return null;
+
+  const subjectResult = await admin
+    .from("teacher_course_subjects")
+    .select("course_id,teacher_id,subject_slug,subject_name,folder_path")
+    .in("course_id", enrolledCourseIds)
+    .eq("teacher_id", teacherId);
+  if (subjectResult.error) throw subjectResult.error;
+
+  const matches = (subjectResult.data || [])
+    .filter((item) => {
+      const folder = normalizeCollectionPath(String(item.folder_path || "")).toLowerCase();
+      return Boolean(folder) &&
+        (normalizedDocumentPath === folder || normalizedDocumentPath.startsWith(`${folder}/`));
+    })
+    .sort(
+      (left, right) =>
+        normalizeCollectionPath(String(right.folder_path || "")).length -
+        normalizeCollectionPath(String(left.folder_path || "")).length,
+    );
+  const match = matches[0];
+  if (!match) return null;
+
+  return {
+    courseId: String(match.course_id || ""),
+    teacherId: String(match.teacher_id || teacherId),
+    subjectSlug: String(match.subject_slug || ""),
+    subjectName: String(match.subject_name || ""),
+    folderPath: String(match.folder_path || ""),
+  };
+}
+
 export async function enrollStudentInCourse(
   studentId: string,
   slug: string,

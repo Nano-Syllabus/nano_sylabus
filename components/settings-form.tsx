@@ -21,6 +21,7 @@ import {
 } from "@/lib/profile-normalization";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { AppUser, StudentProfile } from "@/lib/types";
+import { ThemeSetting } from "@/components/theme-setting";
 
 function engineeringBoard(value: string) {
   return normalizeBoard(value) === "IOE" ? "IOE" : "IOE";
@@ -220,6 +221,8 @@ export function SettingsForm({
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-6">
+      <ThemeSetting />
+
       <div className="rounded-lg border border-border bg-bg-primary">
         <div className="border-b border-border px-5 py-3">
           <h2 className="font-display text-xl">Profile & preferences</h2>

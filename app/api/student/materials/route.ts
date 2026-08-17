@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
+import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
-  findTenantSubject,
   getTenantSourceTree,
-  listTenantSubjects,
   type TenantSourceTreeNode,
 } from "@/lib/tenant/client";
 
@@ -18,13 +16,17 @@ type Material = {
   indexed: boolean;
   documentId: string;
   sizeBytes: number;
+  mimeType: string;
+  previewAvailable: boolean;
 };
 
 type DbMaterialFile = {
   id: string;
   external_document_id: string | null;
   collection_path: string | null;
+  storage_path: string | null;
   original_name: string | null;
+  mime_type: string | null;
   size_bytes: number | null;
 };
 
@@ -78,6 +80,8 @@ function collectFiles(nodes: TenantSourceTreeNode[], trail: string[] = []): Mate
       indexed: node.indexed === true,
       documentId: file.document_id ?? "",
       sizeBytes: Number(file.size ?? file.size_bytes ?? 0),
+      mimeType: "application/pdf",
+      previewAvailable: false,
     });
   }
 
@@ -137,16 +141,9 @@ export async function GET(request: Request) {
       );
     }
 
-    const subjects = await withTimeout(listTenantSubjects(), 5_000);
-    const subject = findTenantSubject(subjects, requested);
-    if (!subject) {
-      return NextResponse.json(
-        { error: "That subject is not available." },
-        { status: 404, headers: NO_STORE_HEADERS },
-      );
-    }
-
-    if (!(await studentHasCourseSubjectAccess(user.id, subject.slug))) {
+    const admin = createSupabaseAdminClient();
+    const access = await getStudentCourseSubjectAccess(user.id, requested, admin);
+    if (!access) {
       return NextResponse.json(
         { error: "Enroll in a course containing this subject first." },
         { status: 403, headers: NO_STORE_HEADERS },
@@ -155,75 +152,75 @@ export async function GET(request: Request) {
 
     let files: Material[] = [];
 
-    // Attempt 1: Fetch source tree from tenant API
+    // Private upload mirrors are the source of truth for student previews. Read
+    // them first so the library remains available if the indexing service is slow.
     try {
-      const tree = await withTimeout(getTenantSourceTree(), 6_000);
-      const folderPathSegments = subject.folder_path.split("/");
-      const folder = findFolder(tree.tree ?? [], folderPathSegments);
-      if (folder && folder.length > 0) {
-        files = collectFiles(folder);
-      }
+      const normalizedFolder = access.folderPath.replace(/^\/+|\/+$/g, "");
+      const { data, error } = await withTimeout(
+        admin
+          .from("teacher_document_files")
+          .select(
+            "id, external_document_id, collection_path, storage_path, original_name, mime_type, size_bytes",
+          )
+          .eq("teacher_id", access.teacherId)
+          .ilike("collection_path", `${normalizedFolder}/%`)
+          .order("created_at", { ascending: false }),
+        6_000,
+      );
+      if (error) throw error;
+
+      const normalizedFolderLower = normalizedFolder.toLowerCase();
+      files = ((data || []) as DbMaterialFile[])
+        .filter((row) => {
+          const candidate = (row.collection_path || "")
+            .replace(/^\/+|\/+$/g, "")
+            .toLowerCase();
+          return candidate.startsWith(`${normalizedFolderLower}/`);
+        })
+        .map((row) => {
+          const collectionPath = row.collection_path || "";
+          const relativePath = collectionPath
+            .slice(normalizedFolder.length)
+            .replace(/^\/+/, "");
+          const parts = relativePath.split("/").filter(Boolean);
+          const fileName = row.original_name || parts.at(-1) || "Document.pdf";
+          return {
+            name: fileName,
+            shelf: parts.length > 1 ? parts[0] : "Materials",
+            path: collectionPath || fileName,
+            indexed: Boolean(row.external_document_id),
+            documentId: row.id,
+            sizeBytes: Number(row.size_bytes || 0),
+            mimeType: row.mime_type || "application/octet-stream",
+            previewAvailable: Boolean(row.storage_path),
+          };
+        });
     } catch {
-      // Ignore tenant API failure, proceed to Supabase fallback
+      // Fall through to the indexing service tree for older external-only files.
     }
 
-    // Attempt 2: If tenant API yielded no files, query Supabase teacher_document_files table
+    // Older documents may exist only in the indexing service. They can still be
+    // listed, although the UI will explain when a private preview is unavailable.
     if (!files.length) {
       try {
-        const admin = createSupabaseAdminClient();
-        const needles = Array.from(
-          new Set(
-            [
-              subject.name,
-              subject.folder_path.split("/").filter(Boolean).at(-1),
-              subject.folder_path,
-            ]
-              .filter(Boolean)
-              .map((value) => String(value)),
-          ),
-        );
-        let dbFiles: DbMaterialFile[] | null = null;
-
-        for (const needle of needles) {
-          const { data } = await withTimeout<{ data: DbMaterialFile[] | null }>(
-            admin
-              .from("teacher_document_files")
-              .select("id, external_document_id, collection_path, original_name, size_bytes")
-              .ilike("collection_path", `%${needle}%`),
-            6_000,
-          );
-          if (data?.length) {
-            dbFiles = data;
-            break;
-          }
-        }
-
-        if (dbFiles && dbFiles.length > 0) {
-          files = dbFiles.map((row) => {
-            const parts = (row.collection_path || "").split("/").filter(Boolean);
-            const fileName = row.original_name || parts[parts.length - 1] || "Document.pdf";
-            const subjectIndex = parts.findIndex(
-              (part) => part.toLowerCase() === subject.name.toLowerCase(),
-            );
-            const shelf = subjectIndex >= 0 ? parts[subjectIndex + 1] || "Files" : "Files";
-            return {
-              name: fileName,
-              shelf,
-              path: row.collection_path || fileName,
-              indexed: true,
-              documentId: row.external_document_id || row.id,
-              sizeBytes: Number(row.size_bytes || 0),
-            };
-          });
+        const tree = await withTimeout(getTenantSourceTree(), 6_000);
+        const folder = findFolder(tree.tree ?? [], access.folderPath.split("/").filter(Boolean));
+        if (folder && folder.length > 0) {
+          files = collectFiles(folder);
         }
       } catch {
-        // Fallback silently if database is not reachable
+        // The empty state below is more useful than turning a missing upstream
+        // source tree into a broken chat screen.
       }
     }
 
     return NextResponse.json(
       {
-        subject: { name: subject.name, providerName: subject.namespace },
+        subject: {
+          name: access.subjectName,
+          slug: access.subjectSlug,
+          courseId: access.courseId,
+        },
         materials: files,
       },
       { headers: NO_STORE_HEADERS },

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
+import {
+  getStudentCourseSubjectAccess,
+  getStudentCourseSubjectAccessForDocumentPath,
+} from "@/lib/student-courses";
 import {
   getTeacherDocument,
   getTeacherDocuments,
@@ -18,6 +21,7 @@ export const dynamic = "force-dynamic";
 type FileNode = TenantSourceTreeNode & { document_id?: string; path?: string };
 type MirrorFile = {
   id: string;
+  teacher_id: string;
   external_document_id: string | null;
   collection_path: string;
   storage_path: string;
@@ -105,7 +109,7 @@ async function findMirror(
 ) {
   const admin = createSupabaseAdminClient();
   const columns =
-    "id,external_document_id,collection_path,storage_path,original_name,mime_type";
+    "id,teacher_id,external_document_id,collection_path,storage_path,original_name,mime_type";
 
   const byExternalId = await admin
     .from("teacher_document_files")
@@ -137,6 +141,120 @@ async function findMirror(
   return (byMirrorId.data as MirrorFile | null) || null;
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+async function findDirectMirror(documentId: string) {
+  const admin = createSupabaseAdminClient();
+  const columns =
+    "id,teacher_id,external_document_id,collection_path,storage_path,original_name,mime_type";
+
+  if (isUuid(documentId)) {
+    const byId = await admin
+      .from("teacher_document_files")
+      .select(columns)
+      .eq("id", documentId)
+      .maybeSingle();
+    if (byId.error) throw byId.error;
+    if (byId.data) return byId.data as MirrorFile;
+  }
+
+  const byExternalId = await admin
+    .from("teacher_document_files")
+    .select(columns)
+    .eq("external_document_id", documentId)
+    .maybeSingle();
+  if (byExternalId.error) throw byExternalId.error;
+  return (byExternalId.data as MirrorFile | null) || null;
+}
+
+async function mirrorResponse(
+  request: Request,
+  userId: string,
+  mirror: MirrorFile,
+) {
+  const admin = createSupabaseAdminClient();
+  const access = await getStudentCourseSubjectAccessForDocumentPath(
+    userId,
+    mirror.teacher_id,
+    mirror.collection_path,
+    admin,
+  );
+  if (!access) {
+    return NextResponse.json(
+      { error: "Enroll in a course containing this subject first." },
+      { status: 403 },
+    );
+  }
+
+  if (new URL(request.url).searchParams.get("metadata") === "1") {
+    let document: Record<string, unknown> = {
+      id: mirror.id,
+      path: mirror.collection_path,
+      source_path: mirror.collection_path,
+      status: mirror.external_document_id ? "indexed" : "uploaded",
+      indexed: Boolean(mirror.external_document_id),
+      subject: access.subjectName,
+    };
+
+    if (mirror.external_document_id) {
+      const teacherResult = await admin
+        .from("teachers")
+        .select("collection_sk")
+        .eq("id", mirror.teacher_id)
+        .maybeSingle();
+      if (teacherResult.error) throw teacherResult.error;
+      if (teacherResult.data?.collection_sk) {
+        try {
+          const remoteDocument = await getTeacherDocument(
+            teacherResult.data.collection_sk,
+            mirror.external_document_id,
+          );
+          document = {
+            ...document,
+            ...remoteDocument,
+            indexing_cost:
+              remoteDocument.indexing_cost ?? remoteDocument.indexing_cost_usd,
+          };
+        } catch {
+          // The mirrored file remains readable even if metadata is temporarily unavailable.
+        }
+      }
+    }
+
+    return NextResponse.json(
+      { document },
+      { headers: { "Cache-Control": "private, max-age=60" } },
+    );
+  }
+
+  if (!mirror.storage_path) {
+    return NextResponse.json(
+      { error: "A preview is not available for this older material yet." },
+      { status: 404 },
+    );
+  }
+
+  const download = await admin.storage.from("teacher-documents").download(mirror.storage_path);
+  if (download.error || !download.data) throw download.error || new Error("File unavailable.");
+  const body = await download.data.arrayBuffer();
+  const name = mirror.original_name || mirror.collection_path.split("/").pop() || "file";
+  const disposition = new URL(request.url).searchParams.get("download") === "1"
+    ? "attachment"
+    : "inline";
+
+  return new NextResponse(new Uint8Array(body), {
+    headers: {
+      "Content-Type": mirror.mime_type || download.data.type || "application/octet-stream",
+      "Content-Disposition": `${disposition}; filename="${name.replace(/"/g, "")}"`,
+      "Cache-Control": "private, max-age=300",
+    },
+  });
+}
+
 /**
  * Streams one of a teacher's files back to the student. Collection credentials
  * never reach the browser, and access is checked through course enrollment.
@@ -155,6 +273,11 @@ export async function GET(
     const { documentId } = await params;
     if (!documentId.trim()) {
       return NextResponse.json({ error: "A document id is required." }, { status: 400 });
+    }
+
+    const directMirror = await findDirectMirror(documentId);
+    if (directMirror) {
+      return await mirrorResponse(request, user.id, directMirror);
     }
 
     const admin = createSupabaseAdminClient();

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowUp, BookOpen, GraduationCap, LibraryBig, Share2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -13,6 +14,10 @@ import {
   type KeyboardEvent,
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
+import {
+  ChatMaterialsLibrary,
+  type ChatLibrarySubject,
+} from "@/components/chat-materials-library";
 
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
@@ -627,6 +632,11 @@ export function ChatPageClient({
   const [attachmentError, setAttachmentError] = useState("");
   const [selectionPopover, setSelectionPopover] = useState<{ top: number; left: number; text: string } | null>(null);
   const [tenantSubjectsByName, setTenantSubjectsByName] = useState<Record<string, TenantChatSubject>>({});
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryWidth, setLibraryWidth] = useState(520);
+  const [viewportWidth, setViewportWidth] = useState(1440);
+  const [composerElement, setComposerElement] = useState<HTMLFormElement | null>(null);
+  const [compactComposerControls, setCompactComposerControls] = useState(false);
   const pendingTitleRef = useRef<string | null>(null);
   const currentSessionIdRef = useRef<string | null>(initialSession?.id ?? null);
   const searchDebounceRef = useRef<number | null>(null);
@@ -643,6 +653,19 @@ export function ChatPageClient({
   const loadingOlderMessagesRef = useRef(false);
   const shouldStickToBottomRef = useRef(true);
   const [responseTimes, setResponseTimes] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!composerElement) return;
+
+    const updateComposerLayout = () => {
+      setCompactComposerControls(composerElement.getBoundingClientRect().width < 640);
+    };
+    updateComposerLayout();
+
+    const observer = new ResizeObserver(updateComposerLayout);
+    observer.observe(composerElement);
+    return () => observer.disconnect();
+  }, [composerElement]);
 
   const clearThinkingStageTimers = useCallback(() => {
     for (const timer of thinkingStageTimersRef.current) {
@@ -747,6 +770,42 @@ export function ChatPageClient({
     if (!normalizedSubjectContext) return null;
     return tenantSubjectsByName[normalizedSubjectContext] ?? null;
   }, [subjectContext, tenantSubjectsByName]);
+  const chatLibrarySubject = useMemo<ChatLibrarySubject | null>(() => {
+    const fallbackName = stripSubjectChapter(subjectContext);
+    if (selectedTenantSubject) {
+      return { name: selectedTenantSubject.name, slug: selectedTenantSubject.slug };
+    }
+    return fallbackName ? { name: fallbackName, slug: fallbackName } : null;
+  }, [selectedTenantSubject, subjectContext]);
+  const compactHeaderActions = libraryOpen && viewportWidth - libraryWidth < 1000;
+
+  useEffect(() => {
+    const storedWidth = Number(window.localStorage.getItem("ns-chat-library-width"));
+    if (Number.isFinite(storedWidth) && storedWidth >= 380) {
+      setLibraryWidth(storedWidth);
+    }
+    const updateViewportWidth = () => setViewportWidth(window.innerWidth);
+    updateViewportWidth();
+    window.addEventListener("resize", updateViewportWidth);
+    return () => window.removeEventListener("resize", updateViewportWidth);
+  }, []);
+
+  const updateLibraryWidth = useCallback((nextWidth: number) => {
+    setLibraryWidth(nextWidth);
+    window.localStorage.setItem("ns-chat-library-width", String(nextWidth));
+  }, []);
+
+  const closeLibrary = useCallback(() => {
+    setLibraryOpen(false);
+    window.requestAnimationFrame(() => {
+      document.getElementById("chat-library-trigger")?.focus();
+    });
+  }, []);
+
+  useEffect(() => {
+    shell.setSidebarSuppressed(libraryOpen);
+    return () => shell.setSidebarSuppressed(false);
+  }, [libraryOpen, shell]);
 
   useEffect(() => {
     let active = true;
@@ -2072,32 +2131,56 @@ export function ChatPageClient({
   useEffect(() => {
     shell.setActions(
       <div className="flex items-center gap-2 select-none">
-        <Badge variant={creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
-          {creditBalance} MESSAGES
-        </Badge>
-        <CompactSelect
-          value={composerLanguage}
-          onChange={(v) => updateGlobalLanguage(v as "EN" | "RN")}
-          options={[
-            { label: "English", value: "EN" },
-            { label: "Roman Nepali", value: "RN" }
-          ]}
-        />
+        {!compactHeaderActions ? (
+          <>
+            <Badge variant={creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
+              {creditBalance} MESSAGES
+            </Badge>
+            <CompactSelect
+              value={composerLanguage}
+              onChange={(v) => updateGlobalLanguage(v as "EN" | "RN")}
+              options={[
+                { label: "English", value: "EN" },
+                { label: "Roman Nepali", value: "RN" }
+              ]}
+            />
+          </>
+        ) : null}
+        <Button
+          id="chat-library-trigger"
+          type="button"
+          size="sm"
+          variant={libraryOpen ? "outline" : "ghost"}
+          className={cn("rounded-full", compactHeaderActions ? "h-10 w-10 px-0" : "h-9 px-3")}
+          onClick={() => setLibraryOpen((current) => !current)}
+          aria-expanded={libraryOpen}
+          aria-controls="chat-course-library"
+          aria-label={libraryOpen ? "Close course library" : "Open course library"}
+        >
+          <LibraryBig className="h-4 w-4" aria-hidden="true" />
+          {!compactHeaderActions ? <span>Library</span> : null}
+        </Button>
         {currentSessionId ? (
           <Button
             type="button"
             size="sm"
-            className="rounded-full h-8 px-4 text-xs font-medium bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition"
+            className={cn(
+              "rounded-full text-xs font-medium bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition-opacity motion-reduce:transition-none",
+              compactHeaderActions ? "h-10 w-10 px-0" : "h-8 px-4",
+            )}
             onClick={() => void shareCurrentSession()}
             disabled={shareLoading}
+            aria-label={shareLoading ? "Creating share link" : "Share chat"}
           >
-            {shareLoading ? "Sharing..." : "Share"}
+            {compactHeaderActions ? (
+              <Share2 className="h-4 w-4" aria-hidden="true" />
+            ) : shareLoading ? "Sharing..." : "Share"}
           </Button>
         ) : null}
       </div>
     );
     return () => shell.setActions(null);
-  }, [shell, composerLanguage, updateGlobalLanguage, creditBalance, currentSessionId, shareCurrentSession, shareLoading]);
+  }, [shell, composerLanguage, updateGlobalLanguage, creditBalance, currentSessionId, shareCurrentSession, shareLoading, compactHeaderActions, libraryOpen]);
 
   useEffect(() => {
     stopChatRef.current = stop;
@@ -2115,7 +2198,11 @@ export function ChatPageClient({
   const capitalizedFirstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
 
   const renderInputForm = () => (
-    <form onSubmit={submitMessage} className="flex w-full flex-col justify-between rounded-[16px] border border-black/5 bg-bg-secondary p-2.5 px-3 shadow-[0_4px_24px_rgba(0,0,0,0.15)] dark:border-white/5 sm:px-3.5">
+    <form
+      ref={setComposerElement}
+      onSubmit={submitMessage}
+      className="flex w-full min-w-0 flex-col justify-between rounded-[16px] border border-black/5 bg-bg-secondary p-2.5 px-3 shadow-[0_4px_24px_rgba(0,0,0,0.15)] dark:border-white/5 sm:px-3.5"
+    >
       <input
         ref={imageInputRef}
         type="file"
@@ -2220,12 +2307,12 @@ export function ChatPageClient({
         placeholder={!subjectContext ? "Please select subject" : "What topic should we explore?"}
         className={cn("min-h-[44px] w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-[15px] leading-7 text-text-primary outline-none placeholder:text-text-muted", !subjectContext && "cursor-not-allowed opacity-60")}
       />
-      <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-3">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <button
             type="button"
             onClick={() => imageInputRef.current?.click()}
-            className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-muted transition hover:bg-bg-tertiary hover:text-text-primary"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors duration-100 hover:bg-bg-tertiary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none"
             aria-label="Upload image"
             title="Upload image"
           >
@@ -2235,10 +2322,18 @@ export function ChatPageClient({
             <button
               type="button"
               disabled
-              className="flex h-8 max-w-[46vw] cursor-default items-center rounded-full bg-bg-tertiary px-3 py-1 text-[12px] font-medium text-text-primary sm:h-7 sm:max-w-[220px]"
+              className={cn(
+                "flex h-10 shrink-0 cursor-default items-center justify-center rounded-full bg-bg-tertiary text-[12px] font-medium text-text-primary",
+                compactComposerControls ? "w-10 px-0" : "max-w-[220px] px-3",
+              )}
               title={`This chat is locked to ${displayedLockedSubjectContext}`}
+              aria-label={`Subject: ${displayedLockedSubjectContext}`}
             >
-              <span className="truncate">{displayedLockedSubjectContext}</span>
+              {compactComposerControls ? (
+                <BookOpen className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <span className="truncate">{displayedLockedSubjectContext}</span>
+              )}
             </button>
           ) : (
             <CompactSelect
@@ -2248,6 +2343,8 @@ export function ChatPageClient({
               placeholder={subjectActionOptions.length ? "Subjects" : "No subjects"}
               direction="up"
               pulseButton={!subjectContext}
+              compact={compactComposerControls}
+              compactIcon={<BookOpen className="h-4 w-4" />}
             />
           )}
           <CompactSelect
@@ -2258,13 +2355,15 @@ export function ChatPageClient({
               value: mode,
             }))}
             direction="up"
+            compact={compactComposerControls}
+            compactIcon={<GraduationCap className="h-4 w-4" />}
           />
         </div>
         {isLoading ? (
           <button
             type="button"
             onClick={stop}
-            className="h-10 w-10 rounded-full flex items-center justify-center bg-black dark:bg-white text-white dark:text-black hover:opacity-80 transition shadow-sm"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black text-white shadow-sm transition-opacity duration-100 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong dark:bg-white dark:text-black motion-reduce:transition-none"
             title="Stop generating"
           >
             <div className="w-3.5 h-3.5 bg-current rounded-[3px]"></div>
@@ -2273,9 +2372,18 @@ export function ChatPageClient({
           <Button
             type="submit"
             disabled={!subjectContext || (!input.trim() && pendingAttachments.length === 0) || creditBalance <= 0}
-            className="h-10 min-w-[78px] shrink-0 rounded-full bg-black px-4 text-[15px] font-medium text-white transition hover:opacity-80 disabled:opacity-50 dark:bg-white dark:text-black sm:min-w-[90px]"
+            className={cn(
+              "h-10 shrink-0 rounded-full bg-black text-[15px] font-medium text-white transition-opacity duration-100 hover:opacity-80 disabled:opacity-50 dark:bg-white dark:text-black motion-reduce:transition-none",
+              compactComposerControls ? "w-10 px-0" : "min-w-[90px] px-4",
+            )}
+            aria-label="Send message"
+            title={compactComposerControls ? "Send message" : undefined}
           >
-            Send →
+            {compactComposerControls ? (
+              <ArrowUp className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              "Send →"
+            )}
           </Button>
         )}
       </div>
@@ -2283,7 +2391,7 @@ export function ChatPageClient({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-bg-primary">
+    <div className="flex h-full min-h-0 min-w-0 overflow-hidden bg-bg-primary">
       <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* matchedScope banner hidden temporarily */}
 
@@ -2667,6 +2775,14 @@ export function ChatPageClient({
           </div>
         ) : null}
       </section>
+
+      <ChatMaterialsLibrary
+        subject={chatLibrarySubject}
+        open={libraryOpen}
+        width={libraryWidth}
+        onWidthChange={updateLibraryWidth}
+        onClose={closeLibrary}
+      />
 
       {saveState ? (
         <SaveNoteModal
