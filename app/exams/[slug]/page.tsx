@@ -50,7 +50,14 @@ function SiteHeader() {
           <Link href="/#why" className="hover:text-foreground">Why nanosyllabus</Link>
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/exams" className="glow-shadow inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:brightness-110">Open study space</Link>
+          <Link
+            href="/app"
+            target="_blank"
+            rel="noreferrer"
+            className="glow-shadow inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            Open study space
+          </Link>
         </div>
       </div>
     </header>
