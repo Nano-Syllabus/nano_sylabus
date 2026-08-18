@@ -34,35 +34,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-function SiteHeader() {
-  return (
-    <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-        <Link href="/" className="flex min-h-10 items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary">
-            <Sparkles className="size-4 text-primary-foreground" aria-hidden="true" />
-          </span>
-          <span className="font-display text-lg font-semibold">nanosyllabus</span>
-        </Link>
-        <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
-          <Link href="/exams" className="hover:text-foreground">Exams</Link>
-          <Link href="/#how" className="hover:text-foreground">How it works</Link>
-          <Link href="/#why" className="hover:text-foreground">Why nanosyllabus</Link>
-        </nav>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/app"
-            target="_blank"
-            rel="noreferrer"
-            className="glow-shadow inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            Open study space
-          </Link>
-        </div>
-      </div>
-    </header>
-  );
-}
+import { LandingHeader } from "@/components/landing-header";
 
 function RelatedCourseCard({ course }: { course: TeacherCourse }) {
   return (
@@ -95,7 +67,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
 
   return (
     <div className="exam-prep-theme min-h-screen bg-background text-foreground">
-      <SiteHeader />
+      <LandingHeader dark />
       <main>
         <section className="hero-glow border-b border-border/60">
           <div className="mx-auto max-w-6xl px-5 py-14 sm:py-20">

@@ -1,565 +1,386 @@
-import type { ComponentType, ReactNode, SVGProps } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  ArrowUpRight,
-  BookOpen,
-  Brain,
-  CalendarCheck,
-  FileText,
-  LineChart,
-  Lock,
-  MessagesSquare,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-  Sparkles,
-  Target,
-  Users,
-} from "lucide-react";
-
+import { ArrowRight, BookOpen, FileUp, Sparkles, Users } from "lucide-react";
 import { listPublishedCourses } from "@/lib/student-courses";
 import type { TeacherCourse } from "@/lib/teacher-courses";
-
-type Icon = ComponentType<SVGProps<SVGSVGElement>>;
-
-const TITLE = "nanosyllabus - AI exam preparation for Nepal";
-const DESC =
-  "Prepare for Loksewa, IOE, CEE, CMAT, IELTS and NEB exams with an AI tutor that builds your daily plan, drills your weak topics and tracks progress.";
+import { LandingHeader } from "@/components/landing-header";
+import { titleCase } from "@/lib/utils";
 
 export const metadata = {
-  title: TITLE,
-  description: DESC,
-  openGraph: {
-    title: TITLE,
-    description: DESC,
-  },
+  title: "NanoSyllabus — Know where you stand before the exam",
+  description:
+    "Practice your actual exam before the real exam. Upload your syllabus. NanoSyllabus becomes your personal exam coach.",
 };
-
-const APP_URL = "/login";
 
 export const dynamic = "force-dynamic";
 
-const steps = [
-  {
-    title: "Ask your AI tutor",
-    body: "Type or speak your doubt in English or Roman Nepali. Get answers pulled from your syllabus and past papers nothing extra, nothing wrong.",
-  },
-  {
-    title: "Write and submit a handwritten exam",
-    body: "Pick a past paper or custom quiz. Write your answers on paper. Snap a photo. Nano Syllabus grades it and shows exactly where you lost marks.",
-  },
-  {
-    title: "Check your readiness dashboard",
-    body: "See your overall preparedness score, weak topics in red, and a clear plan for what to study next. Update it anytime.",
-  },
-];
-
-const pillars = [
-  {
-    icon: MessagesSquare,
-    title: "An AI tutor that speaks your syllabus",
-    body: "Ask a doubt in Nepali or English and get an explanation tied to the exact unit of your exam's official syllabus.",
-  },
-  {
-    icon: LineChart,
-    title: "Progress you can actually read",
-    body: "Accuracy, speed and retention per unit - with an honest estimate of where you stand against the cutoff.",
-  },
-  {
-    icon: Brain,
-    title: "Spaced repetition, automatically",
-    body: "Every wrong answer becomes a scheduled revision card, so concepts return right before you forget them.",
-  },
-];
-
-const studyTools = [
-  {
-    iconText: "Aa",
-    label: "Tool 01",
-    title: "AI Tutor That Answers From Your Syllabus",
-    body: "Ask any doubt. Get answers pulled directly from past papers and your actual textbook not generic internet content. Bilingual: English or Roman Nepali.",
-    note: "Ask anything. Always patient.",
-  },
-  {
-    iconText: "Px",
-    label: "Tool 02",
-    title: "Handwritten Exams Graded Instantly by AI",
-    body: "Write your answer by hand on paper. Snap a photo. Nano Syllabus reads your handwriting, checks your answer against the marking scheme, and tells you exactly what you got right and what you missed.",
-    note: "Real practice. Real feedback.",
-  },
-  {
-    iconText: "Dg",
-    label: "Tool 03",
-    title: "See Your Readiness at a Glance",
-    body: "A live dashboard showing your exam preparedness score, weak topics that need attention, and progress over time. Know before exam day which chapters to revisit.",
-    note: "No blind spots. Just focus.",
-  },
-];
-
-const readinessTopics = [
-  { name: "Data Structures", status: "Strong", score: 85, tone: "bg-emerald-400" },
-  { name: "Operating Systems", status: "Needs work", score: 55, tone: "bg-amber-400" },
-  { name: "DBMS", status: "Weak", score: 30, tone: "bg-rose-400" },
-  { name: "Computer Networks", status: "Moderate", score: 55, tone: "bg-amber-400" },
-  { name: "Mathematics", status: "Critical", score: 15, tone: "bg-rose-400" },
-];
-
-const readinessBars = readinessTopics.filter((topic) => topic.name !== "Computer Networks");
-
-const realResults = [
-  {
-    quote:
-      "I thought I was ready for my OS exam. Nano Syllabus showed me I was scoring 28% on that topic. I spent 3 focused hours on weak areas instead of wasting time on things I already knew.",
-    initials: "DJ",
-    name: "Diwash Joshi",
-    meta: "CSIT Student, Pokhara",
-  },
-  {
-    quote:
-      "Writing exams by hand and getting them checked changed everything. I could see my mistakes in real time like having a teacher look at every answer instantly.",
-    initials: "BM",
-    name: "Bikesh Maharjan",
-    meta: "Electronics Engineering, Kathmandu",
-  },
-  {
-    quote:
-      "Past papers used to scare me. Now I write answers by hand, get feedback, and track my weak topics until they turn green. Exam day feels like just another practice session.",
-    initials: "RS",
-    name: "Roshni Shrestha",
-    meta: "BSc CSIT, Lalitpur",
-  },
-];
-
-const trust = [
-  {
-    icon: FileText,
-    title: "Every unit traces back to an official document",
-    body: "Each track is written from the published syllabus and past papers of the conducting body - PSC, IOE, MEC, TU, KU, NRB and NEB. Units are named the way the notice names them, so nothing feels invented.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Reviewed by people, not just generated",
-    body: "Questions and explanations are drafted with AI, then checked against the source material before they reach your practice set. If something looks wrong, you can flag it inside the study space and we correct it.",
-  },
-  {
-    icon: RefreshCw,
-    title: "Updated when the exam changes",
-    body: "When a commission revises a syllabus or pattern, the affected units are re-mapped and your plan adjusts on the next login. Current-affairs material is refreshed weekly.",
-  },
-  {
-    icon: Lock,
-    title: "Your attempt data stays yours",
-    body: "We use your attempts only to build your plan. No selling of data, no spam calls, and you can export or delete your history any time from account settings.",
-  },
-];
-
-const faqs = [
-  {
-    q: "Is nanosyllabus really free to start?",
-    a: "Yes. You can create an account, take the diagnostic test, and study the daily plan without paying. Paid plans only unlock extras like unlimited full-length mocks and long-answer AI evaluation - the core practice loop stays free.",
-  },
-  {
-    q: "Can I study in Nepali?",
-    a: "Explanations are bilingual. You can read a solution in Nepali, English, or switch mid-question. Nepali-language papers such as Loksewa Paper I keep their original terminology.",
-  },
-  {
-    q: "How is this different from a PDF question bank?",
-    a: "A PDF gives everyone the same 500 questions. nanosyllabus watches which units you get wrong, then chooses tomorrow's questions from those units and schedules revision before you forget. You study less material, more times.",
-  },
-  {
-    q: "Do I need a laptop?",
-    a: "No. The study space is built mobile-first and works on a low-end Android phone over 4G. Question sets are lightweight, and downloaded revision cards work with a weak connection.",
-  },
-  {
-    q: "What happens after I enroll in an exam?",
-    a: "You land in your study space with a 10-minute diagnostic. From your results, the planner builds a week-by-week schedule up to your exam date and starts the daily 18-minute session.",
-  },
-];
-
-const buttonVariants = {
-  hero: "bg-primary text-primary-foreground glow-shadow font-semibold hover:brightness-110",
-  soft: "glass-card border border-border text-foreground hover:border-primary/60",
-  highlight: "bg-highlight text-highlight-foreground font-semibold shadow-sm hover:brightness-105",
-  ghost: "text-foreground hover:bg-accent hover:text-accent-foreground",
-};
-
-const buttonSizes = {
-  sm: "h-8 rounded-md px-3 text-xs",
-  xl: "h-13 rounded-xl px-9 text-base",
-};
-
-function ButtonLink({
-  href,
-  variant,
-  size = "sm",
-  target,
-  children,
-}: {
-  href: string;
-  variant: keyof typeof buttonVariants;
-  size?: keyof typeof buttonSizes;
-  target?: string;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      target={target}
-      rel={target === "_blank" ? "noopener noreferrer" : undefined}
-      className={`inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 ${buttonVariants[variant]} ${buttonSizes[size]}`}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function AnchorButton({
-  href,
-  variant,
-  size = "sm",
-  children,
-}: {
-  href: string;
-  variant: keyof typeof buttonVariants;
-  size?: keyof typeof buttonSizes;
-  children: ReactNode;
-}) {
-  return (
-    <a
-      href={href}
-      className={`inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 ${buttonVariants[variant]} ${buttonSizes[size]}`}
-    >
-      {children}
-    </a>
-  );
-}
-
-function SiteHeader() {
-  return (
-    <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-        <Link
-          href="/"
-          className="flex min-h-10 items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary">
-            <Sparkles className="size-4 text-primary-foreground" aria-hidden="true" />
-          </span>
-          <span className="font-display text-lg font-semibold tracking-tight">nanosyllabus</span>
-        </Link>
-        <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
-          <Link href="/exams" className="transition-colors hover:text-foreground">
-            Exams
-          </Link>
-          <a href="#how" className="transition-colors hover:text-foreground">
-            How it works
-          </a>
-          <a href="#why" className="transition-colors hover:text-foreground">
-            Why nanosyllabus
-          </a>
-        </nav>
-        <div className="flex items-center gap-2">
-          <ButtonLink href="/app" variant="hero" size="sm" target="_blank">
-            Open study space <ArrowRight className="size-4" aria-hidden="true" />
-          </ButtonLink>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function SiteFooter() {
-  return (
-    <footer className="border-t border-border/60 py-10">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-        <p>© {new Date().getFullYear()} nanosyllabus - AI exam prep built for Nepal.</p>
-        <div className="flex gap-6">
-          <Link href="/exams" className="hover:text-foreground">
-            Browse exams
-          </Link>
-          <Link href={APP_URL} className="hover:text-foreground">
-            Study space
-          </Link>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-function ExamCard({ exam }: { exam: TeacherCourse }) {
-  return (
-    <Link
-      href={`/exams/${exam.slug}`}
-      className="glass-card group flex flex-col justify-between rounded-2xl border border-border p-5 transition-all hover:-translate-y-0.5 hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-    >
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <span className="rounded-full border border-border px-2.5 py-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-            {exam.category}
-          </span>
-          <ArrowUpRight className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
-        </div>
-        <h3 className="mt-4 text-base font-semibold leading-snug">{exam.name}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{exam.tagline}</p>
-      </div>
-      <div className="mt-5 flex items-center gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <BookOpen className="size-3.5" /> {exam.subjects.length} subjects
-        </span>
-        <span className="flex items-center gap-1.5">
-          <Users className="size-3.5" /> {exam.enrollmentCount} enrolled
-        </span>
-      </div>
-    </Link>
-  );
-}
-
-export default async function Index() {
-  const courses = await listPublishedCourses().catch(() => []);
-  const featured = courses.slice(0, 8);
-  const subjectCount = new Set(
-    courses.flatMap((course) => course.subjects.map((subject) => subject.slug)),
-  ).size;
-  const enrollmentCount = courses.reduce((total, course) => total + course.enrollmentCount, 0);
-  const averageDailyMinutes = courses.length
-    ? Math.round(courses.reduce((total, course) => total + course.dailyMinutes, 0) / courses.length)
-    : 0;
+export default async function LandingPage() {
+  const publishedCourses = await listPublishedCourses().catch(() => []);
+  const displayCourses = publishedCourses.length ? publishedCourses.slice(0, 6) : null;
 
   return (
-    <div className="exam-prep-theme min-h-screen bg-background text-foreground">
-      <SiteHeader />
+    <div className="landing-v2 min-h-screen bg-white text-[#111b33] antialiased">
+      <style>{`
+        .landing-v2 {
+          --ink: #111b33;
+          --muted: #66738a;
+          --muted-2: #8b96a8;
+          --blue: #2f6fff;
+          --blue-dark: #2057d5;
+          --cyan: #58d7ff;
+          --green: #14a68f;
+          --bg: #f7faff;
+          --white: #fff;
+          --line: #e3e9f2;
+          --dark: #07101e;
+          --dark-2: #0a1422;
+          --shadow: 0 24px 70px rgba(29,54,100,.12);
+          --max: 1180px;
+          --radius: 22px;
+          font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          line-height: 1.55;
+        }
 
-      <main>
-        {/* Hero */}
-        <section className="hero-glow relative overflow-hidden">
-          <div className="grid-lines absolute inset-0 opacity-60" aria-hidden="true" />
-          <div className="relative mx-auto max-w-4xl px-5 pb-20 pt-20 text-center sm:pt-28">
-            <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface/70 px-3 py-1 text-xs text-muted-foreground">
-              <span className="size-1.5 rounded-full bg-highlight" />
-              Built for Nepal&apos;s Students
-            </span>
-            <h1 className="mt-6 font-display text-4xl font-semibold leading-[1.05] sm:text-6xl">
-              You study hours.{" "}
-              <span className="text-gradient">But still don&apos;t know if you&apos;re ready.</span>
+        .landing-v2 * {
+          box-sizing: border-box;
+        }
+
+        .landing-v2 .container {
+          width: min(var(--max), calc(100% - 48px));
+          margin: 0 auto;
+        }
+
+        .landing-v2 .brand {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-weight: 850;
+          letter-spacing: -0.03em;
+        }
+
+        .landing-v2 .brand-mark {
+          width: 27px;
+          height: 27px;
+          border-radius: 8px;
+          position: relative;
+          background: linear-gradient(135deg, #2f6fff, #62b6ff);
+          box-shadow: 0 8px 20px rgba(47, 111, 255, 0.18);
+        }
+
+        .landing-v2 .brand-mark:before,
+        .landing-v2 .brand-mark:after {
+          content: "";
+          position: absolute;
+          background: #fff;
+          border-radius: 999px;
+        }
+
+        .landing-v2 .brand-mark:before {
+          width: 10px;
+          height: 4px;
+          left: 8px;
+          top: 8px;
+          transform: rotate(-20deg);
+        }
+
+        .landing-v2 .brand-mark:after {
+          width: 8px;
+          height: 4px;
+          left: 10px;
+          top: 14px;
+          transform: rotate(24deg);
+          opacity: 0.88;
+        }
+
+        .landing-v2 .btn-primary-glow {
+          background: var(--blue);
+          color: #fff;
+          box-shadow: 0 14px 28px rgba(47, 111, 255, 0.18);
+        }
+
+        .landing-v2 .btn-primary-glow:hover {
+          background: var(--blue-dark);
+          transform: translateY(-1px);
+        }
+
+        .landing-v2 .hero {
+          position: relative;
+          overflow: hidden;
+          text-align: center;
+          padding: 116px 0 105px;
+          background:
+            radial-gradient(circle at 28% 36%, rgba(153, 244, 143, 0.18), transparent 24%),
+            radial-gradient(circle at 67% 30%, rgba(71, 207, 255, 0.18), transparent 28%),
+            linear-gradient(180deg, #ffffff 0%, #fbffff 44%, #f7fbff 100%);
+        }
+
+        .landing-v2 .hero:after {
+          content: "";
+          position: absolute;
+          left: -10%;
+          right: -10%;
+          bottom: -160px;
+          height: 300px;
+          background: radial-gradient(ellipse at center, rgba(47, 111, 255, 0.12), transparent 65%);
+          pointer-events: none;
+        }
+
+        .landing-v2 .eyebrow {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          color: #3f6fd7;
+          font-size: 11px;
+          font-weight: 850;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .landing-v2 .dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--blue);
+        }
+
+        .landing-v2 h1 {
+          margin: 20px auto 0;
+          max-width: 920px;
+          font-size: clamp(48px, 6vw, 78px);
+          line-height: 1.01;
+          letter-spacing: -0.06em;
+          font-weight: 900;
+        }
+
+        .landing-v2 .grad {
+          background: linear-gradient(90deg, #2d66ec, #4f8cff 48%, #58c9ff);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+        }
+
+        .landing-v2 .micro-proof i {
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          color: var(--blue);
+          background: #eef4ff;
+          font-style: normal;
+          font-size: 9px;
+        }
+
+        .landing-v2 .ring-bg {
+          background: conic-gradient(var(--blue) 0 72%, #e9eef5 72% 100%);
+        }
+
+        .landing-v2 .score-ring-bg {
+          background: conic-gradient(var(--blue) 0 68%, #edf1f6 68% 100%);
+        }
+
+        .landing-v2 .b1 { background: linear-gradient(90deg, #3778ff, #63b1ff); }
+        .landing-v2 .b2 { background: #19b28f; }
+        .landing-v2 .b3 { background: #eab24e; }
+        .landing-v2 .b4 { background: #ed6f79; }
+
+        .landing-v2 .soft-section {
+          background:
+            radial-gradient(circle at 20% 10%, rgba(145, 238, 140, 0.15), transparent 22%),
+            radial-gradient(circle at 80% 30%, rgba(88, 215, 255, 0.14), transparent 25%),
+            linear-gradient(180deg, #f9fdff, #f7faff);
+        }
+
+        .landing-v2 .blue-fade-section {
+          background:
+            radial-gradient(circle at 50% 0%, rgba(68, 128, 255, 0.14), transparent 38%),
+            linear-gradient(180deg, #fff, #f6faff 52%, #fff);
+        }
+
+        .landing-v2 .dark-section {
+          background:
+            radial-gradient(circle at 50% 0%, rgba(47, 111, 255, 0.18), transparent 28%),
+            linear-gradient(180deg, #07101e, #08111f);
+          color: #fff;
+        }
+
+        .landing-v2 .cta-section {
+          text-align: center;
+          padding: 115px 0 125px;
+          background:
+            radial-gradient(circle at 50% 0%, rgba(49, 111, 255, 0.18), transparent 34%),
+            linear-gradient(180deg, #fff, #f7fbff);
+        }
+
+        .landing-v2 .check i {
+          width: 19px;
+          height: 19px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          background: #eaf9f4;
+          color: #0d9a7f;
+          font-style: normal;
+          font-size: 10px;
+          flex: none;
+        }
+      `}</style>
+
+      {/* Navigation Header */}
+      <LandingHeader />
+
+      <main id="top">
+        {/* Hero Section */}
+        <section className="hero">
+          <div className="container">
+            <div className="eyebrow">
+              <span className="dot" /> Your exam. Your syllabus. Your readiness.
+            </div>
+            <h1>
+              Practice your actual exam <span className="grad">before the real exam.</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              That anxiety before every exam. The fear that you missed something important. Nano
-              Syllabus ends the guessing. See exactly what you can answer and what you need to fix
-              before it is too late.
+            <p className="mx-auto mt-6 max-w-[670px] text-base text-[#68758a]">
+              Upload your syllabus. NanoSyllabus becomes your personal exam coach—so you know what
+              you know, what you don&apos;t, and where your marks are going.
             </p>
-            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <ButtonLink href="/exams" variant="hero" size="xl">
-                Browse Courses <ArrowRight />
-              </ButtonLink>
-              <AnchorButton href="#how" variant="soft" size="xl">
-                See how it works
-              </AnchorButton>
-            </div>
-            <dl className="mx-auto mt-14 grid max-w-2xl grid-cols-3 gap-4 text-left">
-              {[
-                [String(subjectCount), "indexed subjects in live courses"],
-                [String(enrollmentCount), "active course enrollments"],
-                [`${averageDailyMinutes} min`, "average daily target"],
-              ].map(([stat, label]) => (
-                <div key={label} className="glass-card rounded-xl border border-border p-4">
-                  <dt className="font-display text-xl font-semibold sm:text-2xl">{stat}</dt>
-                  <dd className="mt-1 text-xs text-muted-foreground">{label}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </section>
-
-        {/* Problem */}
-        <section className="border-y border-border/60 bg-surface/30 py-20 sm:py-24">
-          <div className="mx-auto max-w-5xl px-5 text-center">
-            <span className="inline-flex rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-highlight">
-              The problem with exam prep
-            </span>
-            <h2 className="mx-auto mt-6 max-w-4xl font-display text-3xl font-semibold leading-tight sm:text-5xl">
-              You study for hours.{" "}
-              <span className="text-gradient">
-                But do you know what is still costing you marks?
-              </span>
-            </h2>
-            <p className="mx-auto mt-6 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-              More material does not always create more confidence. nanosyllabus shows what you can
-              answer now, which topics are slipping, and where your next focused session will make
-              the biggest difference.
-            </p>
-            <div className="mt-8 flex justify-center">
-              <ButtonLink href="/exams" variant="hero" size="xl">
-                Check your starting point <ArrowRight />
-              </ButtonLink>
-            </div>
-          </div>
-        </section>
-
-        {/* Exams */}
-        <section className="mx-auto max-w-6xl px-5 py-20" id="exams">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2 className="font-display text-2xl font-semibold sm:text-3xl">
-                What are you preparing for?
-              </h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Every live course is published by a teacher and backed by its connected indexed
-                subjects.
-              </p>
-            </div>
-            <ButtonLink href="/exams" variant="soft">
-              <Search /> Show all exams
-            </ButtonLink>
-          </div>
-          {featured.length ? (
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {featured.map((exam) => (
-                <ExamCard key={exam.id} exam={exam} />
-              ))}
-            </div>
-          ) : (
-            <div className="glass-card mt-8 rounded-2xl border border-border p-8 text-sm text-muted-foreground">
-              Published courses will appear here as soon as a teacher makes one live.
-            </div>
-          )}
-        </section>
-
-        {/* Core tools */}
-        <section
-          className="border-y border-border/60 bg-surface/30 py-20"
-          aria-labelledby="tools-title"
-        >
-          <div className="mx-auto max-w-6xl px-5">
-            <span className="text-xs font-semibold uppercase tracking-[0.22em] text-highlight">
-              Three ways to prepare
-            </span>
-            <h2
-              id="tools-title"
-              className="mt-4 max-w-3xl font-display text-3xl font-semibold leading-tight sm:text-4xl"
-            >
-              Stop spending time on what you already know.
-            </h2>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-              Three tools. One goal: knowing your readiness before the exam tells you.
-            </p>
-            <div className="mt-10 grid gap-4 md:grid-cols-3">
-              {studyTools.map((tool) => (
-                <article
-                  key={tool.title}
-                  className="glass-card flex min-h-80 flex-col rounded-2xl border border-border p-6"
-                >
-                  <span className="text-4xl font-semibold leading-none text-foreground">
-                    {tool.iconText}
-                  </span>
-                  <span className="mt-8 text-xs font-semibold uppercase tracking-[0.18em] text-highlight">
-                    {tool.label}
-                  </span>
-                  <h3 className="mt-3 text-lg font-semibold leading-snug">{tool.title}</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{tool.body}</p>
-                  <p className="mt-auto pt-6 text-xs font-medium text-highlight">{tool.note}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* How it works */}
-        <section id="how" className="border-y border-border/60 bg-surface/40 py-20">
-          <div className="mx-auto max-w-6xl px-5">
-            <span className="text-xs font-semibold uppercase tracking-[0.22em] text-highlight">
-              How it works
-            </span>
-            <h2 className="mt-4 max-w-5xl font-display text-3xl font-semibold leading-tight sm:text-5xl">
-              From doubt to certainty in three steps.
-            </h2>
-            <div className="mt-10 grid gap-4 md:grid-cols-3">
-              {steps.map((s, i) => (
-                <div
-                  key={s.title}
-                  className="glass-card rounded-2xl border border-border p-8 text-center"
-                >
-                  <span className="font-display text-6xl font-semibold text-primary/25">
-                    {i + 1}
-                  </span>
-                  <h3 className="mt-8 text-lg font-semibold">{s.title}</h3>
-                  <p className="mx-auto mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                    {s.body}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Readiness dashboard */}
-        <section
-          className="border-y border-border/60 bg-surface/30 py-20"
-          aria-labelledby="readiness-title"
-        >
-          <div className="mx-auto max-w-6xl px-5">
-            <span className="text-xs font-semibold uppercase tracking-[0.22em] text-highlight">
-              Your readiness dashboard
-            </span>
-            <div className="mt-5 grid items-center gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
-              <div>
-                <h2
-                  id="readiness-title"
-                  className="max-w-xl font-display text-3xl font-semibold leading-tight sm:text-4xl"
-                >
-                  See what you are ready for. Fix what you are not.
-                </h2>
-                <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                  No vague scores. Every topic shows exactly how prepared you are so you know where
-                  to spend your last hour of revision.
-                </p>
-                <ul className="mt-8 divide-y divide-border/60 border-y border-border/60">
-                  {readinessTopics.map((topic) => (
-                    <li
-                      key={topic.name}
-                      className="flex items-center justify-between gap-4 py-3 text-sm"
-                    >
-                      <span className="flex items-center gap-3">
-                        <span className={`size-2 rounded-full ${topic.tone}`} aria-hidden="true" />
-                        {topic.name} {topic.status} ({topic.score}%)
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div
-                className="glass-card rounded-3xl border border-border p-6 sm:p-8"
-                aria-label="Illustrative readiness dashboard"
+            <div className="mt-8 flex flex-wrap justify-center gap-2.5">
+              <Link
+                className="btn-primary-glow inline-flex items-center justify-center gap-2 rounded-xl border border-transparent px-[20px] py-3 text-[13px] font-[800] transition-all"
+                href="/exams"
               >
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">CSIT Entrance Prep</p>
+                Browse Community Courses →
+              </Link>
+              <a
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#cbd5e3] bg-white px-[20px] py-3 text-[13px] font-[800] text-[#111b33] transition-all hover:border-[#99a8bc] hover:bg-[#f8fbff]"
+                href="#how"
+              >
+                See how it works
+              </a>
+            </div>
+            <div className="micro-proof mt-9 flex flex-wrap justify-center gap-3.5 text-[11px] text-[#707d90]">
+              <span className="flex items-center gap-1.5">
+                <i>✓</i> Syllabus-grounded
+              </span>
+              <span className="flex items-center gap-1.5">
+                <i>✓</i> Handwritten evaluation
+              </span>
+              <span className="flex items-center gap-1.5">
+                <i>✓</i> MCQ + subjective
+              </span>
+              <span className="flex items-center gap-1.5">
+                <i>✓</i> Readiness tracking
+              </span>
+            </div>
+
+            {/* Product Visual Mockup */}
+            <div className="relative mx-auto mt-[58px] max-w-[1010px]">
+              <div className="overflow-hidden rounded-[26px] border border-[#dce5f1] bg-white text-left shadow-[0_24px_70px_rgba(29,54,100,.12)]">
+                <div className="flex h-12 items-center justify-between border-b border-[#e8edf4] bg-[#fbfcfe] px-[18px]">
+                  <div className="flex gap-1.5">
+                    <span className="h-[7px] w-[7px] rounded-full bg-[#c5ceda]" />
+                    <span className="h-[7px] w-[7px] rounded-full bg-[#c5ceda]" />
+                    <span className="h-[7px] w-[7px] rounded-full bg-[#c5ceda]" />
                   </div>
-                  <h3 className="text-lg font-semibold">Overall Readiness</h3>
+                  <div className="text-[11px] font-bold text-[#6d798d]">
+                    NanoSyllabus · Exam Readiness
+                  </div>
+                  <div className="text-[11px] font-bold text-[#6d798d]">
+                    BCA · Database Management Systems
+                  </div>
                 </div>
-                <div className="mt-7 grid gap-8 sm:grid-cols-[9rem_1fr] sm:items-center">
-                  <div className="readiness-ring mx-auto" aria-label="68 percent readiness">
-                    <span>68%</span>
-                  </div>
-                  <div className="space-y-5">
-                    <p className="text-sm text-muted-foreground">
-                      You need 75% to feel confident. Focus on these next:
-                    </p>
-                    {readinessBars.map((topic) => (
-                      <div key={topic.name}>
-                        <div className="flex justify-between gap-4 text-xs">
-                          <span>{topic.name}</span>
-                          <span className="text-muted-foreground">{topic.score}%</span>
+                <div className="grid grid-cols-1 md:grid-cols-[1.05fr_0.95fr]">
+                  <div className="bg-gradient-to-b from-[#f9fbff] to-white p-6">
+                    <div className="text-[9px] font-[900] uppercase tracking-[0.14em] text-[#7e899c]">
+                      Your readiness
+                    </div>
+                    <div className="mt-3 flex flex-col items-center gap-6 rounded-[18px] border border-[#e0e7f1] bg-gradient-to-br from-[#f7fbff] to-white p-5 sm:flex-row">
+                      <div className="ring-bg relative grid h-32 w-32 shrink-0 place-items-center rounded-full">
+                        <div className="absolute inset-3 rounded-full bg-white" />
+                        <strong className="relative z-10 text-[28px] tracking-[-0.04em]">72%</strong>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="m-0 text-[19px] tracking-[-0.03em]">You&apos;re getting closer.</h3>
+                        <div className="mt-1 text-[11px] text-[#7c899d]">
+                          Your latest mock shows where you are strong—and where you are still
+                          leaving marks behind.
                         </div>
-                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-2">
-                          <span
-                            className={`block h-full rounded-full ${topic.tone}`}
-                            style={{ width: `${topic.score}%` }}
-                          />
+                        <div className="mt-3.5 grid gap-2.5">
+                          <div className="grid grid-cols-[75px_1fr_26px] items-center gap-2 text-[9px] text-[#7b879a]">
+                            <span>SQL</span>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[#edf1f6]">
+                              <div className="b1 h-full rounded-full" style={{ width: "88%" }} />
+                            </div>
+                            <b>88</b>
+                          </div>
+                          <div className="grid grid-cols-[75px_1fr_26px] items-center gap-2 text-[9px] text-[#7b879a]">
+                            <span>ER model</span>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[#edf1f6]">
+                              <div className="b2 h-full rounded-full" style={{ width: "76%" }} />
+                            </div>
+                            <b>76</b>
+                          </div>
+                          <div className="grid grid-cols-[75px_1fr_26px] items-center gap-2 text-[9px] text-[#7b879a]">
+                            <span>Normal.</span>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[#edf1f6]">
+                              <div className="b3 h-full rounded-full" style={{ width: "48%" }} />
+                            </div>
+                            <b>48</b>
+                          </div>
+                          <div className="grid grid-cols-[75px_1fr_26px] items-center gap-2 text-[9px] text-[#7b879a]">
+                            <span>Txns.</span>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[#edf1f6]">
+                              <div className="b4 h-full rounded-full" style={{ width: "35%" }} />
+                            </div>
+                            <b>35</b>
+                          </div>
                         </div>
                       </div>
-                    ))}
+                    </div>
+                    <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+                      <div className="rounded-[14px] border border-[#e5ebf3] bg-[#fbfcfe] p-3.5">
+                        <b className="block text-[18px]">74</b>
+                        <span className="mt-1 block text-[9px] text-[#8290a2]">
+                          Likely marks on next mock
+                        </span>
+                      </div>
+                      <div className="rounded-[14px] border border-[#e5ebf3] bg-[#fbfcfe] p-3.5">
+                        <b className="block text-[18px]">4</b>
+                        <span className="mt-1 block text-[9px] text-[#8290a2]">
+                          High-priority weak areas
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[#e9eef5] bg-white p-6 md:border-l md:border-t-0">
+                    <div className="text-[9px] font-[900] uppercase tracking-[0.14em] text-[#7e899c]">
+                      Your next move
+                    </div>
+                    <div className="mt-2 text-[19px] font-[850] tracking-[-0.03em]">
+                      Fix what is costing you marks.
+                    </div>
+                    <div className="mt-1 text-[11px] text-[#7c899d]">
+                      Don&apos;t reread everything. Work on what matters next.
+                    </div>
+                    <div className="mt-2.5 space-y-2.5">
+                      <div className="rounded-[14px] border border-[#e4eaf2] bg-[#fbfcff] p-4">
+                        <b className="block text-xs">1 · Revise normalization</b>
+                        <p className="m-0 mt-1 text-[10px] text-[#7c899b]">
+                          Low performance + high exam weight.
+                        </p>
+                      </div>
+                      <div className="rounded-[14px] border border-[#e4eaf2] bg-[#fbfcff] p-4">
+                        <b className="block text-xs">2 · Practice OS scheduling</b>
+                        <p className="m-0 mt-1 text-[10px] text-[#7c899b]">
+                          You understand the idea. Your written answers need depth.
+                        </p>
+                      </div>
+                      <div className="rounded-[14px] border border-[#e4eaf2] bg-[#fbfcff] p-4">
+                        <b className="block text-xs">3 · Retest network layers</b>
+                        <p className="m-0 mt-1 text-[10px] text-[#7c899b]">
+                          You&apos;re close to exam-ready here.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -567,139 +388,526 @@ export default async function Index() {
           </div>
         </section>
 
-        {/* Why */}
-        <section id="why" className="mx-auto max-w-6xl px-5 py-20">
-          <h2 className="max-w-2xl font-display text-2xl font-semibold sm:text-3xl">
-            Not another question bank. A tutor that knows where you&apos;re losing marks.
-          </h2>
-          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Most aspirants in Nepal do not fail for lack of material - they fail because the same
-            two or three units keep leaking marks while the rest gets revised again and again.
-            nanosyllabus measures that leak on every attempt and spends your next session on it.
-          </p>
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
-            {pillars.map((p) => (
-              <div key={p.title} className="rounded-2xl border border-border bg-card p-6">
-                <p.icon className="size-5 text-highlight" />
-                <h3 className="mt-4 text-lg font-semibold">{p.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{p.body}</p>
+        {/* Features / The Problem Section */}
+        <section className="bg-white py-24 sm:py-28" id="features">
+          <div className="container">
+            <div className="mx-auto max-w-[740px] text-center">
+              <div className="text-[10px] font-[900] uppercase tracking-[0.15em] text-[#4c79d6]">
+                The problem
               </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Trust */}
-        <section id="trust" className="border-y border-border/60 bg-surface/40 py-20">
-          <div className="mx-auto max-w-6xl px-5">
-            <h2 className="max-w-2xl font-display text-2xl font-semibold sm:text-3xl">
-              Why you can trust what you study here
-            </h2>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-              Exam prep is a high-stakes purchase of your time. So here is exactly how the content
-              is made, kept current and handled - in plain terms, before you sign up.
-            </p>
-            <div className="mt-10 grid gap-4 md:grid-cols-2">
-              {trust.map((t) => (
-                <div key={t.title} className="glass-card rounded-2xl border border-border p-6">
-                  <t.icon className="size-5 text-highlight" />
-                  <h3 className="mt-4 text-lg font-semibold">{t.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t.body}</p>
-                </div>
-              ))}
+              <h2 className="mb-4 mt-3 text-[34px] font-[900] tracking-[-0.055em] sm:text-[52px]">
+                You studied. <span className="grad">But do you know?</span>
+              </h2>
+              <p className="mx-auto m-0 max-w-[640px] text-sm text-[#738095]">
+                Reading notes can feel like progress. Exams expose what you can actually recall,
+                explain and write under pressure.
+              </p>
             </div>
-            <p className="mt-8 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-              A note on honesty: nanosyllabus is a preparation tool, not a guarantee. No app can
-              promise a name on the result sheet. What we can promise is that your practice is
-              mapped to the real syllabus, your weak units are tracked, and nothing here is padded
-              to look bigger than it is.
-            </p>
-          </div>
-        </section>
-
-        {/* Real results */}
-        <section className="mx-auto max-w-6xl px-5 py-20" aria-labelledby="results-title">
-          <span className="text-xs font-semibold uppercase tracking-[0.22em] text-highlight">
-            Real results
-          </span>
-          <h2
-            id="results-title"
-            className="mt-4 max-w-4xl font-display text-3xl font-semibold leading-tight sm:text-5xl"
-          >
-            They finally knew where they stood.
-          </h2>
-          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Before Nano Syllabus, everyone was guessing. After Nano Syllabus, everyone knew.
-          </p>
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
-            {realResults.map((result) => (
-              <article
-                key={result.name}
-                className="glass-card flex min-h-80 flex-col rounded-2xl border border-border p-6"
-              >
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-highlight">
-                  Before Nano Syllabus / After
+            <div className="mt-14 grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
+              <article className="rounded-[20px] border border-[#e3e9f2] bg-white p-7 shadow-[0_10px_30px_rgba(29,54,100,.035)]">
+                <div className="grid h-[38px] w-[38px] place-items-center rounded-xl bg-[#eef4ff] font-[900] text-[#2f6fff]">
+                  01
+                </div>
+                <h3 className="mb-2 mt-4 text-[17px] font-semibold tracking-[-0.02em]">
+                  Too much to cover
+                </h3>
+                <p className="m-0 text-[13px] text-[#7d899a]">
+                  Notes. PDFs. Videos. Past papers. You still don&apos;t know what deserves your
+                  next hour.
                 </p>
-                <blockquote className="mt-6 text-lg font-medium italic leading-relaxed text-muted-foreground">
-                  <span className="text-3xl font-semibold not-italic text-highlight">&quot;</span>
-                  {result.quote}
-                </blockquote>
-                <div className="mt-auto flex items-center gap-3 pt-8">
-                  <span className="grid size-12 place-items-center rounded-full bg-highlight text-sm font-semibold text-background">
-                    {result.initials}
-                  </span>
-                  <div>
-                    <p className="font-semibold">{result.name}</p>
-                    <p className="text-sm text-muted-foreground">{result.meta}</p>
+              </article>
+              <article className="rounded-[20px] border border-[#e3e9f2] bg-white p-7 shadow-[0_10px_30px_rgba(29,54,100,.035)]">
+                <div className="grid h-[38px] w-[38px] place-items-center rounded-xl bg-[#eef4ff] font-[900] text-[#2f6fff]">
+                  02
+                </div>
+                <h3 className="mb-2 mt-4 text-[17px] font-semibold tracking-[-0.02em]">
+                  No real calibration
+                </h3>
+                <p className="m-0 text-[13px] text-[#7d899a]">
+                  You can recognize the answer without being able to write it in the exam.
+                  That&apos;s a different skill.
+                </p>
+              </article>
+              <article className="rounded-[20px] border border-[#e3e9f2] bg-white p-7 shadow-[0_10px_30px_rgba(29,54,100,.035)] sm:col-span-2 lg:col-span-1">
+                <div className="grid h-[38px] w-[38px] place-items-center rounded-xl bg-[#eef4ff] font-[900] text-[#2f6fff]">
+                  03
+                </div>
+                <h3 className="mb-2 mt-4 text-[17px] font-semibold tracking-[-0.02em]">
+                  Gaps found too late
+                </h3>
+                <p className="m-0 text-[13px] text-[#7d899a]">
+                  The worst time to discover a weakness is when the real paper is already in front
+                  of you.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        {/* How It Works Section */}
+        <section className="soft-section py-24 sm:py-28" id="how">
+          <div className="container">
+            <div className="mx-auto max-w-[740px] text-center">
+              <div className="text-[10px] font-[900] uppercase tracking-[0.15em] text-[#4c79d6]">
+                How it works
+              </div>
+              <h2 className="mb-4 mt-3 text-[34px] font-[900] tracking-[-0.055em] sm:text-[52px]">
+                From <span className="grad">“I think I know it”</span> to “I’m ready.”
+              </h2>
+              <p className="mx-auto m-0 max-w-[640px] text-sm text-[#738095]">
+                Practice the way your exam actually works. Then use the result to decide what to do
+                next.
+              </p>
+            </div>
+            <div className="mt-14 grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
+              <Link
+                href="/teachers"
+                className="group block rounded-[20px] border border-[#dde5ef] bg-white p-8 transition-all hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-lg"
+              >
+                <div className="text-[44px] font-[900] leading-none text-[#d8e7ff] group-hover:text-[#2f6fff]/30 transition-colors">
+                  01
+                </div>
+                <h3 className="mb-2 mt-5 text-[17px] font-semibold flex items-center justify-between">
+                  <span>Upload your syllabus</span>
+                  <span className="text-xs font-semibold text-[#2f6fff]">Upload →</span>
+                </h3>
+                <p className="m-0 text-[13px] text-[#7c899b]">
+                  Add your syllabus, notes, question bank and past papers.
+                </p>
+              </Link>
+              <Link
+                href="/app/exams"
+                className="group block rounded-[20px] border border-[#dde5ef] bg-white p-8 transition-all hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-lg"
+              >
+                <div className="text-[44px] font-[900] leading-none text-[#d8e7ff] group-hover:text-[#2f6fff]/30 transition-colors">
+                  02
+                </div>
+                <h3 className="mb-2 mt-5 text-[17px] font-semibold flex items-center justify-between">
+                  <span>Take the mock</span>
+                  <span className="text-xs font-semibold text-[#2f6fff]">Start mock →</span>
+                </h3>
+                <p className="m-0 text-[13px] text-[#7c899b]">
+                  Practice MCQs or write subjective answers under exam conditions.
+                </p>
+              </Link>
+              <Link
+                href="/app/today"
+                className="group block rounded-[20px] border border-[#dde5ef] bg-white p-8 transition-all hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-lg sm:col-span-2 lg:col-span-1"
+              >
+                <div className="text-[44px] font-[900] leading-none text-[#d8e7ff] group-hover:text-[#2f6fff]/30 transition-colors">
+                  03
+                </div>
+                <h3 className="mb-2 mt-5 text-[17px] font-semibold flex items-center justify-between">
+                  <span>See your readiness</span>
+                  <span className="text-xs font-semibold text-[#2f6fff]">Dashboard →</span>
+                </h3>
+                <p className="m-0 text-[13px] text-[#7c899b]">
+                  Get marks, feedback, weak topics and the next best thing to study.
+                </p>
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* Readiness Section */}
+        <section className="blue-fade-section py-24 sm:py-28" id="readiness">
+          <div className="container">
+            <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-20">
+              <div>
+                <div className="text-[10px] font-[900] uppercase tracking-[0.15em] text-[#4c79d6]">
+                  Exam readiness
+                </div>
+                <h2 className="mb-4 mt-3 text-[34px] font-[900] tracking-[-0.055em] sm:text-[52px]">
+                  Know where you stand. <span className="grad">Fix what you don&apos;t.</span>
+                </h2>
+                <p className="max-w-[560px] text-sm text-[#748196]">
+                  NanoSyllabus turns every mock into a diagnosis. Your score is only the beginning.
+                </p>
+                <div className="checklist mt-7 grid gap-3">
+                  <div className="check flex items-start gap-2.5 text-[13px] text-[#526077]">
+                    <i>✓</i>
+                    <span>See topic-by-topic performance</span>
+                  </div>
+                  <div className="check flex items-start gap-2.5 text-[13px] text-[#526077]">
+                    <i>✓</i>
+                    <span>Find where marks are being lost</span>
+                  </div>
+                  <div className="check flex items-start gap-2.5 text-[13px] text-[#526077]">
+                    <i>✓</i>
+                    <span>Get feedback on handwritten answers</span>
+                  </div>
+                  <div className="check flex items-start gap-2.5 text-[13px] text-[#526077]">
+                    <i>✓</i>
+                    <span>Know what to study next</span>
+                  </div>
+                  <div className="check flex items-start gap-2.5 text-[13px] text-[#526077]">
+                    <i>✓</i>
+                    <span>Retest and measure improvement</span>
                   </div>
                 </div>
-              </article>
-            ))}
-          </div>
-        </section>
+                <div className="mt-8">
+                  <Link
+                    href="/app/exams"
+                    className="btn-primary-glow inline-flex items-center justify-center gap-2 rounded-xl border border-transparent px-[18px] py-3 text-[13px] font-[800] transition-all"
+                  >
+                    Check your readiness score →
+                  </Link>
+                </div>
+              </div>
 
-        {/* FAQ */}
-        <section id="faq" className="mx-auto max-w-3xl px-5 py-20">
-          <h2 className="font-display text-2xl font-semibold sm:text-3xl">
-            Questions aspirants ask us
-          </h2>
-          <div className="mt-8 divide-y divide-border/60 rounded-2xl border border-border bg-card">
-            {faqs.map((f) => (
-              <details key={f.q} className="group px-6 py-5">
-                <summary className="cursor-pointer list-none text-base font-medium marker:hidden">
-                  {f.q}
-                </summary>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{f.a}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-        {/* CTA */}
-        <section className="mx-auto max-w-6xl px-5 pb-24">
-          <div className="hero-glow glass-card relative overflow-hidden rounded-3xl border border-border px-6 py-14 text-center">
-            <span className="text-xs font-semibold uppercase tracking-[0.22em] text-highlight">
-              Start today
-            </span>
-            <h2 className="mx-auto mt-5 max-w-4xl font-display text-3xl font-semibold leading-tight sm:text-6xl">
-              Your next exam. Your most confident attempt.
-            </h2>
-            <p className="mx-auto mt-8 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-xl">
-              Join 10,000+ students who stopped guessing and started knowing. Check your readiness
-              now with Nano Syllabus.
-            </p>
-            <div className="mt-8 flex justify-center">
-              <ButtonLink href="/exams" variant="highlight" size="xl">
-                Open the App It Is Free <ArrowRight />
-              </ButtonLink>
+              <div className="dashboard rounded-[24px] border border-[#dce5f0] bg-white p-5 shadow-[0_24px_70px_rgba(29,54,100,.12)]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[13px] font-[850]">Exam readiness</div>
+                    <div className="mt-0.5 text-[10px] text-[#8390a2]">
+                      Database Management Systems
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-[#f0f5ff] px-2.5 py-1.5 text-[9px] font-[800] text-[#4577d8]">
+                    Latest mock
+                  </div>
+                </div>
+                <div className="dashboard-main mt-4 grid grid-cols-1 items-center gap-5 sm:grid-cols-[150px_1fr]">
+                  <div className="score-ring-bg relative mx-auto grid h-[145px] w-[145px] place-items-center rounded-full">
+                    <div className="absolute inset-[13px] rounded-full bg-white" />
+                    <b className="relative z-10 text-[30px]">68%</b>
+                  </div>
+                  <div className="grid gap-2.5">
+                    <div className="grid grid-cols-[82px_1fr_28px] items-center gap-2 text-[9px] text-[#7e899b]">
+                      <span>SQL</span>
+                      <div className="h-[7px] overflow-hidden rounded-full bg-[#edf1f6]">
+                        <div className="b2 h-full rounded-full" style={{ width: "88%" }} />
+                      </div>
+                      <b>88</b>
+                    </div>
+                    <div className="grid grid-cols-[82px_1fr_28px] items-center gap-2 text-[9px] text-[#7e899b]">
+                      <span>ER model</span>
+                      <div className="h-[7px] overflow-hidden rounded-full bg-[#edf1f6]">
+                        <div className="b1 h-full rounded-full" style={{ width: "76%" }} />
+                      </div>
+                      <b>76</b>
+                    </div>
+                    <div className="grid grid-cols-[82px_1fr_28px] items-center gap-2 text-[9px] text-[#7e899b]">
+                      <span>Normal.</span>
+                      <div className="h-[7px] overflow-hidden rounded-full bg-[#edf1f6]">
+                        <div className="b3 h-full rounded-full" style={{ width: "48%" }} />
+                      </div>
+                      <b>48</b>
+                    </div>
+                    <div className="grid grid-cols-[82px_1fr_28px] items-center gap-2 text-[9px] text-[#7e899b]">
+                      <span>Txns.</span>
+                      <div className="h-[7px] overflow-hidden rounded-full bg-[#edf1f6]">
+                        <div className="b4 h-full rounded-full" style={{ width: "35%" }} />
+                      </div>
+                      <b>35</b>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2.5">
+                  <div className="rounded-[14px] border border-[#e7ecf2] bg-[#fbfcfe] p-3.5">
+                    <b className="block text-[19px]">74</b>
+                    <span className="text-[9px] text-[#8591a3]">Likely score range</span>
+                  </div>
+                  <div className="rounded-[14px] border border-[#e7ecf2] bg-[#fbfcfe] p-3.5">
+                    <b className="block text-[19px]">11↑</b>
+                    <span className="text-[9px] text-[#8591a3]">
+                      Improvement since first mock
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <p className="mt-8 text-base text-muted-foreground sm:text-xl">
-              No credit card required. Free forever plan available.
+          </div>
+        </section>
+
+        {/* More than a chatbot - Dark Section */}
+        <section className="dark-section py-24 sm:py-28">
+          <div className="container">
+            <div className="mx-auto max-w-[740px] text-center">
+              <div className="text-[10px] font-[900] uppercase tracking-[0.15em] text-[#76a4ff]">
+                More than a chatbot
+              </div>
+              <h2 className="mb-4 mt-3 text-[34px] font-[900] tracking-[-0.055em] sm:text-[52px]">
+                Ask anything. <span className="grad">Practice everything.</span>
+              </h2>
+              <p className="mx-auto m-0 max-w-[640px] text-sm text-[#93a1b5]">
+                NanoSyllabus combines your course material with an exam loop: learn → practice →
+                answer → evaluate → improve → retest.
+              </p>
+            </div>
+            <div className="mt-14 grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
+              <Link
+                href="/app/chat"
+                className="group rounded-[20px] border border-white/10 bg-white/[0.045] p-7 transition-all hover:bg-white/[0.08] hover:border-white/20"
+              >
+                <div className="grid h-[38px] w-[38px] place-items-center rounded-xl bg-[#5491ff]/10 font-[900] text-[#2f6fff]">
+                  A
+                </div>
+                <h3 className="mb-2 mt-4 text-[17px] font-semibold tracking-[-0.02em] text-white flex items-center justify-between">
+                  <span>Ask your syllabus</span>
+                  <span className="text-xs font-semibold text-[#58d7ff]">Chat tutor →</span>
+                </h3>
+                <p className="m-0 text-[13px] text-[#97a5b8]">
+                  Get explanations grounded in the material you actually need to study.
+                </p>
+              </Link>
+              <Link
+                href="/app/exams"
+                className="group rounded-[20px] border border-white/10 bg-white/[0.045] p-7 transition-all hover:bg-white/[0.08] hover:border-white/20"
+              >
+                <div className="grid h-[38px] w-[38px] place-items-center rounded-xl bg-[#5491ff]/10 font-[900] text-[#2f6fff]">
+                  ✎
+                </div>
+                <h3 className="mb-2 mt-4 text-[17px] font-semibold tracking-[-0.02em] text-white flex items-center justify-between">
+                  <span>Write your real answer</span>
+                  <span className="text-xs font-semibold text-[#58d7ff]">Mock tests →</span>
+                </h3>
+                <p className="m-0 text-[13px] text-[#97a5b8]">
+                  Upload handwritten work for marks and feedback on how you answered.
+                </p>
+              </Link>
+              <Link
+                href="/app/exams"
+                className="group rounded-[20px] border border-white/10 bg-white/[0.045] p-7 transition-all hover:bg-white/[0.08] hover:border-white/20 sm:col-span-2 lg:col-span-1"
+              >
+                <div className="grid h-[38px] w-[38px] place-items-center rounded-xl bg-[#5491ff]/10 font-[900] text-[#2f6fff]">
+                  ↻
+                </div>
+                <h3 className="mb-2 mt-4 text-[17px] font-semibold tracking-[-0.02em] text-white flex items-center justify-between">
+                  <span>Retest yourself</span>
+                  <span className="text-xs font-semibold text-[#58d7ff]">Retest →</span>
+                </h3>
+                <p className="m-0 text-[13px] text-[#97a5b8]">
+                  Turn feedback into another attempt and see whether your readiness changes.
+                </p>
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* Community Courses Section */}
+        <section className="soft-section py-24 sm:py-28" id="courses">
+          <div className="container">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div className="max-w-[740px]">
+                <div className="text-[10px] font-[900] uppercase tracking-[0.15em] text-[#4c79d6]">
+                  Community courses
+                </div>
+                <h2 className="mb-4 mt-3 text-[34px] font-[900] tracking-[-0.055em] sm:text-[52px]">
+                  Start with a course. <span className="grad">Or bring your own.</span>
+                </h2>
+                <p className="m-0 text-sm text-[#738095]">
+                  Browse community-built course spaces or upload your own syllabus and material.
+                </p>
+              </div>
+              <Link
+                href="/exams"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#cbd5e3] bg-white px-4 py-2.5 text-xs font-[800] text-[#111b33] transition hover:bg-[#f8fbff]"
+              >
+                Browse all community courses <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
+            <div className="mt-12 grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
+              {displayCourses && displayCourses.length > 0 ? (
+                displayCourses.map((course: TeacherCourse) => (
+                  <Link
+                    key={course.id}
+                    href={`/exams/${course.slug}`}
+                    className="group rounded-[18px] border border-[#dfe7f1] bg-white p-[22px] transition-all duration-200 hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-[0_18px_42px_rgba(29,54,100,.08)] flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <small className="text-[9px] font-[900] uppercase tracking-[0.13em] text-[#4e7ddd]">
+                          {[course.category, course.level].filter(Boolean).join(" · ")}
+                        </small>
+                        <span className="text-[11px] font-medium text-[#7d899b] flex items-center gap-1">
+                          <Users className="h-3.5 w-3.5" /> {course.enrollmentCount}
+                        </span>
+                      </div>
+                      <h3 className="mb-2 mt-3 text-[17px] font-semibold text-[#111b33] group-hover:text-[#2f6fff] transition-colors">
+                        {titleCase(course.name)}
+                      </h3>
+                      <p className="m-0 text-[12px] leading-relaxed text-[#7d899b] line-clamp-3">
+                        {course.tagline || course.description}
+                      </p>
+                    </div>
+                    <div className="mt-5 flex items-center justify-between border-t border-[#f0f4f9] pt-3 text-[12px]">
+                      <span className="text-[#7d899b] flex items-center gap-1.5 font-medium">
+                        <BookOpen className="h-3.5 w-3.5" /> {course.subjects.length} {course.subjects.length === 1 ? "subject" : "subjects"}
+                      </span>
+                      <span className="font-[850] text-[#2f6fff] group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-1">
+                        Open course →
+                      </span>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <>
+                  <Link
+                    href="/exams"
+                    className="group rounded-[18px] border border-[#dfe7f1] bg-white p-[22px] transition-all duration-200 hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-[0_18px_42px_rgba(29,54,100,.08)] flex flex-col justify-between"
+                  >
+                    <div>
+                      <small className="text-[9px] font-[900] uppercase tracking-[0.13em] text-[#4e7ddd]">
+                        BCA · 3RD SEM
+                      </small>
+                      <h3 className="mb-2 mt-3 text-base font-semibold group-hover:text-[#2f6fff] transition-colors">
+                        Database Management Systems
+                      </h3>
+                      <p className="m-0 text-[11px] text-[#7d899b]">
+                        Mock sets, past questions and answer practice.
+                      </p>
+                    </div>
+                    <span className="mt-4 inline-block text-[11px] font-[850] text-[#2f6fff]">
+                      Open course →
+                    </span>
+                  </Link>
+                  <Link
+                    href="/exams"
+                    className="group rounded-[18px] border border-[#dfe7f1] bg-white p-[22px] transition-all duration-200 hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-[0_18px_42px_rgba(29,54,100,.08)] flex flex-col justify-between"
+                  >
+                    <div>
+                      <small className="text-[9px] font-[900] uppercase tracking-[0.13em] text-[#4e7ddd]">
+                        BIM · 4TH SEM
+                      </small>
+                      <h3 className="mb-2 mt-3 text-base font-semibold group-hover:text-[#2f6fff] transition-colors">
+                        Operating Systems
+                      </h3>
+                      <p className="m-0 text-[11px] text-[#7d899b]">
+                        Practice the concepts you have to write under pressure.
+                      </p>
+                    </div>
+                    <span className="mt-4 inline-block text-[11px] font-[850] text-[#2f6fff]">
+                      Open course →
+                    </span>
+                  </Link>
+                  <Link
+                    href="/exams"
+                    className="group rounded-[18px] border border-[#dfe7f1] bg-white p-[22px] transition-all duration-200 hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-[0_18px_42px_rgba(29,54,100,.08)] flex flex-col justify-between"
+                  >
+                    <div>
+                      <small className="text-[9px] font-[900] uppercase tracking-[0.13em] text-[#4e7ddd]">
+                        BSc CSIT · 2ND SEM
+                      </small>
+                      <h3 className="mb-2 mt-3 text-base font-semibold group-hover:text-[#2f6fff] transition-colors">
+                        Object-Oriented Programming
+                      </h3>
+                      <p className="m-0 text-[11px] text-[#7d899b]">
+                        Turn your syllabus into targeted practice.
+                      </p>
+                    </div>
+                    <span className="mt-4 inline-block text-[11px] font-[850] text-[#2f6fff]">
+                      Open course →
+                    </span>
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* The Outcome - Dark Quotes Section */}
+        <section className="dark-section py-24 sm:py-28">
+          <div className="container">
+            <div className="mx-auto max-w-[740px] text-center">
+              <div className="text-[10px] font-[900] uppercase tracking-[0.15em] text-[#76a4ff]">
+                The outcome
+              </div>
+              <h2 className="mb-4 mt-3 text-[34px] font-[900] tracking-[-0.055em] sm:text-[52px]">
+                Study less blindly. <span className="grad">Walk in more certain.</span>
+              </h2>
+              <p className="mx-auto m-0 max-w-[640px] text-sm text-[#93a1b5]">
+                The goal is not more content. It&apos;s knowing where you stand before the stakes
+                are real.
+              </p>
+            </div>
+            <div className="mt-12 grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
+              <article className="rounded-[20px] border border-white/10 bg-white/[0.045] p-[26px]">
+                <p className="m-0 text-[13px] text-[#d0d8e4]">
+                  “I knew the notes. I didn&apos;t know the answers. The mock made that obvious.”
+                </p>
+                <footer className="mt-5 text-[10px] text-[#8190a5]">
+                  Student · Bachelor program
+                </footer>
+              </article>
+              <article className="rounded-[20px] border border-white/10 bg-white/[0.045] p-[26px]">
+                <p className="m-0 text-[13px] text-[#d0d8e4]">
+                  “The most useful part was knowing what to revise first instead of rereading
+                  everything.”
+                </p>
+                <footer className="mt-5 text-[10px] text-[#8190a5]">
+                  Student · Bachelor program
+                </footer>
+              </article>
+              <article className="rounded-[20px] border border-white/10 bg-white/[0.045] p-[26px] sm:col-span-2 lg:col-span-1">
+                <p className="m-0 text-[13px] text-[#d0d8e4]">
+                  “I wanted a score before the real exam. Now I know what I need to fix.”
+                </p>
+                <footer className="mt-5 text-[10px] text-[#8190a5]">
+                  Student · Bachelor program
+                </footer>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        {/* Final CTA Section */}
+        <section className="cta-section" id="start">
+          <div className="container">
+            <div className="text-[10px] font-[900] uppercase tracking-[0.15em] text-[#4c79d6]">
+              Your next exam
+            </div>
+            <h2 className="mx-auto mb-4 mt-3 max-w-[800px] text-[34px] font-[900] tracking-[-0.055em] sm:text-[52px]">
+              Your most confident attempt starts before exam day.
+            </h2>
+            <p className="mx-auto m-0 max-w-[600px] text-sm text-[#738095]">
+              Upload your syllabus. Take a mock. Submit your answer. Find out where you stand.
             </p>
+            <div className="mt-7 flex flex-wrap justify-center gap-3">
+              <Link
+                className="btn-primary-glow inline-flex items-center justify-center gap-2 rounded-xl border border-transparent px-[22px] py-3 text-[13px] font-[800] transition-all"
+                href="/app"
+              >
+                Start free →
+              </Link>
+              <Link
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#cbd5e3] bg-white px-[20px] py-3 text-[13px] font-[800] text-[#111b33] transition-all hover:border-[#99a8bc] hover:bg-[#f8fbff]"
+                href="/exams"
+              >
+                Browse Community Courses
+              </Link>
+            </div>
+            <div className="mt-3 text-[10px] text-[#9aa4b2]">
+              No credit card · Start with your own course material
+            </div>
           </div>
         </section>
       </main>
 
-      <SiteFooter />
+      {/* Footer */}
+      <footer className="border-t border-[#e6ebf2] bg-white py-8 text-[11px] text-[#7e899a]">
+        <div className="container flex flex-col items-center justify-between gap-5 sm:flex-row">
+          <div>© {new Date().getFullYear()} NanoSyllabus</div>
+          <div className="flex flex-wrap gap-4">
+            <a href="#features" className="hover:text-[#111b33]">
+              Features
+            </a>
+            <a href="#how" className="hover:text-[#111b33]">
+              How it works
+            </a>
+            <Link href="/exams" className="hover:text-[#111b33]">
+              Community Courses
+            </Link>
+            <Link href="/app/chat" className="hover:text-[#111b33]">
+              AI Tutor
+            </Link>
+            <Link href="/login" className="hover:text-[#111b33]">
+              Log in
+            </Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
