@@ -3,7 +3,10 @@ import { SetAppShell } from "@/components/set-app-shell";
 import { SubjectDetailClient } from "@/components/subject-detail-client";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getStudentSubjectDetail } from "@/lib/data/student-subject";
-import { listStudentCourses } from "@/lib/student-courses";
+import {
+  listCreatorPrivateSubjectAccess,
+  listStudentCourses,
+} from "@/lib/student-courses";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +29,10 @@ export default async function SubjectDetailPage({
 
   if (!decodedSubject.trim()) notFound();
 
-  const courses = await listStudentCourses(user.id);
+  const [courses, privateSubjects] = await Promise.all([
+    listStudentCourses(user.id),
+    listCreatorPrivateSubjectAccess(user.id),
+  ]);
   const decodedKey = subjectUrlKey(decodedSubject);
   const subjectMatches = (item: { slug: string; name: string }) => {
       const slug = item.slug.trim();
@@ -40,9 +46,15 @@ export default async function SubjectDetailPage({
   };
   const accessibleCourse = courses.find((course) => course.subjects.some(subjectMatches));
   const accessibleSubject = accessibleCourse?.subjects.find(subjectMatches);
-  if (!accessibleSubject) notFound();
+  const privateSubject = privateSubjects.find((subject) =>
+    subjectMatches({ slug: subject.subjectSlug, name: subject.subjectName }),
+  );
+  if (!accessibleSubject && !privateSubject) notFound();
 
-  const detail = await getStudentSubjectDetail(user.id, accessibleSubject.slug);
+  const subjectSlug = accessibleSubject?.slug || privateSubject?.subjectSlug;
+  if (!subjectSlug) notFound();
+
+  const detail = await getStudentSubjectDetail(user.id, subjectSlug, privateSubject);
   if (!detail) notFound();
 
   return (
@@ -50,7 +62,8 @@ export default async function SubjectDetailPage({
       <SetAppShell title={null} />
       <SubjectDetailClient
         detail={detail}
-        courseName={accessibleCourse?.name || detail.name}
+        courseName={accessibleCourse?.name || "Private subject"}
+        isPrivate={Boolean(privateSubject && !accessibleCourse)}
         readinessTarget={
           accessibleCourse && accessibleCourse.passPercentage > 0
             ? accessibleCourse.passPercentage

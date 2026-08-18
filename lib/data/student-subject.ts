@@ -1,4 +1,5 @@
 import { listTopicMastery, type TopicMastery } from "@/lib/data/student-mastery";
+import type { StudentCourseSubjectAccess } from "@/lib/student-courses";
 import { findTenantSubject, listTenantSubjects } from "@/lib/tenant/client";
 import { findPublishedSubject, getPublishedCatalog } from "@/lib/tenant/marketplace-catalog";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -19,14 +20,23 @@ export type StudentSubjectDetail = {
 export async function getStudentSubjectDetail(
   userId: string,
   requestedSubject: string,
+  accessOverride?: StudentCourseSubjectAccess,
 ): Promise<StudentSubjectDetail | null> {
   const [tenantSubjects, catalog] = await Promise.all([
     listTenantSubjects(),
     getPublishedCatalog(),
   ]);
-  const subject = findTenantSubject(tenantSubjects, requestedSubject);
+  const tenantSubject = findTenantSubject(tenantSubjects, requestedSubject);
+  const subject = tenantSubject || (accessOverride
+    ? {
+        name: accessOverride.subjectName,
+        slug: accessOverride.subjectSlug,
+        namespace: "Private subject",
+        chunk_count: 0,
+      }
+    : null);
   if (!subject) return null;
-  const published = findPublishedSubject(catalog, subject.slug);
+  const published = tenantSubject ? findPublishedSubject(catalog, subject.slug) : null;
 
   const [mastery, revisionNoteCount] = await Promise.all([
     listTopicMastery(userId),

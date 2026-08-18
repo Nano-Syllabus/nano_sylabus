@@ -24,6 +24,7 @@ import {
 } from "@/lib/student-courses";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { askTeacherSubjectStream, TeacherApiError, type ApiRecord } from "@/lib/teacher-app/client";
 import {
   chatTenantStream,
   getTenantName,
@@ -38,6 +39,21 @@ type RetrievalMode = "default" | "web";
 type ResponseLanguage = "EN" | "RN";
 const MAX_TENANT_CONTEXT_SUMMARY_CHARS = 4_000;
 
+// Enrolled subjects use the course UUID directly. Owner-only private subjects
+// use an explicit, non-UUID token so they cannot be confused with a course id.
+// Keep validating both forms at the request boundary; the access lookup below
+// still verifies enrollment/ownership before any teacher content is queried.
+const privateSubjectCourseIdPattern =
+  /^private:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const subjectCourseIdSchema = z
+  .string()
+  .trim()
+  .refine(
+    (value) =>
+      z.string().uuid().safeParse(value).success || privateSubjectCourseIdPattern.test(value),
+    { message: "Invalid course id" },
+  );
+
 const requestSchema = z.object({
   sessionId: z.string().uuid().nullable().optional(),
   language: z.enum(["EN", "RN"]).default("EN"),
@@ -47,7 +63,7 @@ const requestSchema = z.object({
   subjectContext: z.string().trim().min(1).max(120).nullable().optional(),
   tenantSubject: z
     .object({
-      courseId: z.string().uuid().optional(),
+      courseId: subjectCourseIdSchema.optional(),
       name: z.string().trim().min(1).max(160),
       slug: z.string().trim().min(1).max(200),
       namespaceSlug: z.string().trim().min(1).max(200),
@@ -159,6 +175,58 @@ function trustedTenantSubject(access: StudentCourseSubjectAccess): TenantSubject
     folder_path: access.folderPath,
     chunk_count: 0,
   };
+}
+
+function privateCollectionSource(value: unknown, index: number): TenantChatSource | null {
+  if (!value || typeof value !== "object") return null;
+  const chunk = value as ApiRecord;
+  const source =
+    chunk.source && typeof chunk.source === "object" ? (chunk.source as ApiRecord) : {};
+  const metadata =
+    chunk.metadata && typeof chunk.metadata === "object" ? (chunk.metadata as ApiRecord) : {};
+  const sourcePath = String(
+    source.filename ||
+      source.doc ||
+      source.source_path ||
+      metadata.filename ||
+      metadata.source ||
+      "Indexed source",
+  ).trim();
+  const excerpt = String(
+    chunk.text || chunk.content || chunk.chunk || chunk.snippet || source.excerpt || "",
+  ).trim();
+  const pageValue = source.page ?? metadata.page;
+  const page = Number(pageValue);
+
+  return {
+    rank: index + 1,
+    title: sourcePath,
+    source_path: sourcePath,
+    excerpt: excerpt || undefined,
+    score: typeof chunk.score === "number" ? chunk.score : undefined,
+    pages: Number.isFinite(page) && page > 0 ? [page] : null,
+  };
+}
+
+function derivePrivateNextTopic({
+  explicitTopic,
+  nextContextChunk,
+}: {
+  explicitTopic?: string;
+  nextContextChunk?: ApiRecord;
+}) {
+  const explicit = explicitTopic?.trim();
+  if (explicit) return explicit;
+
+  const nextTitle =
+    typeof nextContextChunk?.title === "string"
+      ? nextContextChunk.title.trim()
+      : typeof nextContextChunk?.source_path === "string"
+        ? nextContextChunk.source_path.trim()
+        : "";
+  if (nextTitle) return nextTitle;
+
+  return "";
 }
 
 function teacherCollectionNamespace(handle: string) {
@@ -688,9 +756,11 @@ export async function POST(request: Request) {
       requestId,
       requestedSubject,
       lookupMs: Date.now() - subjectLookupStartedAt,
-      source: parsed.tenantSubject?.courseId
-        ? "enrolled_course_subject"
-        : "enrolled_subject_lookup",
+      source: parsed.tenantSubject?.courseId?.startsWith("private:")
+        ? "owner_private_subject"
+        : parsed.tenantSubject?.courseId
+          ? "enrolled_course_subject"
+          : "enrolled_subject_lookup",
       matchedSubject: subjectAccess?.subjectName ?? null,
     });
 
@@ -700,9 +770,12 @@ export async function POST(request: Request) {
         requestedSubject,
         profileSubjects: profile.subjects,
       });
+      const requestedPrivateSubject = parsed.tenantSubject?.courseId?.startsWith("private:");
       return NextResponse.json(
         {
-          error: "Enroll in a course containing this subject first.",
+          error: requestedPrivateSubject
+            ? "This private subject is no longer available."
+            : "Enroll in a course containing this subject first.",
           code: "COURSE_SUBJECT_ACCESS_REQUIRED",
           requestId,
         },
@@ -711,10 +784,11 @@ export async function POST(request: Request) {
     }
 
     const tenantSubject = trustedTenantSubject(subjectAccess);
+    const isPrivateSubject = subjectAccess.accessKind === "owner-private";
     const admin = createSupabaseAdminClient();
     const { data: creator, error: creatorError } = await admin
       .from("teachers")
-      .select("handle")
+      .select("handle,collection_sk")
       .eq("id", subjectAccess.teacherId)
       .maybeSingle();
 
@@ -730,7 +804,18 @@ export async function POST(request: Request) {
     }
 
     const creatorHandle = String(creator?.handle || "").trim();
-    if (!creatorHandle) {
+    const privateCollectionKey = String(creator?.collection_sk || "").trim();
+    if (isPrivateSubject && !privateCollectionKey) {
+      return NextResponse.json(
+        {
+          error: "This private subject's study collection is not ready.",
+          code: "PRIVATE_COLLECTION_NOT_READY",
+          requestId,
+        },
+        { status: 409 },
+      );
+    }
+    if (!isPrivateSubject && !creatorHandle) {
       return NextResponse.json(
         {
           error: "This course creator's study collection is not ready.",
@@ -743,22 +828,24 @@ export async function POST(request: Request) {
 
     const teacherNamespace = teacherCollectionNamespace(creatorHandle);
     let tenantName = "";
-    try {
-      tenantName = await getTenantName();
-    } catch (error) {
-      logTenantChatDebug(
-        "tenant_identity_lookup_failed",
-        { requestId, teacherNamespace, subject: tenantSubject.name },
-        error,
-      );
-      return NextResponse.json(
-        {
-          error: "Study chat service is not ready.",
-          code: "TENANT_IDENTITY_LOOKUP_FAILED",
-          requestId,
-        },
-        { status: 502 },
-      );
+    if (!isPrivateSubject) {
+      try {
+        tenantName = await getTenantName();
+      } catch (error) {
+        logTenantChatDebug(
+          "tenant_identity_lookup_failed",
+          { requestId, teacherNamespace, subject: tenantSubject.name },
+          error,
+        );
+        return NextResponse.json(
+          {
+            error: "Study chat service is not ready.",
+            code: "TENANT_IDENTITY_LOOKUP_FAILED",
+            requestId,
+          },
+          { status: 502 },
+        );
+      }
     }
 
     const sessionSubjectContext = normalizeSubjectLabel(tenantSubject.name);
@@ -812,6 +899,30 @@ export async function POST(request: Request) {
       board: profile.board,
       hasAttachments,
     });
+    const chatRoutePath = isPrivateSubject ? "owner_private_collection_chat" : "tenant_chat_stream";
+    const chatAnswerReason = isPrivateSubject
+      ? "owner_private_subject_answered_from_collection_key"
+      : "enrolled_course_subject_streamed_from_scoped_teacher_namespace";
+    const chatAnswerModel = isPrivateSubject
+      ? "teacher:/v1/collection/ask/stream"
+      : "tenant:/api/chat/stream";
+    const chatRouteScope = isPrivateSubject ? tenantSubject.slug : teacherNamespace;
+    const privateConversationHistory = parsed.messages
+      .slice(0, -1)
+      .slice(-10)
+      .map((message) => ({
+        role: message.role,
+        content: message.content.trim().slice(0, 4_000),
+      }))
+      .filter((message) => message.content);
+    const privateAnswerPrompt = [
+      answerInstruction,
+      tenantContextSummary
+        ? `Use this rolling conversation context when helpful:\n${tenantContextSummary}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     const tenantStartedAt = Date.now();
     logTenantChatDebug("tenant_chat_started", {
       requestId,
@@ -826,7 +937,13 @@ export async function POST(request: Request) {
       question: tenantQuestion,
       questionHash: tenantQuestionHash,
       attachmentCount: latestUserAttachments.length,
-      transport: latestUserAttachments.length > 0 ? "multipart/form-data" : "application/json",
+      transport: isPrivateSubject
+        ? "teacher-collection-json"
+        : latestUserAttachments.length > 0
+          ? "multipart/form-data"
+          : "application/json",
+      routePath: chatRoutePath,
+      routeScope: chatRouteScope,
       payloadHash: hashDebugValue({
         question: tenantQuestion,
         context_summary: tenantContextSummary,
@@ -855,63 +972,145 @@ export async function POST(request: Request) {
           let chunksRetrieved: number | null = null;
           let servedFrom: string | null = null;
           let tenantTokenUsage = normalizeTokenUsage(null);
+          let privateSourcesSent = false;
 
           try {
             enqueue("status", { message: "Connecting to syllabus stream..." });
 
-            await chatTenantStream(
-              {
-                question: tenantQuestion,
-                answerInstruction,
-                contextSummary: tenantContextSummary,
-                subject: tenantSubject.name,
-                tenant: tenantName,
-                namespaces: [teacherNamespace],
-                topK: 8,
-                attachments: latestUserAttachments,
-              },
-              (event) => {
-                if (event.type === "status") {
-                  enqueue("status", {
-                    message: event.message,
-                    query: event.query,
-                    served_from: event.served_from,
-                  });
-                  return;
-                }
+            if (isPrivateSubject) {
+              if (latestUserAttachments.length > 0) {
+                throw new Error(
+                  "Image attachments are not supported in private-subject chat yet. Ask with text or open the material from Library.",
+                );
+              }
+              enqueue("status", { message: "Reading your private subject materials..." });
+              await askTeacherSubjectStream(
+                privateCollectionKey,
+                tenantSubject.name,
+                tenantQuestion,
+                8,
+                privateAnswerPrompt,
+                privateConversationHistory,
+                (event) => {
+                  if (event.type === "status") {
+                    enqueue("status", {
+                      message: event.message,
+                      query: event.query,
+                      served_from: event.served_from,
+                    });
+                    return;
+                  }
 
-                if (event.type === "token") {
-                  answerParts.push(event.text);
-                  enqueue("token", { text: event.text });
-                  return;
-                }
+                  if (event.type === "token") {
+                    if (event.text) {
+                      answerParts.push(event.text);
+                      enqueue("token", { text: event.text });
+                    }
+                    return;
+                  }
 
-                if (event.type === "sources") {
-                  tenantSources = event.sources;
-                  chunksRetrieved = event.chunks_retrieved ?? null;
-                  servedFrom = event.served_from ?? null;
-                  returnedContextSummary = normalizeContextSummary(event.context_summary);
-                  tenantNextTopic =
-                    event.next_topic?.trim() || event.next_context_chunk?.title?.trim() || "";
-                  enqueue("sources", {
-                    sources: tenantSources,
-                    chunks_retrieved: chunksRetrieved,
-                    served_from: servedFrom,
-                    context_summary: returnedContextSummary ? "1" : "0",
-                    next_topic: tenantNextTopic || undefined,
-                  });
-                  return;
-                }
+                  if (event.type === "sources") {
+                    const rawChunks = Array.isArray(event.chunks)
+                      ? event.chunks
+                      : Array.isArray(event.sources)
+                        ? event.sources
+                        : [];
+                    tenantSources = rawChunks
+                      .map(privateCollectionSource)
+                      .filter((source): source is TenantChatSource => source !== null);
+                    chunksRetrieved = event.chunks_retrieved ?? tenantSources.length;
+                    servedFrom = event.served_from ?? "owner_private_collection";
+                    tenantNextTopic = derivePrivateNextTopic({
+                      explicitTopic: event.next_topic,
+                      nextContextChunk: event.next_context_chunk,
+                    });
+                    privateSourcesSent = true;
+                    enqueue("sources", {
+                      sources: tenantSources,
+                      chunks_retrieved: chunksRetrieved,
+                      served_from: servedFrom,
+                      context_summary: "0",
+                      next_topic: tenantNextTopic || undefined,
+                    });
+                    return;
+                  }
 
-                if (event.type === "error") {
-                  throw new Error(event.message);
-                }
+                  if (event.type === "done") {
+                    tenantTokenUsage = normalizeTokenUsage(event.usage ?? null);
+                    return;
+                  }
 
-                if (event.type === "done") {
-                  tenantTokenUsage = normalizeTokenUsage(event.usage);
-                }
-              },
-            );
+                  if (event.type === "error") {
+                    throw new Error(event.message);
+                  }
+                },
+              );
+              if (!privateSourcesSent) {
+                chunksRetrieved = tenantSources.length;
+                servedFrom = servedFrom ?? "owner_private_collection";
+                enqueue("sources", {
+                  sources: tenantSources,
+                  chunks_retrieved: chunksRetrieved,
+                  served_from: servedFrom,
+                  context_summary: "0",
+                  next_topic: tenantNextTopic || undefined,
+                });
+              }
+            } else {
+              await chatTenantStream(
+                {
+                  question: tenantQuestion,
+                  answerInstruction,
+                  contextSummary: tenantContextSummary,
+                  subject: tenantSubject.name,
+                  tenant: tenantName,
+                  namespaces: [teacherNamespace],
+                  topK: 8,
+                  attachments: latestUserAttachments,
+                },
+                (event) => {
+                  if (event.type === "status") {
+                    enqueue("status", {
+                      message: event.message,
+                      query: event.query,
+                      served_from: event.served_from,
+                    });
+                    return;
+                  }
+
+                  if (event.type === "token") {
+                    answerParts.push(event.text);
+                    enqueue("token", { text: event.text });
+                    return;
+                  }
+
+                  if (event.type === "sources") {
+                    tenantSources = event.sources;
+                    chunksRetrieved = event.chunks_retrieved ?? null;
+                    servedFrom = event.served_from ?? null;
+                    returnedContextSummary = normalizeContextSummary(event.context_summary);
+                    tenantNextTopic =
+                      event.next_topic?.trim() || event.next_context_chunk?.title?.trim() || "";
+                    enqueue("sources", {
+                      sources: tenantSources,
+                      chunks_retrieved: chunksRetrieved,
+                      served_from: servedFrom,
+                      context_summary: returnedContextSummary ? "1" : "0",
+                      next_topic: tenantNextTopic || undefined,
+                    });
+                    return;
+                  }
+
+                  if (event.type === "error") {
+                    throw new Error(event.message);
+                  }
+
+                  if (event.type === "done") {
+                    tenantTokenUsage = normalizeTokenUsage(event.usage);
+                  }
+                },
+              );
+            }
 
             generationMs = Date.now() - tenantStartedAt;
             const answer = answerParts.join("").trim();
@@ -1006,13 +1205,13 @@ export async function POST(request: Request) {
             const totalMs = Date.now() - requestStartedAt;
             const subjectTags = [session.subjectContext ?? sessionSubjectContext];
             const answerTrace = buildAnswerTrace({
-              routePath: "tenant_chat_stream",
-              routeScopeDebug: teacherNamespace,
+              routePath: chatRoutePath,
+              routeScopeDebug: chatRouteScope,
               retrievalMode,
-              answerMode: "tenant_chat_stream",
-              answerModeReason: "enrolled_course_subject_streamed_from_scoped_teacher_namespace",
+              answerMode: chatRoutePath,
+              answerModeReason: chatAnswerReason,
               matchedScope: tenantSubject.name,
-              answerModel: "tenant:/api/chat/stream",
+              answerModel: chatAnswerModel,
               grounded: citations.length > 0,
               citationCount: citations.length,
               lookupMs: 0,
@@ -1168,6 +1367,15 @@ export async function POST(request: Request) {
           } catch (error) {
             generationMs = Date.now() - tenantStartedAt;
             const failureReason = summarizeTenantFailure(error);
+            const privateApiError =
+              isPrivateSubject && error instanceof TeacherApiError ? error : null;
+            const clientErrorMessage = privateApiError
+              ? privateApiError.status === 404
+                ? "No indexed material was found for this private subject. Add or re-index a material, then try again."
+                : privateApiError.status === 401
+                  ? "This private subject's collection key is no longer valid."
+                  : "Could not answer from this private subject's materials."
+              : errorToDebugMessage(error);
             logTenantChatDebug(
               "tenant_chat_failed",
               {
@@ -1196,7 +1404,7 @@ export async function POST(request: Request) {
               message:
                 failureReason === "timeout"
                   ? "Course answer API timed out. Please retry once."
-                  : errorToDebugMessage(error),
+                  : clientErrorMessage,
             });
             controller.close();
           }
@@ -1220,12 +1428,12 @@ export async function POST(request: Request) {
         "x-retrieval-mode": retrievalMode,
         "x-subject-context": session.subjectContext ?? sessionSubjectContext,
         "x-thinking-enabled": "1",
-        "x-answer-mode": "tenant_chat_stream",
-        "x-answer-mode-reason": "enrolled_course_subject_streamed_from_scoped_teacher_namespace",
-        "x-answer-model": "tenant:/api/chat/stream",
+        "x-answer-mode": chatRoutePath,
+        "x-answer-mode-reason": chatAnswerReason,
+        "x-answer-model": chatAnswerModel,
         "x-matched-scope": tenantSubject.name,
-        "x-route-path": "tenant_chat_stream",
-        "x-route-scope-debug": teacherNamespace,
+        "x-route-path": chatRoutePath,
+        "x-route-scope-debug": chatRouteScope,
         "x-history-strategy": "rolling_context_summary",
         "x-history-messages": "0",
         "x-tenant-lookup-ms": "0",
@@ -1242,7 +1450,7 @@ export async function POST(request: Request) {
           attachment_count: latestUserAttachments.length,
         }),
         "x-subject-slug": tenantSubject.slug,
-        "x-namespace-slug": teacherNamespace,
+        "x-namespace-slug": chatRouteScope,
         "x-tenant-context-summary": "0",
         "x-tenant-context-summary-length": "0",
         "x-rewrite-ms": "0",

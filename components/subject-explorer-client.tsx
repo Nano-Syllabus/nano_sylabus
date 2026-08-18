@@ -55,9 +55,16 @@ function SubjectCard({ subject }: { subject: SubjectExplorerSummary }) {
       <div>
         {/* Top bar: Category & Activity Dot */}
         <div className="flex items-center justify-between gap-2">
-          <span className="inline-flex rounded-full border border-border bg-bg-secondary px-2.5 py-0.5 text-xs font-medium text-text-secondary">
-            {subject.category || "Subject"}
-          </span>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="inline-flex rounded-full border border-border bg-bg-secondary px-2.5 py-0.5 text-xs font-medium text-text-secondary">
+              {subject.category || "Subject"}
+            </span>
+            {subject.private ? (
+              <span className="inline-flex rounded-full border border-border-strong bg-bg-tertiary px-2.5 py-0.5 text-xs font-medium text-text-primary">
+                Private
+              </span>
+            ) : null}
+          </div>
           <div className="flex items-center gap-1.5">
             <Dot level={level} label="Study activity" />
           </div>
@@ -239,6 +246,7 @@ export function SubjectExplorerClient({
 }) {
   const [enrolledCourses, setEnrolledCourses] = useState(courses);
   const [selectedCourse, setSelectedCourse] = useState<StudentCourse | null>(null);
+  const privateSubjects = subjects.filter((subject) => subject.private);
 
   useEffect(() => {
     setEnrolledCourses(courses);
@@ -254,7 +262,7 @@ export function SubjectExplorerClient({
       </div>
 
       <p className="mb-4 text-sm text-text-secondary">
-        Your enrolled courses and their indexed subjects appear here. Open a course to review its full details.
+        Your enrolled course subjects appear first. Private subjects you create are kept below them and are visible only to you.
       </p>
 
       {enrolledCourses.length ? (
@@ -263,8 +271,11 @@ export function SubjectExplorerClient({
             const subjectKeys = new Set(
               course.subjects.flatMap((subject) => [slugify(subject.slug), slugify(subject.name)]),
             );
-            const courseSubjects = subjects.filter((subject) =>
-              subjectKeys.has(slugify(subject.slug)) || subjectKeys.has(slugify(subject.subject)),
+            const courseSubjects = subjects.filter(
+              (subject) =>
+                !subject.private &&
+                (subjectKeys.has(slugify(subject.slug)) ||
+                  subjectKeys.has(slugify(subject.subject))),
             );
 
             return (
@@ -295,7 +306,32 @@ export function SubjectExplorerClient({
             );
           })}
         </div>
-      ) : (
+      ) : null}
+
+      {privateSubjects.length ? (
+        <section className="mt-8 border-t border-border pt-7" aria-labelledby="private-subjects-title">
+          <div className="mb-3 flex flex-wrap items-end gap-3 border-b border-border pb-3">
+            <div className="min-w-0 flex-1">
+              <h2 id="private-subjects-title" className="font-display text-lg font-semibold">
+                Private subjects
+              </h2>
+              <p className="mt-0.5 text-sm text-text-muted">
+                Personal subjects only you can access.
+              </p>
+            </div>
+            <span className="text-sm text-text-muted">
+              {privateSubjects.length} subject{privateSubjects.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {privateSubjects.map((subject) => (
+                <SubjectCard key={`private-${subject.slug}`} subject={subject} />
+              ))}
+          </div>
+        </section>
+      ) : null}
+
+      {!enrolledCourses.length && !privateSubjects.length ? (
         <section className="rounded-lg border border-dashed border-border px-6 py-16 text-center">
           <h2 className="font-display text-xl font-semibold">No enrolled subjects yet</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm text-text-secondary">
@@ -306,7 +342,7 @@ export function SubjectExplorerClient({
             <Link href="/exams" className={`${button} border-border bg-bg-primary`}>Browse courses</Link>
           </div>
         </section>
-      )}
+      ) : null}
 
       {selectedCourse ? (
         <Modal title={selectedCourse.name} onClose={() => setSelectedCourse(null)}>

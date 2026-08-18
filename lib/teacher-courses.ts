@@ -28,8 +28,8 @@ export const teacherCourseInputSchema = z
     durationWeeks: z.number().int().min(1).max(104),
     level: z.enum(teacherCourseLevels),
     languageModes: z.array(z.enum(["English", "Nepali"])).min(1),
-    accessModel: z.enum(["free", "paid"]),
-    priceNpr: z.number().int().min(0).max(1_000_000),
+    accessModel: z.literal("free").default("free"),
+    priceNpr: z.literal(0).default(0),
     visibility: z.enum(["public", "unlisted", "private"]),
     diagnosticQuestionCount: z.number().int().min(5).max(100),
     dailyMinutes: z.number().int().min(5).max(240),
@@ -44,23 +44,22 @@ export const teacherCourseInputSchema = z
     outcomes: z.array(z.string().trim().min(2).max(180)).max(8).default([]),
     subjectSlugs: z
       .array(z.string().trim().min(1).max(200))
-      .min(1, "Choose at least one subject.")
       .refine((slugs) => new Set(slugs).size === slugs.length, "Choose each subject once."),
     status: z.enum(["draft", "published"]).default("draft"),
   })
   .superRefine((value, context) => {
-    if (value.accessModel === "paid" && value.priceNpr < 1) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["priceNpr"],
-        message: "Add a price for a paid course.",
-      });
-    }
     if (value.status === "published" && value.visibility === "private") {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["visibility"],
         message: "A published course cannot be private.",
+      });
+    }
+    if (value.status === "published" && value.subjectSlugs.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["subjectSlugs"],
+        message: "Choose at least one subject before publishing.",
       });
     }
   });

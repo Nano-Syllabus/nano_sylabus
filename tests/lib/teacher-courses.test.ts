@@ -38,9 +38,15 @@ describe("teacher courses", () => {
     expect(teacherCourseSlug("  IOE Engineering Entrance  ")).toBe("ioe-engineering-entrance");
   });
 
-  it("requires a real indexed subject", () => {
-    const parsed = teacherCourseInputSchema.safeParse({ ...validCourse, subjectSlugs: [] });
-    expect(parsed.success).toBe(false);
+  it("allows an empty draft but requires a subject before publishing", () => {
+    const draft = teacherCourseInputSchema.safeParse({ ...validCourse, subjectSlugs: [] });
+    const published = teacherCourseInputSchema.safeParse({
+      ...validCourse,
+      subjectSlugs: [],
+      status: "published",
+    });
+    expect(draft.success).toBe(true);
+    expect(published.success).toBe(false);
   });
 
   it("rejects duplicate subject links", () => {
@@ -124,11 +130,7 @@ describe("teacher courses", () => {
     query.eq.mockReturnValue(query);
     const admin = { from: vi.fn(() => query) };
 
-    const courseIds = await detachTeacherSubjectFromCourses(
-      admin as never,
-      "teacher-1",
-      "physics",
-    );
+    const courseIds = await detachTeacherSubjectFromCourses(admin as never, "teacher-1", "physics");
 
     expect(courseIds).toEqual(["course-1"]);
     expect(admin.from).toHaveBeenCalledTimes(1);

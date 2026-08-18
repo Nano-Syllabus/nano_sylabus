@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
   return {
     getTeacherProfile: vi.fn(),
     createTeacherSubject: vi.fn(),
+    createSupabaseAdminClient: vi.fn(),
     MockTeacherApiError,
   };
 });
@@ -25,6 +26,9 @@ vi.mock("@/app/teachers/actions", () => ({
 vi.mock("@/lib/teacher-app/client", () => ({
   createTeacherSubject: mocks.createTeacherSubject,
   TeacherApiError: mocks.MockTeacherApiError,
+}));
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: mocks.createSupabaseAdminClient,
 }));
 
 import { POST } from "@/app/api/teacher/subjects/route";
@@ -39,6 +43,7 @@ function request(body: unknown) {
 
 describe("POST /api/teacher/subjects", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mocks.getTeacherProfile.mockResolvedValue({
       id: "teacher-1",
       user_id: "user-1",
@@ -49,6 +54,12 @@ describe("POST /api/teacher/subjects", () => {
       name: "Engineering Physics",
       slug: "engineering-physics",
       folder_path: "Engineering Physics",
+    });
+    const profileQuery = {
+      upsert: vi.fn(async () => ({ error: null })),
+    };
+    mocks.createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn(() => profileQuery),
     });
   });
 
@@ -92,5 +103,19 @@ describe("POST /api/teacher/subjects", () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({ error: "Subject already exists" });
+  });
+
+  it("allows a public subject before any course exists", async () => {
+    const response = await POST(request({ name: "Physics", visibility: "public" }));
+
+    expect(response.status).toBe(201);
+    expect(mocks.createTeacherSubject).toHaveBeenCalledOnce();
+  });
+
+  it("stores the selected visibility without linking a course", async () => {
+    const response = await POST(request({ name: "Physics", visibility: "public" }));
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ visibility: "public" });
   });
 });

@@ -4,6 +4,9 @@ const mocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   createSupabaseAdminClient: vi.fn(),
   getStudentCourseSubjectAccess: vi.fn(),
+  getStudentCourseSubjectAccessForCourse: vi.fn(),
+  listCreatorPrivateSubjectAccess: vi.fn(),
+  listStudentCourses: vi.fn(),
   getTenantSourceTree: vi.fn(),
 }));
 
@@ -15,6 +18,9 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("@/lib/student-courses", () => ({
   getStudentCourseSubjectAccess: mocks.getStudentCourseSubjectAccess,
+  getStudentCourseSubjectAccessForCourse: mocks.getStudentCourseSubjectAccessForCourse,
+  listCreatorPrivateSubjectAccess: mocks.listCreatorPrivateSubjectAccess,
+  listStudentCourses: mocks.listStudentCourses,
 }));
 vi.mock("@/lib/tenant/client", () => ({
   getTenantSourceTree: mocks.getTenantSourceTree,
@@ -49,6 +55,8 @@ describe("GET /api/student/materials", () => {
       folderPath: "teacher-1/Control Systems",
     });
     mocks.getTenantSourceTree.mockResolvedValue({ tree: [] });
+    mocks.listCreatorPrivateSubjectAccess.mockResolvedValue([]);
+    mocks.listStudentCourses.mockResolvedValue([]);
   });
 
   it("returns private mirrored files without waiting for the tenant tree", async () => {
@@ -102,5 +110,33 @@ describe("GET /api/student/materials", () => {
 
     expect(response.status).toBe(403);
     expect(mocks.getTenantSourceTree).not.toHaveBeenCalled();
+  });
+
+  it("includes creator-only subjects in the complete library", async () => {
+    mocks.listCreatorPrivateSubjectAccess.mockResolvedValueOnce([
+      {
+        courseId: "private:profile-1",
+        teacherId: "teacher-1",
+        subjectSlug: "my-research",
+        subjectName: "My Research",
+        folderPath: "My Research",
+        accessKind: "owner-private",
+      },
+    ]);
+    const query = materialQuery([]);
+    mocks.createSupabaseAdminClient.mockReturnValue({ from: vi.fn(() => query) });
+
+    const response = await GET(new Request("http://localhost/api/student/materials"));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.subjects).toEqual([
+      expect.objectContaining({
+        courseId: "private:profile-1",
+        courseName: "Private",
+        private: true,
+        subject: { name: "My Research", slug: "my-research" },
+      }),
+    ]);
   });
 });

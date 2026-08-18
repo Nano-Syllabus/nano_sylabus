@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   listStudentCourses: vi.fn(),
+  listCreatorPrivateSubjectAccess: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -10,6 +11,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/student-courses", () => ({
   listStudentCourses: mocks.listStudentCourses,
+  listCreatorPrivateSubjectAccess: mocks.listCreatorPrivateSubjectAccess,
 }));
 
 import { GET } from "@/app/api/tenant/subjects/route";
@@ -24,11 +26,16 @@ describe("GET /api/tenant/subjects", () => {
       {
         id: "9fb2bc93-e80f-4c2a-a298-488253b33a3b",
         subjects: [
-          { slug: "engineering-physics", name: "Engineering Physics", folderPath: "Engineering Physics" },
+          {
+            slug: "engineering-physics",
+            name: "Engineering Physics",
+            folderPath: "Engineering Physics",
+          },
           { slug: "mba", name: "MBA", folderPath: "MBA" },
         ],
       },
     ]);
+    mocks.listCreatorPrivateSubjectAccess.mockResolvedValue([]);
   });
 
   it("returns only subjects from the student's enrolled courses", async () => {
@@ -63,6 +70,34 @@ describe("GET /api/tenant/subjects", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ subjects: [] });
+  });
+
+  it("adds creator-only private subjects to the picker", async () => {
+    mocks.listStudentCourses.mockResolvedValueOnce([]);
+    mocks.listCreatorPrivateSubjectAccess.mockResolvedValueOnce([
+      {
+        courseId: "private:profile-1",
+        subjectName: "Personal Research",
+        subjectSlug: "personal-research",
+        folderPath: "Personal Research",
+      },
+    ]);
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      subjects: [
+        {
+          courseId: "private:profile-1",
+          name: "Personal Research",
+          slug: "personal-research",
+          namespaceSlug: "personal-research",
+          folderPath: "Personal Research",
+          private: true,
+        },
+      ],
+    });
   });
 
   it("rejects unauthenticated subject metadata requests", async () => {

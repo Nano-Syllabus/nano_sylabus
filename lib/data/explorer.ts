@@ -19,6 +19,7 @@ function uniqueSubjects(values: string[]) {
 type ExplorerSubjectEntry = {
   name: string;
   slug: string;
+  private?: boolean;
 };
 
 function uniqueSubjectEntries(entries: ExplorerSubjectEntry[]) {
@@ -31,7 +32,7 @@ function uniqueSubjectEntries(entries: ExplorerSubjectEntry[]) {
     const key = slug.toLowerCase();
     if (!name || seen.has(key)) continue;
     seen.add(key);
-    unique.push({ name, slug });
+    unique.push({ name, slug, private: entry.private });
   }
 
   return unique;
@@ -109,6 +110,7 @@ export async function listExplorerSubjects(
   userId: string,
   profile: StudentProfile,
   allowedSubjects?: string[],
+  privateSubjects: ExplorerSubjectEntry[] = [],
 ) {
   const supabase = await createSupabaseServerClient();
   const normalizedBoard = normalizeBoard(profile.board);
@@ -124,7 +126,7 @@ export async function listExplorerSubjects(
 
   const profileSubjects = uniqueSubjects(profile.subjects);
   const profileSubjectKeys = new Set(profileSubjects.map((subject) => subject.toLowerCase()));
-  const subjectEntries = allowedSubjects
+  const courseSubjectEntries = allowedSubjects
     ? uniqueSubjectEntries(
         allowedSubjects.flatMap((value) => {
           const subject = findTenantSubject(tenantSubjects, value);
@@ -137,6 +139,12 @@ export async function listExplorerSubjects(
           return subject ? { name: subject.name, slug: subject.slug } : { name, slug: name };
         }),
       );
+  // Course subjects are the primary list. Private creator subjects are added
+  // afterwards and deduplicated so a matching enrolled subject is not shown twice.
+  const subjectEntries = uniqueSubjectEntries([
+    ...courseSubjectEntries,
+    ...privateSubjects.map((entry) => ({ ...entry, private: true })),
+  ]);
 
   // Group the sessions by subject tag once. Doing it inside the map below
   // rescanned every session for every subject on the page.
@@ -183,7 +191,7 @@ export async function listExplorerSubjects(
     }
   }
 
-  const summaries = subjectEntries.map(({ name: subject, slug }) => {
+  const summaries = subjectEntries.map(({ name: subject, slug, private: isPrivate }) => {
     const subjectKey = normalizeSubjectLabel(subject).toLowerCase();
     const matchingSessions = sessionsBySubjectKey.get(subjectKey) ?? [];
 
@@ -193,6 +201,7 @@ export async function listExplorerSubjects(
       board: normalizedBoard,
       grade: normalizedGrade,
       category: categorizeSubject(subject),
+      private: isPrivate,
       inProfile: profileSubjectKeys.has(subject.toLowerCase()),
       sessionCount: matchingSessions.length,
       questionCount: matchingSessions.reduce(
@@ -207,6 +216,7 @@ export async function listExplorerSubjects(
   });
 
   return summaries.sort((left, right) => {
+    if (left.private !== right.private) return left.private ? 1 : -1;
     if (left.inProfile !== right.inProfile) return left.inProfile ? -1 : 1;
     if (left.questionCount !== right.questionCount) return right.questionCount - left.questionCount;
     if (left.lastActivityAt && right.lastActivityAt) {

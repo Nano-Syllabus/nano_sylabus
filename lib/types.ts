@@ -144,6 +144,8 @@ export interface SubjectExplorerSummary {
   board: string;
   grade: string;
   category: "Science" | "Humanities" | "Management" | "Technical" | "General";
+  /** Creator-owned subjects are shown after enrolled course subjects. */
+  private?: boolean;
   inProfile: boolean;
   sessionCount: number;
   questionCount: number;

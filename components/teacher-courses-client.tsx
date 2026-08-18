@@ -1,16 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import {
-  BookOpen,
-  Check,
-  Globe2,
-  Pencil,
-  Plus,
-  Trash2,
-  Users,
-  X,
-} from "lucide-react";
+import { BookOpen, Check, Globe2, Pencil, Plus, Trash2, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   teacherCourseCategories,
@@ -27,6 +18,7 @@ type TeacherSubject = {
   code: string;
   university: string;
   programme: string;
+  visibility: "public" | "private";
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -70,8 +62,8 @@ function courseDraft(course: TeacherCourse): TeacherCourseInput {
     durationWeeks: course.durationWeeks,
     level: course.level,
     languageModes: course.languageModes,
-    accessModel: course.accessModel,
-    priceNpr: course.priceNpr,
+    accessModel: "free",
+    priceNpr: 0,
     visibility: course.visibility,
     diagnosticQuestionCount: course.diagnosticQuestionCount,
     dailyMinutes: course.dailyMinutes,
@@ -132,7 +124,9 @@ function CourseCard({
           <p className="font-mono text-[11px] uppercase tracking-widest text-text-muted">
             {course.category} · {course.authority}
           </p>
-          <h2 className="mt-3 font-display text-xl font-semibold leading-tight">{titleCase(course.name)}</h2>
+          <h2 className="mt-3 font-display text-xl font-semibold leading-tight">
+            {titleCase(course.name)}
+          </h2>
         </div>
         <span className="flex-1" />
         <CourseStatus course={course} />
@@ -234,7 +228,7 @@ export function TeacherCoursesClient({
           </p>
         </div>
         <span className="flex-1" />
-        <Button type="button" onClick={() => setEditingCourse("new")} disabled={!subjects.length}>
+        <Button type="button" onClick={() => setEditingCourse("new")}>
           <Plus className="size-4" aria-hidden="true" /> New course
         </Button>
       </div>
@@ -269,24 +263,22 @@ export function TeacherCoursesClient({
           </Button>
         </section>
       ) : null}
-      {state === "ready" && !subjects.length ? (
+      {state === "ready" && !subjects.length && courses.length > 0 ? (
         <section className="mt-7 rounded-lg border border-dashed border-border p-10 text-center">
           <h2 className="font-display text-xl font-semibold">No subjects available</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-text-secondary">
-            Your existing courses are still saved. Create a subject before adding a new course or
-            updating its subject list.
+            Your existing courses are still saved. Create a public subject to add content to them.
           </p>
           <Button className="mt-5" type="button" variant="outline" onClick={onCreateSubject}>
             Create subject
           </Button>
         </section>
       ) : null}
-      {state === "ready" && subjects.length > 0 && !courses.length ? (
+      {state === "ready" && !courses.length ? (
         <section className="mt-7 rounded-lg border border-dashed border-border p-10 text-center">
           <h2 className="font-display text-xl font-semibold">No courses yet</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-text-secondary">
-            Build the exam package students will see, then publish it when its subjects and plan are
-            ready.
+            Start with an empty draft, then attach public subjects as you create them.
           </p>
           <Button className="mt-5" type="button" onClick={() => setEditingCourse("new")}>
             <Plus className="size-4" aria-hidden="true" /> Create course
@@ -400,13 +392,13 @@ function DeleteCourseDialog({
         </div>
 
         <p id="delete-course-description" className="mt-5 text-sm leading-6 text-text-secondary">
-          This permanently deletes the course, its subject links, and its student enrollments.
-          The original subjects and their files stay available in Subjects.
+          This permanently deletes the course, its subject links, and its student enrollments. The
+          original subjects and their files stay available in Subjects.
         </p>
         {course.enrollmentCount > 0 ? (
           <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            {course.enrollmentCount} enrolled {course.enrollmentCount === 1 ? "student" : "students"}
-            {" "}will lose access to this course.
+            {course.enrollmentCount} enrolled{" "}
+            {course.enrollmentCount === 1 ? "student" : "students"} will lose access to this course.
           </p>
         ) : null}
         {error ? (
@@ -542,11 +534,6 @@ function CourseEditor({
     [courses],
   );
 
-  function numeric(value: string, fallback: number) {
-    const next = Number(value);
-    return Number.isFinite(next) ? next : fallback;
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
@@ -657,14 +644,12 @@ function CourseEditor({
                       <option key={category}>{category}</option>
                     ))}
                   </select>
-                  {(!(teacherCourseCategories as readonly string[]).includes(draft.category)) ? (
+                  {!(teacherCourseCategories as readonly string[]).includes(draft.category) ? (
                     <input
                       id="course-category-other"
                       required
                       value={draft.category}
-                      onChange={(event) =>
-                        setDraft({ ...draft, category: event.target.value })
-                      }
+                      onChange={(event) => setDraft({ ...draft, category: event.target.value })}
                       className={cn(inputClass, "mt-2")}
                       placeholder="Type your category…"
                       autoComplete="off"
@@ -692,72 +677,87 @@ function CourseEditor({
                 Subjects in this course
               </legend>
               <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                {subjects.map((subject) => {
-                  const checked = draft.subjectSlugs.includes(subject.slug);
-                  const owner = subjectOwners.get(subject.slug);
-                  const unavailable = Boolean(owner && owner.id !== course?.id);
-                  return (
-                    <label
-                      key={subject.slug}
-                      className={cn(
-                        "flex items-center gap-3 rounded-lg border p-3",
-                        unavailable ? "cursor-not-allowed opacity-55" : "cursor-pointer",
-                        checked ? "border-border-strong bg-bg-secondary" : "border-border",
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={unavailable}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            subjectSlugs: event.target.checked
-                              ? [...draft.subjectSlugs, subject.slug]
-                              : draft.subjectSlugs.filter((slug) => slug !== subject.slug),
-                          })
-                        }
-                        className="size-4 accent-current"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{titleCase(subject.name)}</span>
-                        {unavailable ? (
-                          <span className="mt-0.5 block text-xs text-text-muted">
-                            Already in {owner?.name}
+                {subjects
+                  .filter((subject) => subject.visibility === "public")
+                  .map((subject) => {
+                    const checked = draft.subjectSlugs.includes(subject.slug);
+                    const owner = subjectOwners.get(subject.slug);
+                    const unavailable = Boolean(owner && owner.id !== course?.id);
+                    return (
+                      <label
+                        key={subject.slug}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg border p-3",
+                          unavailable ? "cursor-not-allowed opacity-55" : "cursor-pointer",
+                          checked ? "border-border-strong bg-bg-secondary" : "border-border",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={unavailable}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              subjectSlugs: event.target.checked
+                                ? [...draft.subjectSlugs, subject.slug]
+                                : draft.subjectSlugs.filter((slug) => slug !== subject.slug),
+                            })
+                          }
+                          className="size-4 accent-current"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">
+                            {titleCase(subject.name)}
                           </span>
-                        ) : null}
-                      </span>
-                    </label>
-                  );
-                })}
+                          {unavailable ? (
+                            <span className="mt-0.5 block text-xs text-text-muted">
+                              Already in {owner?.name}
+                            </span>
+                          ) : null}
+                        </span>
+                      </label>
+                    );
+                  })}
               </div>
               <p className="mt-2 text-xs text-text-muted">
                 {selectedNames.length
                   ? `${selectedNames.length} selected: ${selectedNames.join(", ")}`
-                  : "Choose at least one subject."}
+                  : "A draft can be empty. Add a public subject before publishing."}
               </p>
             </fieldset>
 
             <fieldset className="mt-5 border-t border-border pt-4">
-              <legend className="font-display text-base font-semibold">Payment plan</legend>
+              <legend className="font-display text-base font-semibold">Course visibility</legend>
+              <p className="mt-2 text-sm leading-6 text-text-secondary">
+                Public courses can be discovered by students. Private courses remain creator-only
+                drafts.
+              </p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <span className="text-sm text-text-secondary">Access:</span>
                 <div className="flex gap-2">
-                  {(["free", "paid"] as const).map((model) => (
+                  {(["public", "private"] as const).map((model) => (
                     <label
                       key={model}
                       className={cn(
                         "inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border px-3.5 text-sm font-medium capitalize transition",
-                        draft.accessModel === model
+                        draft.visibility === model
                           ? "border-border-strong bg-bg-secondary"
                           : "border-border hover:bg-bg-secondary/50",
                       )}
                     >
                       <input
                         type="radio"
-                        name="access-model"
-                        checked={draft.accessModel === model}
-                        onChange={() => setDraft({ ...draft, accessModel: model })}
+                        name="course-visibility"
+                        checked={draft.visibility === model}
+                        onChange={() =>
+                          setDraft({
+                            ...draft,
+                            visibility: model,
+                            accessModel: "free",
+                            priceNpr: 0,
+                            status: model === "private" ? "draft" : draft.status,
+                          })
+                        }
                         className="size-3.5 accent-current"
                       />
                       {model}
@@ -765,24 +765,6 @@ function CourseEditor({
                   ))}
                 </div>
               </div>
-              {draft.accessModel === "paid" ? (
-                <div className="mt-3 max-w-xs">
-                  <Field label="Price (NPR)" id="course-price">
-                    <input
-                      id="course-price"
-                      required
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={draft.priceNpr}
-                      onChange={(event) =>
-                        setDraft({ ...draft, priceNpr: numeric(event.target.value, 0) })
-                      }
-                      className={inputClass}
-                      placeholder="e.g. 500"
-                    />
-                  </Field>
-                </div>
-              ) : null}
             </fieldset>
           </div>
 

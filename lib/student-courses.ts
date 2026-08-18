@@ -342,7 +342,67 @@ export type StudentCourseSubjectAccess = {
   subjectSlug: string;
   subjectName: string;
   folderPath: string;
+  accessKind?: "course" | "owner-private";
 };
+
+type PrivateSubjectProfile = {
+  id: string;
+  teacher_id: string;
+  subject_slug: string;
+  subject_name: string;
+  folder_path: string | null;
+};
+
+function privateSubjectAccess(profile: PrivateSubjectProfile): StudentCourseSubjectAccess {
+  return {
+    courseId: `private:${profile.id}`,
+    teacherId: profile.teacher_id,
+    subjectSlug: profile.subject_slug,
+    subjectName: profile.subject_name,
+    folderPath: profile.folder_path || profile.subject_name,
+    accessKind: "owner-private",
+  };
+}
+
+export async function listCreatorPrivateSubjectAccess(
+  userId: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+): Promise<StudentCourseSubjectAccess[]> {
+  const teacherResult = await admin
+    .from("teachers")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (teacherResult.error) throw teacherResult.error;
+  if (!teacherResult.data?.id) return [];
+
+  const profileResult = await admin
+    .from("teacher_subject_profiles")
+    .select("id,teacher_id,subject_slug,subject_name,folder_path")
+    .eq("teacher_id", teacherResult.data.id)
+    .eq("visibility", "private")
+    .order("updated_at", { ascending: false });
+  if (profileResult.error) throw profileResult.error;
+
+  return ((profileResult.data || []) as PrivateSubjectProfile[]).map(privateSubjectAccess);
+}
+
+async function getCreatorPrivateSubjectAccess(
+  userId: string,
+  subject: string,
+  admin: SupabaseClient,
+) {
+  const requested = subjectAccessKey(subject);
+  if (!requested) return null;
+  const subjects = await listCreatorPrivateSubjectAccess(userId, admin);
+  return (
+    subjects.find(
+      (item) =>
+        subjectAccessKey(item.subjectSlug) === requested ||
+        subjectAccessKey(item.subjectName) === requested,
+    ) || null
+  );
+}
 
 export async function getStudentCourseSubjectAccessForCourse(
   studentId: string,
@@ -350,6 +410,10 @@ export async function getStudentCourseSubjectAccessForCourse(
   subjectSlug: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ): Promise<StudentCourseSubjectAccess | null> {
+  if (courseId.startsWith("private:")) {
+    const access = await getCreatorPrivateSubjectAccess(studentId, subjectSlug, admin);
+    return access?.courseId === courseId ? access : null;
+  }
   const enrollmentResult = await admin
     .from("teacher_course_enrollments")
     .select("course_id")
@@ -394,6 +458,9 @@ export async function getStudentCourseSubjectAccess(
 ): Promise<StudentCourseSubjectAccess | null> {
   const requested = subjectAccessKey(subject);
   if (!requested) return null;
+
+  const privateAccess = await getCreatorPrivateSubjectAccess(studentId, subject, admin);
+  if (privateAccess) return privateAccess;
 
   const enrollmentResult = await admin
     .from("teacher_course_enrollments")
@@ -454,6 +521,19 @@ export async function getStudentCourseSubjectAccessForDocumentPath(
   const normalizedDocumentPath = normalizeCollectionPath(collectionPath).toLowerCase();
   if (!teacherId || !normalizedDocumentPath) return null;
 
+  const privateSubjects = await listCreatorPrivateSubjectAccess(studentId, admin);
+  const privateMatch = privateSubjects
+    .filter((item) => item.teacherId === teacherId)
+    .filter((item) => {
+      const folder = normalizeCollectionPath(item.folderPath).toLowerCase();
+      return (
+        Boolean(folder) &&
+        (normalizedDocumentPath === folder || normalizedDocumentPath.startsWith(`${folder}/`))
+      );
+    })
+    .sort((left, right) => right.folderPath.length - left.folderPath.length)[0];
+  if (privateMatch) return privateMatch;
+
   const enrollmentResult = await admin
     .from("teacher_course_enrollments")
     .select("course_id")
@@ -476,8 +556,10 @@ export async function getStudentCourseSubjectAccessForDocumentPath(
   const matches = (subjectResult.data || [])
     .filter((item) => {
       const folder = normalizeCollectionPath(String(item.folder_path || "")).toLowerCase();
-      return Boolean(folder) &&
-        (normalizedDocumentPath === folder || normalizedDocumentPath.startsWith(`${folder}/`));
+      return (
+        Boolean(folder) &&
+        (normalizedDocumentPath === folder || normalizedDocumentPath.startsWith(`${folder}/`))
+      );
     })
     .sort(
       (left, right) =>

@@ -47,6 +47,7 @@ type TeacherSubject = {
   code: string;
   university: string;
   programme: string;
+  visibility: "public" | "private";
 };
 
 type TeacherDocument = {
@@ -466,65 +467,36 @@ function localDateTimeValue(value: string | null) {
 
 function normalizeWorkspace(payload: ApiRecord): Workspace {
   const subjectsPayload = asRecord(payload.subjects);
-  const profiles = new Map(
-    list(payload.subjectProfiles).map((profile) => [text(profile.subject_slug), profile]),
-  );
-  let subjects = (Array.isArray(payload.subjects)
-    ? payload.subjects
-    : list(subjectsPayload.subjects)
-  ).flatMap((subject) => {
-    const slug = text(subject.slug) || (text(subject.name) ? text(subject.name).toLowerCase().replace(/[^a-z0-9]+/g, "-") : "");
-    const name = text(subject.name) || text(subject.slug);
+  const remoteSubjects = (
+    Array.isArray(payload.subjects) ? payload.subjects : list(subjectsPayload.subjects)
+  ).map(asRecord);
+  const subjects: TeacherSubject[] = list(payload.subjectProfiles).flatMap((profile) => {
+    const slug = text(profile.subject_slug);
+    const name = text(profile.subject_name);
     if (!slug || !name) return [];
-    const profile = profiles.get(slug) || {};
+    const remote =
+      remoteSubjects.find((subject) => text(subject.slug) === slug) ||
+      remoteSubjects.find(
+        (subject) =>
+          text(subject.folder_path) === text(profile.folder_path) ||
+          text(subject.name).toLowerCase() === name.toLowerCase(),
+      ) ||
+      {};
     return [
       {
         slug,
         name,
-        folderPath: text(subject.folder_path) || name,
+        folderPath: text(profile.folder_path) || text(remote.folder_path) || name,
         code: text(profile.subject_code),
         university: text(profile.university),
         programme: text(profile.programme),
+        visibility: profile.visibility === "public" ? "public" : "private",
       },
     ];
   });
   const rawDocuments = Array.isArray(payload.documents)
     ? list(payload.documents)
     : list(asRecord(payload.documents).documents);
-
-  if (!subjects.length) {
-    const discovered = new Set<string>();
-    const tree = asRecord(payload.sourceTree);
-    if (Array.isArray(tree.children)) {
-      for (const child of tree.children as ApiRecord[]) {
-        const folderName = text(child.name);
-        if (folderName) discovered.add(folderName);
-      }
-    } else {
-      for (const key of Object.keys(tree)) {
-        if (key && !key.startsWith(".") && key !== "files" && key !== "folders") {
-          discovered.add(key);
-        }
-      }
-    }
-    for (const doc of rawDocuments) {
-      const p = text(doc.path) || text(doc.source_path) || text(doc.source_file);
-      const top = p.split("/")[0];
-      if (top && top !== "root") discovered.add(top);
-    }
-    subjects = Array.from(discovered).map((name) => {
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      const profile = profiles.get(slug) || {};
-      return {
-        slug,
-        name: titleCase(name),
-        folderPath: name,
-        code: text(profile.subject_code),
-        university: text(profile.university),
-        programme: text(profile.programme),
-      };
-    });
-  }
 
   const previewPaths = new Set(
     Array.isArray(payload.previewPaths)
@@ -587,7 +559,9 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
         institution: text(asRecord(asRecord(payload.teacher).publicProfile).institution),
         location: text(asRecord(asRecord(payload.teacher).publicProfile).location),
         expertise: stringList(asRecord(asRecord(payload.teacher).publicProfile).expertise),
-        yearsExperience: numberValue(asRecord(asRecord(payload.teacher).publicProfile).yearsExperience),
+        yearsExperience: numberValue(
+          asRecord(asRecord(payload.teacher).publicProfile).yearsExperience,
+        ),
         website: text(asRecord(asRecord(payload.teacher).publicProfile).website),
         avatarUrl: text(asRecord(asRecord(payload.teacher).publicProfile).avatarUrl),
         complete: Boolean(asRecord(asRecord(payload.teacher).publicProfile).complete),
@@ -1891,9 +1865,12 @@ function TodayView({
       {!profileComplete ? (
         <section className="mt-5 flex flex-col gap-4 rounded-xl border border-border bg-bg-primary p-5 sm:flex-row sm:items-center">
           <div>
-            <h2 className="font-display text-lg font-semibold">Your public teacher profile is not complete</h2>
+            <h2 className="font-display text-lg font-semibold">
+              Your public teacher profile is not complete
+            </h2>
             <p className="mt-1 text-sm text-text-secondary">
-              Add your photo, expertise, institution, and bio so students know who created each course.
+              Add your photo, expertise, institution, and bio so students know who created each
+              course.
             </p>
           </div>
           <span className="flex-1" />
@@ -1923,46 +1900,68 @@ function TodayView({
       </section>
 
       {/* Real Live Collection & Teacher Stats Grid */}
-      <section className="mt-5 grid grid-cols-2 gap-3.5 sm:grid-cols-4" aria-label="Collection summary">
+      <section
+        className="mt-5 grid grid-cols-2 gap-3.5 sm:grid-cols-4"
+        aria-label="Collection summary"
+      >
         <div className="rounded-xl border border-border bg-bg-surface p-4">
           <p className="text-xs font-medium text-text-muted">Indexed subjects</p>
-          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">{subjectCount}</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">
+            {subjectCount}
+          </p>
         </div>
         <div className="rounded-xl border border-border bg-bg-surface p-4">
           <p className="text-xs font-medium text-text-muted">Files</p>
-          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">{documentCount}</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">
+            {documentCount}
+          </p>
         </div>
         <div className="rounded-xl border border-border bg-bg-surface p-4">
           <p className="text-xs font-medium text-text-muted">Indexed sections</p>
-          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">{sectionCount}</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">
+            {sectionCount}
+          </p>
         </div>
         <div className="rounded-xl border border-border bg-bg-surface p-4">
           <p className="text-xs font-medium text-text-muted">Enrolled students</p>
-          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">{summary.studentCount}</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-text-primary">
+            {summary.studentCount}
+          </p>
         </div>
       </section>
 
       {/* Real Live AI Usage Tokens Grid */}
-      <section className="mt-4 rounded-xl border border-border bg-bg-surface p-5" aria-label="AI usage">
+      <section
+        className="mt-4 rounded-xl border border-border bg-bg-surface p-5"
+        aria-label="AI usage"
+      >
         <div className="flex items-center justify-between">
-          <h3 className="font-display text-base font-semibold text-text-primary">AI processing & token usage</h3>
+          <h3 className="font-display text-base font-semibold text-text-primary">
+            AI processing & token usage
+          </h3>
           <span className="text-xs text-text-muted">Live from collection</span>
         </div>
         <div className="mt-4 grid grid-cols-3 gap-3">
           <div className="rounded-lg bg-bg-secondary p-3.5">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-text-muted">Total tokens</p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-text-muted">
+              Total tokens
+            </p>
             <p className="mt-1.5 font-display text-xl font-semibold text-text-primary">
               {usageState === "loading" ? "…" : Number(totalTokens).toLocaleString()}
             </p>
           </div>
           <div className="rounded-lg bg-bg-secondary p-3.5">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-text-muted">Input tokens</p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-text-muted">
+              Input tokens
+            </p>
             <p className="mt-1.5 font-display text-xl font-semibold text-text-primary">
               {usageState === "loading" ? "…" : Number(inputTokens).toLocaleString()}
             </p>
           </div>
           <div className="rounded-lg bg-bg-secondary p-3.5">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-text-muted">Output tokens</p>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-text-muted">
+              Output tokens
+            </p>
             <p className="mt-1.5 font-display text-xl font-semibold text-text-primary">
               {usageState === "loading" ? "…" : Number(outputTokens).toLocaleString()}
             </p>
@@ -1987,8 +1986,6 @@ function TodayView({
         </div>
         <TeacherCoursesOverview onOpen={onCourses} />
       </section>
-
-
     </>
   );
 }
@@ -7120,7 +7117,9 @@ function TeacherSettingsView({
   const [institution, setInstitution] = useState(teacher.publicProfile.institution);
   const [location, setLocation] = useState(teacher.publicProfile.location);
   const [expertise, setExpertise] = useState(teacher.publicProfile.expertise.join(", "));
-  const [yearsExperience, setYearsExperience] = useState(String(teacher.publicProfile.yearsExperience || ""));
+  const [yearsExperience, setYearsExperience] = useState(
+    String(teacher.publicProfile.yearsExperience || ""),
+  );
   const [website, setWebsite] = useState(teacher.publicProfile.website);
   const [avatar, setAvatar] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState(teacher.publicProfile.avatarUrl);
@@ -7190,9 +7189,15 @@ function TeacherSettingsView({
             <div className="grid size-24 shrink-0 place-items-center overflow-hidden rounded-full border border-border bg-bg-secondary">
               {avatarPreview ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatarPreview} alt="Teacher profile preview" className="h-full w-full object-cover" />
+                <img
+                  src={avatarPreview}
+                  alt="Teacher profile preview"
+                  className="h-full w-full object-cover"
+                />
               ) : (
-                <span className="font-display text-2xl font-semibold" aria-hidden="true">{initials(fullName || teacher.handle)}</span>
+                <span className="font-display text-2xl font-semibold" aria-hidden="true">
+                  {initials(fullName || teacher.handle)}
+                </span>
               )}
             </div>
             <div className="min-w-0 flex-1">
@@ -7200,7 +7205,10 @@ function TeacherSettingsView({
               <p className="mt-1 text-sm text-text-secondary">
                 Give students enough context to trust the person behind the course.
               </p>
-              <label htmlFor="teacher-avatar" className="mt-4 inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-border px-4 text-sm font-medium hover:bg-bg-secondary">
+              <label
+                htmlFor="teacher-avatar"
+                className="mt-4 inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-border px-4 text-sm font-medium hover:bg-bg-secondary"
+              >
                 {avatarPreview ? "Change photo" : "Add profile photo"}
               </label>
               <input
@@ -7225,37 +7233,119 @@ function TeacherSettingsView({
 
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <div>
-              <label htmlFor="teacher-full-name" className="text-sm font-medium">Display name</label>
-              <input id="teacher-full-name" value={fullName} onChange={(event) => setFullName(event.target.value)} maxLength={120} autoComplete="name" className={cn(inputClass, "mt-2")} />
+              <label htmlFor="teacher-full-name" className="text-sm font-medium">
+                Display name
+              </label>
+              <input
+                id="teacher-full-name"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                maxLength={120}
+                autoComplete="name"
+                className={cn(inputClass, "mt-2")}
+              />
             </div>
             <div>
-              <label htmlFor="teacher-headline" className="text-sm font-medium">Professional headline</label>
-              <input id="teacher-headline" value={headline} onChange={(event) => setHeadline(event.target.value)} maxLength={120} placeholder="Computer Science educator" className={cn(inputClass, "mt-2")} />
+              <label htmlFor="teacher-headline" className="text-sm font-medium">
+                Professional headline
+              </label>
+              <input
+                id="teacher-headline"
+                value={headline}
+                onChange={(event) => setHeadline(event.target.value)}
+                maxLength={120}
+                placeholder="Computer Science educator"
+                className={cn(inputClass, "mt-2")}
+              />
             </div>
             <div>
-              <label htmlFor="teacher-institution" className="text-sm font-medium">Institution</label>
-              <input id="teacher-institution" value={institution} onChange={(event) => setInstitution(event.target.value)} maxLength={120} placeholder="Tribhuvan University" autoComplete="organization" className={cn(inputClass, "mt-2")} />
+              <label htmlFor="teacher-institution" className="text-sm font-medium">
+                Institution
+              </label>
+              <input
+                id="teacher-institution"
+                value={institution}
+                onChange={(event) => setInstitution(event.target.value)}
+                maxLength={120}
+                placeholder="Tribhuvan University"
+                autoComplete="organization"
+                className={cn(inputClass, "mt-2")}
+              />
             </div>
             <div>
-              <label htmlFor="teacher-location" className="text-sm font-medium">Location</label>
-              <input id="teacher-location" value={location} onChange={(event) => setLocation(event.target.value)} maxLength={100} placeholder="Kathmandu, Nepal" autoComplete="address-level2" className={cn(inputClass, "mt-2")} />
+              <label htmlFor="teacher-location" className="text-sm font-medium">
+                Location
+              </label>
+              <input
+                id="teacher-location"
+                value={location}
+                onChange={(event) => setLocation(event.target.value)}
+                maxLength={100}
+                placeholder="Kathmandu, Nepal"
+                autoComplete="address-level2"
+                className={cn(inputClass, "mt-2")}
+              />
             </div>
             <div>
-              <label htmlFor="teacher-expertise" className="text-sm font-medium">Expertise</label>
-              <input id="teacher-expertise" value={expertise} onChange={(event) => setExpertise(event.target.value)} maxLength={480} placeholder="Programming, Data Structures, C++" className={cn(inputClass, "mt-2")} />
+              <label htmlFor="teacher-expertise" className="text-sm font-medium">
+                Expertise
+              </label>
+              <input
+                id="teacher-expertise"
+                value={expertise}
+                onChange={(event) => setExpertise(event.target.value)}
+                maxLength={480}
+                placeholder="Programming, Data Structures, C++"
+                className={cn(inputClass, "mt-2")}
+              />
               <p className="mt-2 text-xs text-text-muted">Separate up to 8 areas with commas.</p>
             </div>
             <div>
-              <label htmlFor="teacher-experience" className="text-sm font-medium">Years of teaching</label>
-              <input id="teacher-experience" type="text" inputMode="numeric" pattern="[0-9]*" value={yearsExperience} onChange={(event) => setYearsExperience(event.target.value.replace(/\D/g, "").slice(0, 2))} placeholder="5" className={cn(inputClass, "mt-2")} />
+              <label htmlFor="teacher-experience" className="text-sm font-medium">
+                Years of teaching
+              </label>
+              <input
+                id="teacher-experience"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={yearsExperience}
+                onChange={(event) =>
+                  setYearsExperience(event.target.value.replace(/\D/g, "").slice(0, 2))
+                }
+                placeholder="5"
+                className={cn(inputClass, "mt-2")}
+              />
             </div>
             <div className="sm:col-span-2">
-              <label htmlFor="teacher-website" className="text-sm font-medium">Website <span className="text-text-muted">(optional)</span></label>
-              <input id="teacher-website" type="url" inputMode="url" value={website} onChange={(event) => setWebsite(event.target.value)} maxLength={240} placeholder="https://yourwebsite.com" autoComplete="url" className={cn(inputClass, "mt-2")} />
+              <label htmlFor="teacher-website" className="text-sm font-medium">
+                Website <span className="text-text-muted">(optional)</span>
+              </label>
+              <input
+                id="teacher-website"
+                type="url"
+                inputMode="url"
+                value={website}
+                onChange={(event) => setWebsite(event.target.value)}
+                maxLength={240}
+                placeholder="https://yourwebsite.com"
+                autoComplete="url"
+                className={cn(inputClass, "mt-2")}
+              />
             </div>
             <div className="sm:col-span-2">
-              <label htmlFor="teacher-bio" className="text-sm font-medium">About you</label>
-              <textarea id="teacher-bio" value={bio} onChange={(event) => setBio(event.target.value)} maxLength={600} rows={5} placeholder="Tell students what you teach and how you help them prepare." className={cn(inputClass, "mt-2 min-h-32 py-3")} />
+              <label htmlFor="teacher-bio" className="text-sm font-medium">
+                About you
+              </label>
+              <textarea
+                id="teacher-bio"
+                value={bio}
+                onChange={(event) => setBio(event.target.value)}
+                maxLength={600}
+                rows={5}
+                placeholder="Tell students what you teach and how you help them prepare."
+                className={cn(inputClass, "mt-2 min-h-32 py-3")}
+              />
               <p className="mt-2 text-xs text-text-muted">{bio.length}/600 characters</p>
             </div>
           </div>
@@ -7332,6 +7422,16 @@ function SubjectsView({
                 )}
               >
                 <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize",
+                      subject.visibility === "public"
+                        ? "border-success/30 bg-success/10 text-success"
+                        : "border-border bg-bg-secondary text-text-secondary",
+                    )}
+                  >
+                    {subject.visibility}
+                  </span>
                   {subject.code ? (
                     <span className="rounded-full border border-border px-2.5 py-0.5 font-mono text-xs">
                       {subject.code}
@@ -7341,7 +7441,9 @@ function SubjectsView({
                     {documents.length} files
                   </span>
                 </div>
-                <h2 className="mt-4 font-display text-xl font-semibold">{titleCase(subject.name)}</h2>
+                <h2 className="mt-4 font-display text-xl font-semibold">
+                  {titleCase(subject.name)}
+                </h2>
                 {subject.programme || subject.university ? (
                   <p className="mt-1 truncate text-xs text-text-secondary">
                     {[subject.programme, subject.university].filter(Boolean).join(" · ")}
@@ -7354,9 +7456,9 @@ function SubjectsView({
         </div>
       ) : (
         <section className="mt-8 rounded-lg border border-dashed border-border p-10 text-center">
-          <h2 className="font-display text-xl font-semibold">No subjects yet</h2>
+          <h2 className="font-display text-xl font-semibold">No subjects created yet</h2>
           <p className="mt-2 text-sm text-text-secondary">
-            Create the first subject, then add its syllabus and material.
+            Create your first subject, choose Public or Private, then add its syllabus and material.
           </p>
           <Button className="mt-5" onClick={onCreate}>
             Create first subject
@@ -7825,9 +7927,15 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
                         {[text(unit.number), insightName(unit)].filter(Boolean).join(" ") ||
                           `Unit ${index + 1}`}
                       </td>
-                      <td className="w-1/5 px-5 py-3.5 text-center font-mono text-xs text-text-secondary">{notes}</td>
-                      <td className="w-1/5 px-5 py-3.5 text-center font-mono text-xs text-text-secondary">{questions}</td>
-                      <td className="w-1/5 px-5 py-3.5 text-center font-mono text-xs text-text-secondary">{marks || "—"}</td>
+                      <td className="w-1/5 px-5 py-3.5 text-center font-mono text-xs text-text-secondary">
+                        {notes}
+                      </td>
+                      <td className="w-1/5 px-5 py-3.5 text-center font-mono text-xs text-text-secondary">
+                        {questions}
+                      </td>
+                      <td className="w-1/5 px-5 py-3.5 text-center font-mono text-xs text-text-secondary">
+                        {marks || "—"}
+                      </td>
                     </tr>
                   );
                 })}
@@ -7853,7 +7961,9 @@ function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
               Every AI call made for asking, generating, grading, and parsing is recorded for this
               teacher collection only.
             </p>
-            <p className="mt-4 font-display text-2xl font-semibold">{metricLabel(totalTokens)} total</p>
+            <p className="mt-4 font-display text-2xl font-semibold">
+              {metricLabel(totalTokens)} total
+            </p>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {[
@@ -8417,7 +8527,8 @@ function TestChat({
               <div>
                 <h2 className="font-display text-xl font-semibold">Test the student experience</h2>
                 <p className="mt-2 max-w-md text-sm leading-6 text-text-secondary">
-                  Ask a question and verify that the answer stays grounded in {titleCase(subject.name)}.
+                  Ask a question and verify that the answer stays grounded in{" "}
+                  {titleCase(subject.name)}.
                 </p>
               </div>
             </div>
@@ -8501,6 +8612,7 @@ function CreateSubjectDialog({
   const [name, setName] = useState("");
   const [university, setUniversity] = useState("");
   const [programme, setProgramme] = useState("");
+  const [visibility, setVisibility] = useState<"public" | "private">("private");
   const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
   const [syllabusDropActive, setSyllabusDropActive] = useState(false);
   const [syllabusText, setSyllabusText] = useState("");
@@ -8614,6 +8726,7 @@ function CreateSubjectDialog({
               name: clean,
               university: university.trim(),
               programme: programme.trim(),
+              visibility,
             }),
           }),
         );
@@ -8683,8 +8796,7 @@ function CreateSubjectDialog({
       if (failedUploads.length) {
         const details = failedUploads
           .map(
-            (failure) =>
-              `${uploadShelfLabel(failure.shelf)} — ${failure.name}: ${failure.error}`,
+            (failure) => `${uploadShelfLabel(failure.shelf)} — ${failure.name}: ${failure.error}`,
           )
           .join("\n");
         setError(
@@ -8706,7 +8818,8 @@ function CreateSubjectDialog({
   }
 
   const stages = ["What it is", "Syllabus", "Material"];
-  const selectedFileCount = (syllabusFile || syllabusText.trim() ? 1 : 0) + materialFiles.length + bankFiles.length;
+  const selectedFileCount =
+    (syllabusFile || syllabusText.trim() ? 1 : 0) + materialFiles.length + bankFiles.length;
   return (
     <Dialog title="Add a subject" onClose={busy ? () => undefined : onClose}>
       <ol className="mb-7 grid grid-cols-3 gap-2" aria-label="Create subject progress">
@@ -8807,6 +8920,52 @@ function CreateSubjectDialog({
               />
             </div>
           </div>
+          <fieldset className="mt-5 border-t border-border pt-5">
+            <legend className="text-sm font-medium">Who can access this subject?</legend>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  [
+                    "private",
+                    "Private",
+                    "Only you can study it. It stays in your personal library.",
+                  ],
+                  ["public", "Public", "You can attach it to a course after creating it."],
+                ] as const
+              ).map(([value, label, description]) => (
+                <label
+                  key={value}
+                  className={cn(
+                    "cursor-pointer rounded-lg border p-4",
+                    visibility === value
+                      ? "border-border-strong bg-bg-secondary"
+                      : "border-border hover:bg-bg-secondary/50",
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    <input
+                      type="radio"
+                      name="subject-visibility"
+                      value={value}
+                      checked={visibility === value}
+                      onChange={() => setVisibility(value)}
+                      className="size-4 accent-current"
+                    />
+                    {label}
+                  </span>
+                  <span className="mt-2 block text-xs leading-5 text-text-muted">
+                    {description}
+                  </span>
+                </label>
+              ))}
+            </div>
+            {visibility === "public" ? (
+              <p className="mt-4 text-xs leading-5 text-text-muted">
+                Public subjects become available in the course editor. Create or edit a course
+                later to attach this subject.
+              </p>
+            ) : null}
+          </fieldset>
           <div className="mt-6 flex justify-end gap-2 border-t border-border pt-5">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
@@ -9005,7 +9164,7 @@ function CreateSubjectDialog({
                 ? "border-border-strong bg-bg-secondary"
                 : materialFiles.length
                   ? "border-success bg-success/5"
-                : "border-border-strong hover:bg-bg-secondary",
+                  : "border-border-strong hover:bg-bg-secondary",
             )}
             onDragEnter={(event) => {
               event.preventDefault();
@@ -9030,9 +9189,9 @@ function CreateSubjectDialog({
                 ? materialFiles[0].name
                 : materialFiles.length > 1
                   ? selectedFilesTitle(materialFiles, "notes file", "notes files")
-                : materialDropActive
-                  ? "Drop notes here"
-                  : "Drop notes and study content here, or tap to choose"}
+                  : materialDropActive
+                    ? "Drop notes here"
+                    : "Drop notes and study content here, or tap to choose"}
             </span>
             <span className="mt-2 text-sm text-text-muted">
               {materialFiles.length
@@ -9091,7 +9250,7 @@ function CreateSubjectDialog({
                   ? "border-border-strong bg-bg-secondary"
                   : bankFiles.length
                     ? "border-success bg-success/5"
-                  : "border-border-strong hover:bg-bg-secondary",
+                    : "border-border-strong hover:bg-bg-secondary",
               )}
               onDragEnter={(event) => {
                 event.preventDefault();
@@ -9116,9 +9275,9 @@ function CreateSubjectDialog({
                   ? bankFiles[0].name
                   : bankFiles.length > 1
                     ? selectedFilesTitle(bankFiles, "question bank file", "question bank files")
-                  : bankDropActive
-                    ? "Drop question papers here"
-                    : "Drop question bank and past papers here, or tap to choose"}
+                    : bankDropActive
+                      ? "Drop question papers here"
+                      : "Drop question bank and past papers here, or tap to choose"}
               </span>
               <span className="mt-2 text-sm text-text-muted">
                 {bankFiles.length

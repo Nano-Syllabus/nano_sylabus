@@ -270,10 +270,12 @@ export function SubjectDetailClient({
   detail,
   courseName,
   readinessTarget,
+  isPrivate = false,
 }: {
   detail: StudentSubjectDetail;
   courseName: string;
   readinessTarget: number | null;
+  isPrivate?: boolean;
 }) {
   const [tab, setTab] = useState<"progress" | "exams" | "syllabus" | "material" | "bank">(
     "progress",
@@ -473,9 +475,16 @@ export function SubjectDetailClient({
 
       <div className="mb-7 flex flex-wrap items-start gap-4">
         <div className="min-w-0">
-          <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">
-            {titleCase(detail.name)}
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">
+              {titleCase(detail.name)}
+            </h1>
+            {isPrivate ? (
+              <span className="inline-flex rounded-full border border-border-strong bg-bg-tertiary px-2.5 py-1 text-xs font-medium text-text-primary">
+                Private
+              </span>
+            ) : null}
+          </div>
           <p className="mt-3 text-sm text-text-secondary">
             {topicsState === "ready" ? `${chapters.length} chapters · ` : ""}
             {detail.documentCount} file{detail.documentCount === 1 ? "" : "s"}

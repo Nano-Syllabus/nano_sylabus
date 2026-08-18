@@ -3,14 +3,12 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   getStudentCourseSubjectAccess,
   getStudentCourseSubjectAccessForCourse,
+  listCreatorPrivateSubjectAccess,
   listStudentCourses,
   type StudentCourseSubjectAccess,
 } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import {
-  getTenantSourceTree,
-  type TenantSourceTreeNode,
-} from "@/lib/tenant/client";
+import { getTenantSourceTree, type TenantSourceTreeNode } from "@/lib/tenant/client";
 
 export const dynamic = "force-dynamic";
 
@@ -153,16 +151,12 @@ async function loadSubjectMaterials(
     const normalizedFolderLower = normalizedFolder.toLowerCase();
     files = ((data || []) as DbMaterialFile[])
       .filter((row) => {
-        const candidate = (row.collection_path || "")
-          .replace(/^\/+|\/+$/g, "")
-          .toLowerCase();
+        const candidate = (row.collection_path || "").replace(/^\/+|\/+$/g, "").toLowerCase();
         return candidate.startsWith(`${normalizedFolderLower}/`);
       })
       .map((row) => {
         const collectionPath = row.collection_path || "";
-        const relativePath = collectionPath
-          .slice(normalizedFolder.length)
-          .replace(/^\/+/, "");
+        const relativePath = collectionPath.slice(normalizedFolder.length).replace(/^\/+/, "");
         const parts = relativePath.split("/").filter(Boolean);
         const fileName = row.original_name || parts.at(-1) || "Document.pdf";
         return {
@@ -186,7 +180,7 @@ async function loadSubjectMaterials(
     try {
       const tree = sourceTreePromise
         ? await sourceTreePromise
-        : (await withTimeout(getTenantSourceTree(), 6_000)).tree ?? [];
+        : ((await withTimeout(getTenantSourceTree(), 6_000)).tree ?? []);
       const folder = findFolder(tree, access.folderPath.split("/").filter(Boolean));
       if (folder && folder.length > 0) {
         files = collectFiles(folder);
@@ -219,11 +213,14 @@ export async function GET(request: Request) {
     // course subject. This keeps the library useful before the chat composer
     // has a subject context.
     if (!requested) {
-      const courses = await listStudentCourses(user.id, admin);
+      const [courses, privateSubjects] = await Promise.all([
+        listStudentCourses(user.id, admin),
+        listCreatorPrivateSubjectAccess(user.id, admin),
+      ]);
       const sourceTreePromise = getTenantSourceTree()
         .then((result) => result.tree ?? [])
         .catch(() => [] as TenantSourceTreeNode[]);
-      const entries = (
+      const courseEntries = (
         await Promise.all(
           courses.flatMap((course) =>
             course.subjects.map(async (courseSubject) => {
@@ -248,8 +245,18 @@ export async function GET(request: Request) {
         )
       ).filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
 
+      const privateEntries = await Promise.all(
+        privateSubjects.map(async (access) => ({
+          courseId: access.courseId,
+          courseName: "Private",
+          private: true,
+          subject: { name: access.subjectName, slug: access.subjectSlug },
+          materials: await loadSubjectMaterials(access, admin, sourceTreePromise),
+        })),
+      );
+
       return NextResponse.json(
-        { subjects: entries },
+        { subjects: [...courseEntries, ...privateEntries] },
         { headers: NO_STORE_HEADERS },
       );
     }

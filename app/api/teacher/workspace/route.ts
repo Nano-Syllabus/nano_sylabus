@@ -41,7 +41,9 @@ export async function GET() {
         .eq("teacher_id", teacher.id),
       admin
         .from("teacher_subject_profiles")
-        .select("subject_slug,subject_name,subject_code,university,programme")
+        .select(
+          "subject_slug,subject_name,subject_code,university,programme,visibility,folder_path",
+        )
         .eq("teacher_id", teacher.id),
     ]);
     const { data: profile } = await admin
@@ -49,10 +51,7 @@ export async function GET() {
       .select("full_name,language_pref")
       .eq("user_id", user.id)
       .maybeSingle();
-    const publicProfile = await withTeacherAvatar(
-      admin,
-      profileFromUser(user, teacher.handle),
-    );
+    const publicProfile = await withTeacherAvatar(admin, profileFromUser(user, teacher.handle));
 
     return NextResponse.json({
       teacher: {

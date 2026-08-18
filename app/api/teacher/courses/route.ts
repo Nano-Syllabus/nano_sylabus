@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getTeacherSubjects } from "@/lib/teacher-app/client";
 import {
   teacherCourseInputSchema,
   teacherCourseRow,
@@ -14,16 +13,27 @@ import {
   listTeacherCourses,
 } from "@/lib/teacher-course-store";
 
-type ApiRecord = Record<string, unknown>;
-
-function resolveSubjects(available: ApiRecord[], requestedSlugs: string[]) {
-  const bySlug = new Map(available.map((subject) => [String(subject.slug || ""), subject]));
+async function resolveSubjects(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  teacherId: string,
+  requestedSlugs: string[],
+) {
+  if (!requestedSlugs.length) return [];
+  const result = await admin
+    .from("teacher_subject_profiles")
+    .select("subject_slug,subject_name,folder_path,visibility")
+    .eq("teacher_id", teacherId)
+    .in("subject_slug", requestedSlugs);
+  if (result.error) throw result.error;
+  const bySlug = new Map((result.data || []).map((subject) => [String(subject.subject_slug || ""), subject]));
   return requestedSlugs.map((slug, position) => {
     const subject = bySlug.get(slug);
-    if (!subject) throw new Error(`Indexed subject not found: ${slug}`);
+    if (!subject || subject.visibility !== "public") {
+      throw new Error(`Only public created subjects can be added to a course: ${slug}`);
+    }
     return {
       subject_slug: slug,
-      subject_name: String(subject.name || slug),
+      subject_name: String(subject.subject_name || slug),
       folder_path: String(subject.folder_path || ""),
       position,
     };
@@ -68,10 +78,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const teacherSubjects = await getTeacherSubjects(teacher.collection_sk);
+    const admin = createSupabaseAdminClient();
     let subjects;
     try {
-      subjects = resolveSubjects(teacherSubjects.subjects, parsed.data.subjectSlugs);
+      subjects = await resolveSubjects(admin, teacher.id, parsed.data.subjectSlugs);
     } catch (error) {
       return NextResponse.json(
         { error: error instanceof Error ? error.message : "Subject not found." },
@@ -79,7 +89,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = createSupabaseAdminClient();
     const assignedSubjects = await findAssignedCourseSubjects(
       admin,
       teacher.id,
@@ -104,13 +113,15 @@ export async function POST(request: Request) {
       .single();
     if (courseResult.error) throw courseResult.error;
 
-    const subjectResult = await admin.from("teacher_course_subjects").insert(
-      subjects.map((subject) => ({
-        course_id: courseResult.data.id,
-        teacher_id: teacher.id,
-        ...subject,
-      })),
-    );
+    const subjectResult = subjects.length
+      ? await admin.from("teacher_course_subjects").insert(
+          subjects.map((subject) => ({
+            course_id: courseResult.data.id,
+            teacher_id: teacher.id,
+            ...subject,
+          })),
+        )
+      : { error: null };
     if (subjectResult.error) {
       await admin.from("teacher_courses").delete().eq("id", courseResult.data.id);
       if (isCourseSubjectOwnershipConflict(subjectResult.error)) {
@@ -120,6 +131,15 @@ export async function POST(request: Request) {
         );
       }
       throw subjectResult.error;
+    }
+
+    if (subjects.length) {
+      const profileResult = await admin
+        .from("teacher_subject_profiles")
+        .update({ visibility: "public", updated_at: new Date().toISOString() })
+        .eq("teacher_id", teacher.id)
+        .in("subject_slug", parsed.data.subjectSlugs);
+      if (profileResult.error) throw profileResult.error;
     }
 
     const courses = await listTeacherCourses(admin, teacher.id);

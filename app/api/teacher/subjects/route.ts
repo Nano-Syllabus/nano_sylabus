@@ -18,6 +18,7 @@ const subjectSetupSchema = z.object({
   code: z.string().trim().max(40).optional().default(""),
   university: z.string().trim().max(120).optional().default(""),
   programme: z.string().trim().max(120).optional().default(""),
+  visibility: z.enum(["public", "private"]).default("private"),
 });
 
 export async function POST(request: Request) {
@@ -36,30 +37,45 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid subject setup." }, { status: 400 });
+    }
+
+    const admin = createSupabaseAdminClient();
     const subject = await createTeacherSubject(teacher.collection_sk, name);
     let profileSaved = false;
-    if (parsed.success) {
-      try {
-        const admin = createSupabaseAdminClient();
-        const { error } = await admin.from("teacher_subject_profiles").upsert(
-          {
-            teacher_id: teacher.id,
-            subject_slug: String(subject.slug),
-            subject_name: name,
-            subject_code: parsed.data.code,
-            university: parsed.data.university,
-            programme: parsed.data.programme,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "teacher_id,subject_slug" },
-        );
-        profileSaved = !error;
-      } catch {
-        // Subject creation must remain usable before the optional profile
-        // migration is applied. Collection files and retrieval are unaffected.
-      }
+    try {
+      const { error } = await admin.from("teacher_subject_profiles").upsert(
+        {
+          teacher_id: teacher.id,
+          subject_slug: String(subject.slug),
+          subject_name: name,
+          folder_path: String(subject.folder_path || name),
+          subject_code: parsed.data.code,
+          university: parsed.data.university,
+          programme: parsed.data.programme,
+          visibility: parsed.data.visibility,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "teacher_id,subject_slug" },
+      );
+      if (error) throw error;
+      profileSaved = true;
+    } catch (storageError) {
+      return NextResponse.json(
+        {
+          error:
+            storageError instanceof Error
+              ? storageError.message
+              : "The subject was created, but its privacy settings could not be saved.",
+        },
+        { status: 502 },
+      );
     }
-    return NextResponse.json({ subject, profileSaved }, { status: 201 });
+    return NextResponse.json(
+      { subject, profileSaved, visibility: parsed.data.visibility },
+      { status: 201 },
+    );
   } catch (error) {
     const apiError = error instanceof TeacherApiError ? error : null;
     const invalidKey = apiError?.status === 401;
