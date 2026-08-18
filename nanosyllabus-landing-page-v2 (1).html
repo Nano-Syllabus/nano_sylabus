@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NanoSyllabus — Know where you stand before the exam</title>
+  <meta name="description" content="Practice your actual exam before the real exam. Upload your syllabus. NanoSyllabus becomes your personal exam coach." />
+  <style>
+    :root{
+      --ink:#111b33;
+      --muted:#66738a;
+      --muted-2:#8b96a8;
+      --blue:#2f6fff;
+      --blue-dark:#2057d5;
+      --cyan:#58d7ff;
+      --green:#14a68f;
+      --bg:#f7faff;
+      --white:#fff;
+      --line:#e3e9f2;
+      --dark:#07101e;
+      --dark-2:#0a1422;
+      --shadow:0 24px 70px rgba(29,54,100,.12);
+      --max:1180px;
+      --radius:22px;
+    }
+
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      color:var(--ink);
+      font-family:Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:var(--white);
+      line-height:1.55;
+      -webkit-font-smoothing:antialiased;
+    }
+    a{color:inherit;text-decoration:none}
+    button{font:inherit}
+    .container{width:min(var(--max),calc(100% - 48px));margin:0 auto}
+
+    /* Header */
+    .nav{
+      position:sticky;top:0;z-index:100;
+      background:rgba(255,255,255,.9);
+      backdrop-filter:blur(16px);
+      border-bottom:1px solid rgba(19,34,60,.08);
+    }
+    .nav-inner{
+      height:78px;
+      display:flex;align-items:center;justify-content:space-between;
+      gap:32px;
+    }
+    .brand{display:flex;align-items:center;gap:10px;font-weight:850;letter-spacing:-.03em}
+    .brand-mark{
+      width:27px;height:27px;border-radius:8px;position:relative;
+      background:linear-gradient(135deg,#2f6fff,#62b6ff);
+      box-shadow:0 8px 20px rgba(47,111,255,.18);
+    }
+    .brand-mark:before,.brand-mark:after{
+      content:"";position:absolute;background:#fff;border-radius:999px;
+    }
+    .brand-mark:before{width:10px;height:4px;left:8px;top:8px;transform:rotate(-20deg)}
+    .brand-mark:after{width:8px;height:4px;left:10px;top:14px;transform:rotate(24deg);opacity:.88}
+    .brand span{font-size:15px}
+    .nav-links{display:flex;gap:30px;align-items:center;color:#425067;font-size:14px}
+    .nav-links a:hover{color:var(--ink)}
+    .nav-actions{display:flex;gap:10px;align-items:center}
+    .btn{
+      display:inline-flex;justify-content:center;align-items:center;gap:8px;
+      border-radius:12px;padding:12px 17px;border:1px solid transparent;
+      font-size:13px;font-weight:800;transition:.2s ease;cursor:pointer;
+    }
+    .btn-primary{background:var(--blue);color:#fff;box-shadow:0 14px 28px rgba(47,111,255,.18)}
+    .btn-primary:hover{background:var(--blue-dark);transform:translateY(-1px)}
+    .btn-outline{border-color:#cbd5e3;background:#fff;color:var(--ink)}
+    .btn-outline:hover{border-color:#99a8bc;background:#f8fbff}
+    .menu{display:none}
+
+    /* Hero */
+    .hero{
+      position:relative;
+      overflow:hidden;
+      text-align:center;
+      padding:116px 0 105px;
+      background:
+        radial-gradient(circle at 28% 36%,rgba(153,244,143,.18),transparent 24%),
+        radial-gradient(circle at 67% 30%,rgba(71,207,255,.18),transparent 28%),
+        linear-gradient(180deg,#ffffff 0%,#fbffff 44%,#f7fbff 100%);
+    }
+    .hero:after{
+      content:"";
+      position:absolute;
+      left:-10%;right:-10%;bottom:-160px;height:300px;
+      background:radial-gradient(ellipse at center,rgba(47,111,255,.12),transparent 65%);
+      pointer-events:none;
+    }
+    .eyebrow{
+      display:inline-flex;align-items:center;gap:8px;
+      color:#3f6fd7;font-size:11px;font-weight:850;
+      letter-spacing:.08em;text-transform:uppercase;
+    }
+    .dot{width:6px;height:6px;border-radius:50%;background:var(--blue)}
+    h1{
+      margin:20px auto 0;
+      max-width:920px;
+      font-size:clamp(48px,6vw,78px);
+      line-height:1.01;letter-spacing:-.06em;
+      font-weight:900;
+    }
+    .grad{
+      background:linear-gradient(90deg,#2d66ec,#4f8cff 48%,#58c9ff);
+      -webkit-background-clip:text;background-clip:text;color:transparent;
+    }
+    .hero p{
+      max-width:670px;margin:24px auto 0;
+      color:#68758a;font-size:16px;
+    }
+    .actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:30px}
+    .micro-proof{
+      display:flex;justify-content:center;gap:14px;flex-wrap:wrap;
+      margin-top:35px;color:#707d90;font-size:11px;
+    }
+    .micro-proof span{display:flex;align-items:center;gap:6px}
+    .micro-proof i{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;color:var(--blue);background:#eef4ff;font-style:normal;font-size:9px}
+
+    /* Product visual */
+    .product-wrap{margin:58px auto 0;max-width:1010px;position:relative}
+    .product{
+      border:1px solid #dce5f1;background:#fff;border-radius:26px;box-shadow:var(--shadow);
+      overflow:hidden;text-align:left;
+    }
+    .product-top{
+      height:48px;display:flex;align-items:center;justify-content:space-between;
+      padding:0 18px;border-bottom:1px solid #e8edf4;background:#fbfcfe;
+    }
+    .browser-dots{display:flex;gap:6px}.browser-dots span{width:7px;height:7px;background:#c5ceda;border-radius:50%}
+    .product-title{font-size:11px;color:#6d798d;font-weight:700}
+    .product-grid{display:grid;grid-template-columns:1.05fr .95fr}
+    .visual-pane{padding:24px;background:linear-gradient(180deg,#f9fbff,#fff)}
+    .side-pane{padding:24px;background:#fff;border-left:1px solid #e9eef5}
+    .label{font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#7e899c;font-weight:900}
+    .readiness{
+      margin-top:12px;padding:20px;border-radius:18px;
+      background:linear-gradient(135deg,#f7fbff,#fff);
+      border:1px solid #e0e7f1;
+      display:flex;align-items:center;gap:24px;
+    }
+    .ring{
+      width:128px;height:128px;border-radius:50%;
+      display:grid;place-items:center;position:relative;flex:none;
+      background:conic-gradient(var(--blue) 0 72%,#e9eef5 72% 100%);
+    }
+    .ring:after{content:"";position:absolute;inset:12px;border-radius:50%;background:white}
+    .ring strong{position:relative;z-index:2;font-size:28px;letter-spacing:-.04em}
+    .visual-pane h3{font-size:19px;margin:0 0 5px;letter-spacing:-.03em}
+    .small{font-size:11px;color:#7c899d}
+    .bars{margin-top:14px;display:grid;gap:9px;min-width:0}
+    .bar{display:grid;grid-template-columns:75px 1fr 26px;gap:8px;align-items:center;font-size:9px;color:#7b879a}
+    .track{height:6px;border-radius:99px;background:#edf1f6;overflow:hidden}.fill{height:100%;border-radius:99px}
+    .b1{background:linear-gradient(90deg,#3778ff,#63b1ff)}.b2{background:#19b28f}.b3{background:#eab24e}.b4{background:#ed6f79}
+    .metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+    .metric{padding:14px;border:1px solid #e5ebf3;border-radius:14px;background:#fbfcfe}.metric b{display:block;font-size:18px}.metric span{display:block;font-size:9px;color:#8290a2;margin-top:3px}
+    .next{margin-top:10px;padding:16px;border:1px solid #e4eaf2;border-radius:14px;background:#fbfcff}
+    .next b{font-size:12px;display:block}.next p{margin:5px 0 0;font-size:10px;color:#7c899b}
+
+    /* Sections */
+    section{padding:120px 0}
+    .white{background:#fff}
+    .soft{
+      background:
+        radial-gradient(circle at 20% 10%,rgba(145,238,140,.15),transparent 22%),
+        radial-gradient(circle at 80% 30%,rgba(88,215,255,.14),transparent 25%),
+        linear-gradient(180deg,#f9fdff,#f7faff);
+    }
+    .blue-fade{
+      background:
+        radial-gradient(circle at 50% 0%,rgba(68,128,255,.14),transparent 38%),
+        linear-gradient(180deg,#fff,#f6faff 52%,#fff);
+    }
+    .dark{
+      background:
+        radial-gradient(circle at 50% 0%,rgba(47,111,255,.18),transparent 28%),
+        linear-gradient(180deg,#07101e,#08111f);
+      color:#fff;
+    }
+    .section-head{max-width:740px}
+    .center{text-align:center;margin-left:auto;margin-right:auto}
+    .kicker{font-size:10px;text-transform:uppercase;letter-spacing:.15em;font-weight:900;color:#4c79d6}
+    .dark .kicker{color:#76a4ff}
+    h2{
+      margin:11px 0 15px;
+      font-size:clamp(34px,4.3vw,52px);
+      line-height:1.04;letter-spacing:-.055em;
+    }
+    .section-head p{margin:0;color:#738095;font-size:14px;max-width:640px}
+    .dark .section-head p{color:#93a1b5}
+
+    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:52px}
+    .card{
+      padding:28px;border:1px solid var(--line);background:#fff;border-radius:20px;
+      box-shadow:0 10px 30px rgba(29,54,100,.035);
+    }
+    .card.dark-card{background:rgba(255,255,255,.045);border-color:rgba(255,255,255,.1)}
+    .icon{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:#eef4ff;color:var(--blue);font-weight:900}
+    .dark-card .icon{background:rgba(84,145,255,.1)}
+    .card h3{margin:18px 0 8px;font-size:17px;letter-spacing:-.02em}
+    .card p{margin:0;color:#7d899a;font-size:13px}
+    .dark-card p{color:#97a5b8}
+
+    .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:52px}
+    .step{
+      padding:30px;border:1px solid #dde5ef;border-radius:20px;background:#fff;
+      position:relative;
+    }
+    .step-num{font-size:44px;font-weight:900;color:#d8e7ff;line-height:1}
+    .step h3{margin:20px 0 7px;font-size:17px}.step p{margin:0;color:#7c899b;font-size:13px}
+
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+    .checklist{margin-top:27px;display:grid;gap:12px}
+    .check{display:flex;gap:10px;align-items:flex-start;color:#526077;font-size:13px}
+    .check i{width:19px;height:19px;border-radius:50%;display:grid;place-items:center;background:#eaf9f4;color:#0d9a7f;font-style:normal;font-size:10px;flex:none}
+    .dashboard{
+      border:1px solid #dce5f0;border-radius:24px;background:#fff;padding:20px;box-shadow:var(--shadow)
+    }
+    .dash-head{display:flex;align-items:center;justify-content:space-between}.pill{font-size:9px;padding:6px 9px;border-radius:999px;background:#f0f5ff;color:#4577d8;font-weight:800}
+    .dash-title{font-size:13px;font-weight:850}.dash-sub{font-size:10px;color:#8390a2;margin-top:3px}
+    .dashboard-main{margin-top:16px;display:grid;grid-template-columns:150px 1fr;gap:20px;align-items:center}
+    .score-ring{
+      width:145px;height:145px;border-radius:50%;display:grid;place-items:center;
+      background:conic-gradient(var(--blue) 0 68%,#edf1f6 68% 100%);
+      position:relative;
+    }
+    .score-ring:after{content:"";position:absolute;inset:13px;background:#fff;border-radius:50%}
+    .score-ring b{z-index:2;position:relative;font-size:30px}
+    .topic-list{display:grid;gap:9px}.topic{display:grid;grid-template-columns:82px 1fr 28px;gap:8px;align-items:center;font-size:9px;color:#7e899b}
+    .topic .track{height:7px}
+    .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.stat{padding:13px;border:1px solid #e7ecf2;border-radius:14px;background:#fbfcfe}.stat b{display:block;font-size:19px}.stat span{font-size:9px;color:#8591a3}
+
+    .course-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:50px}
+    .course{
+      padding:22px;border:1px solid #dfe7f1;border-radius:18px;background:#fff;transition:.2s
+    }
+    .course:hover{transform:translateY(-3px);box-shadow:0 18px 42px rgba(29,54,100,.08)}
+    .course small{font-size:9px;font-weight:900;letter-spacing:.13em;color:#4e7ddd}.course h3{margin:12px 0 8px;font-size:16px}.course p{margin:0;color:#7d899b;font-size:11px}.course a{display:inline-block;margin-top:17px;font-size:11px;font-weight:850;color:var(--blue)}
+
+    .quote-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:50px}
+    .quote{padding:26px;border:1px solid rgba(255,255,255,.1);border-radius:20px;background:rgba(255,255,255,.045)}
+    .quote p{margin:0;color:#d0d8e4;font-size:13px}.quote footer{margin-top:20px;color:#8190a5;font-size:10px}
+
+    .cta{
+      text-align:center;
+      padding:115px 0 125px;
+      background:
+        radial-gradient(circle at 50% 0%,rgba(49,111,255,.18),transparent 34%),
+        linear-gradient(180deg,#fff,#f7fbff);
+    }
+    .cta h2{max-width:800px;margin:13px auto}.cta p{max-width:600px;margin:0 auto;color:#738095;font-size:14px}.cta .btn{margin-top:27px}.fine{margin-top:12px;font-size:10px;color:#9aa4b2}
+
+    footer.site-footer{padding:30px 0 38px;border-top:1px solid #e6ebf2;background:#fff;color:#7e899a;font-size:11px}
+    .footer-inner{display:flex;justify-content:space-between;align-items:center;gap:20px}.footer-links{display:flex;gap:18px}
+
+    @media(max-width:900px){
+      .nav-links{display:none}.menu{display:inline-flex}
+      .product-grid,.split{grid-template-columns:1fr}
+      .side-pane{border-left:0;border-top:1px solid #e9eef5}
+      .cards,.course-grid,.steps,.quote-grid{grid-template-columns:1fr 1fr}
+    }
+    @media(max-width:640px){
+      .container{width:min(var(--max),calc(100% - 28px))}
+      .nav-inner{height:70px}.hero{padding:85px 0 80px}
+      h1{font-size:45px}
+      section{padding:85px 0}
+      .cards,.course-grid,.steps,.quote-grid{grid-template-columns:1fr}
+      .readiness{flex-direction:column;align-items:flex-start}
+      .dashboard-main{grid-template-columns:1fr}
+      .dashboard-main .score-ring{margin:auto}
+      .footer-inner{flex-direction:column;align-items:flex-start}
+    }
+  </style>
+</head>
+
+<body>
+  <header class="nav">
+    <div class="container nav-inner">
+      <a class="brand" href="#top"><span class="brand-mark"></span><span>nanosyllabus</span></a>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#courses">Community courses</a>
+        <a href="#readiness">Readiness</a>
+      </nav>
+      <div class="nav-actions">
+        <a href="#start" class="btn btn-outline">Log in</a>
+        <a href="#start" class="btn btn-primary">Start free</a>
+      </div>
+      <button class="btn btn-outline menu" onclick="toggleMenu()">Menu</button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="container">
+        <div class="eyebrow"><span class="dot"></span> Your exam. Your syllabus. Your readiness.</div>
+        <h1>Practice your actual exam <span class="grad">before the real exam.</span></h1>
+        <p>Upload your syllabus. NanoSyllabus becomes your personal exam coach—so you know what you know, what you don't, and where your marks are going.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="#start">Start a mock exam →</a>
+          <a class="btn btn-outline" href="#courses">Browse Community Courses</a>
+        </div>
+        <div class="micro-proof">
+          <span><i>✓</i> Syllabus-grounded</span>
+          <span><i>✓</i> Handwritten evaluation</span>
+          <span><i>✓</i> MCQ + subjective</span>
+          <span><i>✓</i> Readiness tracking</span>
+        </div>
+
+        <div class="product-wrap">
+          <div class="product">
+            <div class="product-top">
+              <div class="browser-dots"><span></span><span></span><span></span></div>
+              <div class="product-title">NanoSyllabus · Exam Readiness</div>
+              <div class="product-title">BCA · Database Management Systems</div>
+            </div>
+            <div class="product-grid">
+              <div class="visual-pane">
+                <div class="label">Your readiness</div>
+                <div class="readiness">
+                  <div class="ring"><strong>72%</strong></div>
+                  <div style="min-width:0">
+                    <h3>You're getting closer.</h3>
+                    <div class="small">Your latest mock shows where you are strong—and where you are still leaving marks behind.</div>
+                    <div class="bars">
+                      <div class="bar"><span>SQL</span><div class="track"><div class="fill b1" style="width:88%"></div></div><b>88</b></div>
+                      <div class="bar"><span>ER model</span><div class="track"><div class="fill b2" style="width:76%"></div></div><b>76</b></div>
+                      <div class="bar"><span>Normal.</span><div class="track"><div class="fill b3" style="width:48%"></div></div><b>48</b></div>
+                      <div class="bar"><span>Txns.</span><div class="track"><div class="fill b4" style="width:35%"></div></div><b>35</b></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="metric-grid">
+                  <div class="metric"><b>74</b><span>Likely marks on next mock</span></div>
+                  <div class="metric"><b>4</b><span>High-priority weak areas</span></div>
+                </div>
+              </div>
+              <div class="side-pane">
+                <div class="label">Your next move</div>
+                <div style="font-size:19px;font-weight:850;letter-spacing:-.03em;margin-top:9px">Fix what is costing you marks.</div>
+                <div class="small" style="margin-top:5px">Don't reread everything. Work on what matters next.</div>
+                <div class="next">
+                  <b>1 · Revise normalization</b>
+                  <p>Low performance + high exam weight.</p>
+                </div>
+                <div class="next">
+                  <b>2 · Practice OS scheduling</b>
+                  <p>You understand the idea. Your written answers need depth.</p>
+                </div>
+                <div class="next">
+                  <b>3 · Retest network layers</b>
+                  <p>You're close to exam-ready here.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="white" id="features">
+      <div class="container">
+        <div class="section-head center">
+          <div class="kicker">The problem</div>
+          <h2>You studied. <span class="grad">But do you know?</span></h2>
+          <p>Reading notes can feel like progress. Exams expose what you can actually recall, explain and write under pressure.</p>
+        </div>
+        <div class="cards">
+          <article class="card">
+            <div class="icon">01</div>
+            <h3>Too much to cover</h3>
+            <p>Notes. PDFs. Videos. Past papers. You still don't know what deserves your next hour.</p>
+          </article>
+          <article class="card">
+            <div class="icon">02</div>
+            <h3>No real calibration</h3>
+            <p>You can recognize the answer without being able to write it in the exam. That's a different skill.</p>
+          </article>
+          <article class="card">
+            <div class="icon">03</div>
+            <h3>Gaps found too late</h3>
+            <p>The worst time to discover a weakness is when the real paper is already in front of you.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="soft" id="how">
+      <div class="container">
+        <div class="section-head center">
+          <div class="kicker">How it works</div>
+          <h2>From <span class="grad">“I think I know it”</span> to “I’m ready.”</h2>
+          <p>Practice the way your exam actually works. Then use the result to decide what to do next.</p>
+        </div>
+        <div class="steps">
+          <article class="step"><div class="step-num">01</div><h3>Upload your syllabus</h3><p>Add your syllabus, notes, question bank and past papers.</p></article>
+          <article class="step"><div class="step-num">02</div><h3>Take the mock</h3><p>Practice MCQs or write subjective answers under exam conditions.</p></article>
+          <article class="step"><div class="step-num">03</div><h3>See your readiness</h3><p>Get marks, feedback, weak topics and the next best thing to study.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="blue-fade" id="readiness">
+      <div class="container">
+        <div class="split">
+          <div>
+            <div class="kicker">Exam readiness</div>
+            <h2>Know where you stand. <span class="grad">Fix what you don't.</span></h2>
+            <p style="color:#748196;font-size:14px;max-width:560px">NanoSyllabus turns every mock into a diagnosis. Your score is only the beginning.</p>
+            <div class="checklist">
+              <div class="check"><i>✓</i><span>See topic-by-topic performance</span></div>
+              <div class="check"><i>✓</i><span>Find where marks are being lost</span></div>
+              <div class="check"><i>✓</i><span>Get feedback on handwritten answers</span></div>
+              <div class="check"><i>✓</i><span>Know what to study next</span></div>
+              <div class="check"><i>✓</i><span>Retest and measure improvement</span></div>
+            </div>
+          </div>
+
+          <div class="dashboard">
+            <div class="dash-head">
+              <div><div class="dash-title">Exam readiness</div><div class="dash-sub">Database Management Systems</div></div>
+              <div class="pill">Latest mock</div>
+            </div>
+            <div class="dashboard-main">
+              <div class="score-ring"><b>68%</b></div>
+              <div class="topic-list">
+                <div class="topic"><span>SQL</span><div class="track"><div class="fill b2" style="width:88%"></div></div><b>88</b></div>
+                <div class="topic"><span>ER model</span><div class="track"><div class="fill b1" style="width:76%"></div></div><b>76</b></div>
+                <div class="topic"><span>Normal.</span><div class="track"><div class="fill b3" style="width:48%"></div></div><b>48</b></div>
+                <div class="topic"><span>Txns.</span><div class="track"><div class="fill b4" style="width:35%"></div></div><b>35</b></div>
+              </div>
+            </div>
+            <div class="stats">
+              <div class="stat"><b>74</b><span>Likely score range</span></div>
+              <div class="stat"><b>11↑</b><span>Improvement since first mock</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="dark">
+      <div class="container">
+        <div class="section-head center">
+          <div class="kicker">More than a chatbot</div>
+          <h2>Ask anything. <span class="grad">Practice everything.</span></h2>
+          <p>NanoSyllabus combines your course material with an exam loop: learn → practice → answer → evaluate → improve → retest.</p>
+        </div>
+        <div class="cards">
+          <article class="card dark-card"><div class="icon">A</div><h3>Ask your syllabus</h3><p>Get explanations grounded in the material you actually need to study.</p></article>
+          <article class="card dark-card"><div class="icon">✎</div><h3>Write your real answer</h3><p>Upload handwritten work for marks and feedback on how you answered.</p></article>
+          <article class="card dark-card"><div class="icon">↻</div><h3>Retest yourself</h3><p>Turn feedback into another attempt and see whether your readiness changes.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="soft" id="courses">
+      <div class="container">
+        <div class="section-head">
+          <div class="kicker">Community courses</div>
+          <h2>Start with a course. <span class="grad">Or bring your own.</span></h2>
+          <p>Browse community-built course spaces or upload your own syllabus and material.</p>
+        </div>
+        <div class="course-grid">
+          <article class="course"><small>BCA · 3RD SEM</small><h3>Database Management Systems</h3><p>Mock sets, past questions and answer practice.</p><a href="#start">Open course →</a></article>
+          <article class="course"><small>BIM · 4TH SEM</small><h3>Operating Systems</h3><p>Practice the concepts you have to write under pressure.</p><a href="#start">Open course →</a></article>
+          <article class="course"><small>BSc CSIT · 2ND SEM</small><h3>Object-Oriented Programming</h3><p>Turn your syllabus into targeted practice.</p><a href="#start">Open course →</a></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="dark">
+      <div class="container">
+        <div class="section-head center">
+          <div class="kicker">The outcome</div>
+          <h2>Study less blindly. <span class="grad">Walk in more certain.</span></h2>
+          <p>The goal is not more content. It's knowing where you stand before the stakes are real.</p>
+        </div>
+        <div class="quote-grid">
+          <article class="quote"><p>“I knew the notes. I didn't know the answers. The mock made that obvious.”</p><footer>Student · Bachelor program</footer></article>
+          <article class="quote"><p>“The most useful part was knowing what to revise first instead of rereading everything.”</p><footer>Student · Bachelor program</footer></article>
+          <article class="quote"><p>“I wanted a score before the real exam. Now I know what I need to fix.”</p><footer>Student · Bachelor program</footer></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta" id="start">
+      <div class="container">
+        <div class="kicker">Your next exam</div>
+        <h2>Your most confident attempt starts before exam day.</h2>
+        <p>Upload your syllabus. Take a mock. Submit your answer. Find out where you stand.</p>
+        <a class="btn btn-primary" href="#" onclick="alert('Connect this button to your NanoSyllabus signup URL.');return false;">Start free →</a>
+        <div class="fine">No credit card · Start with your own course material</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div>© 2026 NanoSyllabus</div>
+      <div class="footer-links"><a href="#features">Features</a><a href="#how">How it works</a><a href="#courses">Community Courses</a></div>
+    </div>
+  </footer>
+
+  <script>
+    function toggleMenu(){
+      const nav=document.querySelector('.nav-links');
+      if(!nav) return;
+      const open=nav.dataset.open==='1';
+      nav.dataset.open=open?'0':'1';
+      nav.style.display=open?'none':'flex';
+      nav.style.position='absolute';
+      nav.style.top='70px';
+      nav.style.left='14px';
+      nav.style.right='14px';
+      nav.style.padding='14px';
+      nav.style.flexDirection='column';
+      nav.style.alignItems='flex-start';
+      nav.style.background='rgba(255,255,255,.98)';
+      nav.style.border='1px solid #dce5ef';
+      nav.style.borderRadius='14px';
+      nav.style.boxShadow='0 20px 50px rgba(29,54,100,.12)';
+    }
+  </script>
+</body>
+</html>

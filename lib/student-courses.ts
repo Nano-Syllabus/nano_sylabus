@@ -1,6 +1,7 @@
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { clearStudentStudyTrails } from "@/lib/data/study-trail-cleanup";
 import { mapTeacherCourse, type TeacherCourse } from "@/lib/teacher-courses";
 import { profileFromUser, withTeacherAvatar } from "@/lib/teacher-public-profile";
 
@@ -239,6 +240,13 @@ export type StudentCourseSubject = {
   position: number;
 };
 
+function isStudentVisibleCourse(row: Record<string, unknown>) {
+  return (
+    row.status === "published" &&
+    (row.visibility === "public" || row.visibility === "unlisted")
+  );
+}
+
 /**
  * The subject list for a student's enrolled courses, and nothing else.
  *
@@ -271,7 +279,7 @@ export const listStudentCourseSubjects = cache(async function listStudentCourseS
   const [courseResult, subjectResult] = await Promise.all([
     admin
       .from("teacher_courses")
-      .select("id,name,slug")
+      .select("id,name,slug,status,visibility")
       .in("id", courseIds)
       .is("archived_at", null),
     admin
@@ -283,18 +291,20 @@ export const listStudentCourseSubjects = cache(async function listStudentCourseS
   if (subjectResult.error) throw subjectResult.error;
 
   const courseById = new Map(
-    (courseResult.data || []).map((row) => [
-      String(row.id || ""),
-      { name: String(row.name || ""), slug: String(row.slug || "") },
-    ]),
+    (courseResult.data || [])
+      .filter((row) => isStudentVisibleCourse(row as Record<string, unknown>))
+      .map((row) => [
+        String(row.id || ""),
+        { name: String(row.name || ""), slug: String(row.slug || "") },
+      ]),
   );
 
   return (subjectResult.data || [])
     .flatMap((row) => {
       const courseId = String(row.course_id || "");
       const course = courseById.get(courseId);
-      // An archived course drops out of the course query above, so its
-      // subjects must drop out here too.
+      // Archived, draft, and private courses are not student-visible, so
+      // their subjects must drop out here too.
       if (!course) return [];
       return [
         {
@@ -375,7 +385,7 @@ export const listStudentCourses = cache(async function listStudentCourses(
 
   const courses = await mapCourseRows(
     admin,
-    (courseResult.data || []) as Record<string, unknown>[],
+    ((courseResult.data || []) as Record<string, unknown>[]).filter(isStudentVisibleCourse),
   );
   const courseById = new Map(courses.map((course) => [course.id, course]));
 
@@ -462,7 +472,6 @@ export async function listCreatorPrivateSubjectAccess(
     .from("teacher_subject_profiles")
     .select("id,teacher_id,subject_slug,subject_name,folder_path")
     .eq("teacher_id", teacherResult.data.id)
-    .eq("visibility", "private")
     .order("updated_at", { ascending: false });
   if (profileResult.error) throw profileResult.error;
 
@@ -508,12 +517,12 @@ export async function getStudentCourseSubjectAccessForCourse(
 
   const courseResult = await admin
     .from("teacher_courses")
-    .select("id,teacher_id")
+    .select("id,teacher_id,status,visibility")
     .eq("id", courseId)
     .is("archived_at", null)
     .maybeSingle();
   if (courseResult.error) throw courseResult.error;
-  if (!courseResult.data) return null;
+  if (!courseResult.data || !isStudentVisibleCourse(courseResult.data)) return null;
 
   const subjectResult = await admin
     .from("teacher_course_subjects")
@@ -558,12 +567,14 @@ export async function getStudentCourseSubjectAccess(
 
   const courseResult = await admin
     .from("teacher_courses")
-    .select("id,teacher_id")
+    .select("id,teacher_id,status,visibility")
     .in("id", enrolledCourseIds)
     .is("archived_at", null);
   if (courseResult.error) throw courseResult.error;
 
-  const courses = (courseResult.data || []) as Array<{ id: string; teacher_id: string }>;
+  const courses = ((courseResult.data || []) as Array<Record<string, unknown>>).filter(
+    isStudentVisibleCourse,
+  ) as Array<{ id: string; teacher_id: string }>;
   const teacherByCourse = new Map(courses.map((course) => [course.id, course.teacher_id]));
   const courseIds = courses.map((course) => course.id);
   if (!courseIds.length) return null;
@@ -628,10 +639,22 @@ export async function getStudentCourseSubjectAccessForDocumentPath(
     .filter(Boolean);
   if (!enrolledCourseIds.length) return null;
 
+  const courseResult = await admin
+    .from("teacher_courses")
+    .select("id,status,visibility")
+    .in("id", enrolledCourseIds)
+    .is("archived_at", null);
+  if (courseResult.error) throw courseResult.error;
+  const visibleCourseIds = (courseResult.data || [])
+    .filter((row) => isStudentVisibleCourse(row as Record<string, unknown>))
+    .map((row) => String(row.id || ""))
+    .filter(Boolean);
+  if (!visibleCourseIds.length) return null;
+
   const subjectResult = await admin
     .from("teacher_course_subjects")
     .select("course_id,teacher_id,subject_slug,subject_name,folder_path")
-    .in("course_id", enrolledCourseIds)
+    .in("course_id", visibleCourseIds)
     .eq("teacher_id", teacherId);
   if (subjectResult.error) throw subjectResult.error;
 
@@ -667,9 +690,6 @@ export async function enrollStudentInCourse(
 ) {
   const course = await getPublishedCourse(slug, admin);
   if (!course) throw new StudentCourseError("Course not found.", 404);
-  if (course.accessModel !== "free") {
-    throw new StudentCourseError("Paid enrollment is not available yet.", 409);
-  }
 
   const result = await admin.from("teacher_course_enrollments").upsert(
     {
@@ -693,19 +713,48 @@ export async function leaveStudentCourse(
 ) {
   const courseResult = await admin
     .from("teacher_courses")
-    .select("id,slug,name")
+    .select("id,teacher_id,slug,name")
     .eq("slug", slug)
     .maybeSingle();
   if (courseResult.error) throw courseResult.error;
   if (!courseResult.data) throw new StudentCourseError("Course not found.", 404);
 
+  const courseId = String(courseResult.data.id || "");
+  const teacherId = String(courseResult.data.teacher_id || "");
+  const [subjectsResult, enrollmentResult] = await Promise.all([
+    admin
+      .from("teacher_course_subjects")
+      .select("course_id,subject_slug,subject_name")
+      .eq("course_id", courseId),
+    admin
+      .from("teacher_course_enrollments")
+      .select("course_id")
+      .eq("course_id", courseId)
+      .eq("student_id", studentId)
+      .in("status", ["active", "completed"])
+      .maybeSingle(),
+  ]);
+  if (subjectsResult.error) throw subjectsResult.error;
+  if (enrollmentResult.error) throw enrollmentResult.error;
+  if (!enrollmentResult.data) {
+    throw new StudentCourseError("You are not enrolled in this course.", 404);
+  }
+
+  const subjects = (subjectsResult.data || []).map((subject) => ({
+    subjectSlug: String(subject.subject_slug || ""),
+    subjectName: String(subject.subject_name || ""),
+    courseId,
+  }));
+
+  // Clear the student's trails before removing the enrollment. If cleanup
+  // fails, the leave is not committed and the user can retry without a silent
+  // half-deleted state.
+  await clearStudentStudyTrails(admin, [studentId], subjects, [courseId], teacherId || undefined);
+
   const result = await admin
     .from("teacher_course_enrollments")
-    .update({
-      status: "cancelled",
-      completed_at: null,
-    })
-    .eq("course_id", String(courseResult.data.id || ""))
+    .delete()
+    .eq("course_id", courseId)
     .eq("student_id", studentId)
     .in("status", ["active", "completed"])
     .select("course_id")

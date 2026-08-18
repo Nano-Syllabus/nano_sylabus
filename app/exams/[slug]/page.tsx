@@ -122,27 +122,17 @@ export default async function CourseDetailPage({ params }: PageProps) {
 
               <aside className="glass-card rounded-2xl border border-border p-6">
                 <p className="text-sm text-muted-foreground">Enrollment</p>
-                {course.accessModel === "free" ? (
-                  <div className="mt-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-display text-4xl font-semibold tracking-tight">$0</span>
-                      <span className="text-sm font-medium text-muted-foreground">USD</span>
-                    </div>
-                    <p className="mt-1 text-sm font-medium text-muted-foreground">NPR 0 · No payment required</p>
+                <div className="mt-2">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-display text-4xl font-semibold tracking-tight">Free</span>
                   </div>
-                ) : (
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className="font-display text-4xl font-semibold tracking-tight">
-                      NPR {course.priceNpr.toLocaleString()}
-                    </span>
-                    <span className="text-sm font-medium text-muted-foreground">one time</span>
-                  </div>
-                )}
+                  <p className="mt-1 text-sm font-medium text-muted-foreground">Instant access to all subjects</p>
+                </div>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
                   Enrolling opens one study space with every subject connected to this course.
                 </p>
                 <a href={paymentHref} className="glow-shadow mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-[filter] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                  Buy now <ArrowRight className="size-4" aria-hidden="true" />
+                  Enroll now <ArrowRight className="size-4" aria-hidden="true" />
                 </a>
                 <ul className="mt-6 space-y-3 text-sm text-muted-foreground">
                   <li className="flex gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-highlight" aria-hidden="true" /> {course.diagnosticQuestionCount}-question diagnostic</li>

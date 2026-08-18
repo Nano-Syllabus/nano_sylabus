@@ -255,10 +255,24 @@ export function SubjectExplorerClient({
   return (
     <main className="w-full max-w-[1240px] px-[14px] pb-24 pt-[18px] lg:p-[26px]">
       <div className="mb-5 flex flex-wrap items-start gap-4">
-        <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">My courses</h1>
+        <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">Create Subject</h1>
         <span className="flex-1" />
-        <Link href="/exams" className={`${button} border-border bg-bg-primary hover:bg-bg-secondary`}>Browse courses</Link>
-        {/* <button type="button" onClick={() => setModal("join")} className={`${button} border-border-strong bg-text-primary text-text-inverse hover:opacity-85`}>Join with a code</button> */}
+        <Link
+          href="/exams"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${button} border-border bg-bg-primary hover:bg-bg-secondary`}
+        >
+          Browse Community Courses
+        </Link>
+        <Link
+          href="/teachers"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${button} border-border-strong bg-text-primary text-text-inverse hover:opacity-90`}
+        >
+          Upload Subject Material
+        </Link>
       </div>
 
       <p className="mb-4 text-sm text-text-secondary">
@@ -338,8 +352,22 @@ export function SubjectExplorerClient({
             Enroll in a published course to unlock all of its subjects here.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {/* <button type="button" onClick={() => setModal("join")} className={`${button} border-border-strong bg-text-primary text-text-inverse`}>Join with a code</button> */}
-            <Link href="/exams" className={`${button} border-border bg-bg-primary`}>Browse courses</Link>
+            <Link
+              href="/exams"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${button} border-border bg-bg-primary hover:bg-bg-secondary`}
+            >
+              Browse Community Courses
+            </Link>
+            <Link
+              href="/teachers"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${button} border-border-strong bg-text-primary text-text-inverse hover:opacity-90`}
+            >
+              Upload Subject Material
+            </Link>
           </div>
         </section>
       ) : null}

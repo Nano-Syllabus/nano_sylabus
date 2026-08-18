@@ -490,7 +490,10 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
         code: text(profile.subject_code),
         university: text(profile.university),
         programme: text(profile.programme),
-        visibility: profile.visibility === "public" ? "public" : "private",
+        // Subject visibility is intentionally not user-selectable. A subject
+        // stays private in the creator library; course visibility controls
+        // whether attached content is exposed to enrolled students.
+        visibility: "private",
       },
     ];
   });
@@ -1407,10 +1410,10 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
         <nav className="space-y-1" aria-label="Creator workspace">
           {(
             [
-              ["today", "Today"],
-              ["subjects", "Subjects"],
-              ["courses", "Courses"],
-              ["settings", "Teacher profile"],
+              ["today", "Analytics"],
+              ["subjects", "Create Subjects"],
+              ["courses", "Publish Courses"],
+              ["settings", "Your Public Profile"],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -1472,7 +1475,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             >
               <path d="m15 18-6-6 6-6" />
             </svg>
-            Back to student portal
+            Back to study portal
           </Link>
           <p className="truncate text-sm font-medium">{workspace.teacher.fullName}</p>
           <p className="mt-1 truncate text-xs text-text-muted">{workspace.teacher.email}</p>
@@ -1491,7 +1494,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             </Link>
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{collectionName}</p>
+            <p className="truncate text-sm font-medium">Admin Portal</p>
           </div>
           <span className="flex-1" />
           <ThemeToggle className="shrink-0 bg-bg-primary" />
@@ -1515,8 +1518,8 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             >
               <path d="m15 18-6-6 6-6" />
             </svg>
-            <span className="sm:hidden">Student</span>
-            <span className="hidden sm:inline">Student portal</span>
+            <span className="sm:hidden">Study portal</span>
+            <span className="hidden sm:inline">Back to study portal</span>
           </Link>
         </header>
 
@@ -1526,10 +1529,10 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
         >
           {(
             [
-              ["today", "Today"],
-              ["subjects", "Subjects"],
-              ["courses", "Courses"],
-              ["settings", "Teacher profile"],
+              ["today", "Analytics"],
+              ["subjects", "Create Subjects"],
+              ["courses", "Publish Courses"],
+              ["settings", "Your Public Profile"],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -1880,24 +1883,7 @@ function TodayView({
         </section>
       ) : null}
 
-      <section className="mt-5 flex flex-col gap-[18px] rounded-xl bg-text-primary p-5 text-text-inverse md:flex-row md:items-center md:px-[22px]">
-        <div>
-          <h2 className="font-display text-[22px] font-semibold">
-            {summary.actionRequiredCount
-              ? `${summary.actionRequiredCount} graded ${summary.actionRequiredCount === 1 ? "paper is" : "papers are"} ready for review`
-              : "All caught up"}
-          </h2>
-          <p className="mt-1 text-[13.5px] text-text-inverse/70">
-            {summary.actionRequiredCount
-              ? "These submissions stay private until you review and publish them."
-              : "No graded submissions are waiting in this creator workspace."}
-          </p>
-        </div>
-        <span className="flex-1" />
-        <Button size="lg" variant="inverse" className="shrink-0" onClick={onCourses}>
-          Open courses
-        </Button>
-      </section>
+
 
       {/* Real Live Collection & Teacher Stats Grid */}
       <section
@@ -7179,7 +7165,7 @@ function TeacherSettingsView({
   return (
     <form onSubmit={save} className="max-w-3xl">
       <p className="font-mono text-xs uppercase tracking-widest text-text-muted">You</p>
-      <h1 className="mt-3 font-display text-3xl font-semibold">Teacher profile</h1>
+      <h1 className="mt-3 font-display text-3xl font-semibold">Your Public Profile</h1>
       <p className="mt-2 text-text-secondary">
         Your public profile appears beside every course you publish.
       </p>
@@ -7458,7 +7444,8 @@ function SubjectsView({
         <section className="mt-8 rounded-lg border border-dashed border-border p-10 text-center">
           <h2 className="font-display text-xl font-semibold">No subjects created yet</h2>
           <p className="mt-2 text-sm text-text-secondary">
-            Create your first subject, choose Public or Private, then add its syllabus and material.
+            Create your first subject, then add its syllabus and material. Subjects start private;
+            attach one to a course later when you are ready to share it.
           </p>
           <Button className="mt-5" onClick={onCreate}>
             Create first subject
@@ -8612,7 +8599,6 @@ function CreateSubjectDialog({
   const [name, setName] = useState("");
   const [university, setUniversity] = useState("");
   const [programme, setProgramme] = useState("");
-  const [visibility, setVisibility] = useState<"public" | "private">("private");
   const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
   const [syllabusDropActive, setSyllabusDropActive] = useState(false);
   const [syllabusText, setSyllabusText] = useState("");
@@ -8726,7 +8712,6 @@ function CreateSubjectDialog({
               name: clean,
               university: university.trim(),
               programme: programme.trim(),
-              visibility,
             }),
           }),
         );
@@ -8920,52 +8905,10 @@ function CreateSubjectDialog({
               />
             </div>
           </div>
-          <fieldset className="mt-5 border-t border-border pt-5">
-            <legend className="text-sm font-medium">Who can access this subject?</legend>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {(
-                [
-                  [
-                    "private",
-                    "Private",
-                    "Only you can study it. It stays in your personal library.",
-                  ],
-                  ["public", "Public", "You can attach it to a course after creating it."],
-                ] as const
-              ).map(([value, label, description]) => (
-                <label
-                  key={value}
-                  className={cn(
-                    "cursor-pointer rounded-lg border p-4",
-                    visibility === value
-                      ? "border-border-strong bg-bg-secondary"
-                      : "border-border hover:bg-bg-secondary/50",
-                  )}
-                >
-                  <span className="flex items-center gap-2 text-sm font-semibold">
-                    <input
-                      type="radio"
-                      name="subject-visibility"
-                      value={value}
-                      checked={visibility === value}
-                      onChange={() => setVisibility(value)}
-                      className="size-4 accent-current"
-                    />
-                    {label}
-                  </span>
-                  <span className="mt-2 block text-xs leading-5 text-text-muted">
-                    {description}
-                  </span>
-                </label>
-              ))}
-            </div>
-            {visibility === "public" ? (
-              <p className="mt-4 text-xs leading-5 text-text-muted">
-                Public subjects become available in the course editor. Create or edit a course
-                later to attach this subject.
-              </p>
-            ) : null}
-          </fieldset>
+          <p className="mt-5 border-t border-border pt-5 text-sm leading-6 text-text-secondary">
+            New subjects start private and stay in your personal library. Add this subject to a
+            course later; the course&apos;s visibility controls who can access it.
+          </p>
           <div className="mt-6 flex justify-end gap-2 border-t border-border pt-5">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel

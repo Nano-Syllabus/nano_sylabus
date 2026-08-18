@@ -635,6 +635,8 @@ export function ChatPageClient({
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryShowAllSubjects, setLibraryShowAllSubjects] = useState(false);
   const [libraryWidth, setLibraryWidth] = useState(520);
+  const [hasOpenedBooks, setHasOpenedBooks] = useState(false);
+  const [showBooksSpotlight, setShowBooksSpotlight] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(1440);
   const [composerElement, setComposerElement] = useState<HTMLFormElement | null>(null);
   const [compactComposerControls, setCompactComposerControls] = useState(false);
@@ -787,6 +789,10 @@ export function ChatPageClient({
   const compactHeaderActions = libraryOpen && viewportWidth - libraryWidth < 1000;
 
   useEffect(() => {
+    const seenSpotlight = window.localStorage.getItem("ns-has-seen-books-spotlight");
+    if (!seenSpotlight) {
+      setShowBooksSpotlight(true);
+    }
     const storedWidth = Number(window.localStorage.getItem("ns-chat-library-width"));
     if (Number.isFinite(storedWidth) && storedWidth >= 380) {
       setLibraryWidth(storedWidth);
@@ -795,6 +801,11 @@ export function ChatPageClient({
     updateViewportWidth();
     window.addEventListener("resize", updateViewportWidth);
     return () => window.removeEventListener("resize", updateViewportWidth);
+  }, []);
+
+  const dismissBooksSpotlight = useCallback(() => {
+    setShowBooksSpotlight(false);
+    window.localStorage.setItem("ns-has-seen-books-spotlight", "true");
   }, []);
 
   const updateLibraryWidth = useCallback((nextWidth: number) => {
@@ -811,6 +822,8 @@ export function ChatPageClient({
   }, []);
 
   const toggleLibrary = useCallback(() => {
+    setHasOpenedBooks(true);
+    dismissBooksSpotlight();
     if (libraryOpen) {
       setLibraryOpen(false);
       setLibraryShowAllSubjects(false);
@@ -820,7 +833,7 @@ export function ChatPageClient({
     // Selecting a subject can still narrow the view for the current visit.
     setLibraryShowAllSubjects(true);
     setLibraryOpen(true);
-  }, [libraryOpen]);
+  }, [libraryOpen, dismissBooksSpotlight]);
 
   useEffect(() => {
     shell.setSidebarCollapsed(libraryOpen);
@@ -1143,6 +1156,12 @@ export function ChatPageClient({
 
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [hasMoreMessages, setHasMoreMessages] = useState(Boolean(initialSession?.hasMoreMessages));
+
+  useEffect(() => {
+    if (!currentSessionId && messages.length === 0) {
+      setHasOpenedBooks(false);
+    }
+  }, [currentSessionId, messages.length]);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [input, setInput] = useState("");
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -2253,20 +2272,70 @@ export function ChatPageClient({
           ]}
         />
         {!libraryOpen ? (
-          <Button
-            id="chat-library-trigger"
-            type="button"
-            size="sm"
-            variant="ghost"
-            className={cn("rounded-full", compactHeaderActions ? "h-10 w-10 px-0" : "h-9 px-3")}
-            onClick={toggleLibrary}
-            aria-expanded={false}
-            aria-controls="chat-course-library"
-            aria-label="Open course library"
-          >
-            <LibraryBig className="h-4 w-4" aria-hidden="true" />
-            {!compactHeaderActions ? <span>Library</span> : null}
-          </Button>
+          <div className="relative">
+            <Button
+              id="chat-library-trigger"
+              type="button"
+              size="sm"
+              variant="ghost"
+              className={cn(
+                "rounded-full transition-all relative",
+                compactHeaderActions ? "h-10 w-10 px-0" : "h-9 px-3",
+                (!hasOpenedBooks && !libraryOpen) &&
+                  "ring-2 ring-blue-500 ring-offset-2 ring-offset-bg-secondary shadow-[0_0_15px_rgba(59,130,246,0.5)] animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/40",
+              )}
+              onClick={toggleLibrary}
+              aria-expanded={false}
+              aria-controls="chat-course-library"
+              aria-label="Open books"
+            >
+              <LibraryBig className="h-4 w-4" aria-hidden="true" />
+              {!compactHeaderActions ? <span>Books</span> : null}
+            </Button>
+
+            {showBooksSpotlight ? (
+              <div
+                role="tooltip"
+                className="absolute right-0 top-full mt-2.5 z-50 w-72 rounded-2xl border border-blue-500/40 bg-popover text-popover-foreground p-3.5 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-display text-sm font-semibold text-foreground">
+                    <span>📚</span>
+                    <span>Course Books & Syllabus</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={dismissBooksSpotlight}
+                    className="text-muted-foreground hover:text-foreground text-xs p-1 rounded hover:bg-muted"
+                    aria-label="Dismiss spotlight"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                  Click <strong>Books</strong> here to browse your subject materials, notes, and chapters anytime while chatting.
+                </p>
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={dismissBooksSpotlight}
+                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1"
+                  >
+                    Got it
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleLibrary();
+                    }}
+                    className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
+                  >
+                    Open Books →
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {currentSessionId ? (
           <Button
@@ -2288,7 +2357,7 @@ export function ChatPageClient({
       </div>
     );
     return () => shell.setActions(null);
-  }, [shell, composerLanguage, updateGlobalLanguage, creditBalance, currentSessionId, shareCurrentSession, shareLoading, compactHeaderActions, libraryOpen, toggleLibrary]);
+  }, [shell, composerLanguage, updateGlobalLanguage, creditBalance, currentSessionId, shareCurrentSession, shareLoading, compactHeaderActions, libraryOpen, toggleLibrary, showBooksSpotlight, dismissBooksSpotlight, hasOpenedBooks]);
 
   useEffect(() => {
     stopChatRef.current = stop;

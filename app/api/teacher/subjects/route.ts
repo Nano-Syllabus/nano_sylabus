@@ -18,7 +18,6 @@ const subjectSetupSchema = z.object({
   code: z.string().trim().max(40).optional().default(""),
   university: z.string().trim().max(120).optional().default(""),
   programme: z.string().trim().max(120).optional().default(""),
-  visibility: z.enum(["public", "private"]).default("private"),
 });
 
 export async function POST(request: Request) {
@@ -54,7 +53,9 @@ export async function POST(request: Request) {
           subject_code: parsed.data.code,
           university: parsed.data.university,
           programme: parsed.data.programme,
-          visibility: parsed.data.visibility,
+          // A subject is always private at the base level. Course visibility
+          // controls whether an attached subject can be discovered by students.
+          visibility: "private",
           updated_at: new Date().toISOString(),
         },
         { onConflict: "teacher_id,subject_slug" },
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
       );
     }
     return NextResponse.json(
-      { subject, profileSaved, visibility: parsed.data.visibility },
+      { subject, profileSaved, visibility: "private" },
       { status: 201 },
     );
   } catch (error) {

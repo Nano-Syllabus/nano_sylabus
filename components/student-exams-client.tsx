@@ -518,11 +518,10 @@ function PracticeDialog({
             <div
               role="tablist"
               aria-label="Practice type"
-              className="mb-5 grid grid-cols-3 rounded-xl border border-border p-1"
+              className="mb-5 grid grid-cols-2 rounded-xl border border-border p-1"
             >
               {(
                 [
-                  ["quick", "Quick drill"],
                   ["mcq", "MCQ quiz"],
                   ["paper", "Full paper"],
                 ] as const
@@ -718,79 +717,12 @@ function PracticeDialog({
                     </label>
                   ))}
                 </div>
-                <label className="mt-3 flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm">
-                  <input type="checkbox" checked={mcqPerChapter} disabled={!selectedTopics.length} onChange={(event) => onMcqPerChapter(event.target.checked)} />
-                  Repeat this mix for each selected chapter
-                </label>
                 <p className="mt-2 text-[13px] text-text-muted">
-                  {(mcqOneMarkCount + mcqTwoMarkCount) * (mcqPerChapter ? selectedTopics.length : 1)} questions · {(mcqOneMarkCount + mcqTwoMarkCount * 2) * (mcqPerChapter ? selectedTopics.length : 1)} marks
-                  {((mcqOneMarkCount + mcqTwoMarkCount) * (mcqPerChapter ? selectedTopics.length : 1)) > 60 ? " · Reduce the mix to stay under 60." : ""}
+                  {mcqOneMarkCount + mcqTwoMarkCount} questions · {mcqOneMarkCount + mcqTwoMarkCount * 2} marks
+                  {(mcqOneMarkCount + mcqTwoMarkCount) > 60 ? " · Reduce the mix to stay under 60." : ""}
                 </p>
               </fieldset>
 
-              <fieldset>
-                <legend className="mb-1.5 text-[13px] text-text-muted">Options per question</legend>
-                <div className="grid grid-cols-5 rounded-xl border border-border p-1">
-                  {[2, 3, 4, 5, 6].map((count) => <button key={count} type="button" onClick={() => onMcqOptionsPerQuestion(count)} className={cn("min-h-10 rounded-lg text-sm", mcqOptionsPerQuestion === count ? "bg-text-primary font-semibold text-text-inverse" : "text-text-secondary")}>{count}</button>)}
-                </div>
-              </fieldset>
-
-              <fieldset>
-              <legend className="mb-1.5 text-[13px] text-text-muted">Wrong-answer penalty</legend>
-              <div className="grid grid-cols-4 rounded-xl border border-border bg-bg-primary p-1 shadow-sm">
-                {(
-                  [
-                    [0, "No penalty"],
-                    [0.25, "−0.25 marks"],
-                    [0.5, "−0.5 marks"],
-                    [1, "−1 mark"],
-                  ] as const
-                ).map(([marks, label]) => (
-                  <button
-                    key={marks}
-                    type="button"
-                    onClick={() => onMcqNegativeMarks(String(marks))}
-                    className={cn(
-                      "min-h-10 rounded-[9px] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong",
-                      Number(mcqNegativeMarks) === marks
-                        ? "bg-text-primary font-semibold text-text-inverse"
-                        : "text-text-secondary",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <label className="mt-3 block text-[13px] text-text-muted">
-                Custom penalty
-                <input
-                  value={mcqNegativeMarks}
-                  onChange={(event) => onMcqNegativeMarks(event.target.value)}
-                  inputMode="decimal"
-                  placeholder="0"
-                  aria-label="Custom wrong-answer penalty"
-                  aria-invalid={!Number.isFinite(Number(mcqNegativeMarks)) || Number(mcqNegativeMarks) < 0}
-                  className="mt-1.5 h-10 w-full rounded-lg border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
-                />
-              </label>
-              <p className="mb-4 text-[13px] leading-5 text-text-muted">
-                Unanswered questions are never penalised. Answers are checked instantly without an
-                AI examiner.
-              </p>
-              </fieldset>
-
-              <label className="block text-[13px] text-text-muted">Examiner instruction (optional)
-                <textarea value={mcqInstruction} maxLength={1000} rows={3} onChange={(event) => onMcqInstruction(event.target.value)} placeholder="For example: Focus on conceptual traps and keep distractors plausible." className="mt-1.5 w-full resize-y rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-border-strong" />
-              </label>
-
-              <div className="rounded-xl border border-border bg-bg-secondary p-4">
-                <p className="text-sm font-medium">Open a shared quiz</p>
-                <p className="mt-1 text-[13px] text-text-muted">Quiz codes work until the tenant set expires.</p>
-                <div className="mt-3 flex gap-2">
-                  <input value={sharedMcqSetId} onChange={(event) => onSharedMcqSetId(event.target.value)} placeholder="Paste set ID" className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-bg-primary px-3 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-border-strong" />
-                  <button type="button" disabled={!sharedMcqSetId.trim() || starting} className={secondaryButton} onClick={onOpenSharedMcq}>Open</button>
-                </div>
-              </div>
             </div>
           ) : null}
 
@@ -1157,7 +1089,7 @@ export function StudentExamsClient({
   const [result, setResult] = useState<Result | null>(null);
   const [resultTab, setResultTab] = useState<"answers" | "summary">("answers");
   const [practiceSubject, setPracticeSubject] = useState<string>(subjects[0]?.slug ?? "");
-  const [practiceMode, setPracticeMode] = useState<PracticeMode>("quick");
+  const [practiceMode, setPracticeMode] = useState<PracticeMode>("mcq");
   const [practiceTopics, setPracticeTopics] = useState<string[]>([]);
   const [practiceLength, setPracticeLength] = useState<PracticeLength>(5);
   const [quickMarks, setQuickMarks] = useState<10 | 20 | 40>(20);
@@ -1503,7 +1435,7 @@ export function StudentExamsClient({
     setDialog("practice");
   }
 
-  function openPractice(nextMode: PracticeMode = "quick") {
+  function openPractice(nextMode: PracticeMode = "mcq") {
     setPracticeMode(nextMode);
     setPracticeStartError("");
     if (nextMode === "checker") setCheckerResult(null);
@@ -2554,16 +2486,7 @@ export function StudentExamsClient({
           </p>
         </div>
         <span className="flex-1" />
-        {/* <button type="button" className={secondaryButton} onClick={() => setDialog("join")}>
-          Join with a code
-        </button> */}
-        <button type="button" className={secondaryButton} onClick={() => openPractice("checker")}>
-          Quick check
-        </button>
-        <button type="button" className={secondaryButton} onClick={() => setDialog("mcq-checker")}>
-          MCQ checker
-        </button>
-        <button type="button" className={primaryButton} onClick={() => openPractice("quick")}>
+        <button type="button" className={primaryButton} onClick={() => openPractice("mcq")}>
           Practise
         </button>
       </div>
@@ -2644,11 +2567,6 @@ export function StudentExamsClient({
 
         {attemptsState === "ready" && practiceAttempts.length ? (
           <>
-            <PracticeReadiness
-              attempts={practiceAttempts}
-              onQuick={() => openRecommendedPractice("quick")}
-              onPaper={() => openRecommendedPractice("paper")}
-            />
             {historyOpenError ? (
               <p className="mt-4 rounded-lg border border-destructive/40 px-4 py-3 text-sm text-destructive">
                 {historyOpenError}
@@ -2718,17 +2636,7 @@ export function StudentExamsClient({
               appear here after grading.
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <button
-                type="button"
-                className={secondaryButton}
-                onClick={() => openPractice("checker")}
-              >
-                Quick check
-              </button>
-              <button type="button" className={secondaryButton} onClick={() => setDialog("mcq-checker")}>
-                MCQ checker
-              </button>
-              <button type="button" className={primaryButton} onClick={() => openPractice("quick")}>
+              <button type="button" className={primaryButton} onClick={() => openPractice("mcq")}>
                 Start practising
               </button>
             </div>

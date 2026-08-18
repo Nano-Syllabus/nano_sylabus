@@ -937,9 +937,6 @@ export function ChatMaterialsLibrary({
                           focusRing,
                         )}
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-bg-secondary text-xs font-semibold text-text-primary">
-                          {entry.name.slice(0, 2).toUpperCase()}
-                        </div>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold">{entry.name}</span>
                           <span className="mt-0.5 block truncate text-xs text-text-muted">

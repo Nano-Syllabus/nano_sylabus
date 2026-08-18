@@ -21,15 +21,15 @@ async function resolveSubjects(
   if (!requestedSlugs.length) return [];
   const result = await admin
     .from("teacher_subject_profiles")
-    .select("subject_slug,subject_name,folder_path,visibility")
+    .select("subject_slug,subject_name,folder_path")
     .eq("teacher_id", teacherId)
     .in("subject_slug", requestedSlugs);
   if (result.error) throw result.error;
   const bySlug = new Map((result.data || []).map((subject) => [String(subject.subject_slug || ""), subject]));
   return requestedSlugs.map((slug, position) => {
     const subject = bySlug.get(slug);
-    if (!subject || subject.visibility !== "public") {
-      throw new Error(`Only public created subjects can be added to a course: ${slug}`);
+    if (!subject) {
+      throw new Error(`Subject is not in your teacher workspace: ${slug}`);
     }
     return {
       subject_slug: slug,
@@ -131,15 +131,6 @@ export async function POST(request: Request) {
         );
       }
       throw subjectResult.error;
-    }
-
-    if (subjects.length) {
-      const profileResult = await admin
-        .from("teacher_subject_profiles")
-        .update({ visibility: "public", updated_at: new Date().toISOString() })
-        .eq("teacher_id", teacher.id)
-        .in("subject_slug", parsed.data.subjectSlugs);
-      if (profileResult.error) throw profileResult.error;
     }
 
     const courses = await listTeacherCourses(admin, teacher.id);

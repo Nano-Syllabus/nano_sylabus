@@ -62,7 +62,7 @@ export function CourseCheckoutClient({ course, user }: CourseCheckoutClientProps
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(payload.error || "Could not complete enrollment.");
 
-      router.replace("/app/explore");
+      router.replace("/app/today");
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not complete enrollment.");

@@ -105,17 +105,21 @@ describe("POST /api/teacher/subjects", () => {
     await expect(response.json()).resolves.toEqual({ error: "Subject already exists" });
   });
 
-  it("allows a public subject before any course exists", async () => {
+  it("ignores legacy visibility input and creates a private base subject", async () => {
     const response = await POST(request({ name: "Physics", visibility: "public" }));
 
     expect(response.status).toBe(201);
     expect(mocks.createTeacherSubject).toHaveBeenCalledOnce();
+    expect(mocks.createSupabaseAdminClient().from().upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ visibility: "private" }),
+      { onConflict: "teacher_id,subject_slug" },
+    );
   });
 
-  it("stores the selected visibility without linking a course", async () => {
+  it("always stores private visibility without linking a course", async () => {
     const response = await POST(request({ name: "Physics", visibility: "public" }));
 
     expect(response.status).toBe(201);
-    expect(await response.json()).toMatchObject({ visibility: "public" });
+    expect(await response.json()).toMatchObject({ visibility: "private" });
   });
 });

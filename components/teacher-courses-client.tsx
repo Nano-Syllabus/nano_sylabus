@@ -267,7 +267,7 @@ export function TeacherCoursesClient({
         <section className="mt-7 rounded-lg border border-dashed border-border p-10 text-center">
           <h2 className="font-display text-xl font-semibold">No subjects available</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-text-secondary">
-            Your existing courses are still saved. Create a public subject to add content to them.
+            Your existing courses are still saved. Create a subject to add content to them.
           </p>
           <Button className="mt-5" type="button" variant="outline" onClick={onCreateSubject}>
             Create subject
@@ -278,7 +278,8 @@ export function TeacherCoursesClient({
         <section className="mt-7 rounded-lg border border-dashed border-border p-10 text-center">
           <h2 className="font-display text-xl font-semibold">No courses yet</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-text-secondary">
-            Start with an empty draft, then attach public subjects as you create them.
+            Start with an empty draft, then attach your subjects as you create them. Course
+            visibility controls whether students can access the attached material.
           </p>
           <Button className="mt-5" type="button" onClick={() => setEditingCourse("new")}>
             <Plus className="size-4" aria-hidden="true" /> Create course
@@ -677,53 +678,51 @@ function CourseEditor({
                 Subjects in this course
               </legend>
               <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                {subjects
-                  .filter((subject) => subject.visibility === "public")
-                  .map((subject) => {
-                    const checked = draft.subjectSlugs.includes(subject.slug);
-                    const owner = subjectOwners.get(subject.slug);
-                    const unavailable = Boolean(owner && owner.id !== course?.id);
-                    return (
-                      <label
-                        key={subject.slug}
-                        className={cn(
-                          "flex items-center gap-3 rounded-lg border p-3",
-                          unavailable ? "cursor-not-allowed opacity-55" : "cursor-pointer",
-                          checked ? "border-border-strong bg-bg-secondary" : "border-border",
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={unavailable}
-                          onChange={(event) =>
-                            setDraft({
-                              ...draft,
-                              subjectSlugs: event.target.checked
-                                ? [...draft.subjectSlugs, subject.slug]
-                                : draft.subjectSlugs.filter((slug) => slug !== subject.slug),
-                            })
-                          }
-                          className="size-4 accent-current"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">
-                            {titleCase(subject.name)}
-                          </span>
-                          {unavailable ? (
-                            <span className="mt-0.5 block text-xs text-text-muted">
-                              Already in {owner?.name}
-                            </span>
-                          ) : null}
+                {subjects.map((subject) => {
+                  const checked = draft.subjectSlugs.includes(subject.slug);
+                  const owner = subjectOwners.get(subject.slug);
+                  const unavailable = Boolean(owner && owner.id !== course?.id);
+                  return (
+                    <label
+                      key={subject.slug}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg border p-3",
+                        unavailable ? "cursor-not-allowed opacity-55" : "cursor-pointer",
+                        checked ? "border-border-strong bg-bg-secondary" : "border-border",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={unavailable}
+                        onChange={(event) =>
+                          setDraft({
+                            ...draft,
+                            subjectSlugs: event.target.checked
+                              ? [...draft.subjectSlugs, subject.slug]
+                              : draft.subjectSlugs.filter((slug) => slug !== subject.slug),
+                          })
+                        }
+                        className="size-4 accent-current"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {titleCase(subject.name)}
                         </span>
-                      </label>
-                    );
-                  })}
+                        {unavailable ? (
+                          <span className="mt-0.5 block text-xs text-text-muted">
+                            Already in {owner?.name}
+                          </span>
+                        ) : null}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
               <p className="mt-2 text-xs text-text-muted">
                 {selectedNames.length
                   ? `${selectedNames.length} selected: ${selectedNames.join(", ")}`
-                  : "A draft can be empty. Add a public subject before publishing."}
+                  : "A draft can be empty. Add subjects before publishing."}
               </p>
             </fieldset>
 
