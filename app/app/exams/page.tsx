@@ -2,15 +2,18 @@ import { SetAppShell } from "@/components/set-app-shell";
 import { StudentExamsClient } from "@/components/student-exams-client";
 import { requireOnboardedUser } from "@/lib/auth";
 import { findTenantSubjectForCourseSubject, listTenantSubjects } from "@/lib/tenant/client";
-import { listCreatorPrivateSubjectAccess, listStudentCourses } from "@/lib/student-courses";
+import {
+  listCreatorPrivateSubjectAccess,
+  listStudentCourseSubjects,
+} from "@/lib/student-courses";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExamsPage() {
   const { user } = await requireOnboardedUser();
-  const [tenantSubjects, courses, privateSubjects] = await Promise.all([
+  const [tenantSubjects, courseSubjects, privateSubjects] = await Promise.all([
     listTenantSubjects(),
-    listStudentCourses(user.id),
+    listStudentCourseSubjects(user.id),
     listCreatorPrivateSubjectAccess(user.id),
   ]);
   const subjectsBySlug = new Map(
@@ -20,7 +23,11 @@ export default async function ExamsPage() {
         name: subject.subjectName,
         folderPath: subject.folderPath,
       })),
-      ...courses.flatMap((course) => course.subjects),
+      ...courseSubjects.map((subject) => ({
+        slug: subject.subjectSlug,
+        name: subject.subjectName,
+        folderPath: subject.folderPath,
+      })),
     ].flatMap((courseSubject) => {
       const tenantSubject = findTenantSubjectForCourseSubject(tenantSubjects, {
         subjectSlug: courseSubject.slug,
