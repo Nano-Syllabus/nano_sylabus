@@ -596,6 +596,16 @@ export function ChatPageClient({
       : "";
     if (fromSession) return fromSession;
 
+    if (typeof window !== "undefined") {
+      try {
+        const saved = window.localStorage.getItem("padhai:selected_subject");
+        if (saved) {
+          const normalized = normalizeSubjectLabel(saved);
+          if (normalized) return normalized;
+        }
+      } catch {}
+    }
+
     return null;
   }, [initialSubjectContext, initialSession?.subjectContext]);
   const [subjectContext, setSubjectContext] = useState<string | null>(defaultSubjectContext);
@@ -864,18 +874,6 @@ export function ChatPageClient({
         }
 
         setTenantSubjectsByName(nextSubjectsByName);
-
-        if (!subjectContext) {
-          try {
-            const savedSubject = window.localStorage.getItem("padhai:selected_subject");
-            if (savedSubject) {
-              const normalized = normalizeSubjectLabel(savedSubject);
-              if (normalized && (nextSubjectsByName[normalized] || Object.keys(nextSubjectsByName).length === 0)) {
-                setSubjectContext(normalized);
-              }
-            }
-          } catch {}
-        }
       } catch {
         // Chat still works through the server-side subject lookup if metadata is not ready yet.
       }
@@ -886,7 +884,7 @@ export function ChatPageClient({
     return () => {
       active = false;
     };
-  }, [subjectContext]);
+  }, []);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -1174,20 +1172,6 @@ export function ChatPageClient({
       setHasOpenedBooks(false);
     }
   }, [currentSessionId, messages.length]);
-
-  useEffect(() => {
-    if (!subjectContext && !currentSessionId && messages.length === 0) {
-      try {
-        const savedSubject = window.localStorage.getItem("padhai:selected_subject");
-        if (savedSubject) {
-          const normalized = normalizeSubjectLabel(savedSubject);
-          if (normalized) {
-            setSubjectContext(normalized);
-          }
-        }
-      } catch {}
-    }
-  }, [currentSessionId, messages.length, subjectContext]);
 
   useEffect(() => {
     if (subjectContext) {
