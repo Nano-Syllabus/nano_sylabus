@@ -879,9 +879,6 @@ export function ChatMaterialsLibrary({
                           focusRing,
                         )}
                       >
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-bg-secondary text-xs font-semibold">
-                          {shelf.slice(0, 2).toUpperCase()}
-                        </div>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold">{shelf}</span>
                           <span className="mt-0.5 block text-xs text-text-muted">
@@ -980,9 +977,6 @@ export function ChatMaterialsLibrary({
                                       focusRing,
                                     )}
                                   >
-                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-bg-secondary text-[10px] font-semibold text-text-primary">
-                                      {shelf.slice(0, 2).toUpperCase()}
-                                    </div>
                                     <span className="min-w-0 flex-1">
                                       <span className="block truncate text-sm font-medium">{shelf}</span>
                                       <span className="mt-0.5 block text-xs text-text-muted">
