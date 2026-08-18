@@ -653,6 +653,12 @@ export function ChatPageClient({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const loadingOlderMessagesRef = useRef(false);
   const shouldStickToBottomRef = useRef(true);
+  // Streaming tokens arrive far faster than the screen refreshes. Buffering
+  // them here and flushing once per frame keeps a long answer from forcing a
+  // React render — and a KaTeX/markdown re-parse — on every single token.
+  const streamBufferRef = useRef("");
+  const streamTargetIdRef = useRef<string | null>(null);
+  const streamFrameRef = useRef<number | null>(null);
   const [responseTimes, setResponseTimes] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -1330,12 +1336,57 @@ export function ChatPageClient({
     } catch {}
   }, [currentSessionId]);
 
+  const flushStreamBuffer = useCallback(() => {
+    streamFrameRef.current = null;
+    const pending = streamBufferRef.current;
+    const targetId = streamTargetIdRef.current;
+    if (!pending || !targetId) return;
+    streamBufferRef.current = "";
+    setMessages((previousMessages) =>
+      previousMessages.map((message) =>
+        message.id === targetId
+          ? { ...message, content: `${message.content}${pending}` }
+          : message,
+      ),
+    );
+  }, []);
+
+  const queueStreamToken = useCallback(
+    (targetId: string, text: string) => {
+      streamTargetIdRef.current = targetId;
+      streamBufferRef.current += text;
+      if (streamFrameRef.current !== null) return;
+      streamFrameRef.current = window.requestAnimationFrame(flushStreamBuffer);
+    },
+    [flushStreamBuffer],
+  );
+
+  const endStreamBuffer = useCallback(() => {
+    if (streamFrameRef.current !== null) {
+      window.cancelAnimationFrame(streamFrameRef.current);
+      streamFrameRef.current = null;
+    }
+    flushStreamBuffer();
+    streamTargetIdRef.current = null;
+    streamBufferRef.current = "";
+  }, [flushStreamBuffer]);
+
   const stop = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    endStreamBuffer();
     clearThinkingStageTimers();
     setIsLoading(false);
-  }, [clearThinkingStageTimers]);
+  }, [clearThinkingStageTimers, endStreamBuffer]);
+
+  useEffect(
+    () => () => {
+      if (streamFrameRef.current !== null) {
+        window.cancelAnimationFrame(streamFrameRef.current);
+      }
+    },
+    [],
+  );
 
   function handleChatResponseHeaders(response: Response) {
     if (requestWatchdogRef.current) {
@@ -1481,6 +1532,16 @@ export function ChatPageClient({
     () => (sessionDetail?.messages ?? []).filter((message) => message.role === "assistant"),
     [sessionDetail],
   );
+
+  // Precomputed once per message-list change. The render loop below used to
+  // derive this with `messages.slice(0, index + 1).filter(...)` inside the map,
+  // which is quadratic in the number of messages — and it ran again on every
+  // streamed token, so a long conversation got measurably slower to type in as
+  // it grew.
+  const assistantOrdinals = useMemo(() => {
+    let seen = 0;
+    return messages.map((message) => (message.role === "assistant" ? seen++ : -1));
+  }, [messages]);
 
   const assistantQuestions = useMemo(() => {
     const questions: string[] = [];
@@ -1791,13 +1852,7 @@ export function ChatPageClient({
               requestWatchdogRef.current = null;
             }
             setThinkingSteps([]);
-            setMessages((previousMessages) =>
-              previousMessages.map((message) =>
-                message.id === assistantMessage.id
-                  ? { ...message, content: `${message.content}${event.text}` }
-                  : message,
-              ),
-            );
+            queueStreamToken(assistantMessage.id, event.text);
             continue;
           }
 
@@ -1852,6 +1907,10 @@ export function ChatPageClient({
         }
       }
 
+      // Land whatever the last frame did not get to before anything reads the
+      // finished message back.
+      endStreamBuffer();
+
       if (buffer.trim()) {
         const event = parseSseBlock(buffer);
         if (event?.type === "error") {
@@ -1868,6 +1927,9 @@ export function ChatPageClient({
       if (error instanceof DOMException && error.name === "AbortError") return;
       handleChatError(error);
     } finally {
+      // Covers the abort and error paths too, so a stopped stream keeps the
+      // text it had already received.
+      endStreamBuffer();
       clearThinkingStageTimers();
       setThinkingSteps([]);
       if (abortControllerRef.current === controller) {
@@ -2488,10 +2550,7 @@ export function ChatPageClient({
                   </div>
                 ) : null}
                 {messages.map((message, index) => {
-                  const assistantOrdinal =
-                    message.role === "assistant"
-                      ? messages.slice(0, index + 1).filter((item) => item.role === "assistant").length - 1
-                      : -1;
+                  const assistantOrdinal = assistantOrdinals[index] ?? -1;
                   const persistedAssistant =
                     assistantOrdinal >= 0 ? persistedAssistantMessages[assistantOrdinal] ?? null : null;
                   const displayCitations = persistedAssistant?.citations

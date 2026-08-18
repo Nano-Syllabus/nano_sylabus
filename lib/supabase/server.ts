@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getSupabaseEnv } from "@/lib/env";
@@ -8,7 +9,12 @@ type CookieToSet = {
   options: Record<string, unknown>;
 };
 
-export async function createSupabaseServerClient() {
+/**
+ * Memoized per request. A single page render reaches for this from the layout,
+ * the page, and every data helper it calls; without the cache each of those
+ * built a fresh auth client and re-read the cookie store.
+ */
+export const createSupabaseServerClient = cache(async function createSupabaseServerClient() {
   const cookieStore = await cookies();
   const { url, key } = getSupabaseEnv();
 
@@ -30,4 +36,4 @@ export async function createSupabaseServerClient() {
       },
     },
   });
-}
+});

@@ -1,7 +1,8 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { isProfileComplete } from "@/lib/access";
-import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
+import { grantStarterCredits } from "@/lib/data/billing";
 import {
   normalizeBoard,
   normalizeBoardScore,
@@ -51,7 +52,14 @@ function toAppUser(
   };
 }
 
-export async function getCurrentAuth() {
+/**
+ * Deduped for the lifetime of one request. The app layout and the page beneath
+ * it both need the signed-in user; without this each of them paid a separate
+ * `auth.getUser()` round trip plus its own profile and credits queries, so a
+ * single navigation spent three sequential Supabase hops on work it had
+ * already done.
+ */
+export const getCurrentAuth = cache(async function getCurrentAuth() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -59,23 +67,35 @@ export async function getCurrentAuth() {
 
   if (!user) return { user: null, profile: null };
 
-  const { data: profileRow } = await supabase
-    .from("student_profiles")
-    .select("*")
-    .eq("user_id", user.id)
-      .maybeSingle();
+  // The profile decides whether the user is onboarded and the ledger row
+  // carries the credit balance. Neither depends on the other, so they go out
+  // together instead of one after the next.
+  const [profileResult, ledgerResult] = await Promise.all([
+    supabase.from("student_profiles").select("*").eq("user_id", user.id).maybeSingle(),
+    supabase
+      .from("credits_ledger")
+      .select("balance_after")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
+  const profileRow = profileResult.data;
   const profile: StudentProfile | null = profileRow ? normalizeProfile(profileRow) : null;
   const onboarded = isProfileComplete(profile);
-  const creditBalance = onboarded
-    ? await ensureStarterCreditsForUser(user.id)
-    : await getCreditBalanceForUser(user.id);
+
+  // Only a brand-new onboarded account still needs the starter grant written;
+  // everyone else already has a ledger row and reads it from the query above.
+  const creditBalance =
+    ledgerResult.data?.balance_after ??
+    (onboarded ? await grantStarterCredits(user.id) : 0);
 
   return {
     user: toAppUser(user, profile, creditBalance),
     profile,
   };
-}
+});
 
 export async function requireAuthenticatedUser() {
   const auth = await getCurrentAuth();

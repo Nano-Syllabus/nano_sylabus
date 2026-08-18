@@ -440,6 +440,15 @@ export type McqSelfCheckItem = {
   explanation?: string;
 };
 
+/**
+ * Every tenant call used to open a fresh socket, so each one paid a TCP
+ * handshake — and over https a full TLS handshake on top — before a single byte
+ * of the request went out. Pooling the connections turns that into one setup
+ * cost for the whole process.
+ */
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 64, keepAliveMsecs: 15_000 });
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 64, keepAliveMsecs: 15_000 });
+
 function requestJson<T>(
   path: string,
   options: {
@@ -453,7 +462,9 @@ function requestJson<T>(
 
   return new Promise<T>((resolve, reject) => {
     const url = new URL(path, baseUrl);
-    const transport = url.protocol === "https:" ? https : http;
+    const isHttps = url.protocol === "https:";
+    const transport = isHttps ? https : http;
+    const agent = isHttps ? httpsAgent : httpAgent;
     const serializedBody = options.body == null ? null : JSON.stringify(options.body);
     let settled = false;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = setTimeout(() => {
@@ -467,6 +478,7 @@ function requestJson<T>(
       {
         method: options.method ?? "GET",
         rejectUnauthorized,
+        agent,
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
@@ -540,9 +552,40 @@ export async function listTenantNamespaces() {
   return payload.namespaces ?? [];
 }
 
+/**
+ * The subject catalog changes when a teacher publishes, not per page view, but
+ * /app/exams, /app/explore and the subject pages each refetched it on every
+ * render. A short TTL keeps those renders off the network while still picking
+ * up new subjects within a minute. In-flight requests share one promise so a
+ * cold cache under concurrent traffic still makes a single call.
+ */
+const TENANT_SUBJECTS_TTL_MS = 60_000;
+let tenantSubjectsCache: { subjects: TenantSubject[]; expiresAt: number } | null = null;
+let tenantSubjectsInFlight: Promise<TenantSubject[]> | null = null;
+
 export async function listTenantSubjects() {
-  const payload = await requestJson<TenantSubjectsResponse>("/api/v1/subjects");
-  return payload.subjects ?? [];
+  const now = Date.now();
+  if (tenantSubjectsCache && tenantSubjectsCache.expiresAt > now) {
+    return tenantSubjectsCache.subjects;
+  }
+  if (tenantSubjectsInFlight) return tenantSubjectsInFlight;
+
+  tenantSubjectsInFlight = requestJson<TenantSubjectsResponse>("/api/v1/subjects")
+    .then((payload) => {
+      const subjects = payload.subjects ?? [];
+      tenantSubjectsCache = { subjects, expiresAt: Date.now() + TENANT_SUBJECTS_TTL_MS };
+      return subjects;
+    })
+    .finally(() => {
+      tenantSubjectsInFlight = null;
+    });
+
+  return tenantSubjectsInFlight;
+}
+
+/** Drops the cached catalog so a publish is visible immediately. */
+export function invalidateTenantSubjectsCache() {
+  tenantSubjectsCache = null;
 }
 
 function tenantSubjectKey(value: string) {

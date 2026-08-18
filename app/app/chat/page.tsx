@@ -16,14 +16,22 @@ export default async function ChatPage({
 }) {
   const { user, profile } = await requireOnboardedUser();
   const params = await searchParams;
-  const sessionResult = await listChatSessions(user.id, {
-    limit: 12,
-    offset: 0,
-  });
-  const activeSession = params.session
-    ? await getChatSessionDetail(params.session, user.id, { limit: INITIAL_CHAT_MESSAGE_LIMIT })
-    : null;
-  const studentCourses = await listStudentCourses(user.id);
+
+  // None of these depend on each other, so they go out together. Run in
+  // sequence they stacked four Supabase round trips in front of the first byte
+  // of HTML, which is what made opening a chat feel unresponsive.
+  const [sessionResult, activeSession, studentCourses, referenceNote] = await Promise.all([
+    listChatSessions(user.id, { limit: 12, offset: 0 }),
+    params.session
+      ? getChatSessionDetail(params.session, user.id, { limit: INITIAL_CHAT_MESSAGE_LIMIT })
+      : Promise.resolve(null),
+    listStudentCourses(user.id),
+    params.referenceNoteId && !params.session
+      ? // Silently ignore – the note may have been deleted.
+        getRevisionNoteDetail(params.referenceNoteId, user.id).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
   const noteSubjectOptions = studentCourses.flatMap((course) =>
     course.subjects.map((subject) => ({
       courseId: course.id,
@@ -32,15 +40,6 @@ export default async function ChatPage({
       subjectName: subject.name,
     })),
   );
-
-  let referenceNote = null;
-  if (params.referenceNoteId && !params.session) {
-    try {
-      referenceNote = await getRevisionNoteDetail(params.referenceNoteId, user.id);
-    } catch (_) {
-      // silently ignore – note may have been deleted
-    }
-  }
 
   return (
     <>

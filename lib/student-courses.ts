@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { mapTeacherCourse, type TeacherCourse } from "@/lib/teacher-courses";
@@ -55,19 +56,31 @@ function courseSourceStats(
   let questionBankFileCount = 0;
   let totalBytes = 0;
 
+  // Normalizing each subject folder once instead of once per document: a
+  // teacher with a large library turned this into tens of thousands of
+  // throwaway lowercase/replace allocations per page render.
+  const subjectPaths = subjects.map((item) => {
+    const raw = String(item.folder_path || "");
+    return { raw, normalized: normalizeCollectionPath(raw).toLowerCase() };
+  });
+
   for (const document of documents) {
     const path = String(document.collection_path || "");
     if (!path || matchedPaths.has(path)) continue;
 
-    const subject = subjects.find((item) =>
-      documentBelongsToSubject(path, String(item.folder_path || "")),
+    const normalizedPath = normalizeCollectionPath(path).toLowerCase();
+    const subject = subjectPaths.find(
+      (item) =>
+        Boolean(item.normalized) &&
+        (normalizedPath === item.normalized ||
+          normalizedPath.startsWith(`${item.normalized}/`)),
     );
     if (!subject) continue;
 
     matchedPaths.add(path);
     totalBytes += Number(document.size_bytes) || 0;
 
-    const shelf = documentShelf(path, String(subject.folder_path || ""));
+    const shelf = documentShelf(path, subject.raw);
     if (shelf === "Syllabus") syllabusFileCount += 1;
     if (shelf === "Notes") notesFileCount += 1;
     if (shelf === "Question Bank") questionBankFileCount += 1;
@@ -81,6 +94,55 @@ function courseSourceStats(
     questionBankFileCount,
     totalBytes,
   };
+}
+
+/**
+ * The author block behind each course card costs two round trips to build — an
+ * Auth Admin lookup for the profile metadata and a storage call to sign the
+ * avatar. That ran once per teacher on every render of the chat, exams and
+ * explore pages, for data that changes when a teacher edits their profile.
+ * Caching it briefly takes those calls off the critical path.
+ *
+ * The signed avatar URL is good for an hour, so a five minute TTL never hands
+ * out an expired link.
+ */
+const COURSE_AUTHOR_TTL_MS = 5 * 60_000;
+const courseAuthorCache = new Map<
+  string,
+  { author: TeacherCourse["author"]; expiresAt: number }
+>();
+
+async function loadCourseAuthor(
+  admin: SupabaseClient,
+  teacher: { id: string; user_id: string; handle: string },
+): Promise<TeacherCourse["author"]> {
+  const cached = courseAuthorCache.get(teacher.id);
+  if (cached && cached.expiresAt > Date.now()) return cached.author;
+
+  const authResult = await admin.auth.admin.getUserById(teacher.user_id);
+  const base = profileFromUser(authResult.data.user, teacher.handle);
+  const profile = await withTeacherAvatar(admin, base);
+  const author: TeacherCourse["author"] = {
+    handle: teacher.handle,
+    displayName: profile.displayName,
+    headline: profile.headline,
+    bio: profile.bio,
+    institution: profile.institution,
+    location: profile.location,
+    expertise: profile.expertise,
+    yearsExperience: profile.yearsExperience,
+    website: profile.website,
+    avatarUrl: profile.avatarUrl,
+    complete: profile.complete,
+  };
+
+  courseAuthorCache.set(teacher.id, { author, expiresAt: Date.now() + COURSE_AUTHOR_TTL_MS });
+  return author;
+}
+
+/** Drops a teacher's cached author block after they edit their public profile. */
+export function invalidateCourseAuthor(teacherId: string) {
+  courseAuthorCache.delete(teacherId);
 }
 
 async function mapCourseRows(admin: SupabaseClient, rows: Record<string, unknown>[]) {
@@ -114,22 +176,7 @@ async function mapCourseRows(admin: SupabaseClient, rows: Record<string, unknown
   await Promise.all(
     ((teachersResult.data || []) as Array<{ id: string; user_id: string; handle: string }>).map(
       async (teacher) => {
-        const authResult = await admin.auth.admin.getUserById(teacher.user_id);
-        const base = profileFromUser(authResult.data.user, teacher.handle);
-        const profile = await withTeacherAvatar(admin, base);
-        authorsByTeacher.set(teacher.id, {
-          handle: teacher.handle,
-          displayName: profile.displayName,
-          headline: profile.headline,
-          bio: profile.bio,
-          institution: profile.institution,
-          location: profile.location,
-          expertise: profile.expertise,
-          yearsExperience: profile.yearsExperience,
-          website: profile.website,
-          avatarUrl: profile.avatarUrl,
-          complete: profile.complete,
-        });
+        authorsByTeacher.set(teacher.id, await loadCourseAuthor(admin, teacher));
       },
     ),
   );
@@ -137,7 +184,9 @@ async function mapCourseRows(admin: SupabaseClient, rows: Record<string, unknown
   const subjectsByCourse = new Map<string, Record<string, unknown>[]>();
   for (const subject of (subjectsResult.data || []) as Record<string, unknown>[]) {
     const courseId = String(subject.course_id || "");
-    subjectsByCourse.set(courseId, [...(subjectsByCourse.get(courseId) || []), subject]);
+    const bucket = subjectsByCourse.get(courseId);
+    if (bucket) bucket.push(subject);
+    else subjectsByCourse.set(courseId, [subject]);
   }
 
   const enrollmentCounts = new Map<string, number>();
@@ -149,7 +198,9 @@ async function mapCourseRows(admin: SupabaseClient, rows: Record<string, unknown
   const documentsByTeacher = new Map<string, TeacherDocumentFileRow[]>();
   for (const document of (documentFilesResult.data || []) as TeacherDocumentFileRow[]) {
     const teacherId = String(document.teacher_id || "");
-    documentsByTeacher.set(teacherId, [...(documentsByTeacher.get(teacherId) || []), document]);
+    const bucket = documentsByTeacher.get(teacherId);
+    if (bucket) bucket.push(document);
+    else documentsByTeacher.set(teacherId, [document]);
   }
 
   return rows.map((row) => {
@@ -212,7 +263,12 @@ export async function getPublishedCourse(
   return course || null;
 }
 
-export async function listStudentCourses(
+/**
+ * Deduped per request. A single navigation can reach this from the page, a
+ * nested segment and an API handler, and each hit is a multi-query fan-out over
+ * enrollments, courses, subjects and the teacher's file list.
+ */
+export const listStudentCourses = cache(async function listStudentCourses(
   studentId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ): Promise<StudentCourse[]> {
@@ -253,7 +309,7 @@ export async function listStudentCourses(
       } satisfies StudentCourse,
     ];
   });
-}
+});
 
 export async function getStudentCourse(
   studentId: string,

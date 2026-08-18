@@ -155,15 +155,6 @@ export async function getChatSessionDetail(
   },
 ) {
   const supabase = await createSupabaseServerClient();
-  const { data: sessionRow, error: sessionError } = await supabase
-    .from("chat_sessions")
-    .select("*")
-    .eq("id", sessionId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (sessionError) throw sessionError;
-  if (!sessionRow) return null;
 
   const messageLimit =
     typeof options?.limit === "number" && Number.isFinite(options.limit)
@@ -185,8 +176,30 @@ export async function getChatSessionDetail(
     messageQuery = messageQuery.order("created_at", { ascending: true });
   }
 
-  const { data: rawMessageRows, error: messageError } = await messageQuery;
+  // All three are keyed by the session id the caller already has, so they run
+  // together rather than as three chained round trips. The session row still
+  // decides whether the caller sees anything: both other queries are scoped to
+  // this user's own rows, so nothing leaks when it turns out to be missing.
+  const [sessionResult, messageResult, noteResult] = await Promise.all([
+    supabase
+      .from("chat_sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+    messageQuery,
+    supabase
+      .from("revision_notes")
+      .select("id, message_id")
+      .eq("user_id", userId)
+      .eq("session_id", sessionId),
+  ]);
 
+  if (sessionResult.error) throw sessionResult.error;
+  const sessionRow = sessionResult.data;
+  if (!sessionRow) return null;
+
+  const { data: rawMessageRows, error: messageError } = messageResult;
   if (messageError) throw messageError;
 
   const hasMoreMessages = messageLimit ? (rawMessageRows?.length ?? 0) > messageLimit : false;
@@ -194,12 +207,7 @@ export async function getChatSessionDetail(
     ? (rawMessageRows ?? []).slice(0, messageLimit).reverse()
     : (rawMessageRows ?? []);
 
-  const { data: noteRows, error: noteError } = await supabase
-    .from("revision_notes")
-    .select("id, message_id")
-    .eq("user_id", userId)
-    .eq("session_id", sessionId);
-
+  const { data: noteRows, error: noteError } = noteResult;
   if (noteError) throw noteError;
 
   const noteByMessageId = new Map((noteRows ?? []).map((note) => [note.message_id, note.id]));

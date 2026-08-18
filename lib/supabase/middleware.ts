@@ -9,6 +9,30 @@ type CookieToSet = {
   options: Record<string, unknown>;
 };
 
+/**
+ * Remembers that a user has finished onboarding so the gate below can skip its
+ * `student_profiles` round trip. Only a positive result is ever trusted: an
+ * account that has just onboarded is re-checked against the database until the
+ * cookie is written, so the gate can never strand someone on /onboarding with
+ * stale data. Going the other way is harmless because every /app page still
+ * runs `requireOnboardedUser()` server-side.
+ */
+const PROFILE_GATE_COOKIE = "ns-gate";
+const PROFILE_GATE_MAX_AGE = 60 * 10;
+
+type ProfileGate = { userId: string; role: "student" | "admin" };
+
+function readProfileGate(request: NextRequest, userId: string): ProfileGate | null {
+  const raw = request.cookies.get(PROFILE_GATE_COOKIE)?.value;
+  if (!raw) return null;
+
+  const [cookieUserId, role] = raw.split(":");
+  if (cookieUserId !== userId) return null;
+  if (role !== "student" && role !== "admin") return null;
+
+  return { userId: cookieUserId, role };
+}
+
 export async function updateSession(request: NextRequest) {
   const { url, key } = getSupabaseEnv();
   let response = NextResponse.next({ request });
@@ -19,9 +43,7 @@ export async function updateSession(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet: CookieToSet[]) {
-        cookiesToSet.forEach(({ name, value, options }) =>
-          request.cookies.set(name, value),
-        );
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         response = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
           response.cookies.set(name, value, options as never),
@@ -37,27 +59,33 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   let onboarded = false;
   let role: "student" | "admin" = "student";
+  let gateToPersist: ProfileGate | null = null;
 
   if (user) {
-    const { data: profileRow } = await supabase
-      .from("student_profiles")
-      .select("full_name, college, board, grade, target_grade, language_pref, role, subjects")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const cachedGate = readProfileGate(request, user.id);
 
-    if (profileRow) {
-      onboarded = isProfileComplete({
-        fullName: profileRow.full_name ?? "",
-        college: profileRow.college ?? "",
-        board: profileRow.board ?? "",
-        grade: profileRow.grade ?? "",
-        targetGrade: profileRow.target_grade ?? "",
-        languagePref: profileRow.language_pref ?? "RN",
-        subjects: Array.isArray(profileRow.subjects) ? profileRow.subjects : [],
-      });
-      role = profileRow.role ?? "student";
+    if (cachedGate) {
+      onboarded = true;
+      role = cachedGate.role;
     } else {
-      onboarded = false;
+      const { data: profileRow } = await supabase
+        .from("student_profiles")
+        .select("board, grade, role, subjects")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (profileRow) {
+        onboarded = isProfileComplete({
+          board: profileRow.board ?? "",
+          grade: profileRow.grade ?? "",
+          subjects: Array.isArray(profileRow.subjects) ? profileRow.subjects : [],
+        });
+        role = profileRow.role ?? "student";
+      }
+
+      if (onboarded) {
+        gateToPersist = { userId: user.id, role };
+      }
     }
   }
 
@@ -76,7 +104,25 @@ export async function updateSession(request: NextRequest) {
     } else {
       redirectUrl.search = "";
     }
-    return NextResponse.redirect(redirectUrl);
+    const redirectResponse = NextResponse.redirect(redirectUrl);
+    // Carry the session cookies the auth client may have just refreshed, so a
+    // redirect does not throw away a rotated token and force another refresh.
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
+  }
+
+  if (gateToPersist) {
+    response.cookies.set(PROFILE_GATE_COOKIE, `${gateToPersist.userId}:${gateToPersist.role}`, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: request.nextUrl.protocol === "https:",
+      path: "/",
+      maxAge: PROFILE_GATE_MAX_AGE,
+    });
+  }
+
+  if (!user && request.cookies.has(PROFILE_GATE_COOKIE)) {
+    response.cookies.delete(PROFILE_GATE_COOKIE);
   }
 
   return response;

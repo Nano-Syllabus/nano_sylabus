@@ -112,6 +112,7 @@ export function AppSidebar({
   };
 
   const searchDebounceRef = useRef<number | null>(null);
+  const hasLoadedHistoryRef = useRef(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const historyScrollRef = useRef<HTMLDivElement>(null);
 
@@ -232,6 +233,16 @@ export function AppSidebar({
     if (searchDebounceRef.current) {
       window.clearTimeout(searchDebounceRef.current);
     }
+
+    // The debounce exists to throttle typing in the search box. On first paint
+    // there is nothing to throttle, and waiting on it left the chat history
+    // blank for a quarter second every time the app loaded.
+    if (!hasLoadedHistoryRef.current) {
+      hasLoadedHistoryRef.current = true;
+      void fetchSessions({ reset: true });
+      return;
+    }
+
     searchDebounceRef.current = window.setTimeout(() => {
       void fetchSessions({ reset: true });
     }, 250);

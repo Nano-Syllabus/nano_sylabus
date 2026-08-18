@@ -121,21 +121,6 @@ export async function listExplorerSubjects(
   if (sessionResult.error) throw sessionResult.error;
 
   const sessions = sessionResult.data ?? [];
-  const sessionIds = sessions.map((session) => session.id);
-  const messageResult = sessionIds.length
-    ? await supabase.from("chat_messages").select("session_id, role").in("session_id", sessionIds)
-    : { data: [], error: null };
-
-  if (messageResult.error) throw messageResult.error;
-
-  const questionCountBySessionId = new Map<string, number>();
-  (messageResult.data ?? []).forEach((row) => {
-    if (row.role !== "user") return;
-    questionCountBySessionId.set(
-      row.session_id,
-      (questionCountBySessionId.get(row.session_id) ?? 0) + 1,
-    );
-  });
 
   const profileSubjects = uniqueSubjects(profile.subjects);
   const profileSubjectKeys = new Set(profileSubjects.map((subject) => subject.toLowerCase()));
@@ -153,15 +138,54 @@ export async function listExplorerSubjects(
         }),
       );
 
+  // Group the sessions by subject tag once. Doing it inside the map below
+  // rescanned every session for every subject on the page.
+  const sessionsBySubjectKey = new Map<string, typeof sessions>();
+  for (const session of sessions) {
+    if (!Array.isArray(session.subject_tags)) continue;
+    for (const tag of new Set(
+      session.subject_tags.map((value) => normalizeSubjectLabel(String(value)).toLowerCase()),
+    )) {
+      const bucket = sessionsBySubjectKey.get(tag);
+      if (bucket) bucket.push(session);
+      else sessionsBySubjectKey.set(tag, [session]);
+    }
+  }
+
+  // Only the sessions actually shown need a question count, and only the
+  // student's own turns count. Previously this pulled every chat message row
+  // the account had ever produced across the wire to count a handful of them.
+  const countedSessionIds = [
+    ...new Set(
+      subjectEntries.flatMap(({ name }) =>
+        (sessionsBySubjectKey.get(normalizeSubjectLabel(name).toLowerCase()) ?? []).map(
+          (session) => session.id,
+        ),
+      ),
+    ),
+  ];
+
+  const questionCountBySessionId = new Map<string, number>();
+  if (countedSessionIds.length) {
+    const { data: messageRows, error: messageError } = await supabase
+      .from("chat_messages")
+      .select("session_id")
+      .eq("role", "user")
+      .in("session_id", countedSessionIds);
+
+    if (messageError) throw messageError;
+
+    for (const row of messageRows ?? []) {
+      questionCountBySessionId.set(
+        row.session_id,
+        (questionCountBySessionId.get(row.session_id) ?? 0) + 1,
+      );
+    }
+  }
+
   const summaries = subjectEntries.map(({ name: subject, slug }) => {
     const subjectKey = normalizeSubjectLabel(subject).toLowerCase();
-    const matchingSessions = sessions.filter(
-      (session) =>
-        Array.isArray(session.subject_tags) &&
-        session.subject_tags.some(
-          (tag) => normalizeSubjectLabel(String(tag)).toLowerCase() === subjectKey,
-        ),
-    );
+    const matchingSessions = sessionsBySubjectKey.get(subjectKey) ?? [];
 
     return {
       slug,

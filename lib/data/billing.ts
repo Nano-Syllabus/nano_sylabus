@@ -114,6 +114,17 @@ export async function ensureStarterCreditsForUser(userId: string) {
   if (existingError) throw existingError;
   if (existing) return existing.balance_after ?? 0;
 
+  return grantStarterCredits(userId);
+}
+
+/**
+ * Writes the starter grant for an account that has no ledger row yet. Split out
+ * of `ensureStarterCreditsForUser` so callers that already read the latest
+ * ledger row (the auth loader does) can skip the duplicate lookup.
+ */
+export async function grantStarterCredits(userId: string) {
+  const supabase = await createSupabaseServerClient();
+
   const { error: insertError } = await supabase.from("credits_ledger").insert({
     user_id: userId,
     type: "grant",
