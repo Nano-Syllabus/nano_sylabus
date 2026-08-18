@@ -11,26 +11,26 @@ type CookieToSet = {
 
 /**
  * Remembers that a user has finished onboarding so the gate below can skip its
- * `student_profiles` round trip. Only a positive result is ever trusted: an
- * account that has just onboarded is re-checked against the database until the
- * cookie is written, so the gate can never strand someone on /onboarding with
- * stale data. Going the other way is harmless because every /app page still
- * runs `requireOnboardedUser()` server-side.
+ * `student_profiles` round trip.
+ *
+ * This cookie is a performance hint, not a credential, and it is deliberately
+ * limited to the one fact that is safe to get wrong. `httpOnly` keeps scripts
+ * out but does not stop a hand-crafted request, so treat the contents as
+ * attacker-controlled: the value is only consulted after `auth.getUser()` has
+ * verified the session, and it is ignored unless it names that same verified
+ * user. The worst a forged cookie can claim is "I am onboarded" about yourself,
+ * which buys nothing — every /app page still runs `requireOnboardedUser()`
+ * server-side and redirects if it is not true.
+ *
+ * Role is deliberately NOT cached here. It decides admin access, so it is
+ * always read from the database on the paths that gate on it.
  */
 const PROFILE_GATE_COOKIE = "ns-gate";
 const PROFILE_GATE_MAX_AGE = 60 * 10;
 
-type ProfileGate = { userId: string; role: "student" | "admin" };
-
-function readProfileGate(request: NextRequest, userId: string): ProfileGate | null {
+function hasOnboardedGate(request: NextRequest, userId: string) {
   const raw = request.cookies.get(PROFILE_GATE_COOKIE)?.value;
-  if (!raw) return null;
-
-  const [cookieUserId, role] = raw.split(":");
-  if (cookieUserId !== userId) return null;
-  if (role !== "student" && role !== "admin") return null;
-
-  return { userId: cookieUserId, role };
+  return Boolean(raw) && raw === userId;
 }
 
 export async function updateSession(request: NextRequest) {
@@ -59,14 +59,15 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   let onboarded = false;
   let role: "student" | "admin" = "student";
-  let gateToPersist: ProfileGate | null = null;
+  let gateToPersist: string | null = null;
 
   if (user) {
-    const cachedGate = readProfileGate(request, user.id);
+    // Admin paths gate on role, and role is never taken from the cookie, so
+    // those always go to the database.
+    const needsRole = pathname.startsWith("/admin");
 
-    if (cachedGate) {
+    if (!needsRole && hasOnboardedGate(request, user.id)) {
       onboarded = true;
-      role = cachedGate.role;
     } else {
       const { data: profileRow } = await supabase
         .from("student_profiles")
@@ -84,7 +85,7 @@ export async function updateSession(request: NextRequest) {
       }
 
       if (onboarded) {
-        gateToPersist = { userId: user.id, role };
+        gateToPersist = user.id;
       }
     }
   }
@@ -112,7 +113,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (gateToPersist) {
-    response.cookies.set(PROFILE_GATE_COOKIE, `${gateToPersist.userId}:${gateToPersist.role}`, {
+    response.cookies.set(PROFILE_GATE_COOKIE, gateToPersist, {
       httpOnly: true,
       sameSite: "lax",
       secure: request.nextUrl.protocol === "https:",

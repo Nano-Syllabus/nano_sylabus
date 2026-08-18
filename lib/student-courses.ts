@@ -229,6 +229,88 @@ async function mapCourseRows(admin: SupabaseClient, rows: Record<string, unknown
   });
 }
 
+export type StudentCourseSubject = {
+  courseId: string;
+  courseName: string;
+  courseSlug: string;
+  subjectSlug: string;
+  subjectName: string;
+  folderPath: string;
+  position: number;
+};
+
+/**
+ * The subject list for a student's enrolled courses, and nothing else.
+ *
+ * `listStudentCourses` builds full course cards: author profiles (an Auth
+ * lookup plus a signed storage URL per teacher), platform-wide enrollment
+ * counts, and every document row the teacher owns so it can total up file
+ * stats. The chat and exams pages need none of that — they only want subject
+ * names and folder paths — but they were paying for all of it on every render.
+ * This walks enrollments, then courses and subjects together: two round trips
+ * with small payloads.
+ */
+export const listStudentCourseSubjects = cache(async function listStudentCourseSubjects(
+  studentId: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+): Promise<StudentCourseSubject[]> {
+  const enrollmentResult = await admin
+    .from("teacher_course_enrollments")
+    .select("course_id")
+    .eq("student_id", studentId)
+    .in("status", ["active", "completed"]);
+  if (enrollmentResult.error) throw enrollmentResult.error;
+
+  const courseIds = [
+    ...new Set(
+      (enrollmentResult.data || []).map((row) => String(row.course_id || "")).filter(Boolean),
+    ),
+  ];
+  if (!courseIds.length) return [];
+
+  const [courseResult, subjectResult] = await Promise.all([
+    admin
+      .from("teacher_courses")
+      .select("id,name,slug")
+      .in("id", courseIds)
+      .is("archived_at", null),
+    admin
+      .from("teacher_course_subjects")
+      .select("course_id,subject_slug,subject_name,folder_path,position")
+      .in("course_id", courseIds),
+  ]);
+  if (courseResult.error) throw courseResult.error;
+  if (subjectResult.error) throw subjectResult.error;
+
+  const courseById = new Map(
+    (courseResult.data || []).map((row) => [
+      String(row.id || ""),
+      { name: String(row.name || ""), slug: String(row.slug || "") },
+    ]),
+  );
+
+  return (subjectResult.data || [])
+    .flatMap((row) => {
+      const courseId = String(row.course_id || "");
+      const course = courseById.get(courseId);
+      // An archived course drops out of the course query above, so its
+      // subjects must drop out here too.
+      if (!course) return [];
+      return [
+        {
+          courseId,
+          courseName: course.name,
+          courseSlug: course.slug,
+          subjectSlug: String(row.subject_slug || ""),
+          subjectName: String(row.subject_name || ""),
+          folderPath: String(row.folder_path || ""),
+          position: Number(row.position) || 0,
+        },
+      ];
+    })
+    .sort((left, right) => left.position - right.position);
+});
+
 export async function listPublishedCourses(
   admin: SupabaseClient = createSupabaseAdminClient(),
 ): Promise<TeacherCourse[]> {
