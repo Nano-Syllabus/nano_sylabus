@@ -864,6 +864,18 @@ export function ChatPageClient({
         }
 
         setTenantSubjectsByName(nextSubjectsByName);
+
+        if (!subjectContext) {
+          try {
+            const savedSubject = window.localStorage.getItem("padhai:selected_subject");
+            if (savedSubject) {
+              const normalized = normalizeSubjectLabel(savedSubject);
+              if (normalized && (nextSubjectsByName[normalized] || Object.keys(nextSubjectsByName).length === 0)) {
+                setSubjectContext(normalized);
+              }
+            }
+          } catch {}
+        }
       } catch {
         // Chat still works through the server-side subject lookup if metadata is not ready yet.
       }
@@ -874,7 +886,7 @@ export function ChatPageClient({
     return () => {
       active = false;
     };
-  }, []);
+  }, [subjectContext]);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -1162,6 +1174,28 @@ export function ChatPageClient({
       setHasOpenedBooks(false);
     }
   }, [currentSessionId, messages.length]);
+
+  useEffect(() => {
+    if (!subjectContext && !currentSessionId && messages.length === 0) {
+      try {
+        const savedSubject = window.localStorage.getItem("padhai:selected_subject");
+        if (savedSubject) {
+          const normalized = normalizeSubjectLabel(savedSubject);
+          if (normalized) {
+            setSubjectContext(normalized);
+          }
+        }
+      } catch {}
+    }
+  }, [currentSessionId, messages.length, subjectContext]);
+
+  useEffect(() => {
+    if (subjectContext) {
+      try {
+        window.localStorage.setItem("padhai:selected_subject", subjectContext);
+      } catch {}
+    }
+  }, [subjectContext]);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [input, setInput] = useState("");
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -2107,6 +2141,10 @@ export function ChatPageClient({
       const currentSubjectContext = normalizeSubjectLabel(stripSubjectChapter(subjectContext) || "");
       if (!nextSubjectContext) return;
 
+      try {
+        window.localStorage.setItem("padhai:selected_subject", nextSubjectContext);
+      } catch {}
+
       // Keep the library in all-subject mode after a selection so another
       // subject can be chosen without closing the panel first.
       setLibraryShowAllSubjects(true);
@@ -2116,6 +2154,7 @@ export function ChatPageClient({
         currentSessionIdRef.current || messages.length > 0 || isLoading,
       );
       if (!chatHasStarted) {
+        setSubjectContext(nextSubjectContext);
         void updateSessionSubjectContext(nextSubjectContext);
         return;
       }

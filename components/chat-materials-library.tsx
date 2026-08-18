@@ -316,13 +316,19 @@ export function ChatMaterialsLibrary({
             }))
             .filter((entry) => entry.slug);
           setLibrarySubjects(nextSubjects);
-          setOpenSubjects(nextSubjects[0] ? new Set([nextSubjects[0].slug]) : new Set());
-          const firstShelf = nextSubjects[0]?.materials[0]
-            ? shelfLabel(nextSubjects[0].materials[0].shelf)
+          const activeEntry = nextSubjects.find(
+            (s) =>
+              (activeSubjectSlug && s.slug === activeSubjectSlug) ||
+              (activeSubject?.name && s.name.trim().toLowerCase() === activeSubject.name.trim().toLowerCase()),
+          );
+          const targetSubject = activeEntry || nextSubjects[0];
+          setOpenSubjects(targetSubject ? new Set([targetSubject.slug]) : new Set());
+          const firstShelf = targetSubject?.materials[0]
+            ? shelfLabel(targetSubject.materials[0].shelf)
             : "";
           setOpenShelves(
-            firstShelf && nextSubjects[0]
-              ? new Set([`${nextSubjects[0].slug}:${firstShelf}`])
+            firstShelf && targetSubject
+              ? new Set([`${targetSubject.slug}:${firstShelf}`])
               : new Set(),
           );
         }
