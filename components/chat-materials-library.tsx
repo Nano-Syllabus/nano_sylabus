@@ -569,11 +569,12 @@ export function ChatMaterialsLibrary({
     onWidthChange(Math.min(max, Math.max(min, width + direction * 24)));
   }
 
-  function renderMaterialRow(material: Material) {
+  function renderMaterialRow(material: Material, depth: 0 | 1 | 2 = 0) {
     const pdf = isPdf(material);
     const canOpen = Boolean(material.documentId) && material.previewAvailable !== false;
     const rowClass = cn(
-      "group flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors motion-reduce:transition-none hover:bg-bg-secondary",
+      "group flex min-h-14 w-full items-center gap-3 py-2 text-left transition-colors motion-reduce:transition-none hover:bg-bg-secondary",
+      depth === 2 ? "pl-14 pr-4" : depth === 1 ? "pl-10 pr-4" : "px-4",
       focusRing,
     );
     const contents = (
@@ -864,7 +865,7 @@ export function ChatMaterialsLibrary({
             ) : null}
 
             {subject && groupedMaterials.length > 0 ? (
-              <div className="space-y-3 p-3">
+              <div className="space-y-2 p-2">
                 {groupedMaterials.map(([shelf, shelfMaterials]) => {
                   const expanded = openShelves.has(shelf) || Boolean(query.trim());
                   return (
@@ -874,7 +875,7 @@ export function ChatMaterialsLibrary({
                         onClick={() => toggleShelf(shelf)}
                         aria-expanded={expanded}
                         className={cn(
-                          "flex min-h-14 w-full items-center gap-3 px-4 text-left transition-colors motion-reduce:transition-none hover:bg-bg-secondary",
+                          "flex min-h-12 w-full items-center gap-3 px-4 text-left transition-colors motion-reduce:transition-none hover:bg-bg-secondary",
                           focusRing,
                         )}
                       >
@@ -896,7 +897,9 @@ export function ChatMaterialsLibrary({
                         />
                       </button>
                       {expanded ? (
-                        <ul className="border-t border-border">{shelfMaterials.map(renderMaterialRow)}</ul>
+                        <ul className="relative border-t border-border bg-bg-secondary/30 before:absolute before:bottom-0 before:left-5 before:top-0 before:border-l before:border-border">
+                          {shelfMaterials.map((material) => renderMaterialRow(material, 1))}
+                        </ul>
                       ) : null}
                     </section>
                   );
@@ -905,7 +908,7 @@ export function ChatMaterialsLibrary({
             ) : null}
 
             {!subject && loadState === "ready" && filteredLibrarySubjects.length > 0 ? (
-              <div className="space-y-3 p-3">
+              <div className="space-y-2 p-2">
                 {filteredLibrarySubjects.map((entry) => {
                   const expanded = openSubjects.has(entry.slug) || Boolean(query.trim());
                   const isActiveSubject =
@@ -916,6 +919,10 @@ export function ChatMaterialsLibrary({
                     const shelf = shelfLabel(material.shelf);
                     shelfGroups.set(shelf, [...(shelfGroups.get(shelf) || []), material]);
                   }
+                  const subjectPanelId = `library-subject-${entry.courseId || "course"}-${entry.slug}`.replace(
+                    /[^a-zA-Z0-9_-]/g,
+                    "-",
+                  );
                   return (
                     <section key={`${entry.courseId}:${entry.slug}`} className="overflow-hidden rounded-lg border border-border bg-bg-primary">
                       <button
@@ -925,9 +932,10 @@ export function ChatMaterialsLibrary({
                           toggleSubject(entry.slug);
                         }}
                         aria-expanded={expanded}
+                        aria-controls={subjectPanelId}
                         aria-current={isActiveSubject ? "true" : undefined}
                         className={cn(
-                          "flex min-h-16 w-full items-center gap-3 px-4 text-left transition-colors motion-reduce:transition-none hover:bg-bg-secondary",
+                          "flex min-h-14 w-full items-center gap-3 px-4 text-left transition-colors motion-reduce:transition-none hover:bg-bg-secondary",
                           isActiveSubject && "bg-bg-secondary",
                           focusRing,
                         )}
@@ -952,18 +960,23 @@ export function ChatMaterialsLibrary({
                       </button>
                       {expanded ? (
                         shelfGroups.size > 0 ? (
-                          <div className="border-t border-border">
+                          <div id={subjectPanelId} className="border-t border-border bg-bg-secondary/30 px-2 py-1">
                             {[...shelfGroups.entries()].map(([shelf, shelfMaterials]) => {
                               const shelfKey = `${entry.slug}:${shelf}`;
                               const shelfExpanded = openShelves.has(shelfKey) || Boolean(query.trim());
+                              const shelfPanelId = `${subjectPanelId}-shelf-${shelf}`.replace(
+                                /[^a-zA-Z0-9_-]/g,
+                                "-",
+                              );
                               return (
-                                <div key={shelfKey} className="border-b border-border last:border-b-0">
+                                <div key={shelfKey} className="relative ml-4 border-l border-border last:border-b-0">
                                   <button
                                     type="button"
                                     onClick={() => toggleShelf(shelfKey)}
                                     aria-expanded={shelfExpanded}
+                                    aria-controls={shelfPanelId}
                                     className={cn(
-                                      "flex min-h-12 w-full items-center gap-3 px-4 text-left transition-colors motion-reduce:transition-none hover:bg-bg-secondary",
+                                      "relative flex min-h-11 w-full items-center gap-3 pl-8 pr-4 text-left transition-colors motion-reduce:transition-none before:absolute before:-left-px before:top-1/2 before:w-5 before:border-t before:border-border hover:bg-bg-secondary",
                                       focusRing,
                                     )}
                                   >
@@ -985,14 +998,19 @@ export function ChatMaterialsLibrary({
                                     />
                                   </button>
                                   {shelfExpanded ? (
-                                    <ul className="border-t border-border">{shelfMaterials.map(renderMaterialRow)}</ul>
+                                    <ul
+                                      id={shelfPanelId}
+                                      className="relative ml-8 border-l border-border bg-bg-primary/40 before:absolute before:-left-px before:top-0 before:h-full before:border-l before:border-border"
+                                    >
+                                      {shelfMaterials.map((material) => renderMaterialRow(material, 2))}
+                                    </ul>
                                   ) : null}
                                 </div>
                               );
                             })}
                           </div>
                         ) : (
-                          <div className="border-t border-border px-4 py-5 text-sm text-text-secondary">
+                          <div id={subjectPanelId} className="border-t border-border px-7 py-5 text-sm text-text-secondary">
                             No materials uploaded for this subject yet.
                           </div>
                         )

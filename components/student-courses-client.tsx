@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, BookOpen, CheckCircle2 } from "lucide-react";
+import { ArrowRight, BookOpen, CheckCircle2, Upload } from "lucide-react";
 import { CourseLeaveButton } from "@/components/course-leave-button";
 import type { StudentCourse } from "@/lib/student-courses";
 import { titleCase } from "@/lib/utils";
@@ -67,12 +67,23 @@ export function StudentCoursesClient({
           </p>
         </div>
         <span className="flex-1" />
-        <Link
-          href="/exams"
-          className="inline-flex min-h-10 items-center rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2"
-        >
-          Browse courses
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/exams"
+            className="inline-flex min-h-10 items-center rounded-full border border-border bg-bg-primary px-4 text-sm font-medium text-text-primary transition hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2"
+          >
+            Community courses
+          </Link>
+          <Link
+            href="/teachers"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2"
+          >
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            Upload Resources
+          </Link>
+        </div>
       </div>
 
       {!courses.length ? (
@@ -86,7 +97,7 @@ export function StudentCoursesClient({
             href="/exams"
             className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2"
           >
-            Browse courses <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            Community courses <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
         </section>
       ) : (
