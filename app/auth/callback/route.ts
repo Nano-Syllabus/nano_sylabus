@@ -6,7 +6,16 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") || request.cookies.get("oauth_next")?.value || null;
+  const encodedCookieNext = request.cookies.get("oauth_next")?.value;
+  let cookieNext: string | null = null;
+  if (encodedCookieNext) {
+    try {
+      cookieNext = decodeURIComponent(encodedCookieNext);
+    } catch {
+      cookieNext = null;
+    }
+  }
+  const next = url.searchParams.get("next") || cookieNext;
   const origin = url.origin;
 
   if (!code) {
@@ -59,6 +68,10 @@ export async function GET(request: NextRequest) {
   response.cookies.set("oauth_next", "", {
     maxAge: 0,
     path: "/",
+    domain:
+      url.hostname === "nanosyllabus.com" || url.hostname.endsWith(".nanosyllabus.com")
+        ? ".nanosyllabus.com"
+        : undefined,
   });
   return response;
 }

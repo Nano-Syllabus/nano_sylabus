@@ -6,6 +6,7 @@ import { FormEvent, useState } from "react";
 import { AuthShell, DividerOr } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
+import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 function passwordStrength(password: string) {
@@ -100,15 +101,8 @@ export function SignupForm({ nextPath }: { nextPath?: string }) {
     setGoogleLoading(true);
 
     const supabase = createSupabaseBrowserClient();
-    const redirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/auth/callback`
-        : undefined;
-
-    if (typeof document !== "undefined") {
-      const encodedNext = encodeURIComponent(nextPath || "");
-      document.cookie = `oauth_next=${encodedNext}; Path=/; Max-Age=600; SameSite=Lax`;
-    }
+    const redirectTo = getGoogleAuthRedirectUrl();
+    setOAuthNextCookie(nextPath);
 
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
