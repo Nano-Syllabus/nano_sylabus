@@ -671,7 +671,7 @@ export function ChatMaterialsLibrary({
               aria-label="Back to library"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              {!compactReader ? <span>Library</span> : null}
+              {!compactReader ? <span>Study Space</span> : null}
             </button>
             <div className="h-5 w-px bg-border" aria-hidden="true" />
             <div className="min-w-0 flex-1">

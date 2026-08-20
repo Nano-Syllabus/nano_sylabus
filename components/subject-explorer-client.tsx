@@ -10,6 +10,12 @@ import { titleCase } from "@/lib/utils";
 
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
 const button = `inline-flex min-h-10 items-center justify-center rounded-[10px] border px-4 text-sm font-medium transition ${focusRing}`;
+const STATIC_SUBJECT_INSIGHTS = [
+  "8 syllabus topics",
+  "3 weak topics",
+  "2 topics not yet tested",
+  "Previous exam score: 54%",
+];
 
 type SubjectLevel = "green" | "yellow" | "red" | "grey";
 
@@ -85,6 +91,17 @@ function SubjectCard({ subject }: { subject: SubjectExplorerSummary }) {
           {subject.questionCount} {subject.questionCount === 1 ? "question" : "questions"} asked ·{" "}
           {subject.sessionCount} {subject.sessionCount === 1 ? "chat" : "chats"}
         </p>
+
+        <div className="mt-3 rounded-[14px] border border-border bg-bg-secondary/70 px-3 py-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+            NanoSyllabus sees
+          </p>
+          <ul className="mt-2 space-y-1 text-xs leading-5 text-text-secondary">
+            {STATIC_SUBJECT_INSIGHTS.map((insight) => (
+              <li key={insight}>{insight}</li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       {/* Footer: Last Activity & Always Visible CTA */}
@@ -255,7 +272,7 @@ export function SubjectExplorerClient({
   return (
     <main className="w-full max-w-[1240px] px-[14px] pb-24 pt-[18px] lg:p-[26px]">
       <div className="mb-5 flex flex-wrap items-start gap-4">
-        <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">Create Subject</h1>
+        <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">My Subjects</h1>
         <span className="flex-1" />
         <Link
           href="/exams"

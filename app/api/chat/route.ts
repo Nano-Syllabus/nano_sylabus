@@ -980,7 +980,7 @@ export async function POST(request: Request) {
             if (isPrivateSubject) {
               if (latestUserAttachments.length > 0) {
                 throw new Error(
-                  "Image attachments are not supported in private-subject chat yet. Ask with text or open the material from Library.",
+                  "Image attachments are not supported in private-subject chat yet. Ask with text or open the material from Study Space.",
                 );
               }
               enqueue("status", { message: "Reading your private subject materials..." });

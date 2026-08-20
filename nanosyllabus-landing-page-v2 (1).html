@@ -102,14 +102,16 @@
     .dot{width:6px;height:6px;border-radius:50%;background:var(--blue)}
     h1{
       margin:20px auto 0;
-      max-width:920px;
+      max-width:940px;
       font-size:clamp(48px,6vw,78px);
-      line-height:1.01;letter-spacing:-.06em;
+      line-height:1.12;letter-spacing:-.05em;
       font-weight:900;
+      padding-bottom:4px;
     }
     .grad{
       background:linear-gradient(90deg,#2d66ec,#4f8cff 48%,#58c9ff);
-      -webkit-background-clip:text;background-clip:text;color:transparent;
+      -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+      display:inline-block;padding-right:0.25em;margin-right:-0.25em;padding-bottom:0.18em;margin-bottom:-0.18em;padding-left:0.05em;margin-left:-0.05em;
     }
     .hero p{
       max-width:670px;margin:24px auto 0;
@@ -301,7 +303,7 @@
     <section class="hero">
       <div class="container">
         <div class="eyebrow"><span class="dot"></span> Your exam. Your syllabus. Your readiness.</div>
-        <h1>Practice your actual exam <span class="grad">before the real exam.</span></h1>
+        <h1>Turn academics into <span class="grad">daily learning challenges.</span></h1>
         <p>Upload your syllabus. NanoSyllabus becomes your personal exam coach—so you know what you know, what you don't, and where your marks are going.</p>
         <div class="actions">
           <a class="btn btn-primary" href="#start">Start a mock exam →</a>

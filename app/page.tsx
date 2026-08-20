@@ -8,7 +8,7 @@ import { titleCase } from "@/lib/utils";
 export const metadata = {
   title: "NanoSyllabus — Know where you stand before the exam",
   description:
-    "Practice your actual exam before the real exam. Upload your syllabus. NanoSyllabus becomes your personal exam coach.",
+    "Turn academics into daily learning challenges. Upload your syllabus. NanoSyllabus becomes your personal exam coach.",
 };
 
 export const dynamic = "force-dynamic";
@@ -144,18 +144,27 @@ export default async function LandingPage() {
 
         .landing-v2 h1 {
           margin: 20px auto 0;
-          max-width: 920px;
-          font-size: clamp(48px, 6vw, 78px);
-          line-height: 1.01;
-          letter-spacing: -0.06em;
+          max-width: 980px;
+          font-size: clamp(44px, 6vw, 76px);
+          line-height: 1.16;
+          letter-spacing: -0.035em;
           font-weight: 900;
+          padding: 0 12px 10px;
         }
 
         .landing-v2 .grad {
           background: linear-gradient(90deg, #2d66ec, #4f8cff 48%, #58c9ff);
           -webkit-background-clip: text;
           background-clip: text;
+          -webkit-text-fill-color: transparent;
           color: transparent;
+          display: inline-block;
+          padding-right: 0.25em;
+          margin-right: -0.25em;
+          padding-bottom: 0.18em;
+          margin-bottom: -0.18em;
+          padding-left: 0.05em;
+          margin-left: -0.05em;
         }
 
         .landing-v2 .micro-proof i {
@@ -236,7 +245,8 @@ export default async function LandingPage() {
               <span className="dot" /> Your exam. Your syllabus. Your readiness.
             </div>
             <h1>
-              Practice your actual exam <span className="grad">before the real exam.</span>
+              Turn academics into{" "}
+              <span className="grad block sm:inline-block">daily learning challenges.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-[670px] text-base text-[#68758a]">
               Upload your syllabus. NanoSyllabus becomes your personal exam coach—so you know what

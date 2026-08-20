@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nano Syllabus — Challenges</title>
+<style>
+  * { box-sizing: border-box; }
+  :root{
+    --blue:#5d98ff;
+    --blue-soft:#eef5ff;
+    --text:#111111;
+    --muted:#777b83;
+    --line:#e7e7e7;
+    --bg:#ffffff;
+    --soft:#f7f7f8;
+    --green:#23935a;
+    --green-soft:#eaf8f0;
+    --orange:#d88916;
+    --orange-soft:#fff5e5;
+  }
+  body{
+    margin:0;
+    font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color:var(--text);
+    background:#fff;
+  }
+  button { font:inherit; }
+  .app{display:flex; min-height:100vh;}
+  .sidebar{
+    width:318px; border-right:1px solid var(--line); min-height:100vh;
+    display:flex; flex-direction:column; background:#fff;
+  }
+  .brand{
+    height:76px; display:flex; align-items:center; padding:0 24px;
+    font-size:23px; font-weight:750; letter-spacing:-.7px;
+  }
+  .brand .mark{
+    width:18px;height:18px;border:2px solid #222;border-radius:3px;margin-left:auto;
+  }
+  .nav{padding:14px 16px;}
+  .nav-item{
+    height:48px; display:flex; align-items:center; gap:16px; padding:0 14px;
+    border-radius:28px; font-size:17px; margin-bottom:4px; cursor:pointer;
+  }
+  .nav-item:hover{background:#f6f6f7;}
+  .nav-item.active{background:#f2f2f3;}
+  .nav-icon{width:22px;text-align:center;font-size:20px;color:#161616;}
+  .recent-title{padding:16px 24px 8px;font-size:16px;font-weight:700;}
+  .recent{padding:0 24px; overflow:hidden;}
+  .recent div{font-size:16px;margin:12px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sidebar-bottom{margin-top:auto;border-top:1px solid var(--line);}
+  .site{height:64px;display:flex;align-items:center;padding:0 28px;font-size:16px;border-bottom:1px solid var(--line);}
+  .profile{height:92px;display:flex;align-items:center;gap:14px;padding:0 24px;}
+  .avatar{width:42px;height:42px;border:1px solid #ddd;border-radius:50%;display:grid;place-items:center;font-weight:600;}
+  .profile-name{font-weight:650;font-size:16px;}
+  .plan{color:#888;font-size:14px;margin-top:4px;}
+  .chev{margin-left:auto;color:#777;font-size:22px;}
+
+  .main{flex:1;min-width:0;background:#fff;}
+  .topbar{
+    height:76px;border-bottom:1px solid #f1f1f1;display:flex;align-items:center;
+    justify-content:flex-end;padding:0 30px;gap:14px;
+  }
+  .messages{background:#e9f6ee;color:#248652;border-radius:20px;padding:8px 15px;font-size:13px;font-weight:700;letter-spacing:.5px;}
+  .lang{background:#f1f1f2;border-radius:24px;padding:11px 18px;font-size:14px;}
+  .books{border:2px solid #91b9ff;color:#6e9fff;border-radius:28px;padding:11px 19px;font-weight:700;box-shadow:0 0 0 5px rgba(105,155,255,.08);}
+
+  .content{max-width:1160px;margin:0 auto;padding:38px 54px 80px;}
+  .eyebrow{font-size:14px;color:#6d7179;font-weight:650;margin-bottom:8px;}
+  h1{font-size:42px;letter-spacing:-1.8px;margin:0 0 8px;font-weight:760;}
+  .subtitle{color:#737780;font-size:17px;margin:0 0 28px;}
+
+  .hero-grid{display:grid;grid-template-columns:1.55fr .9fr;gap:18px;margin-bottom:24px;}
+  .card{border:1px solid var(--line);border-radius:18px;background:#fff;}
+  .readiness{padding:25px 27px;}
+  .card-title{font-size:18px;font-weight:730;margin-bottom:5px;}
+  .card-sub{font-size:14px;color:#7b7e85;}
+  .readiness-number{font-size:40px;font-weight:760;letter-spacing:-1.5px;margin-top:20px;}
+  .progress{height:12px;background:#eeeeef;border-radius:99px;overflow:hidden;margin:9px 0 12px;}
+  .progress span{display:block;height:100%;width:68%;background:#72a5ff;border-radius:99px;}
+  .readiness-foot{display:flex;justify-content:space-between;font-size:13px;color:#777;}
+  .streak{
+    padding:25px 27px;background:linear-gradient(135deg,#fbfdff,#f4f8ff);
+  }
+  .streak-top{display:flex;align-items:flex-start;justify-content:space-between;}
+  .flame{font-size:31px;}
+  .streak-num{font-size:39px;font-weight:760;letter-spacing:-1.5px;margin-top:12px;}
+  .streak-label{color:#777;font-size:14px;}
+  .rank-pill{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #dce8ff;border-radius:20px;padding:7px 11px;color:#4c7fd9;font-size:12px;font-weight:700;margin-top:17px;}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px;}
+  .stat{padding:18px 20px;border:1px solid var(--line);border-radius:15px;}
+  .stat-label{font-size:13px;color:#7d8087;margin-bottom:7px;}
+  .stat-value{font-size:24px;font-weight:750;}
+  .stat-note{font-size:12px;color:#777;margin-top:4px;}
+
+  .challenges-first-head{margin-top:4px;margin-bottom:12px;}
+  .challenge-list-head{margin-top:30px;}
+  .section-head{display:flex;align-items:end;justify-content:space-between;margin:26px 0 14px;}
+  .section-head h2{font-size:22px;margin:0;letter-spacing:-.5px;}
+  .section-head span{font-size:13px;color:#7b7e85;}
+  .challenge-list{display:flex;flex-direction:column;gap:12px;}
+  .challenge{
+    border:1px solid var(--line);border-radius:16px;padding:19px 20px;
+    display:grid;grid-template-columns:48px 1fr auto;gap:16px;align-items:center;
+    cursor:pointer;transition:.15s ease;
+  }
+  .challenge:hover{border-color:#bcd3ff;box-shadow:0 6px 22px rgba(0,0,0,.04);transform:translateY(-1px);}
+  .topic-icon{width:48px;height:48px;border-radius:14px;background:var(--blue-soft);color:#528cf3;display:grid;place-items:center;font-weight:800;}
+  .challenge-title{font-size:17px;font-weight:720;margin-bottom:5px;}
+  .challenge-meta{font-size:13px;color:#777;display:flex;gap:12px;flex-wrap:wrap;}
+  .tag{background:#f5f5f6;padding:5px 8px;border-radius:7px;color:#696c73;}
+  .duration{font-size:13px;color:#777;margin-right:12px;}
+  .start{border:0;background:#111;color:#fff;border-radius:22px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;}
+
+  /* Detail page */
+  .detail{display:none;}
+  .back{border:0;background:transparent;padding:0;color:#666;cursor:pointer;font-size:14px;margin-bottom:22px;}
+  .detail-title{font-size:38px;letter-spacing:-1.4px;margin:0 0 8px;}
+  .detail-sub{color:#777;margin-bottom:25px;}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:22px;}
+  .step{border:1px solid var(--line);border-radius:15px;padding:18px;}
+  .step-num{width:28px;height:28px;border-radius:50%;background:#f1f1f2;display:grid;place-items:center;font-weight:750;font-size:13px;margin-bottom:13px;}
+  .step.done .step-num{background:var(--green-soft);color:var(--green);}
+  .step h3{margin:0 0 6px;font-size:15px;}
+  .step p{margin:0;color:#777;font-size:13px;line-height:1.45;}
+  .lesson{border:1px solid var(--line);border-radius:18px;padding:27px;margin-bottom:15px;}
+  .lesson h2{font-size:22px;margin:0 0 12px;}
+  .lesson p{font-size:15px;line-height:1.7;color:#444;}
+  .question{margin-top:17px;padding:17px;border-radius:13px;background:#fafafa;border:1px solid #ededed;}
+  .q-head{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#777;margin-bottom:9px;}
+  .q-text{font-weight:680;line-height:1.5;}
+  .answer{margin-top:11px;color:#555;font-size:14px;line-height:1.55;}
+  .exam-box{border:1px solid #cfe0ff;background:#f8fbff;border-radius:18px;padding:25px;margin-top:20px;}
+  .exam-box h2{margin:0 0 7px;font-size:22px;}
+  .exam-box p{color:#686d76;font-size:14px;line-height:1.5;}
+  .exam-info{display:flex;gap:20px;margin:18px 0;color:#555;font-size:13px;}
+  .take-exam{border:0;background:#5f96ff;color:#fff;border-radius:25px;padding:12px 20px;font-weight:700;cursor:pointer;}
+  .completed-banner{display:none;padding:18px 20px;border-radius:15px;background:var(--green-soft);color:#207c4d;font-weight:700;margin-top:15px;}
+
+
+  .subject-bars{margin-top:18px;padding-top:15px;border-top:1px solid #eee;}
+  .subject-row{display:grid;grid-template-columns:145px 1fr 35px;gap:10px;align-items:center;font-size:12px;color:#666;margin:9px 0;}
+  .subject-row b{font-size:12px;color:#333;text-align:right;}
+  .mini-progress{height:6px;background:#eee;border-radius:99px;overflow:hidden;}
+  .mini-progress i{display:block;height:100%;background:#8db6ff;border-radius:99px;}
+  .leader-line{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e5ecf7;padding-top:10px;margin-top:14px;font-size:13px;color:#707782;}
+  .leader-line strong{color:#111;}
+  .leader-line.top{margin-top:8px;}
+  .stats .highlight{background:#fbfdff;border-color:#dce8ff;}
+  .today-box{border:1px solid #e5e5e7;background:#fafafa;border-radius:15px;padding:17px 20px;display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:30px;}
+  .today-title{font-weight:750;font-size:15px;margin-bottom:4px;}
+  .today-copy{font-size:13px;color:#737780;}
+  .today-progress{width:190px;}
+  .today-progress>span{display:block;text-align:right;font-size:12px;color:#777;margin-bottom:5px;}
+  .progress.small{height:7px;margin:0;}
+  .progress.small i{display:block;width:0;height:100%;background:#72a5ff;border-radius:99px;}
+  .section-head{align-items:center;}
+  .section-head>div p{font-size:13px;color:#7b7e85;margin:6px 0 0;}
+  .recommendation-note{display:flex;gap:12px;align-items:flex-start;border:1px solid #e6eefc;background:#f8fbff;border-radius:14px;padding:14px 16px;margin-bottom:18px;color:#5f6875;font-size:12px;line-height:1.5;}
+  .recommendation-note strong{color:#20252c;font-size:13px;}
+  .spark{color:#5f96ff;font-size:18px;line-height:1.2;}
+  .subject-section{margin-bottom:25px;}
+  .subject-header{display:flex;justify-content:space-between;align-items:center;padding:0 2px 10px;border-bottom:1px solid #ededee;margin-bottom:10px;}
+  .subject-name{font-size:17px;font-weight:750;}
+  .subject-meta{font-size:12px;color:#7d8188;margin-top:4px;}
+  .subject-score{font-size:20px;font-weight:750;color:#568ce8;}
+  .priority{background:#eaf3ff;color:#4d84e5;padding:5px 8px;border-radius:7px;font-weight:700;}
+  .subject-empty{border:1px dashed #ddd;border-radius:14px;padding:17px;color:#888;font-size:13px;background:#fcfcfc;}
+
+  @media(max-width:900px){
+    .sidebar{width:230px}
+    .content{padding:28px}
+    .hero-grid{grid-template-columns:1fr}
+  }
+  @media(max-width:650px){
+    .sidebar{display:none}
+    .content{padding:22px 16px}
+    .topbar{padding:0 16px}
+    .stats,.steps{grid-template-columns:1fr}
+    h1{font-size:34px}
+    .challenge{grid-template-columns:42px 1fr}
+    .challenge .actions{grid-column:2}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">Nano Syllabus <div class="mark"></div></div>
+    <nav class="nav">
+      <div class="nav-item active" id="challengeNav"><span class="nav-icon">◈</span>Challenges</div>
+      <div class="nav-item"><span class="nav-icon">▣</span>Library</div>
+      <div class="nav-item"><span class="nav-icon">▤</span>Mock Exam</div>
+      <div class="nav-item"><span class="nav-icon">▱</span>Create Subject</div>
+      <div class="nav-item"><span class="nav-icon">▤</span>My Notes</div>
+    </nav>
+    <div class="recent-title">Recents</div>
+    <div class="recent">
+      <div>Attention IS ALL YOU</div>
+      <div>Control System Yesko Chiyo</div>
+      <div>Likely Exam Question Ideas</div>
+      <div>Syllabus Overview</div>
+      <div>Control System Solve</div>
+      <div>Speed Control System Overview</div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="site">‹ &nbsp;&nbsp; Site</div>
+      <div class="profile">
+        <div class="avatar">P</div>
+        <div><div class="profile-name">Prashant Soni</div><div class="plan">Free plan</div></div>
+        <div class="chev">›</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="messages">99902 MESSAGES</div>
+      <div class="lang">English⌄</div>
+      <div class="books">▥ &nbsp; Books</div>
+    </header>
+
+    <section class="content" id="dashboardPage">
+      <div class="today-box">
+        <div>
+          <div class="today-title">Today's minimum</div>
+          <div class="today-copy"><strong>1 challenge</strong> keeps your 12-day streak alive.</div>
+        </div>
+        <div class="today-progress"><span>0 / 1</span><div class="progress small"><i></i></div></div>
+      </div>
+
+      <div class="hero-grid">
+        <div class="card readiness">
+          <div class="card-title">Exam readiness</div>
+          <div class="card-sub">Across all your subjects</div>
+          <div class="readiness-number">68%</div>
+          <div class="progress"><span></span></div>
+          <div class="readiness-foot"><span>12 of 18 topics practiced</span><span>+8% this week</span></div>
+          <div class="subject-bars">
+            <div class="subject-row"><span>Control Systems</span><div class="mini-progress"><i style="width:76%"></i></div><b>76%</b></div>
+            <div class="subject-row"><span>Deep Learning</span><div class="mini-progress"><i style="width:61%"></i></div><b>61%</b></div>
+            <div class="subject-row"><span>Signals & Systems</span><div class="mini-progress"><i style="width:67%"></i></div><b>67%</b></div>
+          </div>
+        </div>
+        <div class="card streak">
+          <div class="streak-top">
+            <div>
+              <div class="card-title">Consistency streak</div>
+              <div class="streak-num">12 days</div>
+              <div class="streak-label">You · current streak</div>
+            </div>
+            <div class="flame">♨</div>
+          </div>
+          <div class="leader-line"><span>Your rank</span><strong>#18</strong></div>
+          <div class="leader-line top"><span>Best streak</span><strong>47 days · #1</strong></div>
+          <div class="rank-pill">You're 35 days away from the current #1 streak</div>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">YOUR CHALLENGES / DAY</div>
+          <div class="stat-value">2.4</div>
+          <div class="stat-note">Your rank · #31</div>
+        </div>
+        <div class="stat highlight">
+          <div class="stat-label">TOP CHALLENGES / DAY</div>
+          <div class="stat-value">6.8</div>
+          <div class="stat-note">Current #1 · 7-day average</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">COMPLETED</div>
+          <div class="stat-value">29</div>
+          <div class="stat-note">This month · +11 this week</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">CHALLENGE PASS RATE</div>
+          <div class="stat-value">84%</div>
+          <div class="stat-note">Last 30 days</div>
+        </div>
+      </div>
+
+
+      <div class="section-head challenge-list-head">
+        <div>
+          <h2>Challenges</h2>
+          <p>Complete one to keep your streak. More challenges appear as you finish them.</p>
+        </div>
+        
+      </div>
+
+      <div class="subject-section">
+        <div class="subject-header">
+          <div>
+            <div class="subject-name">Control Systems</div>
+            <div class="subject-meta">76% ready · 2 weak topics</div>
+          </div>
+          <div class="subject-score">76%</div>
+        </div>
+        <div class="challenge-list">
+          <div class="challenge" data-topic="Laplace Transform">
+            <div class="topic-icon">LT</div>
+            <div>
+              <div class="challenge-title">Master Laplace Transform</div>
+              <div class="challenge-meta"><span class="priority">Recommended</span><span class="tag">2 solved questions</span><span class="tag">2 past questions</span></div>
+            </div>
+            <div class="actions"><span class="duration">~20 min</span><button class="start">Start →</button></div>
+          </div>
+          <div class="challenge" data-topic="Frequency Response">
+            <div class="topic-icon">FR</div>
+            <div>
+              <div class="challenge-title">Practice Frequency Response</div>
+              <div class="challenge-meta"><span class="tag">2 solved questions</span><span class="tag">2 past questions</span></div>
+            </div>
+            <div class="actions"><span class="duration">~25 min</span><button class="start">Start →</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subject-section">
+        <div class="subject-header">
+          <div>
+            <div class="subject-name">Deep Learning</div>
+            <div class="subject-meta">61% ready · 4 weak topics</div>
+          </div>
+          <div class="subject-score">61%</div>
+        </div>
+        <div class="challenge-list">
+          <div class="challenge" data-topic="Attention Mechanism">
+            <div class="topic-icon">AM</div>
+            <div>
+              <div class="challenge-title">Understand Attention Mechanism</div>
+              <div class="challenge-meta"><span class="priority">Recommended</span><span class="tag">2 solved questions</span><span class="tag">2 past questions</span></div>
+            </div>
+            <div class="actions"><span class="duration">~20 min</span><button class="start">Start →</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subject-section muted-subject">
+        <div class="subject-header">
+          <div>
+            <div class="subject-name">Signals &amp; Systems</div>
+            <div class="subject-meta">67% ready · No urgent challenge in today's top 3</div>
+          </div>
+          <div class="subject-score">67%</div>
+        </div>
+        <div class="subject-empty">You're caught up for now. Finish one of today's challenges and the next Signals &amp; Systems challenge can enter your queue.</div>
+      </div>
+
+    </section>
+
+    <section class="content detail" id="detailPage">
+      <button class="back" id="backBtn">← Back to challenges</button>
+      <div class="eyebrow">CHALLENGE · CONTROL SYSTEMS</div>
+      <h1 class="detail-title" id="detailTitle">Master Laplace Transform</h1>
+      <p class="detail-sub">Read the material, study two solved questions, then prove it with two past questions.</p>
+
+      <div class="steps">
+        <div class="step done"><div class="step-num">1</div><h3>Learn</h3><p>Read the short topic explanation from your uploaded material.</p></div>
+        <div class="step"><div class="step-num">2</div><h3>Study 2 solved questions</h3><p>Understand how this topic is used in real exam questions.</p></div>
+        <div class="step"><div class="step-num">3</div><h3>Pass the exam</h3><p>Answer two past questions without help. Pass to complete the challenge.</p></div>
+      </div>
+
+      <div class="lesson">
+        <div class="eyebrow">STEP 1 · READ</div>
+        <h2>What you need to know</h2>
+        <p>The Laplace transform converts a time-domain function into a complex-frequency representation. For control systems, it makes differential equations easier to analyze and helps describe transfer functions, system response, poles, and zeros.</p>
+        <p><strong>Focus for this challenge:</strong> know the common transform pairs, understand the transform of derivatives, and be able to move between a differential equation and its transfer-function representation.</p>
+      </div>
+
+      <div class="lesson">
+        <div class="eyebrow">STEP 2 · SOLVED QUESTIONS</div>
+        <h2>Study these two examples</h2>
+
+        <div class="question">
+          <div class="q-head"><span>Past Question · 2024</span><span>Solved</span></div>
+          <div class="q-text">Find the Laplace transform of f(t) = t e<sup>-2t</sup>.</div>
+          <div class="answer"><strong>Solution:</strong> Using L{t f(t)} = -d/ds F(s) and L{e<sup>-2t</sup>} = 1/(s+2), the result is 1/(s+2)<sup>2</sup>.</div>
+        </div>
+
+        <div class="question">
+          <div class="q-head"><span>Past Question · 2023</span><span>Solved</span></div>
+          <div class="q-text">Obtain the transfer function of a system described by y'' + 3y' + 2y = x(t), assuming zero initial conditions.</div>
+          <div class="answer"><strong>Solution:</strong> Taking the Laplace transform gives (s² + 3s + 2)Y(s) = X(s), so G(s) = Y(s)/X(s) = 1/(s² + 3s + 2).</div>
+        </div>
+      </div>
+
+      <div class="exam-box">
+        <div class="eyebrow">STEP 3 · PROVE IT</div>
+        <h2>Take the challenge exam</h2>
+        <p>Two past questions. No notes. Submit your answers and pass the evaluation to complete this challenge.</p>
+        <div class="exam-info"><span>2 questions</span><span>20 minutes</span><span>Pass required</span></div>
+        <button class="take-exam" id="takeExam">Take exam →</button>
+        <div class="completed-banner" id="completedBanner">✓ Challenge completed. Your streak and progress have been updated.</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  const dashboard = document.getElementById('dashboardPage');
+  const detail = document.getElementById('detailPage');
+  const title = document.getElementById('detailTitle');
+
+  function openChallenge(topic){
+    title.textContent = 'Master ' + topic;
+    dashboard.style.display='none';
+    detail.style.display='block';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  document.querySelectorAll('.challenge').forEach(card=>{
+    card.addEventListener('click', (e)=>{
+      if (e.target.closest('.start')) e.stopPropagation();
+      openChallenge(card.dataset.topic);
+    });
+  });
+  document.getElementById('challengeNav').addEventListener('click', ()=>{
+    dashboard.style.display='block'; detail.style.display='none';
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+  document.getElementById('backBtn').addEventListener('click', ()=>{
+    dashboard.style.display='block'; detail.style.display='none';
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+  document.getElementById('takeExam').addEventListener('click', ()=>{
+    const btn=document.getElementById('takeExam');
+    btn.textContent='Exam started ✓';
+    btn.disabled=true;
+    btn.style.opacity='.65';
+    document.getElementById('completedBanner').style.display='block';
+  });
+</script>
+</body>
+</html>

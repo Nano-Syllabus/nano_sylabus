@@ -11,7 +11,7 @@ import { Field, Input } from "@/components/ui/field";
 
 const NAV = [
   { href: "/app/exams", label: "Mock Exam", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4"/><path d="M9 12h6"/><path d="M9 16h4"/></svg> },
-  { href: "/app/explore", label: "Create Subject", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5z"/><path d="M8 6h8"/><path d="M8 10h6"/></svg> },
+  { href: "/app/explore", label: "My Subjects", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5z"/><path d="M8 6h8"/><path d="M8 10h6"/></svg> },
   { href: "/app/notes", label: "My Notes", icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg> },
 ] as const;
 
@@ -363,14 +363,13 @@ export function AppSidebar({
               ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
-          title={isCollapsed ? "Dashboard" : undefined}
+          title={isCollapsed ? "Challenges" : undefined}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M3 11.5 12 4l9 7.5" />
-            <path d="M5.5 10.5V20h13v-9.5" />
-            <path d="M9.5 20v-6h5v6" />
+            <path d="m12 3-9 9 9 9 9-9z" />
+            <path d="m12 8-4 4 4 4 4-4z" />
           </svg>
-          {!isCollapsed && "Dashboard"}
+          {!isCollapsed && "Challenges"}
         </Link>
 
         <Link
@@ -390,7 +389,7 @@ export function AppSidebar({
               ? "bg-bg-secondary text-text-primary"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
-          title={isCollapsed ? "Library" : undefined}
+          title={isCollapsed ? "Study Space" : undefined}
         >
           {isCollapsed ? (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -405,7 +404,7 @@ export function AppSidebar({
                 <path d="M8 7h8" />
                 <path d="M8 11h6" />
               </svg>
-              Library
+              Study Space
             </>
           )}
         </Link>

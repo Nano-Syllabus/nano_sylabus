@@ -36,6 +36,7 @@ playwright-report/
 *.sw?
 .vercel
 .env
+.env.production
 .env.vercel.check
 .env*.bak*
 local_keys.txt

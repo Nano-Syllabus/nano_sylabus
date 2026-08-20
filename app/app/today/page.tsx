@@ -1,18 +1,16 @@
 import { SetAppShell } from "@/components/set-app-shell";
-import { StudentTodayDashboard } from "@/components/student-today-dashboard";
+import { ChallengesDashboardClient } from "@/components/challenges-dashboard-client";
 import { requireOnboardedUser } from "@/lib/auth";
-import { getStudentToday } from "@/lib/data/student-today";
 
 export const dynamic = "force-dynamic";
 
 export default async function TodayPage() {
-  const { user, profile } = await requireOnboardedUser();
-  const today = await getStudentToday(user.id, profile);
+  const { user } = await requireOnboardedUser();
 
   return (
     <>
       <SetAppShell title="" />
-      <StudentTodayDashboard fullName={user.fullName} today={today} />
+      <ChallengesDashboardClient fullName={user.fullName} />
     </>
   );
 }
