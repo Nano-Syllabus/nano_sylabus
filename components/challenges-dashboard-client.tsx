@@ -168,25 +168,27 @@ export function ChallengesDashboardClient({
   };
 
   return (
-    <div className="w-full bg-white text-[#111111] min-h-screen">
+    <div className="w-full bg-bg-primary text-text-primary min-h-screen transition-colors duration-200">
       {!activeChallenge ? (
         /* ═════════════════════════════════════════════════════════════════════
            DASHBOARD / CHALLENGES LIST
            ═════════════════════════════════════════════════════════════════════ */
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-10 py-9 pb-20">
+        <div className="max-w-[1160px] mx-auto px-4 sm:px-8 py-8 pb-20">
           {/* Today's minimum */}
-          <div className="border border-[#e5e5e7] bg-[#fafafa] rounded-[15px] p-[17px_20px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 mb-[30px]">
+          <div className="border border-border bg-bg-secondary rounded-[15px] p-[17px_20px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 mb-[30px]">
             <div>
-              <div className="font-[750] text-[15px] mb-1 text-[#111111]">Today&apos;s minimum</div>
-              <div className="text-[13px] text-[#737780]">
-                <strong className="text-[#111111] font-semibold">1 challenge</strong> keeps your 12-day streak alive.
+              <div className="font-[750] text-[15px] mb-1 text-text-primary">Today&apos;s minimum</div>
+              <div className="text-[13px] text-text-secondary">
+                <strong className="text-text-primary font-semibold">1 challenge</strong> keeps your 12-day streak alive.
               </div>
             </div>
             <div className="w-full sm:w-[190px]">
-              <span className="block text-right text-[12px] text-[#777] mb-[5px]">0 / 1</span>
-              <div className="h-[7px] bg-[#eeeeef] rounded-full overflow-hidden">
+              <span className="block text-right text-[12px] text-text-muted mb-[5px]">
+                {Object.keys(completedChallenges).length > 0 ? "1 / 1" : "0 / 1"}
+              </span>
+              <div className="h-[7px] bg-bg-tertiary rounded-full overflow-hidden">
                 <i 
-                  className="block h-full bg-[#72a5ff] rounded-full transition-all duration-500" 
+                  className="block h-full bg-[#5d98ff] dark:bg-[#4c84eb] rounded-full transition-all duration-500"
                   style={{ width: Object.keys(completedChallenges).length > 0 ? "100%" : "0%" }}
                 />
               </div>
@@ -196,65 +198,65 @@ export function ChallengesDashboardClient({
           {/* Hero Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_.9fr] gap-[18px] mb-6">
             {/* Exam Readiness */}
-            <div className="border border-[#e7e7e7] rounded-[18px] bg-white p-[25px_27px]">
-              <div className="text-[18px] font-[730] mb-[5px] text-[#111111]">Exam readiness</div>
-              <div className="text-[14px] text-[#7b7e85]">Across all your subjects</div>
-              <div className="text-[40px] font-[760] tracking-[-1.5px] mt-5 text-[#111111]">68%</div>
-              <div className="h-[12px] bg-[#eeeeef] rounded-full overflow-hidden my-[9px_12px]">
-                <span className="block h-full w-[68%] bg-[#72a5ff] rounded-full" />
+            <div className="border border-border rounded-[18px] bg-card p-[25px_27px]">
+              <div className="text-[18px] font-[730] mb-[5px] text-text-primary">Exam readiness</div>
+              <div className="text-[14px] text-text-muted">Across all your subjects</div>
+              <div className="text-[40px] font-[760] tracking-[-1.5px] mt-5 text-text-primary">68%</div>
+              <div className="h-[12px] bg-bg-secondary rounded-full overflow-hidden my-[9px_12px]">
+                <span className="block h-full w-[68%] bg-[#5d98ff] dark:bg-[#4c84eb] rounded-full" />
               </div>
-              <div className="flex justify-between text-[13px] text-[#777]">
+              <div className="flex justify-between text-[13px] text-text-muted">
                 <span>12 of 18 topics practiced</span>
-                <span>+8% this week</span>
+                <span className="text-blue-600 dark:text-blue-400 font-medium">+8% this week</span>
               </div>
-              <div className="mt-[18px] pt-[15px] border-t border-[#eee]">
-                <div className="grid grid-cols-[145px_1fr_35px] gap-[10px] items-center text-[12px] text-[#666] my-[9px]">
+              <div className="mt-[18px] pt-[15px] border-t border-border">
+                <div className="grid grid-cols-[145px_1fr_35px] gap-[10px] items-center text-[12px] text-text-secondary my-[9px]">
                   <span>Control Systems</span>
-                  <div className="h-[6px] bg-[#eee] rounded-full overflow-hidden">
-                    <i className="block h-full bg-[#8db6ff] rounded-full" style={{ width: "76%" }} />
+                  <div className="h-[6px] bg-bg-secondary rounded-full overflow-hidden">
+                    <i className="block h-full bg-[#8db6ff] dark:bg-[#4c84eb] rounded-full" style={{ width: "76%" }} />
                   </div>
-                  <b className="text-[12px] text-[#333] text-right font-bold">76%</b>
+                  <b className="text-[12px] text-text-primary text-right font-bold">76%</b>
                 </div>
-                <div className="grid grid-cols-[145px_1fr_35px] gap-[10px] items-center text-[12px] text-[#666] my-[9px]">
+                <div className="grid grid-cols-[145px_1fr_35px] gap-[10px] items-center text-[12px] text-text-secondary my-[9px]">
                   <span>Deep Learning</span>
-                  <div className="h-[6px] bg-[#eee] rounded-full overflow-hidden">
-                    <i className="block h-full bg-[#8db6ff] rounded-full" style={{ width: "61%" }} />
+                  <div className="h-[6px] bg-bg-secondary rounded-full overflow-hidden">
+                    <i className="block h-full bg-[#8db6ff] dark:bg-[#4c84eb] rounded-full" style={{ width: "61%" }} />
                   </div>
-                  <b className="text-[12px] text-[#333] text-right font-bold">61%</b>
+                  <b className="text-[12px] text-text-primary text-right font-bold">61%</b>
                 </div>
-                <div className="grid grid-cols-[145px_1fr_35px] gap-[10px] items-center text-[12px] text-[#666] my-[9px]">
+                <div className="grid grid-cols-[145px_1fr_35px] gap-[10px] items-center text-[12px] text-text-secondary my-[9px]">
                   <span>Signals &amp; Systems</span>
-                  <div className="h-[6px] bg-[#eee] rounded-full overflow-hidden">
-                    <i className="block h-full bg-[#8db6ff] rounded-full" style={{ width: "67%" }} />
+                  <div className="h-[6px] bg-bg-secondary rounded-full overflow-hidden">
+                    <i className="block h-full bg-[#8db6ff] dark:bg-[#4c84eb] rounded-full" style={{ width: "67%" }} />
                   </div>
-                  <b className="text-[12px] text-[#333] text-right font-bold">67%</b>
+                  <b className="text-[12px] text-text-primary text-right font-bold">67%</b>
                 </div>
               </div>
             </div>
 
             {/* Consistency Streak */}
-            <div className="border border-[#e7e7e7] rounded-[18px] p-[25px_27px] bg-gradient-to-br from-[#fbfdff] to-[#f4f8ff] flex flex-col justify-between">
+            <div className="border border-border rounded-[18px] p-[25px_27px] bg-gradient-to-br from-bg-primary via-bg-primary to-blue-500/5 dark:to-blue-950/20 flex flex-col justify-between">
               <div>
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="text-[18px] font-[730] mb-[5px] text-[#111111]">Consistency streak</div>
-                    <div className="text-[39px] font-[760] tracking-[-1.5px] mt-3 text-[#111111]">12 days</div>
-                    <div className="text-[#777] text-[14px]">You · current streak</div>
+                    <div className="text-[18px] font-[730] mb-[5px] text-text-primary">Consistency streak</div>
+                    <div className="text-[39px] font-[760] tracking-[-1.5px] mt-3 text-text-primary">12 days</div>
+                    <div className="text-text-muted text-[14px]">You · current streak</div>
                   </div>
                   <div className="text-[31px] select-none">♨</div>
                 </div>
 
-                <div className="flex justify-between items-center border-t border-[#e5ecf7] pt-[10px] mt-[14px] text-[13px] text-[#707782]">
+                <div className="flex justify-between items-center border-t border-border pt-[10px] mt-[14px] text-[13px] text-text-muted">
                   <span>Your rank</span>
-                  <strong className="text-[#111] font-bold">#18</strong>
+                  <strong className="text-text-primary font-bold">#18</strong>
                 </div>
-                <div className="flex justify-between items-center border-t border-[#e5ecf7] pt-[10px] mt-2 text-[13px] text-[#707782]">
+                <div className="flex justify-between items-center border-t border-border pt-[10px] mt-2 text-[13px] text-text-muted">
                   <span>Best streak</span>
-                  <strong className="text-[#111] font-bold">47 days · #1</strong>
+                  <strong className="text-text-primary font-bold">47 days · #1</strong>
                 </div>
               </div>
 
-              <div className="inline-flex items-center gap-[7px] bg-white border border-[#dce8ff] rounded-[20px] p-[7px_11px] text-[#4c7fd9] text-[12px] font-bold mt-[17px] w-fit">
+              <div className="inline-flex items-center gap-[7px] bg-card border border-blue-500/30 rounded-[20px] p-[7px_11px] text-blue-600 dark:text-blue-400 text-[12px] font-bold mt-[17px] w-fit">
                 You&apos;re 35 days away from the current #1 streak
               </div>
             </div>
@@ -262,74 +264,74 @@ export function ChallengesDashboardClient({
 
           {/* Stats Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-7">
-            <div className="p-[18px_20px] border border-[#e7e7e7] rounded-[15px] bg-white">
-              <div className="text-[13px] text-[#7d8087] mb-[7px] font-medium tracking-wide">YOUR CHALLENGES / DAY</div>
-              <div className="text-[24px] font-[750] text-[#111]">2.4</div>
-              <div className="text-[12px] text-[#777] mt-1">Your rank · #31</div>
+            <div className="p-[18px_20px] border border-border rounded-[15px] bg-card">
+              <div className="text-[13px] text-text-muted mb-[7px] font-medium tracking-wide">YOUR CHALLENGES / DAY</div>
+              <div className="text-[24px] font-[750] text-text-primary">2.4</div>
+              <div className="text-[12px] text-text-muted mt-1">Your rank · #31</div>
             </div>
 
-            <div className="p-[18px_20px] border border-[#dce8ff] bg-[#fbfdff] rounded-[15px]">
-              <div className="text-[13px] text-[#7d8087] mb-[7px] font-medium tracking-wide">TOP CHALLENGES / DAY</div>
-              <div className="text-[24px] font-[750] text-[#111]">6.8</div>
-              <div className="text-[12px] text-[#777] mt-1">Current #1 · 7-day average</div>
+            <div className="p-[18px_20px] border border-blue-500/30 bg-blue-500/5 dark:bg-blue-950/20 rounded-[15px]">
+              <div className="text-[13px] text-blue-600 dark:text-blue-400 mb-[7px] font-medium tracking-wide">TOP CHALLENGES / DAY</div>
+              <div className="text-[24px] font-[750] text-text-primary">6.8</div>
+              <div className="text-[12px] text-text-muted mt-1">Current #1 · 7-day average</div>
             </div>
 
-            <div className="p-[18px_20px] border border-[#e7e7e7] rounded-[15px] bg-white">
-              <div className="text-[13px] text-[#7d8087] mb-[7px] font-medium tracking-wide">COMPLETED</div>
-              <div className="text-[24px] font-[750] text-[#111]">{29 + Object.keys(completedChallenges).length}</div>
-              <div className="text-[12px] text-[#777] mt-1">This month · +11 this week</div>
+            <div className="p-[18px_20px] border border-border rounded-[15px] bg-card">
+              <div className="text-[13px] text-text-muted mb-[7px] font-medium tracking-wide">COMPLETED</div>
+              <div className="text-[24px] font-[750] text-text-primary">{29 + Object.keys(completedChallenges).length}</div>
+              <div className="text-[12px] text-text-muted mt-1">This month · +11 this week</div>
             </div>
 
-            <div className="p-[18px_20px] border border-[#e7e7e7] rounded-[15px] bg-white">
-              <div className="text-[13px] text-[#7d8087] mb-[7px] font-medium tracking-wide">CHALLENGE PASS RATE</div>
-              <div className="text-[24px] font-[750] text-[#111]">84%</div>
-              <div className="text-[12px] text-[#777] mt-1">Last 30 days</div>
+            <div className="p-[18px_20px] border border-border rounded-[15px] bg-card">
+              <div className="text-[13px] text-text-muted mb-[7px] font-medium tracking-wide">CHALLENGE PASS RATE</div>
+              <div className="text-[24px] font-[750] text-text-primary">84%</div>
+              <div className="text-[12px] text-text-muted mt-1">Last 30 days</div>
             </div>
           </div>
 
           {/* Section Head */}
           <div className="flex items-end justify-between mt-[30px] mb-[14px]">
             <div>
-              <h2 className="text-[22px] font-[750] tracking-[-.5px] m-0 text-[#111]">Challenges</h2>
-              <p className="text-[13px] text-[#7b7e85] mt-1.5 mb-0">Complete one to keep your streak. More challenges appear as you finish them.</p>
+              <h2 className="text-[22px] font-[750] tracking-[-.5px] m-0 text-text-primary">Challenges</h2>
+              <p className="text-[13px] text-text-muted mt-1.5 mb-0">Complete one to keep your streak. More challenges appear as you finish them.</p>
             </div>
           </div>
 
           {/* Subject 1: Control Systems */}
           <div className="mb-[25px]">
-            <div className="flex justify-between items-center px-[2px] pb-[10px] border-b border-[#ededee] mb-[10px]">
+            <div className="flex justify-between items-center px-[2px] pb-[10px] border-b border-border mb-[10px]">
               <div>
-                <div className="text-[17px] font-[750] text-[#111]">Control Systems</div>
-                <div className="text-[12px] text-[#7d8188] mt-1">76% ready · 2 weak topics</div>
+                <div className="text-[17px] font-[750] text-text-primary">Control Systems</div>
+                <div className="text-[12px] text-text-muted mt-1">76% ready · 2 weak topics</div>
               </div>
-              <div className="text-[20px] font-[750] text-[#568ce8]">76%</div>
+              <div className="text-[20px] font-[750] text-blue-600 dark:text-blue-400">76%</div>
             </div>
             <div className="flex flex-col gap-3">
               {/* Challenge 1 */}
               <div 
                 onClick={() => handleOpenChallenge("laplace-transform")}
-                className="border border-[#e7e7e7] rounded-[16px] p-[19px_20px] grid grid-cols-[48px_1fr_auto] gap-4 items-center cursor-pointer transition-all duration-150 hover:border-[#bcd3ff] hover:shadow-[0_6px_22px_rgba(0,0,0,.04)] hover:-translate-y-px bg-white"
+                className="border border-border rounded-[16px] p-[19px_20px] grid grid-cols-[48px_1fr_auto] gap-4 items-center cursor-pointer transition-all duration-150 hover:border-blue-500/50 hover:shadow-md bg-card"
               >
-                <div className="w-[48px] h-[48px] rounded-[14px] bg-[#eef5ff] text-[#528cf3] grid place-items-center font-[800] text-[15px]">
+                <div className="w-[48px] h-[48px] rounded-[14px] bg-blue-500/10 text-blue-600 dark:text-blue-400 grid place-items-center font-[800] text-[15px]">
                   LT
                 </div>
                 <div>
-                  <div className="text-[17px] font-[720] mb-[5px] text-[#111]">Master Laplace Transform</div>
-                  <div className="text-[13px] text-[#777] flex gap-3 flex-wrap items-center">
-                    <span className="bg-[#eaf3ff] text-[#4d84e5] p-[5px_8px] rounded-[7px] font-bold text-[12px]">Recommended</span>
-                    <span className="bg-[#f5f5f6] p-[5px_8px] rounded-[7px] text-[#696c73] text-[12px]">2 solved questions</span>
-                    <span className="bg-[#f5f5f6] p-[5px_8px] rounded-[7px] text-[#696c73] text-[12px]">2 past questions</span>
+                  <div className="text-[17px] font-[720] mb-[5px] text-text-primary">Master Laplace Transform</div>
+                  <div className="text-[13px] text-text-muted flex gap-2.5 flex-wrap items-center">
+                    <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-[7px] font-bold text-[12px]">Recommended</span>
+                    <span className="bg-bg-secondary px-2 py-1 rounded-[7px] text-text-secondary text-[12px]">2 solved questions</span>
+                    <span className="bg-bg-secondary px-2 py-1 rounded-[7px] text-text-secondary text-[12px]">2 past questions</span>
                   </div>
                 </div>
                 <div className="flex items-center">
-                  <span className="text-[13px] text-[#777] mr-3">~20 min</span>
+                  <span className="text-[13px] text-text-muted mr-3">~20 min</span>
                   <button 
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleOpenChallenge("laplace-transform");
                     }}
-                    className="border-0 bg-[#111] text-white rounded-[22px] p-[10px_16px] text-[13px] font-[700] cursor-pointer hover:opacity-90 transition active:scale-95"
+                    className="border-0 bg-text-primary text-text-inverse rounded-[22px] px-4 py-2 text-[13px] font-[700] cursor-pointer hover:opacity-90 transition active:scale-95"
                   >
                     Start →
                   </button>
@@ -339,27 +341,27 @@ export function ChallengesDashboardClient({
               {/* Challenge 2 */}
               <div 
                 onClick={() => handleOpenChallenge("frequency-response")}
-                className="border border-[#e7e7e7] rounded-[16px] p-[19px_20px] grid grid-cols-[48px_1fr_auto] gap-4 items-center cursor-pointer transition-all duration-150 hover:border-[#bcd3ff] hover:shadow-[0_6px_22px_rgba(0,0,0,.04)] hover:-translate-y-px bg-white"
+                className="border border-border rounded-[16px] p-[19px_20px] grid grid-cols-[48px_1fr_auto] gap-4 items-center cursor-pointer transition-all duration-150 hover:border-blue-500/50 hover:shadow-md bg-card"
               >
-                <div className="w-[48px] h-[48px] rounded-[14px] bg-[#eef5ff] text-[#528cf3] grid place-items-center font-[800] text-[15px]">
+                <div className="w-[48px] h-[48px] rounded-[14px] bg-blue-500/10 text-blue-600 dark:text-blue-400 grid place-items-center font-[800] text-[15px]">
                   FR
                 </div>
                 <div>
-                  <div className="text-[17px] font-[720] mb-[5px] text-[#111]">Practice Frequency Response</div>
-                  <div className="text-[13px] text-[#777] flex gap-3 flex-wrap items-center">
-                    <span className="bg-[#f5f5f6] p-[5px_8px] rounded-[7px] text-[#696c73] text-[12px]">2 solved questions</span>
-                    <span className="bg-[#f5f5f6] p-[5px_8px] rounded-[7px] text-[#696c73] text-[12px]">2 past questions</span>
+                  <div className="text-[17px] font-[720] mb-[5px] text-text-primary">Practice Frequency Response</div>
+                  <div className="text-[13px] text-text-muted flex gap-2.5 flex-wrap items-center">
+                    <span className="bg-bg-secondary px-2 py-1 rounded-[7px] text-text-secondary text-[12px]">2 solved questions</span>
+                    <span className="bg-bg-secondary px-2 py-1 rounded-[7px] text-text-secondary text-[12px]">2 past questions</span>
                   </div>
                 </div>
                 <div className="flex items-center">
-                  <span className="text-[13px] text-[#777] mr-3">~25 min</span>
+                  <span className="text-[13px] text-text-muted mr-3">~25 min</span>
                   <button 
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleOpenChallenge("frequency-response");
                     }}
-                    className="border-0 bg-[#111] text-white rounded-[22px] p-[10px_16px] text-[13px] font-[700] cursor-pointer hover:opacity-90 transition active:scale-95"
+                    className="border-0 bg-text-primary text-text-inverse rounded-[22px] px-4 py-2 text-[13px] font-[700] cursor-pointer hover:opacity-90 transition active:scale-95"
                   >
                     Start →
                   </button>
@@ -370,38 +372,38 @@ export function ChallengesDashboardClient({
 
           {/* Subject 2: Deep Learning */}
           <div className="mb-[25px]">
-            <div className="flex justify-between items-center px-[2px] pb-[10px] border-b border-[#ededee] mb-[10px]">
+            <div className="flex justify-between items-center px-[2px] pb-[10px] border-b border-border mb-[10px]">
               <div>
-                <div className="text-[17px] font-[750] text-[#111]">Deep Learning</div>
-                <div className="text-[12px] text-[#7d8188] mt-1">61% ready · 4 weak topics</div>
+                <div className="text-[17px] font-[750] text-text-primary">Deep Learning</div>
+                <div className="text-[12px] text-text-muted mt-1">61% ready · 4 weak topics</div>
               </div>
-              <div className="text-[20px] font-[750] text-[#568ce8]">61%</div>
+              <div className="text-[20px] font-[750] text-blue-600 dark:text-blue-400">61%</div>
             </div>
             <div className="flex flex-col gap-3">
               <div 
                 onClick={() => handleOpenChallenge("attention-mechanism")}
-                className="border border-[#e7e7e7] rounded-[16px] p-[19px_20px] grid grid-cols-[48px_1fr_auto] gap-4 items-center cursor-pointer transition-all duration-150 hover:border-[#bcd3ff] hover:shadow-[0_6px_22px_rgba(0,0,0,.04)] hover:-translate-y-px bg-white"
+                className="border border-border rounded-[16px] p-[19px_20px] grid grid-cols-[48px_1fr_auto] gap-4 items-center cursor-pointer transition-all duration-150 hover:border-blue-500/50 hover:shadow-md bg-card"
               >
-                <div className="w-[48px] h-[48px] rounded-[14px] bg-[#eef5ff] text-[#528cf3] grid place-items-center font-[800] text-[15px]">
+                <div className="w-[48px] h-[48px] rounded-[14px] bg-blue-500/10 text-blue-600 dark:text-blue-400 grid place-items-center font-[800] text-[15px]">
                   AM
                 </div>
                 <div>
-                  <div className="text-[17px] font-[720] mb-[5px] text-[#111]">Understand Attention Mechanism</div>
-                  <div className="text-[13px] text-[#777] flex gap-3 flex-wrap items-center">
-                    <span className="bg-[#eaf3ff] text-[#4d84e5] p-[5px_8px] rounded-[7px] font-bold text-[12px]">Recommended</span>
-                    <span className="bg-[#f5f5f6] p-[5px_8px] rounded-[7px] text-[#696c73] text-[12px]">2 solved questions</span>
-                    <span className="bg-[#f5f5f6] p-[5px_8px] rounded-[7px] text-[#696c73] text-[12px]">2 past questions</span>
+                  <div className="text-[17px] font-[720] mb-[5px] text-text-primary">Understand Attention Mechanism</div>
+                  <div className="text-[13px] text-text-muted flex gap-2.5 flex-wrap items-center">
+                    <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-[7px] font-bold text-[12px]">Recommended</span>
+                    <span className="bg-bg-secondary px-2 py-1 rounded-[7px] text-text-secondary text-[12px]">2 solved questions</span>
+                    <span className="bg-bg-secondary px-2 py-1 rounded-[7px] text-text-secondary text-[12px]">2 past questions</span>
                   </div>
                 </div>
                 <div className="flex items-center">
-                  <span className="text-[13px] text-[#777] mr-3">~20 min</span>
+                  <span className="text-[13px] text-text-muted mr-3">~20 min</span>
                   <button 
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleOpenChallenge("attention-mechanism");
                     }}
-                    className="border-0 bg-[#111] text-white rounded-[22px] p-[10px_16px] text-[13px] font-[700] cursor-pointer hover:opacity-90 transition active:scale-95"
+                    className="border-0 bg-text-primary text-text-inverse rounded-[22px] px-4 py-2 text-[13px] font-[700] cursor-pointer hover:opacity-90 transition active:scale-95"
                   >
                     Start →
                   </button>
@@ -412,77 +414,77 @@ export function ChallengesDashboardClient({
 
           {/* Subject 3: Signals & Systems */}
           <div className="mb-[25px]">
-            <div className="flex justify-between items-center px-[2px] pb-[10px] border-b border-[#ededee] mb-[10px]">
+            <div className="flex justify-between items-center px-[2px] pb-[10px] border-b border-border mb-[10px]">
               <div>
-                <div className="text-[17px] font-[750] text-[#111]">Signals &amp; Systems</div>
-                <div className="text-[12px] text-[#7d8188] mt-1">67% ready · No urgent challenge in today&apos;s top 3</div>
+                <div className="text-[17px] font-[750] text-text-primary">Signals &amp; Systems</div>
+                <div className="text-[12px] text-text-muted mt-1">67% ready · No urgent challenge in today&apos;s top 3</div>
               </div>
-              <div className="text-[20px] font-[750] text-[#568ce8]">67%</div>
+              <div className="text-[20px] font-[750] text-text-muted">67%</div>
             </div>
-            <div className="border border-dashed border-[#ddd] rounded-[14px] p-[17px] text-[#888] text-[13px] bg-[#fcfcfc]">
+            <div className="border border-dashed border-border rounded-[14px] p-[17px] text-text-muted text-[13px] bg-bg-secondary/40">
               You&apos;re caught up for now. Finish one of today&apos;s challenges and the next Signals &amp; Systems challenge can enter your queue.
             </div>
           </div>
         </div>
       ) : (
         /* ═════════════════════════════════════════════════════════════════════
-           CHALLENGE DETAIL VIEW (Matches HTML #detailPage 100%)
+           CHALLENGE DETAIL VIEW
            ═════════════════════════════════════════════════════════════════════ */
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-10 py-9 pb-20">
+        <div className="max-w-[1160px] mx-auto px-4 sm:px-8 py-8 pb-20">
           <button 
             type="button"
             onClick={() => setSelectedChallengeId(null)}
-            className="border-0 bg-transparent p-0 text-[#666] cursor-pointer text-[14px] mb-[22px] hover:text-[#111] flex items-center gap-1.5"
+            className="border-0 bg-transparent p-0 text-text-muted cursor-pointer text-[14px] mb-[22px] hover:text-text-primary flex items-center gap-1.5 transition"
           >
             ← Back to challenges
           </button>
 
-          <div className="text-[14px] text-[#6d7179] font-[650] mb-2 uppercase tracking-wide">
+          <div className="text-[14px] text-blue-600 dark:text-blue-400 font-[650] mb-2 uppercase tracking-wide">
             CHALLENGE · {activeChallenge.subject.toUpperCase()}
           </div>
-          <h1 className="text-[38px] tracking-[-1.4px] m-[0_0_8px] font-[760] text-[#111]">
+          <h1 className="text-[38px] tracking-[-1.4px] m-[0_0_8px] font-[760] text-text-primary">
             {activeChallenge.title}
           </h1>
-          <p className="text-[#777] text-[16px] mb-[25px] mt-0">
+          <p className="text-text-secondary text-[16px] mb-[25px] mt-0">
             Read the material, study two solved questions, then prove it with two past questions.
           </p>
 
           {/* Steps */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-[22px]">
-            <div className="border border-[#e7e7e7] rounded-[15px] p-[18px] bg-white">
-              <div className="w-[28px] h-[28px] rounded-full bg-[#eaf8f0] text-[#23935a] grid place-items-center font-[750] text-[13px] mb-[13px]">
+            <div className="border border-border rounded-[15px] p-[18px] bg-card">
+              <div className="w-[28px] h-[28px] rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 grid place-items-center font-[750] text-[13px] mb-[13px]">
                 1
               </div>
-              <h3 className="m-[0_0_6px] text-[15px] font-[700] text-[#111]">Learn</h3>
-              <p className="m-0 text-[#777] text-[13px] leading-[1.45]">Read the short topic explanation from your uploaded material.</p>
+              <h3 className="m-[0_0_6px] text-[15px] font-[700] text-text-primary">Learn</h3>
+              <p className="m-0 text-text-muted text-[13px] leading-[1.45]">Read the short topic explanation from your uploaded material.</p>
             </div>
 
-            <div className="border border-[#e7e7e7] rounded-[15px] p-[18px] bg-white">
-              <div className="w-[28px] h-[28px] rounded-full bg-[#f1f1f2] text-[#111] grid place-items-center font-[750] text-[13px] mb-[13px]">
+            <div className="border border-border rounded-[15px] p-[18px] bg-card">
+              <div className="w-[28px] h-[28px] rounded-full bg-bg-secondary text-text-primary grid place-items-center font-[750] text-[13px] mb-[13px]">
                 2
               </div>
-              <h3 className="m-[0_0_6px] text-[15px] font-[700] text-[#111]">Study 2 solved questions</h3>
-              <p className="m-0 text-[#777] text-[13px] leading-[1.45]">Understand how this topic is used in real exam questions.</p>
+              <h3 className="m-[0_0_6px] text-[15px] font-[700] text-text-primary">Study 2 solved questions</h3>
+              <p className="m-0 text-text-muted text-[13px] leading-[1.45]">Understand how this topic is used in real exam questions.</p>
             </div>
 
-            <div className="border border-[#e7e7e7] rounded-[15px] p-[18px] bg-white">
-              <div className="w-[28px] h-[28px] rounded-full bg-[#f1f1f2] text-[#111] grid place-items-center font-[750] text-[13px] mb-[13px]">
+            <div className="border border-border rounded-[15px] p-[18px] bg-card">
+              <div className="w-[28px] h-[28px] rounded-full bg-bg-secondary text-text-primary grid place-items-center font-[750] text-[13px] mb-[13px]">
                 3
               </div>
-              <h3 className="m-[0_0_6px] text-[15px] font-[700] text-[#111]">Pass the exam</h3>
-              <p className="m-0 text-[#777] text-[13px] leading-[1.45]">Answer two past questions without help. Pass to complete the challenge.</p>
+              <h3 className="m-[0_0_6px] text-[15px] font-[700] text-text-primary">Pass the exam</h3>
+              <p className="m-0 text-text-muted text-[13px] leading-[1.45]">Answer two past questions without help. Pass to complete the challenge.</p>
             </div>
           </div>
 
           {/* Lesson */}
-          <div className="border border-[#e7e7e7] rounded-[18px] p-[27px] mb-[15px] bg-white">
-            <div className="text-[14px] text-[#6d7179] font-[650] mb-2 uppercase tracking-wide">STEP 1 · READ</div>
-            <h2 className="text-[22px] font-[750] m-[0_0_12px] text-[#111]">{activeChallenge.lesson.title}</h2>
+          <div className="border border-border rounded-[18px] p-[27px] mb-[15px] bg-card">
+            <div className="text-[14px] text-blue-600 dark:text-blue-400 font-[650] mb-2 uppercase tracking-wide">STEP 1 · READ</div>
+            <h2 className="text-[22px] font-[750] m-[0_0_12px] text-text-primary">{activeChallenge.lesson.title}</h2>
             {activeChallenge.lesson.content.map((p, idx) => (
-              <p key={idx} className="text-[15px] leading-[1.7] text-[#444] my-2">
+              <p key={idx} className="text-[15px] leading-[1.7] text-text-secondary my-2">
                 {idx === 1 ? (
                   <>
-                    <strong className="text-[#111]">Focus for this challenge:</strong> {activeChallenge.lesson.focus}
+                    <strong className="text-text-primary">Focus for this challenge:</strong> {activeChallenge.lesson.focus}
                   </>
                 ) : (
                   p
@@ -492,34 +494,34 @@ export function ChallengesDashboardClient({
           </div>
 
           {/* Solved Questions */}
-          <div className="border border-[#e7e7e7] rounded-[18px] p-[27px] mb-[15px] bg-white">
-            <div className="text-[14px] text-[#6d7179] font-[650] mb-2 uppercase tracking-wide">STEP 2 · SOLVED QUESTIONS</div>
-            <h2 className="text-[22px] font-[750] m-[0_0_12px] text-[#111]">Study these two examples</h2>
+          <div className="border border-border rounded-[18px] p-[27px] mb-[15px] bg-card">
+            <div className="text-[14px] text-blue-600 dark:text-blue-400 font-[650] mb-2 uppercase tracking-wide">STEP 2 · SOLVED QUESTIONS</div>
+            <h2 className="text-[22px] font-[750] m-[0_0_12px] text-text-primary">Study these two examples</h2>
 
             {activeChallenge.solvedQuestions.map((q, idx) => (
-              <div key={idx} className="mt-[17px] p-[17px] rounded-[13px] bg-[#fafafa] border border-[#ededed]">
-                <div className="flex justify-between gap-[10px] text-[13px] text-[#777] mb-[9px]">
-                  <span>{q.year}</span>
-                  <span className="font-semibold text-[#23935a]">Solved</span>
+              <div key={idx} className="mt-[17px] p-[17px] rounded-[13px] bg-bg-secondary/60 border border-border">
+                <div className="flex justify-between gap-[10px] text-[13px] text-text-muted mb-[9px]">
+                  <span className="font-semibold text-text-primary">{q.year}</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Solved</span>
                 </div>
-                <div className="font-[680] text-[15px] leading-[1.5] text-[#111]">
+                <div className="font-[680] text-[15px] leading-[1.5] text-text-primary">
                   {q.question}
                 </div>
-                <div className="mt-[11px] text-[#555] text-[14px] leading-[1.55]">
-                  <strong className="text-[#111]">Solution: </strong>{q.solution}
+                <div className="mt-[11px] text-text-secondary text-[14px] leading-[1.55] pt-2 border-t border-border">
+                  <strong className="text-text-primary">Solution: </strong>{q.solution}
                 </div>
               </div>
             ))}
           </div>
 
           {/* Exam Box */}
-          <div className="border border-[#cfe0ff] bg-[#f8fbff] rounded-[18px] p-[25px] mt-[20px]">
-            <div className="text-[14px] text-[#6d7179] font-[650] mb-2 uppercase tracking-wide">STEP 3 · PROVE IT</div>
-            <h2 className="m-[0_0_7px] text-[22px] font-[750] text-[#111]">Take the challenge exam</h2>
-            <p className="text-[#686d76] text-[14px] leading-[1.5] my-2">
+          <div className="border border-blue-500/30 bg-blue-500/5 dark:bg-blue-950/20 rounded-[18px] p-[25px] mt-[20px]">
+            <div className="text-[14px] text-blue-600 dark:text-blue-400 font-[650] mb-2 uppercase tracking-wide">STEP 3 · PROVE IT</div>
+            <h2 className="m-[0_0_7px] text-[22px] font-[750] text-text-primary">Take the challenge exam</h2>
+            <p className="text-text-secondary text-[14px] leading-[1.5] my-2">
               Two past questions. No notes. Submit your answers and pass the evaluation to complete this challenge.
             </p>
-            <div className="flex gap-5 my-[18px] text-[#555] text-[13px] font-medium">
+            <div className="flex gap-5 my-[18px] text-text-muted text-[13px] font-medium">
               <span>{activeChallenge.exam.questionCount} questions</span>
               <span>{activeChallenge.exam.durationMin} minutes</span>
               <span>Pass required</span>
@@ -530,17 +532,17 @@ export function ChallengesDashboardClient({
               disabled={examStarted[activeChallenge.id]}
               onClick={() => handleTakeExam(activeChallenge.id)}
               className={cn(
-                "border-0 text-white rounded-[25px] p-[12px_20px] font-[700] text-[14px] cursor-pointer transition active:scale-95",
+                "border-0 text-white rounded-[25px] px-6 py-3 font-[700] text-[14px] cursor-pointer transition active:scale-95",
                 examStarted[activeChallenge.id]
-                  ? "bg-[#23935a] opacity-80 cursor-default"
-                  : "bg-[#5f96ff] hover:bg-[#4a85f5]"
+                  ? "bg-emerald-600 opacity-80 cursor-default"
+                  : "bg-blue-600 hover:bg-blue-700"
               )}
             >
               {examStarted[activeChallenge.id] ? "Exam started ✓" : "Take exam →"}
             </button>
 
             {completedChallenges[activeChallenge.id] && (
-              <div className="p-[18px_20px] rounded-[15px] bg-[#eaf8f0] text-[#207c4d] font-[700] mt-[15px] text-[14px]">
+              <div className="p-[18px_20px] rounded-[15px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-[700] mt-[15px] text-[14px]">
                 ✓ Challenge completed. Your streak and progress have been updated.
               </div>
             )}
