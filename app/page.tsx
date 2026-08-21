@@ -254,13 +254,13 @@ export default async function LandingPage() {
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-2.5">
               <Link
-                className="btn-primary-glow inline-flex items-center justify-center gap-2 rounded-xl border border-transparent px-[20px] py-3 text-[13px] font-[800] transition-all"
-                href="/exams"
+                className="btn-primary-glow inline-flex items-center justify-center gap-2 rounded-xl border border-transparent px-[22px] py-3.5 text-[13px] font-[800] transition-all"
+                href="/flow"
               >
-                Browse Community Courses →
+                Start free now →
               </Link>
               <a
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#cbd5e3] bg-white px-[20px] py-3 text-[13px] font-[800] text-[#111b33] transition-all hover:border-[#99a8bc] hover:bg-[#f8fbff]"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#cbd5e3] bg-white px-[20px] py-3.5 text-[13px] font-[800] text-[#111b33] transition-all hover:border-[#99a8bc] hover:bg-[#f8fbff]"
                 href="#how"
               >
                 See how it works
@@ -876,17 +876,17 @@ export default async function LandingPage() {
             </p>
             <div className="mt-7 flex flex-wrap justify-center gap-3">
               <Link
-                className="btn-primary-glow inline-flex items-center justify-center gap-2 rounded-xl border border-transparent px-[22px] py-3 text-[13px] font-[800] transition-all"
-                href="/app"
+                className="btn-primary-glow inline-flex items-center justify-center gap-2 rounded-xl border border-transparent px-[20px] py-3 text-[13px] font-[800] transition-all"
+                href="/flow"
               >
                 Start free →
               </Link>
-              <Link
+              <a
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#cbd5e3] bg-white px-[20px] py-3 text-[13px] font-[800] text-[#111b33] transition-all hover:border-[#99a8bc] hover:bg-[#f8fbff]"
-                href="/exams"
+                href="#how"
               >
-                Browse Community Courses
-              </Link>
+                See how it works
+              </a>
             </div>
             <div className="mt-3 text-[10px] text-[#9aa4b2]">
               No credit card · Start with your own course material

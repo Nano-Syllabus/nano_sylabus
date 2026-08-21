@@ -215,7 +215,7 @@ export function SettingsForm({
 
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
-    router.replace("/signup");
+    router.replace("/");
     router.refresh();
   }
 

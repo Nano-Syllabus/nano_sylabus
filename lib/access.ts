@@ -8,14 +8,7 @@ export function isProfileComplete(
     >
   > | null,
 ) {
-  if (!profile) return false;
-
-  // Content is teacher-managed now, so picking a subject is what completes
-  // onboarding. board/grade still count so profiles created under the old
-  // faculty/level flow stay onboarded.
-  if (Array.isArray(profile.subjects) && profile.subjects.length > 0) return true;
-
-  return Boolean(profile.board && profile.grade);
+  return true;
 }
 
 export function resolveAccess(input: {
@@ -24,7 +17,7 @@ export function resolveAccess(input: {
   onboarded: boolean;
   role: AppRole;
 }) {
-  const { pathname, hasUser, onboarded, role } = input;
+  const { pathname, hasUser, role } = input;
   const isAdminRoute = pathname.startsWith("/admin");
   const isStudentRoute = pathname.startsWith("/app");
   const isOnboarding = pathname === "/onboarding";
@@ -35,7 +28,7 @@ export function resolveAccess(input: {
     if (role !== "admin") {
       return {
         allow: false as const,
-        redirectTo: onboarded ? "/app/today" : "/onboarding",
+        redirectTo: "/app/today",
         includeNext: false,
       };
     }
@@ -49,16 +42,12 @@ export function resolveAccess(input: {
   if (hasUser && isGuestPage) {
     return {
       allow: false as const,
-      redirectTo: onboarded ? "/app/today" : "/onboarding",
+      redirectTo: "/app/today",
       includeNext: false,
     };
   }
 
-  if (hasUser && role !== "admin" && isStudentRoute && !onboarded) {
-    return { allow: false as const, redirectTo: "/onboarding", includeNext: false };
-  }
-
-  if (hasUser && isOnboarding && onboarded) {
+  if (hasUser && isOnboarding) {
     return {
       allow: false as const,
       redirectTo: "/app/today",

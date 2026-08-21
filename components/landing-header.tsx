@@ -1,10 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export function LandingHeader({ dark = false }: { dark?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setIsLoggedIn(true);
+      }
+    });
+  }, []);
 
   return (
     <header
@@ -21,7 +33,13 @@ export function LandingHeader({ dark = false }: { dark?: boolean }) {
           }`}
           href="/"
         >
-          <span className="relative h-[27px] w-[27px] rounded-lg bg-gradient-to-br from-[#2f6fff] to-[#62b6ff] shadow-[0_8px_20px_rgba(47,111,255,0.18)] before:absolute before:left-2 before:top-2 before:h-1 before:w-2.5 before:-rotate-[20deg] before:rounded-full before:bg-white after:absolute after:left-2.5 after:top-3.5 after:h-1 after:w-2 after:rotate-[24deg] after:rounded-full after:bg-white after:opacity-90" />
+          <Image
+            src="/nano_logo.png"
+            alt="Nano Syllabus"
+            width={28}
+            height={28}
+            className="h-7 w-7 rounded-lg object-contain"
+          />
           <span className="text-[15px] font-[850] tracking-[-0.03em]">nanosyllabus</span>
         </Link>
 
@@ -64,15 +82,31 @@ export function LandingHeader({ dark = false }: { dark?: boolean }) {
           >
             Readiness
           </Link>
+          <Link
+            href="/flow?step=pricing"
+            onClick={() => setMenuOpen(false)}
+            className={`transition-colors ${dark ? "hover:text-white" : "hover:text-[#111b33]"}`}
+          >
+            Pricing
+          </Link>
         </nav>
 
         <div className="flex items-center gap-2.5">
-          <Link
-            href="/app"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2f6fff] px-[17px] py-2 text-[13px] font-[800] text-white shadow-[0_14px_28px_rgba(47,111,255,0.18)] transition-all hover:bg-[#2057d5] hover:-translate-y-0.5"
-          >
-            Start free
-          </Link>
+          {isLoggedIn ? (
+            <Link
+              href="/app/today"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2f6fff] px-[17px] py-2 text-[13px] font-[800] text-white shadow-[0_14px_28px_rgba(47,111,255,0.18)] transition-all hover:bg-[#2057d5] hover:-translate-y-0.5"
+            >
+              Go to App →
+            </Link>
+          ) : (
+            <Link
+              href="/flow"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2f6fff] px-[17px] py-2 text-[13px] font-[800] text-white shadow-[0_14px_28px_rgba(47,111,255,0.18)] transition-all hover:bg-[#2057d5] hover:-translate-y-0.5"
+            >
+              Start free
+            </Link>
+          )}
           <button
             type="button"
             className={`inline-flex md:hidden items-center justify-center rounded-xl border px-3 py-2 text-[13px] font-[800] ${

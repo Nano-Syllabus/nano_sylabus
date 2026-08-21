@@ -1,12 +1,17 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Logo({ className = "" }: { className?: string }) {
   return (
-    <Link href="/" className={`flex min-h-10 items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 ${className}`}>
-      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-text-primary text-text-inverse font-mono-ui text-sm">
-        N
-      </span>
+    <Link href="/" className={`flex min-h-10 items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 ${className}`}>
+      <Image
+        src="/nano_logo.png"
+        alt="Nano Syllabus"
+        width={28}
+        height={28}
+        className="h-7 w-7 rounded-lg object-contain"
+      />
       <span className="font-display text-lg leading-none">Nano Syllabus</span>
     </Link>
   );

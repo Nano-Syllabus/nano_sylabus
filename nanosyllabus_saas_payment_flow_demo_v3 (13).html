@@ -1,0 +1,187 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nano Syllabus — SaaS Flow</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#111;background:#fff}button,input{font:inherit}.screen{display:none;min-height:100vh}.screen.active{display:block}
+button{cursor:pointer}.btn{border:0;border-radius:12px;padding:14px 20px;background:#111;color:#fff;font-weight:700}.btn.light{background:#f1f1f1;color:#111}.btn.blue{background:#6195ee}.full{width:100%}
+.nav{height:72px;border-bottom:1px solid #eee;padding:0 6%;display:flex;align-items:center;gap:28px}.logo{font-weight:800;font-size:21px;letter-spacing:-.7px}.navlinks{display:flex;gap:25px;color:#777;font-size:14px}.nav-actions{margin-left:auto;display:flex;gap:9px}
+.hero{max-width:1100px;margin:auto;text-align:center;padding:100px 25px}.eyebrow{font-size:11px;font-weight:800;letter-spacing:1.8px;color:#5d91ef;margin-bottom:16px}.hero h1{font-size:68px;line-height:.98;letter-spacing:-4px;max-width:850px;margin:0 auto 24px}.hero p{max-width:700px;margin:0 auto 30px;font-size:19px;line-height:1.5;color:#747982}.actions{display:flex;justify-content:center;gap:10px}.proof{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:65px}.proof-card{border:1px solid #e5e5e5;border-radius:18px;padding:22px;text-align:left}.proof-card span{display:block;color:#777;font-size:13px;line-height:1.5;margin-top:7px}
+.flow{max-width:760px;margin:auto;padding:55px 25px}.topline{display:flex;justify-content:space-between;color:#777;font-size:13px;margin-top:30px}.bar{height:7px;background:#eee;border-radius:20px;margin-top:10px;overflow:hidden}.bar i{display:block;height:100%;background:#6195ee}.question{margin-top:55px}.question h2{font-size:38px;letter-spacing:-1.5px;margin:0 0 10px}.question p{color:#777;margin:0 0 28px}.options{display:grid;gap:10px}.option{border:1px solid #ddd;background:#fff;border-radius:14px;padding:17px;text-align:left;display:flex;justify-content:space-between}.option:hover,.option.selected{border-color:#6195ee;background:#f7faff}.radio{width:18px;height:18px;border:1px solid #aaa;border-radius:50%}.selected .radio{border:5px solid #6195ee}
+.result{max-width:920px;margin:auto;padding:70px 25px}.result-card{border:1px solid #e9ebef;border-radius:24px;padding:42px;background:#fff;box-shadow:0 16px 50px rgba(29,45,72,.05)}.result-card h1{font-size:45px;letter-spacing:-2px;margin:0 0 10px}.muted{color:#777}.result-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:28px 0}.result-item{background:#f8f9fb;border:1px solid #eef0f3;border-radius:15px;padding:20px}.result-item b{display:block;font-size:18px;margin-bottom:6px}.result-item span{color:#727780;font-size:14px;line-height:1.45}
+.price{max-width:1080px;margin:auto;padding:60px 25px}.price h1{text-align:center;font-size:50px;letter-spacing:-2.5px;margin:0}.price-head{text-align:center}.price-head p{color:#777}.plans{display:grid;grid-template-columns:1fr 1.05fr;gap:18px;margin-top:40px}.plan{border:1px solid #ddd;border-radius:22px;padding:30px}.plan.featured{border:2px solid #111}.badge{display:inline-block;background:#111;color:#fff;padding:6px 10px;border-radius:99px;font-size:10px;font-weight:800}.amount{font-size:43px;font-weight:800;margin-top:15px}.amount small{font-size:13px;color:#777;font-weight:500}.features{list-style:none;padding:0}.features li{padding:10px 0;border-top:1px solid #eee;font-size:14px}.features li:before{content:"✓";color:#6195ee;font-weight:800;margin-right:8px}
+.checkout{max-width:1050px;margin:auto;padding:45px 25px}.checkout h1{font-size:40px;letter-spacing:-2px;margin:0}.checkout-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:18px;margin-top:28px}.box{border:1px solid #e2e2e2;border-radius:20px;padding:28px}.field{margin-bottom:15px}.field label{display:block;font-size:12px;font-weight:700;color:#555;margin-bottom:6px}.field input{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.coupon{display:flex;gap:8px}.coupon input{flex:1}.coupon button{border:0;border-radius:10px;padding:12px 16px;font-weight:700}.line{display:flex;justify-content:space-between;padding:10px 0;color:#666;font-size:14px}.total{border-top:1px solid #eee;margin-top:8px;padding-top:16px;font-size:20px;font-weight:800}.green{color:#26905a}.offer{background:#f5f8ff;border:1px solid #dbe8ff;border-radius:13px;padding:14px;font-size:13px;line-height:1.5;margin:18px 0}.offer b{color:#487fdc}
+.modal-bg{display:none;position:fixed;inset:0;background:#0007;align-items:center;justify-content:center;padding:20px;z-index:10}.modal-bg.show{display:flex}.modal{background:#fff;border-radius:22px;padding:30px;max-width:430px;width:100%}.close{float:right;border:0;border-radius:50%;width:30px;height:30px}.code{background:#f5f5f5;border:1px dashed #aaa;border-radius:12px;padding:15px;text-align:center;font-size:24px;font-weight:800;letter-spacing:2px;margin:18px 0}
+.app{background:#fafafa}.appnav{height:70px;background:#fff;border-bottom:1px solid #eee;display:flex;align-items:center;padding:0 25px}.appnav span{margin-left:auto;color:#777;font-size:13px}.layout{display:grid;grid-template-columns:230px 1fr;min-height:calc(100vh - 70px)}.side{background:#fff;border-right:1px solid #eee;padding:20px 12px}.side div{padding:12px;border-radius:10px;color:#555}.side .active{background:#f1f1f1;color:#111;font-weight:700}.main{padding:50px}.main h1{font-size:40px;letter-spacing:-1.5px}.appcards{display:grid;grid-template-columns:2fr 1fr;gap:15px}.appcard{background:#fff;border:1px solid #e5e5e5;border-radius:18px;padding:25px}.readiness{font-size:42px;font-weight:800}.appbar{height:9px;background:#eee;border-radius:99px}.appbar i{display:block;width:68%;height:100%;background:#6195ee;border-radius:99px}
+@media(max-width:800px){.hero h1{font-size:46px}.proof,.plans,.checkout-grid,.result-grid,.appcards,.layout{grid-template-columns:1fr}.navlinks{display:none}.side{display:none}}
+
+.trust-strip{margin:24px 0;padding:16px 19px;border:1px solid #dbe7fa;background:#f7faff;border-radius:15px;color:#5e6773;font-size:13px;line-height:1.5}.trust-strip b{color:#111}
+.insight{margin-top:40px;border:1px solid #e2e7ef;background:linear-gradient(135deg,#f7faff,#fff);border-radius:22px;padding:28px;display:grid;grid-template-columns:56px 1fr;gap:16px}.insight-icon{width:56px;height:56px;border-radius:17px;background:#eaf2ff;display:grid;place-items:center;color:#5d91ef;font-size:25px}.insight p{color:#6f7680;line-height:1.55;font-size:14px}.founder{margin:25px 0;padding:28px;border:1px solid #e3e3e3;border-radius:22px}.founder h3{font-size:25px;margin:0 0 8px}.founder p{color:#666;line-height:1.7}.signature{font-weight:800;margin-top:16px}.mini-graphic{height:150px;border-radius:20px;background:linear-gradient(135deg,#eef5ff,#fff);position:relative;overflow:hidden;margin-top:25px}.orbit{position:absolute;border:1px solid #a9c6f8;border-radius:50%;width:240px;height:105px;left:50%;top:25px;transform:translateX(-50%) rotate(-10deg)}.node{position:absolute;width:13px;height:13px;border-radius:50%;background:#6195ee;box-shadow:0 0 0 7px #dce9ff}.n1{left:24%;top:65px}.n2{right:24%;top:40px}.n3{left:48%;bottom:22px}.book{position:absolute;left:50%;top:44px;transform:translateX(-50%);font-size:38px}@media(max-width:800px){.insight{grid-template-columns:1fr}}
+
+.fact-large{padding:34px}.fact-large h2{font-size:34px;letter-spacing:-1.3px;margin:7px 0 12px}.fact-large p{font-size:16px;line-height:1.65;color:#666;max-width:680px}.fact-callout{margin-top:20px;padding:17px 19px;border-radius:14px;background:#f5f8ff;border:1px solid #dbe7fa;color:#596574;line-height:1.6;font-size:14px}.profile-result{margin:24px 0;padding:22px;border-radius:18px;background:linear-gradient(135deg,#f7faff,#fff);border:1px solid #dce7f7}.profile-label{font-size:10px;letter-spacing:1.4px;font-weight:800;color:#6195ee;margin-bottom:8px}.profile-result>div:nth-child(2){font-size:24px;font-weight:800;letter-spacing:-.7px}.profile-result p{color:#6c737d;line-height:1.55;margin-bottom:0}
+.answer-signal{display:inline-flex;align-items:center;gap:8px;margin:2px 0 10px;padding:8px 12px;border-radius:99px;background:#edf4ff;color:#477bd4;font-size:12px;font-weight:800}.source-line{margin-top:13px!important;font-size:12px!important;color:#8a9099!important}.source-line a{color:#5d84c8;text-decoration:none;border-bottom:1px solid #b8cbec}.source-line a:hover{color:#315fa1}
+.founder-slide{background:linear-gradient(145deg,#fff8e8 0%,#f2f7ff 52%,#f8efff 100%);overflow:hidden;position:relative}.founder-slide:before,.founder-slide:after{content:"";position:absolute;border-radius:50%;filter:blur(1px);opacity:.7}.founder-slide:before{width:240px;height:240px;background:#ffdca0;left:-90px;top:-80px}.founder-slide:after{width:280px;height:280px;background:#d7c9ff;right:-100px;bottom:-110px}.founder-wrap{position:relative;z-index:1;max-width:790px;margin:auto;padding:58px 25px}.founder-card{background:rgba(255,255,255,.9);border:1px solid rgba(255,255,255,.95);border-radius:30px;padding:42px;box-shadow:0 22px 70px rgba(52,57,92,.12)}.founder-kicker{display:flex;align-items:center;gap:10px;color:#7d61c8;font-size:11px;font-weight:850;letter-spacing:1.7px}.founder-spark{width:32px;height:32px;border-radius:10px;background:#fff0be;display:grid;place-items:center;font-size:17px}.founder-card h1{font-size:43px;line-height:1.05;letter-spacing:-2px;margin:20px 0}.founder-copy{font-size:17px;line-height:1.7;color:#575d67;max-width:650px}.founder-highlight{margin:24px 0;padding:17px 19px;border-radius:16px;background:#eef5ff;border:1px solid #d9e7ff;color:#42628f;font-weight:700;line-height:1.5}.founder-person{display:flex;align-items:center;gap:12px;margin:24px 0}.founder-person .avatar{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:#111;color:#fff;font-weight:850}.founder-person b,.founder-person span{display:block}.founder-person span{font-size:13px;color:#858a92;margin-top:3px}.clean-result{background:#fbfcfe}.clean-result .profile-result{margin:28px 0}.clean-result .trust-strip{margin:0 0 25px}@media(max-width:700px){.founder-card{padding:28px 22px}.founder-card h1{font-size:34px}}
+.solution-slide{height:100vh;min-height:0;overflow:hidden;background:linear-gradient(145deg,#f5f9ff,#fffaf0)}.solution-slide .result{max-width:1260px;padding:24px 28px}.solution-head{text-align:center;max-width:800px;margin:14px auto 12px}.solution-head h1{font-size:40px;letter-spacing:-2px;margin:5px 0 9px}.solution-head p{color:#6e747d;line-height:1.45;margin:0}.roadmap-title{text-align:center;margin:20px 0 5px;font-size:12px;font-weight:850;letter-spacing:2px;color:#5d91ef;text-transform:uppercase}.solution-steps{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:32px;margin:8px 0 18px;height:300px;padding:12px 0 48px}.challenge-path{position:absolute;inset:0;width:100%;height:100%;z-index:0;overflow:visible}.solution-step{position:relative;z-index:1;width:auto;min-height:180px;border:1px solid #dce3ed;background:rgba(255,255,255,.98);border-radius:24px;padding:22px;display:block;box-shadow:0 14px 38px rgba(43,62,91,.09)}.solution-step:nth-of-type(even){margin-left:0;transform:translateY(62px)}.solution-num{width:47px;height:47px;border-radius:15px;display:grid;place-items:center;font-weight:850;font-size:18px;margin-bottom:17px}.solution-step:nth-of-type(1) .solution-num{background:#e9f2ff;color:#4f83dc}.solution-step:nth-of-type(2) .solution-num{background:#fff0c9;color:#9b6b00}.solution-step:nth-of-type(3) .solution-num{background:#e9f9ef;color:#2b8650}.solution-step:nth-of-type(4) .solution-num{background:#f3eaff;color:#7a4ab7}.solution-step b{display:block;margin:0 0 8px;font-size:17px}.solution-step span{color:#757b84;font-size:13px;line-height:1.5}.win-flag{position:absolute;right:16px;top:16px;display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:99px;background:#fff3c8;color:#7c5900;font-size:11px;font-weight:850;box-shadow:0 5px 15px rgba(90,63,0,.08)}.win-flag i{font-style:normal;font-size:18px}.lifecycle-cta{display:block;width:min(100%,380px);margin:38px auto 0;padding:15px 28px}
+.mobile-pay{display:grid;grid-template-columns:210px 1fr;gap:24px;align-items:start}.qr-placeholder{width:210px;height:210px;border:10px solid #fff;outline:1px solid #d9dde4;border-radius:18px;background:conic-gradient(from 90deg at 25% 25%,#111 0 25%,#fff 0 50%,#111 0 75%,#fff 0) 0 0/28px 28px;position:relative;overflow:hidden}.qr-placeholder:after{content:"DEMO QR";position:absolute;inset:72px 34px;background:#fff;border:6px solid #111;display:grid;place-items:center;font-size:12px;font-weight:900;text-align:center}.pay-steps{margin:0;padding:0;list-style:none;counter-reset:pay}.pay-steps li{counter-increment:pay;position:relative;padding:0 0 17px 38px;color:#626872;font-size:14px;line-height:1.5}.pay-steps li:before{content:counter(pay);position:absolute;left:0;top:0;width:25px;height:25px;border-radius:8px;background:#edf4ff;color:#4f7fd3;display:grid;place-items:center;font-weight:800;font-size:12px}.invoice-box{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#f7f8fa;border:1px solid #e4e6ea;border-radius:13px;padding:13px 15px;margin:12px 0}.invoice-box small{display:block;color:#777;margin-bottom:3px}.invoice-box b{letter-spacing:1px}.demo-warning{font-size:12px;color:#9a6b13;background:#fff8e6;border:1px solid #f1dfac;border-radius:11px;padding:10px 12px;margin-top:13px}@media(max-width:800px){.mobile-pay{grid-template-columns:1fr}.qr-placeholder{margin:auto}.solution-slide{height:auto;min-height:100vh;overflow:auto}.solution-steps{grid-template-columns:1fr 1fr;height:auto;gap:14px;padding:0}.challenge-path{display:none}.solution-step,.solution-step:nth-of-type(even){min-height:150px;transform:none}.solution-head h1{font-size:32px}}
+</style>
+</head>
+<body>
+
+<section class="screen active" id="landing">
+<header class="nav"><div class="logo">Nano Syllabus</div><div class="navlinks"><span>How it works</span><span>Features</span><span>Pricing</span></div><div class="nav-actions"><button class="btn light" onclick="go('login')">Log in</button><button class="btn" onclick="go('q1')">Start now →</button></div></header>
+<div class="hero"><div class="eyebrow">BUILT FOR EXAM PREPARATION</div><h1>Turn your syllabus into a study system.</h1><p>Upload your syllabus, notes, books and question banks. Learn from your material, practice like the exam and know exactly what you need to improve.</p><div class="actions"><button class="btn" onclick="go('q1')">Start now →</button><button class="btn light" onclick="go('pricing')">See pricing</button></div><div class="proof"><div class="proof-card"><b>AI Tutor</b><span>Ask questions and get answers from your own learning material.</span></div><div class="proof-card"><b>Mock Exams</b><span>Take timed exams and submit handwritten answers.</span></div><div class="proof-card"><b>Readiness</b><span>Track your progress across every topic in your syllabus.</span></div></div></div>
+</section>
+
+<script>
+const questions=[
+["Do you study hard—but still get disappointing marks?",
+"Yes","Sometimes","No"],
+["Do you understand a topic today, then forget it in the exam?",
+"Yes","Sometimes","No"],
+["In the exam, can you remember every formula and step you need?",
+"Yes","Sometimes","No"],
+["Do unseen questions make you freeze—even when you studied the topic?",
+"Yes","Sometimes","No"],
+["Do you get confused about what to study first?",
+"Yes","No"],
+["Do you run out of time to practise enough past question papers?",
+"Yes","Sometimes","No"]
+];
+
+for(let i=0;i<questions.length;i++){
+ document.write(`<section class="screen" id="q${i+1}">
+ <div class="flow">
+   <div class="logo">Nano Syllabus</div>
+   <div class="topline"><span>Let's understand how you study</span><span>${i+1} / 6</span></div>
+   <div class="bar"><i style="width:${Math.round((i+1)/6*100)}%"></i></div>
+   <div class="question">
+     <h2>${questions[i][0]}</h2>
+     <p>There is no right answer. Choose what is closest to your real experience.</p>
+     <div class="options">${questions[i].slice(1).map((x,j)=>`<button class="option" onclick="answer(this,${i+1},${j},'${x.replace(/'/g,"\\\\'")}')">${x}<span class="radio"></span></button>`).join('')}</div>
+   </div>
+ </div>
+ </section>`);
+}
+
+/* One evidence slide, shown midway through the questions. */
+document.write(`
+<section class="screen" id="fact1">
+ <div class="result">
+   <div class="logo">Nano Syllabus</div>
+   <div class="insight fact-large">
+     <div class="insight-icon">◌</div>
+     <div>
+       <div class="eyebrow">YOUR ANSWERS + REAL STUDENT EXPERIENCES</div>
+       <div class="answer-signal" id="fact1Signal">Analysing your first 3 answers…</div>
+       <h2 id="fact1Title">Studying longer does not always mean remembering more.</h2>
+       <p id="fact1Reddit"></p>
+       <p id="fact1Meaning"></p>
+       <div class="fact-callout"><b>61% remembered after one week with retrieval practice—versus 40% with repeated studying.</b><br>In the classic experiment, students who tested themselves remembered 21 percentage points more after one week.</div>
+       <p class="source-line">Student experiences: <a href="https://www.reddit.com/r/GetStudying/comments/1ldvpwb/failed_exam_despite_250_hours_of_studying_feeling/" target="_blank" rel="noopener">250 hours but failed · Reddit</a> and <a href="https://www.reddit.com/r/GetStudying/comments/1h8ngaj/i_forget_everything_i_studied_just_days_before/" target="_blank" rel="noopener">11–13 hours yet forgetting · Reddit</a>. Research: <a href="https://pubmed.ncbi.nlm.nih.gov/16507066/" target="_blank" rel="noopener">Roediger &amp; Karpicke, 2006</a>.</p>
+     </div>
+   </div>
+   <button class="btn full" onclick="go('q4')">Continue →</button>
+ </div>
+</section>
+
+`);
+
+</script>
+
+<section class="screen solution-slide" id="solutionSlide"><div class="result"><div class="logo">Nano Syllabus</div><div class="solution-head"><h1>How a NanoSyllabus challenge works</h1><p>Every day, one challenge takes you from learning a topic to proving you can answer it in the exam.</p></div><div class="roadmap-title">Daily Challenge Lifecycle</div><div class="solution-steps"><svg class="challenge-path" viewBox="0 0 1000 300" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="pathGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#79a8f3"/><stop offset=".36" stop-color="#e2ba59"/><stop offset=".68" stop-color="#69c38d"/><stop offset="1" stop-color="#a979d6"/></linearGradient><marker id="pathArrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#a979d6"/></marker></defs><path d="M95 120 C180 20 265 20 350 120 S520 220 605 120 S775 20 855 120 S930 215 970 160" fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round"/><path d="M95 120 C180 20 265 20 350 120 S520 220 605 120 S775 20 855 120 S930 215 970 160" fill="none" stroke="url(#pathGradient)" stroke-width="8" stroke-linecap="round" stroke-dasharray="4 15" marker-end="url(#pathArrow)"/></svg><div class="solution-step"><div class="solution-num">1</div><div><b>Learn the content</b><span>Study one small topic from your own notes and books.</span></div></div><div class="solution-step"><div class="solution-num">2</div><div><b>Study a solved past question</b><span>See how that topic is used in a real exam answer, step by step.</span></div></div><div class="solution-step"><div class="solution-num">3</div><div><b>Solve a new past question</b><span>Write the answer yourself without looking at the solution.</span></div></div><div class="solution-step"><div class="win-flag"><i>🏁</i> Finish</div><div class="solution-num">4</div><div><b>Get AI-graded marks</b><span>Upload your handwritten answer and get marks, feedback and the exact steps to improve.</span></div></div></div><button class="btn lifecycle-cta" onclick="go('login')">Create my Nano Syllabus →</button></div></section>
+
+<section class="screen founder-slide" id="founderSlide"><div class="founder-wrap"><div class="logo">Nano Syllabus</div><div class="founder-card" style="margin-top:42px"><div class="founder-kicker"><span class="founder-spark">✦</span> ONE LAST THING</div><h1>You are not bad at studying.<br>You need a better feedback loop.</h1><p class="founder-copy">I built Nano Syllabus because capable students spend too much energy wondering what to study, whether they remember it, and how to turn what they know into marks.</p><div class="founder-highlight" id="founderPersonal">We found a few places where your study system can support you better.</div><p class="founder-copy">You do not need to fix everything today. Start with one weak topic, study one clear example, attempt one real question, and improve from the feedback.</p><div class="founder-person"><div class="avatar">P</div><div><b>Prashant Soni</b><span>Founder, Nano Syllabus</span></div></div><button class="btn full" onclick="go('solutionSlide')">See how NanoSyllabus helps →</button></div></div></section>
+
+<section class="screen" id="login"><div class="flow" style="max-width:470px;padding-top:90px"><div class="logo">Nano Syllabus</div><div class="question"><div class="eyebrow">SAVE YOUR PROFILE</div><h2>Log in to continue.</h2><p>Your onboarding answers will be saved to your account.</p><div class="field"><label>Email</label><input style="width:100%;padding:13px;border:1px solid #ddd;border-radius:10px" placeholder="you@example.com"></div><div class="field"><label>Password</label><input type="password" style="width:100%;padding:13px;border:1px solid #ddd;border-radius:10px" placeholder="••••••••"></div><button class="btn full" onclick="go('pricing')">Continue →</button></div></div></section>
+
+<section class="screen" id="pricing"><div class="price"><div class="logo">Nano Syllabus</div><div class="price-head"><div class="eyebrow">PRICING</div><h1>Study without limits.</h1><p>Start free. Upgrade when you want unlimited access.</p></div><div class="plans">
+<div class="plan featured">
+<span class="badge">MOST POPULAR</span>
+<h2>Individual</h2>
+<div class="amount">Rs. 1,500 <small>/ month</small></div>
+<p class="muted">A complete exam-preparation system for one student.</p>
+<ul class="features">
+<li>Unlimited AI Tutor</li><li>Unlimited document conversations</li><li>Unlimited mock exams</li>
+<li>Handwritten answer feedback</li><li>Knowledge graph & exam readiness</li><li>Daily challenges & consistency streak</li>
+</ul>
+<button class="btn full" onclick="go('checkout1')">Get Individual →</button>
+<button class="btn light full" style="margin-top:8px" onclick="openModal()">Check discount code</button>
+</div>
+<div class="plan">
+<span class="badge" style="background:#eef4ff;color:#4f82dc">5 STUDENTS</span>
+<h2>Group</h2>
+<div class="amount">Rs. 5,000 <small>/ month</small></div>
+<p class="muted">One package for five students studying together.</p>
+<ul class="features">
+<li>5 student accounts</li><li>Unlimited AI Tutor for everyone</li><li>Unlimited mock exams</li>
+<li>Handwritten answer feedback</li><li>Individual readiness & progress</li><li>Shared challenge accountability</li>
+</ul>
+<button class="btn full" onclick="go('groupCheckout')">Get Group →</button>
+</div></div></div></div></section>
+
+<section class="screen" id="checkout1"><div class="checkout"><div class="logo">Nano Syllabus</div><div class="eyebrow" style="margin-top:45px">MOBILE BANKING PAYMENT</div><h1>Scan, pay and send your receipt.</h1><p class="muted">Rs. 1,500 / month · Your account will be activated after payment verification.</p><div class="checkout-grid"><div class="box"><h3>Pay with your mobile banking app</h3><div class="mobile-pay"><div><div class="qr-placeholder" aria-label="Demo placeholder for official mobile banking QR"></div><div class="demo-warning"><b>Demo placeholder:</b> replace this with the official NanoSyllabus bank QR before launch.</div></div><div><ol class="pay-steps"><li>Scan the QR using your mobile banking app and pay <b>Rs. <span id="pay">1,500</span></b>.</li><li>Add the invoice number below in the payment remarks.</li><li>Take a screenshot of the successful payment.</li><li>Send the screenshot and invoice number to <b>WhatsApp: +977 98XXXXXXXX</b>.</li></ol><div class="invoice-box"><div><small>PAYMENT REMARK / INVOICE</small><b id="invoiceNumber">NS-2083-0142</b></div><button class="btn light" onclick="copyInvoice(this)">Copy</button></div><div class="offer"><b>Activation:</b> Our team will verify the screenshot and activate your account.</div></div></div><h3>Have a discount code?</h3><div class="coupon"><input id="coupon" placeholder="Enter code"><button onclick="apply()">Apply</button></div><button class="btn full" style="margin-top:18px" onclick="go('paymentPending')">I paid and sent the screenshot →</button></div><div class="box"><h3>Order summary</h3><div class="line"><span>Unlimited</span><span>Rs. 1,500</span></div><div class="line"><span>Discount</span><span id="discount">—</span></div><div class="line total"><span>Total today</span><span>Rs. <span id="total">1,500</span></span></div><button class="btn light full" style="margin-top:20px" onclick="openModal()">Check discount code</button></div></div></div></section>
+
+<section class="screen" id="paymentPending"><div class="flow" style="max-width:560px;padding-top:90px"><div class="logo">Nano Syllabus</div><div class="question"><div class="eyebrow">PAYMENT RECEIVED FOR REVIEW</div><h2>We’ll activate your account after verification.</h2><p>Make sure your WhatsApp message includes the payment screenshot and invoice <b>NS-2083-0142</b>. Our team will confirm once your account is active.</p><div class="offer"><b>Important:</b> This demo still contains placeholder bank QR and WhatsApp details. Replace them before accepting real payments.</div><button class="btn full" onclick="go('landing')">Back to home</button></div></div></section>
+
+<section class="screen" id="checkout2"><div class="checkout"><div class="logo">Nano Syllabus</div><div class="eyebrow" style="margin-top:45px">100% DISCOUNT APPLIED</div><h1>Your first month is free.</h1><p class="muted">You pay Rs. 0 today.</p><div class="checkout-grid"><div class="box"><h3>Payment details</h3><div class="field"><label>Name</label><input value="Prashant" readonly></div><div class="field"><label>Payment method</label><input value="Saved securely for future renewal" readonly></div><div class="offer"><b>WELCOME100</b> gives 100% off your first month. Your subscription renews at Rs. 1,500/month after the offer period.</div><button class="btn full" onclick="go('app')">Start Unlimited for Rs. 0 →</button></div><div class="box"><h3>Order summary</h3><div class="line"><span>Unlimited</span><span>Rs. 1,500</span></div><div class="line green"><span>WELCOME100 · 100% off</span><span>− Rs. 1,500</span></div><div class="line total"><span>Total today</span><span>Rs. 0</span></div></div></div></div></section>
+
+<section class="screen" id="groupCheckout"><div class="checkout"><div class="logo">Nano Syllabus</div><div class="eyebrow" style="margin-top:45px">GROUP PLAN</div><h1>Study together.</h1><p class="muted">5 student accounts · Rs. 5,000 / month</p><div class="checkout-grid"><div class="box"><h3>Group details</h3><div class="field"><label>Group / institution name</label><input placeholder="e.g. Engineering Study Group"></div><div class="field"><label>Your email</label><input placeholder="organizer@example.com"></div><div class="field"><label>Student emails</label><input placeholder="student1@example.com, student2@example.com"></div><div class="offer"><b>Five students in one package.</b> Each student gets their own account, progress and exam-readiness view.</div><button class="btn full" onclick="go('app')">Continue with Group →</button></div><div class="box"><h3>Order summary</h3><div class="line"><span>Group · 5 students</span><span>Rs. 5,000</span></div><div class="line total"><span>Monthly</span><span>Rs. 5,000</span></div></div></div></div></section><section class="screen app" id="app"><header class="appnav"><div class="logo">Nano Syllabus</div><span>Prashant</span></header><div class="layout"><aside class="side"><div class="active">Challenges</div><div>Library</div><div>Mock Exam</div><div>Create Subject</div><div>My Notes</div></aside><main class="main"><h1>Welcome to Nano Syllabus.</h1><p>Start with one challenge today.</p><div class="appcards"><div class="appcard"><b>Exam readiness</b><div class="readiness">0%</div><div class="appbar"><i></i></div><p>Upload your syllabus, notes, book and question bank to begin.</p></div><div class="appcard"><b>Today's challenge</b><p>Set up your first subject and complete your first topic challenge.</p><button class="btn">Create subject →</button></div></div></main></div></section>
+
+<div class="modal-bg" id="modal"><div class="modal"><button class="close" onclick="closeModal()">×</button><div class="eyebrow">LIMITED OFFER</div><h2>Get your first month free.</h2><p class="muted">Use this code to get <b>100% off</b> your Rs. 1,500/month Individual plan. Offer valid until <b>August 31, 2026</b>.</p><div class="code">WELCOME100</div><button class="btn full" onclick="useCode()">Use this code →</button></div></div>
+
+<script>
+function isStruggle(n){
+  if(!answers[n]) return false;
+  return n===3 ? answers[n].text!=='Yes' : answers[n].text!=='No';
+}
+function renderFact1(){
+  const count=[1,2,3].filter(isStruggle).length;
+  document.getElementById('fact1Signal').textContent=`${count} of your first 3 answers point to a recall gap`;
+  document.getElementById('fact1Title').textContent=count
+    ? 'You are putting in effort—but recall is blocking the result.'
+    : 'Your recall foundation looks strong. Keep protecting it.';
+  document.getElementById('fact1Reddit').innerHTML=count
+    ? 'You are not alone. One student on Reddit described <b>failing after 250 hours of studying</b>. Another reported studying <b>11–13 hours a day</b> and still forgetting calculus before the exam.'
+    : 'Even students who study for long hours report forgetting under exam pressure. One Reddit post described <b>250 hours of preparation</b> that still ended in failure.';
+  document.getElementById('fact1Meaning').innerHTML=count
+    ? 'Your answers suggest the problem is not simply effort. You need more chances to <b>retrieve formulas, steps and concepts without looking</b>.'
+    : 'Your answers do not show a major recall problem right now. Regular self-testing can help keep it that way.';
+}
+function renderFounder(){
+  const challenges=[1,2,3,4,5,6].filter(isStruggle).length;
+  const message=document.getElementById('founderPersonal');
+  message.innerHTML=challenges
+    ? `Your answers revealed <b>${challenges} areas</b> where a clearer study system could reduce stress and improve exam readiness.`
+    : 'Your answers show a strong foundation. Nano Syllabus can help you keep it consistent and measurable.';
+}
+function go(id){
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='fact1') renderFact1();
+  if(id==='founderSlide') renderFounder();
+  scrollTo(0,0);
+}
+const answers={};
+function answer(el,n,index,text){
+  el.classList.add('selected');
+  answers[n]={index,text};
+  setTimeout(()=>{
+    if(n===3) go('fact1');
+    else if(n===6) go('founderSlide');
+    else go('q'+(n+1));
+  },180);
+}
+function openModal(){document.getElementById('modal').classList.add('show')}
+function closeModal(){document.getElementById('modal').classList.remove('show')}
+function useCode(){closeModal();go('checkout2')}
+function copyInvoice(button){
+  const value=document.getElementById('invoiceNumber').textContent;
+  if(navigator.clipboard) navigator.clipboard.writeText(value);
+  button.textContent='Copied ✓';
+}
+function apply(){if(document.getElementById('coupon').value.trim().toUpperCase()==='WELCOME100'){document.getElementById('discount').textContent='− Rs. 1,500';document.getElementById('total').textContent='0';document.getElementById('pay').textContent='0';setTimeout(()=>go('checkout2'),400)}else alert('For this demo, use WELCOME100.')}
+</script>
+</body>
+</html>

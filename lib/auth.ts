@@ -104,13 +104,11 @@ export async function requireAuthenticatedUser() {
 }
 
 export async function requireOnboardedUser() {
-  const auth = await requireAuthenticatedUser();
-  if (!auth.user.onboarded) redirect("/onboarding");
-  return auth;
+  return requireAuthenticatedUser();
 }
 
 export async function requireAdminUser() {
   const auth = await requireAuthenticatedUser();
-  if (auth.user.role !== "admin") redirect(auth.user.onboarded ? "/app/today" : "/onboarding");
+  if (auth.user.role !== "admin") redirect("/app/today");
   return auth;
 }

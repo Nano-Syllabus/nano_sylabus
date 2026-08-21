@@ -37,30 +37,32 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=Missing%20session`);
   }
 
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from("student_profiles")
     .select("full_name, college, board, grade, target_grade, language_pref, subjects, role")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const onboarded = isProfileComplete(
-    profile
-      ? {
-          fullName: profile.full_name ?? "",
-          college: profile.college ?? "",
-          board: profile.board ?? "",
-          grade: profile.grade ?? "",
-          targetGrade: profile.target_grade ?? "",
-          languagePref: profile.language_pref ?? "EN",
-          subjects: Array.isArray(profile.subjects) ? profile.subjects : [],
-        }
-      : null,
-  );
+  if (!profile) {
+    const fullName =
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      user.email?.split("@")[0] ||
+      "Student";
+    await supabase.from("student_profiles").upsert(
+      {
+        user_id: user.id,
+        full_name: fullName,
+        language_pref: "RN",
+      },
+      { onConflict: "user_id" },
+    );
+  }
 
   const role = profile?.role === "admin" ? "admin" : "student";
   const destination = resolvePostAuthDestination({
     nextPath: next,
-    onboarded,
+    onboarded: true,
     role,
   });
 

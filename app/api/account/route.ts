@@ -2,6 +2,27 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+function formatDeleteAccountError(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  try {
+    const serialized = JSON.stringify(error);
+    if (serialized && serialized !== "{}") {
+      return serialized;
+    }
+  } catch {
+    // Fall through to the generic message below.
+  }
+
+  return "Failed to delete account.";
+}
+
 export async function DELETE() {
   try {
     const supabase = await createSupabaseServerClient();
@@ -17,13 +38,15 @@ export async function DELETE() {
     const { error } = await admin.auth.admin.deleteUser(user.id);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("[DELETE /api/account] Supabase auth delete failed", error);
+      return NextResponse.json({ error: formatDeleteAccountError(error) }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.error("[DELETE /api/account] Account delete failed", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to delete account." },
+      { error: formatDeleteAccountError(error) },
       { status: 500 },
     );
   }
