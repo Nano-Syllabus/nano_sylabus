@@ -14,6 +14,10 @@ interface SubscriptionPlanRow {
   price: number;
   currency: string;
   billing_type: BillingType;
+  product_type?: "credit_pack" | "individual" | "group";
+  seat_limit?: number;
+  is_unlimited?: boolean;
+  features?: unknown;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -49,6 +53,10 @@ function normalizePlan(row: SubscriptionPlanRow): SubscriptionPlan {
     price: row.price,
     currency: row.currency,
     billingType: row.billing_type,
+    productType: row.product_type ?? "credit_pack",
+    seatLimit: row.seat_limit ?? 1,
+    isUnlimited: row.is_unlimited ?? false,
+    features: Array.isArray(row.features) ? row.features.filter((item): item is string => typeof item === "string") : [],
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

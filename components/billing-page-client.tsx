@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { getCreditWarning } from "@/lib/billing";
@@ -22,7 +22,6 @@ const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
 export function BillingPageClient({ overview }: { overview: StudentBillingOverview }) {
   const router = useRouter();
   const [creatingPlanId, setCreatingPlanId] = useState<string | null>(null);
-  const [methodByPlanId, setMethodByPlanId] = useState<Record<string, PaymentMethod>>({});
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [selectedInvoice, setSelectedInvoice] = useState<BillingInvoiceSummary | null>(null);
@@ -42,7 +41,7 @@ export function BillingPageClient({ overview }: { overview: StudentBillingOvervi
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         planId: plan.id,
-        paymentMethod: methodByPlanId[plan.id] ?? "esewa",
+        paymentMethod: "bank_transfer",
       }),
     });
 
@@ -114,31 +113,9 @@ export function BillingPageClient({ overview }: { overview: StudentBillingOvervi
                     NPR {plan.price} · {plan.billingType === "one_time" ? "One-time purchase" : "Monthly"}
                   </p>
 
-                  <div className="mt-5">
-                    <p className="mb-2 text-[10px] font-mono-ui uppercase text-text-muted">Payment method</p>
-                    <div className="inline-flex rounded-full border border-border p-0.5">
-                      {(["esewa", "khalti", "bank_transfer"] as const).map((method) => (
-                        <button
-                          key={method}
-                          type="button"
-                          onClick={() =>
-                            setMethodByPlanId((prev) => ({
-                              ...prev,
-                              [plan.id]: method,
-                            }))
-                          }
-                          className={
-                            "rounded-full px-3 py-1.5 text-xs transition " +
-                            ((methodByPlanId[plan.id] ?? "esewa") === method
-                              ? "bg-text-primary text-text-inverse"
-                              : "text-text-secondary")
-                          }
-                        >
-                          {PAYMENT_METHOD_LABEL[method]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <p className="mt-5 text-xs text-text-secondary">
+                    Pay with the official bank QR, then upload the receipt for verification.
+                  </p>
 
                   <Button
                     className="mt-5 w-full"
@@ -238,27 +215,35 @@ function PaymentSubmissionModal({
 }) {
   const [reference, setReference] = useState(invoice.paymentSubmission?.reference ?? "");
   const [payerName, setPayerName] = useState(invoice.paymentSubmission?.proofMeta?.payerName ?? "");
-  const [screenshotUrl, setScreenshotUrl] = useState(
-    invoice.paymentSubmission?.proofMeta?.screenshotUrl ?? "",
-  );
+  const [receipt, setReceipt] = useState<File | null>(null);
   const [note, setNote] = useState(invoice.paymentSubmission?.proofMeta?.note ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) onClose();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    dialogRef.current?.focus();
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onClose, saving]);
 
   async function submitPayment() {
     setSaving(true);
     setError("");
 
+    const formData = new FormData();
+    formData.set("invoiceId", invoice.id);
+    formData.set("reference", reference);
+    formData.set("payerName", payerName);
+    formData.set("note", note);
+    if (receipt) formData.set("receipt", receipt);
+
     const response = await fetch("/api/billing/payments", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        invoiceId: invoice.id,
-        reference,
-        payerName,
-        screenshotUrl,
-        note,
-      }),
+      body: formData,
     });
 
     setSaving(false);
@@ -278,26 +263,31 @@ function PaymentSubmissionModal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="payment-dialog-title"
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-border bg-bg-primary p-6"
+        className="w-full max-w-lg rounded-2xl border border-border bg-bg-primary p-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
       >
-        <h3 className="font-display text-2xl">Submit payment details</h3>
+        <h3 id="payment-dialog-title" className="font-display text-2xl">Submit payment details</h3>
         <p className="mt-2 text-sm text-text-secondary">
           {invoice.plan.name} · NPR {invoice.amount} · {PAYMENT_METHOD_LABEL[invoice.paymentMethod]}
         </p>
 
         <div className="mt-5 space-y-4">
           <Field label="Transaction reference">
-            <Input value={reference} onChange={(event) => setReference(event.target.value)} />
+            <Input value={reference} autoComplete="off" spellCheck={false} onChange={(event) => setReference(event.target.value)} />
           </Field>
           <Field label="Payer name">
-            <Input value={payerName} onChange={(event) => setPayerName(event.target.value)} />
+            <Input value={payerName} autoComplete="name" onChange={(event) => setPayerName(event.target.value)} />
           </Field>
-          <Field label="Screenshot URL" hint="Optional public link to proof of payment">
+          <Field label="Payment receipt" hint="JPG, PNG, WebP, or PDF · maximum 5 MB">
             <Input
-              value={screenshotUrl}
-              onChange={(event) => setScreenshotUrl(event.target.value)}
-              placeholder="https://..."
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={(event) => setReceipt(event.target.files?.[0] ?? null)}
             />
           </Field>
           <Field label="Note">
@@ -310,7 +300,11 @@ function PaymentSubmissionModal({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => void submitPayment()} disabled={saving || !reference.trim()}>
+          <Button
+            onClick={() => void submitPayment()}
+            disabled={saving || !reference.trim() || !payerName.trim() || (!receipt && !invoice.paymentSubmission?.proofStoragePath)}
+            aria-busy={saving}
+          >
             {saving ? "Submitting..." : "Submit payment"}
           </Button>
         </div>

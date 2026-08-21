@@ -1,4 +1,5 @@
 import { STARTER_CREDITS } from "@/lib/billing";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   AdminPaymentSubmissionDetail,
@@ -7,6 +8,7 @@ import type {
   CreditsLedgerEntry,
   Invoice,
   PaymentSubmission,
+  PaymentMethodConfig,
   StudentBillingOverview,
   SubscriptionPlan,
   UserSubscription,
@@ -21,6 +23,10 @@ function normalizePlan(row: any): SubscriptionPlan {
     price: row.price,
     currency: row.currency,
     billingType: row.billing_type,
+    productType: row.product_type ?? "credit_pack",
+    seatLimit: row.seat_limit ?? 1,
+    isUnlimited: row.is_unlimited ?? false,
+    features: Array.isArray(row.features) ? row.features.filter((item: unknown): item is string => typeof item === "string") : [],
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -36,6 +42,13 @@ function normalizeInvoice(row: any): Invoice {
     amount: row.amount,
     currency: row.currency,
     paymentMethod: row.payment_method,
+    invoiceCode: row.invoice_code ?? `NS-${String(row.id).replaceAll("-", "").slice(0, 10).toUpperCase()}`,
+    subtotal: row.subtotal ?? row.amount,
+    discountAmount: row.discount_amount ?? 0,
+    couponId: row.coupon_id ?? null,
+    expiresAt: row.expires_at ?? row.created_at,
+    billingPeriodStart: row.billing_period_start ?? null,
+    billingPeriodEnd: row.billing_period_end ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -48,10 +61,27 @@ function normalizePaymentSubmission(row: any): PaymentSubmission {
     userId: row.user_id,
     reference: row.reference,
     proofMeta: row.proof_meta ?? null,
+    payerName: row.payer_name ?? row.proof_meta?.payerName ?? null,
+    proofStoragePath: row.proof_storage_path ?? null,
+    note: row.note ?? row.proof_meta?.note ?? null,
+    reviewNote: row.review_note ?? null,
     status: row.status,
     submittedAt: row.submitted_at,
     reviewedAt: row.reviewed_at,
     reviewedBy: row.reviewed_by,
+  };
+}
+
+function normalizePaymentMethodConfig(row: any): PaymentMethodConfig {
+  return {
+    id: row.id,
+    paymentMethod: row.payment_method,
+    displayName: row.display_name,
+    bankName: row.bank_name ?? null,
+    accountName: row.account_name,
+    accountNumber: row.account_number ?? null,
+    qrImageUrl: row.qr_image_url,
+    instructions: row.instructions ?? null,
   };
 }
 
@@ -161,6 +191,36 @@ export async function listSubscriptionPlans() {
 
   if (error) throw error;
   return (data ?? []).map(normalizePlan);
+}
+
+export async function getActiveManualPaymentConfig() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("payment_method_configs")
+    .select("*")
+    .eq("payment_method", "bank_transfer")
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? normalizePaymentMethodConfig(data) : null;
+}
+
+export async function hasUnlimitedSubscription(userId: string) {
+  const supabase = await createSupabaseServerClient();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("user_subscriptions")
+    .select("ends_at, subscription_plans!inner(is_unlimited)")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .eq("subscription_plans.is_unlimited", true)
+    .or(`ends_at.is.null,ends_at.gt.${now}`)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return Boolean(data);
 }
 
 export async function listUserSubscriptions(userId: string) {
@@ -332,6 +392,14 @@ export async function getAdminPaymentSubmissionDetail(submissionId: string) {
   const invoice = normalizeInvoice(invoiceRow);
   const plan = normalizePlan(planRow);
   const proofMeta = submissionRow.proof_meta ?? {};
+  let receiptUrl: string | null = null;
+  if (typeof submissionRow.proof_storage_path === "string" && submissionRow.proof_storage_path) {
+    const admin = createSupabaseAdminClient();
+    const { data: signedReceipt } = await admin.storage
+      .from("payment-receipts")
+      .createSignedUrl(submissionRow.proof_storage_path, 15 * 60);
+    receiptUrl = signedReceipt?.signedUrl ?? null;
+  }
 
   return {
     id: submissionRow.id,
@@ -347,9 +415,9 @@ export async function getAdminPaymentSubmissionDetail(submissionId: string) {
     status: submissionRow.status,
     invoiceStatus: invoice.status,
     submittedAt: submissionRow.submitted_at,
-    screenshotUrl: typeof proofMeta.screenshotUrl === "string" ? proofMeta.screenshotUrl : null,
-    payerName: typeof proofMeta.payerName === "string" ? proofMeta.payerName : null,
-    note: typeof proofMeta.note === "string" ? proofMeta.note : null,
+    screenshotUrl: receiptUrl ?? (typeof proofMeta.screenshotUrl === "string" ? proofMeta.screenshotUrl : null),
+    payerName: submissionRow.payer_name ?? (typeof proofMeta.payerName === "string" ? proofMeta.payerName : null),
+    note: submissionRow.note ?? (typeof proofMeta.note === "string" ? proofMeta.note : null),
     reviewedAt: submissionRow.reviewed_at,
     reviewedBy: submissionRow.reviewed_by,
   } satisfies AdminPaymentSubmissionDetail;

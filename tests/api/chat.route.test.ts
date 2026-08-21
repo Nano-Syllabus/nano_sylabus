@@ -8,6 +8,7 @@ const {
   createSupabaseServerClient,
   ensureStarterCreditsForUser,
   getCreditBalanceForUser,
+  hasUnlimitedSubscription,
   getStudentCourseSubjectAccess,
   getStudentCourseSubjectAccessForCourse,
   getTenantName,
@@ -19,6 +20,7 @@ const {
   createSupabaseServerClient: vi.fn(),
   ensureStarterCreditsForUser: vi.fn(),
   getCreditBalanceForUser: vi.fn(),
+  hasUnlimitedSubscription: vi.fn(),
   getStudentCourseSubjectAccess: vi.fn(),
   getStudentCourseSubjectAccessForCourse: vi.fn(),
   getTenantName: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/data/billing", () => ({
   ensureStarterCreditsForUser,
   getCreditBalanceForUser,
+  hasUnlimitedSubscription,
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -65,6 +68,7 @@ import { POST } from "@/app/api/chat/route";
 describe("POST /api/chat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    hasUnlimitedSubscription.mockResolvedValue(false);
 
     const profileChain = {
       select: vi.fn(),

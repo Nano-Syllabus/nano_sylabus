@@ -36,6 +36,7 @@ function toAppUser(
   user: User,
   profile: StudentProfile | null,
   creditBalance: number,
+  hasUnlimitedAccess: boolean,
 ): AppUser {
   return {
     id: user.id,
@@ -49,6 +50,7 @@ function toAppUser(
     onboarded: isProfileComplete(profile),
     role: profile?.role ?? "student",
     creditBalance,
+    hasUnlimitedAccess,
   };
 }
 
@@ -70,7 +72,7 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
   // The profile decides whether the user is onboarded and the ledger row
   // carries the credit balance. Neither depends on the other, so they go out
   // together instead of one after the next.
-  const [profileResult, ledgerResult] = await Promise.all([
+  const [profileResult, ledgerResult, subscriptionResult] = await Promise.all([
     supabase.from("student_profiles").select("*").eq("user_id", user.id).maybeSingle(),
     supabase
       .from("credits_ledger")
@@ -79,6 +81,12 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("user_subscriptions")
+      .select("ends_at, subscription_plans(is_unlimited)")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .order("starts_at", { ascending: false }),
   ]);
 
   const profileRow = profileResult.data;
@@ -91,8 +99,17 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
     ledgerResult.data?.balance_after ??
     (onboarded ? await grantStarterCredits(user.id) : 0);
 
+  const now = Date.now();
+  const hasUnlimitedAccess = (subscriptionResult.data ?? []).some((subscription: any) => {
+    const plan = Array.isArray(subscription.subscription_plans)
+      ? subscription.subscription_plans[0]
+      : subscription.subscription_plans;
+    const notExpired = !subscription.ends_at || new Date(subscription.ends_at).getTime() > now;
+    return Boolean(plan?.is_unlimited && notExpired);
+  });
+
   return {
-    user: toAppUser(user, profile, creditBalance),
+    user: toAppUser(user, profile, creditBalance, hasUnlimitedAccess),
     profile,
   };
 });

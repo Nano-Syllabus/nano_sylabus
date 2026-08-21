@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listSubscriptionPlans } from "@/lib/data/billing";
+import { getActiveManualPaymentConfig, listSubscriptionPlans } from "@/lib/data/billing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -13,8 +13,11 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const plans = await listSubscriptionPlans();
-    return NextResponse.json({ plans });
+    const [plans, paymentConfig] = await Promise.all([
+      listSubscriptionPlans(),
+      getActiveManualPaymentConfig(),
+    ]);
+    return NextResponse.json({ plans, paymentConfig });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load plans." },

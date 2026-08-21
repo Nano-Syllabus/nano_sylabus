@@ -49,7 +49,28 @@ export function AdminPaymentDetailClient({
             <DetailRow label="Student" value={submission.studentName} />
             <DetailRow label="Reference" value={submission.reference} />
             <DetailRow label="Payer name" value={submission.payerName || "Not provided"} />
-            <DetailRow label="Screenshot URL" value={submission.screenshotUrl || "Not provided"} />
+            {submission.screenshotUrl ? (
+              <div className="space-y-2 border-b border-border pb-4">
+                <p className="text-[10px] font-mono-ui uppercase text-text-muted">Private receipt</p>
+                <a
+                  href={submission.screenshotUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-10 items-center text-sm font-medium text-text-primary underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+                >
+                  Open receipt in a new tab
+                </a>
+                {/* Signed private URL is short-lived and may point to an image or PDF. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={submission.screenshotUrl}
+                  alt="Submitted payment receipt preview"
+                  className="max-h-[560px] w-full rounded-md bg-bg-tertiary object-contain"
+                />
+              </div>
+            ) : (
+              <DetailRow label="Private receipt" value="Not provided" />
+            )}
             <DetailRow label="Note" value={submission.note || "No note"} />
             <DetailRow label="Submitted" value={formatDate(submission.submittedAt)} />
             {submission.reviewedAt ? (

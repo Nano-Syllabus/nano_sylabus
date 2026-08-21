@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 import { z } from "zod";
 import { canSpendCredits, CHAT_MESSAGE_CREDIT_COST, computeNextBalance } from "@/lib/billing";
 import { resolveResponseLanguage } from "@/lib/chat-language-mode";
-import { ensureStarterCreditsForUser, getCreditBalanceForUser } from "@/lib/data/billing";
+import { ensureStarterCreditsForUser, getCreditBalanceForUser, hasUnlimitedSubscription } from "@/lib/data/billing";
 import {
   normalizeBoard,
   normalizeBoardScore,
@@ -487,6 +487,7 @@ async function persistAssistantCompletion({
   contextSummary,
   tokenUsage,
   followUpSuggestions,
+  skipCreditCharge,
 }: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   sessionId: string;
@@ -500,6 +501,7 @@ async function persistAssistantCompletion({
   contextSummary: string;
   tokenUsage: TenantTokenUsage;
   followUpSuggestions: string[];
+  skipCreditCharge: boolean;
 }) {
   const normalizedTokenUsage = normalizeTokenUsage(tokenUsage);
   const basePayload = {
@@ -565,21 +567,23 @@ async function persistAssistantCompletion({
     })
     .eq("id", sessionId);
 
-  const latestBalance = await getCreditBalanceForUser(userId);
-  const nextBalance = computeNextBalance(latestBalance, -CHAT_MESSAGE_CREDIT_COST);
+  if (!skipCreditCharge) {
+    const latestBalance = await getCreditBalanceForUser(userId);
+    const nextBalance = computeNextBalance(latestBalance, -CHAT_MESSAGE_CREDIT_COST);
 
-  const { error: chargeError } = await supabase.from("credits_ledger").insert({
-    user_id: userId,
-    type: "usage",
-    amount: -CHAT_MESSAGE_CREDIT_COST,
-    balance_after: Math.max(nextBalance, 0),
-    reference_type: "chat_message",
-    reference_id: assistantMessage.id,
-    description: "Credit used for successful assistant response",
-  });
+    const { error: chargeError } = await supabase.from("credits_ledger").insert({
+      user_id: userId,
+      type: "usage",
+      amount: -CHAT_MESSAGE_CREDIT_COST,
+      balance_after: Math.max(nextBalance, 0),
+      reference_type: "chat_message",
+      reference_id: assistantMessage.id,
+      description: "Credit used for successful assistant response",
+    });
 
-  if (chargeError && chargeError.code !== "23505") {
-    console.error("Failed to record credit usage", chargeError);
+    if (chargeError && chargeError.code !== "23505") {
+      console.error("Failed to record credit usage", chargeError);
+    }
   }
 
   return assistantMessage.id;
@@ -681,8 +685,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Onboarding required." }, { status: 400 });
     }
 
-    const currentBalance = await ensureStarterCreditsForUser(user.id);
-    if (!canSpendCredits(currentBalance)) {
+    const [currentBalance, hasUnlimitedAccess] = await Promise.all([
+      ensureStarterCreditsForUser(user.id),
+      hasUnlimitedSubscription(user.id),
+    ]);
+    if (!hasUnlimitedAccess && !canSpendCredits(currentBalance)) {
       return NextResponse.json(
         { error: "No credits left. Buy a plan to continue chatting." },
         { status: 402 },
@@ -1321,6 +1328,7 @@ export async function POST(request: Request) {
               contextSummary: returnedContextSummary,
               tokenUsage: tenantTokenUsage,
               followUpSuggestions,
+              skipCreditCharge: hasUnlimitedAccess,
             });
 
             if (!assistantMessageId) {

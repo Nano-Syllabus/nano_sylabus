@@ -18,6 +18,19 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
 import { cn } from "@/lib/utils";
+import type { PaymentMethodConfig, SubscriptionPlan } from "@/lib/types";
+
+type CheckoutInvoice = {
+  id: string;
+  planId: string;
+  status: string;
+  amount: number;
+  subtotal: number;
+  discountAmount: number;
+  currency: string;
+  invoiceCode: string;
+  expiresAt: string;
+};
 
 export type FlowStep = 
   | "q1" | "q2" | "q3" 
@@ -120,18 +133,28 @@ export function SaaSFlowClient({
     }
   };
   
-  // Modal & Discount state
+  // Modal, coupon, and real checkout state
   const [discountModalOpen, setDiscountModalOpen] = useState(false);
   const [couponInput, setCouponInput] = useState("");
-  const [discountApplied, setDiscountApplied] = useState(false);
   const [copiedInvoice, setCopiedInvoice] = useState(false);
+  const [checkoutInvoice, setCheckoutInvoice] = useState<CheckoutInvoice | null>(null);
+  const [checkoutPlan, setCheckoutPlan] = useState<SubscriptionPlan | null>(null);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentMethodConfig | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentPayerName, setPaymentPayerName] = useState(initialUser?.fullName ?? "");
+  const [paymentReceipt, setPaymentReceipt] = useState<File | null>(null);
+  const [paymentNote, setPaymentNote] = useState("");
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   
   // Group checkout state
   const [groupName, setGroupName] = useState("");
   const [groupEmail, setGroupEmail] = useState("");
   const [studentEmails, setStudentEmails] = useState("");
 
-  const invoiceNumber = "NS-2083-0142";
+  const invoiceNumber = checkoutInvoice?.invoiceCode ?? "Invoice generated at checkout";
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -219,16 +242,148 @@ export function SaaSFlowClient({
     }
   };
 
-  const handleApplyCoupon = (codeToApply?: string) => {
+  async function createCheckoutInvoice(
+    planSlug: string,
+    purchaseDetails?: { groupName: string; organizerEmail: string; studentEmails: string[] },
+  ) {
+    setCheckoutLoading(true);
+    setCheckoutError("");
+
+    try {
+      const plansResponse = await fetch("/api/billing/plans", { cache: "no-store" });
+      const plansPayload = (await plansResponse.json()) as {
+        plans?: SubscriptionPlan[];
+        paymentConfig?: PaymentMethodConfig | null;
+        error?: string;
+      };
+      if (!plansResponse.ok) throw new Error(plansPayload.error || "Could not load plans.");
+
+      const plan = plansPayload.plans?.find((item) => item.slug === planSlug);
+      if (!plan) throw new Error("This plan is not available right now.");
+
+      const invoiceResponse = await fetch("/api/billing/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: plan.id, paymentMethod: "bank_transfer", purchaseDetails }),
+      });
+      const invoicePayload = (await invoiceResponse.json()) as {
+        invoice?: CheckoutInvoice;
+        paymentConfig?: PaymentMethodConfig | null;
+        error?: string;
+      };
+      if (!invoiceResponse.ok || !invoicePayload.invoice) {
+        throw new Error(invoicePayload.error || "Could not create invoice.");
+      }
+
+      setCheckoutPlan(plan);
+      setCheckoutInvoice(invoicePayload.invoice);
+      setPaymentConfig(invoicePayload.paymentConfig ?? plansPayload.paymentConfig ?? null);
+      return invoicePayload.invoice;
+    } finally {
+      setCheckoutLoading(false);
+    }
+  }
+
+  async function beginCheckout(
+    planSlug: string,
+    purchaseDetails?: { groupName: string; organizerEmail: string; studentEmails: string[] },
+  ) {
+    try {
+      await createCheckoutInvoice(planSlug, purchaseDetails);
+      setCurrentStep("checkout1");
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "Could not start checkout.");
+    }
+  }
+
+  async function beginGroupCheckout() {
+    const emails = Array.from(
+      new Set(studentEmails.split(/[\n,]/).map((email) => email.trim().toLowerCase()).filter(Boolean)),
+    );
+    if (groupName.trim().length < 2 || !groupEmail.includes("@") || emails.length < 1 || emails.length > 5) {
+      setCheckoutError("Enter a group name, organizer email, and 1–5 student emails.");
+      return;
+    }
+    await beginCheckout("group-unlimited", {
+      groupName: groupName.trim(),
+      organizerEmail: groupEmail.trim().toLowerCase(),
+      studentEmails: emails,
+    });
+  }
+
+  const handleApplyCoupon = async (codeToApply?: string) => {
     const code = (codeToApply || couponInput).trim().toUpperCase();
-    if (code === "WELCOME100") {
-      setDiscountApplied(true);
+    if (!code) {
+      setCheckoutError("Enter a coupon code.");
+      return;
+    }
+
+    setCouponLoading(true);
+    setCheckoutError("");
+    try {
+      const invoice = checkoutInvoice && checkoutPlan?.slug === "individual-unlimited"
+        ? checkoutInvoice
+        : await createCheckoutInvoice("individual-unlimited");
+      const response = await fetch("/api/billing/coupons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: invoice.id, code }),
+      });
+      const payload = (await response.json()) as {
+        redemption?: {
+          amount: number;
+          subtotal: number;
+          discountAmount: number;
+          status: string;
+          couponCode: string;
+        };
+        error?: string;
+      };
+      if (!response.ok || !payload.redemption) {
+        throw new Error(payload.error || "Coupon could not be applied.");
+      }
+
+      setCheckoutInvoice((current) => current ? {
+        ...current,
+        amount: payload.redemption!.amount,
+        subtotal: payload.redemption!.subtotal,
+        discountAmount: payload.redemption!.discountAmount,
+        status: payload.redemption!.status,
+      } : current);
       setDiscountModalOpen(false);
-      setTimeout(() => setCurrentStep("checkout2"), 300);
-    } else {
-      alert("Please use promo code WELCOME100 for this offer.");
+      setCouponInput(code);
+      setCurrentStep("checkout2");
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "Coupon could not be applied.");
+    } finally {
+      setCouponLoading(false);
     }
   };
+
+  async function submitManualPayment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!checkoutInvoice || !paymentReceipt) return;
+
+    setPaymentSubmitting(true);
+    setCheckoutError("");
+    const formData = new FormData();
+    formData.set("invoiceId", checkoutInvoice.id);
+    formData.set("reference", paymentReference);
+    formData.set("payerName", paymentPayerName);
+    formData.set("note", paymentNote);
+    formData.set("receipt", paymentReceipt);
+
+    try {
+      const response = await fetch("/api/billing/payments", { method: "POST", body: formData });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Payment could not be submitted.");
+      setCurrentStep("paymentPending");
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "Payment could not be submitted.");
+    } finally {
+      setPaymentSubmitting(false);
+    }
+  }
 
   const copyInvoiceText = () => {
     if (navigator.clipboard) {
@@ -783,14 +938,17 @@ export function SaaSFlowClient({
 
               <div className="mt-8 space-y-2.5">
                 <button
-                  onClick={() => setCurrentStep("checkout1")}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-3.5 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] cursor-pointer"
+                  onClick={() => void beginCheckout("individual-unlimited")}
+                  disabled={checkoutLoading}
+                  aria-busy={checkoutLoading}
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-3.5 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
                 >
-                  Get Individual →
+                  {checkoutLoading ? "Creating invoice..." : "Get Individual →"}
                 </button>
                 <button
                   onClick={() => setDiscountModalOpen(true)}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#f1f1f1] py-3 text-[14px] font-[700] text-[#111] transition hover:bg-[#e7e7e7] cursor-pointer"
+                  disabled={couponLoading}
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[#f1f1f1] py-3 text-[14px] font-[700] text-[#111] transition hover:bg-[#e7e7e7] disabled:opacity-60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
                 >
                   Check discount code
                 </button>
@@ -832,13 +990,18 @@ export function SaaSFlowClient({
               <div className="mt-8">
                 <button
                   onClick={() => setCurrentStep("groupCheckout")}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-3.5 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] cursor-pointer"
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-3.5 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
                 >
                   Get Group →
                 </button>
               </div>
             </div>
           </div>
+          {checkoutError ? (
+            <p role="alert" className="mx-auto mt-5 max-w-xl rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-center text-[13px] text-red-700">
+              {checkoutError}
+            </p>
+          ) : null}
         </main>
       )}
 
@@ -857,132 +1020,191 @@ export function SaaSFlowClient({
               Scan, pay and send your receipt.
             </h1>
             <p className="mt-1 text-[14px] text-[#777]">
-              Rs. 1,500 / month · Your account will be activated after payment verification.
+              {checkoutPlan ? `${checkoutPlan.currency} ${checkoutPlan.price} / month` : "Your selected plan"} · Access activates after verification.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_.7fr]">
-            {/* Left: Payment Box */}
             <div className="rounded-[20px] border border-[#e2e2e2] bg-white p-7 shadow-xs">
               <h3 className="text-[17px] font-[750] text-[#111] mb-4">
                 Pay with your mobile banking app
               </h3>
 
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-[210px_1fr]">
-                {/* QR Placeholder */}
-                <div>
-                  <div className="relative flex h-[210px] w-[210px] flex-col items-center justify-center rounded-[18px] border-[10px] border-white outline outline-1 outline-[#d9dde4] bg-neutral-900 p-4 shadow-sm text-center text-white">
-                    <div className="font-mono text-[12px] font-bold uppercase tracking-widest text-[#6195ee]">
-                      FONEPAY QR
-                    </div>
-                    <div className="mt-2 text-[11px] text-neutral-300 font-medium">
-                      NanoSyllabus
-                    </div>
+              {paymentConfig ? (
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-[210px_1fr]">
+                  <div>
+                    {/* The official QR can be hosted on any HTTPS origin configured by billing admins. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={paymentConfig.qrImageUrl}
+                      alt={`Official ${paymentConfig.displayName} payment QR`}
+                      width={210}
+                      height={210}
+                      className="h-[210px] w-[210px] rounded-[18px] border border-[#d9dde4] bg-white object-contain p-2 shadow-sm"
+                    />
+                    <p className="mt-2.5 text-[12px] font-[700] text-[#555]">
+                      {paymentConfig.bankName || paymentConfig.displayName}
+                    </p>
+                    <p className="text-[12px] text-[#777]">{paymentConfig.accountName}</p>
+                    {paymentConfig.accountNumber ? (
+                      <p className="text-[12px] text-[#777]">A/C {paymentConfig.accountNumber}</p>
+                    ) : null}
                   </div>
-                  <div className="mt-2.5 rounded-[11px] bg-[#fff8e6] border border-[#f1dfac] p-2.5 text-[12px] text-[#9a6b13]">
-                    <b>Demo placeholder:</b> replace this with the official NanoSyllabus bank QR before launch.
-                  </div>
-                </div>
 
-                {/* Steps & Invoice */}
-                <div>
-                  <ol className="space-y-3 text-[14px] text-[#626872] list-none p-0">
-                    <li className="flex gap-2.5">
-                      <span className="flex h-[25px] w-[25px] shrink-0 items-center justify-center rounded-[8px] bg-[#edf4ff] font-[800] text-[#4f7fd3] text-[12px]">1</span>
-                      <span>Scan the QR using your mobile banking app and pay <b>Rs. 1,500</b>.</span>
-                    </li>
-                    <li className="flex gap-2.5">
-                      <span className="flex h-[25px] w-[25px] shrink-0 items-center justify-center rounded-[8px] bg-[#edf4ff] font-[800] text-[#4f7fd3] text-[12px]">2</span>
-                      <span>Add the invoice number below in the payment remarks.</span>
-                    </li>
-                    <li className="flex gap-2.5">
-                      <span className="flex h-[25px] w-[25px] shrink-0 items-center justify-center rounded-[8px] bg-[#edf4ff] font-[800] text-[#4f7fd3] text-[12px]">3</span>
-                      <span>Take a screenshot of the successful payment.</span>
-                    </li>
-                    <li className="flex gap-2.5">
-                      <span className="flex h-[25px] w-[25px] shrink-0 items-center justify-center rounded-[8px] bg-[#edf4ff] font-[800] text-[#4f7fd3] text-[12px]">4</span>
-                      <span>Send the screenshot and invoice number to <b>WhatsApp: +977 98XXXXXXXX</b>.</span>
-                    </li>
-                  </ol>
+                  <div>
+                    <ol className="space-y-3 text-[14px] text-[#626872] list-none p-0">
+                      {[
+                        `Scan the official QR and pay ${checkoutInvoice?.currency ?? "NPR"} ${checkoutInvoice?.amount ?? checkoutPlan?.price ?? 0}.`,
+                        "Add the invoice number below in the payment remarks.",
+                        "Save the successful payment receipt.",
+                        "Enter the reference and upload the receipt below.",
+                      ].map((step, index) => (
+                        <li key={step} className="flex gap-2.5">
+                          <span className="flex h-[25px] w-[25px] shrink-0 items-center justify-center rounded-[8px] bg-[#edf4ff] font-[800] text-[#4f7fd3] text-[12px]">
+                            {index + 1}
+                          </span>
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ol>
 
-                  {/* Invoice Code */}
-                  <div className="mt-4 flex items-center justify-between rounded-[13px] border border-[#e4e6ea] bg-[#f7f8fa] p-[13px_15px]">
-                    <div>
-                      <small className="block text-[11px] text-[#777] mb-1 font-bold">
-                        PAYMENT REMARK / INVOICE
-                      </small>
-                      <b className="font-mono text-[16px] text-[#111] tracking-wider">
-                        {invoiceNumber}
-                      </b>
+                    <div className="mt-4 flex items-center justify-between gap-3 rounded-[13px] border border-[#e4e6ea] bg-[#f7f8fa] px-4 py-3">
+                      <div className="min-w-0">
+                        <small className="block text-[11px] text-[#777] mb-1 font-bold">PAYMENT REMARK / INVOICE</small>
+                        <b className="block truncate font-mono text-[16px] text-[#111] tracking-wider">{invoiceNumber}</b>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={copyInvoiceText}
+                        className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-[10px] bg-[#eceef1] px-3.5 py-2 text-[13px] font-[700] text-[#111] transition hover:bg-[#dfe2e6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
+                      >
+                        {copiedInvoice ? <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+                        <span>{copiedInvoice ? "Copied" : "Copy"}</span>
+                      </button>
                     </div>
-                    <button
-                      onClick={copyInvoiceText}
-                      className="inline-flex items-center gap-1 rounded-[10px] bg-[#f1f1f1] px-3.5 py-1.5 text-[13px] font-[700] text-[#111] transition hover:bg-[#e7e7e7] cursor-pointer"
-                    >
-                      {copiedInvoice ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                      <span>{copiedInvoice ? "Copied ✓" : "Copy"}</span>
-                    </button>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-[13px] border border-amber-200 bg-amber-50 p-4 text-[13px] leading-6 text-amber-900">
+                  <b>Official payment QR is not configured yet.</b> You can still use the free coupon below. Paid receipt submission will open after an admin adds the official QR.
+                </div>
+              )}
 
-              {/* Coupon Field */}
               <div className="mt-6 border-t border-[#eee] pt-5">
-                <label className="block text-[12px] font-[700] text-[#555] mb-2">
+                <label htmlFor="checkout-coupon" className="block text-[12px] font-[700] text-[#555] mb-2">
                   Have a discount code?
                 </label>
                 <div className="flex gap-2">
                   <input
+                    id="checkout-coupon"
                     type="text"
+                    autoComplete="off"
+                    spellCheck={false}
                     value={couponInput}
-                    onChange={(e) => setCouponInput(e.target.value)}
-                    placeholder="Enter code (e.g. WELCOME100)"
-                    className="flex-1 rounded-[10px] border border-[#ddd] bg-white px-4 py-2.5 text-[14px] text-[#111] focus:border-[#6195ee] focus:outline-none uppercase"
+                    onChange={(event) => setCouponInput(event.target.value)}
+                    placeholder="WELCOME100"
+                    className="min-h-11 flex-1 rounded-[10px] border border-[#bbb] bg-white px-4 py-2.5 text-[14px] uppercase text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
                   />
                   <button
-                    onClick={() => handleApplyCoupon()}
-                    className="rounded-[10px] bg-[#111] px-5 py-2.5 text-[13px] font-[700] text-white transition hover:opacity-90 cursor-pointer"
+                    type="button"
+                    onClick={() => void handleApplyCoupon()}
+                    disabled={couponLoading}
+                    aria-busy={couponLoading}
+                    className="min-h-11 rounded-[10px] bg-[#111] px-5 py-2.5 text-[13px] font-[700] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
                   >
-                    Apply
+                    {couponLoading ? "Applying..." : "Apply"}
                   </button>
                 </div>
               </div>
 
-              <button
-                onClick={() => setCurrentStep("paymentPending")}
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[14px] font-[700] text-white shadow-sm transition hover:opacity-90 active:scale-[0.99] cursor-pointer"
-              >
-                I paid and sent the screenshot →
-              </button>
+              <form onSubmit={submitManualPayment} className="mt-6 space-y-4 border-t border-[#eee] pt-5">
+                <div>
+                  <label htmlFor="payment-reference" className="mb-1.5 block text-[12px] font-[700] text-[#555]">Transaction reference *</label>
+                  <input
+                    id="payment-reference"
+                    type="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    required
+                    value={paymentReference}
+                    onChange={(event) => setPaymentReference(event.target.value)}
+                    className="min-h-11 w-full rounded-[10px] border border-[#bbb] bg-white px-3 text-[14px] text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="payment-payer-name" className="mb-1.5 block text-[12px] font-[700] text-[#555]">Payer name *</label>
+                  <input
+                    id="payment-payer-name"
+                    type="text"
+                    autoComplete="name"
+                    required
+                    value={paymentPayerName}
+                    onChange={(event) => setPaymentPayerName(event.target.value)}
+                    className="min-h-11 w-full rounded-[10px] border border-[#bbb] bg-white px-3 text-[14px] text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="payment-receipt" className="mb-1.5 block text-[12px] font-[700] text-[#555]">Payment receipt *</label>
+                  <input
+                    id="payment-receipt"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    required
+                    onChange={(event) => setPaymentReceipt(event.target.files?.[0] ?? null)}
+                    className="block min-h-11 w-full rounded-[10px] border border-[#bbb] bg-white px-3 py-2 text-[13px] text-[#555] file:mr-3 file:rounded-md file:border-0 file:bg-[#eceef1] file:px-3 file:py-1.5 file:font-[700] file:text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
+                  />
+                  <p className="mt-1 text-[12px] text-[#666]">JPG, PNG, WebP, or PDF · maximum 5 MB</p>
+                </div>
+                <div>
+                  <label htmlFor="payment-note" className="mb-1.5 block text-[12px] font-[700] text-[#555]">Note (optional)</label>
+                  <textarea
+                    id="payment-note"
+                    rows={3}
+                    value={paymentNote}
+                    onChange={(event) => setPaymentNote(event.target.value)}
+                    className="w-full rounded-[10px] border border-[#bbb] bg-white px-3 py-2 text-[14px] text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
+                  />
+                </div>
+
+                {checkoutError ? <p role="alert" className="rounded-[10px] bg-red-50 px-3 py-2 text-[13px] text-red-700">{checkoutError}</p> : null}
+
+                <button
+                  type="submit"
+                  disabled={!paymentConfig || !checkoutInvoice || paymentSubmitting || !paymentReference.trim() || !paymentPayerName.trim() || !paymentReceipt}
+                  aria-busy={paymentSubmitting}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] px-4 py-3 text-[14px] font-[700] text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
+                >
+                  {paymentSubmitting ? "Uploading receipt..." : "Submit payment for verification →"}
+                </button>
+              </form>
             </div>
 
-            {/* Right: Order Summary */}
             <div className="rounded-[20px] border border-[#e2e2e2] bg-white p-7 shadow-xs flex flex-col justify-between">
               <div>
-                <h3 className="text-[17px] font-[750] text-[#111] mb-4">
-                  Order summary
-                </h3>
+                <h3 className="text-[17px] font-[750] text-[#111] mb-4">Order summary</h3>
                 <div className="space-y-2.5 text-[14px]">
-                  <div className="flex justify-between text-[#666]">
-                    <span>Unlimited</span>
-                    <span>Rs. 1,500</span>
+                  <div className="flex justify-between gap-4 text-[#666]">
+                    <span>{checkoutPlan?.name ?? "Selected plan"}</span>
+                    <span>{checkoutInvoice?.currency ?? "NPR"} {checkoutInvoice?.subtotal ?? checkoutPlan?.price ?? 0}</span>
                   </div>
                   <div className="flex justify-between text-[#777]">
                     <span>Discount</span>
-                    <span>—</span>
+                    <span>{checkoutInvoice?.discountAmount ? `− ${checkoutInvoice.currency} ${checkoutInvoice.discountAmount}` : "—"}</span>
                   </div>
                   <div className="flex justify-between border-t border-[#eee] pt-3 text-[18px] font-[800] text-[#111]">
                     <span>Total today</span>
-                    <span>Rs. 1,500</span>
+                    <span>{checkoutInvoice?.currency ?? "NPR"} {checkoutInvoice?.amount ?? checkoutPlan?.price ?? 0}</span>
                   </div>
                 </div>
+                <p className="mt-5 text-[12px] leading-5 text-[#666]">Invoice {invoiceNumber} expires in 24 hours. Payment is usually verified within one business day.</p>
               </div>
 
               <button
+                type="button"
                 onClick={() => setDiscountModalOpen(true)}
-                className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#f1f1f1] py-3 text-[13px] font-[700] text-[#111] transition hover:bg-[#e7e7e7] cursor-pointer"
+                className="mt-8 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[#eceef1] py-3 text-[13px] font-[700] text-[#111] transition hover:bg-[#dfe2e6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
               >
-                Check discount code
+                Use a discount code
               </button>
             </div>
           </div>
@@ -1016,32 +1238,34 @@ export function SaaSFlowClient({
 
               <div className="space-y-3.5 text-[14px]">
                 <div>
-                  <label className="block text-[12px] font-[700] text-[#555] mb-1">Name</label>
+                  <label htmlFor="coupon-customer-name" className="block text-[12px] font-[700] text-[#555] mb-1">Name</label>
                   <input 
+                    id="coupon-customer-name"
                     type="text" 
                     readOnly 
-                    value={user?.fullName || "Prashant"} 
+                    value={user?.fullName || "Student"}
                     className="w-full rounded-[10px] border border-[#ddd] bg-[#f9f9f9] p-3 text-[14px] text-[#111]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[12px] font-[700] text-[#555] mb-1">Payment method</label>
+                  <label htmlFor="coupon-payment-method" className="block text-[12px] font-[700] text-[#555] mb-1">Payment method</label>
                   <input 
+                    id="coupon-payment-method"
                     type="text" 
                     readOnly 
-                    value="Saved securely for future renewal" 
+                    value="No payment required for this invoice"
                     className="w-full rounded-[10px] border border-[#ddd] bg-[#f9f9f9] p-3 text-[14px] text-[#111]"
                   />
                 </div>
               </div>
 
               <div className="mt-5 rounded-[13px] bg-[#f5f8ff] border border-[#dbe8ff] p-3.5 text-[13px] leading-[1.5] text-[#555]">
-                <b className="text-[#487fdc]">WELCOME100</b> gives 100% off your first month. Your subscription renews at Rs. 1,500/month after the offer period.
+                <b className="text-[#487fdc]">{couponInput || "WELCOME100"}</b> has been verified by the server and gives 100% off this invoice. We do not store a payment method; renewal requires a new payment.
               </div>
 
               <button
                 onClick={() => router.push("/app/today")}
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[14px] font-[700] text-white shadow-sm transition hover:opacity-90 active:scale-[0.99] cursor-pointer"
+                className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[14px] font-[700] text-white shadow-sm transition hover:opacity-90 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
               >
                 Start Unlimited for Rs. 0 →
               </button>
@@ -1055,16 +1279,16 @@ export function SaaSFlowClient({
                 </h3>
                 <div className="space-y-2.5 text-[14px]">
                   <div className="flex justify-between text-[#666]">
-                    <span>Unlimited</span>
-                    <span>Rs. 1,500</span>
+                    <span>{checkoutPlan?.name ?? "Individual Unlimited"}</span>
+                    <span>{checkoutInvoice?.currency ?? "NPR"} {checkoutInvoice?.subtotal ?? 1500}</span>
                   </div>
                   <div className="flex justify-between font-semibold text-[#26905a]">
-                    <span>WELCOME100 · 100% off</span>
-                    <span>− Rs. 1,500</span>
+                    <span>{couponInput || "WELCOME100"} · 100% off</span>
+                    <span>− {checkoutInvoice?.currency ?? "NPR"} {checkoutInvoice?.discountAmount ?? 1500}</span>
                   </div>
                   <div className="flex justify-between border-t border-[#eee] pt-3 text-[18px] font-[800] text-[#111]">
                     <span>Total today</span>
-                    <span>Rs. 0</span>
+                    <span>{checkoutInvoice?.currency ?? "NPR"} {checkoutInvoice?.amount ?? 0}</span>
                   </div>
                 </div>
               </div>
@@ -1142,11 +1366,15 @@ export function SaaSFlowClient({
               </div>
 
               <button
-                onClick={() => setCurrentStep("checkout1")}
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[14px] font-[700] text-white shadow-sm transition hover:opacity-90 active:scale-[0.99] cursor-pointer"
+                type="button"
+                onClick={() => void beginGroupCheckout()}
+                disabled={checkoutLoading}
+                aria-busy={checkoutLoading}
+                className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[14px] font-[700] text-white shadow-sm transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
               >
-                Continue with Group →
+                {checkoutLoading ? "Creating invoice..." : "Continue with Group →"}
               </button>
+              {checkoutError ? <p role="alert" className="mt-3 text-[13px] text-red-700">{checkoutError}</p> : null}
             </div>
 
             {/* Order summary */}
@@ -1186,11 +1414,11 @@ export function SaaSFlowClient({
               We&apos;ll activate your account after verification.
             </h2>
             <p className="mt-2 text-[14px] text-[#666] leading-[1.5]">
-              Make sure your WhatsApp message includes the payment screenshot and invoice <b>{invoiceNumber}</b>. Our team will confirm once your account is active.
+              Receipt and transaction details for invoice <b>{invoiceNumber}</b> were submitted securely. We&apos;ll notify you after an admin matches the payment.
             </p>
 
             <div className="mt-5 rounded-[13px] bg-[#f5f8ff] border border-[#dbe8ff] p-3.5 text-[13px] leading-[1.5] text-[#555]">
-              <b className="text-[#487fdc]">Important:</b> This demo still contains placeholder bank QR and WhatsApp details. Replace them before accepting real payments.
+              <b className="text-[#487fdc]">What happens next:</b> approval activates the subscription automatically. Payment is usually verified within one business day.
             </div>
 
             <div className="mt-8 flex flex-col gap-3">
@@ -1212,8 +1440,10 @@ export function SaaSFlowClient({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in">
           <div className="relative w-full max-w-[430px] rounded-[22px] border border-[#ddd] bg-white p-7 sm:p-8 shadow-2xl">
             <button
+              type="button"
               onClick={() => setDiscountModalOpen(false)}
-              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-[#f1f1f1] text-[#666] hover:text-[#111] transition cursor-pointer"
+              aria-label="Close discount dialog"
+              className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-[#f1f1f1] text-[#666] hover:text-[#111] transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
             >
               <X className="h-4 w-4" />
             </button>
@@ -1235,11 +1465,15 @@ export function SaaSFlowClient({
             </div>
 
             <button
-              onClick={() => handleApplyCoupon("WELCOME100")}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-3.5 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] cursor-pointer"
+              type="button"
+              onClick={() => void handleApplyCoupon("WELCOME100")}
+              disabled={couponLoading}
+              aria-busy={couponLoading}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-3.5 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
             >
-              Use this code →
+              {couponLoading ? "Applying securely..." : "Use this code →"}
             </button>
+            {checkoutError ? <p role="alert" className="mt-3 text-[13px] text-red-700">{checkoutError}</p> : null}
           </div>
         </div>
       )}

@@ -1681,7 +1681,7 @@ export function ChatPageClient({
     const trimmed = (overrideText ?? input).trim();
     const attachmentsForMessage = overrideText ? [] : pendingAttachments;
     if ((!trimmed && attachmentsForMessage.length === 0) || isLoading) return;
-    if (creditBalance <= 0) {
+    if (!user.hasUnlimitedAccess && creditBalance <= 0) {
       setChatError("No messages left. Buy a plan to continue chatting.");
       return;
     }
@@ -2284,7 +2284,7 @@ export function ChatPageClient({
     shell.setActions(
       <div className="flex min-w-0 items-center gap-1.5 select-none sm:gap-2">
         <Badge variant={creditBalance > 0 ? "success" : "warning"} className="hidden shrink-0 sm:inline-flex">
-          {creditBalance} MESSAGES
+          {user.hasUnlimitedAccess ? "UNLIMITED" : `${creditBalance} MESSAGES`}
         </Badge>
         <CompactSelect
           value={composerLanguage}
@@ -2380,7 +2380,7 @@ export function ChatPageClient({
       </div>
     );
     return () => shell.setActions(null);
-  }, [shell, composerLanguage, updateGlobalLanguage, creditBalance, currentSessionId, shareCurrentSession, shareLoading, compactHeaderActions, libraryOpen, toggleLibrary, showBooksSpotlight, dismissBooksSpotlight, hasOpenedBooks]);
+  }, [shell, composerLanguage, updateGlobalLanguage, creditBalance, user.hasUnlimitedAccess, currentSessionId, shareCurrentSession, shareLoading, compactHeaderActions, libraryOpen, toggleLibrary, showBooksSpotlight, dismissBooksSpotlight, hasOpenedBooks]);
 
   useEffect(() => {
     stopChatRef.current = stop;
@@ -2571,7 +2571,7 @@ export function ChatPageClient({
         ) : (
           <Button
             type="submit"
-            disabled={!subjectContext || (!input.trim() && pendingAttachments.length === 0) || creditBalance <= 0}
+            disabled={!subjectContext || (!input.trim() && pendingAttachments.length === 0) || (!user.hasUnlimitedAccess && creditBalance <= 0)}
             className={cn(
               "h-10 shrink-0 rounded-full bg-black text-[15px] font-medium text-white transition-opacity duration-100 hover:opacity-80 disabled:opacity-50 dark:bg-white dark:text-black motion-reduce:transition-none",
               compactComposerControls ? "w-10 px-0" : "min-w-[90px] px-4",

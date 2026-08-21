@@ -60,7 +60,9 @@ export function AppNav({ user }: { user: AppUser }) {
             <div className="w-full min-w-0">
               <div className="truncate text-[12px] font-medium">{user.fullName}</div>
               <div className="truncate text-[10px] text-text-muted">{user.email}</div>
-              <div className="mt-0.5 text-[10px] text-text-muted">{user.creditBalance} messages left</div>
+              <div className="mt-0.5 text-[10px] text-text-muted">
+                {user.hasUnlimitedAccess ? "Unlimited plan" : `${user.creditBalance} messages left`}
+              </div>
             </div>
           </div>
           <Button className="mt-2 w-full rounded-full" variant="outline" size="sm" onClick={handleLogout}>

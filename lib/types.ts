@@ -90,6 +90,7 @@ export interface AppUser {
   onboarded: boolean;
   role: AppRole;
   creditBalance: number;
+  hasUnlimitedAccess: boolean;
 }
 
 export interface ChatSessionSummary {
@@ -209,6 +210,10 @@ export interface SubscriptionPlan {
   price: number;
   currency: string;
   billingType: BillingType;
+  productType: "credit_pack" | "individual" | "group";
+  seatLimit: number;
+  isUnlimited: boolean;
+  features: string[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -233,6 +238,13 @@ export interface Invoice {
   amount: number;
   currency: string;
   paymentMethod: PaymentMethod;
+  invoiceCode: string;
+  subtotal: number;
+  discountAmount: number;
+  couponId: string | null;
+  expiresAt: string;
+  billingPeriodStart: string | null;
+  billingPeriodEnd: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -247,6 +259,10 @@ export interface PaymentSubmission {
     screenshotUrl?: string;
     note?: string;
   } | null;
+  payerName: string | null;
+  proofStoragePath: string | null;
+  note: string | null;
+  reviewNote: string | null;
   status: PaymentSubmissionStatus;
   submittedAt: string;
   reviewedAt: string | null;
@@ -287,6 +303,17 @@ export interface AdminPaymentSubmissionDetail extends AdminPaymentSubmissionSumm
   note: string | null;
   reviewedAt: string | null;
   reviewedBy: string | null;
+}
+
+export interface PaymentMethodConfig {
+  id: string;
+  paymentMethod: "bank_transfer";
+  displayName: string;
+  bankName: string | null;
+  accountName: string;
+  accountNumber: string | null;
+  qrImageUrl: string;
+  instructions: string | null;
 }
 
 export interface AdminUserSummary {
