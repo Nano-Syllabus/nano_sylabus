@@ -761,7 +761,14 @@ export async function leaveStudentCourse(
   // Clear the student's trails before removing the enrollment. If cleanup
   // fails, the leave is not committed and the user can retry without a silent
   // half-deleted state.
-  await clearStudentStudyTrails(admin, [studentId], subjects, [courseId], teacherId || undefined);
+  await clearStudentStudyTrails(
+    admin,
+    [studentId],
+    subjects,
+    [courseId],
+    teacherId || undefined,
+    true,
+  );
 
   const result = await admin
     .from("teacher_course_enrollments")

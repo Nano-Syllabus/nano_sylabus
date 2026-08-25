@@ -16,6 +16,7 @@ export type PracticeAttemptHistory = {
 };
 
 export type TopicMastery = {
+  courseId: string | null;
   subjectSlug: string;
   subjectName: string;
   topicKey: string;
@@ -29,6 +30,7 @@ export type TopicMastery = {
 };
 
 export type PracticeAttemptSummary = {
+  courseId: string | null;
   subjectSlug: string;
   subjectName: string;
   source: string;
@@ -124,6 +126,7 @@ async function storePracticeAttemptDetails(input: {
 
 function toMastery(row: Record<string, unknown>): TopicMastery {
   return {
+    courseId: row.course_id ? String(row.course_id) : null,
     subjectSlug: String(row.subject_slug ?? ""),
     subjectName: String(row.subject_name ?? ""),
     topicKey: String(row.topic_key ?? ""),
@@ -158,7 +161,7 @@ export async function listPracticeAttempts(
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("student_practice_attempts")
-    .select("subject_slug, subject_name, source, total_score, total_marks, created_at")
+    .select("course_id, subject_slug, subject_name, source, total_score, total_marks, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -167,6 +170,7 @@ export async function listPracticeAttempts(
   if (error) throw error;
 
   return (data ?? []).map((row) => ({
+    courseId: row.course_id ? String(row.course_id) : null,
     subjectSlug: String(row.subject_slug ?? ""),
     subjectName: String(row.subject_name ?? ""),
     source: String(row.source ?? "practice"),
@@ -185,6 +189,7 @@ export async function listPracticeAttempts(
  */
 export async function recordPracticeEvaluation(input: {
   userId: string;
+  courseId?: string | null;
   subjectSlug: string;
   subjectName: string;
   source: "practice" | "teacher_exam" | "challenge";
@@ -201,6 +206,7 @@ export async function recordPracticeEvaluation(input: {
     .from("student_practice_attempts")
     .insert({
       user_id: input.userId,
+      course_id: input.courseId ?? null,
       subject_slug: input.subjectSlug,
       subject_name: input.subjectName,
       source: input.source,
@@ -255,6 +261,7 @@ export async function recordPracticeEvaluation(input: {
 
     return {
       user_id: input.userId,
+      course_id: input.courseId ?? null,
       subject_slug: input.subjectSlug,
       subject_name: input.subjectName,
       topic_key: chapter.topic_key,

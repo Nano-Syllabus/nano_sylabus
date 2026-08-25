@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { studentExamHistorySchema } from "@/lib/practice-history";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  getStudentCourseSubjectAccess,
+  getStudentCourseSubjectAccessForCourse,
+} from "@/lib/student-courses";
 
 export const dynamic = "force-dynamic";
 
@@ -152,13 +156,22 @@ export async function GET(
     const admin = createSupabaseAdminClient();
     const { data: row, error } = await admin
       .from("student_practice_attempts")
-      .select("id, subject_name, source, total_score, total_marks, evaluation, created_at")
+      .select("id, course_id, subject_slug, subject_name, source, total_score, total_marks, evaluation, created_at")
       .eq("id", attemptId)
       .eq("user_id", user.id)
       .maybeSingle();
 
     if (error) throw error;
     if (!row) return NextResponse.json({ error: "Practice result not found." }, { status: 404 });
+    const access = row.course_id
+      ? await getStudentCourseSubjectAccessForCourse(
+          user.id,
+          String(row.course_id),
+          String(row.subject_slug || ""),
+          admin,
+        )
+      : await getStudentCourseSubjectAccess(user.id, String(row.subject_slug || ""), admin);
+    if (!access) return NextResponse.json({ error: "Practice result not found." }, { status: 404 });
 
     const { evaluation, history } = splitEvaluation(row.evaluation);
     const normalized = await readNormalizedDetails({

@@ -55,7 +55,13 @@ export type StudentChallengeDashboard = {
 };
 
 type Attempt = { totalScore: number; totalMarks: number; createdAt: string };
-type SubjectAccess = { subjectSlug: string; subjectName: string; folderPath?: string };
+type SubjectAccess = {
+  courseId: string;
+  accessKind?: "course" | "owner-private";
+  subjectSlug: string;
+  subjectName: string;
+  folderPath?: string;
+};
 
 type ChallengeMetricsRow = {
   has_practice_history: boolean;
@@ -351,6 +357,8 @@ export async function getStudentChallengeDashboard(userId: string): Promise<Stud
             topicDataAvailable: true,
           },
           recommendations: rankedTopics.slice(0, 3).map(({ topic, mastery: topicMastery }) => ({
+            courseId:
+              courseSubject.accessKind === "owner-private" ? null : courseSubject.courseId,
             subjectSlug: tenantSubject.slug,
             subjectName,
             namespace: tenantSubject.namespace,

@@ -17,6 +17,7 @@ export function isMissingChallengeTable(error: { code?: string } | null) {
 export type ChallengeStatus = "assigned" | "started" | "completed";
 
 export type ChallengeRecommendation = {
+  courseId: string | null;
   subjectSlug: string;
   subjectName: string;
   namespace: string;
@@ -28,6 +29,7 @@ export type ChallengeRecommendation = {
 
 export type StudentChallengeSummary = {
   id: string;
+  courseId: string | null;
   date: string;
   position: number;
   subjectSlug: string;
@@ -117,6 +119,7 @@ function toSummary(row: ChallengeRow): StudentChallengeSummary {
   const topicTitle = studentFacingTopicTitle(rawTopicTitle, subjectName);
   return {
     id: String(row.id ?? ""),
+    courseId: row.course_id ? String(row.course_id) : null,
     date: String(row.challenge_date ?? ""),
     position: number(row.position),
     subjectSlug: String(row.subject_slug ?? ""),
@@ -178,6 +181,7 @@ export async function ensureDailyChallenges(
     );
     return {
       user_id: userId,
+      course_id: recommendation.courseId,
       challenge_date: date,
       position,
       subject_slug: recommendation.subjectSlug,

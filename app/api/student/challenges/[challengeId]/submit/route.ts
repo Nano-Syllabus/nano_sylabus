@@ -97,6 +97,7 @@ export async function POST(
     };
     const attemptId = await recordPracticeEvaluation({
       userId: user.id,
+      courseId: challenge.courseId,
       subjectSlug: challenge.subjectSlug,
       subjectName: challenge.subjectName,
       source: "challenge",

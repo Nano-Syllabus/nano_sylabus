@@ -66,6 +66,7 @@ export async function handleMcqSetCheck(setId: string, payload: unknown) {
       try {
         await recordPracticeEvaluation({
           userId: user.id,
+          courseId: access.accessKind === "owner-private" ? null : access.courseId,
           subjectSlug: subject.slug,
           subjectName: subject.name,
           source: "practice",

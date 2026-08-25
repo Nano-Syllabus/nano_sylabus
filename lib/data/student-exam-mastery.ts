@@ -26,13 +26,27 @@ export async function recordExamEvaluationForStudent(input: {
 
   const { data: classroom } = await input.admin
     .from("teacher_classrooms")
-    .select("subject_slug, subject_name")
+    .select("course_id, subject_slug, subject_name")
     .eq("id", input.classroomId)
     .maybeSingle();
   if (!classroom?.subject_slug) return;
 
+  let courseId: string | null = null;
+  if (classroom.course_id) {
+    const { data: enrollment, error: enrollmentError } = await input.admin
+      .from("teacher_course_enrollments")
+      .select("course_id")
+      .eq("course_id", classroom.course_id)
+      .eq("student_id", input.userId)
+      .in("status", ["active", "completed"])
+      .maybeSingle();
+    if (enrollmentError) throw enrollmentError;
+    courseId = enrollment?.course_id || null;
+  }
+
   await recordPracticeEvaluation({
     userId: input.userId,
+    courseId,
     subjectSlug: classroom.subject_slug,
     subjectName: classroom.subject_name || "",
     source: "teacher_exam",

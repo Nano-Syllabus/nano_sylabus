@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordPracticeEvaluation } from "@/lib/data/student-mastery";
 import { createPracticeAttemptHistory, studentExamHistorySchema } from "@/lib/practice-history";
-import { studentHasCourseSubjectAccess } from "@/lib/student-courses";
+import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findTenantSubject, gradeTeacherPaper, listTenantSubjects } from "@/lib/tenant/client";
 
@@ -37,7 +37,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
     const { setId } = await params;
     const payload = requestSchema.parse(await request.json());
     const { subject: subjectName, exam, answers, ...gradePayload } = payload;
-    if (subjectName && !(await studentHasCourseSubjectAccess(user.id, subjectName))) {
+    const access = subjectName
+      ? await getStudentCourseSubjectAccess(user.id, subjectName)
+      : null;
+    if (subjectName && !access) {
       return NextResponse.json(
         { error: "Enroll in a course containing this subject first." },
         { status: 403 },
@@ -65,6 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
         if (subject) {
           await recordPracticeEvaluation({
             userId: user.id,
+            courseId: access?.accessKind === "owner-private" ? null : access?.courseId,
             subjectSlug: subject.slug,
             subjectName: subject.name,
             source: "practice",

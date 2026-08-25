@@ -595,17 +595,21 @@ async function resolveChatSession({
   sessionId,
   question,
   subjectContext,
+  courseId,
+  subjectSlug,
 }: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   userId: string;
   sessionId: string | null;
   question: string;
   subjectContext: string | null;
+  courseId: string | null;
+  subjectSlug: string;
 }) {
   if (sessionId) {
     const { data: sessionRow } = await supabase
       .from("chat_sessions")
-      .select("id, subject_tags, subject_context")
+      .select("id, subject_tags, subject_context, course_id, subject_slug")
       .eq("id", sessionId)
       .eq("user_id", userId)
       .maybeSingle();
@@ -613,6 +617,13 @@ async function resolveChatSession({
     if (!sessionRow) {
       throw new Error("Chat session not found.");
     }
+
+    const { error: ownershipError } = await supabase
+      .from("chat_sessions")
+      .update({ course_id: courseId, subject_slug: subjectSlug })
+      .eq("id", sessionRow.id)
+      .eq("user_id", userId);
+    if (ownershipError) throw ownershipError;
 
     return {
       id: sessionRow.id as string,
@@ -629,6 +640,8 @@ async function resolveChatSession({
       title: deriveSessionTitle(question, subjectContext),
       subject_context: subjectContext,
       subject_tags: subjectContext ? [subjectContext] : [],
+      course_id: courseId,
+      subject_slug: subjectSlug,
     })
     .select("id, subject_context")
     .single();
@@ -862,6 +875,8 @@ export async function POST(request: Request) {
       sessionId: parsed.sessionId ?? null,
       question: question || "Image attachment",
       subjectContext: sessionSubjectContext,
+      courseId: isPrivateSubject ? null : subjectAccess.courseId,
+      subjectSlug: tenantSubject.slug,
     });
     const contextSummaryPromise = getLatestTenantContextSummary({
       supabase,

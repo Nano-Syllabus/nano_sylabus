@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { clearTeacherCourseTrails } from "@/lib/data/study-trail-cleanup";
+import {
+  clearStudentStudyTrails,
+  clearTeacherCourseTrails,
+} from "@/lib/data/study-trail-cleanup";
 import { teacherCourseInputSchema, teacherCourseRow } from "@/lib/teacher-courses";
 import {
   courseStorageError,
@@ -110,32 +113,19 @@ export async function PATCH(request: Request, context: RouteContext) {
       .select("subject_slug,subject_name,folder_path,position")
       .eq("course_id", courseId);
     if (oldSubjectsResult.error) throw oldSubjectsResult.error;
-    const deleteResult = await admin
-      .from("teacher_course_subjects")
-      .delete()
-      .eq("course_id", courseId);
-    if (deleteResult.error) throw deleteResult.error;
     const insertResult = subjects.length
       ? await admin
           .from("teacher_course_subjects")
-          .insert(
+          .upsert(
             subjects.map((subject) => ({
               course_id: courseId,
               teacher_id: teacher.id,
               ...subject,
             })),
+            { onConflict: "course_id,subject_slug" },
           )
       : { error: null };
     if (insertResult.error) {
-      if (oldSubjectsResult.data?.length) {
-        await admin.from("teacher_course_subjects").insert(
-          oldSubjectsResult.data.map((subject) => ({
-            course_id: courseId,
-            teacher_id: teacher.id,
-            ...subject,
-          })),
-        );
-      }
       if (isCourseSubjectOwnershipConflict(insertResult.error)) {
         return NextResponse.json(
           { error: "A selected subject was just assigned to another course." },
@@ -143,6 +133,41 @@ export async function PATCH(request: Request, context: RouteContext) {
         );
       }
       throw insertResult.error;
+    }
+
+    const nextSlugs = new Set(subjects.map((subject) => subject.subject_slug));
+    const removedSubjects = (oldSubjectsResult.data || [])
+      .filter((subject) => !nextSlugs.has(String(subject.subject_slug || "")))
+      .map((subject) => ({
+        subjectSlug: String(subject.subject_slug || ""),
+        subjectName: String(subject.subject_name || ""),
+        courseId,
+      }));
+    if (removedSubjects.length) {
+      const enrollmentsResult = await admin
+        .from("teacher_course_enrollments")
+        .select("student_id")
+        .eq("course_id", courseId)
+        .in("status", ["active", "completed"]);
+      if (enrollmentsResult.error) throw enrollmentsResult.error;
+      const studentIds = (enrollmentsResult.data || [])
+        .map((row) => String(row.student_id || ""))
+        .filter(Boolean);
+      await clearStudentStudyTrails(
+        admin,
+        studentIds,
+        removedSubjects,
+        [courseId],
+        teacher.id,
+      );
+
+      const removedSlugs = removedSubjects.map((subject) => subject.subjectSlug);
+      const deleteResult = await admin
+        .from("teacher_course_subjects")
+        .delete()
+        .eq("course_id", courseId)
+        .in("subject_slug", removedSlugs);
+      if (deleteResult.error) throw deleteResult.error;
     }
 
     const courses = await listTeacherCourses(admin, teacher.id);
