@@ -1,14 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, BookOpen, CalendarDays, Clock3, FileText, MessageSquareText, UserRound } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  CalendarDays,
+  Clock3,
+  FileText,
+  LockKeyhole,
+  MessageSquareText,
+  UserRound,
+} from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CourseInviteCodeEntry } from "@/components/course-invite-code-form";
 import { CourseLeaveButton } from "@/components/course-leave-button";
 import type { StudentCourse } from "@/lib/student-courses";
 import type { SubjectExplorerSummary } from "@/lib/types";
 import { titleCase } from "@/lib/utils";
 
-const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
+const focusRing =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
 const button = `inline-flex min-h-10 items-center justify-center rounded-[10px] border px-4 text-sm font-medium transition ${focusRing}`;
 type SubjectLevel = "green" | "yellow" | "red" | "grey";
 
@@ -57,7 +68,14 @@ function Dot({ level, label }: { level: SubjectLevel; label: string }) {
     red: "bg-destructive",
     grey: "bg-bg-tertiary",
   }[level];
-  return <span role="img" aria-label={label} title={label} className={`h-2.5 w-2.5 shrink-0 rounded-full border border-border-strong/30 ${colour}`} />;
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={`h-2.5 w-2.5 shrink-0 rounded-full border border-border-strong/30 ${colour}`}
+    />
+  );
 }
 
 function SubjectCard({ subject }: { subject: SubjectExplorerSummary }) {
@@ -125,12 +143,25 @@ function SubjectCard({ subject }: { subject: SubjectExplorerSummary }) {
   );
 }
 
-function Modal({ title, children, footer, onClose }: { title: string; children: ReactNode; footer?: ReactNode; onClose: () => void }) {
+function Modal({
+  title,
+  children,
+  footer,
+  compact = false,
+  onClose,
+}: {
+  title: string;
+  children: ReactNode;
+  footer?: ReactNode;
+  compact?: boolean;
+  onClose: () => void;
+}) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     closeRef.current?.focus();
@@ -165,15 +196,39 @@ function Modal({ title, children, footer, onClose }: { title: string; children: 
 
   return (
     <div className="fixed inset-0 z-[100] grid place-items-center p-4 sm:p-6">
-      <button type="button" aria-label="Close course details" onClick={onClose} className="absolute inset-0 h-full w-full bg-black/50 backdrop-blur-[2px]" />
-      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="course-modal-title" className="relative z-10 max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-border bg-bg-primary shadow-xl">
+      <button
+        type="button"
+        aria-label={`Close ${title}`}
+        onClick={onClose}
+        className="absolute inset-0 h-full w-full bg-black/50 backdrop-blur-[2px]"
+      />
+      <section
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="course-modal-title"
+        className={`relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-border bg-bg-primary shadow-xl ${compact ? "max-w-xl" : "max-w-4xl"}`}
+      >
         <header className="flex items-center gap-3 border-b border-border px-5 py-4">
-          <h2 id="course-modal-title" className="font-display text-xl font-semibold">{title}</h2>
+          <h2 id="course-modal-title" className="font-display text-xl font-semibold">
+            {title}
+          </h2>
           <span className="flex-1" />
-          <button ref={closeRef} type="button" onClick={onClose} className={`${button} border-border bg-bg-primary text-text-primary hover:bg-bg-secondary`}>Close</button>
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            className={`${button} border-border bg-bg-primary text-text-primary hover:bg-bg-secondary`}
+          >
+            Close
+          </button>
         </header>
         <div className="p-5 sm:p-6">{children}</div>
-        {footer ? <footer className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-border bg-bg-primary px-5 py-4">{footer}</footer> : null}
+        {footer ? (
+          <footer className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-border bg-bg-primary px-5 py-4">
+            {footer}
+          </footer>
+        ) : null}
       </section>
     </div>
   );
@@ -192,9 +247,15 @@ function CourseDetails({ course, onLeft }: { course: StudentCourse; onLeft: () =
     <div className="grid gap-7 lg:grid-cols-[1.45fr_1fr]">
       <div className="min-w-0">
         <div className="flex flex-wrap gap-2">
-          <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">{course.category}</span>
-          <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">{course.level}</span>
-          <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">{course.enrollmentStatus === "completed" ? "Completed" : "Active"}</span>
+          <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
+            {course.category}
+          </span>
+          <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
+            {course.level}
+          </span>
+          <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
+            {course.enrollmentStatus === "completed" ? "Completed" : "Active"}
+          </span>
         </div>
         <p className="mt-4 text-sm leading-6 text-text-secondary">{course.description}</p>
 
@@ -207,7 +268,10 @@ function CourseDetails({ course, onLeft }: { course: StudentCourse; onLeft: () =
           ].map(([Icon, value, label]) => {
             const MetricIcon = Icon as typeof BookOpen;
             return (
-              <div key={String(label)} className="rounded-lg border border-border bg-bg-secondary p-3">
+              <div
+                key={String(label)}
+                className="rounded-lg border border-border bg-bg-secondary p-3"
+              >
                 <MetricIcon className="h-4 w-4 text-text-muted" aria-hidden="true" />
                 <dd className="mt-2 font-display text-lg font-semibold">{String(value)}</dd>
                 <dt className="mt-0.5 text-xs text-text-muted">{String(label)}</dt>
@@ -221,15 +285,28 @@ function CourseDetails({ course, onLeft }: { course: StudentCourse; onLeft: () =
           {course.subjects.length ? (
             <div className="mt-3 divide-y divide-border border-y border-border">
               {course.subjects.map((subject, index) => (
-                <Link key={subject.slug} href={`/app/explore/${encodeURIComponent(subject.slug)}`} className={`group flex min-h-14 items-center gap-3 py-3 no-underline ${focusRing}`}>
-                  <span className="w-6 shrink-0 font-mono-ui text-xs text-text-muted">{String(index + 1).padStart(2, "0")}</span>
-                  <span className="min-w-0 flex-1 text-sm font-medium">{titleCase(subject.name)}</span>
-                  <ArrowRight className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                <Link
+                  key={subject.slug}
+                  href={`/app/explore/${encodeURIComponent(subject.slug)}`}
+                  className={`group flex min-h-14 items-center gap-3 py-3 no-underline ${focusRing}`}
+                >
+                  <span className="w-6 shrink-0 font-mono-ui text-xs text-text-muted">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span className="min-w-0 flex-1 text-sm font-medium">
+                    {titleCase(subject.name)}
+                  </span>
+                  <ArrowRight
+                    className="h-4 w-4 text-text-muted transition-transform group-hover:translate-x-0.5"
+                    aria-hidden="true"
+                  />
                 </Link>
               ))}
             </div>
           ) : (
-            <p className="mt-3 rounded-lg border border-dashed border-border p-4 text-sm text-text-secondary">No indexed subject is connected yet.</p>
+            <p className="mt-3 rounded-lg border border-dashed border-border p-4 text-sm text-text-secondary">
+              No indexed subject is connected yet.
+            </p>
           )}
         </div>
       </div>
@@ -237,19 +314,51 @@ function CourseDetails({ course, onLeft }: { course: StudentCourse; onLeft: () =
       <aside className="rounded-xl border border-border bg-bg-secondary p-5">
         <h3 className="font-display text-base font-semibold">Course details</h3>
         <dl className="mt-4 divide-y divide-border text-sm">
-          <div className="flex items-start justify-between gap-4 py-3"><dt className="text-text-secondary">Teacher</dt><dd className="text-right font-medium">{course.author.displayName}</dd></div>
-          <div className="flex items-start justify-between gap-4 py-3"><dt className="text-text-secondary">Institution</dt><dd className="text-right font-medium">{course.authority}</dd></div>
-          <div className="flex items-start justify-between gap-4 py-3"><dt className="text-text-secondary">Language</dt><dd className="text-right font-medium">{course.languageModes.join(", ")}</dd></div>
-          <div className="flex items-start justify-between gap-4 py-3"><dt className="text-text-secondary">Diagnostic</dt><dd className="text-right font-medium">{course.diagnosticQuestionCount} questions</dd></div>
-          <div className="flex items-start justify-between gap-4 py-3"><dt className="text-text-secondary">Pass target</dt><dd className="text-right font-medium">{course.passPercentage}%</dd></div>
+          <div className="flex items-start justify-between gap-4 py-3">
+            <dt className="text-text-secondary">Teacher</dt>
+            <dd className="text-right font-medium">{course.author.displayName}</dd>
+          </div>
+          <div className="flex items-start justify-between gap-4 py-3">
+            <dt className="text-text-secondary">Institution</dt>
+            <dd className="text-right font-medium">{course.authority}</dd>
+          </div>
+          <div className="flex items-start justify-between gap-4 py-3">
+            <dt className="text-text-secondary">Language</dt>
+            <dd className="text-right font-medium">{course.languageModes.join(", ")}</dd>
+          </div>
+          <div className="flex items-start justify-between gap-4 py-3">
+            <dt className="text-text-secondary">Diagnostic</dt>
+            <dd className="text-right font-medium">{course.diagnosticQuestionCount} questions</dd>
+          </div>
+          <div className="flex items-start justify-between gap-4 py-3">
+            <dt className="text-text-secondary">Pass target</dt>
+            <dd className="text-right font-medium">{course.passPercentage}%</dd>
+          </div>
         </dl>
         <div className="mt-5 flex items-center gap-3 rounded-lg border border-border bg-bg-primary p-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-bg-tertiary"><UserRound className="h-5 w-5" aria-hidden="true" /></span>
-          <div className="min-w-0"><p className="truncate text-sm font-medium">{course.author.displayName}</p><p className="truncate text-xs text-text-muted">{course.author.headline || "Course instructor"}</p></div>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-bg-tertiary">
+            <UserRound className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{course.author.displayName}</p>
+            <p className="truncate text-xs text-text-muted">
+              {course.author.headline || "Course instructor"}
+            </p>
+          </div>
         </div>
         <div className="mt-5 grid gap-2">
-          <Link href={chatHref} className={`${button} gap-2 border-border bg-bg-primary hover:bg-bg-tertiary`}><MessageSquareText className="h-4 w-4" aria-hidden="true" /> Ask tutor</Link>
-          <Link href={practiceHref} className={`${button} gap-2 border-text-primary bg-text-primary text-text-inverse hover:opacity-90`}>Start practice <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+          <Link
+            href={chatHref}
+            className={`${button} gap-2 border-border bg-bg-primary hover:bg-bg-tertiary`}
+          >
+            <MessageSquareText className="h-4 w-4" aria-hidden="true" /> Ask tutor
+          </Link>
+          <Link
+            href={practiceHref}
+            className={`${button} gap-2 border-text-primary bg-text-primary text-text-inverse hover:opacity-90`}
+          >
+            Start practice <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
           <div className="mt-2 border-t border-border pt-2">
             <CourseLeaveButton
               slug={course.slug}
@@ -273,6 +382,7 @@ export function SubjectExplorerClient({
 }) {
   const [enrolledCourses, setEnrolledCourses] = useState(courses);
   const [selectedCourse, setSelectedCourse] = useState<StudentCourse | null>(null);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const privateSubjects = subjects.filter((subject) => subject.private);
 
   useEffect(() => {
@@ -284,6 +394,13 @@ export function SubjectExplorerClient({
       <div className="mb-5 flex flex-wrap items-start gap-4">
         <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">My Subjects</h1>
         <span className="flex-1" />
+        <button
+          type="button"
+          onClick={() => setInviteModalOpen(true)}
+          className={`${button} gap-2 border-border bg-bg-primary hover:bg-bg-secondary`}
+        >
+          <LockKeyhole className="size-4" aria-hidden="true" /> Join with code
+        </button>
         <Link
           href="/exams"
           target="_blank"
@@ -303,7 +420,8 @@ export function SubjectExplorerClient({
       </div>
 
       <p className="mb-4 text-sm text-text-secondary">
-        Your enrolled course subjects appear first. Private subjects you create are kept below them and are visible only to you.
+        Your enrolled course subjects appear first. Private subjects you create are kept below them
+        and are visible only to you.
       </p>
 
       {enrolledCourses.length ? (
@@ -325,10 +443,15 @@ export function SubjectExplorerClient({
                   <div className="min-w-0 flex-1">
                     <h2 className="font-display text-lg font-semibold">{titleCase(course.name)}</h2>
                     <p className="mt-0.5 text-sm text-text-muted">
-                      {courseSubjects.length} subject{courseSubjects.length === 1 ? "" : "s"} included
+                      {courseSubjects.length} subject{courseSubjects.length === 1 ? "" : "s"}{" "}
+                      included
                     </p>
                   </div>
-                  <button type="button" onClick={() => setSelectedCourse(course)} className={`${button} border-border bg-bg-primary hover:bg-bg-secondary`}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCourse(course)}
+                    className={`${button} border-border bg-bg-primary hover:bg-bg-secondary`}
+                  >
                     Open course
                   </button>
                 </div>
@@ -350,7 +473,10 @@ export function SubjectExplorerClient({
       ) : null}
 
       {privateSubjects.length ? (
-        <section className="mt-8 border-t border-border pt-7" aria-labelledby="private-subjects-title">
+        <section
+          className="mt-8 border-t border-border pt-7"
+          aria-labelledby="private-subjects-title"
+        >
           <div className="mb-3 flex flex-wrap items-end gap-3 border-b border-border pb-3">
             <div className="min-w-0 flex-1">
               <h2 id="private-subjects-title" className="font-display text-lg font-semibold">
@@ -366,8 +492,8 @@ export function SubjectExplorerClient({
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {privateSubjects.map((subject) => (
-                <SubjectCard key={`private-${subject.slug}`} subject={subject} />
-              ))}
+              <SubjectCard key={`private-${subject.slug}`} subject={subject} />
+            ))}
           </div>
         </section>
       ) : null}
@@ -399,12 +525,23 @@ export function SubjectExplorerClient({
         </section>
       ) : null}
 
+      {inviteModalOpen ? (
+        <Modal title="Join a private course" compact onClose={() => setInviteModalOpen(false)}>
+          <p className="mb-5 text-sm leading-6 text-text-secondary">
+            Enter the code your course creator shared. You can review the course before joining.
+          </p>
+          <CourseInviteCodeEntry id="student-private-course-code" />
+        </Modal>
+      ) : null}
+
       {selectedCourse ? (
         <Modal title={selectedCourse.name} onClose={() => setSelectedCourse(null)}>
           <CourseDetails
             course={selectedCourse}
             onLeft={() => {
-              setEnrolledCourses((current) => current.filter((course) => course.id !== selectedCourse.id));
+              setEnrolledCourses((current) =>
+                current.filter((course) => course.id !== selectedCourse.id),
+              );
               setSelectedCourse(null);
             }}
           />

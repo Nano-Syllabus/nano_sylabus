@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import {
-  clearStudentStudyTrails,
-  clearTeacherCourseTrails,
-} from "@/lib/data/study-trail-cleanup";
+import { createCourseInviteCode } from "@/lib/course-invites";
+import { clearStudentStudyTrails, clearTeacherCourseTrails } from "@/lib/data/study-trail-cleanup";
 import { teacherCourseInputSchema, teacherCourseRow } from "@/lib/teacher-courses";
 import {
   courseStorageError,
@@ -27,7 +25,9 @@ async function resolveSubjects(
     .eq("teacher_id", teacherId)
     .in("subject_slug", requestedSlugs);
   if (result.error) throw result.error;
-  const bySlug = new Map((result.data || []).map((subject) => [String(subject.subject_slug || ""), subject]));
+  const bySlug = new Map(
+    (result.data || []).map((subject) => [String(subject.subject_slug || ""), subject]),
+  );
   return requestedSlugs.map((slug, position) => {
     const subject = bySlug.get(slug);
     if (!subject) {
@@ -58,7 +58,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const admin = createSupabaseAdminClient();
     const ownerResult = await admin
       .from("teacher_courses")
-      .select("id,status,published_at")
+      .select("id,status,visibility,published_at,invite_code,invite_created_at")
       .eq("id", courseId)
       .eq("teacher_id", teacher.id)
       .is("archived_at", null)
@@ -95,11 +95,22 @@ export async function PATCH(request: Request, context: RouteContext) {
       );
     }
 
-    const row = teacherCourseRow(parsed.data);
+    const row: Record<string, unknown> = teacherCourseRow(parsed.data);
     if (parsed.data.status === "draft") {
       row.published_at = null;
     } else if (ownerResult.data.status === "published") {
       row.published_at = ownerResult.data.published_at;
+    }
+    if (parsed.data.status === "published" && parsed.data.visibility === "unlisted") {
+      const newlyInviteOnly =
+        ownerResult.data.status !== "published" || ownerResult.data.visibility !== "unlisted";
+      row.invite_code = newlyInviteOnly ? createCourseInviteCode() : ownerResult.data.invite_code;
+      row.invite_created_at = newlyInviteOnly
+        ? new Date().toISOString()
+        : ownerResult.data.invite_created_at;
+    } else {
+      row.invite_code = null;
+      row.invite_created_at = null;
     }
     const updateResult = await admin
       .from("teacher_courses")
@@ -114,16 +125,14 @@ export async function PATCH(request: Request, context: RouteContext) {
       .eq("course_id", courseId);
     if (oldSubjectsResult.error) throw oldSubjectsResult.error;
     const insertResult = subjects.length
-      ? await admin
-          .from("teacher_course_subjects")
-          .upsert(
-            subjects.map((subject) => ({
-              course_id: courseId,
-              teacher_id: teacher.id,
-              ...subject,
-            })),
-            { onConflict: "course_id,subject_slug" },
-          )
+      ? await admin.from("teacher_course_subjects").upsert(
+          subjects.map((subject) => ({
+            course_id: courseId,
+            teacher_id: teacher.id,
+            ...subject,
+          })),
+          { onConflict: "course_id,subject_slug" },
+        )
       : { error: null };
     if (insertResult.error) {
       if (isCourseSubjectOwnershipConflict(insertResult.error)) {
@@ -153,13 +162,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       const studentIds = (enrollmentsResult.data || [])
         .map((row) => String(row.student_id || ""))
         .filter(Boolean);
-      await clearStudentStudyTrails(
-        admin,
-        studentIds,
-        removedSubjects,
-        [courseId],
-        teacher.id,
-      );
+      await clearStudentStudyTrails(admin, studentIds, removedSubjects, [courseId], teacher.id);
 
       const removedSlugs = removedSubjects.map((subject) => subject.subjectSlug);
       const deleteResult = await admin
@@ -194,7 +197,8 @@ export async function DELETE(_request: Request, context: RouteContext) {
       .is("archived_at", null)
       .maybeSingle();
     if (ownerResult.error) throw ownerResult.error;
-    if (!ownerResult.data) return NextResponse.json({ error: "Course not found." }, { status: 404 });
+    if (!ownerResult.data)
+      return NextResponse.json({ error: "Course not found." }, { status: 404 });
 
     const [subjectsResult, enrollmentsResult] = await Promise.all([
       admin
@@ -202,10 +206,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
         .select("course_id,subject_slug,subject_name")
         .eq("course_id", courseId)
         .eq("teacher_id", teacher.id),
-      admin
-        .from("teacher_course_enrollments")
-        .select("student_id")
-        .eq("course_id", courseId),
+      admin.from("teacher_course_enrollments").select("student_id").eq("course_id", courseId),
     ]);
     if (subjectsResult.error) throw subjectsResult.error;
     if (enrollmentsResult.error) throw enrollmentsResult.error;

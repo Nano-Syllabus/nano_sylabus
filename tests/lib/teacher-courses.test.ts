@@ -49,6 +49,22 @@ describe("teacher courses", () => {
     expect(published.success).toBe(false);
   });
 
+  it("publishes invite-only courses but keeps creator-only courses as drafts", () => {
+    const inviteOnly = teacherCourseInputSchema.safeParse({
+      ...validCourse,
+      visibility: "unlisted",
+      status: "published",
+    });
+    const creatorOnly = teacherCourseInputSchema.safeParse({
+      ...validCourse,
+      visibility: "private",
+      status: "published",
+    });
+
+    expect(inviteOnly.success).toBe(true);
+    expect(creatorOnly.success).toBe(false);
+  });
+
   it("rejects duplicate subject links", () => {
     const parsed = teacherCourseInputSchema.safeParse({
       ...validCourse,
@@ -89,6 +105,8 @@ describe("teacher courses", () => {
         access_model: "free",
         visibility: "public",
         status: "draft",
+        invite_code: "ABCDEF0123456789ABCDEF0123456789",
+        invite_created_at: "2026-08-25T12:00:00.000Z",
         diagnostic_question_count: 10,
         daily_minutes: 20,
         pass_percentage: 40,
@@ -102,6 +120,7 @@ describe("teacher courses", () => {
     );
     expect(course.subjects.map((subject) => subject.name)).toEqual(["Physics", "Mathematics"]);
     expect(course.enrollmentCount).toBe(8);
+    expect(course.inviteCode).toBe("ABCDEF0123456789ABCDEF0123456789");
   });
 
   it("recognizes the database ownership constraint", () => {

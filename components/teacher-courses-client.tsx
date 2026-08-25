@@ -1,7 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { BookOpen, Check, Globe2, Pencil, Plus, Trash2, Users, X } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  Copy,
+  Globe2,
+  Link2,
+  LockKeyhole,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   teacherCourseCategories,
@@ -93,6 +106,7 @@ function CoursesSkeleton({ compact = false }: { compact?: boolean }) {
 }
 
 function CourseStatus({ course }: { course: TeacherCourse }) {
+  const inviteOnly = course.status === "published" && course.visibility === "unlisted";
   return (
     <span
       className={cn(
@@ -102,8 +116,12 @@ function CourseStatus({ course }: { course: TeacherCourse }) {
           : "border-border bg-bg-secondary text-text-secondary",
       )}
     >
-      {course.status === "published" ? <Globe2 className="size-3.5" aria-hidden="true" /> : null}
-      {course.status === "published" ? "Published" : "Draft"}
+      {inviteOnly ? (
+        <LockKeyhole className="size-3.5" aria-hidden="true" />
+      ) : course.status === "published" ? (
+        <Globe2 className="size-3.5" aria-hidden="true" />
+      ) : null}
+      {inviteOnly ? "Invite-only" : course.status === "published" ? "Public" : "Draft"}
     </span>
   );
 }
@@ -168,7 +186,12 @@ function CourseCard({
           </Button>
         ) : null}
         <Button type="button" size="sm" variant="outline" onClick={onEdit}>
-          <Pencil className="size-3.5" aria-hidden="true" /> Edit
+          {course.status === "published" && course.visibility === "unlisted" ? (
+            <Link2 className="size-3.5" aria-hidden="true" />
+          ) : (
+            <Pencil className="size-3.5" aria-hidden="true" />
+          )}
+          {course.status === "published" && course.visibility === "unlisted" ? "Share" : "Edit"}
         </Button>
       </div>
     </article>
@@ -305,6 +328,11 @@ export function TeacherCoursesClient({
           courses={courses}
           subjects={subjects}
           onClose={() => setEditingCourse(null)}
+          onCourseChanged={(updated) =>
+            setCourses((current) =>
+              current.map((item) => (item.id === updated.id ? updated : item)),
+            )
+          }
           onSaved={async () => {
             setEditingCourse(null);
             await load();
@@ -495,19 +523,25 @@ function CourseEditor({
   courses,
   subjects,
   onClose,
+  onCourseChanged,
   onSaved,
 }: {
   course: TeacherCourse | null;
   courses: TeacherCourse[];
   subjects: TeacherSubject[];
   onClose: () => void;
+  onCourseChanged: (course: TeacherCourse) => void;
   onSaved: () => Promise<void>;
 }) {
+  const [currentCourse, setCurrentCourse] = useState(course);
   const [draft, setDraft] = useState<TeacherCourseInput>(() =>
     course ? courseDraft(course) : emptyCourseDraft(),
   );
   const [outcomesText, setOutcomesText] = useState(() => draft.outcomes.join("\n"));
   const [saving, setSaving] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteNotice, setInviteNotice] = useState("");
+  const [copiedInviteField, setCopiedInviteField] = useState<"link" | "code" | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -517,6 +551,12 @@ function CourseEditor({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose, saving]);
+
+  useEffect(() => {
+    if (!copiedInviteField) return;
+    const timeout = window.setTimeout(() => setCopiedInviteField(null), 2_000);
+    return () => window.clearTimeout(timeout);
+  }, [copiedInviteField]);
 
   const selectedNames = useMemo(
     () =>
@@ -534,6 +574,54 @@ function CourseEditor({
       ),
     [courses],
   );
+
+  const inviteLink = useMemo(() => {
+    if (!currentCourse?.inviteCode || typeof window === "undefined") return "";
+    return `${window.location.origin}/join/course/${currentCourse.inviteCode}`;
+  }, [currentCourse?.inviteCode]);
+
+  async function updateInvite(method: "POST" | "DELETE") {
+    if (!currentCourse) return;
+    setInviteBusy(true);
+    setError("");
+    setInviteNotice("");
+    setCopiedInviteField(null);
+    try {
+      const payload = await apiPayload(
+        await fetch(`/api/teacher/courses/${currentCourse.id}/invite`, {
+          method,
+          headers: { Accept: "application/json" },
+        }),
+      );
+      const updated = payload.course as TeacherCourse;
+      setCurrentCourse(updated);
+      onCourseChanged(updated);
+      setInviteNotice(
+        method === "DELETE"
+          ? "Invite disabled. Existing students keep access, but the old link cannot enroll anyone."
+          : currentCourse.inviteCode
+            ? "New invite created. The previous link no longer works."
+            : "Invite link created.",
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update the invite link.");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
+  async function copyInvite(value: string, field: "link" | "code") {
+    const label = field === "link" ? "Link" : "Code";
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedInviteField(field);
+      setInviteNotice("");
+      setError("");
+    } catch {
+      setCopiedInviteField(null);
+      setError(`Could not copy the ${label.toLowerCase()}. Select it and copy manually.`);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -729,42 +817,199 @@ function CourseEditor({
             <fieldset className="mt-5 border-t border-border pt-4">
               <legend className="font-display text-base font-semibold">Course visibility</legend>
               <p className="mt-2 text-sm leading-6 text-text-secondary">
-                Public courses can be discovered by students. Private courses remain creator-only
-                drafts.
+                Public courses appear in Browse. Invite-only courses stay hidden but anyone with the
+                active link can join. Private drafts remain visible only to you.
               </p>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <div className="flex gap-2">
-                  {(["public", "private"] as const).map((model) => (
-                    <label
-                      key={model}
-                      className={cn(
-                        "inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border px-3.5 text-sm font-medium capitalize transition",
-                        draft.visibility === model
-                          ? "border-border-strong bg-bg-secondary"
-                          : "border-border hover:bg-bg-secondary/50",
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="course-visibility"
-                        checked={draft.visibility === model}
-                        onChange={() =>
-                          setDraft({
-                            ...draft,
-                            visibility: model,
-                            accessModel: "free",
-                            priceNpr: 0,
-                            status: model === "private" ? "draft" : draft.status,
-                          })
-                        }
-                        className="size-3.5 accent-current"
-                      />
-                      {model}
-                    </label>
-                  ))}
-                </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {(["public", "unlisted", "private"] as const).map((model) => (
+                  <label
+                    key={model}
+                    className={cn(
+                      "flex min-h-20 cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm transition",
+                      draft.visibility === model
+                        ? "border-border-strong bg-bg-secondary"
+                        : "border-border hover:bg-bg-secondary/50",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="course-visibility"
+                      checked={draft.visibility === model}
+                      onChange={() =>
+                        setDraft({
+                          ...draft,
+                          visibility: model,
+                          accessModel: "free",
+                          priceNpr: 0,
+                          status: model === "private" ? "draft" : draft.status,
+                        })
+                      }
+                      className="size-3.5 accent-current"
+                    />
+                    <span>
+                      <span className="block font-medium">
+                        {model === "unlisted"
+                          ? "Invite-only"
+                          : model === "private"
+                            ? "Private draft"
+                            : "Public"}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-text-muted">
+                        {model === "public"
+                          ? "Searchable in Browse courses"
+                          : model === "unlisted"
+                            ? "Hidden; join through link or code"
+                            : "Creator access only; cannot publish"}
+                      </span>
+                    </span>
+                  </label>
+                ))}
               </div>
             </fieldset>
+
+            {draft.visibility === "unlisted" ? (
+              <section
+                className="mt-5 border-t border-border pt-5"
+                aria-labelledby="course-invite-title"
+              >
+                <div className="flex flex-wrap items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h3 id="course-invite-title" className="font-display text-base font-semibold">
+                      Private course invitation
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-text-secondary">
+                      Share this only with the students you want to enroll. Existing members keep
+                      access if you disable or regenerate the link.
+                    </p>
+                  </div>
+                  <LockKeyhole className="size-5 text-text-muted" aria-hidden="true" />
+                </div>
+
+                {currentCourse?.status === "published" &&
+                currentCourse.visibility === "unlisted" ? (
+                  currentCourse.inviteCode ? (
+                    <div className="mt-4 space-y-3 rounded-lg border border-border bg-bg-secondary p-4">
+                      <div>
+                        <label
+                          htmlFor="course-invite-link"
+                          className="text-xs font-medium text-text-muted"
+                        >
+                          Share link
+                        </label>
+                        <div className="mt-1.5 flex gap-2">
+                          <input
+                            id="course-invite-link"
+                            readOnly
+                            value={inviteLink}
+                            className={inputClass}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void copyInvite(inviteLink, "link")}
+                            aria-label={
+                              copiedInviteField === "link"
+                                ? "Course invite link copied"
+                                : "Copy course invite link"
+                            }
+                            className="min-w-24"
+                          >
+                            {copiedInviteField === "link" ? (
+                              <Check className="size-4" aria-hidden="true" />
+                            ) : (
+                              <Copy className="size-4" aria-hidden="true" />
+                            )}
+                            {copiedInviteField === "link" ? "Copied" : "Copy"}
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="course-invite-code"
+                          className="text-xs font-medium text-text-muted"
+                        >
+                          Invite code
+                        </label>
+                        <div className="mt-1.5 flex gap-2">
+                          <input
+                            id="course-invite-code"
+                            readOnly
+                            value={currentCourse.inviteCode}
+                            className={cn(inputClass, "font-mono-ui tracking-wider")}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                              void copyInvite(currentCourse.inviteCode || "", "code")
+                            }
+                            aria-label={
+                              copiedInviteField === "code"
+                                ? "Course invite code copied"
+                                : "Copy course invite code"
+                            }
+                            className="min-w-24"
+                          >
+                            {copiedInviteField === "code" ? (
+                              <Check className="size-4" aria-hidden="true" />
+                            ) : (
+                              <Copy className="size-4" aria-hidden="true" />
+                            )}
+                            {copiedInviteField === "code" ? "Copied" : "Copy"}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={inviteBusy}
+                          aria-busy={inviteBusy}
+                          onClick={() => void updateInvite("POST")}
+                        >
+                          <RefreshCw className="size-4" aria-hidden="true" />{" "}
+                          {inviteBusy ? "Updating…" : "Regenerate link"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          disabled={inviteBusy}
+                          onClick={() => void updateInvite("DELETE")}
+                        >
+                          Disable invite
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-lg border border-dashed border-border p-4">
+                      <p className="text-sm text-text-secondary">
+                        New students cannot join until you create another invite.
+                      </p>
+                      <Button
+                        className="mt-3"
+                        type="button"
+                        variant="outline"
+                        disabled={inviteBusy}
+                        aria-busy={inviteBusy}
+                        onClick={() => void updateInvite("POST")}
+                      >
+                        <Link2 className="size-4" aria-hidden="true" />{" "}
+                        {inviteBusy ? "Creating…" : "Create invite link"}
+                      </Button>
+                    </div>
+                  )
+                ) : (
+                  <p className="mt-4 rounded-lg border border-dashed border-border p-4 text-sm text-text-secondary">
+                    Publish this course as invite-only to create its private join link.
+                  </p>
+                )}
+                {inviteNotice ? (
+                  <p className="mt-3 text-sm text-success" role="status">
+                    {inviteNotice}
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
           </div>
 
           <footer className="flex flex-wrap justify-end gap-2 border-t border-border bg-bg-primary px-5 py-4 sm:px-6">

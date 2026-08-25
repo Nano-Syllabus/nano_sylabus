@@ -6,7 +6,7 @@ import { mapTeacherCourse, type TeacherCourse } from "@/lib/teacher-courses";
 import { profileFromUser, withTeacherAvatar } from "@/lib/teacher-public-profile";
 
 const courseColumns =
-  "id,teacher_id,slug,name,short_name,category,authority,tagline,description,duration_weeks,level,language_modes,access_model,price_paisa,visibility,status,diagnostic_question_count,daily_minutes,pass_percentage,negative_marking,exam_date,outcomes,created_at,updated_at,published_at";
+  "id,teacher_id,slug,name,short_name,category,authority,tagline,description,duration_weeks,level,language_modes,access_model,price_paisa,visibility,status,diagnostic_question_count,daily_minutes,pass_percentage,negative_marking,exam_date,outcomes,invite_code,invite_created_at,created_at,updated_at,published_at";
 
 export type StudentCourse = TeacherCourse & {
   enrollmentStatus: "active" | "completed";
@@ -73,8 +73,7 @@ function courseSourceStats(
     const subject = subjectPaths.find(
       (item) =>
         Boolean(item.normalized) &&
-        (normalizedPath === item.normalized ||
-          normalizedPath.startsWith(`${item.normalized}/`)),
+        (normalizedPath === item.normalized || normalizedPath.startsWith(`${item.normalized}/`)),
     );
     if (!subject) continue;
 
@@ -108,10 +107,7 @@ function courseSourceStats(
  * out an expired link.
  */
 const COURSE_AUTHOR_TTL_MS = 5 * 60_000;
-const courseAuthorCache = new Map<
-  string,
-  { author: TeacherCourse["author"]; expiresAt: number }
->();
+const courseAuthorCache = new Map<string, { author: TeacherCourse["author"]; expiresAt: number }>();
 
 async function loadCourseAuthor(
   admin: SupabaseClient,
@@ -245,8 +241,7 @@ export type StudentCourseSubject = {
 
 function isStudentVisibleCourse(row: Record<string, unknown>) {
   return (
-    row.status === "published" &&
-    (row.visibility === "public" || row.visibility === "unlisted")
+    row.status === "published" && (row.visibility === "public" || row.visibility === "unlisted")
   );
 }
 
@@ -357,7 +352,7 @@ export async function getPublishedCourse(
     .select(courseColumns)
     .eq("slug", slug)
     .eq("status", "published")
-    .in("visibility", ["public", "unlisted"])
+    .eq("visibility", "public")
     .is("archived_at", null)
     .maybeSingle();
   if (result.error) throw result.error;
@@ -365,6 +360,47 @@ export async function getPublishedCourse(
 
   const [course] = await mapCourseRows(admin, [result.data as Record<string, unknown>]);
   return course || null;
+}
+
+function normalizeCourseInviteCode(value: string) {
+  return value.trim().toUpperCase();
+}
+
+export async function getPublishedCourseByInviteCode(
+  inviteCode: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+): Promise<TeacherCourse | null> {
+  const code = normalizeCourseInviteCode(inviteCode);
+  if (!/^[A-Z0-9]{16,64}$/.test(code)) return null;
+
+  const result = await admin
+    .from("teacher_courses")
+    .select(courseColumns)
+    .eq("invite_code", code)
+    .eq("status", "published")
+    .eq("visibility", "unlisted")
+    .is("archived_at", null)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  if (!result.data) return null;
+
+  const [course] = await mapCourseRows(admin, [result.data as Record<string, unknown>]);
+  return course || null;
+}
+
+export async function isCourseCreator(
+  userId: string,
+  course: Pick<TeacherCourse, "teacherId">,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+) {
+  if (!course.teacherId) return false;
+  const result = await admin
+    .from("teachers")
+    .select("user_id")
+    .eq("id", course.teacherId)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  return String(result.data?.user_id || "") === userId;
 }
 
 /**
@@ -702,6 +738,38 @@ export async function enrollStudentInCourse(
 ) {
   const course = await getPublishedCourse(slug, admin);
   if (!course) throw new StudentCourseError("Course not found.", 404);
+
+  if (await isCourseCreator(studentId, course, admin)) {
+    throw new StudentCourseError("You created this course and do not need to enroll in it.", 409);
+  }
+
+  const result = await admin.from("teacher_course_enrollments").upsert(
+    {
+      course_id: course.id,
+      student_id: studentId,
+      status: "active",
+      enrolled_at: new Date().toISOString(),
+      completed_at: null,
+    },
+    { onConflict: "course_id,student_id" },
+  );
+  if (result.error) throw result.error;
+
+  return course;
+}
+
+export async function enrollStudentInCourseByInviteCode(
+  studentId: string,
+  inviteCode: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+) {
+  const course = await getPublishedCourseByInviteCode(inviteCode, admin);
+  if (!course) {
+    throw new StudentCourseError("This course invite is invalid or no longer active.", 404);
+  }
+  if (await isCourseCreator(studentId, course, admin)) {
+    throw new StudentCourseError("You created this course and do not need to join it.", 409);
+  }
 
   const result = await admin.from("teacher_course_enrollments").upsert(
     {

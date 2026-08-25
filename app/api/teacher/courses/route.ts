@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createCourseInviteCode } from "@/lib/course-invites";
 import {
   teacherCourseInputSchema,
   teacherCourseRow,
@@ -25,7 +26,9 @@ async function resolveSubjects(
     .eq("teacher_id", teacherId)
     .in("subject_slug", requestedSlugs);
   if (result.error) throw result.error;
-  const bySlug = new Map((result.data || []).map((subject) => [String(subject.subject_slug || ""), subject]));
+  const bySlug = new Map(
+    (result.data || []).map((subject) => [String(subject.subject_slug || ""), subject]),
+  );
   return requestedSlugs.map((slug, position) => {
     const subject = bySlug.get(slug);
     if (!subject) {
@@ -106,9 +109,18 @@ export async function POST(request: Request) {
       );
     }
     const slug = await availableSlug(admin, parsed.data.name);
+    const courseRow = {
+      ...teacherCourseRow(parsed.data),
+      ...(parsed.data.status === "published" && parsed.data.visibility === "unlisted"
+        ? {
+            invite_code: createCourseInviteCode(),
+            invite_created_at: new Date().toISOString(),
+          }
+        : { invite_code: null, invite_created_at: null }),
+    };
     const courseResult = await admin
       .from("teacher_courses")
-      .insert({ teacher_id: teacher.id, slug, ...teacherCourseRow(parsed.data) })
+      .insert({ teacher_id: teacher.id, slug, ...courseRow })
       .select("id")
       .single();
     if (courseResult.error) throw courseResult.error;

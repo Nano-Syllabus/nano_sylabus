@@ -3,7 +3,7 @@ import { mapTeacherCourse, type TeacherCourse } from "@/lib/teacher-courses";
 export { detachTeacherSubjectFromCourses } from "@/lib/teacher-course-links";
 
 const courseColumns =
-  "id,teacher_id,slug,name,short_name,category,authority,tagline,description,duration_weeks,level,language_modes,access_model,price_paisa,visibility,status,diagnostic_question_count,daily_minutes,pass_percentage,negative_marking,exam_date,outcomes,created_at,updated_at,published_at";
+  "id,teacher_id,slug,name,short_name,category,authority,tagline,description,duration_weeks,level,language_modes,access_model,price_paisa,visibility,status,diagnostic_question_count,daily_minutes,pass_percentage,negative_marking,exam_date,outcomes,invite_code,invite_created_at,created_at,updated_at,published_at";
 
 export async function listTeacherCourses(
   admin: SupabaseClient,
@@ -78,7 +78,11 @@ export function courseStorageError(error: unknown, fallback = "Could not save th
       : error && typeof error === "object" && "message" in error
         ? String(error.message)
         : String(error || "");
-  if (message.includes("teacher_courses") || message.includes("teacher_course_subjects")) {
+  if (
+    message.includes("teacher_courses") ||
+    message.includes("teacher_course_subjects") ||
+    message.includes("invite_code")
+  ) {
     return "Course storage is not ready. Apply the latest Supabase migration, then try again.";
   }
   return fallback;

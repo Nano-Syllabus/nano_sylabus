@@ -68,6 +68,7 @@ export type TeacherCourseInput = z.infer<typeof teacherCourseInputSchema>;
 
 export type TeacherCourse = {
   id: string;
+  teacherId: string;
   slug: string;
   name: string;
   shortName: string;
@@ -82,6 +83,8 @@ export type TeacherCourse = {
   priceNpr: number;
   visibility: "public" | "unlisted" | "private";
   status: "draft" | "published";
+  inviteCode: string | null;
+  inviteCreatedAt: string | null;
   diagnosticQuestionCount: number;
   dailyMinutes: number;
   passPercentage: number;
@@ -172,6 +175,7 @@ export function mapTeacherCourse(
 
   return {
     id: String(row.id || ""),
+    teacherId: String(row.teacher_id || ""),
     slug: String(row.slug || ""),
     name: String(row.name || ""),
     shortName: String(row.short_name || ""),
@@ -188,6 +192,8 @@ export function mapTeacherCourse(
     priceNpr: Math.round((Number(row.price_paisa) || 0) / 100),
     visibility: row.visibility as TeacherCourse["visibility"],
     status: row.status === "published" ? "published" : "draft",
+    inviteCode: typeof row.invite_code === "string" ? row.invite_code : null,
+    inviteCreatedAt: typeof row.invite_created_at === "string" ? row.invite_created_at : null,
     diagnosticQuestionCount: Number(row.diagnostic_question_count) || 10,
     dailyMinutes: Number(row.daily_minutes) || 20,
     passPercentage: Number(row.pass_percentage) || 0,
