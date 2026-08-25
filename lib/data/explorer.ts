@@ -1,11 +1,17 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { listPracticeAttempts, listTopicMastery } from "@/lib/data/student-mastery";
 import {
   normalizeBoard,
   normalizeGrade,
   normalizeSubjectLabel,
   normalizeSubjects,
 } from "@/lib/profile-normalization";
-import { findTenantSubject, listTenantSubjectNames, listTenantSubjects } from "@/lib/tenant/client";
+import {
+  findTenantSubject,
+  listPracticeTopics,
+  listTenantSubjectNames,
+  listTenantSubjects,
+} from "@/lib/tenant/client";
 import type {
   StudentProfile,
   SubjectExplorerSessionSummary,
@@ -16,10 +22,21 @@ function uniqueSubjects(values: string[]) {
   return normalizeSubjects(values);
 }
 
-type ExplorerSubjectEntry = {
+function identityKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export type ExplorerSubjectEntry = {
   name: string;
   slug: string;
   private?: boolean;
+  category?: string;
+  board?: string;
+  grade?: string;
 };
 
 function uniqueSubjectEntries(entries: ExplorerSubjectEntry[]) {
@@ -32,92 +49,26 @@ function uniqueSubjectEntries(entries: ExplorerSubjectEntry[]) {
     const key = slug.toLowerCase();
     if (!name || seen.has(key)) continue;
     seen.add(key);
-    unique.push({ name, slug, private: entry.private });
+    unique.push({ ...entry, name, slug });
   }
 
   return unique;
 }
 
-function categorizeSubject(subject: string): SubjectExplorerSummary["category"] {
-  const normalized = subject.toLowerCase();
-  if (
-    [
-      "physics",
-      "chemistry",
-      "biology",
-      "science",
-      "mathematics",
-      "math",
-      "computer",
-      "statistics",
-    ].some((token) => normalized.includes(token))
-  ) {
-    return "Science";
-  }
-
-  if (
-    ["account", "business", "economics", "management", "marketing", "finance", "entrepreneur"].some(
-      (token) => normalized.includes(token),
-    )
-  ) {
-    return "Management";
-  }
-
-  if (
-    [
-      "engineering",
-      "technical",
-      "it",
-      "programming",
-      "network",
-      "electronics",
-      "instrumentation",
-      "circuit",
-      "logic",
-      "machine",
-      "communication",
-      "system",
-      "electrical",
-      "filter",
-      "civil",
-      "mechanical",
-    ].some((token) => normalized.includes(token))
-  ) {
-    return "Technical";
-  }
-
-  if (
-    [
-      "english",
-      "nepali",
-      "history",
-      "geography",
-      "sociology",
-      "political",
-      "philosophy",
-      "psychology",
-      "humanities",
-      "civics",
-    ].some((token) => normalized.includes(token))
-  ) {
-    return "Humanities";
-  }
-
-  return "General";
-}
-
 export async function listExplorerSubjects(
   userId: string,
   profile: StudentProfile,
-  allowedSubjects?: string[],
+  allowedSubjects?: ExplorerSubjectEntry[],
   privateSubjects: ExplorerSubjectEntry[] = [],
 ) {
   const supabase = await createSupabaseServerClient();
   const normalizedBoard = normalizeBoard(profile.board);
   const normalizedGrade = normalizeGrade(profile.grade);
-  const [sessionResult, tenantSubjects] = await Promise.all([
+  const [sessionResult, tenantSubjects, mastery, attempts] = await Promise.all([
     supabase.from("chat_sessions").select("id, updated_at, subject_tags").eq("user_id", userId),
     listTenantSubjects(),
+    listTopicMastery(userId),
+    listPracticeAttempts(userId, 500),
   ]);
 
   if (sessionResult.error) throw sessionResult.error;
@@ -128,23 +79,68 @@ export async function listExplorerSubjects(
   const profileSubjectKeys = new Set(profileSubjects.map((subject) => subject.toLowerCase()));
   const courseSubjectEntries = allowedSubjects
     ? uniqueSubjectEntries(
-        allowedSubjects.flatMap((value) => {
-          const subject = findTenantSubject(tenantSubjects, value);
-          return subject ? [{ name: subject.name, slug: subject.slug }] : [];
+        allowedSubjects.flatMap((entry) => {
+          const subject =
+            findTenantSubject(tenantSubjects, entry.slug) ??
+            findTenantSubject(tenantSubjects, entry.name);
+          return subject ? [{ ...entry, name: subject.name, slug: subject.slug }] : [];
         }),
       )
     : uniqueSubjectEntries(
         listTenantSubjectNames(tenantSubjects, profileSubjects).map((name) => {
           const subject = findTenantSubject(tenantSubjects, name);
-          return subject ? { name: subject.name, slug: subject.slug } : { name, slug: name };
+          return subject
+            ? {
+                name: subject.name,
+                slug: subject.slug,
+                category: "Subject",
+                board: normalizedBoard,
+                grade: normalizedGrade,
+              }
+            : {
+                name,
+                slug: name,
+                category: "Subject",
+                board: normalizedBoard,
+                grade: normalizedGrade,
+              };
         }),
       );
   // Course subjects are the primary list. Private creator subjects are added
   // afterwards and deduplicated so a matching enrolled subject is not shown twice.
   const subjectEntries = uniqueSubjectEntries([
     ...courseSubjectEntries,
-    ...privateSubjects.map((entry) => ({ ...entry, private: true })),
+    ...privateSubjects.map((entry) => ({
+      ...entry,
+      private: true,
+      category: entry.category || "Private subject",
+      board: entry.board || "",
+      grade: entry.grade || "",
+    })),
   ]);
+
+  const topicCatalogs = await Promise.all(
+    subjectEntries.map(async (entry) => {
+      const tenantSubject =
+        findTenantSubject(tenantSubjects, entry.slug) ??
+        findTenantSubject(tenantSubjects, entry.name);
+      if (!tenantSubject) return null;
+
+      try {
+        const response = await listPracticeTopics({
+          subject: tenantSubject.slug,
+          namespaces: [tenantSubject.namespace],
+          totalMarks: 20,
+          maxQuestions: 5,
+        });
+        return response.topics ?? [];
+      } catch {
+        // Chat activity and persisted mastery remain useful even when the
+        // tenant topic catalog is temporarily unavailable.
+        return null;
+      }
+    }),
+  );
 
   // Group the sessions by subject tag once. Doing it inside the map below
   // rescanned every session for every subject on the page.
@@ -191,16 +187,45 @@ export async function listExplorerSubjects(
     }
   }
 
-  const summaries = subjectEntries.map(({ name: subject, slug, private: isPrivate }) => {
+  const summaries = subjectEntries.map((entry, index) => {
+    const { name: subject, slug, private: isPrivate } = entry;
     const subjectKey = normalizeSubjectLabel(subject).toLowerCase();
     const matchingSessions = sessionsBySubjectKey.get(subjectKey) ?? [];
+    const identityKeys = new Set([identityKey(slug), identityKey(subject)]);
+    const subjectMastery = mastery.filter(
+      (topic) =>
+        identityKeys.has(identityKey(topic.subjectSlug)) ||
+        identityKeys.has(identityKey(topic.subjectName)),
+    );
+    const catalog = topicCatalogs[index];
+    const catalogTopicKeys = new Set((catalog ?? []).map((topic) => topic.topic_key));
+    const masteredTopicKeys = new Set(subjectMastery.map((topic) => topic.topicKey));
+    const syllabusTopicCount = catalog
+      ? catalogTopicKeys.size
+      : masteredTopicKeys.size
+        ? masteredTopicKeys.size
+        : null;
+    const practicedTopicCount = new Set(
+      subjectMastery.filter((topic) => topic.attempts > 0).map((topic) => topic.topicKey),
+    ).size;
+    const latestAttempt = attempts.find(
+      (attempt) =>
+        identityKeys.has(identityKey(attempt.subjectSlug)) ||
+        identityKeys.has(identityKey(attempt.subjectName)),
+    );
+    const lastActivityAt = [
+      ...matchingSessions.map((session) => session.updated_at),
+      latestAttempt?.createdAt,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null;
 
     return {
       slug,
       subject,
-      board: normalizedBoard,
-      grade: normalizedGrade,
-      category: categorizeSubject(subject),
+      board: entry.board?.trim() || "",
+      grade: entry.grade?.trim() || "",
+      category: entry.category?.trim() || (isPrivate ? "Private subject" : "Subject"),
       private: isPrivate,
       inProfile: profileSubjectKeys.has(subject.toLowerCase()),
       sessionCount: matchingSessions.length,
@@ -208,10 +233,18 @@ export async function listExplorerSubjects(
         (total, session) => total + (questionCountBySessionId.get(session.id) ?? 0),
         0,
       ),
-      lastActivityAt:
-        matchingSessions
-          .map((session) => session.updated_at)
-          .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null,
+      lastActivityAt,
+      syllabusTopicCount,
+      weakTopicCount: subjectMastery.filter((topic) => topic.status === "weak").length,
+      untestedTopicCount:
+        syllabusTopicCount === null ? null : Math.max(0, syllabusTopicCount - practicedTopicCount),
+      latestPracticeScore:
+        latestAttempt && latestAttempt.totalMarks > 0
+          ? Math.max(
+              0,
+              Math.min(100, (latestAttempt.totalScore / latestAttempt.totalMarks) * 100),
+            )
+          : null,
     } satisfies SubjectExplorerSummary;
   });
 

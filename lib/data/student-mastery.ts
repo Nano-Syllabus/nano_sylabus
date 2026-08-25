@@ -187,7 +187,7 @@ export async function recordPracticeEvaluation(input: {
   userId: string;
   subjectSlug: string;
   subjectName: string;
-  source: "practice" | "teacher_exam";
+  source: "practice" | "teacher_exam" | "challenge";
   sessionId?: string;
   totalScore: number;
   totalMarks: number;

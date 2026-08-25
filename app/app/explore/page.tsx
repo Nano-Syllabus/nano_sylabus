@@ -25,10 +25,17 @@ export default async function ExplorePage() {
           listExplorerSubjects(
             user.id,
             profile,
-            courseSubjects.flatMap((subject) => [subject.subjectSlug, subject.subjectName]),
+            courseSubjects.map((subject) => ({
+              name: subject.subjectName,
+              slug: subject.subjectSlug,
+              category: subject.courseCategory,
+              board: subject.courseAuthority,
+              grade: subject.courseLevel,
+            })),
             privateSubjects.map((subject) => ({
               name: subject.subjectName,
               slug: subject.subjectSlug,
+              private: true,
             })),
           ),
       )

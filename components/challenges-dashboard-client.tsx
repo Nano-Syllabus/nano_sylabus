@@ -1,177 +1,504 @@
-import Link from "next/link";
-import type { ChallengeSubject, StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
+"use client";
 
-function percentage(value: number | null) {
+import { Flame } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import type { ChallengeSubject, StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
+import type {
+  StudentChallengeDetail,
+  StudentChallengeSummary,
+} from "@/lib/data/student-challenges";
+
+function percent(value: number | null) {
   return value === null ? "—" : `${Math.round(value)}%`;
 }
 
-function signedPoints(value: number | null) {
-  if (value === null) return "First week of practice";
+function subjectInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((word) => word[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "CH";
+}
+
+function scoreChange(value: number | null) {
+  if (value === null) return "Challenge score · first week";
   const rounded = Math.round(value);
-  return `${rounded >= 0 ? "+" : ""}${rounded} pts vs previous 7 days`;
+  return `Challenge score · ${rounded >= 0 ? "+" : ""}${rounded} pts`;
 }
 
-function practiceHref(subject: ChallengeSubject) {
-  const params = new URLSearchParams({ subject: subject.slug });
-  if (subject.nextTopic) params.set("topic", subject.nextTopic.key);
-  return `/app/exams?${params.toString()}`;
-}
-
-function SubjectCard({ subject }: { subject: ChallengeSubject }) {
-  const detail = subject.totalTopics
-    ? `${subject.practicedTopics} of ${subject.totalTopics} topics practised`
-    : "Topic data is not available yet";
-  const action = subject.nextTopic ? `Practise ${subject.nextTopic.title}` : "Open practice";
-
-  return (
-    <article className="rounded-xl border border-border bg-card p-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h3 className="font-display text-lg font-semibold text-text-primary">{subject.name}</h3>
-            <span className="text-sm text-text-secondary">{percentage(subject.readiness)} ready</span>
-          </div>
-          <p className="mt-1 text-sm text-text-secondary">{detail}</p>
-          {subject.weakTopics > 0 ? (
-            <p className="mt-2 text-sm text-text-secondary">
-              {subject.weakTopics} topic{subject.weakTopics === 1 ? "" : "s"} need attention.
-            </p>
-          ) : null}
-          {!subject.topicDataAvailable ? (
-            <p className="mt-2 text-sm text-text-secondary">Showing saved progress while topic data reconnects.</p>
-          ) : null}
-        </div>
-        <Link
-          href={practiceHref(subject)}
-          className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
-        >
-          {action}
-        </Link>
-      </div>
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-bg-secondary" aria-hidden="true">
-        <div
-          className="h-full rounded-full bg-primary"
-          style={{ width: `${Math.max(0, Math.min(100, subject.readiness ?? 0))}%` }}
-        />
-      </div>
-    </article>
-  );
-}
-
-function StatCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <article className="rounded-xl border border-border bg-card p-5">
-      <p className="text-xs font-medium tracking-wide text-text-secondary">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tracking-tight text-text-primary">{value}</p>
-      <p className="mt-1 text-sm text-text-secondary">{detail}</p>
-    </article>
-  );
-}
-
-export function ChallengesDashboardClient({
-  dashboard,
+function ChallengeCard({
+  challenge,
+  subject,
+  busy,
+  onOpen,
 }: {
-  dashboard: StudentChallengeDashboard;
+  challenge: StudentChallengeSummary;
+  subject?: ChallengeSubject;
+  busy: boolean;
+  onOpen: () => void;
 }) {
-  const hasSubjects = dashboard.subjects.length > 0;
+  const status =
+    challenge.status === "completed"
+      ? "Completed"
+      : challenge.status === "started"
+        ? "Continue"
+        : "Recommended";
+  return (
+    <div className="mb-[25px]">
+      <div className="mb-[10px] flex items-center justify-between border-b border-border px-[2px] pb-[10px]">
+        <div>
+          <div className="text-[17px] font-[750] text-text-primary">{challenge.subjectName}</div>
+          <div className="mt-1 text-[12px] text-text-muted">
+            {!subject || subject.readiness === null ? "No graded topic yet" : `${Math.round(subject.readiness)}% ready`}
+            {" · "}
+            {subject?.weakTopics ?? 0} weak topic{subject?.weakTopics === 1 ? "" : "s"}
+          </div>
+        </div>
+        <div className="text-[20px] font-[750] text-blue-600 dark:text-blue-400">
+          {percent(subject?.readiness ?? null)}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onOpen}
+        disabled={busy}
+        className="grid min-h-20 w-full grid-cols-[48px_1fr] items-center gap-4 rounded-[16px] border border-border bg-card p-[19px_20px] text-left transition-[border-color,box-shadow] duration-150 hover:border-blue-500/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:grid-cols-[48px_1fr_auto]"
+      >
+        <span className="grid h-[48px] w-[48px] place-items-center rounded-[14px] bg-blue-500/10 text-[15px] font-[800] text-blue-600 dark:text-blue-400">
+          {subjectInitials(challenge.topicTitle)}
+        </span>
+        <span className="min-w-0">
+          <span className="mb-[5px] block truncate text-[17px] font-[720] text-text-primary">
+            {challenge.title}
+          </span>
+          <span className="flex flex-wrap items-center gap-2.5 text-[13px] text-text-muted">
+            <span className="rounded-[7px] bg-bg-secondary px-2 py-1 text-[12px] text-text-secondary">
+              {status}
+            </span>
+            <span className="line-clamp-1">{challenge.recommendationReason}</span>
+          </span>
+        </span>
+        <span className="col-start-2 flex items-center justify-end sm:col-start-auto">
+          <span className="mr-3 text-[13px] text-text-muted">~{challenge.durationMinutes} min</span>
+          <span className="rounded-[22px] bg-text-primary px-4 py-2 text-[13px] font-[700] text-text-inverse">
+            {busy ? "Building…" : challenge.status === "assigned" ? "Start →" : "Open →"}
+          </span>
+        </span>
+      </button>
+    </div>
+  );
+}
+
+type GradeResult = {
+  question_id: string;
+  score: number;
+  marks: number;
+  feedback: string;
+};
+
+async function apiJson<T>(response: Response): Promise<T> {
+  const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
+  if (!response.ok) throw new Error(payload.error || "Request failed.");
+  return payload;
+}
+
+function ChallengeDetail({
+  challenge,
+  onBack,
+  onChange,
+}: {
+  challenge: StudentChallengeDetail;
+  onBack: () => void;
+  onChange: (challenge: StudentChallengeDetail) => void;
+}) {
+  const router = useRouter();
+  const [savingStep, setSavingStep] = useState<"lesson" | "examples" | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [results, setResults] = useState<GradeResult[]>([]);
+  const [score, setScore] = useState<{ earned: number; total: number; passed: boolean } | null>(null);
+  const content = challenge.content;
+
+  if (!content) return null;
+
+  const markStep = async (step: "lesson" | "examples") => {
+    setSavingStep(step);
+    setError("");
+    try {
+      const payload = await apiJson<{ challenge: StudentChallengeDetail }>(
+        await fetch(`/api/student/challenges/${challenge.id}/progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ step }),
+        }),
+      );
+      onChange(payload.challenge);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save progress.");
+    } finally {
+      setSavingStep(null);
+    }
+  };
+
+  const submit = async () => {
+    setSubmitting(true);
+    setError("");
+    try {
+      const payload = await apiJson<{
+        challenge: StudentChallengeDetail;
+        results: GradeResult[];
+        totalScore: number;
+        totalMarks: number;
+        passed: boolean;
+      }>(
+        await fetch(`/api/student/challenges/${challenge.id}/submit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            answers: content.examQuestions.map((question) => ({
+              questionId: question.id,
+              answerText: answers[question.id]?.trim() || "",
+            })),
+          }),
+        }),
+      );
+      setResults(payload.results);
+      setScore({ earned: payload.totalScore, total: payload.totalMarks, passed: payload.passed });
+      onChange(payload.challenge);
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not grade the challenge.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const readyForExam = challenge.lessonRead && challenge.examplesReviewed;
+  const allAnswered = content.examQuestions.every((question) => answers[question.id]?.trim());
 
   return (
-    <main className="min-h-screen bg-bg-primary text-text-primary">
-      <div className="mx-auto w-full max-w-6xl px-4 py-8 pb-20 sm:px-8">
-        <section className="rounded-xl border border-border bg-bg-secondary p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="font-display text-lg font-semibold">Today&apos;s minimum</h1>
-              <p className="mt-1 text-sm text-text-secondary">
-                {dashboard.todayCompleted
-                  ? "Today’s practice is complete. Keep going if you want another round."
-                  : "Pass one practice session today to keep your consistency streak going."}
-              </p>
+    <main className="min-h-screen w-full bg-bg-primary text-text-primary">
+      <div className="mx-auto max-w-[1160px] px-4 py-8 pb-20 sm:px-8">
+        <button type="button" onClick={onBack} className="mb-5 text-sm text-text-muted hover:text-text-primary">
+          ← Back to challenges
+        </button>
+        <p className="text-sm font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+          Challenge · {challenge.subjectName}
+        </p>
+        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">{challenge.title}</h1>
+        <p className="mt-2 text-sm text-text-muted">{challenge.recommendationReason}</p>
+
+        <section className="mt-6 grid gap-3 sm:grid-cols-3">
+          {[
+            ["1", "Learn", challenge.lessonRead],
+            ["2", "Study solved questions", challenge.examplesReviewed],
+            ["3", "Pass the exam", challenge.status === "completed"],
+          ].map(([number, label, done]) => (
+            <div key={String(number)} className="rounded-[15px] border border-border bg-card p-4">
+              <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-bold ${done ? "bg-success/15 text-success" : "bg-bg-secondary"}`}>
+                {done ? "✓" : number}
+              </span>
+              <p className="mt-3 text-sm font-semibold">{label}</p>
             </div>
-            <div className="w-full sm:w-52">
-              <p className="text-right text-sm text-text-secondary">{dashboard.todayCompleted ? "1 / 1" : "0 / 1"}</p>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-bg-tertiary" aria-hidden="true">
-                <div className="h-full rounded-full bg-primary" style={{ width: dashboard.todayCompleted ? "100%" : "0%" }} />
+          ))}
+        </section>
+
+        <section className="mt-4 rounded-[18px] border border-border bg-card p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Step 1 · Read</p>
+          <h2 className="mt-2 text-xl font-semibold">{content.lesson.title}</h2>
+          {content.lesson.content.map((paragraph) => (
+            <p key={paragraph} className="mt-3 max-w-prose text-sm leading-7 text-text-secondary">{paragraph}</p>
+          ))}
+          <p className="mt-3 max-w-prose text-sm leading-7 text-text-secondary"><strong>Focus:</strong> {content.lesson.focus}</p>
+          {content.lesson.sources?.length ? (
+            <div className="mt-4 rounded-xl border border-border bg-bg-secondary/50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Grounded in</p>
+              <ul className="mt-2 space-y-2 text-sm text-text-secondary">
+                {content.lesson.sources.map((source, index) => (
+                  <li key={`${source.source}-${index}`}>
+                    <strong className="text-text-primary">{source.title}</strong>
+                    <span className="text-text-muted"> · {source.source}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            disabled={challenge.lessonRead || savingStep !== null}
+            onClick={() => void markStep("lesson")}
+            className="mt-4 rounded-full bg-text-primary px-4 py-2 text-sm font-semibold text-text-inverse disabled:opacity-60"
+          >
+            {challenge.lessonRead ? "Lesson read ✓" : savingStep === "lesson" ? "Saving…" : "I’ve read this"}
+          </button>
+        </section>
+
+        <section className="mt-4 rounded-[18px] border border-border bg-card p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Step 2 · Solved questions</p>
+          <h2 className="mt-2 text-xl font-semibold">Study these two examples</h2>
+          <div className="mt-4 space-y-3">
+            {content.solvedExamples.map((example, index) => (
+              <article key={`${example.question}-${index}`} className="rounded-xl border border-border bg-bg-secondary/50 p-4">
+                <p className="text-xs text-text-muted">{example.year} · {example.marks} marks</p>
+                <p className="mt-2 text-sm font-semibold leading-6">{example.question}</p>
+                <p className="mt-3 border-t border-border pt-3 text-sm leading-6 text-text-secondary"><strong>Solution:</strong> {example.solution}</p>
+              </article>
+            ))}
+          </div>
+          <button
+            type="button"
+            disabled={!challenge.lessonRead || challenge.examplesReviewed || savingStep !== null}
+            onClick={() => void markStep("examples")}
+            className="mt-4 rounded-full bg-text-primary px-4 py-2 text-sm font-semibold text-text-inverse disabled:opacity-60"
+          >
+            {challenge.examplesReviewed ? "Examples reviewed ✓" : savingStep === "examples" ? "Saving…" : "I’ve studied both"}
+          </button>
+        </section>
+
+        <section className="mt-4 rounded-[18px] border border-blue-500/40 bg-blue-500/5 p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Step 3 · Prove it</p>
+          <h2 className="mt-2 text-xl font-semibold">Take the challenge exam</h2>
+          <p className="mt-2 text-sm text-text-muted">Two unseen questions · {challenge.durationMinutes} minutes · {Math.round((challenge.passMarks / Math.max(1, challenge.totalMarks)) * 100)}% required</p>
+          {!readyForExam ? <p className="mt-4 text-sm text-text-muted">Complete Steps 1 and 2 to unlock the exam.</p> : null}
+          {readyForExam ? (
+            <div className="mt-5 space-y-5">
+              {content.examQuestions.map((question, index) => (
+                <label key={question.id} className="block">
+                  <span className="text-sm font-semibold">{index + 1}. {question.question} <span className="text-text-muted">({question.marks} marks)</span></span>
+                  <textarea
+                    rows={5}
+                    value={answers[question.id] ?? ""}
+                    disabled={challenge.status === "completed" || submitting}
+                    onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))}
+                    className="mt-2 w-full rounded-xl border border-border bg-bg-primary p-3 text-sm outline-none focus:border-blue-500"
+                    placeholder="Write your answer without looking at the solved examples…"
+                  />
+                </label>
+              ))}
+              {challenge.status !== "completed" ? (
+                <button
+                  type="button"
+                  disabled={!allAnswered || submitting}
+                  onClick={() => void submit()}
+                  className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {submitting ? "Grading…" : challenge.attemptCount ? "Submit another attempt" : "Submit for grading"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {score ? (
+            <div className={`mt-5 rounded-xl border p-4 ${score.passed ? "border-success/40 bg-success/10" : "border-warning/40 bg-warning/10"}`}>
+              <p className="font-semibold">{score.earned} / {score.total} · {score.passed ? "Challenge completed ✓" : "Not passed yet"}</p>
+              <div className="mt-3 space-y-2 text-sm text-text-secondary">
+                {results.map((result) => <p key={result.question_id}>{result.feedback}</p>)}
               </div>
+            </div>
+          ) : challenge.status === "completed" ? (
+            <p className="mt-5 rounded-xl border border-success/40 bg-success/10 p-4 font-semibold text-success">Challenge completed ✓</p>
+          ) : null}
+        </section>
+        {content.warning ? <p className="mt-4 text-xs text-warning">{content.warning}</p> : null}
+        {error ? <p className="mt-4 rounded-xl border border-destructive/40 p-3 text-sm text-destructive">{error}</p> : null}
+      </div>
+    </main>
+  );
+}
+
+export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentChallengeDashboard }) {
+  const [selected, setSelected] = useState<StudentChallengeDetail | null>(null);
+  const [openingId, setOpeningId] = useState("");
+  const [openError, setOpenError] = useState("");
+  const leaderboard = dashboard.leaderboard;
+  const streakCopy = dashboard.todayCompleted
+    ? "is complete for today."
+    : dashboard.currentStreak > 0
+      ? `keeps your ${dashboard.currentStreak}-day streak alive.`
+      : "starts your consistency streak.";
+  const platformBest = leaderboard?.platformBestStreak ?? 0;
+  const comparisonCopy = !leaderboard
+    ? "Leaderboard is being prepared"
+    : platformBest === 0
+      ? "Pass the first challenge to set the pace"
+      : dashboard.currentStreak > 0 && leaderboard.daysFromBest === 0
+        ? "You’ve matched the all-time best streak"
+        : `${leaderboard.daysFromBest} ${leaderboard.daysFromBest === 1 ? "day" : "days"} from the all-time best streak`;
+
+  const openChallenge = async (challenge: StudentChallengeSummary) => {
+    setOpeningId(challenge.id);
+    setOpenError("");
+    try {
+      const payload = await apiJson<{ challenge: StudentChallengeDetail }>(
+        await fetch(`/api/student/challenges/${challenge.id}/start`, { method: "POST" }),
+      );
+      setSelected(payload.challenge);
+    } catch (cause) {
+      setOpenError(cause instanceof Error ? cause.message : "Could not open this challenge.");
+    } finally {
+      setOpeningId("");
+    }
+  };
+
+  if (selected) {
+    return <ChallengeDetail challenge={selected} onBack={() => setSelected(null)} onChange={setSelected} />;
+  }
+
+  return (
+    <main className="min-h-screen w-full bg-bg-primary text-text-primary">
+      <div className="mx-auto max-w-[1160px] px-4 py-8 pb-20 sm:px-8">
+        <section className="mb-[30px] flex flex-col items-start justify-between gap-5 rounded-[15px] border border-border bg-bg-secondary p-[17px_20px] sm:flex-row sm:items-center">
+          <div>
+            <h1 className="mb-1 text-[15px] font-[750] text-text-primary">Today&apos;s minimum</h1>
+            <p className="text-[13px] text-text-secondary">
+              <strong className="font-semibold text-text-primary">1 challenge</strong> {streakCopy}
+            </p>
+          </div>
+          <div className="w-full sm:w-[190px]">
+            <span className="mb-[5px] block text-right text-[12px] text-text-muted">
+              {dashboard.todayCompleted ? "1 / 1" : "0 / 1"}
+            </span>
+            <div className="h-[7px] overflow-hidden rounded-full bg-bg-tertiary" aria-hidden="true">
+              <span
+                className="block h-full rounded-full bg-blue-500 transition-[width] duration-500 motion-reduce:transition-none"
+                style={{ width: dashboard.todayCompleted ? "100%" : "0%" }}
+              />
             </div>
           </div>
         </section>
 
-        <section className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(18rem,.9fr)]">
-          <article className="rounded-xl border border-border bg-card p-6">
-            <p className="font-display text-lg font-semibold">Exam readiness</p>
-            <p className="mt-1 text-sm text-text-secondary">Across your enrolled subjects</p>
-            <p className="mt-6 text-5xl font-semibold tracking-tight">{percentage(dashboard.readiness)}</p>
-            <div className="mt-4 h-3 overflow-hidden rounded-full bg-bg-secondary" aria-hidden="true">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, dashboard.readiness ?? 0))}%` }} />
+        <section className="mb-6 grid grid-cols-1 gap-[18px] lg:grid-cols-[1.55fr_.9fr]">
+          <article className="rounded-[18px] border border-border bg-card p-[25px_27px]">
+            <h2 className="mb-[5px] text-[18px] font-[730] text-text-primary">Exam readiness</h2>
+            <p className="text-[14px] text-text-muted">Across all your subjects</p>
+            <p className="mt-5 text-[40px] font-[760] tracking-[-1.5px] text-text-primary">
+              {percent(dashboard.readiness)}
+            </p>
+            <div className="my-[9px_12px] h-[12px] overflow-hidden rounded-full bg-bg-secondary" aria-hidden="true">
+              <span
+                className="block h-full rounded-full bg-blue-500"
+                style={{ width: `${Math.max(0, Math.min(100, dashboard.readiness ?? 0))}%` }}
+              />
             </div>
-            <div className="mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 text-sm text-text-secondary">
-              <span>{dashboard.totalTopics ? `${dashboard.practicedTopics} of ${dashboard.totalTopics} topics practised` : "Start a practice session to build your readiness."}</span>
-              <span>{signedPoints(dashboard.readinessChange)}</span>
+            <div className="flex flex-wrap justify-between gap-2 text-[13px] text-text-muted">
+              <span>{dashboard.practicedTopics} of {dashboard.totalTopics} topics practised</span>
+              <span className="font-medium text-blue-600 dark:text-blue-400">
+                {scoreChange(dashboard.practiceScoreChange)}
+              </span>
+            </div>
+            <div className="mt-[18px] border-t border-border pt-[15px]">
+              {dashboard.subjects.length ? (
+                dashboard.subjects.slice(0, 5).map((subject) => (
+                  <div key={subject.slug} className="my-[9px] grid grid-cols-[minmax(100px,145px)_1fr_40px] items-center gap-[10px] text-[12px] text-text-secondary">
+                    <span className="truncate">{subject.name}</span>
+                    <div className="h-[6px] overflow-hidden rounded-full bg-bg-secondary" aria-hidden="true">
+                      <span
+                        className="block h-full rounded-full bg-blue-400 dark:bg-blue-500"
+                        style={{ width: `${Math.max(0, Math.min(100, subject.readiness ?? 0))}%` }}
+                      />
+                    </div>
+                    <strong className="text-right text-[12px] font-bold text-text-primary">
+                      {percent(subject.readiness)}
+                    </strong>
+                  </div>
+                ))
+              ) : (
+                <p className="text-[13px] text-text-muted">Join a course to calculate readiness.</p>
+              )}
             </div>
           </article>
 
-          <article className="rounded-xl border border-border bg-card p-6">
-            <p className="font-display text-lg font-semibold">Consistency streak</p>
-            <p className="mt-5 text-5xl font-semibold tracking-tight">{dashboard.currentStreak} {dashboard.currentStreak === 1 ? "day" : "days"}</p>
-            <p className="mt-1 text-sm text-text-secondary">Practice days in a row</p>
-            {dashboard.leaderboard ? (
-              <div className="mt-6 space-y-3 border-t border-border pt-4 text-sm text-text-secondary">
-                <div className="flex items-center justify-between gap-4">
-                  <span>Your streak rank</span>
-                  <strong className="text-text-primary">{dashboard.leaderboard.currentStreakRank ? `#${dashboard.leaderboard.currentStreakRank}` : "—"}</strong>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Your best streak</span>
-                  <strong className="text-text-primary">{dashboard.leaderboard.bestStreak} days</strong>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Platform best</span>
-                  <strong className="text-text-primary">{dashboard.leaderboard.platformBestStreak} days · #1</strong>
-                </div>
-                <p className="pt-1">{dashboard.leaderboard.daysFromBest === 0 ? "You are at the current top streak." : `${dashboard.leaderboard.daysFromBest} days from the current #1 streak.`}</p>
-              </div>
-            ) : (
-              <div className="mt-6 border-t border-border pt-4 text-sm text-text-secondary">
-                Ranking will appear after daily practice tracking is enabled.
-              </div>
-            )}
-          </article>
-        </section>
-
-        <section className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="CHALLENGES / DAY" value={dashboard.practicePerDay.toFixed(1)} detail={dashboard.leaderboard?.practicePerDayRank ? `Your rank · #${dashboard.leaderboard.practicePerDayRank}` : "Your 7-day average"} />
-          <StatCard label="TOP CHALLENGES / DAY" value={dashboard.leaderboard ? dashboard.leaderboard.topPracticePerDay.toFixed(1) : "—"} detail="Current #1 · 7-day average" />
-          <StatCard label="PASSED" value={String(dashboard.passedThisMonth)} detail={`This month · ${dashboard.passedThisWeek} this week`} />
-          <StatCard label="PASS RATE" value={percentage(dashboard.passRateLast30Days)} detail="Graded practice in the last 30 days" />
-        </section>
-
-        <section className="mt-9">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <article className="flex flex-col justify-between rounded-[18px] border border-border bg-gradient-to-br from-bg-primary via-bg-primary to-blue-500/5 p-[25px_27px] dark:to-blue-950/20">
             <div>
-              <h2 className="font-display text-2xl font-semibold tracking-tight">Your challenges</h2>
-              <p className="mt-1 text-sm text-text-secondary">Each challenge opens a real topic-focused practice session from your course material.</p>
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="mb-[5px] text-[18px] font-[730] text-text-primary">Consistency streak</h2>
+                  <p className="mt-3 text-[39px] font-[760] tracking-[-1.5px] text-text-primary">
+                    {dashboard.currentStreak} {dashboard.currentStreak === 1 ? "day" : "days"}
+                  </p>
+                  <p className="text-[14px] text-text-muted">You · current streak</p>
+                </div>
+                <Flame className="h-8 w-8 text-text-secondary" aria-hidden="true" />
+              </div>
+              <div className="mt-[14px] flex items-center justify-between border-t border-border pt-[10px] text-[13px] text-text-muted">
+                <span>Your rank</span>
+                <strong className="font-bold text-text-primary">
+                  {leaderboard?.currentStreakRank ? `#${leaderboard.currentStreakRank}` : "—"}
+                </strong>
+              </div>
+              <div className="mt-2 flex items-center justify-between border-t border-border pt-[10px] text-[13px] text-text-muted">
+                <span>Platform all-time best</span>
+                <strong className="font-bold text-text-primary">
+                  {leaderboard
+                    ? `${platformBest} ${platformBest === 1 ? "day" : "days"} · #1`
+                    : "—"}
+                </strong>
+              </div>
             </div>
-            {hasSubjects ? (
-              <Link href="/app/exams" className="inline-flex min-h-10 items-center text-sm font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary">
-                View all practice
-              </Link>
-            ) : null}
+            <div className="mt-[17px] inline-flex w-fit items-center gap-[7px] rounded-[20px] border border-blue-500/30 bg-card p-[7px_11px] text-[12px] font-bold text-blue-600 dark:text-blue-400">
+              {comparisonCopy}
+            </div>
+          </article>
+        </section>
+
+        <section className="mb-7 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <article className="rounded-[15px] border border-border bg-card p-[18px_20px]">
+            <p className="mb-[7px] text-[13px] font-medium tracking-wide text-text-muted">YOUR CHALLENGES / DAY</p>
+            <p className="text-[24px] font-[750] text-text-primary">{dashboard.practicePerDay.toFixed(1)}</p>
+            <p className="mt-1 text-[12px] text-text-muted">Your rank · {leaderboard?.practicePerDayRank ? `#${leaderboard.practicePerDayRank}` : "—"}</p>
+          </article>
+          <article className="rounded-[15px] border border-blue-500/30 bg-blue-500/5 p-[18px_20px] dark:bg-blue-950/20">
+            <p className="mb-[7px] text-[13px] font-medium tracking-wide text-blue-600 dark:text-blue-400">TOP CHALLENGES / DAY</p>
+            <p className="text-[24px] font-[750] text-text-primary">{leaderboard ? leaderboard.topPracticePerDay.toFixed(1) : "—"}</p>
+            <p className="mt-1 text-[12px] text-text-muted">Current #1 · 7-day average</p>
+          </article>
+          <article className="rounded-[15px] border border-border bg-card p-[18px_20px]">
+            <p className="mb-[7px] text-[13px] font-medium tracking-wide text-text-muted">CHALLENGES PASSED</p>
+            <p className="text-[24px] font-[750] text-text-primary">{dashboard.passedThisMonth}</p>
+            <p className="mt-1 text-[12px] text-text-muted">This month · {dashboard.passedThisWeek} this week</p>
+          </article>
+          <article className="rounded-[15px] border border-border bg-card p-[18px_20px]">
+            <p className="mb-[7px] text-[13px] font-medium tracking-wide text-text-muted">CHALLENGE PASS RATE</p>
+            <p className="text-[24px] font-[750] text-text-primary">{percent(dashboard.passRateLast30Days)}</p>
+            <p className="mt-1 text-[12px] text-text-muted">Last 30 days</p>
+          </article>
+        </section>
+
+        <section>
+          <div className="mb-[14px] mt-[30px] flex items-end justify-between">
+            <div>
+              <h2 className="m-0 text-[22px] font-[750] tracking-[-.5px] text-text-primary">Challenges</h2>
+              <p className="mb-0 mt-1.5 text-[13px] text-text-muted">Complete one to keep your streak. Challenges follow your real course progress.</p>
+            </div>
           </div>
 
-          {hasSubjects ? (
-            <div className="mt-4 space-y-3">
-              {dashboard.subjects.map((subject) => <SubjectCard key={subject.slug} subject={subject} />)}
-            </div>
+          {dashboard.challenges.length ? (
+            dashboard.challenges.map((challenge) => (
+              <ChallengeCard
+                key={challenge.id}
+                challenge={challenge}
+                subject={dashboard.subjects.find((subject) => subject.slug === challenge.subjectSlug)}
+                busy={openingId === challenge.id}
+                onOpen={() => void openChallenge(challenge)}
+              />
+            ))
           ) : (
-            <div className="mt-4 rounded-xl border border-border bg-card p-8 text-center">
-              <h3 className="font-display text-lg font-semibold">No enrolled subjects yet</h3>
-              <p className="mx-auto mt-2 max-w-prose text-sm text-text-secondary">Join a course first. Then your subject topics, practice results, and readiness will appear here.</p>
-              <Link href="/app/courses" className="mt-5 inline-flex min-h-10 items-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary">
+            <div className="rounded-[14px] border border-dashed border-border bg-bg-secondary/40 p-6 text-center">
+              <p className="text-[15px] font-semibold text-text-primary">No challenges yet</p>
+              <p className="mt-1 text-[13px] text-text-muted">Join a course and its real topics will appear here.</p>
+              <Link
+                href="/app/courses"
+                className="mt-4 inline-flex min-h-10 items-center rounded-[22px] bg-text-primary px-4 text-[13px] font-[700] text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+              >
                 Browse courses
               </Link>
             </div>
           )}
+          {openError ? <p className="mt-4 rounded-xl border border-destructive/40 p-3 text-sm text-destructive">{openError}</p> : null}
         </section>
       </div>
     </main>

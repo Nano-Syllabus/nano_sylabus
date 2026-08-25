@@ -10,13 +10,6 @@ import { titleCase } from "@/lib/utils";
 
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
 const button = `inline-flex min-h-10 items-center justify-center rounded-[10px] border px-4 text-sm font-medium transition ${focusRing}`;
-const STATIC_SUBJECT_INSIGHTS = [
-  "8 syllabus topics",
-  "3 weak topics",
-  "2 topics not yet tested",
-  "Previous exam score: 54%",
-];
-
 type SubjectLevel = "green" | "yellow" | "red" | "grey";
 
 function slugify(value: string) {
@@ -28,16 +21,33 @@ function slugify(value: string) {
 }
 
 function subjectLevel(subject: SubjectExplorerSummary): SubjectLevel {
-  if (subject.questionCount >= 10) return "green";
+  if (subject.weakTopicCount > 0) return "red";
+  if (subject.latestPracticeScore !== null && subject.latestPracticeScore >= 70) return "green";
+  if (subject.latestPracticeScore !== null) return "yellow";
   if (subject.questionCount > 0 || subject.sessionCount > 0) return "yellow";
   return "grey";
+}
+
+function subjectInsights(subject: SubjectExplorerSummary) {
+  return [
+    subject.syllabusTopicCount === null
+      ? "Syllabus topics unavailable"
+      : `${subject.syllabusTopicCount} syllabus ${subject.syllabusTopicCount === 1 ? "topic" : "topics"}`,
+    `${subject.weakTopicCount} weak ${subject.weakTopicCount === 1 ? "topic" : "topics"}`,
+    subject.untestedTopicCount === null
+      ? "Untested topics unavailable"
+      : `${subject.untestedTopicCount} ${subject.untestedTopicCount === 1 ? "topic" : "topics"} not yet tested`,
+    subject.latestPracticeScore === null
+      ? "No graded practice yet"
+      : `Latest practice score: ${Math.round(subject.latestPracticeScore)}%`,
+  ];
 }
 
 function formatLastActivity(value: string | null) {
   if (!value) return "No study activity yet";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Recent activity";
-  return `Last asked ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  return `Last studied ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
 
 function Dot({ level, label }: { level: SubjectLevel; label: string }) {
@@ -97,7 +107,7 @@ function SubjectCard({ subject }: { subject: SubjectExplorerSummary }) {
             NanoSyllabus sees
           </p>
           <ul className="mt-2 space-y-1 text-xs leading-5 text-text-secondary">
-            {STATIC_SUBJECT_INSIGHTS.map((insight) => (
+            {subjectInsights(subject).map((insight) => (
               <li key={insight}>{insight}</li>
             ))}
           </ul>

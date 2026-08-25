@@ -234,6 +234,9 @@ export type StudentCourseSubject = {
   courseId: string;
   courseName: string;
   courseSlug: string;
+  courseCategory: string;
+  courseAuthority: string;
+  courseLevel: string;
   subjectSlug: string;
   subjectName: string;
   folderPath: string;
@@ -279,7 +282,7 @@ export const listStudentCourseSubjects = cache(async function listStudentCourseS
   const [courseResult, subjectResult] = await Promise.all([
     admin
       .from("teacher_courses")
-      .select("id,name,slug,status,visibility")
+      .select("id,name,slug,category,authority,level,status,visibility")
       .in("id", courseIds)
       .is("archived_at", null),
     admin
@@ -295,7 +298,13 @@ export const listStudentCourseSubjects = cache(async function listStudentCourseS
       .filter((row) => isStudentVisibleCourse(row as Record<string, unknown>))
       .map((row) => [
         String(row.id || ""),
-        { name: String(row.name || ""), slug: String(row.slug || "") },
+        {
+          name: String(row.name || ""),
+          slug: String(row.slug || ""),
+          category: String(row.category || ""),
+          authority: String(row.authority || ""),
+          level: String(row.level || ""),
+        },
       ]),
   );
 
@@ -311,6 +320,9 @@ export const listStudentCourseSubjects = cache(async function listStudentCourseS
           courseId,
           courseName: course.name,
           courseSlug: course.slug,
+          courseCategory: course.category,
+          courseAuthority: course.authority,
+          courseLevel: course.level,
           subjectSlug: String(row.subject_slug || ""),
           subjectName: String(row.subject_name || ""),
           folderPath: String(row.folder_path || ""),

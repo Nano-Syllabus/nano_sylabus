@@ -144,13 +144,18 @@ export interface SubjectExplorerSummary {
   subject: string;
   board: string;
   grade: string;
-  category: "Science" | "Humanities" | "Management" | "Technical" | "General";
+  /** Authoritative course category, or a neutral subject/private label. */
+  category: string;
   /** Creator-owned subjects are shown after enrolled course subjects. */
   private?: boolean;
   inProfile: boolean;
   sessionCount: number;
   questionCount: number;
   lastActivityAt: string | null;
+  syllabusTopicCount: number | null;
+  weakTopicCount: number;
+  untestedTopicCount: number | null;
+  latestPracticeScore: number | null;
 }
 
 export interface SubjectExplorerSessionSummary extends ChatSessionSummary {
