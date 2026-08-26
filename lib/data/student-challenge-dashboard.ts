@@ -2,6 +2,7 @@ import { listTopicMastery, type TopicMastery } from "@/lib/data/student-mastery"
 import {
   ensureDailyChallenges,
   isMissingChallengeTable,
+  listCompletedStudentChallenges,
   type ChallengeRecommendation,
   type StudentChallengeSummary,
 } from "@/lib/data/student-challenges";
@@ -39,6 +40,10 @@ export type ChallengeLeaderboard = {
 export type StudentChallengeDashboard = {
   subjects: ChallengeSubject[];
   challenges: StudentChallengeSummary[];
+  completedChallenges: StudentChallengeSummary[];
+  completedChallengePage: number;
+  completedChallengeTotal: number;
+  completedChallengeTotalPages: number;
   readiness: number | null;
   totalTopics: number;
   practicedTopics: number;
@@ -316,7 +321,10 @@ function localSubjectRow(
   };
 }
 
-export async function getStudentChallengeDashboard(userId: string): Promise<StudentChallengeDashboard> {
+export async function getStudentChallengeDashboard(
+  userId: string,
+  completedChallengePage = 1,
+): Promise<StudentChallengeDashboard> {
   const [mastery, courseSubjects, privateSubjects, metrics] = await Promise.all([
     listTopicMastery(userId),
     listStudentCourseSubjects(userId),
@@ -395,7 +403,7 @@ export async function getStudentChallengeDashboard(userId: string): Promise<Stud
             nextTopic: next ? { key: next.topic_key, title: next.title } : null,
             topicDataAvailable: true,
           },
-          recommendations: rankedTopics.slice(0, 3).map(({ topic, mastery: topicMastery }) => ({
+          recommendations: rankedTopics.map(({ topic, mastery: topicMastery }) => ({
             courseId:
               courseSubject.accessKind === "owner-private" ? null : courseSubject.courseId,
             subjectSlug,
@@ -416,14 +424,22 @@ export async function getStudentChallengeDashboard(userId: string): Promise<Stud
     }),
   );
   const subjectRows = subjectResults.map((result) => result.row);
+  const recommendationDepth = Math.max(
+    0,
+    ...subjectResults.map((result) => result.recommendations.length),
+  );
   const challenges = await ensureDailyChallenges(
     userId,
     // Round-robin keeps one large subject from monopolising the daily queue.
-    [0, 1, 2].flatMap((position) =>
+    Array.from({ length: recommendationDepth }, (_, position) => position).flatMap((position) =>
       subjectResults
         .map((result) => result.recommendations[position])
         .filter((value): value is ChallengeRecommendation => Boolean(value)),
     ),
+  );
+  const completedHistory = await listCompletedStudentChallenges(
+    userId,
+    completedChallengePage,
   );
 
   const progress = metrics;
@@ -437,6 +453,10 @@ export async function getStudentChallengeDashboard(userId: string): Promise<Stud
   return {
     subjects: subjectRows,
     challenges,
+    completedChallenges: completedHistory.challenges,
+    completedChallengePage: completedHistory.page,
+    completedChallengeTotal: completedHistory.total,
+    completedChallengeTotalPages: completedHistory.totalPages,
     readiness: readinessComplete && totalTopics > 0 ? readinessPoints / totalTopics : null,
     totalTopics,
     practicedTopics: subjectRows.reduce((sum, subject) => sum + subject.practicedTopics, 0),

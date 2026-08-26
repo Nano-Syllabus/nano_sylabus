@@ -5,9 +5,18 @@ import { getStudentChallengeDashboard } from "@/lib/data/student-challenge-dashb
 
 export const dynamic = "force-dynamic";
 
-export default async function TodayPage() {
+export default async function TodayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ completedPage?: string }>;
+}) {
   const { user } = await requireOnboardedUser();
-  const dashboard = await getStudentChallengeDashboard(user.id);
+  const params = await searchParams;
+  const requestedPage = Number.parseInt(params.completedPage || "1", 10);
+  const dashboard = await getStudentChallengeDashboard(
+    user.id,
+    Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1,
+  );
 
   return (
     <>

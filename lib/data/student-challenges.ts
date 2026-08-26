@@ -187,7 +187,27 @@ async function listDailyRows(userId: string, date: string) {
   return (data ?? []) as ChallengeRow[];
 }
 
-/** Assigns one stable daily queue. Recommendations do not reshuffle mid-day. */
+function recommendationKey(recommendation: ChallengeRecommendation) {
+  return [
+    recommendation.courseId ?? "owner-private",
+    recommendation.subjectSlug.trim().toLowerCase(),
+    recommendation.topicKey.trim().toLowerCase(),
+  ].join(":");
+}
+
+function rowRecommendationKey(row: ChallengeRow) {
+  return [
+    row.course_id ? String(row.course_id) : "owner-private",
+    String(row.subject_slug ?? "").trim().toLowerCase(),
+    String(row.topic_key ?? "").trim().toLowerCase(),
+  ].join(":");
+}
+
+/**
+ * Keeps three real, unfinished challenges in today's queue. Completed rows stay
+ * immutable for history/metrics, while the next unused recommendation is
+ * inserted as a fresh assignment and sorts above the older active rows.
+ */
 export async function ensureDailyChallenges(
   userId: string,
   recommendations: ChallengeRecommendation[],
@@ -195,10 +215,30 @@ export async function ensureDailyChallenges(
   const date = nepaliChallengeDate();
   const existing = await listDailyRows(userId, date);
   if (existing === null) return [];
-  if (existing.length || !recommendations.length) return existing.map(toSummary);
+
+  const active = existing.filter((row) => row.status !== "completed");
+  const assignedKeys = new Set(existing.map(rowRecommendationKey));
+  const available = recommendations.filter(
+    (recommendation) => !assignedKeys.has(recommendationKey(recommendation)),
+  );
+  const openSlots = Math.max(0, 3 - active.length);
+  const selected = available.slice(0, openSlots);
+
+  if (!selected.length) {
+    return active
+      .sort((left, right) => {
+        const created = String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""));
+        return created || number(left.position) - number(right.position);
+      })
+      .map(toSummary);
+  }
 
   const admin = createSupabaseAdminClient();
-  const rows = recommendations.slice(0, 3).map((recommendation, position) => {
+  const nextPosition = existing.reduce(
+    (maximum, row) => Math.max(maximum, number(row.position) + 1),
+    0,
+  );
+  const rows = selected.map((recommendation, offset) => {
     const topicTitle = studentFacingTopicTitle(
       recommendation.topicTitle,
       recommendation.subjectName,
@@ -207,7 +247,7 @@ export async function ensureDailyChallenges(
       user_id: userId,
       course_id: recommendation.courseId,
       challenge_date: date,
-      position,
+      position: nextPosition + offset,
       subject_slug: recommendation.subjectSlug,
       subject_name: recommendation.subjectName,
       namespace: recommendation.namespace,
@@ -219,14 +259,60 @@ export async function ensureDailyChallenges(
       duration_minutes: 20,
     };
   });
-  const { data, error } = await admin.from("student_challenges").insert(rows).select("*");
+  const { error } = await admin.from("student_challenges").insert(rows);
   if (error?.code === "23505") {
-    return ((await listDailyRows(userId, date)) ?? []).map(toSummary);
+    const concurrent = (await listDailyRows(userId, date)) ?? [];
+    return concurrent
+      .filter((row) => row.status !== "completed")
+      .sort((left, right) => {
+        const created = String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""));
+        return created || number(left.position) - number(right.position);
+      })
+      .map(toSummary);
   }
   if (error) throw error;
-  return ((data ?? []) as ChallengeRow[])
-    .sort((left, right) => number(left.position) - number(right.position))
+
+  return (((await listDailyRows(userId, date)) ?? []) as ChallengeRow[])
+    .filter((row) => row.status !== "completed")
+    .sort((left, right) => {
+      const created = String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""));
+      return created || number(left.position) - number(right.position);
+    })
     .map(toSummary);
+}
+
+export async function listCompletedStudentChallenges(
+  userId: string,
+  page: number,
+  pageSize = 5,
+) {
+  const admin = createSupabaseAdminClient();
+  const requestedPage = Math.max(1, Math.floor(page));
+  const from = (requestedPage - 1) * pageSize;
+  const { data, error, count } = await admin
+    .from("student_challenges")
+    .select("*", { count: "exact" })
+    .eq("user_id", userId)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .range(from, from + pageSize - 1);
+  if (isMissingChallengeTable(error)) {
+    return { challenges: [], page: 1, total: 0, totalPages: 0 };
+  }
+  if (error) throw error;
+
+  const total = count ?? 0;
+  const totalPages = total ? Math.ceil(total / pageSize) : 0;
+  if (totalPages > 0 && requestedPage > totalPages) {
+    return listCompletedStudentChallenges(userId, totalPages, pageSize);
+  }
+  return {
+    challenges: ((data ?? []) as ChallengeRow[]).map(toSummary),
+    page: totalPages ? Math.min(requestedPage, totalPages) : 1,
+    total,
+    totalPages,
+  };
 }
 
 export async function getStudentChallenge(userId: string, challengeId: string) {

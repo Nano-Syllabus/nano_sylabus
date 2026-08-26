@@ -93,6 +93,42 @@ function ChallengeCard({
   );
 }
 
+function CompletedChallengeCard({
+  challenge,
+  busy,
+  onOpen,
+}: {
+  challenge: StudentChallengeSummary;
+  busy: boolean;
+  onOpen: () => void;
+}) {
+  const score = challenge.lastTotalMarks && challenge.lastScore !== null
+    ? `${challenge.lastScore} / ${challenge.lastTotalMarks}`
+    : "Passed";
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={busy}
+      className="grid w-full grid-cols-[44px_1fr_auto] items-center gap-3 rounded-[14px] border border-border bg-card p-4 text-left transition-colors hover:border-blue-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
+    >
+      <span className="grid h-11 w-11 place-items-center rounded-xl bg-success/10 text-sm font-extrabold text-success">
+        ✓
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold text-text-primary">{challenge.title}</span>
+        <span className="mt-1 block truncate text-xs text-text-muted">
+          {challenge.subjectName} · {score} · {challenge.date}
+        </span>
+      </span>
+      <span className="text-xs font-semibold text-text-secondary">
+        {busy ? "Opening…" : "Review →"}
+      </span>
+    </button>
+  );
+}
+
 type GradeResult = {
   question_id: string;
   score: number;
@@ -550,8 +586,8 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
         <section>
           <div className="mb-[14px] mt-[30px] flex items-end justify-between">
             <div>
-              <h2 className="m-0 text-[22px] font-[750] tracking-[-.5px] text-text-primary">Challenges</h2>
-              <p className="mb-0 mt-1.5 text-[13px] text-text-muted">Complete one to keep your streak. Challenges follow your real course progress.</p>
+              <h2 className="m-0 text-[22px] font-[750] tracking-[-.5px] text-text-primary">Today&apos;s challenges</h2>
+              <p className="mb-0 mt-1.5 text-[13px] text-text-muted">Passing one brings the next eligible course topic to the top.</p>
             </div>
           </div>
 
@@ -583,6 +619,56 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
           )}
           {openError ? <p className="mt-4 rounded-xl border border-destructive/40 p-3 text-sm text-destructive">{openError}</p> : null}
         </section>
+
+        {dashboard.completedChallengeTotal > 0 ? (
+          <section id="completed-challenges" className="mt-10 border-t border-border pt-8">
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="text-[20px] font-[750] tracking-[-.4px] text-text-primary">Completed challenges</h2>
+                <p className="mt-1 text-[13px] text-text-muted">
+                  {dashboard.completedChallengeTotal} passed challenge{dashboard.completedChallengeTotal === 1 ? "" : "s"}, newest first.
+                </p>
+              </div>
+              {dashboard.completedChallengeTotalPages > 1 ? (
+                <p className="text-xs text-text-muted">
+                  Page {dashboard.completedChallengePage} of {dashboard.completedChallengeTotalPages}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-3">
+              {dashboard.completedChallenges.map((challenge) => (
+                <CompletedChallengeCard
+                  key={challenge.id}
+                  challenge={challenge}
+                  busy={openingId === challenge.id}
+                  onOpen={() => void openChallenge(challenge)}
+                />
+              ))}
+            </div>
+
+            {dashboard.completedChallengeTotalPages > 1 ? (
+              <nav className="mt-5 flex items-center justify-between" aria-label="Completed challenges pagination">
+                {dashboard.completedChallengePage > 1 ? (
+                  <Link
+                    href={`/app/today?completedPage=${dashboard.completedChallengePage - 1}#completed-challenges`}
+                    className="rounded-full border border-border px-4 py-2 text-sm font-semibold hover:border-blue-500/40"
+                  >
+                    ← Previous
+                  </Link>
+                ) : <span />}
+                {dashboard.completedChallengePage < dashboard.completedChallengeTotalPages ? (
+                  <Link
+                    href={`/app/today?completedPage=${dashboard.completedChallengePage + 1}#completed-challenges`}
+                    className="rounded-full border border-border px-4 py-2 text-sm font-semibold hover:border-blue-500/40"
+                  >
+                    Next →
+                  </Link>
+                ) : <span />}
+              </nav>
+            ) : null}
+          </section>
+        ) : null}
       </div>
     </main>
   );
