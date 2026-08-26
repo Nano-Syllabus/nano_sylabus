@@ -228,6 +228,7 @@ async function mapCourseRows(admin: SupabaseClient, rows: Record<string, unknown
 
 export type StudentCourseSubject = {
   courseId: string;
+  teacherId: string;
   courseName: string;
   courseSlug: string;
   courseCategory: string;
@@ -277,7 +278,7 @@ export const listStudentCourseSubjects = cache(async function listStudentCourseS
   const [courseResult, subjectResult] = await Promise.all([
     admin
       .from("teacher_courses")
-      .select("id,name,slug,category,authority,level,status,visibility")
+      .select("id,teacher_id,name,slug,category,authority,level,status,visibility")
       .in("id", courseIds)
       .is("archived_at", null),
     admin
@@ -295,6 +296,7 @@ export const listStudentCourseSubjects = cache(async function listStudentCourseS
         String(row.id || ""),
         {
           name: String(row.name || ""),
+          teacherId: String(row.teacher_id || ""),
           slug: String(row.slug || ""),
           category: String(row.category || ""),
           authority: String(row.authority || ""),
@@ -313,6 +315,7 @@ export const listStudentCourseSubjects = cache(async function listStudentCourseS
       return [
         {
           courseId,
+          teacherId: course.teacherId,
           courseName: course.name,
           courseSlug: course.slug,
           courseCategory: course.category,

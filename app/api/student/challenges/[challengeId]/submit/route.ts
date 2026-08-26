@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  challengeExamExpired,
   getStudentChallengeGradeContext,
   recordStudentChallengeGrade,
+  refreshStudentChallengeExam,
+  submitStudentChallengeAttempt,
 } from "@/lib/data/student-challenges";
 import { recordPracticeEvaluation } from "@/lib/data/student-mastery";
 import { createPracticeAttemptHistory } from "@/lib/practice-history";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { gradeTeacherPaper } from "@/lib/tenant/client";
+import { TeacherApiError } from "@/lib/teacher-app/client";
 import type { StudentExam } from "@/lib/practice-sitting";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +55,13 @@ export async function POST(
     if (!challenge.content || !externalPaperId) {
       return NextResponse.json({ error: "Start the challenge before submitting it." }, { status: 409 });
     }
+    if (challengeExamExpired(challenge)) {
+      const refreshed = await refreshStudentChallengeExam(user.id, challengeId);
+      return NextResponse.json(
+        { error: "That sitting expired. A fresh challenge exam is ready.", challenge: refreshed },
+        { status: 409 },
+      );
+    }
 
     const expectedIds = new Set(challenge.content.examQuestions.map((question) => question.id));
     const answerById = new Map(parsed.answers.map((answer) => [answer.questionId, answer]));
@@ -62,16 +72,34 @@ export async function POST(
       return NextResponse.json({ error: "Answer every challenge question once." }, { status: 400 });
     }
     const answers = challenge.content.examQuestions.map((question) => answerById.get(question.id)!);
-    const graded = await gradeTeacherPaper(externalPaperId, {
-      student_name: String(user.user_metadata?.full_name || user.email || "Student"),
-      answers: answers.map((answer) => ({
-        question_id: answer.questionId,
-        answer_text: answer.answerText,
-      })),
-      instruction: "Grade only the submitted daily challenge questions against their private reference answers.",
-    });
+    let graded;
+    try {
+      graded = await submitStudentChallengeAttempt({
+        userId: user.id,
+        challengeId,
+        answers,
+      });
+    } catch (error) {
+      if (error instanceof TeacherApiError && error.status === 404) {
+        const refreshed = await refreshStudentChallengeExam(user.id, challengeId);
+        return NextResponse.json(
+          {
+            error: "That sitting is no longer live. A fresh challenge exam is ready.",
+            challenge: refreshed,
+          },
+          { status: 409 },
+        );
+      }
+      throw error;
+    }
+    if (!graded.graded) {
+      return NextResponse.json(
+        { error: "Grading is temporarily unavailable. Your sitting is still live; try again." },
+        { status: 503 },
+      );
+    }
     if (!graded.evaluation) {
-      throw new Error("The grading API returned marks without a topic evaluation.");
+      throw new Error("The challenge grader returned marks without a topic evaluation.");
     }
 
     const exam: StudentExam = {
@@ -104,6 +132,8 @@ export async function POST(
       sessionId: externalPaperId,
       totalScore: graded.total_score,
       totalMarks: graded.total_marks,
+      passed: graded.passed,
+      passMarks: challenge.passMarks,
       evaluation: graded.evaluation,
       history: createPracticeAttemptHistory({
         exam,
@@ -115,14 +145,23 @@ export async function POST(
         studentName: String(user.user_metadata?.full_name || "Student"),
       }),
     });
-    const updated = await recordStudentChallengeGrade({
+    let updated = await recordStudentChallengeGrade({
       userId: user.id,
       challengeId,
       attemptId,
       score: graded.total_score,
       totalMarks: graded.total_marks,
+      passed: graded.passed,
     });
     if (!updated) throw new Error("The grade was saved, but the challenge could not be updated.");
+    if (!graded.passed) {
+      try {
+        updated = (await refreshStudentChallengeExam(user.id, challengeId)) ?? updated;
+      } catch {
+        // The failed grade is already durable. Opening the challenge again
+        // will issue the next live sitting if the API was briefly unavailable.
+      }
+    }
 
     return NextResponse.json({
       challenge: updated,
@@ -130,7 +169,7 @@ export async function POST(
       evaluation: graded.evaluation,
       totalScore: graded.total_score,
       totalMarks: graded.total_marks,
-      passed: updated.status === "completed",
+      passed: graded.passed,
     });
   } catch (error) {
     const message =

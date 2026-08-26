@@ -4,6 +4,102 @@ import { getTenantApiEnv } from "@/lib/env";
 
 export type ApiRecord = Record<string, unknown>;
 
+export type TeacherChallengeTopic = {
+  topic_key: string;
+  title: string;
+  unit_number?: string;
+  order_index: number;
+};
+
+export type TeacherChallengePrerequisite = TeacherChallengeTopic & {
+  taught: boolean;
+  bank_questions: number;
+  reason: string;
+};
+
+export type TeacherChallengeReading = {
+  headline: string;
+  content: string;
+  focus: string;
+  sources: Array<{
+    chunk_id?: string;
+    document_id?: string;
+    filename?: string;
+    source_path?: string;
+    chapter?: string;
+  }>;
+};
+
+export type TeacherChallengeSolvedQuestion = {
+  id: string;
+  text: string;
+  solution: string;
+  topic: string;
+  topic_key: string;
+  marks: number;
+  year?: string | null;
+  source?: string;
+};
+
+export type TeacherChallengeExam = {
+  attempt_id: string;
+  subject: string;
+  topics: TeacherChallengeTopic[];
+  questions: Array<{
+    id: string;
+    topic_key: string;
+    topic: string;
+    marks: number;
+    question_type: string;
+    text: string;
+  }>;
+  total_marks: number;
+  pass_marks: number;
+  duration_minutes: number;
+  expires_at: string;
+  warning?: string | null;
+};
+
+export type TeacherChallengeResponse = {
+  collection: string;
+  subject: string;
+  subject_slug: string;
+  challenge_id: string;
+  title: string;
+  topics: TeacherChallengeTopic[];
+  topic_source: string;
+  can_start: boolean;
+  prerequisites: TeacherChallengePrerequisite[];
+  reading: TeacherChallengeReading;
+  solved_questions: TeacherChallengeSolvedQuestion[];
+  exam: TeacherChallengeExam;
+  warnings: string[];
+};
+
+export type TeacherChallengeGradeResponse = {
+  attempt_id: string;
+  subject: string;
+  results: Array<{
+    question_id: string;
+    topic_key?: string;
+    topic?: string;
+    question: string;
+    marks: number;
+    student_answer?: string;
+    score: number;
+    feedback: string;
+  }>;
+  total_score: number;
+  total_marks: number;
+  percentage: number;
+  pass_marks: number;
+  passed: boolean;
+  graded: boolean;
+  stored?: boolean;
+  evaluation?: import("@/lib/tenant/client").PracticeEvaluation;
+  verdict?: string;
+};
+
 export type TeacherSubjectStreamEvent =
   | { type: "status"; message: string; query?: string; served_from?: string }
   | { type: "token"; text: string }
@@ -571,6 +667,51 @@ export const getTeacherCollectionPapers = (key: string, subject?: string) =>
 
 export const getTeacherCollectionPaper = (key: string, paperId: string) =>
   teacherRequest<ApiRecord>(`/v1/collection/papers/${encodeURIComponent(paperId)}`, key);
+
+export const createTeacherChallenge = (
+  key: string,
+  input: {
+    subject: string;
+    topics: string[];
+    prerequisite_limit?: number;
+    solved_questions?: number;
+    exam_questions?: number;
+    duration_minutes?: number;
+    pass_percent?: number;
+  },
+) =>
+  teacherRequest<TeacherChallengeResponse>("/v1/collection/challenge", key, {
+    method: "POST",
+    body: input,
+    timeoutMs: 180_000,
+  });
+
+export const createTeacherChallengeExam = (
+  key: string,
+  input: {
+    subject: string;
+    topics: string[];
+    questions?: number;
+    duration_minutes?: number;
+    pass_percent?: number;
+  },
+) =>
+  teacherRequest<TeacherChallengeExam>("/v1/collection/challenge/exam", key, {
+    method: "POST",
+    body: input,
+    timeoutMs: 120_000,
+  });
+
+export const submitTeacherChallengeExam = (
+  key: string,
+  attemptId: string,
+  input: { answers: Array<{ question_id: string; answer_text: string }> },
+) =>
+  teacherRequest<TeacherChallengeGradeResponse>(
+    `/v1/collection/challenge/exam/${encodeURIComponent(attemptId)}/submit`,
+    key,
+    { method: "POST", body: input, timeoutMs: 180_000 },
+  );
 
 export const generateTeacherCollectionPaper = (
   key: string,

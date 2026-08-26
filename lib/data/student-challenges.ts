@@ -1,10 +1,18 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
-  chatTenant,
-  generateTeacherPaper,
-  getTenantName,
-  type TeacherQuestion,
-} from "@/lib/tenant/client";
+  getStudentCourseSubjectAccess,
+  getStudentCourseSubjectAccessForCourse,
+} from "@/lib/student-courses";
+import {
+  createTeacherChallenge,
+  createTeacherChallengeExam,
+  submitTeacherChallengeExam,
+  TeacherApiError,
+  type TeacherChallengeExam,
+  type TeacherChallengeGradeResponse,
+  type TeacherChallengeResponse,
+  type TeacherChallengeSolvedQuestion,
+} from "@/lib/teacher-app/client";
 
 const UNDEFINED_TABLE = "42P01";
 const POSTGREST_MISSING_TABLE = "PGRST205";
@@ -50,11 +58,20 @@ export type StudentChallengeSummary = {
 };
 
 export type ChallengeSolvedExample = {
-  year: string;
+  year: string | null;
   question: string;
   solution: string;
   topic: string;
   marks: number;
+  grounded: boolean;
+  source: string;
+};
+
+export type ChallengePrerequisite = {
+  topicKey: string;
+  title: string;
+  taught: boolean;
+  reason: string;
 };
 
 export type ChallengeExamQuestion = {
@@ -66,6 +83,11 @@ export type ChallengeExamQuestion = {
 };
 
 export type StudentChallengeContent = {
+  provider?: "collection-challenge-v1";
+  upstreamChallengeId?: string;
+  topicKeys?: string[];
+  canStart?: boolean;
+  prerequisites?: ChallengePrerequisite[];
   lesson: {
     title: string;
     content: string[];
@@ -74,6 +96,8 @@ export type StudentChallengeContent = {
   };
   solvedExamples: ChallengeSolvedExample[];
   examQuestions: ChallengeExamQuestion[];
+  examExpiresAt?: string;
+  examAttemptNumber?: number;
   warning: string | null;
 };
 
@@ -234,24 +258,131 @@ export async function getStudentChallengeGradeContext(userId: string, challengeI
   };
 }
 
-function solvedExample(question: TeacherQuestion, index: number): ChallengeSolvedExample {
+function solvedExample(question: TeacherChallengeSolvedQuestion): ChallengeSolvedExample {
+  const source = String(question.source || "").trim();
   return {
-    year: question.band_label || `Worked example ${index + 1}`,
+    year: question.year?.trim() || null,
     question: question.text,
-    solution: question.reference_answer?.trim() || "",
-    topic: question.chapter || "",
+    solution: question.solution?.trim() || "",
+    topic: question.topic || "",
     marks: number(question.marks),
+    grounded: source !== "generated_from_notes",
+    source,
   };
 }
 
-function examQuestion(question: TeacherQuestion): ChallengeExamQuestion {
+function examQuestion(question: TeacherChallengeExam["questions"][number]): ChallengeExamQuestion {
   return {
     id: question.id,
     question: question.text,
-    topic: question.chapter || "",
+    topic: question.topic || "",
     marks: number(question.marks),
     questionType: question.question_type || "Short answer",
   };
+}
+
+async function resolveChallengeLane(userId: string, row: ChallengeRow) {
+  const admin = createSupabaseAdminClient();
+  const courseId = row.course_id ? String(row.course_id) : null;
+  const subjectSlug = String(row.subject_slug || "");
+  const access = courseId
+    ? await getStudentCourseSubjectAccessForCourse(userId, courseId, subjectSlug, admin)
+    : await getStudentCourseSubjectAccess(userId, subjectSlug, admin);
+  if (!access) {
+    throw new Error("You no longer have access to the course that assigned this challenge.");
+  }
+
+  const { data: teacher, error } = await admin
+    .from("teachers")
+    .select("collection_sk")
+    .eq("id", access.teacherId)
+    .maybeSingle();
+  if (error) throw error;
+  const collectionKey = String(teacher?.collection_sk || "").trim();
+  if (!collectionKey) {
+    throw new Error("This course creator's study collection is not ready yet.");
+  }
+  return { collectionKey, subject: access.subjectName || String(row.subject_name || "") };
+}
+
+function lessonParagraphs(content: string) {
+  return content
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
+function warningText(...warnings: Array<string | null | undefined | string[]>) {
+  return warnings
+    .flatMap((warning) => (Array.isArray(warning) ? warning : [warning]))
+    .map((warning) => String(warning || "").trim())
+    .filter(Boolean)
+    .join(" ") || null;
+}
+
+function contentWithExam(
+  content: StudentChallengeContent,
+  exam: TeacherChallengeExam,
+  attemptNumber: number,
+): StudentChallengeContent {
+  return {
+    ...content,
+    examQuestions: (exam.questions || []).map(examQuestion),
+    examExpiresAt: exam.expires_at,
+    examAttemptNumber: attemptNumber,
+    warning: warningText(content.warning, exam.warning),
+  };
+}
+
+function challengeContent(
+  response: TeacherChallengeResponse,
+  attemptNumber: number,
+): StudentChallengeContent {
+  return contentWithExam(
+    {
+      provider: "collection-challenge-v1",
+      upstreamChallengeId: response.challenge_id,
+      topicKeys: (response.topics || []).map((topic) => topic.topic_key).filter(Boolean),
+      canStart: response.can_start,
+      prerequisites: (response.prerequisites || []).map((prerequisite) => ({
+        topicKey: prerequisite.topic_key,
+        title: prerequisite.title,
+        taught: prerequisite.taught,
+        reason: prerequisite.reason,
+      })),
+      lesson: {
+        title: response.reading.headline || "What you need to know",
+        content: lessonParagraphs(response.reading.content),
+        focus: response.reading.focus || "",
+        sources: (response.reading.sources || []).map((source) => ({
+          title: source.chapter?.trim() || source.filename?.trim() || "Course material",
+          source: source.source_path?.trim() || source.filename?.trim() || "Indexed source",
+          excerpt: "",
+        })),
+      },
+      solvedExamples: (response.solved_questions || []).map(solvedExample),
+      examQuestions: [],
+      warning: warningText(response.warnings),
+    },
+    response.exam,
+    attemptNumber,
+  );
+}
+
+function hasLiveExam(detail: StudentChallengeDetail, externalAttemptId: string) {
+  if (
+    detail.content?.provider !== "collection-challenge-v1" ||
+    !externalAttemptId ||
+    !detail.content.examExpiresAt
+  ) {
+    return false;
+  }
+  const expiresAt = Date.parse(detail.content.examExpiresAt);
+  return (
+    Number.isFinite(expiresAt) &&
+    expiresAt > Date.now() &&
+    number(detail.content.examAttemptNumber) > detail.attemptCount
+  );
 }
 
 /** Lazily materializes grounded content so unopened daily cards cost no AI work. */
@@ -259,10 +390,6 @@ export async function startStudentChallenge(
   userId: string,
   challengeId: string,
 ): Promise<StudentChallengeDetail | null> {
-  const current = await getStudentChallenge(userId, challengeId);
-  if (!current) return null;
-  if (current.content) return current;
-
   const admin = createSupabaseAdminClient();
   const { data: raw, error: loadError } = await admin
     .from("student_challenges")
@@ -273,100 +400,57 @@ export async function startStudentChallenge(
   if (loadError) throw loadError;
   if (!raw) return null;
   const row = raw as ChallengeRow;
-  const topicTitle = studentFacingTopicTitle(
-    String(row.topic_title ?? ""),
-    String(row.subject_name ?? ""),
-  );
-  const topicBlurb = String(row.topic_blurb ?? "").trim();
-  const paperBase = {
-    subject: String(row.subject_slug ?? ""),
-    namespaces: [String(row.namespace ?? "")],
-    bands: [
-      {
-        label: "Topic challenge",
-        question_type: "Short answer",
-        count: 2,
-        marks_each: 2.5,
-      },
-    ],
-  };
-  const tenantName = await getTenantName();
-  const [lessonResponse, workedPaper, examPaper] = await Promise.all([
-    chatTenant({
-      question: [
-        `Teach the student the topic "${topicTitle}" using only the indexed course material.`,
-        "Give a concise explanation of the core idea, the method or reasoning they must remember, and one common mistake.",
-        "Do not invent facts and do not include an exam answer key.",
-      ].join(" "),
-      contextSummary: "",
-      subject: String(row.subject_name ?? row.subject_slug ?? ""),
-      tenant: tenantName,
-      namespaces: [String(row.namespace ?? "")],
-      topK: 8,
-      responseLanguage: "EN",
-    }),
-    generateTeacherPaper({
-      ...paperBase,
-      title: `${topicTitle} worked examples`,
-      pass_marks: 0,
-      instruction: [
-        `Use only the indexed course material and question bank for the topic: ${topicTitle}.`,
-        "Create two representative exam-style worked examples.",
-        "Every question must include a complete step-by-step reference answer.",
-      ].join(" "),
-    }),
-    generateTeacherPaper({
-      ...paperBase,
-      title: `${topicTitle} challenge exam`,
-      pass_marks: 2,
-      instruction: [
-        `Use only the indexed course material and question bank for the topic: ${topicTitle}.`,
-        "Create two distinct unseen exam-style questions for the student to solve without notes.",
-        "Every question must include a private reference answer for grading.",
-      ].join(" "),
-    }),
-  ]);
-  const solved = (workedPaper.questions ?? []).filter(
-    (question) => question.id && question.text && question.reference_answer?.trim(),
-  );
-  const exam = (examPaper.questions ?? []).filter(
-    (question) => question.id && question.text && question.reference_answer?.trim(),
-  );
-  if (solved.length < 2 || exam.length < 2) {
-    throw new Error("The course API could not build the grounded challenge content.");
+  const current = toDetail(row);
+  const externalAttemptId = String(row.external_paper_id || "");
+  if (current.status === "completed" || hasLiveExam(current, externalAttemptId)) return current;
+  if (current.content?.provider === "collection-challenge-v1") {
+    return refreshStudentChallengeExam(userId, challengeId);
   }
 
-  const content: StudentChallengeContent = {
-    lesson: {
-      title: "What you need to know",
-      content: [
-        lessonResponse.answer?.trim() ||
-          topicBlurb ||
-          `Review ${topicTitle} from your indexed course material before studying the worked examples.`,
-      ],
-      focus: `Understand the core ideas in ${topicTitle} and apply them without looking at the worked solutions.`,
-      sources: (lessonResponse.sources ?? []).slice(0, 4).map((source) => ({
-        title: source.title?.trim() || "Course material",
-        source: source.clean_path?.trim() || source.source_path?.trim() || "Indexed source",
-        excerpt: source.excerpt?.trim() || "",
-      })),
-    },
-    solvedExamples: solved.slice(0, 2).map(solvedExample),
-    // Reference answers for these unseen questions stay inside the tenant paper.
-    examQuestions: exam.slice(0, 2).map(examQuestion),
-    warning: [workedPaper.warning, examPaper.warning].filter(Boolean).join(" ").trim() || null,
+  const lane = await resolveChallengeLane(userId, row);
+  const challengeRequest = {
+    subject: lane.subject,
+    topics: [String(row.topic_key || row.topic_title || "")].filter(Boolean),
+    prerequisite_limit: 3,
+    solved_questions: 2,
+    exam_questions: 2,
+    duration_minutes: number(row.duration_minutes) || 20,
+    pass_percent: CHALLENGE_PASS_PERCENT,
   };
-  const totalMarks = exam.slice(0, 2).reduce((sum, question) => sum + number(question.marks), 0);
-  const passMarks = totalMarks * (CHALLENGE_PASS_PERCENT / 100);
+  let response: TeacherChallengeResponse;
+  try {
+    response = await createTeacherChallenge(lane.collectionKey, challengeRequest);
+  } catch (error) {
+    // Daily rows assigned before the collection-scoped wiring may carry a
+    // legacy topic key. Let the API choose the real highest-weight topic once.
+    if (!(error instanceof TeacherApiError) || ![404, 422].includes(error.status)) throw error;
+    response = await createTeacherChallenge(lane.collectionKey, {
+      ...challengeRequest,
+      topics: [],
+    });
+  }
+  if (!response.can_start || !response.exam?.attempt_id || !response.exam.questions?.length) {
+    throw new Error("This topic is not taught by the course material yet, so its challenge cannot start.");
+  }
+  const content = challengeContent(response, number(row.attempt_count) + 1);
+  const selectedTopic = response.topics?.[0];
   const now = new Date().toISOString();
   const { data, error } = await admin
     .from("student_challenges")
     .update({
       status: "started",
-      external_paper_id: examPaper.id,
+      external_paper_id: response.exam.attempt_id,
       content,
-      total_marks: totalMarks,
-      pass_marks: passMarks,
+      total_marks: response.exam.total_marks,
+      pass_marks: response.exam.pass_marks,
+      duration_minutes: response.exam.duration_minutes,
+      ...(selectedTopic
+        ? {
+            topic_key: selectedTopic.topic_key,
+            topic_title: selectedTopic.title,
+            title: response.title || `Master ${selectedTopic.title}`,
+          }
+        : {}),
       started_at: now,
       updated_at: now,
     })
@@ -376,6 +460,90 @@ export async function startStudentChallenge(
     .single();
   if (error) throw error;
   return toDetail(data as ChallengeRow);
+}
+
+/** Issues a fresh in-memory sitting while retaining the durable learning steps. */
+export async function refreshStudentChallengeExam(userId: string, challengeId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error: loadError } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (loadError) throw loadError;
+  if (!raw) return null;
+  const row = raw as ChallengeRow;
+  const detail = toDetail(row);
+  if (detail.status === "completed") return detail;
+  if (detail.content?.provider !== "collection-challenge-v1") {
+    return startStudentChallenge(userId, challengeId);
+  }
+
+  const lane = await resolveChallengeLane(userId, row);
+  const exam = await createTeacherChallengeExam(lane.collectionKey, {
+    subject: lane.subject,
+    topics:
+      detail.content.topicKeys?.filter(Boolean) ||
+      [String(row.topic_key || row.topic_title || "")].filter(Boolean),
+    questions: 2,
+    duration_minutes: detail.durationMinutes,
+    pass_percent: CHALLENGE_PASS_PERCENT,
+  });
+  if (!exam.attempt_id || !exam.questions?.length) {
+    throw new Error("The course API could not issue a fresh challenge exam.");
+  }
+  const content = contentWithExam(detail.content, exam, detail.attemptCount + 1);
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from("student_challenges")
+    .update({
+      status: "started",
+      external_paper_id: exam.attempt_id,
+      content,
+      total_marks: exam.total_marks,
+      pass_marks: exam.pass_marks,
+      duration_minutes: exam.duration_minutes,
+      started_at: now,
+      updated_at: now,
+    })
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return toDetail(data as ChallengeRow);
+}
+
+export function challengeExamExpired(challenge: StudentChallengeDetail) {
+  const expiresAt = Date.parse(challenge.content?.examExpiresAt || "");
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+}
+
+export async function submitStudentChallengeAttempt(input: {
+  userId: string;
+  challengeId: string;
+  answers: Array<{ questionId: string; answerText: string }>;
+}): Promise<TeacherChallengeGradeResponse> {
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", input.challengeId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!raw) throw new Error("Challenge not found.");
+  const row = raw as ChallengeRow;
+  const attemptId = String(row.external_paper_id || "");
+  if (!attemptId) throw new Error("Start the challenge before submitting it.");
+  const lane = await resolveChallengeLane(input.userId, row);
+  return submitTeacherChallengeExam(lane.collectionKey, attemptId, {
+    answers: input.answers.map((answer) => ({
+      question_id: answer.questionId,
+      answer_text: answer.answerText,
+    })),
+  });
 }
 
 export async function markStudentChallengeStep(
@@ -419,6 +587,7 @@ export async function recordStudentChallengeGrade(input: {
   attemptId: string;
   score: number;
   totalMarks: number;
+  passed: boolean;
 }) {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin.rpc("record_student_challenge_grade", {
@@ -427,6 +596,7 @@ export async function recordStudentChallengeGrade(input: {
     target_attempt_id: input.attemptId,
     earned_score: input.score,
     available_marks: input.totalMarks,
+    did_pass: input.passed,
   });
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;

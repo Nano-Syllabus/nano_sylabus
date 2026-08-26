@@ -7,16 +7,16 @@ import {
 } from "@/lib/data/student-challenges";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
-  findTenantSubjectForCourseSubject,
-  listPracticeTopics,
-  listTenantSubjects,
+  type PracticeTopic,
   type PracticeTopicStatus,
 } from "@/lib/tenant/client";
+import { getTeacherPracticeTopics } from "@/lib/teacher-app/client";
 import { listCreatorPrivateSubjectAccess, listStudentCourseSubjects } from "@/lib/student-courses";
 
-const CHALLENGE_PASS_PERCENT = 40;
-
 export type ChallengeSubject = {
+  courseId: string | null;
+  /** Course-scoped identity; subject slugs are not globally unique. */
+  scopeKey: string;
   slug: string;
   name: string;
   readiness: number | null;
@@ -54,9 +54,16 @@ export type StudentChallengeDashboard = {
   leaderboard: ChallengeLeaderboard | null;
 };
 
-type Attempt = { totalScore: number; totalMarks: number; createdAt: string };
+type Attempt = {
+  totalScore: number;
+  totalMarks: number;
+  createdAt: string;
+  /** Verdict returned by the challenge grader, not inferred by this client. */
+  passed: boolean;
+};
 type SubjectAccess = {
   courseId: string;
+  teacherId: string;
   accessKind?: "course" | "owner-private";
   subjectSlug: string;
   subjectName: string;
@@ -143,14 +150,14 @@ function attemptPercent(attempt: Attempt) {
     : null;
 }
 
-/** Pure legacy-attempt calculator retained for regression coverage only. */
+/** Pure mirror of the durable metrics query, retained for regression coverage. */
 export function calculateAttemptMetrics(attempts: Attempt[], now = new Date()): Omit<ChallengeMetrics, "leaderboard"> {
   const today = nepaliDateKey(now);
   const weekStart = daysAgo(6, now);
   const previousWeekStart = daysAgo(13, now);
   const monthStart = `${today.slice(0, 7)}-01`;
   const lastThirtyDays = daysAgo(29, now);
-  const passed = (attempt: Attempt) => (attemptPercent(attempt) ?? -1) >= CHALLENGE_PASS_PERCENT;
+  const passed = (attempt: Attempt) => attempt.passed;
   const thisWeek = attempts.filter((attempt) => nepaliDateKey(attempt.createdAt) >= weekStart);
   const previousWeek = attempts.filter((attempt) => {
     const day = nepaliDateKey(attempt.createdAt);
@@ -186,7 +193,7 @@ export function calculateAttemptMetrics(attempts: Attempt[], now = new Date()): 
   };
 }
 
-async function loadChallengeMetrics(userId: string): Promise<ChallengeMetrics | null> {
+async function loadChallengeMetrics(userId: string): Promise<ChallengeMetrics> {
   const admin = createSupabaseAdminClient();
 
   // An older deployment of the RPC counted arbitrary practice attempts as
@@ -196,16 +203,20 @@ async function loadChallengeMetrics(userId: string): Promise<ChallengeMetrics | 
     .select("id")
     .eq("user_id", userId)
     .limit(1);
-  if (isMissingChallengeTable(schemaError)) return null;
+  if (isMissingChallengeTable(schemaError)) {
+    throw new Error("Challenge metrics are unavailable because the student challenge migration has not been applied.");
+  }
   if (schemaError) throw schemaError;
 
   const { data, error } = await admin
     .rpc("get_student_challenge_metrics", { target_user_id: userId })
     .maybeSingle();
 
-  // A missing aggregate must render an honest empty challenge state. Practice
-  // attempts are deliberately not used as a semantic fallback.
-  if (error || !data) return null;
+  // Never turn a metrics outage into believable-looking zeroes. An empty
+  // account is represented by a real all-zero RPC row; an error must remain an
+  // error so the UI cannot present fabricated dashboard values.
+  if (error) throw error;
+  if (!data) throw new Error("The challenge metrics query returned no result.");
   const row = data as ChallengeMetricsRow;
   const recentAttempts = number(row.attempts_last_30);
   const recentPassed = number(row.passed_last_30);
@@ -230,12 +241,17 @@ async function loadChallengeMetrics(userId: string): Promise<ChallengeMetrics | 
   };
 }
 
+function subjectScopeKey(courseId: string | null, subjectSlug: string) {
+  return `${courseId ?? "owner-private"}:${subjectSlug.trim().toLowerCase()}`;
+}
+
 function masteryBySubject(rows: TopicMastery[]) {
   const result = new Map<string, Map<string, TopicMastery>>();
   for (const row of rows) {
-    const byTopic = result.get(row.subjectSlug) ?? new Map<string, TopicMastery>();
+    const scope = subjectScopeKey(row.courseId, row.subjectSlug);
+    const byTopic = result.get(scope) ?? new Map<string, TopicMastery>();
     byTopic.set(row.topicKey, row);
-    result.set(row.subjectSlug, byTopic);
+    result.set(scope, byTopic);
   }
   return result;
 }
@@ -243,7 +259,10 @@ function masteryBySubject(rows: TopicMastery[]) {
 function uniqueSubjects(...groups: SubjectAccess[][]) {
   const result = new Map<string, SubjectAccess>();
   for (const subject of groups.flat()) {
-    const key = subject.subjectSlug.trim().toLowerCase();
+    const key = subjectScopeKey(
+      subject.accessKind === "owner-private" ? null : subject.courseId,
+      subject.subjectSlug,
+    );
     if (key && !result.has(key)) result.set(key, subject);
   }
   return [...result.values()];
@@ -279,11 +298,16 @@ function localSubjectRow(
       left.percentage - right.percentage,
   )[0];
   return {
+    courseId: courseSubject.accessKind === "owner-private" ? null : courseSubject.courseId,
+    scopeKey: subjectScopeKey(
+      courseSubject.accessKind === "owner-private" ? null : courseSubject.courseId,
+      subjectSlug || courseSubject.subjectSlug,
+    ),
     slug: subjectSlug || courseSubject.subjectSlug,
     name: subjectName || courseSubject.subjectName,
-    readiness: topics.length
-      ? topics.reduce((sum, topic) => sum + topic.percentage, 0) / topics.length
-      : null,
+    // Stored attempts are real, but they are not a complete topic catalogue.
+    // Do not use a partial denominator to claim whole-subject readiness.
+    readiness: null,
     totalTopics: topics.length,
     practicedTopics: topics.filter((topic) => topic.attempts > 0).length,
     weakTopics: topics.filter((topic) => topic.status === "weak").length,
@@ -293,26 +317,41 @@ function localSubjectRow(
 }
 
 export async function getStudentChallengeDashboard(userId: string): Promise<StudentChallengeDashboard> {
-  const [mastery, courseSubjects, privateSubjects, metrics, tenantSubjects] = await Promise.all([
+  const [mastery, courseSubjects, privateSubjects, metrics] = await Promise.all([
     listTopicMastery(userId),
     listStudentCourseSubjects(userId),
     listCreatorPrivateSubjectAccess(userId),
     loadChallengeMetrics(userId),
-    listTenantSubjects().catch(() => []),
   ]);
   const storedBySubject = masteryBySubject(mastery);
   const subjects = uniqueSubjects(courseSubjects, privateSubjects);
+  const admin = createSupabaseAdminClient();
+  const teacherIds = [...new Set(subjects.map((subject) => subject.teacherId).filter(Boolean))];
+  const collectionKeyByTeacher = new Map<string, string>();
+  if (teacherIds.length) {
+    const { data, error } = await admin
+      .from("teachers")
+      .select("id,collection_sk")
+      .in("id", teacherIds);
+    if (error) throw error;
+    for (const teacher of data ?? []) {
+      const key = String(teacher.collection_sk || "").trim();
+      if (key) collectionKeyByTeacher.set(String(teacher.id), key);
+    }
+  }
 
   const subjectResults = await Promise.all(
     subjects.map(async (courseSubject): Promise<{
       row: ChallengeSubject;
       recommendations: ChallengeRecommendation[];
     }> => {
-      const tenantSubject = findTenantSubjectForCourseSubject(tenantSubjects, courseSubject);
-      const subjectSlug = tenantSubject?.slug || courseSubject.subjectSlug;
-      const subjectName = tenantSubject?.name || courseSubject.subjectName;
-      const stored = storedBySubject.get(subjectSlug) ?? new Map<string, TopicMastery>();
-      if (!tenantSubject) {
+      const subjectSlug = courseSubject.subjectSlug;
+      const subjectName = courseSubject.subjectName;
+      const courseId = courseSubject.accessKind === "owner-private" ? null : courseSubject.courseId;
+      const scopeKey = subjectScopeKey(courseId, subjectSlug);
+      const stored = storedBySubject.get(scopeKey) ?? new Map<string, TopicMastery>();
+      const collectionKey = collectionKeyByTeacher.get(courseSubject.teacherId);
+      if (!collectionKey) {
         return {
           row: localSubjectRow(courseSubject, subjectSlug, subjectName, stored),
           recommendations: [],
@@ -320,13 +359,11 @@ export async function getStudentChallengeDashboard(userId: string): Promise<Stud
       }
 
       try {
-        const response = await listPracticeTopics({
-          subject: tenantSubject.slug,
-          namespaces: [tenantSubject.namespace],
+        const response = await getTeacherPracticeTopics(collectionKey, subjectName, {
           totalMarks: 20,
           maxQuestions: 5,
         });
-        const topics = response.topics ?? [];
+        const topics = (Array.isArray(response.topics) ? response.topics : []) as PracticeTopic[];
         const rankedTopics = topics
           .map((topic) => ({ topic, mastery: stored.get(topic.topic_key) }))
           .sort(
@@ -338,7 +375,9 @@ export async function getStudentChallengeDashboard(userId: string): Promise<Stud
         const next = rankedTopics[0]?.topic;
         return {
           row: {
-            slug: tenantSubject.slug,
+            courseId,
+            scopeKey,
+            slug: subjectSlug,
             name: subjectName,
             readiness: topics.length
               ? topics.reduce(
@@ -359,9 +398,9 @@ export async function getStudentChallengeDashboard(userId: string): Promise<Stud
           recommendations: rankedTopics.slice(0, 3).map(({ topic, mastery: topicMastery }) => ({
             courseId:
               courseSubject.accessKind === "owner-private" ? null : courseSubject.courseId,
-            subjectSlug: tenantSubject.slug,
+            subjectSlug,
             subjectName,
-            namespace: tenantSubject.namespace,
+            namespace: courseSubject.folderPath || subjectSlug,
             topicKey: topic.topic_key,
             topicTitle: topic.title,
             topicBlurb: topic.blurb?.trim() || "",
@@ -387,18 +426,9 @@ export async function getStudentChallengeDashboard(userId: string): Promise<Stud
     ),
   );
 
-  const progress = metrics ?? {
-    hasPracticeHistory: false,
-    todayCompleted: false,
-    currentStreak: 0,
-    passedThisMonth: 0,
-    passedThisWeek: 0,
-    passRateLast30Days: null,
-    practicePerDay: 0,
-    practiceScoreChange: null,
-    leaderboard: null,
-  };
+  const progress = metrics;
   const totalTopics = subjectRows.reduce((sum, subject) => sum + subject.totalTopics, 0);
+  const readinessComplete = subjectRows.every((subject) => subject.topicDataAvailable);
   const readinessPoints = subjectRows.reduce(
     (sum, subject) => sum + (subject.readiness ?? 0) * subject.totalTopics,
     0,
@@ -407,7 +437,7 @@ export async function getStudentChallengeDashboard(userId: string): Promise<Stud
   return {
     subjects: subjectRows,
     challenges,
-    readiness: totalTopics > 0 ? readinessPoints / totalTopics : null,
+    readiness: readinessComplete && totalTopics > 0 ? readinessPoints / totalTopics : null,
     totalTopics,
     practicedTopics: subjectRows.reduce((sum, subject) => sum + subject.practicedTopics, 0),
     practiceScoreChange: progress.practiceScoreChange,

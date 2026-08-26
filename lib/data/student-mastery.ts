@@ -46,6 +46,30 @@ export type PracticeAttemptSummary = {
  */
 const NEW_RESULT_WEIGHT = 0.4;
 
+/**
+ * The durable mastery scale is always 0..100. Some tenant graders have
+ * historically returned `percentage` as a 0..1 ratio, while score and marks
+ * have always remained authoritative. Derive from marks whenever possible so
+ * a full-mark answer can never be persisted as 1% mastery.
+ */
+export function chapterPercentageFromMarks(chapter: {
+  score: number;
+  marks: number;
+  percentage: number;
+}) {
+  const score = Number(chapter.score);
+  const marks = Number(chapter.marks);
+  const reported = Number(chapter.percentage);
+  const percentage =
+    Number.isFinite(score) && Number.isFinite(marks) && marks > 0
+      ? (score / marks) * 100
+      : Number.isFinite(reported)
+        ? reported
+        : 0;
+
+  return Math.max(0, Math.min(100, percentage));
+}
+
 /** Postgres `undefined_table` — the migration has not been applied yet. */
 const UNDEFINED_TABLE = "42P01";
 
@@ -196,6 +220,10 @@ export async function recordPracticeEvaluation(input: {
   sessionId?: string;
   totalScore: number;
   totalMarks: number;
+  /** Authoritative verdict returned by the issuing/grading API. */
+  passed?: boolean | null;
+  /** Mark threshold issued with the paper, when the API exposes one. */
+  passMarks?: number | null;
   evaluation: PracticeEvaluation;
   history?: PracticeAttemptHistory;
 }) {
@@ -213,6 +241,8 @@ export async function recordPracticeEvaluation(input: {
       session_id: input.sessionId ?? "",
       total_score: input.totalScore,
       total_marks: input.totalMarks,
+      ...(input.passed !== undefined ? { passed: input.passed } : {}),
+      ...(input.passMarks !== undefined ? { pass_marks: input.passMarks } : {}),
       evaluation: input.history
         ? { ...input.evaluation, attempt_history: input.history }
         : input.evaluation,
@@ -255,9 +285,10 @@ export async function recordPracticeEvaluation(input: {
 
   const rows = attempted.map((chapter) => {
     const previous = existingByTopic.get(chapter.topic_key);
+    const currentPercentage = chapterPercentageFromMarks(chapter);
     const blended = previous
-      ? previous.percentage * (1 - NEW_RESULT_WEIGHT) + chapter.percentage * NEW_RESULT_WEIGHT
-      : chapter.percentage;
+      ? previous.percentage * (1 - NEW_RESULT_WEIGHT) + currentPercentage * NEW_RESULT_WEIGHT
+      : currentPercentage;
 
     return {
       user_id: input.userId,
@@ -278,7 +309,7 @@ export async function recordPracticeEvaluation(input: {
 
   const { error: upsertError } = await admin
     .from("student_topic_mastery")
-    .upsert(rows, { onConflict: "user_id,subject_slug,topic_key" });
+    .upsert(rows, { onConflict: "user_id,course_id,subject_slug,topic_key" });
   if (upsertError) throw upsertError;
 
   return String(attempt.id);

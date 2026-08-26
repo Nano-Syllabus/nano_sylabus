@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { calculateAttemptMetrics } from "@/lib/data/student-challenge-dashboard";
 import {
+  challengeExamExpired,
   isMissingChallengeTable,
   studentFacingTopicTitle,
+  type StudentChallengeDetail,
 } from "@/lib/data/student-challenges";
 
 const now = new Date("2026-08-25T06:00:00.000Z");
@@ -23,13 +25,13 @@ describe("student challenge metrics", () => {
     );
   });
 
-  it("uses the 40-percent pass mark as the single challenge-completion rule", () => {
+  it("uses the grading API verdict instead of reconstructing a pass threshold", () => {
     const result = calculateAttemptMetrics(
       [
-        { totalScore: 4, totalMarks: 10, createdAt: "2026-08-25T04:00:00.000Z" },
-        { totalScore: 7, totalMarks: 10, createdAt: "2026-08-24T04:00:00.000Z" },
-        { totalScore: 2, totalMarks: 10, createdAt: "2026-08-23T04:00:00.000Z" },
-        { totalScore: 8, totalMarks: 10, createdAt: "2026-08-18T04:00:00.000Z" },
+        { totalScore: 4, totalMarks: 10, passed: true, createdAt: "2026-08-25T04:00:00.000Z" },
+        { totalScore: 7, totalMarks: 10, passed: true, createdAt: "2026-08-24T04:00:00.000Z" },
+        { totalScore: 9, totalMarks: 10, passed: false, createdAt: "2026-08-23T04:00:00.000Z" },
+        { totalScore: 8, totalMarks: 10, passed: true, createdAt: "2026-08-18T04:00:00.000Z" },
       ],
       now,
     );
@@ -40,14 +42,14 @@ describe("student challenge metrics", () => {
     expect(result.passedThisMonth).toBe(3);
     expect(result.practicePerDay).toBeCloseTo(2 / 7);
     expect(result.passRateLast30Days).toBe(75);
-    expect(result.practiceScoreChange).toBeCloseTo(-36.67, 1);
+    expect(result.practiceScoreChange).toBeCloseTo(-13.33, 1);
   });
 
   it("keeps a streak alive through yesterday until today's deadline", () => {
     const result = calculateAttemptMetrics(
       [
-        { totalScore: 5, totalMarks: 10, createdAt: "2026-08-24T04:00:00.000Z" },
-        { totalScore: 5, totalMarks: 10, createdAt: "2026-08-23T04:00:00.000Z" },
+        { totalScore: 5, totalMarks: 10, passed: true, createdAt: "2026-08-24T04:00:00.000Z" },
+        { totalScore: 5, totalMarks: 10, passed: true, createdAt: "2026-08-23T04:00:00.000Z" },
       ],
       now,
     );
@@ -64,5 +66,13 @@ describe("student challenge metrics", () => {
     expect(result.currentStreak).toBe(0);
     expect(result.passRateLast30Days).toBeNull();
     expect(result.practiceScoreChange).toBeNull();
+  });
+
+  it("recognizes an expired in-memory challenge sitting", () => {
+    const challenge = {
+      content: { examExpiresAt: "2026-08-25T05:59:59.000Z" },
+    } as StudentChallengeDetail;
+
+    expect(challengeExamExpired(challenge)).toBe(true);
   });
 });
