@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import { getTenantApiEnv } from "@/lib/env";
+import { trackApiRequest } from "@/lib/api-request-tracking";
 
 function extractErrorMessage(url: URL, statusCode: number, raw: string): string {
   try {
@@ -460,7 +461,7 @@ function requestJson<T>(
   const { baseUrl, token, rejectUnauthorized, timeoutMs: defaultTimeoutMs } = getTenantApiEnv();
   const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
 
-  return new Promise<T>((resolve, reject) => {
+  return trackApiRequest("tenant", () => new Promise<T>((resolve, reject) => {
     const url = new URL(path, baseUrl);
     const isHttps = url.protocol === "https:";
     const transport = isHttps ? https : http;
@@ -544,7 +545,7 @@ function requestJson<T>(
     });
     if (serializedBody) request.write(serializedBody);
     request.end();
-  });
+  }));
 }
 
 export async function listTenantNamespaces() {
@@ -703,7 +704,7 @@ export function fetchTenantDocumentRaw(documentId: string) {
   const url = new URL(`/api/v1/documents/${encodeURIComponent(documentId)}/raw`, baseUrl);
   const transport = url.protocol === "https:" ? https : http;
 
-  return new Promise<{ body: Buffer; contentType: string }>((resolve, reject) => {
+  return trackApiRequest("tenant", () => new Promise<{ body: Buffer; contentType: string }>((resolve, reject) => {
     const request = transport.request(
       url,
       { method: "GET", rejectUnauthorized, headers: { Authorization: `Bearer ${token}` } },
@@ -727,7 +728,7 @@ export function fetchTenantDocumentRaw(documentId: string) {
     request.setTimeout(timeoutMs, () => request.destroy(new Error("Document download timed out.")));
     request.on("error", reject);
     request.end();
-  });
+  }));
 }
 
 export async function listPracticeTopics(input: {
@@ -909,7 +910,7 @@ export async function gradeTeacherPaperFile(
   const transport = url.protocol === "https:" ? https : http;
   const multipartBody = createTeacherGradeFileMultipartBody(input);
 
-  return new Promise<TeacherGradeResponse>((resolve, reject) => {
+  return trackApiRequest("tenant", () => new Promise<TeacherGradeResponse>((resolve, reject) => {
     let settled = false;
     const request = transport.request(
       url,
@@ -962,7 +963,7 @@ export async function gradeTeacherPaperFile(
     });
     request.write(multipartBody.body);
     request.end();
-  });
+  }));
 }
 
 export async function promptTenant(input: {
@@ -1187,7 +1188,7 @@ export async function chatTenantStream(
     : null;
   const serializedBody = multipartBody ? multipartBody.body : JSON.stringify(requestPayload);
 
-  await new Promise<void>((resolve, reject) => {
+  await trackApiRequest("tenant", () => new Promise<void>((resolve, reject) => {
     let settled = false;
     let buffer = "";
 
@@ -1282,5 +1283,5 @@ export async function chatTenantStream(
     });
     request.write(serializedBody);
     request.end();
-  });
+  }));
 }

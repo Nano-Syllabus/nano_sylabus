@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import { getTenantApiEnv } from "@/lib/env";
+import { trackApiRequest } from "@/lib/api-request-tracking";
 
 export type ApiRecord = Record<string, unknown>;
 
@@ -174,7 +175,7 @@ async function teacherRequest<T>(
   const { baseUrl, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
   const requestTimeoutMs = options.timeoutMs ?? timeoutMs;
 
-  return new Promise<T>((resolve, reject) => {
+  return trackApiRequest("collection", () => new Promise<T>((resolve, reject) => {
     const url = new URL(path, baseUrl);
     const transport = url.protocol === "https:" ? https : http;
     const serializedBody = options.body === undefined ? undefined : JSON.stringify(options.body);
@@ -233,7 +234,7 @@ async function teacherRequest<T>(
     request.on("error", reject);
     if (serializedBody) request.write(serializedBody);
     request.end();
-  });
+  }));
 }
 
 function parseTeacherSseEvent(rawEvent: string): TeacherSubjectStreamEvent | null {
@@ -329,7 +330,7 @@ async function teacherStreamRequest(
   const { baseUrl, rejectUnauthorized, timeoutMs: defaultTimeoutMs } = getTenantApiEnv();
   const requestTimeoutMs = timeoutMs ?? defaultTimeoutMs;
 
-  await new Promise<void>((resolve, reject) => {
+  await trackApiRequest("collection", () => new Promise<void>((resolve, reject) => {
     let settled = false;
     let buffer = "";
     const url = new URL(path, baseUrl);
@@ -413,7 +414,7 @@ async function teacherStreamRequest(
     });
     request.write(serializedBody);
     request.end();
-  });
+  }));
 }
 
 export const getTeacherMe = (key: string) => teacherRequest<ApiRecord>("/v1/collection/me", key);
@@ -434,7 +435,7 @@ export function fetchTeacherDocumentRaw(key: string, documentId: string) {
   const { baseUrl, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
 
   const readRaw = (path: string) =>
-    new Promise<{ body: Buffer; contentType: string }>((resolve, reject) => {
+    trackApiRequest("collection", () => new Promise<{ body: Buffer; contentType: string }>((resolve, reject) => {
       const url = new URL(path, baseUrl);
       const transport = url.protocol === "https:" ? https : http;
       const request = transport.request(
@@ -465,7 +466,7 @@ export function fetchTeacherDocumentRaw(key: string, documentId: string) {
       });
       request.on("error", reject);
       request.end();
-    });
+    }));
 
   const encodedId = encodeURIComponent(documentId);
   return readRaw(`/api/v1/documents/${encodedId}/raw`).catch((error) => {
@@ -806,7 +807,7 @@ export async function gradeTeacherPracticePaperFile(
   const transport = url.protocol === "https:" ? https : http;
   const timeoutMs = Math.max(defaultTimeoutMs, 120_000);
 
-  return new Promise<ApiRecord>((resolve, reject) => {
+  return trackApiRequest("collection", () => new Promise<ApiRecord>((resolve, reject) => {
     const request = transport.request(
       url,
       {
@@ -856,5 +857,5 @@ export async function gradeTeacherPracticePaperFile(
     request.on("error", reject);
     request.write(body);
     request.end();
-  });
+  }));
 }

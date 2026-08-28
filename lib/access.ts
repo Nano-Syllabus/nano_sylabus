@@ -1,4 +1,5 @@
 import type { AppRole, StudentProfile } from "@/lib/types";
+import { isAdminRole } from "@/lib/admin-role";
 
 export function isProfileComplete(
   profile: Partial<
@@ -15,7 +16,7 @@ export function resolveAccess(input: {
   pathname: string;
   hasUser: boolean;
   onboarded: boolean;
-  role: AppRole;
+  role: AppRole | "super_admin";
 }) {
   const { pathname, hasUser, role } = input;
   const isAdminRoute = pathname.startsWith("/admin");
@@ -25,7 +26,7 @@ export function resolveAccess(input: {
 
   if (isAdminRoute) {
     if (!hasUser) return { allow: false as const, redirectTo: "/login", includeNext: true };
-    if (role !== "admin") {
+    if (!isAdminRole(role)) {
       return {
         allow: false as const,
         redirectTo: "/app/today",

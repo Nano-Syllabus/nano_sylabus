@@ -2,6 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { isProfileComplete } from "@/lib/access";
+import { isAdminRole } from "@/lib/admin-role";
 import { grantStarterCredits } from "@/lib/data/billing";
 import {
   normalizeBoard,
@@ -126,6 +127,6 @@ export async function requireOnboardedUser() {
 
 export async function requireAdminUser() {
   const auth = await requireAuthenticatedUser();
-  if (auth.user.role !== "admin") redirect("/app/today");
+  if (!isAdminRole(auth.user.role)) redirect("/app/today");
   return auth;
 }
