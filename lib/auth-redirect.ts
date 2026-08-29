@@ -1,4 +1,4 @@
-const DEFAULT_AUTH_ORIGIN = "https://nanosyllabus.com";
+const DEFAULT_AUTH_ORIGIN = "https://nano-sylabus-ten.vercel.app";
 
 function normalizeOrigin(value: string) {
   return value.trim().replace(/\/+$/, "");
@@ -9,14 +9,9 @@ function isLocalHostname(hostname: string) {
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
-function isNanoSyllabusHostname(hostname: string) {
-  const normalized = hostname.toLowerCase();
-  return normalized === "nanosyllabus.com" || normalized.endsWith(".nanosyllabus.com");
-}
-
 /**
- * Keep OAuth on the canonical app domain in production, while preserving the
- * current origin for local development and tests.
+ * Keep OAuth on the live Vercel app in production while the custom domain is
+ * unavailable. Local development and tests continue to use their own origin.
  */
 export function getGoogleAuthRedirectUrl() {
   if (typeof window === "undefined") {
@@ -32,9 +27,9 @@ export function getGoogleAuthRedirectUrl() {
 }
 
 /**
- * The callback can land on nanosyllabus.com even when sign-in started on
- * app.nanosyllabus.com. Scope the short-lived return-path cookie to the
- * parent domain so the callback can still restore the requested destination.
+ * Keep the return-path cookie host-only. The OAuth callback now returns to the
+ * same Vercel host, so sharing this cookie with an expired parent domain is
+ * both unnecessary and incorrect.
  */
 export function setOAuthNextCookie(nextPath?: string) {
   if (typeof document === "undefined" || typeof window === "undefined") {
@@ -42,10 +37,7 @@ export function setOAuthNextCookie(nextPath?: string) {
   }
 
   const encodedNext = encodeURIComponent(nextPath || "");
-  const domain = isNanoSyllabusHostname(window.location.hostname)
-    ? "; Domain=.nanosyllabus.com"
-    : "";
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
 
-  document.cookie = `oauth_next=${encodedNext}; Path=/; Max-Age=600; SameSite=Lax${domain}${secure}`;
+  document.cookie = `oauth_next=${encodedNext}; Path=/; Max-Age=600; SameSite=Lax${secure}`;
 }

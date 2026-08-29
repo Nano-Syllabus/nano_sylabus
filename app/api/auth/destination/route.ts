@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isProfileComplete } from "@/lib/access";
+import { isAdminRole } from "@/lib/admin-role";
 import { resolvePostAuthDestination } from "@/lib/post-auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
       : null,
   );
 
-  const role = profile?.role === "admin" ? "admin" : "student";
+  const role = isAdminRole(profile?.role) ? profile?.role : "student";
   const destination = resolvePostAuthDestination({
     nextPath,
     onboarded,

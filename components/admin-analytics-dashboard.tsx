@@ -13,6 +13,7 @@ import {
   CheckCheck,
   ChevronRight,
   CircleAlert,
+  CreditCard,
   Database,
   Download,
   FileCheck2,
@@ -21,6 +22,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Users,
+  UserCog,
   Wallet,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -238,6 +240,22 @@ export function AdminAnalyticsDashboard() {
           </Link>
         );
       })}
+      <div className={mobile ? "contents" : "my-3 border-t border-border pt-3"}>
+        <Link
+          href="/admin/users"
+          className="flex min-h-10 shrink-0 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <UserCog size={17} strokeWidth={1.7} aria-hidden="true" />
+          User access
+        </Link>
+        <Link
+          href="/admin/billing"
+          className="flex min-h-10 shrink-0 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors duration-100 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <CreditCard size={17} strokeWidth={1.7} aria-hidden="true" />
+          Payment reviews
+        </Link>
+      </div>
     </nav>
   );
 

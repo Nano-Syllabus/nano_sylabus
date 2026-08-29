@@ -1,5 +1,8 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/admin-role";
+import type { AppRole } from "@/lib/types";
+
+type AdminRole = Extract<AppRole, "admin" | "super_admin">;
 
 export async function assertAdminRequest() {
   const supabase = await createSupabaseServerClient();
@@ -25,5 +28,16 @@ export async function assertAdminRequest() {
     return { error: "Forbidden" as const, status: 403 };
   }
 
-  return { userId: user.id };
+  return { userId: user.id, role: profile?.role as AdminRole };
+}
+
+export async function assertSuperAdminRequest() {
+  const access = await assertAdminRequest();
+  if ("error" in access) return access;
+
+  if (access.role !== "super_admin") {
+    return { error: "Super admin access is required." as const, status: 403 };
+  }
+
+  return access;
 }

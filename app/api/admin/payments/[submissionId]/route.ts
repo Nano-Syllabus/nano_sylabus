@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isAdminRole } from "@/lib/admin-role";
 import { getAdminPaymentSubmissionDetail } from "@/lib/data/billing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -27,7 +28,7 @@ export async function GET(
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (profile?.role !== "admin") {
+    if (!isAdminRole(profile?.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -67,7 +68,7 @@ export async function PATCH(
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (profile?.role !== "admin") {
+    if (!isAdminRole(profile?.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

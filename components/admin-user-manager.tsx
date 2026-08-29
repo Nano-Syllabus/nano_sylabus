@@ -12,10 +12,15 @@ import { formatDate } from "@/lib/utils";
 export function AdminUserManager({
   initialUsers,
   initialPage,
+  viewerRole,
+  viewerUserId,
 }: {
   initialUsers: AdminUserSummary[];
   initialPage: AdminListPage<AdminUserSummary>;
+  viewerRole: Extract<AppRole, "admin" | "super_admin">;
+  viewerUserId: string;
 }) {
+  const canManageRoles = viewerRole === "super_admin";
   const [users, setUsers] = useState(initialUsers);
   const [selectedId, setSelectedId] = useState<string>(initialUsers[0]?.userId ?? "");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -114,8 +119,16 @@ export function AdminUserManager({
   }, [users]);
 
   async function handleBulkRoleSave() {
+    if (!canManageRoles) {
+      setFeedback("Only a super admin can change platform roles.");
+      return;
+    }
     if (!selectedUserIds.length) {
       setFeedback("Select at least one student first.");
+      return;
+    }
+    if (bulkRole !== "super_admin" && selectedUserIds.includes(viewerUserId)) {
+      setFeedback("Remove your own account from this selection before applying a lower role.");
       return;
     }
 
@@ -156,6 +169,10 @@ export function AdminUserManager({
 
   async function handleRoleSave() {
     if (!detail) return;
+    if (!canManageRoles) {
+      setFeedback("Only a super admin can change platform roles.");
+      return;
+    }
     setBusy("saving-role");
     setFeedback(null);
     try {
@@ -242,7 +259,7 @@ export function AdminUserManager({
           onPrevPage={() => void refreshUsers(undefined, Math.max(1, page - 1))}
           onNextPage={() => void refreshUsers(undefined, Math.min(totalPages, page + 1))}
           disabled={busy !== "idle"}
-          secondaryControls={
+          secondaryControls={canManageRoles ? (
             <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
               <select
                 value={bulkRole}
@@ -251,12 +268,13 @@ export function AdminUserManager({
               >
                 <option value="student">student</option>
                 <option value="admin">admin</option>
+                <option value="super_admin">super admin</option>
               </select>
               <Button size="sm" onClick={handleBulkRoleSave} disabled={!selectedUserIds.length || busy !== "idle"}>
                 Apply role
               </Button>
             </div>
-          }
+          ) : undefined}
         />
       </aside>
 
@@ -278,7 +296,7 @@ export function AdminUserManager({
           </div>
 
           {feedback ? (
-            <div className="mx-5 mt-4 border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+            <div aria-live="polite" className="mx-5 mt-4 rounded-md border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
               {feedback}
             </div>
           ) : null}
@@ -304,20 +322,44 @@ export function AdminUserManager({
                   <Row label="Onboarded" value={detail.onboarded ? "Yes" : "No"} />
                 </DetailBlock>
 
-                <DetailBlock title="Role control">
-                  <Field label="Role">
-                    <select
-                      value={nextRole}
-                      onChange={(event) => setNextRole(event.target.value as AppRole)}
-                      className="block h-11 w-full rounded-md border border-border bg-bg-primary px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-border-strong/40"
-                    >
-                      <option value="student">student</option>
-                      <option value="admin">admin</option>
-                    </select>
-                  </Field>
-                  <Button onClick={handleRoleSave} disabled={busy !== "idle"}>
-                    {busy === "saving-role" ? "Saving..." : "Save role"}
-                  </Button>
+                <DetailBlock title="Role access">
+                  {canManageRoles ? (
+                    <>
+                      <p className="text-sm leading-5 text-text-secondary">
+                        Admins can operate the admin workspace. Super admins can also grant or revoke platform roles.
+                      </p>
+                      <Field label="Role">
+                        <select
+                          value={nextRole}
+                          onChange={(event) => setNextRole(event.target.value as AppRole)}
+                          disabled={detail.userId === viewerUserId}
+                          className="block h-11 w-full rounded-md border border-border bg-bg-primary px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-border-strong/40 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <option value="student">student</option>
+                          <option value="admin">admin</option>
+                          <option value="super_admin">super admin</option>
+                        </select>
+                      </Field>
+                      {detail.userId === viewerUserId ? (
+                        <p className="text-xs leading-5 text-text-muted">
+                          Your own super-admin role is locked to prevent accidental lockout.
+                        </p>
+                      ) : null}
+                      <Button
+                        onClick={handleRoleSave}
+                        disabled={busy !== "idle" || detail.userId === viewerUserId || nextRole === detail.role}
+                      >
+                        {busy === "saving-role" ? "Saving..." : "Save role"}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Row label="Current role" value={detail.role.replace("_", " ")} />
+                      <p className="text-sm leading-5 text-text-secondary">
+                        Role changes are restricted to super admins. You can still inspect users and manage credits.
+                      </p>
+                    </>
+                  )}
                 </DetailBlock>
 
                 <DetailBlock title="Credit adjustment">

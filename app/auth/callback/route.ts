@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isProfileComplete } from "@/lib/access";
+import { isAdminRole } from "@/lib/admin-role";
 import { resolvePostAuthDestination } from "@/lib/post-auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const role = profile?.role === "admin" ? "admin" : "student";
+  const role = isAdminRole(profile?.role) ? profile?.role : "student";
   const destination = resolvePostAuthDestination({
     nextPath: next,
     onboarded: true,
@@ -70,10 +71,6 @@ export async function GET(request: NextRequest) {
   response.cookies.set("oauth_next", "", {
     maxAge: 0,
     path: "/",
-    domain:
-      url.hostname === "nanosyllabus.com" || url.hostname.endsWith(".nanosyllabus.com")
-        ? ".nanosyllabus.com"
-        : undefined,
   });
   return response;
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { assertAdminRequest } from "@/lib/admin-access";
+import { assertAdminRequest, assertSuperAdminRequest } from "@/lib/admin-access";
 import { userRoleUpdateSchema } from "@/lib/admin/schemas";
 import { getAdminUserDetail, updateAdminUserRole } from "@/lib/data/admin-users";
 
@@ -31,7 +31,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ userId: string }> },
 ) {
-  const access = await assertAdminRequest();
+  const access = await assertSuperAdminRequest();
   if ("error" in access) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
@@ -39,7 +39,11 @@ export async function PATCH(
   try {
     const { userId } = await params;
     const payload = userRoleUpdateSchema.parse(await request.json());
-    const user = await updateAdminUserRole(userId, payload.role);
+    const user = await updateAdminUserRole({
+      actorUserId: access.userId,
+      userId,
+      role: payload.role,
+    });
     return NextResponse.json({ user });
   } catch (error) {
     return NextResponse.json(

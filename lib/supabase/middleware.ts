@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isProfileComplete, resolveAccess } from "@/lib/access";
 import { getSupabaseEnv } from "@/lib/env";
+import type { AppRole } from "@/lib/types";
 
 type CookieToSet = {
   name: string;
@@ -58,7 +59,7 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   let onboarded = false;
-  let role: "student" | "admin" = "student";
+  let role: AppRole = "student";
   let gateToPersist: string | null = null;
 
   if (user) {

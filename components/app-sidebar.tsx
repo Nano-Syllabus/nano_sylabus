@@ -743,6 +743,10 @@ export function AppSidebar({
                 onClick={() => setIsProfileMenuOpen(false)}
                 className="flex min-h-10 items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
               >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 3v18h18" />
+                  <path d="m7 16 4-5 4 3 5-7" />
+                </svg>
                 Platform analytics
               </Link>
             )}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { listAdminPaymentSubmissions } from "@/lib/data/billing";
+import { isAdminRole } from "@/lib/admin-role";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -19,7 +20,7 @@ export async function GET() {
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (profile?.role !== "admin") {
+    if (!isAdminRole(profile?.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

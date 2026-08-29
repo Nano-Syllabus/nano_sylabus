@@ -428,20 +428,23 @@ export async function getAdminUserDetail(userId: string) {
   } satisfies AdminUserDetail;
 }
 
-export async function updateAdminUserRole(userId: string, role: AppRole) {
+export async function updateAdminUserRole(input: {
+  actorUserId: string;
+  userId: string;
+  role: AppRole;
+}) {
   const supabase = createSupabaseAdminClient();
-  const { error } = await supabase.from("student_profiles").upsert(
-    {
-      user_id: userId,
-      role,
-    },
-    { onConflict: "user_id" },
-  );
-  if (error) throw error;
-  return getAdminUserDetail(userId);
+  const { error } = await supabase.rpc("set_platform_user_roles", {
+    p_actor_user_id: input.actorUserId,
+    p_target_user_ids: [input.userId],
+    p_role: input.role,
+  });
+  if (error) throw new Error(error.message);
+  return getAdminUserDetail(input.userId);
 }
 
 export async function bulkUpdateAdminUserRoles(input: {
+  actorUserId: string;
   userIds: string[];
   role: AppRole;
 }) {
@@ -451,16 +454,15 @@ export async function bulkUpdateAdminUserRoles(input: {
   }
 
   const supabase = createSupabaseAdminClient();
-  const payload = userIds.map((userId) => ({
-    user_id: userId,
-    role: input.role,
-  }));
-
-  const { error } = await supabase.from("student_profiles").upsert(payload, { onConflict: "user_id" });
-  if (error) throw error;
+  const { data, error } = await supabase.rpc("set_platform_user_roles", {
+    p_actor_user_id: input.actorUserId,
+    p_target_user_ids: userIds,
+    p_role: input.role,
+  });
+  if (error) throw new Error(error.message);
 
   return {
-    updatedCount: userIds.length,
+    updatedCount: typeof data === "number" ? data : userIds.length,
     userIds,
   };
 }

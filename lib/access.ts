@@ -16,7 +16,7 @@ export function resolveAccess(input: {
   pathname: string;
   hasUser: boolean;
   onboarded: boolean;
-  role: AppRole | "super_admin";
+  role: AppRole;
 }) {
   const { pathname, hasUser, role } = input;
   const isAdminRoute = pathname.startsWith("/admin");

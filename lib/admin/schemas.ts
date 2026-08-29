@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AdminAnswerFilter } from "@/lib/types";
 
 export const userRoleUpdateSchema = z.object({
-  role: z.enum(["student", "admin"]),
+  role: z.enum(["student", "admin", "super_admin"]),
 });
 
 export const userCreditAdjustmentSchema = z.object({
@@ -12,7 +12,7 @@ export const userCreditAdjustmentSchema = z.object({
 
 export const bulkUserActionSchema = z.object({
   action: z.literal("set_role"),
-  role: z.enum(["student", "admin"]),
+  role: z.enum(["student", "admin", "super_admin"]),
   userIds: z.array(z.string().uuid()).min(1).max(200),
 });
 

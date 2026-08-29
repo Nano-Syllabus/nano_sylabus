@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { assertAdminRequest } from "@/lib/admin-access";
+import { assertSuperAdminRequest } from "@/lib/admin-access";
 import { bulkUserActionSchema } from "@/lib/admin/schemas";
 import { bulkUpdateAdminUserRoles } from "@/lib/data/admin-users";
 
 export async function POST(request: Request) {
-  const access = await assertAdminRequest();
+  const access = await assertSuperAdminRequest();
   if ("error" in access) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
@@ -12,6 +12,7 @@ export async function POST(request: Request) {
   try {
     const payload = bulkUserActionSchema.parse(await request.json());
     const result = await bulkUpdateAdminUserRoles({
+      actorUserId: access.userId,
       role: payload.role,
       userIds: payload.userIds,
     });
