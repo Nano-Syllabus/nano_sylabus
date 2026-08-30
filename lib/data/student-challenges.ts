@@ -7,6 +7,7 @@ import {
   createTeacherChallenge,
   createTeacherChallengeExam,
   submitTeacherChallengeExam,
+  submitTeacherChallengeExamFile,
   TeacherApiError,
   type TeacherChallengeExam,
   type TeacherChallengeGradeResponse,
@@ -285,18 +286,22 @@ export async function listCompletedStudentChallenges(
   userId: string,
   page: number,
   pageSize = 5,
+  scope?: { courseId: string; subjectSlug: string },
 ) {
   const admin = createSupabaseAdminClient();
   const requestedPage = Math.max(1, Math.floor(page));
   const from = (requestedPage - 1) * pageSize;
-  const { data, error, count } = await admin
+  let query = admin
     .from("student_challenges")
     .select("*", { count: "exact" })
     .eq("user_id", userId)
     .eq("status", "completed")
     .order("completed_at", { ascending: false })
-    .order("created_at", { ascending: false })
-    .range(from, from + pageSize - 1);
+    .order("created_at", { ascending: false });
+  if (scope) {
+    query = query.eq("course_id", scope.courseId).eq("subject_slug", scope.subjectSlug);
+  }
+  const { data, error, count } = await query.range(from, from + pageSize - 1);
   if (isMissingChallengeTable(error)) {
     return { challenges: [], page: 1, total: 0, totalPages: 0 };
   }
@@ -305,7 +310,7 @@ export async function listCompletedStudentChallenges(
   const total = count ?? 0;
   const totalPages = total ? Math.ceil(total / pageSize) : 0;
   if (totalPages > 0 && requestedPage > totalPages) {
-    return listCompletedStudentChallenges(userId, totalPages, pageSize);
+    return listCompletedStudentChallenges(userId, totalPages, pageSize, scope);
   }
   return {
     challenges: ((data ?? []) as ChallengeRow[]).map(toSummary),
@@ -629,6 +634,31 @@ export async function submitStudentChallengeAttempt(input: {
       question_id: answer.questionId,
       answer_text: answer.answerText,
     })),
+  });
+}
+
+export async function submitStudentChallengeFile(input: {
+  userId: string;
+  challengeId: string;
+  studentName: string;
+  file: { name: string; mimeType: string; buffer: Buffer };
+}) {
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", input.challengeId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!raw) throw new Error("Challenge not found.");
+  const row = raw as ChallengeRow;
+  const attemptId = String(row.external_paper_id || "");
+  if (!attemptId) throw new Error("Start the challenge before submitting it.");
+  const lane = await resolveChallengeLane(input.userId, row);
+  return submitTeacherChallengeExamFile(lane.collectionKey, attemptId, {
+    studentName: input.studentName,
+    file: input.file,
   });
 }
 

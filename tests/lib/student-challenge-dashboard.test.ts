@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { calculateAttemptMetrics } from "@/lib/data/student-challenge-dashboard";
+import {
+  calculateAttemptMetrics,
+  challengeBelongsToScope,
+} from "@/lib/data/student-challenge-dashboard";
 import {
   challengeExamExpired,
   isMissingChallengeTable,
@@ -10,6 +13,23 @@ import {
 const now = new Date("2026-08-25T06:00:00.000Z");
 
 describe("student challenge metrics", () => {
+  it("keeps a community subject challenge view isolated from legacy courses", () => {
+    const scope = { courseId: "community-course", subjectSlug: "computer-programming" };
+
+    expect(
+      challengeBelongsToScope(
+        { courseId: "legacy-course", subjectSlug: "attention-is-all-you-need" },
+        scope,
+      ),
+    ).toBe(false);
+    expect(
+      challengeBelongsToScope(
+        { courseId: "community-course", subjectSlug: "Computer-Programming" },
+        scope,
+      ),
+    ).toBe(true);
+  });
+
   it("treats both Postgres and PostgREST missing-table errors as a staged deploy", () => {
     expect(isMissingChallengeTable({ code: "42P01" })).toBe(true);
     expect(isMissingChallengeTable({ code: "PGRST205" })).toBe(true);

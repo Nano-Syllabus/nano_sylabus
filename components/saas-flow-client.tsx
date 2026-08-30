@@ -45,6 +45,35 @@ export type FlowStep =
   | "groupCheckout" 
   | "paymentPending";
 
+const PAYMENT_FLOW_ENABLED = false;
+const PAYMENT_FLOW_STEPS = new Set<FlowStep>([
+  "pricing",
+  "checkout1",
+  "checkout2",
+  "groupCheckout",
+  "paymentPending",
+]);
+const FLOW_STEPS = new Set<FlowStep>([
+  "q1",
+  "q2",
+  "q3",
+  "fact1",
+  "q4",
+  "q5",
+  "q6",
+  "founderSlide",
+  "solutionSlide",
+  "login",
+  ...PAYMENT_FLOW_STEPS,
+]);
+
+function resolveInitialStep(value: string | null): FlowStep {
+  const requested = value as FlowStep | null;
+  if (!requested || !FLOW_STEPS.has(requested)) return "q1";
+  if (!PAYMENT_FLOW_ENABLED && PAYMENT_FLOW_STEPS.has(requested)) return "q1";
+  return requested;
+}
+
 export type UserAnswer = {
   questionIndex: number;
   optionIndex: number;
@@ -91,8 +120,9 @@ export function SaaSFlowClient({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const completionDestination = "/app/today";
   
-  const initialStep = (searchParams.get("step") as FlowStep) || "q1";
+  const initialStep = resolveInitialStep(searchParams.get("step"));
   const [currentStep, setCurrentStep] = useState<FlowStep>(initialStep);
   const [answers, setAnswers] = useState<Record<number, UserAnswer>>({});
   
@@ -117,7 +147,7 @@ export function SaaSFlowClient({
     setGoogleLoading(true);
     const supabase = createSupabaseBrowserClient();
     const redirectTo = getGoogleAuthRedirectUrl();
-    setOAuthNextCookie("/flow?step=pricing");
+    setOAuthNextCookie(PAYMENT_FLOW_ENABLED ? "/flow?step=pricing" : completionDestination);
 
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -159,6 +189,12 @@ export function SaaSFlowClient({
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [currentStep]);
+
+  useEffect(() => {
+    if (!PAYMENT_FLOW_ENABLED && PAYMENT_FLOW_STEPS.has(currentStep)) {
+      router.replace("/app/today");
+    }
+  }, [currentStep, router]);
 
   const isStruggle = (qNum: number) => {
     const ans = answers[qNum];
@@ -233,8 +269,12 @@ export function SaaSFlowClient({
         }
       }
 
-      // Proceed to pricing after auth
-      setCurrentStep("pricing");
+      if (PAYMENT_FLOW_ENABLED) {
+        setCurrentStep("pricing");
+      } else {
+        router.replace(completionDestination);
+        router.refresh();
+      }
     } catch (err: any) {
       setAuthError(err?.message || "Authentication failed. Please try again.");
     } finally {
@@ -722,8 +762,10 @@ export function SaaSFlowClient({
           <div className="mt-16 text-center">
             <button
               onClick={() => {
-                if (user) {
+                if (user && PAYMENT_FLOW_ENABLED) {
                   setCurrentStep("pricing");
+                } else if (user) {
+                  router.push(completionDestination);
                 } else {
                   setCurrentStep("login");
                 }
@@ -886,7 +928,7 @@ export function SaaSFlowClient({
       {/* ═════════════════════════════════════════════════════════════════════
           6. PRICING STEP (pricing)
           ═════════════════════════════════════════════════════════════════════ */}
-      {currentStep === "pricing" && (
+      {PAYMENT_FLOW_ENABLED && currentStep === "pricing" && (
         <main className="mx-auto max-w-[1080px] px-6 py-12 sm:py-16">
           {renderFlowHeader()}
 
@@ -1008,7 +1050,7 @@ export function SaaSFlowClient({
       {/* ═════════════════════════════════════════════════════════════════════
           7. STANDARD MOBILE BANKING CHECKOUT (checkout1)
           ═════════════════════════════════════════════ */}
-      {currentStep === "checkout1" && (
+      {PAYMENT_FLOW_ENABLED && currentStep === "checkout1" && (
         <main className="mx-auto max-w-[1050px] px-6 py-12 sm:py-16">
           {renderFlowHeader()}
 
@@ -1214,7 +1256,7 @@ export function SaaSFlowClient({
       {/* ═════════════════════════════════════════════════════════════════════
           8. 100% DISCOUNT FREE TRIAL CHECKOUT (checkout2)
           ═════════════════════════════════════════════ */}
-      {currentStep === "checkout2" && (
+      {PAYMENT_FLOW_ENABLED && currentStep === "checkout2" && (
         <main className="mx-auto max-w-[1050px] px-6 py-12 sm:py-16">
           {renderFlowHeader()}
 
@@ -1300,7 +1342,7 @@ export function SaaSFlowClient({
       {/* ═════════════════════════════════════════════════════════════════════
           9. GROUP CHECKOUT (groupCheckout)
           ═════════════════════════════════════════════════════════════════════ */}
-      {currentStep === "groupCheckout" && (
+      {PAYMENT_FLOW_ENABLED && currentStep === "groupCheckout" && (
         <main className="mx-auto max-w-[1050px] px-6 py-12 sm:py-16">
           {renderFlowHeader()}
 
@@ -1402,7 +1444,7 @@ export function SaaSFlowClient({
       {/* ═════════════════════════════════════════════════════════════════════
           10. PAYMENT PENDING VERIFICATION SCREEN (paymentPending)
           ═════════════════════════════════════════════════════════════════════ */}
-      {currentStep === "paymentPending" && (
+      {PAYMENT_FLOW_ENABLED && currentStep === "paymentPending" && (
         <main className="mx-auto max-w-[560px] px-6 py-16 sm:py-20">
           {renderFlowHeader("Home")}
 

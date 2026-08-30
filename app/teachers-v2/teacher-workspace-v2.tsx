@@ -273,7 +273,11 @@ type ChatMessage = {
 };
 
 type DialogState =
-  | { type: "create-subject"; returnTo?: "create-classroom" | "exams" }
+  | {
+      type: "create-subject";
+      returnTo?: "create-classroom" | "exams";
+      communityReturnTo?: string;
+    }
   | { type: "create-classroom"; subjectSlug?: string }
   | { type: "upload"; shelf: Shelf }
   | { type: "create-folder"; shelf: Shelf }
@@ -299,6 +303,17 @@ function asRecord(value: unknown): ApiRecord {
 
 function text(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function safeCommunityReturnTo(value: string | null) {
+  if (!value || !value.startsWith("/app/communities/") || value.startsWith("//")) return "";
+  try {
+    const url = new URL(value, "http://nanosyllabus.local");
+    if (url.origin !== "http://nanosyllabus.local") return "";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "";
+  }
 }
 
 function fileSizeLabel(file: File) {
@@ -1097,6 +1112,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
   const [requestedPaperId, setRequestedPaperId] = useState("");
   const [indexingJobs, setIndexingJobs] = useState<Record<string, string>>({});
+  const [communityReturnTo, setCommunityReturnTo] = useState("");
 
   const loadWorkspace = useCallback(async () => {
     setWorkspaceState("loading");
@@ -1230,10 +1246,36 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
     void loadDashboard();
   }, [loadDashboard]);
   useEffect(() => {
-    const paperId = new URLSearchParams(window.location.search).get("paper") || "";
-    if (!paperId) return;
-    setRequestedPaperId(paperId);
-    setView("exams");
+    const params = new URLSearchParams(window.location.search);
+    const paperId = params.get("paper") || "";
+    if (paperId) {
+      setRequestedPaperId(paperId);
+      setView("exams");
+      return;
+    }
+
+    const returnTo = safeCommunityReturnTo(params.get("returnTo"));
+    setCommunityReturnTo(returnTo);
+    if (params.get("view") === "subjects" || params.get("subject") || params.get("newSubject")) {
+      setView("subjects");
+    }
+    const subjectSlug = params.get("subject") || "";
+    if (subjectSlug) setSelectedSlug(subjectSlug);
+    const requestedTab = params.get("tab");
+    if (
+      requestedTab === "overview" ||
+      requestedTab === "syllabus" ||
+      requestedTab === "material" ||
+      requestedTab === "bank" ||
+      requestedTab === "source-search" ||
+      requestedTab === "test-chat" ||
+      requestedTab === "config"
+    ) {
+      setSubjectTab(requestedTab);
+    }
+    if (params.get("newSubject") === "1") {
+      setDialog({ type: "create-subject", communityReturnTo: returnTo || undefined });
+    }
   }, []);
   useEffect(() => {
     if (!toast) return;
@@ -1497,6 +1539,30 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             <p className="truncate text-sm font-medium">Admin Portal</p>
           </div>
           <span className="flex-1" />
+          {communityReturnTo ? (
+            <Link
+              href={communityReturnTo}
+              className={cn(
+                "inline-flex min-h-10 items-center gap-1.5 rounded-[9px] border border-border bg-bg-primary px-3 text-sm font-medium text-text-primary transition hover:border-border-strong hover:bg-bg-secondary",
+                interactive,
+              )}
+            >
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+              Back to community
+            </Link>
+          ) : null}
           <ThemeToggle className="shrink-0 bg-bg-primary" />
           <Link
             href="/app/today"
@@ -1669,6 +1735,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           onClose={() => setDialog(null)}
           onCreated={async (result) => {
             const returnTo = dialog.returnTo;
+            const creatorReturnTo = dialog.communityReturnTo;
             const nextWorkspace = await loadWorkspace();
             const createdSubject = nextWorkspace?.subjects.find(
               (subject) => subject.slug === result.slug || subject.name === result.name,
@@ -1680,6 +1747,14 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             );
             if (returnTo === "exams") setView("exams");
             result.jobs.forEach((job) => void pollIndexingJob(job.id, job.label));
+            if (creatorReturnTo) {
+              const destination = new URL(creatorReturnTo, window.location.origin);
+              destination.searchParams.set("attach", result.slug);
+              window.location.assign(
+                `${destination.pathname}${destination.search}${destination.hash}`,
+              );
+              return;
+            }
             setToast(
               result.failedUploads.length
                 ? `${result.name} created. ${result.failedUploads.length} file upload${result.failedUploads.length === 1 ? "" : "s"} failed.`

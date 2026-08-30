@@ -1,6 +1,6 @@
 "use client";
 
-import { Flame } from "lucide-react";
+import { Flame, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -154,6 +154,7 @@ function ChallengeDetail({
   const router = useRouter();
   const [savingStep, setSavingStep] = useState<"lesson" | "examples" | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [scanFile, setScanFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<GradeResult[]>([]);
@@ -224,6 +225,41 @@ function ChallengeDetail({
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not grade the challenge.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitScan = async () => {
+    if (!scanFile) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.set("file", scanFile);
+      const response = await fetch(`/api/student/challenges/${challenge.id}/submit-file`, {
+        method: "POST",
+        body: form,
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        challenge: StudentChallengeDetail;
+        results: GradeResult[];
+        totalScore: number;
+        totalMarks: number;
+        passed: boolean;
+        error?: string;
+      };
+      if (!response.ok) {
+        if (payload.challenge) onChange(payload.challenge);
+        throw new Error(payload.error || "Could not grade the handwritten answer.");
+      }
+      setResults(payload.results);
+      setScore({ earned: payload.totalScore, total: payload.totalMarks, passed: payload.passed });
+      setScanFile(null);
+      onChange(payload.challenge);
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not grade the handwritten answer.");
     } finally {
       setSubmitting(false);
     }
@@ -392,24 +428,53 @@ function ChallengeDetail({
                 </label>
               ))}
               {challenge.status !== "completed" ? (
-                <button
-                  type="button"
-                  disabled={(!examExpired && !allAnswered) || submitting}
-                  onClick={() => void (examExpired ? refreshExam() : submit())}
-                  className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary disabled:opacity-50"
-                >
-                  {submitting
-                    ? examExpired ? "Issuing…" : "Grading…"
-                    : examExpired
-                      ? "Get a fresh exam"
-                      : challenge.attemptCount ? "Submit another attempt" : "Submit for grading"}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    disabled={(!examExpired && !allAnswered) || submitting}
+                    onClick={() => void (examExpired ? refreshExam() : submit())}
+                    className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary disabled:opacity-50"
+                  >
+                    {submitting
+                      ? examExpired ? "Issuing…" : "Grading…"
+                      : examExpired
+                        ? "Get a fresh exam"
+                        : challenge.attemptCount ? "Submit another attempt" : "Submit typed answers"}
+                  </button>
+                  {!examExpired ? (
+                    <div className="rounded-xl border border-border bg-bg-primary p-4">
+                      <div className="flex items-start gap-3">
+                        <Upload className="mt-0.5 size-5 text-text-muted" aria-hidden="true" />
+                        <div>
+                          <p className="text-sm font-semibold">Or upload your handwritten answer</p>
+                          <p className="mt-1 text-xs leading-5 text-text-muted">Photograph every page clearly and upload one PDF or image. AI reads the scan, grades each question, and awards 50 XP when you pass.</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <input
+                          type="file"
+                          accept="application/pdf,image/jpeg,image/png,image/webp"
+                          onChange={(event) => setScanFile(event.target.files?.[0] || null)}
+                          className="min-h-10 min-w-0 flex-1 rounded-lg border border-border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        />
+                        <button
+                          type="button"
+                          disabled={!scanFile || submitting}
+                          onClick={() => void submitScan()}
+                          className="min-h-10 rounded-full border border-blue-500 px-4 text-sm font-semibold text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 dark:text-blue-400"
+                        >
+                          {submitting ? "Reading scan…" : "Upload & grade"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </div>
           ) : null}
           {score ? (
             <div className={`mt-5 rounded-xl border p-4 ${score.passed ? "border-success/40 bg-success/10" : "border-warning/40 bg-warning/10"}`}>
-              <p className="font-semibold">{score.earned} / {score.total} · {score.passed ? "Challenge completed ✓" : "Not passed yet"}</p>
+              <p className="font-semibold">{score.earned} / {score.total} · {score.passed ? "Challenge completed · +50 XP ✓" : "Not passed yet"}</p>
               <div className="mt-3 space-y-2 text-sm text-text-secondary">
                 {results.map((result) => <p key={result.question_id}>{result.feedback}</p>)}
               </div>
@@ -443,6 +508,14 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
       : dashboard.currentStreak > 0 && leaderboard.daysFromBest === 0
         ? "You’ve matched the all-time best streak"
         : `${leaderboard.daysFromBest} ${leaderboard.daysFromBest === 1 ? "day" : "days"} from the all-time best streak`;
+  const completedPageHref = (page: number) => {
+    const params = new URLSearchParams({ completedPage: String(page) });
+    if (dashboard.scope) {
+      params.set("courseId", dashboard.scope.courseId);
+      params.set("subject", dashboard.scope.subjectSlug);
+    }
+    return `/app/today?${params.toString()}#completed-challenges`;
+  };
 
   const openChallenge = async (challenge: StudentChallengeSummary) => {
     setOpeningId(challenge.id);
@@ -466,6 +539,25 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
   return (
     <main className="min-h-screen w-full bg-bg-primary text-text-primary">
       <div className="mx-auto max-w-[1160px] px-4 py-8 pb-20 sm:px-8">
+        {dashboard.scope ? (
+          <section className="mb-5 flex flex-col gap-3 rounded-[15px] border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Community subject</p>
+              <h1 className="mt-1 text-lg font-bold text-text-primary">
+                {dashboard.scope.subjectName} challenges
+              </h1>
+              <p className="mt-1 text-sm text-text-secondary">
+                Only challenges from this subject are shown here.
+              </p>
+            </div>
+            <Link
+              href="/app/today"
+              className="inline-flex min-h-10 items-center justify-center rounded-full border border-border px-4 text-sm font-semibold text-text-primary transition-colors hover:border-blue-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+            >
+              Show all challenges
+            </Link>
+          </section>
+        ) : null}
         <section className="mb-[30px] flex flex-col items-start justify-between gap-5 rounded-[15px] border border-border bg-bg-secondary p-[17px_20px] sm:flex-row sm:items-center">
           <div>
             <h1 className="mb-1 text-[15px] font-[750] text-text-primary">Today&apos;s minimum</h1>
@@ -489,7 +581,9 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
         <section className="mb-6 grid grid-cols-1 gap-[18px] lg:grid-cols-[1.55fr_.9fr]">
           <article className="rounded-[18px] border border-border bg-card p-[25px_27px]">
             <h2 className="mb-[5px] text-[18px] font-[730] text-text-primary">Exam readiness</h2>
-            <p className="text-[14px] text-text-muted">Across all your subjects</p>
+            <p className="text-[14px] text-text-muted">
+              {dashboard.scope ? `For ${dashboard.scope.subjectName}` : "Across all your subjects"}
+            </p>
             <p className="mt-5 text-[40px] font-[760] tracking-[-1.5px] text-text-primary">
               {percent(dashboard.readiness)}
             </p>
@@ -586,8 +680,14 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
         <section>
           <div className="mb-[14px] mt-[30px] flex items-end justify-between">
             <div>
-              <h2 className="m-0 text-[22px] font-[750] tracking-[-.5px] text-text-primary">Today&apos;s challenges</h2>
-              <p className="mb-0 mt-1.5 text-[13px] text-text-muted">Passing one brings the next eligible course topic to the top.</p>
+              <h2 className="m-0 text-[22px] font-[750] tracking-[-.5px] text-text-primary">
+                {dashboard.scope ? `${dashboard.scope.subjectName} challenges` : "Today's challenges"}
+              </h2>
+              <p className="mb-0 mt-1.5 text-[13px] text-text-muted">
+                {dashboard.scope
+                  ? "These challenges come from this community subject's extracted topics."
+                  : "Passing one brings the next eligible course topic to the top."}
+              </p>
             </div>
           </div>
 
@@ -607,13 +707,19 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
             ))
           ) : (
             <div className="rounded-[14px] border border-dashed border-border bg-bg-secondary/40 p-6 text-center">
-              <p className="text-[15px] font-semibold text-text-primary">No challenges yet</p>
-              <p className="mt-1 text-[13px] text-text-muted">Join a course and its real topics will appear here.</p>
+              <p className="text-[15px] font-semibold text-text-primary">
+                {dashboard.scope ? "No challenge is ready for this subject yet" : "No challenges yet"}
+              </p>
+              <p className="mt-1 text-[13px] text-text-muted">
+                {dashboard.scope
+                  ? "Ask the community creator to refresh the extracted topics, then try again."
+                  : "Join a community and its real topics will appear here."}
+              </p>
               <Link
-                href="/app/courses"
+                href="/app/communities"
                 className="mt-4 inline-flex min-h-10 items-center rounded-[22px] bg-text-primary px-4 text-[13px] font-[700] text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
               >
-                Browse courses
+                {dashboard.scope ? "Back to communities" : "Browse communities"}
               </Link>
             </div>
           )}
@@ -651,7 +757,7 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
               <nav className="mt-5 flex items-center justify-between" aria-label="Completed challenges pagination">
                 {dashboard.completedChallengePage > 1 ? (
                   <Link
-                    href={`/app/today?completedPage=${dashboard.completedChallengePage - 1}#completed-challenges`}
+                    href={completedPageHref(dashboard.completedChallengePage - 1)}
                     className="rounded-full border border-border px-4 py-2 text-sm font-semibold hover:border-blue-500/40"
                   >
                     ← Previous
@@ -659,7 +765,7 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
                 ) : <span />}
                 {dashboard.completedChallengePage < dashboard.completedChallengeTotalPages ? (
                   <Link
-                    href={`/app/today?completedPage=${dashboard.completedChallengePage + 1}#completed-challenges`}
+                    href={completedPageHref(dashboard.completedChallengePage + 1)}
                     className="rounded-full border border-border px-4 py-2 text-sm font-semibold hover:border-blue-500/40"
                   >
                     Next →

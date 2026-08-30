@@ -69,11 +69,11 @@ export function LandingHeader({ dark = false }: { dark?: boolean }) {
             How it works
           </Link>
           <Link
-            href="/exams"
+            href="/communities"
             onClick={() => setMenuOpen(false)}
             className={`transition-colors ${dark ? "hover:text-white" : "hover:text-[#111b33]"}`}
           >
-            Community courses
+            Communities
           </Link>
           <Link
             href="/#readiness"
@@ -95,16 +95,16 @@ export function LandingHeader({ dark = false }: { dark?: boolean }) {
           {isLoggedIn ? (
             <Link
               href="/app/today"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2f6fff] px-[17px] py-2 text-[13px] font-[800] text-white shadow-[0_14px_28px_rgba(47,111,255,0.18)] transition-all hover:bg-[#2057d5] hover:-translate-y-0.5"
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#2f6fff] px-[17px] py-2 text-[13px] font-[800] text-white shadow-[0_14px_28px_rgba(47,111,255,0.18)] transition-all hover:-translate-y-0.5 hover:bg-[#2057d5]"
             >
               Go to App →
             </Link>
           ) : (
             <Link
-              href="/flow"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2f6fff] px-[17px] py-2 text-[13px] font-[800] text-white shadow-[0_14px_28px_rgba(47,111,255,0.18)] transition-all hover:bg-[#2057d5] hover:-translate-y-0.5"
+              href="/communities"
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#2f6fff] px-[17px] py-2 text-[13px] font-[800] text-white shadow-[0_14px_28px_rgba(47,111,255,0.18)] transition-all hover:-translate-y-0.5 hover:bg-[#2057d5]"
             >
-              Start free
+              Browse communities
             </Link>
           )}
           <button

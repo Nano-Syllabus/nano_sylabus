@@ -12,7 +12,16 @@ import {
   type PracticeTopicStatus,
 } from "@/lib/tenant/client";
 import { getTeacherPracticeTopics } from "@/lib/teacher-app/client";
-import { listCreatorPrivateSubjectAccess, listStudentCourseSubjects } from "@/lib/student-courses";
+import {
+  listCreatorPrivateSubjectAccess,
+  listStudentCommunitySubjectAccess,
+  listStudentCourseSubjects,
+} from "@/lib/student-courses";
+
+export type ChallengeDashboardScope = {
+  courseId: string;
+  subjectSlug: string;
+};
 
 export type ChallengeSubject = {
   courseId: string | null;
@@ -38,6 +47,11 @@ export type ChallengeLeaderboard = {
 };
 
 export type StudentChallengeDashboard = {
+  scope: {
+    courseId: string;
+    subjectSlug: string;
+    subjectName: string;
+  } | null;
   subjects: ChallengeSubject[];
   challenges: StudentChallengeSummary[];
   completedChallenges: StudentChallengeSummary[];
@@ -250,6 +264,20 @@ function subjectScopeKey(courseId: string | null, subjectSlug: string) {
   return `${courseId ?? "owner-private"}:${subjectSlug.trim().toLowerCase()}`;
 }
 
+function normalizedSubjectSlug(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function challengeBelongsToScope(
+  challenge: Pick<StudentChallengeSummary, "courseId" | "subjectSlug">,
+  scope: ChallengeDashboardScope,
+) {
+  return (
+    challenge.courseId === scope.courseId &&
+    normalizedSubjectSlug(challenge.subjectSlug) === normalizedSubjectSlug(scope.subjectSlug)
+  );
+}
+
 function masteryBySubject(rows: TopicMastery[]) {
   const result = new Map<string, Map<string, TopicMastery>>();
   for (const row of rows) {
@@ -324,15 +352,33 @@ function localSubjectRow(
 export async function getStudentChallengeDashboard(
   userId: string,
   completedChallengePage = 1,
+  requestedScope?: ChallengeDashboardScope,
 ): Promise<StudentChallengeDashboard> {
-  const [mastery, courseSubjects, privateSubjects, metrics] = await Promise.all([
+  const [mastery, courseSubjects, communitySubjects, privateSubjects, metrics] = await Promise.all([
     listTopicMastery(userId),
     listStudentCourseSubjects(userId),
+    listStudentCommunitySubjectAccess(userId),
     listCreatorPrivateSubjectAccess(userId),
     loadChallengeMetrics(userId),
   ]);
   const storedBySubject = masteryBySubject(mastery);
-  const subjects = uniqueSubjects(courseSubjects, privateSubjects);
+  const accessibleSubjects = uniqueSubjects(courseSubjects, communitySubjects, privateSubjects);
+  const accessibleScopeKeys = new Set(
+    accessibleSubjects.map((subject) =>
+      subjectScopeKey(
+        subject.accessKind === "owner-private" ? null : subject.courseId,
+        subject.subjectSlug,
+      ),
+    ),
+  );
+  const subjects = requestedScope
+    ? accessibleSubjects.filter(
+        (subject) =>
+          subject.courseId === requestedScope.courseId &&
+          normalizedSubjectSlug(subject.subjectSlug) ===
+            normalizedSubjectSlug(requestedScope.subjectSlug),
+      )
+    : accessibleSubjects;
   const admin = createSupabaseAdminClient();
   const teacherIds = [...new Set(subjects.map((subject) => subject.teacherId).filter(Boolean))];
   const collectionKeyByTeacher = new Map<string, string>();
@@ -428,7 +474,7 @@ export async function getStudentChallengeDashboard(
     0,
     ...subjectResults.map((result) => result.recommendations.length),
   );
-  const challenges = await ensureDailyChallenges(
+  const dailyChallenges = await ensureDailyChallenges(
     userId,
     // Round-robin keeps one large subject from monopolising the daily queue.
     Array.from({ length: recommendationDepth }, (_, position) => position).flatMap((position) =>
@@ -437,9 +483,17 @@ export async function getStudentChallengeDashboard(
         .filter((value): value is ChallengeRecommendation => Boolean(value)),
     ),
   );
+  const accessibleChallenges = dailyChallenges.filter((challenge) =>
+    accessibleScopeKeys.has(subjectScopeKey(challenge.courseId, challenge.subjectSlug)),
+  );
+  const challenges = requestedScope
+    ? accessibleChallenges.filter((challenge) => challengeBelongsToScope(challenge, requestedScope))
+    : accessibleChallenges;
   const completedHistory = await listCompletedStudentChallenges(
     userId,
     completedChallengePage,
+    undefined,
+    requestedScope,
   );
 
   const progress = metrics;
@@ -451,6 +505,13 @@ export async function getStudentChallengeDashboard(
   );
 
   return {
+    scope: requestedScope
+      ? {
+          courseId: requestedScope.courseId,
+          subjectSlug: requestedScope.subjectSlug,
+          subjectName: subjectRows[0]?.name || requestedScope.subjectSlug,
+        }
+      : null,
     subjects: subjectRows,
     challenges,
     completedChallenges: completedHistory.challenges,

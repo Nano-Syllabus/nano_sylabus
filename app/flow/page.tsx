@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
 import { getCurrentAuth } from "@/lib/auth";
 import { SaaSFlowClient } from "@/components/saas-flow-client";
 
@@ -10,18 +9,8 @@ export const metadata = {
   description: "Answer a few quick questions to assess your study routine and unlock your personalized challenge path.",
 };
 
-export default async function FlowPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ step?: string; retake?: string }>;
-}) {
+export default async function FlowPage() {
   const { user } = await getCurrentAuth().catch(() => ({ user: null }));
-  const params = await searchParams;
-
-  // If already logged in and not explicitly viewing pricing or retaking quiz, go straight to the app!
-  if (user && !params.step && !params.retake) {
-    redirect("/app/today");
-  }
 
   return (
     <Suspense fallback={<div className="min-h-screen bg-bg-primary" />}>

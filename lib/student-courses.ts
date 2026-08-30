@@ -488,6 +488,109 @@ export type StudentCourseSubjectAccess = {
   accessKind?: "course" | "owner-private";
 };
 
+async function getCommunitySubjectAccessForCourse(
+  studentId: string,
+  courseId: string,
+  subjectSlug: string,
+  admin: SupabaseClient,
+): Promise<StudentCourseSubjectAccess | null> {
+  const communityResult = await admin
+    .from("communities")
+    .select("id")
+    .eq("study_course_id", courseId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (communityResult.error) throw communityResult.error;
+  if (!communityResult.data?.id) return null;
+
+  const communityId = String(communityResult.data.id);
+  const membershipResult = await admin
+    .from("community_memberships")
+    .select("status")
+    .eq("community_id", communityId)
+    .eq("user_id", studentId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (membershipResult.error) throw membershipResult.error;
+  if (!membershipResult.data) return null;
+
+  const subjectResult = await admin
+    .from("community_subjects")
+    .select("teacher_id,external_subject_slug,name,folder_path")
+    .eq("community_id", communityId)
+    .eq("external_subject_slug", subjectSlug)
+    .eq("status", "active")
+    .maybeSingle();
+  if (subjectResult.error) throw subjectResult.error;
+  if (!subjectResult.data?.teacher_id || !subjectResult.data.external_subject_slug) return null;
+
+  return {
+    courseId,
+    teacherId: String(subjectResult.data.teacher_id),
+    subjectSlug: String(subjectResult.data.external_subject_slug),
+    subjectName: String(subjectResult.data.name || subjectSlug),
+    folderPath: String(subjectResult.data.folder_path || subjectResult.data.name || subjectSlug),
+  };
+}
+
+/** Community subjects keep their source workspace while using a hidden course for mastery. */
+export async function listStudentCommunitySubjectAccess(
+  studentId: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+): Promise<StudentCourseSubjectAccess[]> {
+  const membershipResult = await admin
+    .from("community_memberships")
+    .select("community_id")
+    .eq("user_id", studentId)
+    .eq("status", "active");
+  if (membershipResult.error) throw membershipResult.error;
+
+  const communityIds = [
+    ...new Set(
+      (membershipResult.data || [])
+        .map((row) => String(row.community_id || ""))
+        .filter(Boolean),
+    ),
+  ];
+  if (!communityIds.length) return [];
+
+  const communitiesResult = await admin
+    .from("communities")
+    .select("id,study_course_id")
+    .in("id", communityIds)
+    .eq("status", "active");
+  if (communitiesResult.error) throw communitiesResult.error;
+
+  const courseByCommunity = new Map(
+    (communitiesResult.data || [])
+      .filter((row) => Boolean(row.study_course_id))
+      .map((row) => [String(row.id), String(row.study_course_id)]),
+  );
+  const readyCommunityIds = [...courseByCommunity.keys()];
+  if (!readyCommunityIds.length) return [];
+
+  const subjectResult = await admin
+    .from("community_subjects")
+    .select("community_id,teacher_id,external_subject_slug,name,folder_path")
+    .in("community_id", readyCommunityIds)
+    .eq("status", "active");
+  if (subjectResult.error) throw subjectResult.error;
+
+  return (subjectResult.data || []).flatMap((row) => {
+    const courseId = courseByCommunity.get(String(row.community_id || ""));
+    const teacherId = String(row.teacher_id || "");
+    const slug = String(row.external_subject_slug || "");
+    if (!courseId || !teacherId || !slug) return [];
+    return [{
+      courseId,
+      teacherId,
+      subjectSlug: slug,
+      subjectName: String(row.name || slug),
+      folderPath: String(row.folder_path || row.name || slug),
+    } satisfies StudentCourseSubjectAccess];
+  });
+}
+
 type PrivateSubjectProfile = {
   id: string;
   teacher_id: string;
@@ -564,7 +667,10 @@ export async function getStudentCourseSubjectAccessForCourse(
     .in("status", ["active", "completed"])
     .maybeSingle();
   if (enrollmentResult.error) throw enrollmentResult.error;
-  if (!enrollmentResult.data) return null;
+  const communityAccess = enrollmentResult.data
+    ? null
+    : await getCommunitySubjectAccessForCourse(studentId, courseId, subjectSlug, admin);
+  if (!enrollmentResult.data && !communityAccess) return null;
 
   const courseResult = await admin
     .from("teacher_courses")
@@ -574,6 +680,7 @@ export async function getStudentCourseSubjectAccessForCourse(
     .maybeSingle();
   if (courseResult.error) throw courseResult.error;
   if (!courseResult.data || !isStudentVisibleCourse(courseResult.data)) return null;
+  if (communityAccess) return communityAccess;
 
   const subjectResult = await admin
     .from("teacher_course_subjects")
@@ -582,7 +689,14 @@ export async function getStudentCourseSubjectAccessForCourse(
     .eq("subject_slug", subjectSlug)
     .maybeSingle();
   if (subjectResult.error) throw subjectResult.error;
-  if (!subjectResult.data) return null;
+  if (!subjectResult.data) {
+    return getCommunitySubjectAccessForCourse(
+      studentId,
+      courseId,
+      subjectSlug,
+      admin,
+    );
+  }
 
   return {
     courseId: String(subjectResult.data.course_id || courseId),

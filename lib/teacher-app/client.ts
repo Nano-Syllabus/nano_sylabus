@@ -714,6 +714,61 @@ export const submitTeacherChallengeExam = (
     { method: "POST", body: input, timeoutMs: 180_000 },
   );
 
+export async function submitTeacherChallengeExamFile(
+  key: string,
+  attemptId: string,
+  input: { studentName?: string; file: { name: string; mimeType: string; buffer: Buffer } },
+) {
+  const { baseUrl, rejectUnauthorized, timeoutMs: defaultTimeoutMs } = getTenantApiEnv();
+  const url = new URL(
+    `/v1/collection/challenge/exam/${encodeURIComponent(attemptId)}/submit-file`,
+    baseUrl,
+  );
+  const boundary = `----padhai-challenge-scan-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const safeName = input.file.name.replace(/["\r\n]/g, "_");
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="student_name"\r\n\r\n${input.studentName?.trim() || "Student"}\r\n`),
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${safeName}"\r\nContent-Type: ${input.file.mimeType || "application/octet-stream"}\r\n\r\n`),
+    input.file.buffer,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  const transport = url.protocol === "https:" ? https : http;
+  return trackApiRequest("collection", () => new Promise<TeacherChallengeGradeResponse>((resolve, reject) => {
+    const request = transport.request(
+      url,
+      {
+        method: "POST",
+        rejectUnauthorized,
+        headers: {
+          Authorization: `Bearer ${key}`,
+          Accept: "application/json",
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": body.length,
+        },
+      },
+      (response) => {
+        let raw = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk: string) => { raw += chunk; });
+        response.on("end", () => {
+          let payload: unknown = {};
+          try { payload = raw.trim() ? JSON.parse(raw) : {}; } catch {}
+          const status = response.statusCode ?? 502;
+          if (status >= 400) {
+            reject(new TeacherApiError(formatTeacherApiError(payload, status), status, payload));
+            return;
+          }
+          resolve(payload as TeacherChallengeGradeResponse);
+        });
+      },
+    );
+    request.setTimeout(Math.max(defaultTimeoutMs, 180_000), () => request.destroy(new Error("Challenge scan grading timed out.")));
+    request.on("error", reject);
+    request.write(body);
+    request.end();
+  }));
+}
+
 export const generateTeacherCollectionPaper = (
   key: string,
   input: {
