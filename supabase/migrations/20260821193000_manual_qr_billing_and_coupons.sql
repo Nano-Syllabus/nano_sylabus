@@ -95,7 +95,7 @@ create table if not exists public.billing_coupons (
   ends_at timestamptz,
   max_redemptions integer check (max_redemptions is null or max_redemptions > 0),
   redemption_count integer not null default 0 check (redemption_count >= 0),
-  per_user_limit integer not null default 1 check (per_user_limit > 0),
+  per_user_limit integer check (per_user_limit is null or per_user_limit > 0),
   eligible_plan_slugs text[] not null default '{}',
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -116,8 +116,10 @@ create table if not exists public.billing_coupon_redemptions (
   user_id uuid not null references auth.users(id) on delete cascade,
   invoice_id uuid not null unique references public.invoices(id) on delete cascade,
   discount_amount integer not null check (discount_amount >= 0),
-  redeemed_at timestamptz not null default now(),
-  unique (coupon_id, user_id)
+  redeemed_at timestamptz not null default now()
+  -- Keep one redemption per invoice, but allow the same launch coupon to be
+  -- reused by the same user when its per_user_limit is null.
+  -- Historical per-user limits are enforced inside redeem_billing_coupon().
 );
 
 alter table public.invoices
@@ -353,7 +355,7 @@ begin
   from public.billing_coupon_redemptions
   where coupon_id = coupon_record.id and user_id = auth.uid();
 
-  if prior_redemptions >= coupon_record.per_user_limit then
+  if coupon_record.per_user_limit is not null and prior_redemptions >= coupon_record.per_user_limit then
     raise exception 'You have already used this coupon.';
   end if;
 
@@ -511,8 +513,8 @@ values (
   '100% off the first Individual Unlimited month',
   100,
   '2026-01-01T00:00:00Z',
-  '2026-09-01T00:00:00Z',
-  1,
+  null,
+  null,
   array['individual-unlimited'],
   true
 )
