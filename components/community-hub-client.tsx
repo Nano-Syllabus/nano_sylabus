@@ -29,6 +29,7 @@ import type {
   CommunityHubData,
   CommunityHubPost,
 } from "@/lib/data/community-hub";
+import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 import { cn, titleCase } from "@/lib/utils";
 
 type CommunitySection = "overview" | "subjects" | "forum" | "members";
@@ -310,7 +311,7 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
       return;
     }
     if (channel === "discord") {
-      window.open("https://discord.com/channels/@me", "_blank", "noopener,noreferrer");
+      window.open(DISCORD_STUDY_ROOM_URL, "_blank", "noopener,noreferrer");
       try {
         await writeClipboardText(message);
         setReferralShareNotice("Discord opened. Paste the copied referral message.");
@@ -550,6 +551,7 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
           data={initialData}
           voteCounts={voteCounts}
           onOpenForum={() => setSection("forum")}
+          onOpenReferral={openPeerInvite}
         />
       ) : null}
       {section === "subjects" ? (
@@ -901,10 +903,12 @@ function CommunityOverview({
   data,
   voteCounts,
   onOpenForum,
+  onOpenReferral,
 }: {
   data: CommunityHubData;
   voteCounts: Record<string, number>;
   onOpenForum: () => void;
+  onOpenReferral: () => void;
 }) {
   return (
     <div className="pt-8">
@@ -995,6 +999,53 @@ function CommunityOverview({
               </p>
             </div>
           )}
+
+          <section
+            className="mt-6 grid gap-3 sm:grid-cols-2"
+            aria-label="Community invitations and study room"
+          >
+            <article className="flex min-h-52 flex-col rounded-2xl border border-border bg-bg-secondary p-5">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-bg-primary text-[var(--community-accent)] shadow-sm">
+                <UserRoundPlus className="size-5" aria-hidden="true" />
+              </span>
+              <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-text-muted">
+                Peer referral
+              </p>
+              <h3 className="mt-2 font-display text-xl font-semibold">Give 1 month. Get 1 month.</h3>
+              <p className="mt-2 text-sm leading-6 text-text-secondary">
+                After your friend&apos;s first paid Pro subscription is approved, both accounts get
+                30 days automatically.
+              </p>
+              <button
+                type="button"
+                onClick={onOpenReferral}
+                className={`mt-auto inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-text-primary px-4 text-sm font-semibold text-text-inverse hover:opacity-90 ${focusRing}`}
+              >
+                Create referral link <ArrowRight className="size-4" aria-hidden="true" />
+              </button>
+            </article>
+
+            <article className="flex min-h-52 flex-col rounded-2xl border border-border bg-bg-primary p-5">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-bg-secondary text-[var(--community-accent)]">
+                <MessageCircle className="size-5" aria-hidden="true" />
+              </span>
+              <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-text-muted">
+                Discord co-study server
+              </p>
+              <h3 className="mt-2 font-display text-xl font-semibold">Discord Study Room</h3>
+              <p className="mt-2 text-sm leading-6 text-text-secondary">
+                Join the NanoSyllabus Discord room for voice study, questions, and peer help.
+              </p>
+              <a
+                href={DISCORD_STUDY_ROOM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`mt-auto inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl border border-border px-4 text-sm font-semibold hover:bg-bg-secondary ${focusRing}`}
+              >
+                Join Discord <ArrowRight className="size-4" aria-hidden="true" />
+              </a>
+            </article>
+          </section>
         </section>
 
         <aside className="space-y-8">

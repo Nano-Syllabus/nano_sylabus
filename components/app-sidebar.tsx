@@ -10,6 +10,7 @@ import { cn, compactSessionTitle, groupDateLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { isAdminRole } from "@/lib/admin-role";
+import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 
 // Keep the exam experience available by direct URL while it is temporarily
 // removed from primary navigation. Flip this when the product is ready.
@@ -889,7 +890,7 @@ export function AppSidebar({
       <div className={cn("mt-auto shrink-0", isCollapsed ? "p-2 pb-1" : "px-3 pb-1.5 pt-1")}>
         {isCollapsed ? (
           <a
-            href="https://discord.gg/jWdtCbtaK"
+            href={DISCORD_STUDY_ROOM_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="flex h-10 w-10 mx-auto items-center justify-center rounded-xl bg-[#5865F2]/10 text-[#5865F2] hover:bg-[#5865F2] hover:text-white transition"
@@ -901,7 +902,7 @@ export function AppSidebar({
           </a>
         ) : (
           <a
-            href="https://discord.gg/jWdtCbtaK"
+            href={DISCORD_STUDY_ROOM_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between rounded-xl border border-border bg-card px-2.5 py-2 shadow-xs hover:border-[#5865F2]/40 hover:bg-bg-secondary transition group no-underline"
