@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  FolderClosed,
   LibraryBig,
   RefreshCw,
   Search,
@@ -46,6 +47,15 @@ type LibrarySubject = {
   slug: string;
   courseId: string;
   courseName: string;
+  community: boolean;
+  communityInfo?: { id: string; name: string };
+  term?: {
+    id: string;
+    yearNumber: number;
+    semesterNumber: number;
+    semesterInYear: number;
+    position: number;
+  };
   materials: Material[];
 };
 
@@ -81,6 +91,10 @@ function shelfLabel(value: string) {
 
 function materialCacheKey(material: Material) {
   return `${material.documentId}:${material.path}:${material.sizeBytes}`;
+}
+
+function librarySubjectKey(subject: LibrarySubject) {
+  return `${subject.communityInfo?.id || subject.courseId || "library"}:${subject.term?.id || "subject"}:${subject.slug}`;
 }
 
 function readCachedPdf(cache: Map<string, string>, key: string) {
@@ -153,6 +167,7 @@ export function ChatMaterialsLibrary({
   const [query, setQuery] = useState("");
   const [openShelves, setOpenShelves] = useState<Set<string>>(new Set());
   const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
+  const [openSemesters, setOpenSemesters] = useState<Set<string>>(new Set());
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
   const [readerState, setReaderState] = useState<LoadState>("idle");
   const [readerError, setReaderError] = useState("");
@@ -257,6 +272,7 @@ export function ChatMaterialsLibrary({
     setLibrarySubjects([]);
     setOpenShelves(new Set());
     setOpenSubjects(new Set());
+    setOpenSemesters(new Set());
     setLoadError("");
 
     if (!open) {
@@ -281,6 +297,15 @@ export function ChatMaterialsLibrary({
           subjects?: Array<{
             courseId?: string;
             courseName?: string;
+            community?: boolean;
+            communityInfo?: { id?: string; name?: string };
+            term?: {
+              id?: string;
+              yearNumber?: number;
+              semesterNumber?: number;
+              semesterInYear?: number;
+              position?: number;
+            };
             subject?: { name?: string; slug?: string };
             materials?: Material[];
           }>;
@@ -299,6 +324,7 @@ export function ChatMaterialsLibrary({
             slug: payload?.subject?.slug || subject.slug,
             courseId: payload?.subject?.courseId || "",
             courseName: "",
+            community: false,
             materials: nextMaterials,
           };
           setLibrarySubjects([subjectEntry]);
@@ -312,6 +338,22 @@ export function ChatMaterialsLibrary({
               slug: entry.subject?.slug || entry.subject?.name || "subject",
               courseId: entry.courseId || "",
               courseName: entry.courseName || "",
+              community: entry.community === true,
+              communityInfo: entry.communityInfo?.id
+                ? {
+                    id: entry.communityInfo.id,
+                    name: entry.communityInfo.name || entry.courseName || "Community",
+                  }
+                : undefined,
+              term: entry.term?.id
+                ? {
+                    id: entry.term.id,
+                    yearNumber: Number(entry.term.yearNumber) || 1,
+                    semesterNumber: Number(entry.term.semesterNumber) || 1,
+                    semesterInYear: Number(entry.term.semesterInYear) || 1,
+                    position: Number(entry.term.position) || 0,
+                  }
+                : undefined,
               materials: Array.isArray(entry.materials) ? entry.materials : [],
             }))
             .filter((entry) => entry.slug);
@@ -322,13 +364,20 @@ export function ChatMaterialsLibrary({
               (activeSubject?.name && s.name.trim().toLowerCase() === activeSubject.name.trim().toLowerCase()),
           );
           const targetSubject = activeEntry || nextSubjects[0];
-          setOpenSubjects(targetSubject ? new Set([targetSubject.slug]) : new Set());
+          setOpenSubjects(targetSubject ? new Set([librarySubjectKey(targetSubject)]) : new Set());
+          setOpenSemesters(
+            targetSubject?.term
+              ? new Set([
+                  `${targetSubject.communityInfo?.id || targetSubject.courseId}:${targetSubject.term.id}`,
+                ])
+              : new Set(),
+          );
           const firstShelf = targetSubject?.materials[0]
             ? shelfLabel(targetSubject.materials[0].shelf)
             : "";
           setOpenShelves(
             firstShelf && targetSubject
-              ? new Set([`${targetSubject.slug}:${firstShelf}`])
+              ? new Set([`${librarySubjectKey(targetSubject)}:${firstShelf}`])
               : new Set(),
           );
         }
@@ -346,7 +395,7 @@ export function ChatMaterialsLibrary({
 
     void loadMaterials();
     return () => controller.abort();
-  }, [open, reloadKey, subject]);
+  }, [activeSubject?.name, activeSubjectSlug, open, reloadKey, subject]);
 
   useEffect(() => {
     setPdfObjectUrl("");
@@ -467,6 +516,45 @@ export function ChatMaterialsLibrary({
       .filter((entry) => entry.materials.length > 0 || `${entry.name} ${entry.courseName}`.toLowerCase().includes(normalizedQuery));
   }, [librarySubjects, query]);
 
+  const communitySemesterGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        key: string;
+        communityName: string;
+        term: NonNullable<LibrarySubject["term"]>;
+        subjects: LibrarySubject[];
+      }
+    >();
+
+    for (const entry of filteredLibrarySubjects) {
+      if (!entry.community || !entry.term) continue;
+      const key = `${entry.communityInfo?.id || entry.courseId}:${entry.term.id}`;
+      const existing = groups.get(key);
+      if (existing) existing.subjects.push(entry);
+      else {
+        groups.set(key, {
+          key,
+          communityName: entry.communityInfo?.name || entry.courseName || "Community",
+          term: entry.term,
+          subjects: [entry],
+        });
+      }
+    }
+
+    return [...groups.values()].sort(
+      (a, b) =>
+        a.term.position - b.term.position ||
+        a.term.semesterNumber - b.term.semesterNumber ||
+        a.communityName.localeCompare(b.communityName),
+    );
+  }, [filteredLibrarySubjects]);
+
+  const ungroupedLibrarySubjects = useMemo(
+    () => filteredLibrarySubjects.filter((entry) => !entry.community || !entry.term),
+    [filteredLibrarySubjects],
+  );
+
   const viewerUrl = useMemo(() => {
     if (!pdfObjectUrl) return "";
     const zoom =
@@ -530,6 +618,15 @@ export function ChatMaterialsLibrary({
       const next = new Set(current);
       if (next.has(slug)) next.delete(slug);
       else next.add(slug);
+      return next;
+    });
+  }
+
+  function toggleSemester(termKey: string) {
+    setOpenSemesters((current) => {
+      const next = new Set(current);
+      if (next.has(termKey)) next.delete(termKey);
+      else next.add(termKey);
       return next;
     });
   }
@@ -628,6 +725,112 @@ export function ChatMaterialsLibrary({
     );
   }
 
+  function renderLibrarySubject(entry: LibrarySubject) {
+    const treeKey = librarySubjectKey(entry);
+    const expanded = openSubjects.has(treeKey) || Boolean(query.trim());
+    const isActiveSubject =
+      activeSubjectSlug === entry.slug ||
+      activeSubject?.name.trim().toLowerCase() === entry.name.trim().toLowerCase();
+    const shelfGroups = new Map<string, Material[]>();
+    for (const material of entry.materials) {
+      const shelf = shelfLabel(material.shelf);
+      shelfGroups.set(shelf, [...(shelfGroups.get(shelf) || []), material]);
+    }
+    const subjectPanelId = `library-subject-${treeKey}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+
+    return (
+      <section
+        key={treeKey}
+        className="overflow-hidden rounded-lg border border-border bg-bg-primary"
+      >
+        <button
+          type="button"
+          onClick={() => {
+            onSubjectSelect?.({ name: entry.name, slug: entry.slug });
+            toggleSubject(treeKey);
+          }}
+          aria-expanded={expanded}
+          aria-controls={subjectPanelId}
+          aria-current={isActiveSubject ? "true" : undefined}
+          className={cn(
+            "flex min-h-14 w-full items-center gap-3 px-4 text-left transition-colors motion-reduce:transition-none hover:bg-bg-secondary",
+            isActiveSubject && "bg-bg-secondary",
+            focusRing,
+          )}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">{entry.name}</span>
+            <span className="mt-0.5 block truncate text-xs text-text-muted">
+              {entry.materials.length} material{entry.materials.length === 1 ? "" : "s"}
+              {!entry.community && entry.courseName ? ` · ${entry.courseName}` : ""}
+            </span>
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-text-muted transition-transform motion-reduce:transition-none",
+              expanded && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+        </button>
+        {expanded ? (
+          shelfGroups.size > 0 ? (
+            <div id={subjectPanelId} className="border-t border-border bg-bg-secondary/30 px-2 py-1">
+              {[...shelfGroups.entries()].map(([shelf, shelfMaterials]) => {
+                const shelfKey = `${treeKey}:${shelf}`;
+                const shelfExpanded = openShelves.has(shelfKey) || Boolean(query.trim());
+                const shelfPanelId = `${subjectPanelId}-shelf-${shelf}`.replace(
+                  /[^a-zA-Z0-9_-]/g,
+                  "-",
+                );
+                return (
+                  <div key={shelfKey} className="relative ml-4 border-l border-border last:border-b-0">
+                    <button
+                      type="button"
+                      onClick={() => toggleShelf(shelfKey)}
+                      aria-expanded={shelfExpanded}
+                      aria-controls={shelfPanelId}
+                      className={cn(
+                        "relative flex min-h-11 w-full items-center gap-3 pl-8 pr-4 text-left transition-colors motion-reduce:transition-none before:absolute before:-left-px before:top-1/2 before:w-5 before:border-t before:border-border hover:bg-bg-secondary",
+                        focusRing,
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{shelf}</span>
+                        <span className="mt-0.5 block text-xs text-text-muted">
+                          {shelfMaterials.length} material{shelfMaterials.length === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 shrink-0 text-text-muted transition-transform motion-reduce:transition-none",
+                          shelfExpanded && "rotate-180",
+                        )}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    {shelfExpanded ? (
+                      <ul
+                        id={shelfPanelId}
+                        className="relative ml-8 border-l border-border bg-bg-primary/40 before:absolute before:-left-px before:top-0 before:h-full before:border-l before:border-border"
+                      >
+                        {shelfMaterials.map((material) => renderMaterialRow(material, 2))}
+                      </ul>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div id={subjectPanelId} className="border-t border-border px-7 py-5 text-sm text-text-secondary">
+              No materials uploaded for this subject yet.
+            </div>
+          )
+        ) : null}
+      </section>
+    );
+  }
+
   if (!open) return null;
 
   const compactReader = width < 500;
@@ -671,7 +874,7 @@ export function ChatMaterialsLibrary({
               aria-label="Back to library"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              {!compactReader ? <span>Study Space</span> : null}
+              {!compactReader ? <span>Library</span> : null}
             </button>
             <div className="h-5 w-px bg-border" aria-hidden="true" />
             <div className="min-w-0 flex-1">
@@ -911,110 +1114,89 @@ export function ChatMaterialsLibrary({
             ) : null}
 
             {!subject && loadState === "ready" && filteredLibrarySubjects.length > 0 ? (
-              <div className="space-y-2 p-2">
-                {filteredLibrarySubjects.map((entry) => {
-                  const expanded = openSubjects.has(entry.slug) || Boolean(query.trim());
-                  const isActiveSubject =
-                    activeSubjectSlug === entry.slug ||
-                    activeSubject?.name.trim().toLowerCase() === entry.name.trim().toLowerCase();
-                  const shelfGroups = new Map<string, Material[]>();
-                  for (const material of entry.materials) {
-                    const shelf = shelfLabel(material.shelf);
-                    shelfGroups.set(shelf, [...(shelfGroups.get(shelf) || []), material]);
-                  }
-                  const subjectPanelId = `library-subject-${entry.courseId || "course"}-${entry.slug}`.replace(
-                    /[^a-zA-Z0-9_-]/g,
-                    "-",
-                  );
-                  return (
-                    <section key={`${entry.courseId}:${entry.slug}`} className="overflow-hidden rounded-lg border border-border bg-bg-primary">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onSubjectSelect?.({ name: entry.name, slug: entry.slug });
-                          toggleSubject(entry.slug);
-                        }}
-                        aria-expanded={expanded}
-                        aria-controls={subjectPanelId}
-                        aria-current={isActiveSubject ? "true" : undefined}
-                        className={cn(
-                          "flex min-h-14 w-full items-center gap-3 px-4 text-left transition-colors motion-reduce:transition-none hover:bg-bg-secondary",
-                          isActiveSubject && "bg-bg-secondary",
-                          focusRing,
-                        )}
+              <div className="space-y-5 p-2">
+                {communitySemesterGroups.length > 0 ? (
+                  <section aria-labelledby="joined-community-library-heading">
+                    <div className="px-2 pb-2">
+                      <p
+                        id="joined-community-library-heading"
+                        className="text-xs font-semibold uppercase tracking-wide text-text-muted"
                       >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold">{entry.name}</span>
-                          <span className="mt-0.5 block truncate text-xs text-text-muted">
-                            {entry.materials.length} material{entry.materials.length === 1 ? "" : "s"}
-                            {entry.courseName ? ` · ${entry.courseName}` : ""}
-                          </span>
-                        </span>
-                        <ChevronDown
-                          className={cn(
-                            "h-4 w-4 shrink-0 text-text-muted transition-transform motion-reduce:transition-none",
-                            expanded && "rotate-180",
-                          )}
-                          aria-hidden="true"
-                        />
-                      </button>
-                      {expanded ? (
-                        shelfGroups.size > 0 ? (
-                          <div id={subjectPanelId} className="border-t border-border bg-bg-secondary/30 px-2 py-1">
-                            {[...shelfGroups.entries()].map(([shelf, shelfMaterials]) => {
-                              const shelfKey = `${entry.slug}:${shelf}`;
-                              const shelfExpanded = openShelves.has(shelfKey) || Boolean(query.trim());
-                              const shelfPanelId = `${subjectPanelId}-shelf-${shelf}`.replace(
-                                /[^a-zA-Z0-9_-]/g,
-                                "-",
-                              );
-                              return (
-                                <div key={shelfKey} className="relative ml-4 border-l border-border last:border-b-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleShelf(shelfKey)}
-                                    aria-expanded={shelfExpanded}
-                                    aria-controls={shelfPanelId}
-                                    className={cn(
-                                      "relative flex min-h-11 w-full items-center gap-3 pl-8 pr-4 text-left transition-colors motion-reduce:transition-none before:absolute before:-left-px before:top-1/2 before:w-5 before:border-t before:border-border hover:bg-bg-secondary",
-                                      focusRing,
-                                    )}
-                                  >
-                                    <span className="min-w-0 flex-1">
-                                      <span className="block truncate text-sm font-medium">{shelf}</span>
-                                      <span className="mt-0.5 block text-xs text-text-muted">
-                                        {shelfMaterials.length} material{shelfMaterials.length === 1 ? "" : "s"}
-                                      </span>
-                                    </span>
-                                    <ChevronDown
-                                      className={cn(
-                                        "h-4 w-4 shrink-0 text-text-muted transition-transform motion-reduce:transition-none",
-                                        shelfExpanded && "rotate-180",
-                                      )}
-                                      aria-hidden="true"
-                                    />
-                                  </button>
-                                  {shelfExpanded ? (
-                                    <ul
-                                      id={shelfPanelId}
-                                      className="relative ml-8 border-l border-border bg-bg-primary/40 before:absolute before:-left-px before:top-0 before:h-full before:border-l before:border-border"
-                                    >
-                                      {shelfMaterials.map((material) => renderMaterialRow(material, 2))}
-                                    </ul>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div id={subjectPanelId} className="border-t border-border px-7 py-5 text-sm text-text-secondary">
-                            No materials uploaded for this subject yet.
-                          </div>
-                        )
-                      ) : null}
-                    </section>
-                  );
-                })}
+                        Joined community
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      {communitySemesterGroups.map((group) => {
+                        const expanded = openSemesters.has(group.key) || Boolean(query.trim());
+                        const panelId = `library-semester-${group.key}`.replace(
+                          /[^a-zA-Z0-9_-]/g,
+                          "-",
+                        );
+                        return (
+                          <section
+                            key={group.key}
+                            className="overflow-hidden rounded-lg border border-border bg-bg-primary"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => toggleSemester(group.key)}
+                              aria-expanded={expanded}
+                              aria-controls={panelId}
+                              className={cn(
+                                "flex min-h-16 w-full items-center gap-3 px-4 text-left transition-colors motion-reduce:transition-none hover:bg-bg-secondary",
+                                focusRing,
+                              )}
+                            >
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-bg-secondary">
+                                <FolderClosed className="h-5 w-5" aria-hidden="true" />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-semibold">
+                                  Semester {group.term.semesterNumber}
+                                </span>
+                                <span className="mt-0.5 block truncate text-xs text-text-muted">
+                                  Year {group.term.yearNumber} · {group.subjects.length} subject
+                                  {group.subjects.length === 1 ? "" : "s"} · {group.communityName}
+                                </span>
+                              </span>
+                              <ChevronDown
+                                className={cn(
+                                  "h-4 w-4 shrink-0 text-text-muted transition-transform motion-reduce:transition-none",
+                                  expanded && "rotate-180",
+                                )}
+                                aria-hidden="true"
+                              />
+                            </button>
+                            {expanded ? (
+                              <div
+                                id={panelId}
+                                className="relative space-y-2 border-t border-border bg-bg-secondary/40 p-2 pl-6 before:absolute before:bottom-2 before:left-4 before:top-0 before:border-l before:border-border"
+                              >
+                                {group.subjects.map(renderLibrarySubject)}
+                              </div>
+                            ) : null}
+                          </section>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
+
+                {ungroupedLibrarySubjects.length > 0 ? (
+                  <section aria-labelledby="other-library-subjects-heading">
+                    {communitySemesterGroups.length > 0 ? (
+                      <p
+                        id="other-library-subjects-heading"
+                        className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-text-muted"
+                      >
+                        Other subjects
+                      </p>
+                    ) : null}
+                    <div className="space-y-2">
+                      {ungroupedLibrarySubjects.map(renderLibrarySubject)}
+                    </div>
+                  </section>
+                ) : null}
               </div>
             ) : null}
           </div>

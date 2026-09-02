@@ -4,6 +4,7 @@ import {
   getStudentCourseSubjectAccess,
   getStudentCourseSubjectAccessForCourse,
   listCreatorPrivateSubjectAccess,
+  listStudentCommunitySubjectAccess,
   listStudentCourses,
   type StudentCourseSubjectAccess,
 } from "@/lib/student-courses";
@@ -213,8 +214,9 @@ export async function GET(request: Request) {
     // course subject. This keeps the library useful before the chat composer
     // has a subject context.
     if (!requested) {
-      const [courses, privateSubjects] = await Promise.all([
+      const [courses, communitySubjects, privateSubjects] = await Promise.all([
         listStudentCourses(user.id, admin),
+        listStudentCommunitySubjectAccess(user.id, admin),
         listCreatorPrivateSubjectAccess(user.id, admin),
       ]);
       const sourceTreePromise = getTenantSourceTree()
@@ -255,8 +257,20 @@ export async function GET(request: Request) {
         })),
       );
 
+      const communityEntries = await Promise.all(
+        communitySubjects.map(async (access) => ({
+          courseId: access.courseId,
+          courseName: access.community?.name || "Community",
+          community: true,
+          communityInfo: access.community,
+          term: access.term,
+          subject: { name: access.subjectName, slug: access.subjectSlug },
+          materials: await loadSubjectMaterials(access, admin, sourceTreePromise),
+        })),
+      );
+
       return NextResponse.json(
-        { subjects: [...courseEntries, ...privateEntries] },
+        { subjects: [...courseEntries, ...communityEntries, ...privateEntries] },
         { headers: NO_STORE_HEADERS },
       );
     }
@@ -264,7 +278,7 @@ export async function GET(request: Request) {
     const access = await getStudentCourseSubjectAccess(user.id, requested, admin);
     if (!access) {
       return NextResponse.json(
-        { error: "Enroll in a course containing this subject first." },
+        { error: "Join the subject's community or enroll in its course first." },
         { status: 403, headers: NO_STORE_HEADERS },
       );
     }

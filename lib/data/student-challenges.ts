@@ -7,6 +7,7 @@ import {
   createTeacherChallenge,
   createTeacherChallengeExam,
   submitTeacherChallengeExam,
+  submitTeacherChallengeExamFile,
   TeacherApiError,
   type TeacherChallengeExam,
   type TeacherChallengeGradeResponse,
@@ -33,6 +34,14 @@ export type ChallengeRecommendation = {
   topicTitle: string;
   topicBlurb: string;
   reason: string;
+};
+
+export type EnsureDailyChallengeOptions = {
+  /**
+   * A subject-scoped screen must retain its own daily set even when the
+   * general queue already contains assignments from other subjects.
+   */
+  minimumRecommendationCount?: number;
 };
 
 export type StudentChallengeSummary = {
@@ -103,6 +112,18 @@ export type StudentChallengeContent = {
 
 export type StudentChallengeDetail = StudentChallengeSummary & {
   content: StudentChallengeContent | null;
+  latestAttempt: ChallengeAttemptReview | null;
+};
+
+export type ChallengeAttemptReview = {
+  attemptId: string;
+  handedInAt: string | null;
+  answers: Array<{
+    questionId: string;
+    answerText: string;
+    score: number;
+    feedback: string;
+  }>;
 };
 
 type ChallengeRow = Record<string, unknown>;
@@ -150,9 +171,7 @@ function toSummary(row: ChallengeRow): StudentChallengeSummary {
     subjectName,
     topicKey: String(row.topic_key ?? ""),
     topicTitle,
-    title: topicTitle === rawTopicTitle
-      ? String(row.title ?? "")
-      : `Master ${topicTitle}`,
+    title: topicTitle === rawTopicTitle ? String(row.title ?? "") : `Master ${topicTitle}`,
     recommendationReason: String(row.recommendation_reason ?? ""),
     status: (row.status as ChallengeStatus) ?? "assigned",
     durationMinutes: number(row.duration_minutes) || 20,
@@ -171,7 +190,125 @@ function toDetail(row: ChallengeRow): StudentChallengeDetail {
     row.content && typeof row.content === "object" && !Array.isArray(row.content)
       ? (row.content as StudentChallengeContent)
       : null;
-  return { ...toSummary(row), content };
+  return { ...toSummary(row), content, latestAttempt: null };
+}
+
+export function challengeAttemptReviewFromEvaluation(
+  attemptId: string,
+  evaluation: unknown,
+  createdAt?: string | null,
+): ChallengeAttemptReview | null {
+  if (!evaluation || typeof evaluation !== "object" || Array.isArray(evaluation)) return null;
+  const history = (evaluation as Record<string, unknown>).attempt_history;
+  if (!history || typeof history !== "object" || Array.isArray(history)) return null;
+  const historyRecord = history as Record<string, unknown>;
+  if (!Array.isArray(historyRecord.results)) return null;
+
+  const answers = historyRecord.results
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((item) => ({
+      questionId: String(item.question_id ?? ""),
+      answerText: String(item.student_answer ?? ""),
+      score: number(item.score),
+      feedback: String(item.feedback ?? ""),
+    }))
+    .filter((answer) => answer.questionId);
+  if (!answers.length) return null;
+
+  return {
+    attemptId,
+    handedInAt: historyRecord.handedInAt
+      ? String(historyRecord.handedInAt)
+      : createdAt || null,
+    answers,
+  };
+}
+
+export function challengeAttemptReviewFromNormalizedRows(
+  attemptId: string,
+  questions: Array<{ id: unknown; external_question_id: unknown }>,
+  answers: Array<{
+    question_id: unknown;
+    answer_text: unknown;
+    score: unknown;
+    feedback: unknown;
+  }>,
+  createdAt?: string | null,
+): ChallengeAttemptReview | null {
+  const answerByQuestion = new Map(
+    answers.map((answer) => [String(answer.question_id ?? ""), answer]),
+  );
+  const restored = questions
+    .map((question) => {
+      const answer = answerByQuestion.get(String(question.id ?? ""));
+      return {
+        questionId: String(question.external_question_id ?? ""),
+        answerText: String(answer?.answer_text ?? ""),
+        score: number(answer?.score),
+        feedback: String(answer?.feedback ?? ""),
+      };
+    })
+    .filter((answer) => answer.questionId);
+  if (!restored.length) return null;
+
+  return {
+    attemptId,
+    handedInAt: createdAt || null,
+    answers: restored,
+  };
+}
+
+async function withLatestAttemptReview(
+  userId: string,
+  row: ChallengeRow,
+  detail = toDetail(row),
+): Promise<StudentChallengeDetail> {
+  const attemptId = String(row.last_attempt_id ?? "");
+  if (!attemptId) return detail;
+
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("student_practice_attempts")
+    .select("id, evaluation, created_at")
+    .eq("id", attemptId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return detail;
+
+  const embeddedReview = challengeAttemptReviewFromEvaluation(
+    String(data.id),
+    data.evaluation,
+    data.created_at ? String(data.created_at) : null,
+  );
+  if (embeddedReview) return { ...detail, latestAttempt: embeddedReview };
+
+  const [{ data: questions, error: questionError }, { data: answers, error: answerError }] =
+    await Promise.all([
+      admin
+        .from("student_practice_attempt_questions")
+        .select("id, external_question_id")
+        .eq("attempt_id", attemptId)
+        .eq("user_id", userId)
+        .order("position", { ascending: true }),
+      admin
+        .from("student_practice_attempt_answers")
+        .select("question_id, answer_text, score, feedback")
+        .eq("attempt_id", attemptId)
+        .eq("user_id", userId),
+    ]);
+  if (questionError && questionError.code !== UNDEFINED_TABLE) throw questionError;
+  if (answerError && answerError.code !== UNDEFINED_TABLE) throw answerError;
+
+  return {
+    ...detail,
+    latestAttempt: challengeAttemptReviewFromNormalizedRows(
+      String(data.id),
+      questions ?? [],
+      answers ?? [],
+      data.created_at ? String(data.created_at) : null,
+    ),
+  };
 }
 
 async function listDailyRows(userId: string, date: string) {
@@ -198,19 +335,44 @@ function recommendationKey(recommendation: ChallengeRecommendation) {
 function rowRecommendationKey(row: ChallengeRow) {
   return [
     row.course_id ? String(row.course_id) : "owner-private",
-    String(row.subject_slug ?? "").trim().toLowerCase(),
-    String(row.topic_key ?? "").trim().toLowerCase(),
+    String(row.subject_slug ?? "")
+      .trim()
+      .toLowerCase(),
+    String(row.topic_key ?? "")
+      .trim()
+      .toLowerCase(),
   ].join(":");
 }
 
+export function dailyChallengeAssignmentCount({
+  activeCount,
+  activeRecommendationCount,
+  availableCount,
+  minimumRecommendationCount = 0,
+}: {
+  activeCount: number;
+  activeRecommendationCount: number;
+  availableCount: number;
+  minimumRecommendationCount?: number;
+}) {
+  const openSlots = Math.max(0, 3 - activeCount);
+  const scopedSlots = Math.max(0, minimumRecommendationCount - activeRecommendationCount);
+  const requested = Math.max(openSlots, scopedSlots);
+  return Math.min(availableCount, requested);
+}
+
 /**
- * Keeps three real, unfinished challenges in today's queue. Completed rows stay
- * immutable for history/metrics, while the next unused recommendation is
- * inserted as a fresh assignment and sorts above the older active rows.
+ * Keeps three real, unfinished challenges in today's general queue. Completed
+ * rows stay immutable for history/metrics, while the next unused recommendation
+ * is inserted as a fresh assignment and sorts above the older active rows. A
+ * subject-scoped caller can request its own three matching assignments so
+ * opening a subject preserves the same three-challenge experience even when
+ * other subjects already filled the general queue.
  */
 export async function ensureDailyChallenges(
   userId: string,
   recommendations: ChallengeRecommendation[],
+  options: EnsureDailyChallengeOptions = {},
 ): Promise<StudentChallengeSummary[]> {
   const date = nepaliChallengeDate();
   const existing = await listDailyRows(userId, date);
@@ -218,11 +380,22 @@ export async function ensureDailyChallenges(
 
   const active = existing.filter((row) => row.status !== "completed");
   const assignedKeys = new Set(existing.map(rowRecommendationKey));
+  const recommendationKeys = new Set(recommendations.map(recommendationKey));
+  const activeRecommendationCount = active.filter((row) =>
+    recommendationKeys.has(rowRecommendationKey(row)),
+  ).length;
   const available = recommendations.filter(
     (recommendation) => !assignedKeys.has(recommendationKey(recommendation)),
   );
-  const openSlots = Math.max(0, 3 - active.length);
-  const selected = available.slice(0, openSlots);
+  const selected = available.slice(
+    0,
+    dailyChallengeAssignmentCount({
+      activeCount: active.length,
+      activeRecommendationCount,
+      availableCount: available.length,
+      minimumRecommendationCount: options.minimumRecommendationCount,
+    }),
+  );
 
   if (!selected.length) {
     return active
@@ -285,18 +458,22 @@ export async function listCompletedStudentChallenges(
   userId: string,
   page: number,
   pageSize = 5,
+  scope?: { courseId: string; subjectSlug: string },
 ) {
   const admin = createSupabaseAdminClient();
   const requestedPage = Math.max(1, Math.floor(page));
   const from = (requestedPage - 1) * pageSize;
-  const { data, error, count } = await admin
+  let query = admin
     .from("student_challenges")
     .select("*", { count: "exact" })
     .eq("user_id", userId)
     .eq("status", "completed")
     .order("completed_at", { ascending: false })
-    .order("created_at", { ascending: false })
-    .range(from, from + pageSize - 1);
+    .order("created_at", { ascending: false });
+  if (scope) {
+    query = query.eq("course_id", scope.courseId).eq("subject_slug", scope.subjectSlug);
+  }
+  const { data, error, count } = await query.range(from, from + pageSize - 1);
   if (isMissingChallengeTable(error)) {
     return { challenges: [], page: 1, total: 0, totalPages: 0 };
   }
@@ -305,7 +482,7 @@ export async function listCompletedStudentChallenges(
   const total = count ?? 0;
   const totalPages = total ? Math.ceil(total / pageSize) : 0;
   if (totalPages > 0 && requestedPage > totalPages) {
-    return listCompletedStudentChallenges(userId, totalPages, pageSize);
+    return listCompletedStudentChallenges(userId, totalPages, pageSize, scope);
   }
   return {
     challenges: ((data ?? []) as ChallengeRow[]).map(toSummary),
@@ -324,7 +501,7 @@ export async function getStudentChallenge(userId: string, challengeId: string) {
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
-  return data ? toDetail(data as ChallengeRow) : null;
+  return data ? withLatestAttemptReview(userId, data as ChallengeRow) : null;
 }
 
 export async function getStudentChallengeGradeContext(userId: string, challengeId: string) {
@@ -399,11 +576,13 @@ function lessonParagraphs(content: string) {
 }
 
 function warningText(...warnings: Array<string | null | undefined | string[]>) {
-  return warnings
-    .flatMap((warning) => (Array.isArray(warning) ? warning : [warning]))
-    .map((warning) => String(warning || "").trim())
-    .filter(Boolean)
-    .join(" ") || null;
+  return (
+    warnings
+      .flatMap((warning) => (Array.isArray(warning) ? warning : [warning]))
+      .map((warning) => String(warning || "").trim())
+      .filter(Boolean)
+      .join(" ") || null
+  );
 }
 
 function contentWithExam(
@@ -488,7 +667,8 @@ export async function startStudentChallenge(
   const row = raw as ChallengeRow;
   const current = toDetail(row);
   const externalAttemptId = String(row.external_paper_id || "");
-  if (current.status === "completed" || hasLiveExam(current, externalAttemptId)) return current;
+  if (current.status === "completed") return withLatestAttemptReview(userId, row, current);
+  if (hasLiveExam(current, externalAttemptId)) return current;
   if (current.content?.provider === "collection-challenge-v1") {
     return refreshStudentChallengeExam(userId, challengeId);
   }
@@ -516,7 +696,9 @@ export async function startStudentChallenge(
     });
   }
   if (!response.can_start || !response.exam?.attempt_id || !response.exam.questions?.length) {
-    throw new Error("This topic is not taught by the course material yet, so its challenge cannot start.");
+    throw new Error(
+      "This topic is not taught by the course material yet, so its challenge cannot start.",
+    );
   }
   const content = challengeContent(response, number(row.attempt_count) + 1);
   const selectedTopic = response.topics?.[0];
@@ -629,6 +811,31 @@ export async function submitStudentChallengeAttempt(input: {
       question_id: answer.questionId,
       answer_text: answer.answerText,
     })),
+  });
+}
+
+export async function submitStudentChallengeFile(input: {
+  userId: string;
+  challengeId: string;
+  studentName: string;
+  file: { name: string; mimeType: string; buffer: Buffer };
+}) {
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", input.challengeId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!raw) throw new Error("Challenge not found.");
+  const row = raw as ChallengeRow;
+  const attemptId = String(row.external_paper_id || "");
+  if (!attemptId) throw new Error("Start the challenge before submitting it.");
+  const lane = await resolveChallengeLane(input.userId, row);
+  return submitTeacherChallengeExamFile(lane.collectionKey, attemptId, {
+    studentName: input.studentName,
+    file: input.file,
   });
 }
 

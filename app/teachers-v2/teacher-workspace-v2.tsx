@@ -12,6 +12,8 @@ import {
   type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { CommunityStudySpaceClient } from "@/components/community-study-space-client";
+import { CommunitySubjectWorkspaceClient } from "@/components/community-subject-workspace-client";
 import { TeacherCoursesClient, TeacherCoursesOverview } from "@/components/teacher-courses-client";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -21,6 +23,8 @@ import {
   scoreDistribution,
 } from "@/lib/teacher-score-insights";
 import { TEACHER_UPLOAD_MAX_LABEL, teacherUploadSizeError } from "@/lib/teacher-upload";
+import type { CommunityDetail } from "@/lib/communities";
+import type { CommunitySubjectWorkspace } from "@/lib/data/community-subjects";
 import { cn, titleCase } from "@/lib/utils";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -28,7 +32,14 @@ type ApiRecord = Record<string, unknown>;
 type WorkspaceState = "loading" | "ready" | "error";
 type RecoveryState = "idle" | "recovering" | "missing" | "recreating";
 type DashboardState = "loading" | "ready" | "error";
-type MainView = "today" | "subjects" | "courses" | "classrooms" | "exams" | "settings";
+type MainView =
+  | "today"
+  | "communities"
+  | "subjects"
+  | "courses"
+  | "classrooms"
+  | "exams"
+  | "settings";
 type SubjectTab =
   | "overview"
   | "syllabus"
@@ -117,6 +128,42 @@ type TeacherDashboard = {
     submissionCount: number;
     latestAt: string;
   }[];
+  managedCommunities: {
+    id: string;
+    slug: string;
+    name: string;
+    university: string;
+    faculty: string;
+    totalYears: number;
+    totalSemesters: number;
+    memberCount: number;
+    subjectCount: number;
+    createdAt: string;
+  }[];
+  communityWorkspace: CommunityDetail | null;
+  communitySubjectWorkspace: CommunitySubjectWorkspace | null;
+  communityAdmin: {
+    id: string;
+    slug: string;
+    name: string;
+    university: string;
+    faculty: string;
+    totalYears: number;
+    totalSemesters: number;
+    contributionThreshold: number;
+    memberCount: number;
+    subjectCount: number;
+    filledSemesterCount: number;
+    pendingResourceCount: number;
+    mergedResourceCount: number;
+    discussionCount: number;
+    recentMembers: {
+      userId: string;
+      name: string;
+      role: string;
+      joinedAt: string;
+    }[];
+  } | null;
 };
 
 type ClassroomDetail = {
@@ -273,7 +320,17 @@ type ChatMessage = {
 };
 
 type DialogState =
-  | { type: "create-subject"; returnTo?: "create-classroom" | "exams" }
+  | {
+      type: "create-subject";
+      returnTo?: "create-classroom" | "exams";
+      communityReturnTo?: string;
+      communityAttach?: {
+        slug: string;
+        termId: string;
+        university: string;
+        programme: string;
+      };
+    }
   | { type: "create-classroom"; subjectSlug?: string }
   | { type: "upload"; shelf: Shelf }
   | { type: "create-folder"; shelf: Shelf }
@@ -299,6 +356,17 @@ function asRecord(value: unknown): ApiRecord {
 
 function text(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function safeCommunityReturnTo(value: string | null) {
+  if (!value || !value.startsWith("/app/communities/") || value.startsWith("//")) return "";
+  try {
+    const url = new URL(value, "http://nanosyllabus.local");
+    if (url.origin !== "http://nanosyllabus.local") return "";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "";
+  }
 }
 
 function fileSizeLabel(file: File) {
@@ -579,6 +647,8 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
 
 function normalizeDashboard(payload: ApiRecord): TeacherDashboard {
   const summary = asRecord(payload.summary);
+  const community = asRecord(payload.communityAdmin);
+  const communityId = text(community.id);
   return {
     summary: {
       classroomCount: numberValue(summary.classroomCount),
@@ -622,6 +692,63 @@ function normalizeDashboard(payload: ApiRecord): TeacherDashboard {
         },
       ];
     }),
+    managedCommunities: list(payload.managedCommunities).flatMap((community) => {
+      const id = text(community.id);
+      const slug = text(community.slug);
+      if (!id || !slug) return [];
+      return [
+        {
+          id,
+          slug,
+          name: text(community.name) || "Community",
+          university: text(community.university),
+          faculty: text(community.faculty),
+          totalYears: numberValue(community.totalYears),
+          totalSemesters: numberValue(community.totalSemesters),
+          memberCount: numberValue(community.memberCount),
+          subjectCount: numberValue(community.subjectCount),
+          createdAt: text(community.createdAt),
+        },
+      ];
+    }),
+    communityWorkspace:
+      payload.communityWorkspace && typeof payload.communityWorkspace === "object"
+        ? (payload.communityWorkspace as CommunityDetail)
+        : null,
+    communitySubjectWorkspace:
+      payload.communitySubjectWorkspace && typeof payload.communitySubjectWorkspace === "object"
+        ? (payload.communitySubjectWorkspace as CommunitySubjectWorkspace)
+        : null,
+    communityAdmin: communityId
+      ? {
+          id: communityId,
+          slug: text(community.slug),
+          name: text(community.name) || "Community",
+          university: text(community.university),
+          faculty: text(community.faculty),
+          totalYears: numberValue(community.totalYears),
+          totalSemesters: numberValue(community.totalSemesters),
+          contributionThreshold: numberValue(community.contributionThreshold) || 10,
+          memberCount: numberValue(community.memberCount),
+          subjectCount: numberValue(community.subjectCount),
+          filledSemesterCount: numberValue(community.filledSemesterCount),
+          pendingResourceCount: numberValue(community.pendingResourceCount),
+          mergedResourceCount: numberValue(community.mergedResourceCount),
+          discussionCount: numberValue(community.discussionCount),
+          recentMembers: list(community.recentMembers).flatMap((member) => {
+            const userId = text(member.userId);
+            if (!userId) return [];
+            return [
+              {
+                userId,
+                name: text(member.name) || "Community member",
+                role: text(member.role) || "member",
+                joinedAt: text(member.joinedAt),
+              },
+            ];
+          }),
+        }
+      : null,
   };
 }
 
@@ -1077,7 +1204,17 @@ function WorkspaceSkeleton() {
   );
 }
 
-export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string }) {
+export function TeacherWorkspaceV2({
+  teacherHandle,
+  initialCommunitySlug = "",
+  initialCommunitySubjectSlug = "",
+  initialCommunityTermId = "",
+}: {
+  teacherHandle: string;
+  initialCommunitySlug?: string;
+  initialCommunitySubjectSlug?: string;
+  initialCommunityTermId?: string;
+}) {
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>("loading");
   const [workspaceError, setWorkspaceError] = useState("");
   const [recoveryState, setRecoveryState] = useState<RecoveryState>("idle");
@@ -1087,7 +1224,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   const [dashboardState, setDashboardState] = useState<DashboardState>("loading");
   const [dashboardError, setDashboardError] = useState("");
   const [dashboard, setDashboard] = useState<TeacherDashboard | null>(null);
-  const [view, setView] = useState<MainView>("today");
+  const [view, setView] = useState<MainView>("communities");
   const [selectedSlug, setSelectedSlug] = useState("");
   const [selectedClassroomId, setSelectedClassroomId] = useState("");
   const [subjectTab, setSubjectTab] = useState<SubjectTab>("syllabus");
@@ -1097,6 +1234,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
   const [requestedPaperId, setRequestedPaperId] = useState("");
   const [indexingJobs, setIndexingJobs] = useState<Record<string, string>>({});
+  const [communityReturnTo, setCommunityReturnTo] = useState("");
 
   const loadWorkspace = useCallback(async () => {
     setWorkspaceState("loading");
@@ -1127,7 +1265,13 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
     setDashboardState("loading");
     setDashboardError("");
     try {
-      const response = await fetch("/api/teacher/dashboard", {
+      const communityParams = new URLSearchParams();
+      if (initialCommunitySlug) communityParams.set("community", initialCommunitySlug);
+      if (initialCommunitySubjectSlug) {
+        communityParams.set("communitySubject", initialCommunitySubjectSlug);
+      }
+      const communityQuery = communityParams.size ? `?${communityParams.toString()}` : "";
+      const response = await fetch(`/api/teacher/dashboard${communityQuery}`, {
         headers: { Accept: "application/json" },
         cache: "no-store",
       });
@@ -1140,7 +1284,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       );
       setDashboardState("error");
     }
-  }, []);
+  }, [initialCommunitySlug, initialCommunitySubjectSlug]);
 
   const pollIndexingJob = useCallback(
     async (jobId: string, fileName: string) => {
@@ -1230,10 +1374,49 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
     void loadDashboard();
   }, [loadDashboard]);
   useEffect(() => {
-    const paperId = new URLSearchParams(window.location.search).get("paper") || "";
-    if (!paperId) return;
-    setRequestedPaperId(paperId);
-    setView("exams");
+    const params = new URLSearchParams(window.location.search);
+    const paperId = params.get("paper") || "";
+    if (paperId) {
+      setRequestedPaperId(paperId);
+      setView("exams");
+      return;
+    }
+
+    const returnTo = safeCommunityReturnTo(params.get("returnTo"));
+    setCommunityReturnTo(returnTo);
+    const requestedView = params.get("view");
+    if (
+      requestedView === "today" ||
+      requestedView === "communities" ||
+      requestedView === "subjects" ||
+      requestedView === "courses" ||
+      requestedView === "classrooms" ||
+      requestedView === "exams" ||
+      requestedView === "settings"
+    ) {
+      setView(requestedView);
+    }
+    if (params.get("community")) setView("communities");
+    if (params.get("view") === "subjects" || params.get("subject") || params.get("newSubject")) {
+      setView("subjects");
+    }
+    const subjectSlug = params.get("subject") || "";
+    if (subjectSlug) setSelectedSlug(subjectSlug);
+    const requestedTab = params.get("tab");
+    if (
+      requestedTab === "overview" ||
+      requestedTab === "syllabus" ||
+      requestedTab === "material" ||
+      requestedTab === "bank" ||
+      requestedTab === "source-search" ||
+      requestedTab === "test-chat" ||
+      requestedTab === "config"
+    ) {
+      setSubjectTab(requestedTab);
+    }
+    if (params.get("newSubject") === "1") {
+      setDialog({ type: "create-subject", communityReturnTo: returnTo || undefined });
+    }
   }, []);
   useEffect(() => {
     if (!toast) return;
@@ -1296,6 +1479,12 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   }, [selectedSubject, subjectTab, syllabi]);
 
   function navigate(next: MainView) {
+    if (initialCommunitySlug) {
+      window.location.assign(
+        next === "communities" ? "/teachers?view=communities" : `/teachers?view=${next}`,
+      );
+      return;
+    }
     setView(next);
     if (next !== "subjects") setSelectedSlug("");
     if (next !== "classrooms") setSelectedClassroomId("");
@@ -1411,6 +1600,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           {(
             [
               ["today", "Analytics"],
+              ["communities", "My Communities"],
               ["subjects", "Create Subjects"],
               ["courses", "Publish Courses"],
               ["settings", "Your Public Profile"],
@@ -1494,9 +1684,37 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             </Link>
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">Admin Portal</p>
+            <p className="truncate text-sm font-medium">
+              {dashboard?.communityAdmin
+                ? `${dashboard.communityAdmin.name} Admin`
+                : "Admin Portal"}
+            </p>
           </div>
           <span className="flex-1" />
+          {communityReturnTo ? (
+            <Link
+              href={communityReturnTo}
+              className={cn(
+                "inline-flex min-h-10 items-center gap-1.5 rounded-[9px] border border-border bg-bg-primary px-3 text-sm font-medium text-text-primary transition hover:border-border-strong hover:bg-bg-secondary",
+                interactive,
+              )}
+            >
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+              Back to community
+            </Link>
+          ) : null}
           <ThemeToggle className="shrink-0 bg-bg-primary" />
           <Link
             href="/app/today"
@@ -1530,6 +1748,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           {(
             [
               ["today", "Analytics"],
+              ["communities", "My Communities"],
               ["subjects", "Create Subjects"],
               ["courses", "Publish Courses"],
               ["settings", "Your Public Profile"],
@@ -1565,8 +1784,24 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               onSetExam={() => navigate("exams")}
               onCourses={() => navigate("courses")}
               profileComplete={workspace.teacher.publicProfile.complete}
+              communityAdmin={dashboard?.communityAdmin || null}
+              onSubjects={() => navigate("subjects")}
               onSettings={() => navigate("settings")}
               onRetry={() => void loadDashboard()}
+            />
+          ) : null}
+          {view === "communities" ? (
+            <CommunitiesView
+              dashboard={dashboard}
+              state={dashboardState}
+              error={dashboardError}
+              onRetry={() => void loadDashboard()}
+              selectedSubjectSlug={initialCommunitySubjectSlug}
+              selectedTermId={initialCommunityTermId}
+              onRefresh={() => loadDashboard()}
+              onCreateSubject={(communityAttach) =>
+                setDialog({ type: "create-subject", communityAttach })
+              }
             />
           ) : null}
           {view === "courses" ? (
@@ -1666,20 +1901,52 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
 
       {dialog?.type === "create-subject" ? (
         <CreateSubjectDialog
+          initialUniversity={dialog.communityAttach?.university}
+          initialProgramme={dialog.communityAttach?.programme}
           onClose={() => setDialog(null)}
           onCreated={async (result) => {
             const returnTo = dialog.returnTo;
+            const creatorReturnTo = dialog.communityReturnTo;
+            const communityAttach = dialog.communityAttach;
             const nextWorkspace = await loadWorkspace();
             const createdSubject = nextWorkspace?.subjects.find(
               (subject) => subject.slug === result.slug || subject.name === result.name,
             );
+            result.jobs.forEach((job) => void pollIndexingJob(job.id, job.label));
+            if (communityAttach) {
+              await responsePayload(
+                await fetch(
+                  `/api/communities/${encodeURIComponent(communityAttach.slug)}/subjects`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Accept: "application/json" },
+                    body: JSON.stringify({
+                      termId: communityAttach.termId,
+                      subjectSlug: result.slug,
+                    }),
+                  },
+                ),
+              );
+              await loadDashboard();
+              setDialog(null);
+              setView("communities");
+              setToast(`${result.name} created and attached to the selected semester`);
+              return;
+            }
             setDialog(
               returnTo === "create-classroom"
                 ? { type: "create-classroom", subjectSlug: createdSubject?.slug }
                 : null,
             );
             if (returnTo === "exams") setView("exams");
-            result.jobs.forEach((job) => void pollIndexingJob(job.id, job.label));
+            if (creatorReturnTo) {
+              const destination = new URL(creatorReturnTo, window.location.origin);
+              destination.searchParams.set("attach", result.slug);
+              window.location.assign(
+                `${destination.pathname}${destination.search}${destination.hash}`,
+              );
+              return;
+            }
             setToast(
               result.failedUploads.length
                 ? `${result.name} created. ${result.failedUploads.length} file upload${result.failedUploads.length === 1 ? "" : "s"} failed.`
@@ -1785,6 +2052,302 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   );
 }
 
+function CommunitiesView({
+  dashboard,
+  state,
+  error,
+  onRetry,
+  onCreateSubject,
+  selectedSubjectSlug,
+  selectedTermId,
+  onRefresh,
+}: {
+  dashboard: TeacherDashboard | null;
+  state: DashboardState;
+  error: string;
+  onRetry: () => void;
+  selectedSubjectSlug: string;
+  selectedTermId: string;
+  onRefresh: () => Promise<unknown>;
+  onCreateSubject: (communityAttach: {
+    slug: string;
+    termId: string;
+    university: string;
+    programme: string;
+  }) => void;
+}) {
+  if (state === "loading" && !dashboard) return <DashboardSkeleton />;
+  if (state === "error" && !dashboard) {
+    return <DashboardError message={error} onRetry={onRetry} />;
+  }
+  if (!dashboard) return null;
+
+  const selected = dashboard.communityWorkspace;
+  const admin = dashboard.communityAdmin;
+
+  if (!selected) {
+    return (
+      <>
+        <header className="flex flex-wrap items-end gap-4 border-b border-border pb-6">
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
+              Community admin
+            </p>
+            <h1 className="mt-2 font-display text-[28px] font-semibold tracking-[-0.04em]">
+              My communities
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
+              Open a community you created to manage its semesters, subjects, members, and challenge
+              map.
+            </p>
+          </div>
+          <Link
+            href="/communities?create=1"
+            className={cn(
+              "inline-flex min-h-10 items-center justify-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90",
+              interactive,
+            )}
+          >
+            Create community
+          </Link>
+        </header>
+
+        {dashboard.managedCommunities.length ? (
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {dashboard.managedCommunities.map((community) => (
+              <article
+                key={community.id}
+                className="flex min-h-56 flex-col rounded-xl border border-border bg-bg-primary p-5"
+              >
+                <p className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                  {community.university}
+                </p>
+                <h2 className="mt-3 font-display text-xl font-semibold">
+                  {titleCase(community.name)}
+                </h2>
+                <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-secondary">
+                  {community.faculty}
+                </p>
+                <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-text-muted">
+                  <span>{community.totalYears} years</span>
+                  <span>{community.totalSemesters} semesters</span>
+                  <span>{community.subjectCount} subjects</span>
+                  <span>{community.memberCount} members</span>
+                </div>
+                <Link
+                  href={`/teachers?view=communities&community=${encodeURIComponent(community.slug)}`}
+                  className={cn(
+                    "mt-auto inline-flex min-h-10 items-center justify-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90",
+                    interactive,
+                  )}
+                >
+                  Open admin workspace →
+                </Link>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <section className="mt-6 rounded-xl border border-dashed border-border bg-bg-primary px-6 py-14 text-center">
+            <h2 className="font-display text-xl font-semibold">Create your first community</h2>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-text-secondary">
+              Once created, every community you own will appear here as a separate admin workspace.
+            </p>
+            <Link
+              href="/communities?create=1"
+              className={cn(
+                "mt-5 inline-flex min-h-10 items-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse",
+                interactive,
+              )}
+            >
+              Create community
+            </Link>
+          </section>
+        )}
+      </>
+    );
+  }
+
+  const selectedTerm =
+    selected.terms.find((term) => term.id === selectedTermId) ||
+    selected.terms.find((term) =>
+      term.subjects.some((subject) => subject.slug === selectedSubjectSlug),
+    );
+  const selectedSubject = selectedTerm?.subjects.find(
+    (subject) => subject.slug === selectedSubjectSlug,
+  );
+
+  if (selectedSubjectSlug && selectedTerm && selectedSubject) {
+    if (!dashboard.communitySubjectWorkspace) {
+      return (
+        <DashboardError
+          message="This subject workspace could not be loaded. Return to the community and try again."
+          onRetry={onRetry}
+        />
+      );
+    }
+
+    return (
+      <>
+        <Link
+          href={`/teachers?view=communities&community=${encodeURIComponent(selected.slug)}`}
+          className={cn(
+            "inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
+            interactive,
+          )}
+        >
+          ← {titleCase(selected.name)}
+        </Link>
+        <header className="border-b border-border pb-7 pt-3">
+          <p className="text-sm text-text-secondary">
+            Year {selectedTerm.yearNumber} · Semester {selectedTerm.semesterNumber}
+            {selectedSubject.code ? ` · ${selectedSubject.code}` : ""}
+          </p>
+          <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em]">
+            {titleCase(selectedSubject.name)} workspace
+          </h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
+            Extract the learning map, prepare member challenges, and manage community resources and
+            discussions from one place.
+          </p>
+        </header>
+        <CommunitySubjectWorkspaceClient
+          communitySlug={selected.slug}
+          communitySubjectSlug={selectedSubject.slug}
+          workspace={dashboard.communitySubjectWorkspace}
+          creatorMode
+          onRefresh={async () => {
+            await onRefresh();
+          }}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Link
+        href="/teachers?view=communities"
+        className={cn(
+          "inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
+          interactive,
+        )}
+      >
+        ← My communities
+      </Link>
+
+      <section className="mt-3 overflow-hidden rounded-xl border border-border bg-bg-primary">
+        <div className="bg-[var(--community-banner)] px-5 py-6 text-white sm:px-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
+                Community workspace
+              </p>
+              <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em]">
+                {titleCase(selected.name)}
+              </h1>
+              <p className="mt-2 text-sm text-white/65">
+                {selected.university} · {selected.faculty}
+              </p>
+            </div>
+            <Link
+              href={`/app/communities/${encodeURIComponent(selected.slug)}`}
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center rounded-lg border border-white/25 px-4 text-sm font-medium text-white transition hover:bg-white/10",
+                interactive,
+              )}
+            >
+              Preview student view →
+            </Link>
+          </div>
+        </div>
+
+        {admin ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+            <CommunityMetric label="Active members" value={admin.memberCount} />
+            <CommunityMetric label="Linked subjects" value={admin.subjectCount} />
+            <CommunityMetric
+              label="Semesters filled"
+              value={`${admin.filledSemesterCount}/${admin.totalSemesters}`}
+            />
+            <CommunityMetric label="Resources waiting" value={admin.pendingResourceCount} />
+            <CommunityMetric label="Resources merged" value={admin.mergedResourceCount} />
+            <CommunityMetric label="Discussions" value={admin.discussionCount} />
+          </div>
+        ) : null}
+      </section>
+
+      <section className="mt-7" aria-labelledby="community-curriculum-heading">
+        <div className="mb-5 flex flex-wrap items-end gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
+              Curriculum manager
+            </p>
+            <h2
+              id="community-curriculum-heading"
+              className="mt-2 font-display text-2xl font-semibold"
+            >
+              Semesters, subjects, and challenges
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
+              Add a new or reusable Creator Workspace subject to a semester, then prepare its member
+              challenge map here.
+            </p>
+          </div>
+        </div>
+        <CommunityStudySpaceClient
+          initialCommunity={selected}
+          mode="teacher"
+          teacherWorkspaceBaseHref={`/teachers?view=communities&community=${encodeURIComponent(selected.slug)}`}
+          onCreateSubject={(termId) =>
+            onCreateSubject({
+              slug: selected.slug,
+              termId,
+              university: selected.university,
+              programme: selected.faculty,
+            })
+          }
+        />
+      </section>
+
+      {admin ? (
+        <section className="mt-7 rounded-xl border border-border bg-bg-primary p-5 sm:p-6">
+          <div className="flex flex-wrap items-end gap-3 border-b border-border pb-4">
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display text-xl font-semibold">Community members</h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Newest active members in this community.
+              </p>
+            </div>
+            <span className="text-sm text-text-muted">{admin.memberCount} active</span>
+          </div>
+          {admin.recentMembers.length ? (
+            <div className="divide-y divide-border">
+              {admin.recentMembers.map((member) => (
+                <div key={member.userId} className="flex min-h-16 items-center gap-3 py-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-xs font-semibold">
+                    {initials(member.name)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{member.name}</p>
+                    <p className="mt-0.5 text-xs capitalize text-text-muted">{member.role}</p>
+                  </div>
+                  <time className="text-xs text-text-muted" dateTime={member.joinedAt}>
+                    {formatDate(member.joinedAt)}
+                  </time>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-text-secondary">
+              Members will appear here when students join.
+            </p>
+          )}
+        </section>
+      ) : null}
+    </>
+  );
+}
+
 function TodayView({
   teacherHandle,
   subjectCount,
@@ -1796,6 +2359,8 @@ function TodayView({
   onSetExam,
   onCourses,
   profileComplete,
+  communityAdmin,
+  onSubjects,
   onSettings,
   onRetry,
 }: {
@@ -1809,6 +2374,8 @@ function TodayView({
   onSetExam: () => void;
   onCourses: () => void;
   profileComplete: boolean;
+  communityAdmin: TeacherDashboard["communityAdmin"];
+  onSubjects: () => void;
   onSettings: () => void;
   onRetry: () => void;
 }) {
@@ -1883,7 +2450,99 @@ function TodayView({
         </section>
       ) : null}
 
+      {communityAdmin ? (
+        <section
+          className="mt-5 overflow-hidden rounded-xl border border-border bg-bg-primary"
+          aria-labelledby="community-admin-heading"
+        >
+          <div className="bg-[var(--community-banner)] px-5 py-5 text-white sm:px-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
+                  Community admin
+                </p>
+                <h2
+                  id="community-admin-heading"
+                  className="mt-1 truncate font-display text-2xl font-semibold tracking-[-0.03em]"
+                >
+                  {communityAdmin.name}
+                </h2>
+                <p className="mt-1 text-sm text-white/65">
+                  {communityAdmin.university} · {communityAdmin.faculty}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-white/20 bg-white text-[#0b2859] hover:bg-white/90"
+                  onClick={onSubjects}
+                >
+                  Create subjects
+                </Button>
+                <Link
+                  href={`/app/communities/${encodeURIComponent(communityAdmin.slug)}`}
+                  className={cn(
+                    "inline-flex min-h-10 items-center justify-center rounded-lg border border-white/25 px-4 text-sm font-medium text-white transition hover:bg-white/10",
+                    interactive,
+                  )}
+                >
+                  Manage semesters →
+                </Link>
+              </div>
+            </div>
+          </div>
 
+          <div className="grid lg:grid-cols-[minmax(0,1.45fr)_minmax(260px,0.55fr)]">
+            <div className="grid grid-cols-2 border-b border-border lg:border-b-0 lg:border-r sm:grid-cols-3">
+              <CommunityMetric label="Active members" value={communityAdmin.memberCount} />
+              <CommunityMetric label="Linked subjects" value={communityAdmin.subjectCount} />
+              <CommunityMetric
+                label="Semesters filled"
+                value={`${communityAdmin.filledSemesterCount}/${communityAdmin.totalSemesters}`}
+              />
+              <CommunityMetric
+                label="Resources waiting"
+                value={communityAdmin.pendingResourceCount}
+              />
+              <CommunityMetric
+                label="Resources merged"
+                value={communityAdmin.mergedResourceCount}
+              />
+              <CommunityMetric label="Discussions" value={communityAdmin.discussionCount} />
+            </div>
+
+            <div className="p-5 sm:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-display text-sm font-semibold">Recent members</h3>
+                <span className="text-xs text-text-muted">Newest first</span>
+              </div>
+              {communityAdmin.recentMembers.length ? (
+                <div className="mt-4 space-y-3">
+                  {communityAdmin.recentMembers.slice(0, 4).map((member) => (
+                    <div key={member.userId} className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-[10px] font-semibold">
+                        {initials(member.name)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{member.name}</p>
+                        <p className="text-xs capitalize text-text-muted">{member.role}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm leading-6 text-text-secondary">
+                  Members will appear here when students join this community.
+                </p>
+              )}
+              <p className="mt-5 border-t border-border pt-4 text-xs leading-5 text-text-muted">
+                Resources merge automatically after {communityAdmin.contributionThreshold} upvotes.
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {/* Real Live Collection & Teacher Stats Grid */}
       <section
@@ -1973,6 +2632,17 @@ function TodayView({
         <TeacherCoursesOverview onOpen={onCourses} />
       </section>
     </>
+  );
+}
+
+function CommunityMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="border-b border-r border-border p-4 last:border-r-0 sm:p-5">
+      <p className="text-xs font-medium text-text-muted">{label}</p>
+      <p className="mt-2 font-display text-2xl font-semibold tabular-nums text-text-primary">
+        {typeof value === "number" ? value.toLocaleString() : value}
+      </p>
+    </div>
   );
 }
 
@@ -2087,6 +2757,12 @@ function initials(name: string) {
       .map((part) => part[0]?.toUpperCase())
       .join("") || "S"
   );
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recently joined";
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
 }
 
 function EmptyClassrooms({ onClassrooms }: { onClassrooms: () => void }) {
@@ -8591,14 +9267,18 @@ function TestChat({
 function CreateSubjectDialog({
   onClose,
   onCreated,
+  initialUniversity = "",
+  initialProgramme = "",
 }: {
   onClose: () => void;
   onCreated: (result: SubjectCreationResult) => Promise<void>;
+  initialUniversity?: string;
+  initialProgramme?: string;
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [name, setName] = useState("");
-  const [university, setUniversity] = useState("");
-  const [programme, setProgramme] = useState("");
+  const [university, setUniversity] = useState(initialUniversity);
+  const [programme, setProgramme] = useState(initialProgramme);
   const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
   const [syllabusDropActive, setSyllabusDropActive] = useState(false);
   const [syllabusText, setSyllabusText] = useState("");

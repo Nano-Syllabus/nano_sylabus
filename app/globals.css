@@ -74,6 +74,8 @@
   --note-red: rgba(229, 62, 62, 0.12);
   --note-yellow: rgba(214, 158, 46, 0.12);
   --note-green: rgba(56, 161, 105, 0.12);
+  --community-banner: #0b2859;
+  --community-accent: #2f6fed;
 }
 
 [data-theme="dark"] {
@@ -103,6 +105,8 @@
   --note-red: rgba(248, 113, 113, 0.14);
   --note-yellow: rgba(251, 191, 36, 0.14);
   --note-green: rgba(74, 222, 128, 0.13);
+  --community-banner: #0a1e42;
+  --community-accent: #6f9cff;
 }
 
 @layer base {

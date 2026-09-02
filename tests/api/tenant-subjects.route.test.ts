@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   listStudentCourses: vi.fn(),
+  listStudentCommunitySubjectAccess: vi.fn(),
   listCreatorPrivateSubjectAccess: vi.fn(),
 }));
 
@@ -11,6 +12,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/student-courses", () => ({
   listStudentCourses: mocks.listStudentCourses,
+  listStudentCommunitySubjectAccess: mocks.listStudentCommunitySubjectAccess,
   listCreatorPrivateSubjectAccess: mocks.listCreatorPrivateSubjectAccess,
 }));
 
@@ -35,6 +37,7 @@ describe("GET /api/tenant/subjects", () => {
         ],
       },
     ]);
+    mocks.listStudentCommunitySubjectAccess.mockResolvedValue([]);
     mocks.listCreatorPrivateSubjectAccess.mockResolvedValue([]);
   });
 

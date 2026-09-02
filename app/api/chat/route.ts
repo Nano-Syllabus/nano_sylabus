@@ -24,7 +24,12 @@ import {
 } from "@/lib/student-courses";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { askTeacherSubjectStream, TeacherApiError, type ApiRecord } from "@/lib/teacher-app/client";
+import {
+  askTeacherSubjectStream,
+  getTeacherCollectionReadiness,
+  TeacherApiError,
+  type ApiRecord,
+} from "@/lib/teacher-app/client";
 import {
   chatTenantStream,
   getTenantName,
@@ -227,6 +232,39 @@ function derivePrivateNextTopic({
   if (nextTitle) return nextTitle;
 
   return "";
+}
+
+function readinessUnitTitles(readiness: ApiRecord | null) {
+  const units = Array.isArray(readiness?.units) ? readiness.units : [];
+  const seen = new Set<string>();
+  return units.flatMap((unit) => {
+    const record = unit && typeof unit === "object" && !Array.isArray(unit) ? (unit as ApiRecord) : {};
+    const title = String(record.title || record.name || record.topic || "").trim();
+    const key = title.toLowerCase();
+    if (!title || seen.has(key)) return [];
+    seen.add(key);
+    return [title];
+  });
+}
+
+function deriveNextReadinessTopic(readiness: ApiRecord | null, question: string, answer: string) {
+  const titles = readinessUnitTitles(readiness);
+  if (!titles.length) return "";
+
+  const context = `${question} ${answer}`.toLowerCase();
+  const scores = titles.map((title) =>
+    title
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 3)
+      .reduce((score, token) => score + (context.includes(token) ? 1 : 0), 0),
+  );
+  const bestScore = Math.max(...scores);
+  if (bestScore > 0) {
+    const currentIndex = scores.indexOf(bestScore);
+    return titles[currentIndex + 1] || "";
+  }
+  return titles[0];
 }
 
 function teacherCollectionNamespace(handle: string) {
@@ -776,11 +814,14 @@ export async function POST(request: Request) {
       requestId,
       requestedSubject,
       lookupMs: Date.now() - subjectLookupStartedAt,
-      source: parsed.tenantSubject?.courseId?.startsWith("private:")
-        ? "owner_private_subject"
-        : parsed.tenantSubject?.courseId
-          ? "enrolled_course_subject"
-          : "enrolled_subject_lookup",
+      source:
+        subjectAccess?.accessKind === "community"
+          ? "community_subject"
+          : parsed.tenantSubject?.courseId?.startsWith("private:")
+            ? "owner_private_subject"
+            : parsed.tenantSubject?.courseId
+              ? "enrolled_course_subject"
+              : "enrolled_subject_lookup",
       matchedSubject: subjectAccess?.subjectName ?? null,
     });
 
@@ -805,6 +846,11 @@ export async function POST(request: Request) {
 
     const tenantSubject = trustedTenantSubject(subjectAccess);
     const isPrivateSubject = subjectAccess.accessKind === "owner-private";
+    const isCommunitySubject = subjectAccess.accessKind === "community";
+    // A community membership is the access boundary. Its subject can therefore
+    // stream directly from the creator's indexed collection without requiring the
+    // collection to be published in the external marketplace first.
+    const usesCreatorCollectionStream = isPrivateSubject || isCommunitySubject;
     const admin = createSupabaseAdminClient();
     const { data: creator, error: creatorError } = await admin
       .from("teachers")
@@ -824,18 +870,22 @@ export async function POST(request: Request) {
     }
 
     const creatorHandle = String(creator?.handle || "").trim();
-    const privateCollectionKey = String(creator?.collection_sk || "").trim();
-    if (isPrivateSubject && !privateCollectionKey) {
+    const creatorCollectionKey = String(creator?.collection_sk || "").trim();
+    if (usesCreatorCollectionStream && !creatorCollectionKey) {
       return NextResponse.json(
         {
-          error: "This private subject's study collection is not ready.",
-          code: "PRIVATE_COLLECTION_NOT_READY",
+          error: isCommunitySubject
+            ? "This community subject's study collection is not ready."
+            : "This private subject's study collection is not ready.",
+          code: isCommunitySubject
+            ? "COMMUNITY_COLLECTION_NOT_READY"
+            : "PRIVATE_COLLECTION_NOT_READY",
           requestId,
         },
         { status: 409 },
       );
     }
-    if (!isPrivateSubject && !creatorHandle) {
+    if (!usesCreatorCollectionStream && !creatorHandle) {
       return NextResponse.json(
         {
           error: "This course creator's study collection is not ready.",
@@ -848,7 +898,7 @@ export async function POST(request: Request) {
 
     const teacherNamespace = teacherCollectionNamespace(creatorHandle);
     let tenantName = "";
-    if (!isPrivateSubject) {
+    if (!usesCreatorCollectionStream) {
       try {
         tenantName = await getTenantName();
       } catch (error) {
@@ -921,14 +971,20 @@ export async function POST(request: Request) {
       board: profile.board,
       hasAttachments,
     });
-    const chatRoutePath = isPrivateSubject ? "owner_private_collection_chat" : "tenant_chat_stream";
-    const chatAnswerReason = isPrivateSubject
-      ? "owner_private_subject_answered_from_collection_key"
+    const chatRoutePath = usesCreatorCollectionStream
+      ? isCommunitySubject
+        ? "community_collection_chat"
+        : "owner_private_collection_chat"
+      : "tenant_chat_stream";
+    const chatAnswerReason = usesCreatorCollectionStream
+      ? isCommunitySubject
+        ? "community_subject_answered_from_creator_collection"
+        : "owner_private_subject_answered_from_collection_key"
       : "enrolled_course_subject_streamed_from_scoped_teacher_namespace";
-    const chatAnswerModel = isPrivateSubject
+    const chatAnswerModel = usesCreatorCollectionStream
       ? "teacher:/v1/collection/ask/stream"
       : "tenant:/api/chat/stream";
-    const chatRouteScope = isPrivateSubject ? tenantSubject.slug : teacherNamespace;
+    const chatRouteScope = usesCreatorCollectionStream ? tenantSubject.slug : teacherNamespace;
     const privateConversationHistory = parsed.messages
       .slice(0, -1)
       .slice(-10)
@@ -945,6 +1001,16 @@ export async function POST(request: Request) {
     ]
       .filter(Boolean)
       .join("\n\n");
+    const collectionReadinessPromise = usesCreatorCollectionStream
+      ? getTeacherCollectionReadiness(creatorCollectionKey, tenantSubject.name).catch((error) => {
+          logTenantChatDebug(
+            "community_next_topic_lookup_failed",
+            { requestId, subject: tenantSubject.name },
+            error,
+          );
+          return null;
+        })
+      : null;
     const tenantStartedAt = Date.now();
     logTenantChatDebug("tenant_chat_started", {
       requestId,
@@ -959,7 +1025,7 @@ export async function POST(request: Request) {
       question: tenantQuestion,
       questionHash: tenantQuestionHash,
       attachmentCount: latestUserAttachments.length,
-      transport: isPrivateSubject
+      transport: usesCreatorCollectionStream
         ? "teacher-collection-json"
         : latestUserAttachments.length > 0
           ? "multipart/form-data"
@@ -999,15 +1065,19 @@ export async function POST(request: Request) {
           try {
             enqueue("status", { message: "Connecting to syllabus stream..." });
 
-            if (isPrivateSubject) {
+            if (usesCreatorCollectionStream) {
               if (latestUserAttachments.length > 0) {
                 throw new Error(
-                  "Image attachments are not supported in private-subject chat yet. Ask with text or open the material from Study Space.",
+                  "Image attachments are not supported in collection chat yet. Ask with text or open the material from Library & NanoAI.",
                 );
               }
-              enqueue("status", { message: "Reading your private subject materials..." });
+              enqueue("status", {
+                message: isCommunitySubject
+                  ? "Reading this community subject's materials..."
+                  : "Reading your private subject materials...",
+              });
               await askTeacherSubjectStream(
-                privateCollectionKey,
+                creatorCollectionKey,
                 tenantSubject.name,
                 tenantQuestion,
                 8,
@@ -1041,7 +1111,9 @@ export async function POST(request: Request) {
                       .map(privateCollectionSource)
                       .filter((source): source is TenantChatSource => source !== null);
                     chunksRetrieved = event.chunks_retrieved ?? tenantSources.length;
-                    servedFrom = event.served_from ?? "owner_private_collection";
+                    servedFrom =
+                      event.served_from ??
+                      (isCommunitySubject ? "community_creator_collection" : "owner_private_collection");
                     tenantNextTopic = derivePrivateNextTopic({
                       explicitTopic: event.next_topic,
                       nextContextChunk: event.next_context_chunk,
@@ -1069,7 +1141,9 @@ export async function POST(request: Request) {
               );
               if (!privateSourcesSent) {
                 chunksRetrieved = tenantSources.length;
-                servedFrom = servedFrom ?? "owner_private_collection";
+                servedFrom =
+                  servedFrom ??
+                  (isCommunitySubject ? "community_creator_collection" : "owner_private_collection");
                 enqueue("sources", {
                   sources: tenantSources,
                   chunks_retrieved: chunksRetrieved,
@@ -1077,6 +1151,19 @@ export async function POST(request: Request) {
                   context_summary: "0",
                   next_topic: tenantNextTopic || undefined,
                 });
+              }
+              if (!tenantNextTopic && collectionReadinessPromise) {
+                const readiness = await collectionReadinessPromise;
+                tenantNextTopic = deriveNextReadinessTopic(readiness, tenantQuestion, answerParts.join(""));
+                if (tenantNextTopic) {
+                  enqueue("sources", {
+                    sources: tenantSources,
+                    chunks_retrieved: chunksRetrieved,
+                    served_from: servedFrom,
+                    context_summary: "0",
+                    next_topic: tenantNextTopic,
+                  });
+                }
               }
             } else {
               await chatTenantStream(
@@ -1391,13 +1478,15 @@ export async function POST(request: Request) {
             generationMs = Date.now() - tenantStartedAt;
             const failureReason = summarizeTenantFailure(error);
             const privateApiError =
-              isPrivateSubject && error instanceof TeacherApiError ? error : null;
+              usesCreatorCollectionStream && error instanceof TeacherApiError ? error : null;
             const clientErrorMessage = privateApiError
               ? privateApiError.status === 404
-                ? "No indexed material was found for this private subject. Add or re-index a material, then try again."
+                ? isCommunitySubject
+                  ? "No indexed material was found for this community subject. Ask its creator to add or re-index a material."
+                  : "No indexed material was found for this private subject. Add or re-index a material, then try again."
                 : privateApiError.status === 401
-                  ? "This private subject's collection key is no longer valid."
-                  : "Could not answer from this private subject's materials."
+                  ? "This subject's collection key is no longer valid."
+                  : "Could not answer from this subject's indexed materials."
               : errorToDebugMessage(error);
             logTenantChatDebug(
               "tenant_chat_failed",

@@ -8,6 +8,7 @@ import {
   getTeacherCollectionWeightage,
   gradeTeacherPracticePaper,
   gradeTeacherPracticePaperFile,
+  submitTeacherChallengeExamFile,
 } from "@/lib/teacher-app/client";
 
 describe("generateTeacherPracticePaper", () => {
@@ -171,6 +172,53 @@ describe("generateTeacherPracticePaper", () => {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
+    }
+  });
+
+  it("submits a handwritten scan to the live collection challenge", async () => {
+    let received: { path: string; authorization: string; body: string } | null = null;
+    const server = http.createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      request.on("end", () => {
+        received = {
+          path: request.url || "",
+          authorization: String(request.headers.authorization || ""),
+          body: Buffer.concat(chunks).toString("utf8"),
+        };
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify({
+          attempt_id: "attempt/one",
+          graded: true,
+          total_score: 82,
+          total_marks: 100,
+          percentage: 82,
+          pass_marks: 40,
+          passed: true,
+          subject: "Computer Networks",
+          results: [],
+        }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Test server did not start.");
+      vi.stubEnv("TENANT_API_BASE_URL", `http://127.0.0.1:${address.port}`);
+      vi.stubEnv("TENANT_API_TOKEN", "unused-tenant-token");
+      vi.stubEnv("TENANT_API_REJECT_UNAUTHORIZED", "0");
+      const result = await submitTeacherChallengeExamFile("collection-secret", "attempt/one", {
+        studentName: "Aarav Shrestha",
+        file: { name: "answer.jpg", mimeType: "image/jpeg", buffer: Buffer.from("scan") },
+      });
+      expect(result.total_score).toBe(82);
+      expect(received?.path).toBe("/v1/collection/challenge/exam/attempt%2Fone/submit-file");
+      expect(received?.authorization).toBe("Bearer collection-secret");
+      expect(received?.body).toContain("Aarav Shrestha");
+      expect(received?.body).toContain('filename="answer.jpg"');
+      expect(received?.body).toContain("scan");
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
   });
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, BookOpen, FileUp, Sparkles, Users } from "lucide-react";
-import { listPublishedCourses } from "@/lib/student-courses";
-import type { TeacherCourse } from "@/lib/teacher-courses";
+import { listPublicCommunities } from "@/lib/data/communities";
+import type { CommunitySummary } from "@/lib/communities";
 import { LandingHeader } from "@/components/landing-header";
 import { titleCase } from "@/lib/utils";
 
@@ -14,8 +14,8 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function LandingPage() {
-  const publishedCourses = await listPublishedCourses().catch(() => []);
-  const displayCourses = publishedCourses.length ? publishedCourses.slice(0, 6) : null;
+  const publicCommunities = await listPublicCommunities().catch(() => []);
+  const displayCommunities = publicCommunities.length ? publicCommunities.slice(0, 6) : null;
 
   return (
     <div className="landing-v2 min-h-screen bg-white text-[#111b33] antialiased">
@@ -255,9 +255,9 @@ export default async function LandingPage() {
             <div className="mt-8 flex flex-wrap justify-center gap-2.5">
               <Link
                 className="btn-primary-glow inline-flex items-center justify-center gap-2 rounded-xl border border-transparent px-[22px] py-3.5 text-[13px] font-[800] transition-all"
-                href="/flow"
+                href="/communities"
               >
-                Start free now →
+                Join community →
               </Link>
               <a
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#cbd5e3] bg-white px-[20px] py-3.5 text-[13px] font-[800] text-[#111b33] transition-all hover:border-[#99a8bc] hover:bg-[#f8fbff]"
@@ -695,59 +695,59 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        {/* Community Courses Section */}
+        {/* Academic Communities Section */}
         <section className="soft-section py-24 sm:py-28" id="courses">
           <div className="container">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div className="max-w-[740px]">
                 <div className="text-[10px] font-[900] uppercase tracking-[0.15em] text-[#4c79d6]">
-                  Community courses
+                  Academic communities
                 </div>
                 <h2 className="mb-4 mt-3 text-[34px] font-[900] tracking-[-0.055em] sm:text-[52px]">
-                  Start with a course. <span className="grad">Or bring your own.</span>
+                  Find your people. <span className="grad">Or start the community.</span>
                 </h2>
                 <p className="m-0 text-sm text-[#738095]">
-                  Browse community-built course spaces or upload your own syllabus and material.
+                  Join your university and faculty, then move through years, semesters, and subjects.
                 </p>
               </div>
               <Link
-                href="/exams"
+                href="/communities"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-[#cbd5e3] bg-white px-4 py-2.5 text-xs font-[800] text-[#111b33] transition hover:bg-[#f8fbff]"
               >
-                Browse all community courses <ArrowRight className="h-3.5 w-3.5" />
+                Browse all communities <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
 
             <div className="mt-12 grid grid-cols-1 gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
-              {displayCourses && displayCourses.length > 0 ? (
-                displayCourses.map((course: TeacherCourse) => (
+              {displayCommunities && displayCommunities.length > 0 ? (
+                displayCommunities.map((community: CommunitySummary) => (
                   <Link
-                    key={course.id}
-                    href={`/exams/${course.slug}`}
+                    key={community.id}
+                    href={`/communities/${community.slug}`}
                     className="group rounded-[18px] border border-[#dfe7f1] bg-white p-[22px] transition-all duration-200 hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-[0_18px_42px_rgba(29,54,100,.08)] flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-center justify-between gap-2">
                         <small className="text-[9px] font-[900] uppercase tracking-[0.13em] text-[#4e7ddd]">
-                          {[course.category, course.level].filter(Boolean).join(" · ")}
+                          {community.faculty}
                         </small>
                         <span className="text-[11px] font-medium text-[#7d899b] flex items-center gap-1">
-                          <Users className="h-3.5 w-3.5" /> {course.enrollmentCount}
+                          <Users className="h-3.5 w-3.5" /> {community.memberCount}
                         </span>
                       </div>
                       <h3 className="mb-2 mt-3 text-[17px] font-semibold text-[#111b33] group-hover:text-[#2f6fff] transition-colors">
-                        {titleCase(course.name)}
+                        {titleCase(community.name)}
                       </h3>
                       <p className="m-0 text-[12px] leading-relaxed text-[#7d899b] line-clamp-3">
-                        {course.tagline || course.description}
+                        {community.description || community.university}
                       </p>
                     </div>
                     <div className="mt-5 flex items-center justify-between border-t border-[#f0f4f9] pt-3 text-[12px]">
                       <span className="text-[#7d899b] flex items-center gap-1.5 font-medium">
-                        <BookOpen className="h-3.5 w-3.5" /> {course.subjects.length} {course.subjects.length === 1 ? "subject" : "subjects"}
+                        <BookOpen className="h-3.5 w-3.5" /> {community.subjectCount} {community.subjectCount === 1 ? "subject" : "subjects"}
                       </span>
                       <span className="font-[850] text-[#2f6fff] group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-1">
-                        Open course →
+                        Open community →
                       </span>
                     </div>
                   </Link>
@@ -755,7 +755,7 @@ export default async function LandingPage() {
               ) : (
                 <>
                   <Link
-                    href="/exams"
+                    href="/communities"
                     className="group rounded-[18px] border border-[#dfe7f1] bg-white p-[22px] transition-all duration-200 hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-[0_18px_42px_rgba(29,54,100,.08)] flex flex-col justify-between"
                   >
                     <div>
@@ -770,11 +770,11 @@ export default async function LandingPage() {
                       </p>
                     </div>
                     <span className="mt-4 inline-block text-[11px] font-[850] text-[#2f6fff]">
-                      Open course →
+                      Browse communities →
                     </span>
                   </Link>
                   <Link
-                    href="/exams"
+                    href="/communities"
                     className="group rounded-[18px] border border-[#dfe7f1] bg-white p-[22px] transition-all duration-200 hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-[0_18px_42px_rgba(29,54,100,.08)] flex flex-col justify-between"
                   >
                     <div>
@@ -789,11 +789,11 @@ export default async function LandingPage() {
                       </p>
                     </div>
                     <span className="mt-4 inline-block text-[11px] font-[850] text-[#2f6fff]">
-                      Open course →
+                      Browse communities →
                     </span>
                   </Link>
                   <Link
-                    href="/exams"
+                    href="/communities"
                     className="group rounded-[18px] border border-[#dfe7f1] bg-white p-[22px] transition-all duration-200 hover:-translate-y-1 hover:border-[#2f6fff]/60 hover:shadow-[0_18px_42px_rgba(29,54,100,.08)] flex flex-col justify-between"
                   >
                     <div>
@@ -808,7 +808,7 @@ export default async function LandingPage() {
                       </p>
                     </div>
                     <span className="mt-4 inline-block text-[11px] font-[850] text-[#2f6fff]">
-                      Open course →
+                      Browse communities →
                     </span>
                   </Link>
                 </>
@@ -906,8 +906,8 @@ export default async function LandingPage() {
             <a href="#how" className="hover:text-[#111b33]">
               How it works
             </a>
-            <Link href="/exams" className="hover:text-[#111b33]">
-              Community Courses
+            <Link href="/communities" className="hover:text-[#111b33]">
+              Communities
             </Link>
             <Link href="/app/chat" className="hover:text-[#111b33]">
               AI Tutor

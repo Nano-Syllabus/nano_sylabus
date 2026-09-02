@@ -185,7 +185,7 @@ async function mirrorResponse(
   );
   if (!access) {
     return NextResponse.json(
-      { error: "Enroll in a course containing this subject first." },
+      { error: "Join the subject's community or enroll in its course first." },
       { status: 403 },
     );
   }
@@ -257,7 +257,8 @@ async function mirrorResponse(
 
 /**
  * Streams one of a teacher's files back to the student. Collection credentials
- * never reach the browser, and access is checked through course enrollment.
+ * never reach the browser, and access is checked through community membership
+ * or course enrollment.
  */
 export async function GET(
   request: Request,
@@ -303,7 +304,7 @@ export async function GET(
     const access = await getStudentCourseSubjectAccess(user.id, subject.slug, admin);
     if (!access || (mirrorOwner && mirrorOwner.teacher_id !== access.teacherId)) {
       return NextResponse.json(
-        { error: "Enroll in a course containing this subject first." },
+        { error: "Join the subject's community or enroll in its course first." },
         { status: 403 },
       );
     }

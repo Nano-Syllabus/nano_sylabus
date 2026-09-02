@@ -18,17 +18,17 @@ describe("resolvePostAuthDestination", () => {
     expect(resolvePostAuthDestination({ role: "student", onboarded: true })).toBe("/app/today");
   });
 
-  it("sends non-onboarded student to onboarding when next is missing", () => {
-    expect(resolvePostAuthDestination({ role: "student", onboarded: false })).toBe("/onboarding");
+  it("sends a student without a completed profile to Today when next is missing", () => {
+    expect(resolvePostAuthDestination({ role: "student", onboarded: false })).toBe("/app/today");
   });
 
-  it("preserves a safe destination through onboarding", () => {
+  it("preserves a safe destination without forcing onboarding", () => {
     expect(
       resolvePostAuthDestination({
         role: "student",
         onboarded: false,
         nextPath: "/app/payment/ioe-entrance",
       }),
-    ).toBe("/onboarding?next=%2Fapp%2Fpayment%2Fioe-entrance");
+    ).toBe("/app/payment/ioe-entrance");
   });
 });

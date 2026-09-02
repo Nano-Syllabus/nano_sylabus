@@ -11,6 +11,7 @@ const {
   hasUnlimitedSubscription,
   getStudentCourseSubjectAccess,
   getStudentCourseSubjectAccessForCourse,
+  getTeacherCollectionReadiness,
   getTenantName,
 } = vi.hoisted(() => ({
   askTeacherSubject: vi.fn(),
@@ -23,6 +24,7 @@ const {
   hasUnlimitedSubscription: vi.fn(),
   getStudentCourseSubjectAccess: vi.fn(),
   getStudentCourseSubjectAccessForCourse: vi.fn(),
+  getTeacherCollectionReadiness: vi.fn(),
   getTenantName: vi.fn(),
 }));
 
@@ -53,6 +55,7 @@ vi.mock("@/lib/tenant/client", () => ({
 vi.mock("@/lib/teacher-app/client", () => ({
   askTeacherSubject,
   askTeacherSubjectStream,
+  getTeacherCollectionReadiness,
   TeacherApiError: class TeacherApiError extends Error {
     constructor(
       message: string,
@@ -69,6 +72,7 @@ describe("POST /api/chat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hasUnlimitedSubscription.mockResolvedValue(false);
+    getTeacherCollectionReadiness.mockResolvedValue({ units: [] });
 
     const profileChain = {
       select: vi.fn(),
@@ -291,6 +295,126 @@ describe("POST /api/chat", () => {
     expect(askTeacherSubject).not.toHaveBeenCalled();
     expect(chatTenantStream).not.toHaveBeenCalled();
     expect(getTenantName).not.toHaveBeenCalled();
+  });
+
+  it("streams a joined community subject directly from its creator collection", async () => {
+    ensureStarterCreditsForUser.mockResolvedValue(10);
+    getCreditBalanceForUser.mockResolvedValue(10);
+    getStudentCourseSubjectAccessForCourse.mockResolvedValue({
+      courseId: "11111111-1111-4111-8111-111111111111",
+      teacherId: "teacher-1",
+      subjectSlug: "math",
+      subjectName: "Math",
+      folderPath: "Math",
+      accessKind: "community",
+    });
+    getTeacherCollectionReadiness.mockResolvedValue({
+      units: [{ title: "Control Structures" }, { title: "Array and Pointer" }],
+    });
+    askTeacherSubjectStream.mockImplementation(async (...args: unknown[]) => {
+      const onEvent = args[6] as (event: unknown) => void | Promise<void>;
+      await onEvent({ type: "token", text: "Community math answer." });
+      await onEvent({
+        type: "sources",
+        chunks: [
+          {
+            score: 0.9,
+            text: "Algebra notes",
+            source: { filename: "math.pdf", page: 1 },
+          },
+        ],
+        chunks_retrieved: 1,
+        served_from: "community_creator_collection",
+      });
+      await onEvent({ type: "done", ok: true, usage: { input_tokens: 10, output_tokens: 5 } });
+    });
+
+    const query = (result: { data?: unknown; error?: unknown } = { data: null, error: null }) => {
+      const builder = {
+        select: vi.fn(() => builder),
+        eq: vi.fn(() => builder),
+        update: vi.fn(() => builder),
+        insert: vi.fn(() => builder),
+        single: vi.fn(async () => result),
+        maybeSingle: vi.fn(async () => result),
+        then: (
+          resolve: (value: { data?: unknown; error?: unknown }) => unknown,
+          reject?: (reason: unknown) => unknown,
+        ) => Promise.resolve(result).then(resolve, reject),
+      };
+      return builder;
+    };
+    let messageNumber = 0;
+    createSupabaseServerClient.mockResolvedValue({
+      auth: { getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } } })) },
+      from: vi.fn((table: string) => {
+        if (table === "student_profiles") {
+          return query({
+            data: {
+              user_id: "user-1",
+              full_name: "Student",
+              college: "Campus",
+              grade: "11",
+              board_score: null,
+              subjects: ["Math"],
+              target_grade: "A",
+            },
+            error: null,
+          });
+        }
+        if (table === "chat_sessions") {
+          return query({ data: { id: "session-1", subject_context: "Math" }, error: null });
+        }
+        if (table === "chat_messages") {
+          messageNumber += 1;
+          return query({ data: { id: `message-${messageNumber}` }, error: null });
+        }
+        if (table === "credits_ledger") return query();
+        throw new Error(`Unexpected table access: ${table}`);
+      }),
+    });
+    createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn(() =>
+        query({ data: { handle: "community-creator", collection_sk: "collection-secret" }, error: null }),
+      ),
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: null,
+          language: "EN",
+          tenantSubject: {
+            courseId: "11111111-1111-4111-8111-111111111111",
+            name: "Math",
+            slug: "math",
+            namespaceSlug: "math",
+            folderPath: "Math",
+          },
+          messages: [{ role: "user", content: "Explain control structures" }],
+        }),
+      }),
+    );
+    const stream = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(stream).toContain("Community math answer.");
+    expect(stream).toContain("community_creator_collection");
+    expect(stream).toContain('"next_topic":"Array and Pointer"');
+    expect(askTeacherSubjectStream).toHaveBeenCalledWith(
+      "collection-secret",
+      "Math",
+      "Explain control structures",
+      8,
+      expect.stringContaining("Teach the subject: Math"),
+      [],
+      expect.any(Function),
+    );
+    expect(chatTenantStream).not.toHaveBeenCalled();
+    expect(getTenantName).not.toHaveBeenCalled();
+    expect(getTeacherCollectionReadiness).toHaveBeenCalledWith("collection-secret", "Math");
   });
 
   it("falls back to owner private subject access when client metadata is missing", async () => {

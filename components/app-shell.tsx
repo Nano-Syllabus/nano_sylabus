@@ -132,7 +132,7 @@ export function AppShell({
               </div>
             </div>
             <div className="flex min-w-0 shrink-0 items-center gap-1.5 md:gap-2">
-              {!dynamicActions && pathname !== "/app/today" && (
+              {!dynamicActions && pathname !== "/app/challenges" && (
                 <Badge variant={user.hasUnlimitedAccess || user.creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
                   {user.hasUnlimitedAccess ? "Unlimited" : `${user.creditBalance} messages`}
                 </Badge>

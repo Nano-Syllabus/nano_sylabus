@@ -1,27 +1,30 @@
 import { SetAppShell } from "@/components/set-app-shell";
-import { ChallengesDashboardClient } from "@/components/challenges-dashboard-client";
+import { StudentDailyDashboardView } from "@/components/student-daily-dashboard";
 import { requireOnboardedUser } from "@/lib/auth";
-import { getStudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
+import { listSubscriptionPlans } from "@/lib/data/billing";
+import { getStudentDailyDashboard } from "@/lib/data/student-daily-dashboard";
 
 export const dynamic = "force-dynamic";
 
-export default async function TodayPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ completedPage?: string }>;
-}) {
+export default async function TodayPage() {
   const { user } = await requireOnboardedUser();
-  const params = await searchParams;
-  const requestedPage = Number.parseInt(params.completedPage || "1", 10);
-  const dashboard = await getStudentChallengeDashboard(
-    user.id,
-    Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1,
-  );
+  const [dashboard, plans] = await Promise.all([
+    getStudentDailyDashboard(user.id),
+    listSubscriptionPlans(),
+  ]);
+  const unlimitedPlan =
+    plans.find((plan) => plan.slug === "individual-unlimited" && plan.isUnlimited) ?? null;
 
   return (
     <>
-      <SetAppShell title="" />
-      <ChallengesDashboardClient dashboard={dashboard} />
+      <SetAppShell title="Daily Dashboard" />
+      <StudentDailyDashboardView
+        fullName={user.fullName}
+        creditBalance={user.creditBalance}
+        hasUnlimitedAccess={user.hasUnlimitedAccess}
+        unlimitedPlan={unlimitedPlan}
+        dashboard={dashboard}
+      />
     </>
   );
 }

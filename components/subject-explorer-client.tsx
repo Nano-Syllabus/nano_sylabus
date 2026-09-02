@@ -402,12 +402,12 @@ export function SubjectExplorerClient({
           <LockKeyhole className="size-4" aria-hidden="true" /> Join with code
         </button>
         <Link
-          href="/exams"
+          href="/communities"
           target="_blank"
           rel="noopener noreferrer"
           className={`${button} border-border bg-bg-primary hover:bg-bg-secondary`}
         >
-          Browse Community Courses
+          Browse Communities
         </Link>
         <Link
           href="/teachers"
@@ -506,12 +506,12 @@ export function SubjectExplorerClient({
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Link
-              href="/exams"
+              href="/communities"
               target="_blank"
               rel="noopener noreferrer"
               className={`${button} border-border bg-bg-primary hover:bg-bg-secondary`}
             >
-              Browse Community Courses
+              Browse Communities
             </Link>
             <Link
               href="/teachers"

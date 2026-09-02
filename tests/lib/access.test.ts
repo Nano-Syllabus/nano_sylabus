@@ -28,7 +28,7 @@ describe("resolveAccess", () => {
     ).toEqual({ allow: true });
   });
 
-  it("redirects non-onboarded students to onboarding", () => {
+  it("allows authenticated students into the app without a profile gate", () => {
     expect(
       resolveAccess({
         pathname: "/app/notes",
@@ -36,11 +36,7 @@ describe("resolveAccess", () => {
         onboarded: false,
         role: "student",
       }),
-    ).toEqual({
-      allow: false,
-      redirectTo: "/onboarding",
-      includeNext: false,
-    });
+    ).toEqual({ allow: true });
   });
 
   it("keeps the public course catalog available before onboarding", () => {
@@ -82,7 +78,7 @@ describe("resolveAccess", () => {
 });
 
 describe("isProfileComplete", () => {
-  it("requires board to be present", () => {
+  it("treats a partial profile as usable because onboarding is optional", () => {
     expect(
       isProfileComplete({
         fullName: "Student",
@@ -92,7 +88,7 @@ describe("isProfileComplete", () => {
         targetGrade: "A+",
         languagePref: "EN",
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("returns true for complete profiles including board", () => {

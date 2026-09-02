@@ -1,4 +1,8 @@
-import { listTopicMastery, type TopicMastery } from "@/lib/data/student-mastery";
+import {
+  listPracticeAttempts,
+  listTopicMastery,
+  type TopicMastery,
+} from "@/lib/data/student-mastery";
 import {
   ensureDailyChallenges,
   isMissingChallengeTable,
@@ -7,12 +11,18 @@ import {
   type StudentChallengeSummary,
 } from "@/lib/data/student-challenges";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import {
-  type PracticeTopic,
-  type PracticeTopicStatus,
-} from "@/lib/tenant/client";
+import { type PracticeTopic, type PracticeTopicStatus } from "@/lib/tenant/client";
 import { getTeacherPracticeTopics } from "@/lib/teacher-app/client";
-import { listCreatorPrivateSubjectAccess, listStudentCourseSubjects } from "@/lib/student-courses";
+import {
+  listCreatorPrivateSubjectAccess,
+  listStudentCommunitySubjectAccess,
+  listStudentCourseSubjects,
+} from "@/lib/student-courses";
+
+export type ChallengeDashboardScope = {
+  courseId: string;
+  subjectSlug: string;
+};
 
 export type ChallengeSubject = {
   courseId: string | null;
@@ -28,6 +38,13 @@ export type ChallengeSubject = {
   topicDataAvailable: boolean;
 };
 
+export type ChallengeSubjectOption = {
+  courseId: string;
+  scopeKey: string;
+  subjectSlug: string;
+  subjectName: string;
+};
+
 export type ChallengeLeaderboard = {
   currentStreakRank: number | null;
   bestStreak: number;
@@ -38,7 +55,13 @@ export type ChallengeLeaderboard = {
 };
 
 export type StudentChallengeDashboard = {
+  scope: {
+    courseId: string;
+    subjectSlug: string;
+    subjectName: string;
+  } | null;
   subjects: ChallengeSubject[];
+  subjectOptions: ChallengeSubjectOption[];
   challenges: StudentChallengeSummary[];
   completedChallenges: StudentChallengeSummary[];
   completedChallengePage: number;
@@ -53,6 +76,7 @@ export type StudentChallengeDashboard = {
   todayCompleted: boolean;
   passedThisMonth: number;
   passedThisWeek: number;
+  averageTestScore: number | null;
   passRateLast30Days: number | null;
   practicePerDay: number;
   hasPracticeHistory: boolean;
@@ -69,7 +93,7 @@ type Attempt = {
 type SubjectAccess = {
   courseId: string;
   teacherId: string;
-  accessKind?: "course" | "owner-private";
+  accessKind?: "course" | "community" | "owner-private";
   subjectSlug: string;
   subjectName: string;
   folderPath?: string;
@@ -156,7 +180,10 @@ function attemptPercent(attempt: Attempt) {
 }
 
 /** Pure mirror of the durable metrics query, retained for regression coverage. */
-export function calculateAttemptMetrics(attempts: Attempt[], now = new Date()): Omit<ChallengeMetrics, "leaderboard"> {
+export function calculateAttemptMetrics(
+  attempts: Attempt[],
+  now = new Date(),
+): Omit<ChallengeMetrics, "leaderboard"> {
   const today = nepaliDateKey(now);
   const weekStart = daysAgo(6, now);
   const previousWeekStart = daysAgo(13, now);
@@ -169,8 +196,12 @@ export function calculateAttemptMetrics(attempts: Attempt[], now = new Date()): 
     return day >= previousWeekStart && day < weekStart;
   });
   const average = (items: Attempt[]) => {
-    const percentages = items.map(attemptPercent).filter((value): value is number => value !== null);
-    return percentages.length ? percentages.reduce((sum, value) => sum + value, 0) / percentages.length : null;
+    const percentages = items
+      .map(attemptPercent)
+      .filter((value): value is number => value !== null);
+    return percentages.length
+      ? percentages.reduce((sum, value) => sum + value, 0) / percentages.length
+      : null;
   };
   const currentAverage = average(thisWeek);
   const previousAverage = average(previousWeek);
@@ -192,9 +223,7 @@ export function calculateAttemptMetrics(attempts: Attempt[], now = new Date()): 
     passRateLast30Days: recent.length ? (recent.filter(passed).length / recent.length) * 100 : null,
     practicePerDay: thisWeek.filter(passed).length / 7,
     practiceScoreChange:
-      currentAverage !== null && previousAverage !== null
-        ? currentAverage - previousAverage
-        : null,
+      currentAverage !== null && previousAverage !== null ? currentAverage - previousAverage : null,
   };
 }
 
@@ -209,7 +238,9 @@ async function loadChallengeMetrics(userId: string): Promise<ChallengeMetrics> {
     .eq("user_id", userId)
     .limit(1);
   if (isMissingChallengeTable(schemaError)) {
-    throw new Error("Challenge metrics are unavailable because the student challenge migration has not been applied.");
+    throw new Error(
+      "Challenge metrics are unavailable because the student challenge migration has not been applied.",
+    );
   }
   if (schemaError) throw schemaError;
 
@@ -248,6 +279,20 @@ async function loadChallengeMetrics(userId: string): Promise<ChallengeMetrics> {
 
 function subjectScopeKey(courseId: string | null, subjectSlug: string) {
   return `${courseId ?? "owner-private"}:${subjectSlug.trim().toLowerCase()}`;
+}
+
+function normalizedSubjectSlug(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function challengeBelongsToScope(
+  challenge: Pick<StudentChallengeSummary, "courseId" | "subjectSlug">,
+  scope: ChallengeDashboardScope,
+) {
+  return (
+    challenge.courseId === scope.courseId &&
+    normalizedSubjectSlug(challenge.subjectSlug) === normalizedSubjectSlug(scope.subjectSlug)
+  );
 }
 
 function masteryBySubject(rows: TopicMastery[]) {
@@ -324,15 +369,43 @@ function localSubjectRow(
 export async function getStudentChallengeDashboard(
   userId: string,
   completedChallengePage = 1,
+  requestedScope?: ChallengeDashboardScope,
 ): Promise<StudentChallengeDashboard> {
-  const [mastery, courseSubjects, privateSubjects, metrics] = await Promise.all([
-    listTopicMastery(userId),
-    listStudentCourseSubjects(userId),
-    listCreatorPrivateSubjectAccess(userId),
-    loadChallengeMetrics(userId),
-  ]);
+  const [mastery, courseSubjects, communitySubjects, privateSubjects, metrics, practiceAttempts] =
+    await Promise.all([
+      listTopicMastery(userId),
+      listStudentCourseSubjects(userId),
+      listStudentCommunitySubjectAccess(userId),
+      listCreatorPrivateSubjectAccess(userId),
+      loadChallengeMetrics(userId),
+      listPracticeAttempts(userId, 200),
+    ]);
   const storedBySubject = masteryBySubject(mastery);
-  const subjects = uniqueSubjects(courseSubjects, privateSubjects);
+  const accessibleSubjects = uniqueSubjects(courseSubjects, communitySubjects, privateSubjects);
+  const subjectOptions = accessibleSubjects
+    .filter((subject) => subject.accessKind !== "owner-private")
+    .map((subject) => ({
+      courseId: subject.courseId,
+      scopeKey: subjectScopeKey(subject.courseId, subject.subjectSlug),
+      subjectSlug: subject.subjectSlug,
+      subjectName: subject.subjectName,
+    }));
+  const accessibleScopeKeys = new Set(
+    accessibleSubjects.map((subject) =>
+      subjectScopeKey(
+        subject.accessKind === "owner-private" ? null : subject.courseId,
+        subject.subjectSlug,
+      ),
+    ),
+  );
+  const subjects = requestedScope
+    ? accessibleSubjects.filter(
+        (subject) =>
+          subject.courseId === requestedScope.courseId &&
+          normalizedSubjectSlug(subject.subjectSlug) ===
+            normalizedSubjectSlug(requestedScope.subjectSlug),
+      )
+    : accessibleSubjects;
   const admin = createSupabaseAdminClient();
   const teacherIds = [...new Set(subjects.map((subject) => subject.teacherId).filter(Boolean))];
   const collectionKeyByTeacher = new Map<string, string>();
@@ -349,86 +422,90 @@ export async function getStudentChallengeDashboard(
   }
 
   const subjectResults = await Promise.all(
-    subjects.map(async (courseSubject): Promise<{
-      row: ChallengeSubject;
-      recommendations: ChallengeRecommendation[];
-    }> => {
-      const subjectSlug = courseSubject.subjectSlug;
-      const subjectName = courseSubject.subjectName;
-      const courseId = courseSubject.accessKind === "owner-private" ? null : courseSubject.courseId;
-      const scopeKey = subjectScopeKey(courseId, subjectSlug);
-      const stored = storedBySubject.get(scopeKey) ?? new Map<string, TopicMastery>();
-      const collectionKey = collectionKeyByTeacher.get(courseSubject.teacherId);
-      if (!collectionKey) {
-        return {
-          row: localSubjectRow(courseSubject, subjectSlug, subjectName, stored),
-          recommendations: [],
-        };
-      }
+    subjects.map(
+      async (
+        courseSubject,
+      ): Promise<{
+        row: ChallengeSubject;
+        recommendations: ChallengeRecommendation[];
+      }> => {
+        const subjectSlug = courseSubject.subjectSlug;
+        const subjectName = courseSubject.subjectName;
+        const courseId =
+          courseSubject.accessKind === "owner-private" ? null : courseSubject.courseId;
+        const scopeKey = subjectScopeKey(courseId, subjectSlug);
+        const stored = storedBySubject.get(scopeKey) ?? new Map<string, TopicMastery>();
+        const collectionKey = collectionKeyByTeacher.get(courseSubject.teacherId);
+        if (!collectionKey) {
+          return {
+            row: localSubjectRow(courseSubject, subjectSlug, subjectName, stored),
+            recommendations: [],
+          };
+        }
 
-      try {
-        const response = await getTeacherPracticeTopics(collectionKey, subjectName, {
-          totalMarks: 20,
-          maxQuestions: 5,
-        });
-        const topics = (Array.isArray(response.topics) ? response.topics : []) as PracticeTopic[];
-        const rankedTopics = topics
-          .map((topic) => ({ topic, mastery: stored.get(topic.topic_key) }))
-          .sort(
-            (left, right) =>
-              topicPriority(left.mastery?.status, left.mastery?.attempts ?? 0) -
-                topicPriority(right.mastery?.status, right.mastery?.attempts ?? 0) ||
-              (left.mastery?.percentage ?? 0) - (right.mastery?.percentage ?? 0),
-          );
-        const next = rankedTopics[0]?.topic;
-        return {
-          row: {
-            courseId,
-            scopeKey,
-            slug: subjectSlug,
-            name: subjectName,
-            readiness: topics.length
-              ? topics.reduce(
-                  (sum, topic) => sum + (stored.get(topic.topic_key)?.percentage ?? 0),
-                  0,
-                ) / topics.length
-              : null,
-            totalTopics: topics.length,
-            practicedTopics: topics.filter(
-              (topic) => (stored.get(topic.topic_key)?.attempts ?? 0) > 0,
-            ).length,
-            weakTopics: topics.filter(
-              (topic) => stored.get(topic.topic_key)?.status === "weak",
-            ).length,
-            nextTopic: next ? { key: next.topic_key, title: next.title } : null,
-            topicDataAvailable: true,
-          },
-          recommendations: rankedTopics.map(({ topic, mastery: topicMastery }) => ({
-            courseId:
-              courseSubject.accessKind === "owner-private" ? null : courseSubject.courseId,
-            subjectSlug,
-            subjectName,
-            namespace: courseSubject.folderPath || subjectSlug,
-            topicKey: topic.topic_key,
-            topicTitle: topic.title,
-            topicBlurb: topic.blurb?.trim() || "",
-            reason: recommendationReason(topicMastery),
-          })),
-        };
-      } catch {
-        return {
-          row: localSubjectRow(courseSubject, subjectSlug, subjectName, stored),
-          recommendations: [],
-        };
-      }
-    }),
+        try {
+          const response = await getTeacherPracticeTopics(collectionKey, subjectName, {
+            totalMarks: 20,
+            maxQuestions: 5,
+          });
+          const topics = (Array.isArray(response.topics) ? response.topics : []) as PracticeTopic[];
+          const rankedTopics = topics
+            .map((topic) => ({ topic, mastery: stored.get(topic.topic_key) }))
+            .sort(
+              (left, right) =>
+                topicPriority(left.mastery?.status, left.mastery?.attempts ?? 0) -
+                  topicPriority(right.mastery?.status, right.mastery?.attempts ?? 0) ||
+                (left.mastery?.percentage ?? 0) - (right.mastery?.percentage ?? 0),
+            );
+          const next = rankedTopics[0]?.topic;
+          return {
+            row: {
+              courseId,
+              scopeKey,
+              slug: subjectSlug,
+              name: subjectName,
+              readiness: topics.length
+                ? topics.reduce(
+                    (sum, topic) => sum + (stored.get(topic.topic_key)?.percentage ?? 0),
+                    0,
+                  ) / topics.length
+                : null,
+              totalTopics: topics.length,
+              practicedTopics: topics.filter(
+                (topic) => (stored.get(topic.topic_key)?.attempts ?? 0) > 0,
+              ).length,
+              weakTopics: topics.filter((topic) => stored.get(topic.topic_key)?.status === "weak")
+                .length,
+              nextTopic: next ? { key: next.topic_key, title: next.title } : null,
+              topicDataAvailable: true,
+            },
+            recommendations: rankedTopics.map(({ topic, mastery: topicMastery }) => ({
+              courseId:
+                courseSubject.accessKind === "owner-private" ? null : courseSubject.courseId,
+              subjectSlug,
+              subjectName,
+              namespace: courseSubject.folderPath || subjectSlug,
+              topicKey: topic.topic_key,
+              topicTitle: topic.title,
+              topicBlurb: topic.blurb?.trim() || "",
+              reason: recommendationReason(topicMastery),
+            })),
+          };
+        } catch {
+          return {
+            row: localSubjectRow(courseSubject, subjectSlug, subjectName, stored),
+            recommendations: [],
+          };
+        }
+      },
+    ),
   );
   const subjectRows = subjectResults.map((result) => result.row);
   const recommendationDepth = Math.max(
     0,
     ...subjectResults.map((result) => result.recommendations.length),
   );
-  const challenges = await ensureDailyChallenges(
+  const dailyChallenges = await ensureDailyChallenges(
     userId,
     // Round-robin keeps one large subject from monopolising the daily queue.
     Array.from({ length: recommendationDepth }, (_, position) => position).flatMap((position) =>
@@ -436,13 +513,41 @@ export async function getStudentChallengeDashboard(
         .map((result) => result.recommendations[position])
         .filter((value): value is ChallengeRecommendation => Boolean(value)),
     ),
+    { minimumRecommendationCount: requestedScope ? 3 : 0 },
   );
+  const accessibleChallenges = dailyChallenges.filter((challenge) =>
+    accessibleScopeKeys.has(subjectScopeKey(challenge.courseId, challenge.subjectSlug)),
+  );
+  const challenges = requestedScope
+    ? accessibleChallenges.filter((challenge) => challengeBelongsToScope(challenge, requestedScope))
+    : accessibleChallenges;
   const completedHistory = await listCompletedStudentChallenges(
     userId,
     completedChallengePage,
+    undefined,
+    requestedScope,
   );
 
   const progress = metrics;
+  const weekStart = daysAgo(6);
+  const today = nepaliDateKey(new Date());
+  const weeklyChallengeScores = practiceAttempts
+    .filter((attempt) => attempt.source === "challenge" && attempt.totalMarks > 0)
+    .filter((attempt) => {
+      const attemptDay = nepaliDateKey(attempt.createdAt);
+      return attemptDay >= weekStart && attemptDay <= today;
+    })
+    .filter((attempt) =>
+      requestedScope
+        ? attempt.courseId === requestedScope.courseId &&
+          normalizedSubjectSlug(attempt.subjectSlug) ===
+            normalizedSubjectSlug(requestedScope.subjectSlug)
+        : true,
+    )
+    .map((attempt) => Math.max(0, Math.min(100, (attempt.totalScore / attempt.totalMarks) * 100)));
+  const averageTestScore = weeklyChallengeScores.length
+    ? weeklyChallengeScores.reduce((sum, score) => sum + score, 0) / weeklyChallengeScores.length
+    : null;
   const totalTopics = subjectRows.reduce((sum, subject) => sum + subject.totalTopics, 0);
   const readinessComplete = subjectRows.every((subject) => subject.topicDataAvailable);
   const readinessPoints = subjectRows.reduce(
@@ -451,7 +556,15 @@ export async function getStudentChallengeDashboard(
   );
 
   return {
+    scope: requestedScope
+      ? {
+          courseId: requestedScope.courseId,
+          subjectSlug: requestedScope.subjectSlug,
+          subjectName: subjectRows[0]?.name || requestedScope.subjectSlug,
+        }
+      : null,
     subjects: subjectRows,
+    subjectOptions,
     challenges,
     completedChallenges: completedHistory.challenges,
     completedChallengePage: completedHistory.page,
@@ -465,6 +578,7 @@ export async function getStudentChallengeDashboard(
     todayCompleted: progress.todayCompleted,
     passedThisMonth: progress.passedThisMonth,
     passedThisWeek: progress.passedThisWeek,
+    averageTestScore,
     passRateLast30Days: progress.passRateLast30Days,
     practicePerDay: progress.practicePerDay,
     hasPracticeHistory: progress.hasPracticeHistory,
