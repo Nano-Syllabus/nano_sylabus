@@ -24,6 +24,24 @@ type GradeResult = {
   feedback: string;
 };
 
+function savedAnswers(challenge: StudentChallengeDetail) {
+  return Object.fromEntries(
+    (challenge.latestAttempt?.answers ?? []).map((answer) => [answer.questionId, answer.answerText]),
+  );
+}
+
+function savedResults(challenge: StudentChallengeDetail): GradeResult[] {
+  const marksByQuestion = new Map(
+    (challenge.content?.examQuestions ?? []).map((question) => [question.id, question.marks]),
+  );
+  return (challenge.latestAttempt?.answers ?? []).map((answer) => ({
+    question_id: answer.questionId,
+    score: answer.score,
+    marks: marksByQuestion.get(answer.questionId) ?? 0,
+    feedback: answer.feedback,
+  }));
+}
+
 async function apiJson<T>(response: Response): Promise<T> {
   const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) throw new Error(payload.error || "Request failed.");
@@ -50,13 +68,15 @@ function ChallengeDetail({
           : 1,
   );
   const [savingStep, setSavingStep] = useState<"lesson" | "examples" | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>(() => savedAnswers(challenge));
   const [scanFile, setScanFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [results, setResults] = useState<GradeResult[]>([]);
-  const [score, setScore] = useState<{ earned: number; total: number; passed: boolean } | null>(
-    null,
+  const [results, setResults] = useState<GradeResult[]>(() => savedResults(challenge));
+  const [score, setScore] = useState<{ earned: number; total: number; passed: boolean } | null>(() =>
+    challenge.status === "completed" && challenge.lastScore !== null && challenge.lastTotalMarks
+      ? { earned: challenge.lastScore, total: challenge.lastTotalMarks, passed: true }
+      : null,
   );
   const [clock, setClock] = useState(() => Date.now());
   const content = challenge.content;
@@ -66,6 +86,15 @@ function ChallengeDetail({
     const timer = window.setInterval(() => setClock(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, [challenge.status, content?.examExpiresAt]);
+
+  useEffect(() => {
+    if (challenge.status !== "completed" || !challenge.latestAttempt) return;
+    setAnswers(savedAnswers(challenge));
+    setResults(savedResults(challenge));
+    if (challenge.lastScore !== null && challenge.lastTotalMarks) {
+      setScore({ earned: challenge.lastScore, total: challenge.lastTotalMarks, passed: true });
+    }
+  }, [challenge]);
 
   if (!content) return null;
 
@@ -371,8 +400,15 @@ function ChallengeDetail({
             <div>
               <h2 className="text-xl font-semibold">📝 Your Turn — Practice Question</h2>
               <p className="mt-2 text-sm text-text-muted">
-                Answer below or solve on paper and upload it in the next step.
+                {challenge.status === "completed"
+                  ? "Review the answers saved with your completed attempt."
+                  : "Answer below or solve on paper and upload it in the next step."}
               </p>
+              {challenge.status === "completed" && !challenge.latestAttempt ? (
+                <div className="mt-5 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-text-secondary">
+                  This result is saved, but its answer details are unavailable for review.
+                </div>
+              ) : null}
               {content.examQuestions.length ? (
                 <div className="mt-6 space-y-5">
                   {content.examQuestions.map((question, index) => (
@@ -384,10 +420,16 @@ function ChallengeDetail({
                       <textarea
                         rows={5}
                         value={answers[question.id] ?? ""}
-                        disabled={challenge.status === "completed" || submitting}
+                        readOnly={challenge.status === "completed"}
+                        disabled={submitting}
+                        aria-readonly={challenge.status === "completed"}
                         onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))}
-                        className="mt-4 w-full rounded-xl border border-border bg-card p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
-                        placeholder="Type your answer here, or leave this blank if you will upload handwritten work."
+                        className="mt-4 w-full rounded-xl border border-border bg-card p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60 read-only:bg-bg-primary"
+                        placeholder={
+                          challenge.status === "completed"
+                            ? "No typed answer was saved for this question."
+                            : "Type your answer here, or leave this blank if you will upload handwritten work."
+                        }
                       />
                     </label>
                   ))}

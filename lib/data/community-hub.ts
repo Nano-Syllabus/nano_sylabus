@@ -524,7 +524,7 @@ export async function getCommunityHubForUser(
       ? Math.round((contentReadySubjects / subjectRows.length) * 100)
       : null,
     subjects,
-    members: members.slice(0, 100),
+    members,
     posts,
     announcements,
     activity,

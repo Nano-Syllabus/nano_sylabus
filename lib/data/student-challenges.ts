@@ -112,6 +112,18 @@ export type StudentChallengeContent = {
 
 export type StudentChallengeDetail = StudentChallengeSummary & {
   content: StudentChallengeContent | null;
+  latestAttempt: ChallengeAttemptReview | null;
+};
+
+export type ChallengeAttemptReview = {
+  attemptId: string;
+  handedInAt: string | null;
+  answers: Array<{
+    questionId: string;
+    answerText: string;
+    score: number;
+    feedback: string;
+  }>;
 };
 
 type ChallengeRow = Record<string, unknown>;
@@ -178,7 +190,125 @@ function toDetail(row: ChallengeRow): StudentChallengeDetail {
     row.content && typeof row.content === "object" && !Array.isArray(row.content)
       ? (row.content as StudentChallengeContent)
       : null;
-  return { ...toSummary(row), content };
+  return { ...toSummary(row), content, latestAttempt: null };
+}
+
+export function challengeAttemptReviewFromEvaluation(
+  attemptId: string,
+  evaluation: unknown,
+  createdAt?: string | null,
+): ChallengeAttemptReview | null {
+  if (!evaluation || typeof evaluation !== "object" || Array.isArray(evaluation)) return null;
+  const history = (evaluation as Record<string, unknown>).attempt_history;
+  if (!history || typeof history !== "object" || Array.isArray(history)) return null;
+  const historyRecord = history as Record<string, unknown>;
+  if (!Array.isArray(historyRecord.results)) return null;
+
+  const answers = historyRecord.results
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((item) => ({
+      questionId: String(item.question_id ?? ""),
+      answerText: String(item.student_answer ?? ""),
+      score: number(item.score),
+      feedback: String(item.feedback ?? ""),
+    }))
+    .filter((answer) => answer.questionId);
+  if (!answers.length) return null;
+
+  return {
+    attemptId,
+    handedInAt: historyRecord.handedInAt
+      ? String(historyRecord.handedInAt)
+      : createdAt || null,
+    answers,
+  };
+}
+
+export function challengeAttemptReviewFromNormalizedRows(
+  attemptId: string,
+  questions: Array<{ id: unknown; external_question_id: unknown }>,
+  answers: Array<{
+    question_id: unknown;
+    answer_text: unknown;
+    score: unknown;
+    feedback: unknown;
+  }>,
+  createdAt?: string | null,
+): ChallengeAttemptReview | null {
+  const answerByQuestion = new Map(
+    answers.map((answer) => [String(answer.question_id ?? ""), answer]),
+  );
+  const restored = questions
+    .map((question) => {
+      const answer = answerByQuestion.get(String(question.id ?? ""));
+      return {
+        questionId: String(question.external_question_id ?? ""),
+        answerText: String(answer?.answer_text ?? ""),
+        score: number(answer?.score),
+        feedback: String(answer?.feedback ?? ""),
+      };
+    })
+    .filter((answer) => answer.questionId);
+  if (!restored.length) return null;
+
+  return {
+    attemptId,
+    handedInAt: createdAt || null,
+    answers: restored,
+  };
+}
+
+async function withLatestAttemptReview(
+  userId: string,
+  row: ChallengeRow,
+  detail = toDetail(row),
+): Promise<StudentChallengeDetail> {
+  const attemptId = String(row.last_attempt_id ?? "");
+  if (!attemptId) return detail;
+
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("student_practice_attempts")
+    .select("id, evaluation, created_at")
+    .eq("id", attemptId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return detail;
+
+  const embeddedReview = challengeAttemptReviewFromEvaluation(
+    String(data.id),
+    data.evaluation,
+    data.created_at ? String(data.created_at) : null,
+  );
+  if (embeddedReview) return { ...detail, latestAttempt: embeddedReview };
+
+  const [{ data: questions, error: questionError }, { data: answers, error: answerError }] =
+    await Promise.all([
+      admin
+        .from("student_practice_attempt_questions")
+        .select("id, external_question_id")
+        .eq("attempt_id", attemptId)
+        .eq("user_id", userId)
+        .order("position", { ascending: true }),
+      admin
+        .from("student_practice_attempt_answers")
+        .select("question_id, answer_text, score, feedback")
+        .eq("attempt_id", attemptId)
+        .eq("user_id", userId),
+    ]);
+  if (questionError && questionError.code !== UNDEFINED_TABLE) throw questionError;
+  if (answerError && answerError.code !== UNDEFINED_TABLE) throw answerError;
+
+  return {
+    ...detail,
+    latestAttempt: challengeAttemptReviewFromNormalizedRows(
+      String(data.id),
+      questions ?? [],
+      answers ?? [],
+      data.created_at ? String(data.created_at) : null,
+    ),
+  };
 }
 
 async function listDailyRows(userId: string, date: string) {
@@ -371,7 +501,7 @@ export async function getStudentChallenge(userId: string, challengeId: string) {
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
-  return data ? toDetail(data as ChallengeRow) : null;
+  return data ? withLatestAttemptReview(userId, data as ChallengeRow) : null;
 }
 
 export async function getStudentChallengeGradeContext(userId: string, challengeId: string) {
@@ -537,7 +667,8 @@ export async function startStudentChallenge(
   const row = raw as ChallengeRow;
   const current = toDetail(row);
   const externalAttemptId = String(row.external_paper_id || "");
-  if (current.status === "completed" || hasLiveExam(current, externalAttemptId)) return current;
+  if (current.status === "completed") return withLatestAttemptReview(userId, row, current);
+  if (hasLiveExam(current, externalAttemptId)) return current;
   if (current.content?.provider === "collection-challenge-v1") {
     return refreshStudentChallengeExam(userId, challengeId);
   }

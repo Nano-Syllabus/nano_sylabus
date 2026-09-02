@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   BookOpenCheck,
@@ -11,10 +12,12 @@ import {
   Clock3,
   Flame,
   LibraryBig,
+  LoaderCircle,
   LockKeyholeOpen,
   Sparkles,
   Trophy,
   Users,
+  X,
   Zap,
 } from "lucide-react";
 import type {
@@ -22,6 +25,7 @@ import type {
   DailyLeaderboardMember,
   StudentDailyDashboard,
 } from "@/lib/data/student-daily-dashboard";
+import type { SubscriptionPlan } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const focusRing =
@@ -33,6 +37,227 @@ function formatNumber(value: number, maximumFractionDigits = 0) {
 
 function firstName(value: string) {
   return value.trim().split(/\s+/)[0] || "Student";
+}
+
+function formatPrice(plan: SubscriptionPlan) {
+  return new Intl.NumberFormat("en-NP", {
+    style: "currency",
+    currency: plan.currency,
+    currencyDisplay: "code",
+    maximumFractionDigits: 0,
+  }).format(plan.price);
+}
+
+function billingInterval(plan: SubscriptionPlan) {
+  if (plan.billingType === "monthly") return "/ month";
+  return "one-time";
+}
+
+function UpgradeModal({
+  open,
+  plan,
+  onClose,
+}: {
+  open: boolean;
+  plan: SubscriptionPlan;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const creatingInvoiceRef = useRef(false);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !creatingInvoiceRef.current) {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+      previousFocus?.focus();
+    };
+  }, [onClose, open]);
+
+  if (!open) return null;
+
+  async function startPaidUpgrade() {
+    creatingInvoiceRef.current = true;
+    setCreatingInvoice(true);
+    setError("");
+    try {
+      const response = await fetch("/api/billing/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ planId: plan.id, paymentMethod: "bank_transfer" }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error || "Could not prepare your upgrade. Try again.");
+        return;
+      }
+      router.push("/app/billing");
+    } catch {
+      setError("Could not reach NanoSyllabus. Check your connection and try again.");
+    } finally {
+      creatingInvoiceRef.current = false;
+      setCreatingInvoice(false);
+    }
+  }
+
+  function openReferral() {
+    onClose();
+    router.push("/app/community?invite=referral");
+  }
+
+  const price = formatPrice(plan);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !creatingInvoice) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upgrade-dialog-title"
+        aria-describedby="upgrade-dialog-description"
+        className="max-h-[min(720px,calc(100dvh-2rem))] w-full max-w-xl overflow-y-auto rounded-3xl border border-border bg-bg-primary p-5 shadow-2xl sm:p-7"
+      >
+        <div className="flex items-start justify-between gap-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
+              {plan.name}
+            </p>
+            <h2 id="upgrade-dialog-title" className="mt-2 font-display text-2xl font-semibold">
+              Upgrade to Unlimited
+            </h2>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            disabled={creatingInvoice}
+            className={cn(
+              "flex size-10 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50",
+              focusRing,
+            )}
+            aria-label="Close upgrade dialog"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        <p id="upgrade-dialog-description" className="mt-3 text-sm leading-6 text-text-secondary">
+          Choose the official paid plan or invite a peer. Both paths use your real billing account.
+        </p>
+
+        <section className="mt-6 rounded-2xl border border-border bg-bg-secondary p-5">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
+                Pay with official QR
+              </p>
+              <p className="mt-2 font-display text-3xl font-semibold tabular-nums">{price}</p>
+            </div>
+            <p className="pb-1 text-sm text-text-secondary">{billingInterval(plan)}</p>
+          </div>
+          {plan.features.length ? (
+            <ul className="mt-4 grid gap-2 text-sm text-text-secondary">
+              {plan.features.slice(0, 4).map((feature) => (
+                <li key={feature} className="flex items-start gap-2">
+                  <Check className="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void startPaidUpgrade()}
+            disabled={creatingInvoice}
+            aria-busy={creatingInvoice}
+            className={cn(
+              "mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-text-primary px-5 text-sm font-semibold text-text-inverse hover:opacity-90 disabled:cursor-wait disabled:opacity-60",
+              focusRing,
+            )}
+          >
+            {creatingInvoice ? (
+              <LoaderCircle
+                className="size-4 animate-spin motion-reduce:animate-none"
+                aria-hidden="true"
+              />
+            ) : (
+              <Zap className="size-4" aria-hidden="true" />
+            )}
+            {creatingInvoice ? "Preparing invoice…" : `Continue with ${price}`}
+          </button>
+        </section>
+
+        <section className="mt-3 rounded-2xl border border-border p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
+            Free via peer referral
+          </p>
+          <p className="mt-2 text-sm leading-6 text-text-secondary">
+            Share your tracked link. After your peer joins through it and their first Pro payment is
+            approved, both of you receive one free month automatically.
+          </p>
+          <button
+            type="button"
+            onClick={openReferral}
+            disabled={creatingInvoice}
+            className={cn(
+              "mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-border px-5 text-sm font-semibold hover:bg-bg-secondary disabled:opacity-50",
+              focusRing,
+            )}
+          >
+            Create referral link <ArrowRight className="size-4" aria-hidden="true" />
+          </button>
+        </section>
+
+        {error ? (
+          <p
+            role="alert"
+            className="mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function MetricCard({
@@ -81,10 +306,20 @@ function activityLabel(day: DailyActivityDay) {
 }
 
 function ActivityCalendar({ days }: { days: DailyActivityDay[] }) {
+  const initialSelectedDate =
+    days.find((day) => day.isToday)?.date ??
+    [...days].reverse().find((day) => day.status !== "future")?.date ??
+    days[0]?.date ??
+    "";
+  const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
+  const selectedDay = days.find((day) => day.date === selectedDate) ?? null;
   const completedDays = days.filter((day) => day.status === "completed").length;
   const practiceDays = days.filter(
     (day) => day.status === "completed" || day.status === "started",
   ).length;
+  const rangeLabel = days.length
+    ? `${days[0].label.replace(/, \d{4}$/, "")} – ${days.at(-1)?.label}`
+    : "Recent activity";
 
   return (
     <section
@@ -95,7 +330,7 @@ function ActivityCalendar({ days }: { days: DailyActivityDay[] }) {
         <div>
           <div className="flex items-center gap-2 text-text-secondary">
             <CalendarDays className="size-4" aria-hidden="true" />
-            <p className="text-xs font-semibold uppercase tracking-[0.14em]">Last five weeks</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em]">{rangeLabel}</p>
           </div>
           <h2 id="activity-calendar-heading" className="mt-2 font-display text-xl font-semibold">
             Practice calendar
@@ -132,27 +367,76 @@ function ActivityCalendar({ days }: { days: DailyActivityDay[] }) {
           </div>
           <div className="grid grid-cols-7 gap-2">
             {days.map((day) => (
-              <div
+              <button
+                type="button"
                 key={day.date}
-                role="img"
+                onClick={() => setSelectedDate(day.date)}
+                disabled={day.status === "future"}
                 title={activityLabel(day)}
                 aria-label={activityLabel(day)}
+                aria-pressed={day.date === selectedDate}
                 className={cn(
-                  "flex aspect-[1.3] min-h-10 items-center justify-center rounded-lg border text-xs font-medium tabular-nums",
+                  "flex aspect-[1.3] min-h-10 flex-col items-center justify-center rounded-lg border text-xs font-medium tabular-nums disabled:cursor-default",
+                  focusRing,
                   day.status === "completed" && "border-success/20 bg-success text-white",
                   day.status === "started" && "border-warning/25 bg-warning text-white",
                   day.status === "idle" && "border-border bg-bg-secondary text-text-muted",
                   day.status === "future" && "border-transparent bg-transparent text-text-muted/40",
                   day.isToday &&
                     "ring-2 ring-[var(--community-accent)] ring-offset-2 ring-offset-bg-primary",
+                  day.date === selectedDate &&
+                    !day.isToday &&
+                    "ring-2 ring-border-strong ring-offset-2 ring-offset-bg-primary",
                 )}
               >
                 {day.dayOfMonth}
-              </div>
+                {day.attempts > 0 ? (
+                  <span className="mt-0.5 text-[9px] leading-none opacity-80">
+                    {day.attempts} attempt{day.attempts === 1 ? "" : "s"}
+                  </span>
+                ) : null}
+              </button>
             ))}
           </div>
         </div>
       </div>
+
+      {selectedDay ? (
+        <div
+          className="mt-5 grid gap-4 rounded-xl border border-border bg-bg-secondary p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+          aria-live="polite"
+        >
+          <div>
+            <p className="text-sm font-semibold">
+              {selectedDay.label}
+              {selectedDay.isToday ? " · Today" : ""}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-text-secondary">
+              {selectedDay.attempts
+                ? `${selectedDay.attempts} graded practice attempt${selectedDay.attempts === 1 ? "" : "s"} recorded from your account.`
+                : "No graded practice was recorded for this date."}
+            </p>
+          </div>
+          {selectedDay.attempts ? (
+            <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm sm:justify-end">
+              <div>
+                <dt className="text-xs text-text-muted">Passed</dt>
+                <dd className="mt-0.5 font-semibold tabular-nums">
+                  {selectedDay.completions}/{selectedDay.attempts}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-text-muted">Average</dt>
+                <dd className="mt-0.5 font-semibold tabular-nums">
+                  {selectedDay.averageScore === null
+                    ? "—"
+                    : `${Math.round(selectedDay.averageScore)}%`}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -244,15 +528,9 @@ function DailyLeaderboard({ dashboard }: { dashboard: StudentDailyDashboard }) {
           </h2>
           <p className="mt-1 text-sm text-text-secondary">{community.name}</p>
         </div>
-        <Link
-          href="/app/community?tab=members"
-          className={cn(
-            "inline-flex min-h-10 items-center text-sm font-medium text-text-secondary hover:text-text-primary",
-            focusRing,
-          )}
-        >
-          All {formatNumber(community.memberCount)} members
-        </Link>
+        <p className="inline-flex min-h-10 items-center text-sm text-text-secondary">
+          {formatNumber(community.memberCount)} members
+        </p>
       </div>
       <div className="mt-5 grid grid-cols-[34px_minmax(0,1fr)_64px_62px] gap-2 border-b border-border px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted sm:grid-cols-[42px_minmax(0,1fr)_84px_70px]">
         <span>Rank</span>
@@ -270,6 +548,17 @@ function DailyLeaderboard({ dashboard }: { dashboard: StudentDailyDashboard }) {
           No community member has recorded practice today. Ordering currently uses streak and XP.
         </p>
       ) : null}
+      <div className="mt-3 border-t border-border pt-3 text-center">
+        <Link
+          href="/app/community?tab=members&sort=today"
+          className={cn(
+            "inline-flex min-h-10 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--community-accent)] hover:underline",
+            focusRing,
+          )}
+        >
+          View full leaderboard <ArrowRight className="size-4" aria-hidden="true" />
+        </Link>
+      </div>
     </section>
   );
 }
@@ -425,13 +714,16 @@ export function StudentDailyDashboardView({
   fullName,
   creditBalance,
   hasUnlimitedAccess,
+  unlimitedPlan,
   dashboard,
 }: {
   fullName: string;
   creditBalance: number;
   hasUnlimitedAccess: boolean;
+  unlimitedPlan: SubscriptionPlan | null;
   dashboard: StudentDailyDashboard;
 }) {
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const community = dashboard.community;
   const challenge = dashboard.challenge;
   const readyChallenges = challenge.challenges.filter((item) => item.status !== "completed").length;
@@ -462,15 +754,18 @@ export function StudentDailyDashboardView({
         </div>
         <div className="flex flex-wrap gap-2">
           {!hasUnlimitedAccess ? (
-            <Link
-              href="/app/billing"
+            <button
+              type="button"
+              onClick={() => setUpgradeOpen(true)}
+              disabled={!unlimitedPlan}
               className={cn(
-                "inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold hover:bg-bg-secondary",
+                "inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-50",
                 focusRing,
               )}
+              title={unlimitedPlan ? undefined : "Unlimited plan is currently unavailable"}
             >
-              <Zap className="size-4" aria-hidden="true" /> View Unlimited
-            </Link>
+              <Zap className="size-4" aria-hidden="true" /> Unlock Unlimited
+            </button>
           ) : null}
           <Link
             href="/app/challenges"
@@ -560,6 +855,14 @@ export function StudentDailyDashboardView({
       <div className="mt-6">
         <SemesterProgress dashboard={dashboard} />
       </div>
+
+      {unlimitedPlan ? (
+        <UpgradeModal
+          open={upgradeOpen}
+          plan={unlimitedPlan}
+          onClose={() => setUpgradeOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }

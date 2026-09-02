@@ -7,15 +7,30 @@ import { getCommunityHubForUser } from "@/lib/data/community-hub";
 
 export const dynamic = "force-dynamic";
 
-export default async function CommunityPage() {
+export default async function CommunityPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { user } = await requireOnboardedUser();
-  const data = await getCommunityHubForUser(user.id);
+  const [data, params] = await Promise.all([getCommunityHubForUser(user.id), searchParams]);
+  const tab = typeof params.tab === "string" ? params.tab : "overview";
+  const initialSection = ["overview", "subjects", "forum", "members"].includes(tab)
+    ? (tab as "overview" | "subjects" | "forum" | "members")
+    : "overview";
+  const memberRanking = params.sort === "today" ? "today" : "xp";
+  const initialInviteOpen = params.invite === "referral";
 
   return (
     <>
       <SetAppShell title="Community Hub" />
       {data ? (
-        <CommunityHubClient initialData={data} />
+        <CommunityHubClient
+          initialData={data}
+          initialSection={initialSection}
+          memberRanking={memberRanking}
+          initialInviteOpen={initialInviteOpen}
+        />
       ) : (
         <main className="mx-auto w-full max-w-[1240px] px-4 pb-24 pt-8 sm:px-6 lg:px-10">
           <section className="flex min-h-[60vh] flex-col items-center justify-center rounded-3xl border border-dashed border-border px-6 py-16 text-center">

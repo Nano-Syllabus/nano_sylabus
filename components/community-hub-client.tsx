@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -167,15 +176,25 @@ function MetricCard({
   );
 }
 
-export function CommunityHubClient({ initialData }: { initialData: CommunityHubData }) {
+export function CommunityHubClient({
+  initialData,
+  initialSection = "overview",
+  memberRanking = "xp",
+  initialInviteOpen = false,
+}: {
+  initialData: CommunityHubData;
+  initialSection?: CommunitySection;
+  memberRanking?: "xp" | "today";
+  initialInviteOpen?: boolean;
+}) {
   const router = useRouter();
   const { community } = initialData;
-  const [section, setSection] = useState<CommunitySection>("overview");
+  const [section, setSection] = useState<CommunitySection>(initialSection);
   const [selectedTermId, setSelectedTermId] = useState(initialData.currentTermId);
   const [currentTermId, setCurrentTermId] = useState(initialData.currentTermId);
   const [announcements, setAnnouncements] = useState(initialData.announcements);
   const [announcementsOpen, setAnnouncementsOpen] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(initialInviteOpen);
   const [inviteMode, setInviteMode] = useState<"referral" | "community">("referral");
   const [inviteLink, setInviteLink] = useState("");
   const [inviteExpiresAt, setInviteExpiresAt] = useState("");
@@ -244,7 +263,7 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
     }
   }
 
-  async function generateReferral() {
+  const generateReferral = useCallback(async () => {
     setReferralLoading(true);
     setReferralError("");
     setReferralCopied(false);
@@ -269,7 +288,11 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
     } finally {
       setReferralLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (initialInviteOpen) void generateReferral();
+  }, [generateReferral, initialInviteOpen]);
 
   function openPeerInvite() {
     setInviteMode("referral");
@@ -316,7 +339,9 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
         await writeClipboardText(message);
         setReferralShareNotice("Discord opened. Paste the copied referral message.");
       } catch {
-        setReferralError("Discord opened, but the message could not be copied. Copy the link manually.");
+        setReferralError(
+          "Discord opened, but the message could not be copied. Copy the link manually.",
+        );
       }
       return;
     }
@@ -576,7 +601,9 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
           onVote={vote}
         />
       ) : null}
-      {section === "members" ? <CommunityMembers data={initialData} /> : null}
+      {section === "members" ? (
+        <CommunityMembers data={initialData} ranking={memberRanking} />
+      ) : null}
 
       <section
         className="mt-12 grid gap-4 border-t border-border pt-8 md:grid-cols-2"
@@ -768,7 +795,9 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
                       href={`mailto:?subject=${encodeURIComponent("Join me on NanoSyllabus Pro")}&body=${encodeURIComponent(referralShareMessage(referralLink))}`}
                       onClick={() => {
                         setReferralError("");
-                        setReferralShareNotice("Your email app is opening with the referral message.");
+                        setReferralShareNotice(
+                          "Your email app is opening with the referral message.",
+                        );
                       }}
                       className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border px-3 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
                     >
@@ -1011,7 +1040,9 @@ function CommunityOverview({
               <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-text-muted">
                 Peer referral
               </p>
-              <h3 className="mt-2 font-display text-xl font-semibold">Give 1 month. Get 1 month.</h3>
+              <h3 className="mt-2 font-display text-xl font-semibold">
+                Give 1 month. Get 1 month.
+              </h3>
               <p className="mt-2 text-sm leading-6 text-text-secondary">
                 After your friend&apos;s first paid Pro subscription is approved, both accounts get
                 30 days automatically.
@@ -1085,7 +1116,7 @@ function CommunityOverview({
           >
             <div className="flex items-center justify-between gap-3">
               <h2 id="top-contributors-heading" className="font-display text-lg font-semibold">
-                Top contributors
+                Top members
               </h2>
               <span className="text-xs text-text-muted">All time</span>
             </div>
@@ -1418,7 +1449,18 @@ function CommunityForum({
   );
 }
 
-function CommunityMembers({ data }: { data: CommunityHubData }) {
+function CommunityMembers({ data, ranking }: { data: CommunityHubData; ranking: "xp" | "today" }) {
+  const members =
+    ranking === "today"
+      ? [...data.members].sort(
+          (left, right) =>
+            right.todayAttempts - left.todayAttempts ||
+            right.streak - left.streak ||
+            right.xp - left.xp ||
+            left.joinedAt.localeCompare(right.joinedAt),
+        )
+      : data.members;
+
   return (
     <section className="pt-8" aria-labelledby="community-members-heading">
       <div>
@@ -1426,46 +1468,80 @@ function CommunityMembers({ data }: { data: CommunityHubData }) {
           {formatNumber(data.memberCount)} active members
         </p>
         <h2 id="community-members-heading" className="mt-2 font-display text-2xl font-semibold">
-          People studying {titleCase(data.community.name)}
+          {ranking === "today"
+            ? "Full daily leaderboard"
+            : `People studying ${titleCase(data.community.name)}`}
         </h2>
         <p className="mt-2 text-sm text-text-secondary">
-          Ranked by XP earned from this community&apos;s challenges and accepted contributions.
+          {ranking === "today"
+            ? "Ranked by today's real challenge activity, then streak and community XP."
+            : "Ranked by XP earned from this community's challenges and accepted contributions."}
         </p>
       </div>
-      {data.members.length ? (
-        <div className="mt-6 divide-y divide-border border-y border-border">
-          {data.members.map((member) => (
-            <div
-              key={member.id}
-              className="grid gap-3 py-4 sm:grid-cols-[44px_minmax(0,1fr)_120px_100px] sm:items-center"
-            >
-              <span className="flex size-11 items-center justify-center rounded-full bg-bg-secondary text-xs font-semibold">
-                {member.initials}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate font-semibold">
-                  {member.name}
-                  {member.isViewer ? " (you)" : ""}
-                </p>
-                <p className="mt-1 text-xs text-text-muted">
-                  {member.role === "creator"
-                    ? "Community creator"
-                    : `Joined ${formatDate(member.joinedAt)}`}
-                </p>
+      {members.length ? (
+        <div className="mt-6 border-y border-border">
+          <div className="hidden grid-cols-[56px_44px_minmax(0,1fr)_120px_100px] gap-3 border-b border-border px-3 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted sm:grid">
+            <span>Rank</span>
+            <span aria-hidden="true" />
+            <span>Member</span>
+            <span>{ranking === "today" ? "Today" : "Completed"}</span>
+            <span className="text-right">{ranking === "today" ? "Streak" : "XP"}</span>
+          </div>
+          <div className="divide-y divide-border">
+            {members.map((member, index) => (
+              <div
+                key={member.id}
+                className={cn(
+                  "grid gap-3 px-3 py-4 sm:grid-cols-[56px_44px_minmax(0,1fr)_120px_100px] sm:items-center",
+                  member.isViewer && "bg-bg-secondary",
+                )}
+              >
+                <span className="text-sm font-semibold tabular-nums text-text-muted">
+                  #{ranking === "today" ? index + 1 : member.rank}
+                </span>
+                <span className="flex size-11 items-center justify-center rounded-full bg-bg-secondary text-xs font-semibold">
+                  {member.initials}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">
+                    {member.name}
+                    {member.isViewer ? " (you)" : ""}
+                  </p>
+                  <p className="mt-1 text-xs text-text-muted">
+                    {ranking === "today"
+                      ? `${formatNumber(member.xp)} XP`
+                      : member.role === "creator"
+                        ? "Community creator"
+                        : `Joined ${formatDate(member.joinedAt)}`}
+                  </p>
+                </div>
+                {ranking === "today" ? (
+                  <>
+                    <span className="text-sm font-semibold tabular-nums text-text-secondary">
+                      {formatNumber(member.todayAttempts)} today
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums sm:text-right">
+                      {member.streak}d streak
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm tabular-nums text-text-secondary">
+                      {member.completedChallenges} challenges
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums sm:text-right">
+                      {formatNumber(member.xp)} XP
+                    </span>
+                  </>
+                )}
               </div>
-              <span className="text-sm tabular-nums text-text-secondary">
-                {member.completedChallenges} challenges
-              </span>
-              <span className="text-sm font-semibold tabular-nums sm:text-right">
-                #{member.rank} · {formatNumber(member.xp)} XP
-              </span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       ) : null}
-      {data.memberCount > data.members.length ? (
+      {data.memberCount > members.length ? (
         <p className="mt-4 text-sm text-text-muted">
-          Showing the top {data.members.length} contributors.
+          Showing the top {members.length} contributors.
         </p>
       ) : null}
     </section>
