@@ -65,6 +65,32 @@ function relativeTime(value: string) {
   return "just now";
 }
 
+function referralShareMessage(link: string) {
+  return `Join me on NanoSyllabus Pro. Use my referral link and, after your first paid Pro subscription is approved, we both get one free month: ${link}`;
+}
+
+async function writeClipboardText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+      // Some browsers expose Clipboard API but reject it outside their preferred context.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("Clipboard copy failed");
+}
+
 function Modal({
   open,
   title,
@@ -254,7 +280,7 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
     if (!referralLink) return;
     setReferralError("");
     try {
-      await navigator.clipboard.writeText(referralLink);
+      await writeClipboardText(referralLink);
       setReferralCopied(true);
       setReferralShareNotice("Referral link copied.");
       window.setTimeout(() => setReferralCopied(false), 2000);
@@ -265,7 +291,7 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
 
   async function shareReferral(channel: "whatsapp" | "discord" | "email" | "native") {
     if (!referralLink) return;
-    const message = `Join me on NanoSyllabus Pro. Use my referral link and, after your first paid Pro subscription is approved, we both get one free month: ${referralLink}`;
+    const message = referralShareMessage(referralLink);
     setReferralError("");
     setReferralShareNotice("");
 
@@ -284,11 +310,12 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
       return;
     }
     if (channel === "discord") {
+      window.open("https://discord.com/channels/@me", "_blank", "noopener,noreferrer");
       try {
-        await navigator.clipboard.writeText(message);
-        setReferralShareNotice("Message copied. Paste it into Discord.");
+        await writeClipboardText(message);
+        setReferralShareNotice("Discord opened. Paste the copied referral message.");
       } catch {
-        setReferralError("Could not copy the Discord message. Copy the referral link manually.");
+        setReferralError("Discord opened, but the message could not be copied. Copy the link manually.");
       }
       return;
     }
@@ -307,7 +334,14 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
       }
       return;
     }
-    await copyReferral();
+    try {
+      await writeClipboardText(message);
+      setReferralCopied(true);
+      setReferralShareNotice("Sharing is unavailable here, so the referral message was copied.");
+      window.setTimeout(() => setReferralCopied(false), 2000);
+    } catch {
+      setReferralError("Sharing is unavailable in this browser. Select and copy the link above.");
+    }
   }
 
   async function copyInvite() {
@@ -709,13 +743,18 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
                 <div className="mt-5">
                   <p className="text-sm font-semibold">Share via</p>
                   <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <button
-                      type="button"
-                      onClick={() => void shareReferral("whatsapp")}
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(referralShareMessage(referralLink))}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => {
+                        setReferralError("");
+                        setReferralShareNotice("WhatsApp opened with your referral message.");
+                      }}
                       className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border px-3 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
                     >
                       <MessageCircle className="size-4" aria-hidden="true" /> WhatsApp
-                    </button>
+                    </a>
                     <button
                       type="button"
                       onClick={() => void shareReferral("discord")}
@@ -723,13 +762,16 @@ export function CommunityHubClient({ initialData }: { initialData: CommunityHubD
                     >
                       <MessageCircle className="size-4" aria-hidden="true" /> Discord
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => void shareReferral("email")}
+                    <a
+                      href={`mailto:?subject=${encodeURIComponent("Join me on NanoSyllabus Pro")}&body=${encodeURIComponent(referralShareMessage(referralLink))}`}
+                      onClick={() => {
+                        setReferralError("");
+                        setReferralShareNotice("Your email app is opening with the referral message.");
+                      }}
                       className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border px-3 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
                     >
                       <Mail className="size-4" aria-hidden="true" /> Email
-                    </button>
+                    </a>
                     <button
                       type="button"
                       onClick={() => void shareReferral("native")}
