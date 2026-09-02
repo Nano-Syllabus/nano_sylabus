@@ -115,6 +115,12 @@ type DailyActivityRow = {
   completed_count: number;
 };
 
+type CommunityPracticeAttemptRow = {
+  user_id: string;
+  created_at: string;
+  passed: boolean | null;
+};
+
 type XpRow = {
   user_id: string;
   event_key: string;
@@ -157,6 +163,26 @@ export function calculateActivityStreak(
     cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
   return streak;
+}
+
+export function aggregateCommunityDailyActivity(
+  rows: CommunityPracticeAttemptRow[],
+): DailyActivityRow[] {
+  const activity = new Map<string, DailyActivityRow>();
+  for (const row of rows) {
+    const activityDate = communityDateKey(row.created_at);
+    const key = `${row.user_id}:${activityDate}`;
+    const current = activity.get(key) ?? {
+      user_id: row.user_id,
+      activity_date: activityDate,
+      attempt_count: 0,
+      completed_count: 0,
+    };
+    current.attempt_count += 1;
+    if (row.passed === true) current.completed_count += 1;
+    activity.set(key, current);
+  }
+  return [...activity.values()];
 }
 
 function initials(name: string) {
@@ -238,7 +264,7 @@ export async function getCommunityHubForUser(
     topicsResult,
     documentsResult,
     challengesResult,
-    dailyResult,
+    practiceResult,
     xpResult,
     postsResult,
     votesResult,
@@ -267,12 +293,14 @@ export async function getCommunityHubForUser(
           .eq("course_id", community.studyCourseId)
           .in("user_id", memberIds)
       : Promise.resolve({ data: [], error: null }),
-    memberIds.length
+    community.studyCourseId && memberIds.length
       ? admin
-          .from("student_daily_practice_activity")
-          .select("user_id,activity_date,attempt_count,completed_count")
+          .from("student_practice_attempts")
+          .select("user_id,created_at,passed")
           .in("user_id", memberIds)
-          .gte("activity_date", thirtyDaysAgo)
+          .eq("course_id", community.studyCourseId)
+          .eq("source", "challenge")
+          .gte("created_at", `${thirtyDaysAgo}T00:00:00.000Z`)
       : Promise.resolve({ data: [], error: null }),
     memberIds.length
       ? admin
@@ -305,7 +333,7 @@ export async function getCommunityHubForUser(
     topicsResult,
     documentsResult,
     challengesResult,
-    dailyResult,
+    practiceResult,
     xpResult,
     postsResult,
     votesResult,
@@ -330,7 +358,9 @@ export async function getCommunityHubForUser(
   }>;
   const challengeRows = (challengesResult.data || []) as ChallengeRow[];
   const challengeIds = new Set(challengeRows.map((row) => String(row.id)));
-  const dailyRows = (dailyResult.data || []) as DailyActivityRow[];
+  const dailyRows = aggregateCommunityDailyActivity(
+    (practiceResult.data || []) as CommunityPracticeAttemptRow[],
+  );
   const scopedXpRows = ((xpResult.data || []) as XpRow[]).filter((row) => {
     const metadata = row.metadata || {};
     return (

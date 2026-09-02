@@ -459,6 +459,37 @@ export function AppSidebar({
       {/* ── Nav Links ── */}
       <nav className={cn("mt-3 space-y-1", isCollapsed ? "px-2" : "px-3")}>
         <Link
+          href="/app/today"
+          onClick={() => onCloseMobile?.()}
+          className={cn(
+            "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            isCollapsed
+              ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
+              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+            pathname === "/app/today"
+              ? "bg-text-primary text-text-inverse"
+              : "hover:bg-bg-secondary hover:text-text-primary",
+          )}
+          title={isCollapsed ? "Daily Dashboard" : undefined}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M8.5 14.5c0 2 1.5 3.5 3.5 3.5s3.5-1.5 3.5-3.5c0-1.5-.8-2.5-2-3.5.1 1.3-.5 2.1-1.4 2.6.1-2.7-1.4-4.7-3.1-6.1.2 2.2-.7 3.7-1.9 5-.4.5-.6 1.2-.6 2Z" />
+            <circle cx="12" cy="12" r="9" />
+          </svg>
+          {!isCollapsed && "Daily Dashboard"}
+        </Link>
+
+        <Link
           href="/app/community"
           onClick={() => onCloseMobile?.()}
           className={cn(

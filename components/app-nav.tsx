@@ -12,6 +12,25 @@ const SHOW_MOCK_EXAM_NAV = false;
 
 const NAV = [
   {
+    href: "/app/today",
+    label: "Daily Dashboard",
+    icon: (
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M8.5 14.5c0 2 1.5 3.5 3.5 3.5s3.5-1.5 3.5-3.5c0-1.5-.8-2.5-2-3.5.1 1.3-.5 2.1-1.4 2.6.1-2.7-1.4-4.7-3.1-6.1.2 2.2-.7 3.7-1.9 5-.4.5-.6 1.2-.6 2Z" />
+        <circle cx="12" cy="12" r="9" />
+      </svg>
+    ),
+  },
+  {
     href: "/app/community",
     label: "Community Hub",
     icon: (

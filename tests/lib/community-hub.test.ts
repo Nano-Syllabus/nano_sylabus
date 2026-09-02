@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  aggregateCommunityDailyActivity,
   calculateActivityStreak,
   communityDateKey,
   documentBelongsToSubject,
@@ -23,6 +24,29 @@ describe("community hub calculations", () => {
         now,
       ),
     ).toBe(3);
+  });
+
+  it("aggregates only the community-scoped challenge attempts supplied by the loader", () => {
+    expect(
+      aggregateCommunityDailyActivity([
+        { user_id: "student-1", created_at: "2026-09-01T18:20:00.000Z", passed: true },
+        { user_id: "student-1", created_at: "2026-09-01T19:20:00.000Z", passed: false },
+        { user_id: "student-2", created_at: "2026-09-01T20:20:00.000Z", passed: true },
+      ]),
+    ).toEqual([
+      {
+        user_id: "student-1",
+        activity_date: "2026-09-02",
+        attempt_count: 2,
+        completed_count: 1,
+      },
+      {
+        user_id: "student-2",
+        activity_date: "2026-09-02",
+        attempt_count: 1,
+        completed_count: 1,
+      },
+    ]);
   });
 
   it("scopes teacher files to the linked subject folder", () => {
