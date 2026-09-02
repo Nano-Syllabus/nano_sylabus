@@ -42,6 +42,7 @@ function CommunityCard({
 }) {
   const router = useRouter();
   const joined = community.membership?.status === "active";
+  const creator = joined && community.membership?.role === "creator";
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
 
@@ -49,13 +50,10 @@ function CommunityCard({
     setJoining(true);
     setJoinError("");
     try {
-      const response = await fetch(
-        `/api/communities/${encodeURIComponent(community.slug)}/join`,
-        {
-          method: "POST",
-          headers: { Accept: "application/json" },
-        },
-      );
+      const response = await fetch(`/api/communities/${encodeURIComponent(community.slug)}/join`, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+      });
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
         setJoinError(payload.error || "Could not join this community. Please try again.");
@@ -109,10 +107,14 @@ function CommunityCard({
       <div className="mt-auto flex items-center gap-2 pt-6">
         {joined ? (
           <Link
-            href={`/app/communities/${community.slug}`}
+            href={
+              creator
+                ? `/teachers?view=communities&community=${encodeURIComponent(community.slug)}`
+                : `/app/communities/${community.slug}`
+            }
             className={`inline-flex min-h-10 flex-1 items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 ${focusRing}`}
           >
-            Open community
+            {creator ? "Open admin workspace" : "Open community"}
           </Link>
         ) : signedIn ? (
           <button
@@ -134,7 +136,7 @@ function CommunityCard({
         )}
         {joined ? (
           <span className="inline-flex min-h-10 items-center rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 text-xs font-medium text-emerald-300">
-            Joined
+            {creator ? "Creator" : "Joined"}
           </span>
         ) : null}
       </div>
@@ -169,14 +171,16 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 export function CommunityCatalogClient({
   initialCommunities,
   signedIn,
+  initialShowCreate = false,
 }: {
   initialCommunities: CommunitySummary[];
   signedIn: boolean;
+  initialShowCreate?: boolean;
 }) {
   const router = useRouter();
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(initialShowCreate);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
@@ -250,7 +254,9 @@ export function CommunityCatalogClient({
         else setFormError(payload.error || "Could not create the community. Try again.");
         return;
       }
-      router.push(`/app/communities/${payload.community.slug}`);
+      router.push(
+        `/teachers?view=communities&community=${encodeURIComponent(payload.community.slug)}`,
+      );
       router.refresh();
     } catch {
       setFormError("Could not reach NanoSyllabus. Check your connection and try again.");
@@ -296,7 +302,10 @@ export function CommunityCatalogClient({
       </header>
 
       {showCreate ? (
-        <section className="glass-card mt-6 rounded-3xl border border-border p-6 sm:p-8" aria-labelledby="create-community-title">
+        <section
+          className="glass-card mt-6 rounded-3xl border border-border p-6 sm:p-8"
+          aria-labelledby="create-community-title"
+        >
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)]">
             <form onSubmit={submit} noValidate aria-busy={submitting}>
               <h2 id="create-community-title" className="font-display text-2xl font-semibold">

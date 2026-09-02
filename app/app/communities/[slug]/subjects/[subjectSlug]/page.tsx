@@ -33,10 +33,10 @@ export default async function CommunitySubjectPage({ params, searchParams }: Pag
       <SetAppShell title={subject.name} />
       <main className="w-full max-w-[1100px] px-4 pb-24 pt-5 lg:p-7">
         <Link
-          href={`/app/communities/${community.slug}`}
+          href={`/app/communities/${encodeURIComponent(community.slug)}/semesters/${encodeURIComponent(term.id)}`}
           className="inline-flex min-h-10 items-center gap-2 text-sm text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
         >
-          <ArrowLeft className="size-4" aria-hidden="true" /> {titleCase(community.name)}
+          <ArrowLeft className="size-4" aria-hidden="true" /> Semester {term.semesterNumber}
         </Link>
         <header className="border-b border-border pb-8 pt-4">
           <p className="text-sm text-text-secondary">

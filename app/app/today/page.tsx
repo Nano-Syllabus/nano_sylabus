@@ -1,30 +1,14 @@
-import { SetAppShell } from "@/components/set-app-shell";
-import { ChallengesDashboardClient } from "@/components/challenges-dashboard-client";
-import { requireOnboardedUser } from "@/lib/auth";
-import { getStudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
-
-export const dynamic = "force-dynamic";
+import { redirect } from "next/navigation";
 
 export default async function TodayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ completedPage?: string; courseId?: string; subject?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { user } = await requireOnboardedUser();
   const params = await searchParams;
-  const requestedPage = Number.parseInt(params.completedPage || "1", 10);
-  const courseId = String(params.courseId || "").trim();
-  const subjectSlug = String(params.subject || "").trim();
-  const dashboard = await getStudentChallengeDashboard(
-    user.id,
-    Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1,
-    courseId && subjectSlug ? { courseId, subjectSlug } : undefined,
-  );
-
-  return (
-    <>
-      <SetAppShell title="" />
-      <ChallengesDashboardClient dashboard={dashboard} />
-    </>
-  );
+  const next = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string") next.set(key, value);
+  }
+  redirect(`/app/challenges${next.size ? `?${next.toString()}` : ""}`);
 }

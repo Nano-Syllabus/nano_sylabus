@@ -3,11 +3,25 @@ import { PGlite } from "@electric-sql/pglite";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-const foundation = path.join(process.cwd(), "supabase/migrations/20260830153000_community_foundation.sql");
-const learning = path.join(process.cwd(), "supabase/migrations/20260830170000_community_learning_flow.sql");
+const foundation = path.join(
+  process.cwd(),
+  "supabase/migrations/20260830153000_community_foundation.sql",
+);
+const learning = path.join(
+  process.cwd(),
+  "supabase/migrations/20260830170000_community_learning_flow.sql",
+);
 const subjectReuse = path.join(
   process.cwd(),
   "supabase/migrations/20260830183000_community_subject_reuse.sql",
+);
+const singleActiveCommunity = path.join(
+  process.cwd(),
+  "supabase/migrations/20260901090000_single_active_student_community.sql",
+);
+const communityHub = path.join(
+  process.cwd(),
+  "supabase/migrations/20260902120000_real_community_hub.sql",
 );
 
 describe("community learning migration", () => {
@@ -33,6 +47,12 @@ describe("community learning migration", () => {
         id uuid primary key default gen_random_uuid(),
         teacher_id uuid not null references public.teachers(id),
         slug text not null unique
+      );
+      create table public.teacher_course_enrollments (
+        course_id uuid not null references public.teacher_courses(id),
+        student_id uuid not null references auth.users(id),
+        status text not null default 'active',
+        primary key (course_id, student_id)
       );
       create table public.student_challenges (
         id uuid primary key default gen_random_uuid(),
@@ -64,6 +84,8 @@ describe("community learning migration", () => {
     await db.exec(await readFile(foundation, "utf8"));
     await db.exec(await readFile(learning, "utf8"));
     await db.exec(await readFile(subjectReuse, "utf8"));
+    await db.exec(await readFile(singleActiveCommunity, "utf8"));
+    await db.exec(await readFile(communityHub, "utf8"));
     await db.exec(`
       insert into auth.users(id) values
         ('11111111-1111-4111-8111-111111111111'),
@@ -75,9 +97,20 @@ describe("community learning migration", () => {
 
   it("crosses a resource threshold exactly once", async () => {
     await db.query(`select public.create_community_with_terms($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [
-      "11111111-1111-4111-8111-111111111111", "sec-bei", "SEC BEI", "PU", "BEI", "", 4, 8, "public",
+      "11111111-1111-4111-8111-111111111111",
+      "sec-bei",
+      "SEC BEI",
+      "PU",
+      "BEI",
+      "",
+      4,
+      8,
+      "public",
     ]);
-    await db.query("select public.join_community($1,$2)", ["22222222-2222-4222-8222-222222222222", "sec-bei"]);
+    await db.query("select public.join_community($1,$2)", [
+      "22222222-2222-4222-8222-222222222222",
+      "sec-bei",
+    ]);
     await db.exec(`
       update public.communities set contribution_threshold = 2;
       insert into public.community_subjects (community_id,term_id,created_by,slug,name)
@@ -91,25 +124,50 @@ describe("community learning migration", () => {
     `);
     const post = await db.query<{ id: string }>("select id from public.community_posts");
     const postId = post.rows[0]!.id;
-    const first = await db.query<{ should_merge: boolean; vote_count: number }>("select * from public.vote_community_post($1,$2)", ["22222222-2222-4222-8222-222222222222", postId]);
-    const repeat = await db.query<{ should_merge: boolean; vote_count: number }>("select * from public.vote_community_post($1,$2)", ["22222222-2222-4222-8222-222222222222", postId]);
-    const crossing = await db.query<{ should_merge: boolean; vote_count: number }>("select * from public.vote_community_post($1,$2)", ["11111111-1111-4111-8111-111111111111", postId]);
+    const first = await db.query<{ should_merge: boolean; vote_count: number }>(
+      "select * from public.vote_community_post($1,$2)",
+      ["22222222-2222-4222-8222-222222222222", postId],
+    );
+    const repeat = await db.query<{ should_merge: boolean; vote_count: number }>(
+      "select * from public.vote_community_post($1,$2)",
+      ["22222222-2222-4222-8222-222222222222", postId],
+    );
+    const crossing = await db.query<{ should_merge: boolean; vote_count: number }>(
+      "select * from public.vote_community_post($1,$2)",
+      ["11111111-1111-4111-8111-111111111111", postId],
+    );
     expect(first.rows[0]).toMatchObject({ should_merge: false, vote_count: 1 });
     expect(repeat.rows[0]).toMatchObject({ should_merge: false, vote_count: 1 });
     expect(crossing.rows[0]).toMatchObject({ should_merge: true, vote_count: 2 });
-    const events = await db.query<{ total: number }>("select count(*)::integer total from public.community_merge_events where event_type = 'threshold_reached'");
+    const events = await db.query<{ total: number }>(
+      "select count(*)::integer total from public.community_merge_events where event_type = 'threshold_reached'",
+    );
     expect(events.rows[0]?.total).toBe(1);
   });
 
   it("awards challenge XP only once", async () => {
-    await db.exec(`insert into public.student_challenges (id,user_id) values ('33333333-3333-4333-8333-333333333333','22222222-2222-4222-8222-222222222222')`);
+    await db.exec(
+      `insert into public.student_challenges (id,user_id) values ('33333333-3333-4333-8333-333333333333','22222222-2222-4222-8222-222222222222')`,
+    );
     await db.query("select * from public.record_student_challenge_grade($1,$2,$3,$4,$5,$6)", [
-      "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333", "44444444-4444-4444-8444-444444444444", 82, 100, true,
+      "22222222-2222-4222-8222-222222222222",
+      "33333333-3333-4333-8333-333333333333",
+      "44444444-4444-4444-8444-444444444444",
+      82,
+      100,
+      true,
     ]);
     await db.query("select * from public.record_student_challenge_grade($1,$2,$3,$4,$5,$6)", [
-      "22222222-2222-4222-8222-222222222222", "33333333-3333-4333-8333-333333333333", "55555555-5555-4555-8555-555555555555", 90, 100, true,
+      "22222222-2222-4222-8222-222222222222",
+      "33333333-3333-4333-8333-333333333333",
+      "55555555-5555-4555-8555-555555555555",
+      90,
+      100,
+      true,
     ]);
-    const xp = await db.query<{ points: number; total: number }>("select sum(points)::integer points,count(*)::integer total from public.student_xp_ledger");
+    const xp = await db.query<{ points: number; total: number }>(
+      "select sum(points)::integer points,count(*)::integer total from public.student_xp_ledger",
+    );
     expect(xp.rows[0]).toEqual({ points: 50, total: 1 });
   });
 
@@ -119,10 +177,26 @@ describe("community learning migration", () => {
         ('33333333-3333-4333-8333-333333333333','11111111-1111-4111-8111-111111111111','ram','collection-key');
     `);
     await db.query(`select public.create_community_with_terms($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [
-      "11111111-1111-4111-8111-111111111111", "sec-bei", "SEC BEI", "PU", "BEI", "", 4, 8, "public",
+      "11111111-1111-4111-8111-111111111111",
+      "sec-bei",
+      "SEC BEI",
+      "PU",
+      "BEI",
+      "",
+      4,
+      8,
+      "public",
     ]);
     await db.query(`select public.create_community_with_terms($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [
-      "11111111-1111-4111-8111-111111111111", "sec-bei-evening", "SEC BEI Evening", "PU", "BEI", "", 4, 8, "public",
+      "11111111-1111-4111-8111-111111111111",
+      "sec-bei-evening",
+      "SEC BEI Evening",
+      "PU",
+      "BEI",
+      "",
+      4,
+      8,
+      "public",
     ]);
     await db.exec(`
       insert into public.community_subjects (
@@ -151,5 +225,60 @@ describe("community learning migration", () => {
         where community.slug = 'sec-bei' and term.semester_number = 4;
       `),
     ).rejects.toThrow();
+  });
+
+  it("persists a member semester and redeems a limited invite only once", async () => {
+    await db.query(`select public.create_community_with_terms($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [
+      "11111111-1111-4111-8111-111111111111",
+      "sec-bei",
+      "SEC BEI",
+      "PU",
+      "BEI",
+      "",
+      4,
+      8,
+      "public",
+    ]);
+    const community = await db.query<{ id: string }>(
+      "select id from public.communities where slug = 'sec-bei'",
+    );
+    const communityId = community.rows[0]!.id;
+    const term = await db.query<{ id: string }>(
+      "select id from public.community_terms where community_id = $1 and semester_number = 3",
+      [communityId],
+    );
+    const invite = await db.query<{ token: string }>(
+      `insert into public.community_invites (community_id,created_by,max_uses)
+       values ($1,$2,25) returning token`,
+      [communityId, "11111111-1111-4111-8111-111111111111"],
+    );
+
+    await db.query("select public.redeem_community_invite($1,$2)", [
+      "22222222-2222-4222-8222-222222222222",
+      invite.rows[0]!.token,
+    ]);
+    await db.query("select public.redeem_community_invite($1,$2)", [
+      "22222222-2222-4222-8222-222222222222",
+      invite.rows[0]!.token,
+    ]);
+    await db.query("select public.set_community_current_term($1,$2,$3)", [
+      "22222222-2222-4222-8222-222222222222",
+      communityId,
+      term.rows[0]!.id,
+    ]);
+
+    const membership = await db.query<{ current_term_id: string; status: string }>(
+      "select current_term_id,status from public.community_memberships where community_id = $1 and user_id = $2",
+      [communityId, "22222222-2222-4222-8222-222222222222"],
+    );
+    const usage = await db.query<{ use_count: number; redemption_count: number }>(
+      `select invite.use_count,
+         (select count(*)::integer from public.community_invite_redemptions) as redemption_count
+       from public.community_invites invite where invite.token = $1`,
+      [invite.rows[0]!.token],
+    );
+
+    expect(membership.rows[0]).toEqual({ current_term_id: term.rows[0]!.id, status: "active" });
+    expect(usage.rows[0]).toEqual({ use_count: 1, redemption_count: 1 });
   });
 });

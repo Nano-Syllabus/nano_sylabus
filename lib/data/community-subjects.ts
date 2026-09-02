@@ -60,16 +60,20 @@ function extractedTopics(payload: ApiRecord) {
     if (!item || typeof item !== "object") return [];
     const row = item as ApiRecord;
     const title = stringValue(row.title || row.name);
-    const topicKey = stringValue(row.topic_key || row.topic_id || title.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+    const topicKey = stringValue(
+      row.topic_key || row.topic_id || title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    );
     if (!title || !topicKey) return [];
-    return [{
-      topic_key: topicKey,
-      title,
-      blurb: stringValue(row.blurb),
-      unit_number: stringValue(row.unit_number) || null,
-      position: Math.max(0, numberValue(row.order_index ?? index)),
-      source: stringValue(payload.topic_source) || "indexed_material",
-    }];
+    return [
+      {
+        topic_key: topicKey,
+        title,
+        blurb: stringValue(row.blurb),
+        unit_number: stringValue(row.unit_number) || null,
+        position: Math.max(0, numberValue(row.order_index ?? index)),
+        source: stringValue(payload.topic_source) || "indexed_material",
+      },
+    ];
   });
 }
 
@@ -127,7 +131,9 @@ export async function getCommunitySubjectWorkspace(
       : Promise.resolve({ data: [], error: null }),
     admin
       .from("community_posts")
-      .select("id,author_id,title,body,post_type,shelf,attachment_name,status,vote_count,created_at")
+      .select(
+        "id,author_id,title,body,post_type,shelf,attachment_name,status,vote_count,created_at",
+      )
       .eq("subject_id", subjectId)
       .neq("status", "hidden")
       .order("created_at", { ascending: false }),
@@ -136,9 +142,7 @@ export async function getCommunitySubjectWorkspace(
   for (const result of [topicsResult, masteryResult, postsResult, votesResult]) {
     if (result.error) throw result.error;
   }
-  const mastery = new Map(
-    (masteryResult.data || []).map((row) => [String(row.topic_key), row]),
-  );
+  const mastery = new Map((masteryResult.data || []).map((row) => [String(row.topic_key), row]));
   const voted = new Set((votesResult.data || []).map((row) => String(row.post_id)));
   return {
     subjectId,
@@ -182,8 +186,7 @@ export async function getCommunitySubjectWorkspace(
       title: String(row.title),
       body: String(row.body || ""),
       postType: row.post_type === "discussion" ? "discussion" : "resource",
-      shelf:
-        row.shelf === "Syllabus" || row.shelf === "Notes" ? row.shelf : "Question Bank",
+      shelf: row.shelf === "Syllabus" || row.shelf === "Notes" ? row.shelf : "Question Bank",
       attachmentName: row.attachment_name ? String(row.attachment_name) : null,
       status:
         row.status === "merge_pending" || row.status === "merged" || row.status === "merge_error"
@@ -237,7 +240,11 @@ export async function syncCommunitySubjectTopics(
     const topics = extractedTopics(payload);
     if (topics.length) {
       const upsert = await admin.from("community_subject_topics").upsert(
-        topics.map((topic) => ({ community_subject_id: subjectId, ...topic, updated_at: new Date().toISOString() })),
+        topics.map((topic) => ({
+          community_subject_id: subjectId,
+          ...topic,
+          updated_at: new Date().toISOString(),
+        })),
         { onConflict: "community_subject_id,topic_key" },
       );
       if (upsert.error) throw upsert.error;
@@ -245,7 +252,7 @@ export async function syncCommunitySubjectTopics(
       const existing = await admin
         .from("community_subject_topics")
         .select("id,topic_key")
-        .eq("community_subject_id", subjectId)
+        .eq("community_subject_id", subjectId);
       if (existing.error) throw existing.error;
       const staleIds = (existing.data || [])
         .filter((row) => !keys.has(String(row.topic_key)))
@@ -255,7 +262,10 @@ export async function syncCommunitySubjectTopics(
         if (stale.error) throw stale.error;
       }
     } else {
-      const cleared = await admin.from("community_subject_topics").delete().eq("community_subject_id", subjectId);
+      const cleared = await admin
+        .from("community_subject_topics")
+        .delete()
+        .eq("community_subject_id", subjectId);
       if (cleared.error) throw cleared.error;
     }
     const syncedAt = new Date().toISOString();
@@ -292,7 +302,9 @@ export async function syncCommunitySubjectTopics(
       }));
       await Promise.all(
         (memberships.data || []).map((membership) =>
-          ensureDailyChallenges(String(membership.user_id), recommendations),
+          ensureDailyChallenges(String(membership.user_id), recommendations, {
+            minimumRecommendationCount: 3,
+          }),
         ),
       );
     }
@@ -302,7 +314,10 @@ export async function syncCommunitySubjectTopics(
       .from("community_subjects")
       .update({
         topic_sync_status: "error",
-        topic_sync_error: (error instanceof Error ? error.message : "Topic extraction failed.").slice(0, 1000),
+        topic_sync_error: (error instanceof Error
+          ? error.message
+          : "Topic extraction failed."
+        ).slice(0, 1000),
       })
       .eq("id", subjectId);
     throw error;
@@ -413,10 +428,29 @@ export async function createCommunityPost(input: {
     .select("id")
     .single();
   if (insert.error) {
-    if (attachmentPath) await admin.storage.from("community-contributions").remove([attachmentPath]);
+    if (attachmentPath)
+      await admin.storage.from("community-contributions").remove([attachmentPath]);
     throw insert.error;
   }
-  return { id: String(insert.data.id) };
+  const postId = String(insert.data.id);
+  await admin.from("student_xp_ledger").upsert(
+    {
+      user_id: input.userId,
+      event_key: `community-post:${postId}`,
+      points: input.postType === "resource" ? 20 : 10,
+      reason:
+        input.postType === "resource"
+          ? "Shared a community resource"
+          : "Started a community discussion",
+      metadata: {
+        community_id: String(communityResult.data.id),
+        community_post_id: postId,
+        subject_id: input.subjectId,
+      },
+    },
+    { onConflict: "user_id,event_key", ignoreDuplicates: true },
+  );
+  return { id: postId };
 }
 
 export async function getCommunityPostAttachment(
@@ -459,7 +493,9 @@ export async function getCommunityPostAttachment(
 async function mergeCommunityPost(admin: SupabaseClient, postId: string, actorId: string) {
   const postResult = await admin
     .from("community_posts")
-    .select("id,community_id,subject_id,shelf,attachment_bucket,attachment_path,attachment_name,attachment_mime_type,status")
+    .select(
+      "id,community_id,subject_id,author_id,shelf,attachment_bucket,attachment_path,attachment_name,attachment_mime_type,status",
+    )
     .eq("id", postId)
     .maybeSingle();
   if (postResult.error) throw postResult.error;
@@ -491,14 +527,19 @@ async function mergeCommunityPost(admin: SupabaseClient, postId: string, actorId
     const download = await admin.storage
       .from(String(post.attachment_bucket || "community-contributions"))
       .download(String(post.attachment_path));
-    if (download.error || !download.data) throw download.error || new Error("Contribution file is missing.");
+    if (download.error || !download.data)
+      throw download.error || new Error("Contribution file is missing.");
     const result = await ingestTeacherDocument({
       collectionKey: String(teacherResult.data.collection_sk),
       fileName: String(post.attachment_name || "community-resource"),
       mimeType: String(post.attachment_mime_type || "application/octet-stream"),
       buffer: Buffer.from(await download.data.arrayBuffer()),
       path: `${subjectResult.data.folder_path}/${post.shelf || "Question Bank"}`,
-      metadata: { community_post_id: post.id, community_id: post.community_id, contributed_by: actorId },
+      metadata: {
+        community_post_id: post.id,
+        community_id: post.community_id,
+        contributed_by: actorId,
+      },
     });
     const now = new Date().toISOString();
     const update = await admin
@@ -515,9 +556,26 @@ async function mergeCommunityPost(admin: SupabaseClient, postId: string, actorId
       actor_id: actorId,
       details: { collection_path: result.collectionPath },
     });
+    await admin.from("student_xp_ledger").upsert(
+      {
+        user_id: post.author_id,
+        event_key: `community-merge:${post.id}`,
+        points: 30,
+        reason: "Community resource merged into the subject library",
+        metadata: {
+          community_id: post.community_id,
+          community_post_id: post.id,
+          subject_id: post.subject_id,
+        },
+      },
+      { onConflict: "user_id,event_key", ignoreDuplicates: true },
+    );
     return { merged: true };
   } catch (error) {
-    const message = (error instanceof Error ? error.message : "Automatic merge failed.").slice(0, 1000);
+    const message = (error instanceof Error ? error.message : "Automatic merge failed.").slice(
+      0,
+      1000,
+    );
     await admin
       .from("community_posts")
       .update({ status: "merge_error", merge_error: message, updated_at: new Date().toISOString() })
@@ -545,7 +603,8 @@ export async function voteCommunityPost(
   });
   if (vote.error) {
     if (vote.error.code === "P0002") throw new CommunityError("Post not found.", 404);
-    if (vote.error.code === "42501") throw new CommunityError("Join the community before voting.", 403);
+    if (vote.error.code === "42501")
+      throw new CommunityError("Join the community before voting.", 403);
     throw vote.error;
   }
   const row = Array.isArray(vote.data) ? vote.data[0] : vote.data;
@@ -574,9 +633,14 @@ export async function reportCommunityPost(
   reason: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ) {
-  const postResult = await admin.from("community_posts").select("id,community_id,status").eq("id", postId).maybeSingle();
+  const postResult = await admin
+    .from("community_posts")
+    .select("id,community_id,status")
+    .eq("id", postId)
+    .maybeSingle();
   if (postResult.error) throw postResult.error;
-  if (!postResult.data || postResult.data.status === "hidden") throw new CommunityError("Post not found.", 404);
+  if (!postResult.data || postResult.data.status === "hidden")
+    throw new CommunityError("Post not found.", 404);
   const membership = await admin
     .from("community_memberships")
     .select("status")
@@ -584,11 +648,18 @@ export async function reportCommunityPost(
     .eq("user_id", userId)
     .maybeSingle();
   if (membership.error) throw membership.error;
-  if (membership.data?.status !== "active") throw new CommunityError("Join the community before reporting.", 403);
+  if (membership.data?.status !== "active")
+    throw new CommunityError("Join the community before reporting.", 403);
   const cleanReason = reason.trim();
-  if (cleanReason.length < 3 || cleanReason.length > 500) throw new CommunityError("Add a short report reason.", 400);
+  if (cleanReason.length < 3 || cleanReason.length > 500)
+    throw new CommunityError("Add a short report reason.", 400);
   const report = await admin.from("community_post_reports").upsert(
-    { post_id: postId, reporter_id: userId, reason: cleanReason, updated_at: new Date().toISOString() },
+    {
+      post_id: postId,
+      reporter_id: userId,
+      reason: cleanReason,
+      updated_at: new Date().toISOString(),
+    },
     { onConflict: "post_id,reporter_id" },
   );
   if (report.error) throw report.error;

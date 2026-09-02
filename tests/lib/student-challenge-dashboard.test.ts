@@ -5,6 +5,7 @@ import {
 } from "@/lib/data/student-challenge-dashboard";
 import {
   challengeExamExpired,
+  dailyChallengeAssignmentCount,
   isMissingChallengeTable,
   studentFacingTopicTitle,
   type StudentChallengeDetail,
@@ -43,6 +44,26 @@ describe("student challenge metrics", () => {
     expect(studentFacingTopicTitle("Laplace Transform", "Control Systems")).toBe(
       "Laplace Transform",
     );
+  });
+
+  it("keeps three scoped subject assignments when other subjects filled the daily queue", () => {
+    expect(
+      dailyChallengeAssignmentCount({
+        activeCount: 3,
+        activeRecommendationCount: 0,
+        availableCount: 10,
+        minimumRecommendationCount: 3,
+      }),
+    ).toBe(3);
+
+    expect(
+      dailyChallengeAssignmentCount({
+        activeCount: 4,
+        activeRecommendationCount: 1,
+        availableCount: 10,
+        minimumRecommendationCount: 3,
+      }),
+    ).toBe(2);
   });
 
   it("uses the grading API verdict instead of reconstructing a pass threshold", () => {

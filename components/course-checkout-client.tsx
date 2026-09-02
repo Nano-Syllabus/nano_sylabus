@@ -256,7 +256,7 @@ export function CourseCheckoutClient({ course, user }: CourseCheckoutClientProps
                 <div className="flex items-center justify-between border-b border-border/70 pb-5">
                   <div>
                     <h2 className="font-display text-xl font-bold tracking-tight text-foreground">
-                      Study Space Activation
+                      Library &amp; NanoAI Activation
                     </h2>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Review details & activate your course

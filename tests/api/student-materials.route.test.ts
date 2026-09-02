@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getStudentCourseSubjectAccess: vi.fn(),
   getStudentCourseSubjectAccessForCourse: vi.fn(),
   listCreatorPrivateSubjectAccess: vi.fn(),
+  listStudentCommunitySubjectAccess: vi.fn(),
   listStudentCourses: vi.fn(),
   getTenantSourceTree: vi.fn(),
 }));
@@ -20,6 +21,7 @@ vi.mock("@/lib/student-courses", () => ({
   getStudentCourseSubjectAccess: mocks.getStudentCourseSubjectAccess,
   getStudentCourseSubjectAccessForCourse: mocks.getStudentCourseSubjectAccessForCourse,
   listCreatorPrivateSubjectAccess: mocks.listCreatorPrivateSubjectAccess,
+  listStudentCommunitySubjectAccess: mocks.listStudentCommunitySubjectAccess,
   listStudentCourses: mocks.listStudentCourses,
 }));
 vi.mock("@/lib/tenant/client", () => ({
@@ -56,6 +58,7 @@ describe("GET /api/student/materials", () => {
     });
     mocks.getTenantSourceTree.mockResolvedValue({ tree: [] });
     mocks.listCreatorPrivateSubjectAccess.mockResolvedValue([]);
+    mocks.listStudentCommunitySubjectAccess.mockResolvedValue([]);
     mocks.listStudentCourses.mockResolvedValue([]);
   });
 
@@ -136,6 +139,50 @@ describe("GET /api/student/materials", () => {
         courseName: "Private",
         private: true,
         subject: { name: "My Research", slug: "my-research" },
+      }),
+    ]);
+  });
+
+  it("includes subjects granted through active community membership", async () => {
+    mocks.listStudentCommunitySubjectAccess.mockResolvedValueOnce([
+      {
+        courseId: "community-course",
+        teacherId: "teacher-1",
+        subjectSlug: "math",
+        subjectName: "Math",
+        folderPath: "Math",
+        accessKind: "community",
+        community: { id: "community-1", name: "Engineering Programming" },
+        term: {
+          id: "term-1",
+          yearNumber: 1,
+          semesterNumber: 1,
+          semesterInYear: 1,
+          position: 0,
+        },
+      },
+    ]);
+    const query = materialQuery([]);
+    mocks.createSupabaseAdminClient.mockReturnValue({ from: vi.fn(() => query) });
+
+    const response = await GET(new Request("http://localhost/api/student/materials"));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.subjects).toEqual([
+      expect.objectContaining({
+        courseId: "community-course",
+        courseName: "Engineering Programming",
+        community: true,
+        communityInfo: { id: "community-1", name: "Engineering Programming" },
+        term: {
+          id: "term-1",
+          yearNumber: 1,
+          semesterNumber: 1,
+          semesterInYear: 1,
+          position: 0,
+        },
+        subject: { name: "Math", slug: "math" },
       }),
     ]);
   });

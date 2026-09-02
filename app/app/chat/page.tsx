@@ -4,6 +4,7 @@ import { requireOnboardedUser } from "@/lib/auth";
 import { getChatSessionDetail, listChatSessions } from "@/lib/data/chat";
 import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 import { getRevisionNoteDetail } from "@/lib/data/notes";
+import { getCommunity, listJoinedCommunities } from "@/lib/data/communities";
 import {
   listCreatorPrivateSubjectAccess,
   listStudentCourseSubjects,
@@ -20,6 +21,9 @@ export default async function ChatPage({
     subject?: string;
     prompt?: string;
     referenceNoteId?: string;
+    semester?: string;
+    librarySubject?: string;
+    document?: string;
   }>;
 }) {
   const { user, profile } = await requireOnboardedUser();
@@ -28,7 +32,7 @@ export default async function ChatPage({
   // None of these depend on each other, so they go out together. Run in
   // sequence they stacked four Supabase round trips in front of the first byte
   // of HTML, which is what made opening a chat feel unresponsive.
-  const [sessionResult, activeSession, courseSubjects, privateSubjects, referenceNote] =
+  const [sessionResult, activeSession, courseSubjects, privateSubjects, referenceNote, joinedCommunities] =
     await Promise.all([
       listChatSessions(user.id, { limit: 12, offset: 0 }),
       params.session
@@ -40,7 +44,16 @@ export default async function ChatPage({
         ? // Silently ignore – the note may have been deleted.
           getRevisionNoteDetail(params.referenceNoteId, user.id).catch(() => null)
         : Promise.resolve(null),
+      listJoinedCommunities(user.id),
     ]);
+
+  const activeStudentCommunity =
+    joinedCommunities.find((community) => community.membership?.role === "member") ??
+    joinedCommunities[0] ??
+    null;
+  const libraryCommunity = activeStudentCommunity
+    ? await getCommunity(activeStudentCommunity.slug, user.id)
+    : null;
 
   const noteSubjectOptions = [
     ...privateSubjects.map((subject) => ({
@@ -59,7 +72,7 @@ export default async function ChatPage({
 
   return (
     <>
-      <SetAppShell title="Chat" />
+      <SetAppShell title="Library & NanoAI" />
       <ChatPageClient
         user={user}
         defaultLanguage={profile!.languagePref}
@@ -75,6 +88,12 @@ export default async function ChatPage({
         initialPrompt={params.prompt ? decodeURIComponent(params.prompt) : null}
         initialReferenceNote={referenceNote}
         noteSubjectOptions={noteSubjectOptions}
+        libraryCommunity={libraryCommunity}
+        initialLibrarySelection={{
+          termId: params.semester?.trim() || null,
+          subjectSlug: params.librarySubject?.trim() || null,
+          documentId: params.document?.trim() || null,
+        }}
       />
     </>
   );

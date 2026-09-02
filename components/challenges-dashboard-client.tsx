@@ -1,132 +1,20 @@
 "use client";
 
-import { Flame, Upload } from "lucide-react";
+import { Target, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { ChallengeSubject, StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
+import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
 import type {
   StudentChallengeDetail,
   StudentChallengeSummary,
 } from "@/lib/data/student-challenges";
 
-function percent(value: number | null) {
-  return value === null ? "—" : `${Math.round(value)}%`;
-}
+const WEEKLY_CHALLENGE_TARGET = 15;
 
-function subjectInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .map((word) => word[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "CH";
-}
-
-function scoreChange(value: number | null) {
-  if (value === null) return "Challenge score · first week";
-  const rounded = Math.round(value);
-  return `Challenge score · ${rounded >= 0 ? "+" : ""}${rounded} pts`;
-}
-
-function ChallengeCard({
-  challenge,
-  subject,
-  busy,
-  onOpen,
-}: {
-  challenge: StudentChallengeSummary;
-  subject?: ChallengeSubject;
-  busy: boolean;
-  onOpen: () => void;
-}) {
-  const status =
-    challenge.status === "completed"
-      ? "Completed"
-      : challenge.status === "started"
-        ? "Continue"
-        : "Recommended";
-  return (
-    <div className="mb-[25px]">
-      <div className="mb-[10px] flex items-center justify-between border-b border-border px-[2px] pb-[10px]">
-        <div>
-          <div className="text-[17px] font-[750] text-text-primary">{challenge.subjectName}</div>
-          <div className="mt-1 text-[12px] text-text-muted">
-            {!subject || subject.readiness === null ? "No graded topic yet" : `${Math.round(subject.readiness)}% ready`}
-            {" · "}
-            {subject?.weakTopics ?? 0} weak topic{subject?.weakTopics === 1 ? "" : "s"}
-          </div>
-        </div>
-        <div className="text-[20px] font-[750] text-blue-600 dark:text-blue-400">
-          {percent(subject?.readiness ?? null)}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={onOpen}
-        disabled={busy}
-        className="grid min-h-20 w-full grid-cols-[48px_1fr] items-center gap-4 rounded-[16px] border border-border bg-card p-[19px_20px] text-left transition-[border-color,box-shadow] duration-150 hover:border-blue-500/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary sm:grid-cols-[48px_1fr_auto]"
-      >
-        <span className="grid h-[48px] w-[48px] place-items-center rounded-[14px] bg-blue-500/10 text-[15px] font-[800] text-blue-600 dark:text-blue-400">
-          {subjectInitials(challenge.topicTitle)}
-        </span>
-        <span className="min-w-0">
-          <span className="mb-[5px] block truncate text-[17px] font-[720] text-text-primary">
-            {challenge.title}
-          </span>
-          <span className="flex flex-wrap items-center gap-2.5 text-[13px] text-text-muted">
-            <span className="rounded-[7px] bg-bg-secondary px-2 py-1 text-[12px] text-text-secondary">
-              {status}
-            </span>
-            <span className="line-clamp-1">{challenge.recommendationReason}</span>
-          </span>
-        </span>
-        <span className="col-start-2 flex items-center justify-end sm:col-start-auto">
-          <span className="mr-3 text-[13px] text-text-muted">~{challenge.durationMinutes} min</span>
-          <span className="rounded-[22px] bg-text-primary px-4 py-2 text-[13px] font-[700] text-text-inverse">
-            {busy ? "Building…" : challenge.status === "assigned" ? "Start →" : "Open →"}
-          </span>
-        </span>
-      </button>
-    </div>
-  );
-}
-
-function CompletedChallengeCard({
-  challenge,
-  busy,
-  onOpen,
-}: {
-  challenge: StudentChallengeSummary;
-  busy: boolean;
-  onOpen: () => void;
-}) {
-  const score = challenge.lastTotalMarks && challenge.lastScore !== null
-    ? `${challenge.lastScore} / ${challenge.lastTotalMarks}`
-    : "Passed";
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      disabled={busy}
-      className="grid w-full grid-cols-[44px_1fr_auto] items-center gap-3 rounded-[14px] border border-border bg-card p-4 text-left transition-colors hover:border-blue-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
-    >
-      <span className="grid h-11 w-11 place-items-center rounded-xl bg-success/10 text-sm font-extrabold text-success">
-        ✓
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold text-text-primary">{challenge.title}</span>
-        <span className="mt-1 block truncate text-xs text-text-muted">
-          {challenge.subjectName} · {score} · {challenge.date}
-        </span>
-      </span>
-      <span className="text-xs font-semibold text-text-secondary">
-        {busy ? "Opening…" : "Review →"}
-      </span>
-    </button>
-  );
+function challengeScore(challenge: StudentChallengeSummary) {
+  if (!challenge.lastTotalMarks || challenge.lastScore === null) return null;
+  return Math.max(0, Math.min(100, (challenge.lastScore / challenge.lastTotalMarks) * 100));
 }
 
 type GradeResult = {
@@ -152,13 +40,24 @@ function ChallengeDetail({
   onChange: (challenge: StudentChallengeDetail) => void;
 }) {
   const router = useRouter();
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4>(() =>
+    challenge.status === "completed"
+      ? 4
+      : challenge.examplesReviewed
+        ? 3
+        : challenge.lessonRead
+          ? 2
+          : 1,
+  );
   const [savingStep, setSavingStep] = useState<"lesson" | "examples" | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [scanFile, setScanFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<GradeResult[]>([]);
-  const [score, setScore] = useState<{ earned: number; total: number; passed: boolean } | null>(null);
+  const [score, setScore] = useState<{ earned: number; total: number; passed: boolean } | null>(
+    null,
+  );
   const [clock, setClock] = useState(() => Date.now());
   const content = challenge.content;
 
@@ -182,8 +81,10 @@ function ChallengeDetail({
         }),
       );
       onChange(payload.challenge);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not save progress.");
+      return false;
     } finally {
       setSavingStep(null);
     }
@@ -265,16 +166,16 @@ function ChallengeDetail({
     }
   };
 
-  const readyForExam = challenge.lessonRead && challenge.examplesReviewed;
   const allAnswered = content.examQuestions.every((question) => answers[question.id]?.trim());
   const expiresAt = Date.parse(content.examExpiresAt || "");
   const remainingSeconds = Number.isFinite(expiresAt)
     ? Math.max(0, Math.ceil((expiresAt - clock) / 1_000))
     : null;
   const examExpired = remainingSeconds === 0;
-  const timeRemaining = remainingSeconds === null
-    ? null
-    : `${Math.floor(remainingSeconds / 60)}:${String(remainingSeconds % 60).padStart(2, "0")}`;
+  const timeRemaining =
+    remainingSeconds === null
+      ? null
+      : `${Math.floor(remainingSeconds / 60)}:${String(remainingSeconds % 60).padStart(2, "0")}`;
 
   const refreshExam = async () => {
     setSubmitting(true);
@@ -295,226 +196,349 @@ function ChallengeDetail({
     }
   };
 
+  const goNext = async () => {
+    if (activeStep === 1) {
+      const saved = challenge.lessonRead || (await markStep("lesson"));
+      if (saved) setActiveStep(2);
+      return;
+    }
+    if (activeStep === 2) {
+      const saved = challenge.examplesReviewed || (await markStep("examples"));
+      if (saved) setActiveStep(3);
+      return;
+    }
+    if (activeStep === 3) setActiveStep(4);
+  };
+
+  const steps = [
+    { number: 1, label: "Concept Reading", complete: challenge.lessonRead },
+    { number: 2, label: "Solved Example", complete: challenge.examplesReviewed },
+    { number: 3, label: "Practice Question", complete: activeStep === 4 || challenge.status === "completed" },
+    { number: 4, label: "Submit Answer", complete: challenge.status === "completed" },
+  ] as const;
+
+  const focusButtonClass =
+    "min-h-10 rounded-lg px-5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary disabled:cursor-not-allowed disabled:opacity-50";
+
   return (
-    <main className="min-h-screen w-full bg-bg-primary text-text-primary">
-      <div className="mx-auto max-w-[1160px] px-4 py-8 pb-20 sm:px-8">
-        <button type="button" onClick={onBack} className="mb-5 text-sm text-text-muted hover:text-text-primary">
-          ← Back to challenges
-        </button>
-        <p className="text-sm font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-          Challenge · {challenge.subjectName}
-        </p>
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">{challenge.title}</h1>
-        <p className="mt-2 text-sm text-text-muted">{challenge.recommendationReason}</p>
-
-        <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ["1", "Check prerequisites", true],
-            ["2", "Learn", challenge.lessonRead],
-            ["3", "Study worked questions", challenge.examplesReviewed],
-            ["4", "Pass the exam", challenge.status === "completed"],
-          ].map(([number, label, done]) => (
-            <div key={String(number)} className="rounded-[15px] border border-border bg-card p-4">
-              <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-bold ${done ? "bg-success/15 text-success" : "bg-bg-secondary"}`}>
-                {done ? "✓" : number}
-              </span>
-              <p className="mt-3 text-sm font-semibold">{label}</p>
-            </div>
-          ))}
-        </section>
-
-        <section className="mt-4 rounded-[18px] border border-border bg-card p-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Step 1 · Prerequisites</p>
-          <h2 className="mt-2 text-xl font-semibold">Before this topic</h2>
-          {content.prerequisites?.length ? (
-            <ul className="mt-4 space-y-2">
-              {content.prerequisites.map((prerequisite) => (
-                <li key={prerequisite.topicKey} className="flex items-start justify-between gap-4 rounded-xl border border-border bg-bg-secondary/50 p-4 text-sm">
-                  <span>
-                    <strong className="text-text-primary">{prerequisite.title}</strong>
-                    {prerequisite.reason ? <span className="mt-1 block text-text-muted">{prerequisite.reason}</span> : null}
-                  </span>
-                  <span className={prerequisite.taught ? "text-success" : "text-warning"}>
-                    {prerequisite.taught ? "Available" : "Notes missing"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-sm text-text-muted">The syllabus does not place an earlier topic before this one.</p>
-          )}
-        </section>
-
-        <section className="mt-4 rounded-[18px] border border-border bg-card p-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Step 2 · Read</p>
-          <h2 className="mt-2 text-xl font-semibold">{content.lesson.title}</h2>
-          {content.lesson.content.map((paragraph) => (
-            <p key={paragraph} className="mt-3 max-w-prose text-sm leading-7 text-text-secondary">{paragraph}</p>
-          ))}
-          <p className="mt-3 max-w-prose text-sm leading-7 text-text-secondary"><strong>Focus:</strong> {content.lesson.focus}</p>
-          {content.lesson.sources?.length ? (
-            <div className="mt-4 rounded-xl border border-border bg-bg-secondary/50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Grounded in</p>
-              <ul className="mt-2 space-y-2 text-sm text-text-secondary">
-                {content.lesson.sources.map((source, index) => (
-                  <li key={`${source.source}-${index}`}>
-                    <strong className="text-text-primary">{source.title}</strong>
-                    <span className="text-text-muted"> · {source.source}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+    <main className="min-h-screen w-full bg-bg-secondary text-text-primary">
+      <div className="mx-auto max-w-5xl px-4 py-6 pb-16 sm:px-8">
+        <header className="grid grid-cols-[1fr_auto] items-start gap-4 sm:grid-cols-[auto_1fr_auto]">
           <button
             type="button"
-            disabled={challenge.lessonRead || savingStep !== null}
-            onClick={() => void markStep("lesson")}
-            className="mt-4 rounded-full bg-text-primary px-4 py-2 text-sm font-semibold text-text-inverse disabled:opacity-60"
+            onClick={onBack}
+            className={`${focusButtonClass} border border-border bg-card text-text-primary hover:bg-bg-primary`}
           >
-            {challenge.lessonRead ? "Lesson read ✓" : savingStep === "lesson" ? "Saving…" : "I’ve read this"}
+            ← Back to Challenge Hub
           </button>
-        </section>
-
-        <section className="mt-4 rounded-[18px] border border-border bg-card p-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Step 3 · Worked questions</p>
-          <h2 className="mt-2 text-xl font-semibold">Study these worked examples</h2>
-          <div className="mt-4 space-y-3">
-            {content.solvedExamples.map((example, index) => (
-              <article key={`${example.question}-${index}`} className="rounded-xl border border-border bg-bg-secondary/50 p-4">
-                <p className="text-xs text-text-muted">
-                  {example.grounded === false || example.source === "generated_from_notes"
-                    ? "Worked example from course notes"
-                    : example.year
-                      ? `Past question · ${example.year}`
-                      : "Past question"}
-                  {" · "}{example.marks} marks
-                </p>
-                <p className="mt-2 text-sm font-semibold leading-6">{example.question}</p>
-                <p className="mt-3 border-t border-border pt-3 text-sm leading-6 text-text-secondary"><strong>Solution:</strong> {example.solution}</p>
-              </article>
-            ))}
+          <div className="hidden min-w-0 text-center sm:block">
+            <p className="truncate text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+              {challenge.subjectName} challenge
+            </p>
+            <h1 className="mt-1 truncate font-display text-xl font-semibold">{challenge.title}</h1>
           </div>
-          <button
-            type="button"
-            disabled={!challenge.lessonRead || challenge.examplesReviewed || savingStep !== null}
-            onClick={() => void markStep("examples")}
-            className="mt-4 rounded-full bg-text-primary px-4 py-2 text-sm font-semibold text-text-inverse disabled:opacity-60"
+          <div
+            aria-label={timeRemaining ? `${timeRemaining} remaining` : "Challenge timer"}
+            className="min-w-20 rounded-lg border border-border bg-card px-3 py-2 text-center font-mono text-sm font-semibold tabular-nums"
           >
-            {challenge.examplesReviewed ? "Examples reviewed ✓" : savingStep === "examples" ? "Saving…" : "I’ve studied both"}
-          </button>
-        </section>
+            {challenge.status === "completed" ? "Done" : timeRemaining || `${challenge.durationMinutes}:00`}
+          </div>
+        </header>
 
-        <section className="mt-4 rounded-[18px] border border-blue-500/40 bg-blue-500/5 p-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Step 4 · Prove it</p>
-          <h2 className="mt-2 text-xl font-semibold">Take the challenge exam</h2>
-          <p className="mt-2 text-sm text-text-muted">
-            {content.examQuestions.length} unseen questions · {challenge.durationMinutes} minutes · {Math.round((challenge.passMarks / Math.max(1, challenge.totalMarks)) * 100)}% required
-            {timeRemaining && challenge.status !== "completed" ? ` · ${timeRemaining} remaining` : ""}
+        <div className="mt-5 sm:hidden">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+            {challenge.subjectName} challenge
           </p>
-          {!readyForExam ? <p className="mt-4 text-sm text-text-muted">Complete the reading and worked questions to unlock the exam.</p> : null}
-          {readyForExam ? (
-            <div className="mt-5 space-y-5">
-              {content.examQuestions.map((question, index) => (
-                <label key={question.id} className="block">
-                  <span className="text-sm font-semibold">{index + 1}. {question.question} <span className="text-text-muted">({question.marks} marks)</span></span>
-                  <textarea
-                    rows={5}
-                    value={answers[question.id] ?? ""}
-                    disabled={challenge.status === "completed" || submitting}
-                    onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))}
-                    className="mt-2 w-full rounded-xl border border-border bg-bg-primary p-3 text-sm outline-none focus:border-blue-500"
-                    placeholder="Write your answer without looking at the solved examples…"
-                  />
-                </label>
-              ))}
-              {challenge.status !== "completed" ? (
-                <>
+          <h1 className="mt-1 font-display text-xl font-semibold">{challenge.title}</h1>
+        </div>
+
+        <nav aria-label="Challenge progress" className="mt-6 rounded-2xl border border-border bg-card px-3 py-4 sm:px-6">
+          <ol className="grid grid-cols-4">
+            {steps.map((step, index) => {
+              const isActive = activeStep === step.number;
+              return (
+                <li key={step.number} className="relative flex min-w-0 flex-col items-center text-center">
+                  {index < steps.length - 1 ? (
+                    <span
+                      aria-hidden="true"
+                      className={`absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-4 h-px ${step.complete ? "bg-success" : "bg-border"}`}
+                    />
+                  ) : null}
                   <button
                     type="button"
-                    disabled={(!examExpired && !allAnswered) || submitting}
-                    onClick={() => void (examExpired ? refreshExam() : submit())}
-                    className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary disabled:opacity-50"
+                    aria-current={isActive ? "step" : undefined}
+                    onClick={() => {
+                      if (step.number <= activeStep || step.complete) setActiveStep(step.number);
+                    }}
+                    className="relative z-10 flex min-h-10 min-w-10 flex-col items-center gap-1 rounded-lg px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   >
-                    {submitting
-                      ? examExpired ? "Issuing…" : "Grading…"
-                      : examExpired
-                        ? "Get a fresh exam"
-                        : challenge.attemptCount ? "Submit another attempt" : "Submit typed answers"}
+                    <span
+                      className={`grid size-8 place-items-center rounded-full text-xs font-bold ${
+                        step.complete
+                          ? "bg-success text-white"
+                          : isActive
+                            ? "bg-blue-600 text-white"
+                            : "bg-bg-secondary text-text-muted"
+                      }`}
+                    >
+                      {step.complete ? "✓" : step.number}
+                    </span>
+                    <span className={`hidden text-xs font-semibold sm:block ${isActive ? "text-blue-600 dark:text-blue-400" : "text-text-muted"}`}>
+                      {step.label}
+                    </span>
                   </button>
-                  {!examExpired ? (
-                    <div className="rounded-xl border border-border bg-bg-primary p-4">
-                      <div className="flex items-start gap-3">
-                        <Upload className="mt-0.5 size-5 text-text-muted" aria-hidden="true" />
-                        <div>
-                          <p className="text-sm font-semibold">Or upload your handwritten answer</p>
-                          <p className="mt-1 text-xs leading-5 text-text-muted">Photograph every page clearly and upload one PDF or image. AI reads the scan, grades each question, and awards 50 XP when you pass.</p>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+
+        <section className="mt-6 rounded-2xl border border-border bg-card p-5 sm:p-8">
+          {activeStep === 1 ? (
+            <div>
+              <h2 className="text-xl font-semibold">📘 Key Concepts</h2>
+              <p className="mt-2 text-sm text-text-muted">
+                Read these concepts carefully before moving to the worked example.
+              </p>
+              <h3 className="mt-6 text-base font-semibold">{content.lesson.title}</h3>
+              <div className="mt-3 space-y-3">
+                {content.lesson.content.map((paragraph) => (
+                  <p key={paragraph} className="max-w-prose text-sm leading-7 text-text-secondary">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+              <div className="mt-5 rounded-xl bg-blue-500/10 p-4">
+                <p className="text-sm font-semibold">Core focus</p>
+                <p className="mt-1 text-sm leading-6 text-text-secondary">{content.lesson.focus}</p>
+              </div>
+              {content.prerequisites?.length ? (
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold">Before this topic</h3>
+                  <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {content.prerequisites.map((prerequisite) => (
+                      <li key={prerequisite.topicKey} className="rounded-xl bg-bg-secondary p-4 text-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <strong>{prerequisite.title}</strong>
+                          <span className={prerequisite.taught ? "text-success" : "text-warning"}>
+                            {prerequisite.taught ? "Available" : "Notes missing"}
+                          </span>
                         </div>
-                      </div>
-                      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                        <input
-                          type="file"
-                          accept="application/pdf,image/jpeg,image/png,image/webp"
-                          onChange={(event) => setScanFile(event.target.files?.[0] || null)}
-                          className="min-h-10 min-w-0 flex-1 rounded-lg border border-border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        />
-                        <button
-                          type="button"
-                          disabled={!scanFile || submitting}
-                          onClick={() => void submitScan()}
-                          className="min-h-10 rounded-full border border-blue-500 px-4 text-sm font-semibold text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 dark:text-blue-400"
-                        >
-                          {submitting ? "Reading scan…" : "Upload & grade"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                </>
+                        {prerequisite.reason ? <p className="mt-1 text-text-muted">{prerequisite.reason}</p> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {content.lesson.sources?.length ? (
+                <p className="mt-5 text-xs text-text-muted">
+                  Grounded in {content.lesson.sources.length} uploaded course {content.lesson.sources.length === 1 ? "source" : "sources"}.
+                </p>
               ) : null}
             </div>
           ) : null}
-          {score ? (
-            <div className={`mt-5 rounded-xl border p-4 ${score.passed ? "border-success/40 bg-success/10" : "border-warning/40 bg-warning/10"}`}>
-              <p className="font-semibold">{score.earned} / {score.total} · {score.passed ? "Challenge completed · +50 XP ✓" : "Not passed yet"}</p>
-              <div className="mt-3 space-y-2 text-sm text-text-secondary">
-                {results.map((result) => <p key={result.question_id}>{result.feedback}</p>)}
-              </div>
+
+          {activeStep === 2 ? (
+            <div>
+              <h2 className="text-xl font-semibold">✅ Solved Example</h2>
+              <p className="mt-2 text-sm text-text-muted">
+                Walk through the complete solution before trying the question yourself.
+              </p>
+              {content.solvedExamples.length ? (
+                <div className="mt-6 space-y-4">
+                  {content.solvedExamples.map((example, index) => (
+                    <article key={`${example.question}-${index}`} className="rounded-xl border border-border bg-bg-secondary p-5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                        Example {index + 1} · {example.marks} marks
+                      </p>
+                      <p className="mt-3 text-sm font-semibold leading-6">{example.question}</p>
+                      <div className="mt-4 rounded-lg bg-card p-4 text-sm leading-7 text-text-secondary">
+                        <strong className="text-text-primary">Solution</strong>
+                        <p className="mt-1 whitespace-pre-wrap">{example.solution}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
+                  No solved example is available for this topic yet.
+                </div>
+              )}
             </div>
-          ) : challenge.status === "completed" ? (
-            <p className="mt-5 rounded-xl border border-success/40 bg-success/10 p-4 font-semibold text-success">Challenge completed ✓</p>
+          ) : null}
+
+          {activeStep === 3 ? (
+            <div>
+              <h2 className="text-xl font-semibold">📝 Your Turn — Practice Question</h2>
+              <p className="mt-2 text-sm text-text-muted">
+                Answer below or solve on paper and upload it in the next step.
+              </p>
+              {content.examQuestions.length ? (
+                <div className="mt-6 space-y-5">
+                  {content.examQuestions.map((question, index) => (
+                    <label key={question.id} className="block rounded-xl bg-bg-secondary p-5">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                        Question {index + 1} · {question.marks} marks
+                      </span>
+                      <span className="mt-2 block text-sm font-semibold leading-6">{question.question}</span>
+                      <textarea
+                        rows={5}
+                        value={answers[question.id] ?? ""}
+                        disabled={challenge.status === "completed" || submitting}
+                        onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))}
+                        className="mt-4 w-full rounded-xl border border-border bg-card p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
+                        placeholder="Type your answer here, or leave this blank if you will upload handwritten work."
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
+                  No practice question is available. Return to the hub and try another challenge.
+                </div>
+              )}
+              <p className="mt-5 text-sm text-text-muted">
+                💡 {timeRemaining ? `You have ${timeRemaining} remaining.` : `This challenge allows ${challenge.durationMinutes} minutes.`}
+              </p>
+            </div>
+          ) : null}
+
+          {activeStep === 4 ? (
+            <div>
+              <h2 className="text-xl font-semibold">📤 Submit Your Answer</h2>
+              <p className="mt-2 text-sm text-text-muted">
+                Submit your typed answers or upload one clear PDF or photo of your handwritten work.
+              </p>
+              {challenge.status !== "completed" && examExpired ? (
+                <div className="mt-6 rounded-xl border border-warning/40 bg-warning/10 p-5">
+                  <p className="text-sm font-semibold">This exam session expired.</p>
+                  <button type="button" disabled={submitting} onClick={() => void refreshExam()} className={`${focusButtonClass} mt-4 bg-text-primary text-text-inverse`}>
+                    {submitting ? "Issuing…" : "Get a fresh exam"}
+                  </button>
+                </div>
+              ) : null}
+              {challenge.status !== "completed" && !examExpired ? (
+                <div className="mt-6 space-y-4">
+                  <div className="rounded-xl border-2 border-dashed border-blue-500 bg-blue-500/10 p-8 text-center sm:p-10">
+                    <Upload className="mx-auto size-8 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                    <label htmlFor={`challenge-upload-${challenge.id}`} className="mt-3 block text-sm font-semibold">
+                      Upload or take a photo
+                    </label>
+                    <p className="mt-1 text-xs text-text-muted">PDF, JPG, PNG or WebP</p>
+                    <input
+                      id={`challenge-upload-${challenge.id}`}
+                      type="file"
+                      accept="application/pdf,image/jpeg,image/png,image/webp"
+                      onChange={(event) => setScanFile(event.target.files?.[0] || null)}
+                      className="mx-auto mt-4 block w-full max-w-sm rounded-lg border border-border bg-card p-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    />
+                    <button type="button" disabled={!scanFile || submitting} onClick={() => void submitScan()} className={`${focusButtonClass} mt-4 bg-blue-600 text-white`}>
+                      {submitting ? "Reading and grading…" : "Submit handwritten answer"}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3" aria-hidden="true">
+                    <span className="h-px flex-1 bg-border" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">or</span>
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+                  <div className="rounded-xl border border-border bg-bg-secondary p-5">
+                    <p className="text-sm font-semibold">Typed answers</p>
+                    <p className="mt-1 text-xs text-text-muted">
+                      {allAnswered ? "Every question has an answer and is ready for grading." : "Return to Practice Question and answer every question first."}
+                    </p>
+                    <button type="button" disabled={!allAnswered || submitting} onClick={() => void submit()} className={`${focusButtonClass} mt-4 bg-text-primary text-text-inverse`}>
+                      {submitting ? "Grading…" : challenge.attemptCount ? "Submit another attempt" : "Submit typed answers"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {score ? (
+                <div className={`mt-6 rounded-xl border p-5 ${score.passed ? "border-success/40 bg-success/10" : "border-warning/40 bg-warning/10"}`}>
+                  <p className="font-semibold">
+                    {score.earned} / {score.total} · {score.passed ? "Challenge completed · +50 XP ✓" : "Not passed yet"}
+                  </p>
+                  <div className="mt-3 space-y-2 text-sm text-text-secondary">
+                    {results.map((result) => <p key={result.question_id}>{result.feedback}</p>)}
+                  </div>
+                </div>
+              ) : challenge.status === "completed" ? (
+                <div className="mt-6 rounded-xl border border-success/40 bg-success/10 p-5">
+                  <p className="font-semibold text-success">Challenge completed ✓</p>
+                  <p className="mt-1 text-sm text-text-secondary">Your result is saved in Challenge Hub.</p>
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </section>
+
         {content.warning ? <p className="mt-4 text-xs text-warning">{content.warning}</p> : null}
-        {error ? <p className="mt-4 rounded-xl border border-destructive/40 p-3 text-sm text-destructive">{error}</p> : null}
+        {error ? <p role="alert" className="mt-4 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
+
+        <footer className="mt-6 flex items-center justify-between gap-4">
+          <button
+            type="button"
+            disabled={activeStep === 1 || submitting || savingStep !== null}
+            onClick={() => setActiveStep((current) => Math.max(1, current - 1) as 1 | 2 | 3 | 4)}
+            className={`${focusButtonClass} border border-border bg-card text-text-primary`}
+          >
+            ← Previous
+          </button>
+          {activeStep < 4 ? (
+            <button
+              type="button"
+              disabled={savingStep !== null || submitting || (activeStep === 3 && !content.examQuestions.length)}
+              onClick={() => void goNext()}
+              className={`${focusButtonClass} bg-blue-600 text-white`}
+            >
+              {savingStep ? "Saving…" : activeStep === 3 ? "Continue to submission →" : "Next →"}
+            </button>
+          ) : (
+            <button type="button" onClick={onBack} className={`${focusButtonClass} border border-border bg-card text-text-primary`}>
+              Return to Challenge Hub
+            </button>
+          )}
+        </footer>
       </div>
     </main>
   );
 }
 
 export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentChallengeDashboard }) {
+  const router = useRouter();
   const [selected, setSelected] = useState<StudentChallengeDetail | null>(null);
   const [openingId, setOpeningId] = useState("");
   const [openError, setOpenError] = useState("");
-  const leaderboard = dashboard.leaderboard;
-  const streakCopy = dashboard.todayCompleted
-    ? "is complete for today."
-    : dashboard.currentStreak > 0
-      ? `keeps your ${dashboard.currentStreak}-day streak alive.`
-      : "starts your consistency streak.";
-  const platformBest = leaderboard?.platformBestStreak ?? 0;
-  const comparisonCopy = !leaderboard
-    ? "Leaderboard is being prepared"
-    : platformBest === 0
-      ? "Pass the first challenge to set the pace"
-      : dashboard.currentStreak > 0 && leaderboard.daysFromBest === 0
-        ? "You’ve matched the all-time best streak"
-        : `${leaderboard.daysFromBest} ${leaderboard.daysFromBest === 1 ? "day" : "days"} from the all-time best streak`;
+  const selectedScopeKey = dashboard.scope
+    ? `${dashboard.scope.courseId}:${dashboard.scope.subjectSlug.trim().toLowerCase()}`
+    : "all";
+  const selectedSubject = dashboard.subjectOptions.find(
+    (subject) => subject.scopeKey === selectedScopeKey,
+  );
+  const weeklyProgress = Math.min(100, (dashboard.passedThisWeek / WEEKLY_CHALLENGE_TARGET) * 100);
+  const weeklyLeaderTotal = Math.round((dashboard.leaderboard?.topPracticePerDay ?? 0) * 7);
+  const challengesBehind = Math.max(0, weeklyLeaderTotal - dashboard.passedThisWeek);
+
   const completedPageHref = (page: number) => {
     const params = new URLSearchParams({ completedPage: String(page) });
     if (dashboard.scope) {
       params.set("courseId", dashboard.scope.courseId);
       params.set("subject", dashboard.scope.subjectSlug);
     }
-    return `/app/today?${params.toString()}#completed-challenges`;
+    return `/app/challenges?${params.toString()}#completed-challenges`;
+  };
+
+  const changePrioritySubject = (scopeKey: string) => {
+    if (scopeKey === "all") {
+      router.replace("/app/challenges");
+      return;
+    }
+    const subject = dashboard.subjectOptions.find((option) => option.scopeKey === scopeKey);
+    if (!subject) return;
+    const params = new URLSearchParams({
+      courseId: subject.courseId,
+      subject: subject.subjectSlug,
+    });
+    router.replace(`/app/challenges?${params.toString()}`);
   };
 
   const openChallenge = async (challenge: StudentChallengeSummary) => {
@@ -533,244 +557,303 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
   };
 
   if (selected) {
-    return <ChallengeDetail challenge={selected} onBack={() => setSelected(null)} onChange={setSelected} />;
+    return (
+      <ChallengeDetail
+        challenge={selected}
+        onBack={() => setSelected(null)}
+        onChange={setSelected}
+      />
+    );
   }
 
   return (
-    <main className="min-h-screen w-full bg-bg-primary text-text-primary">
-      <div className="mx-auto max-w-[1160px] px-4 py-8 pb-20 sm:px-8">
-        {dashboard.scope ? (
-          <section className="mb-5 flex flex-col gap-3 rounded-[15px] border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Community subject</p>
-              <h1 className="mt-1 text-lg font-bold text-text-primary">
-                {dashboard.scope.subjectName} challenges
-              </h1>
-              <p className="mt-1 text-sm text-text-secondary">
-                Only challenges from this subject are shown here.
-              </p>
-            </div>
-            <Link
-              href="/app/today"
-              className="inline-flex min-h-10 items-center justify-center rounded-full border border-border px-4 text-sm font-semibold text-text-primary transition-colors hover:border-blue-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
-            >
-              Show all challenges
-            </Link>
-          </section>
-        ) : null}
-        <section className="mb-[30px] flex flex-col items-start justify-between gap-5 rounded-[15px] border border-border bg-bg-secondary p-[17px_20px] sm:flex-row sm:items-center">
-          <div>
-            <h1 className="mb-1 text-[15px] font-[750] text-text-primary">Today&apos;s minimum</h1>
-            <p className="text-[13px] text-text-secondary">
-              <strong className="font-semibold text-text-primary">1 challenge</strong> {streakCopy}
-            </p>
-          </div>
-          <div className="w-full sm:w-[190px]">
-            <span className="mb-[5px] block text-right text-[12px] text-text-muted">
-              {dashboard.todayCompleted ? "1 / 1" : "0 / 1"}
+    <main className="min-h-screen w-full bg-bg-secondary text-text-primary">
+      <div className="mx-auto max-w-7xl px-4 py-8 pb-20 md:px-8">
+        <header className="mb-8 grid gap-5 border-b border-border pb-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-end">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-300">
+              <Target className="size-5" aria-hidden="true" />
             </span>
-            <div className="h-[7px] overflow-hidden rounded-full bg-bg-tertiary" aria-hidden="true">
-              <span
-                className="block h-full rounded-full bg-blue-500 transition-[width] duration-500 motion-reduce:transition-none"
-                style={{ width: dashboard.todayCompleted ? "100%" : "0%" }}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="mb-6 grid grid-cols-1 gap-[18px] lg:grid-cols-[1.55fr_.9fr]">
-          <article className="rounded-[18px] border border-border bg-card p-[25px_27px]">
-            <h2 className="mb-[5px] text-[18px] font-[730] text-text-primary">Exam readiness</h2>
-            <p className="text-[14px] text-text-muted">
-              {dashboard.scope ? `For ${dashboard.scope.subjectName}` : "Across all your subjects"}
-            </p>
-            <p className="mt-5 text-[40px] font-[760] tracking-[-1.5px] text-text-primary">
-              {percent(dashboard.readiness)}
-            </p>
-            <div className="my-[9px_12px] h-[12px] overflow-hidden rounded-full bg-bg-secondary" aria-hidden="true">
-              <span
-                className="block h-full rounded-full bg-blue-500"
-                style={{ width: `${Math.max(0, Math.min(100, dashboard.readiness ?? 0))}%` }}
-              />
-            </div>
-            <div className="flex flex-wrap justify-between gap-2 text-[13px] text-text-muted">
-              <span>{dashboard.practicedTopics} of {dashboard.totalTopics} topics practised</span>
-              <span className="font-medium text-blue-600 dark:text-blue-400">
-                {scoreChange(dashboard.practiceScoreChange)}
-              </span>
-            </div>
-            <div className="mt-[18px] border-t border-border pt-[15px]">
-              {dashboard.subjects.length ? (
-                dashboard.subjects.slice(0, 5).map((subject) => (
-                  <div key={subject.scopeKey} className="my-[9px] grid grid-cols-[minmax(100px,145px)_1fr_40px] items-center gap-[10px] text-[12px] text-text-secondary">
-                    <span className="truncate">{subject.name}</span>
-                    <div className="h-[6px] overflow-hidden rounded-full bg-bg-secondary" aria-hidden="true">
-                      <span
-                        className="block h-full rounded-full bg-blue-400 dark:bg-blue-500"
-                        style={{ width: `${Math.max(0, Math.min(100, subject.readiness ?? 0))}%` }}
-                      />
-                    </div>
-                    <strong className="text-right text-[12px] font-bold text-text-primary">
-                      {percent(subject.readiness)}
-                    </strong>
-                  </div>
-                ))
-              ) : (
-                <p className="text-[13px] text-text-muted">Join a course to calculate readiness.</p>
-              )}
-            </div>
-          </article>
-
-          <article className="flex flex-col justify-between rounded-[18px] border border-border bg-gradient-to-br from-bg-primary via-bg-primary to-blue-500/5 p-[25px_27px] dark:to-blue-950/20">
-            <div>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="mb-[5px] text-[18px] font-[730] text-text-primary">Consistency streak</h2>
-                  <p className="mt-3 text-[39px] font-[760] tracking-[-1.5px] text-text-primary">
-                    {dashboard.currentStreak} {dashboard.currentStreak === 1 ? "day" : "days"}
-                  </p>
-                  <p className="text-[14px] text-text-muted">You · current streak</p>
-                </div>
-                <Flame className="h-8 w-8 text-text-secondary" aria-hidden="true" />
-              </div>
-              <div className="mt-[14px] flex items-center justify-between border-t border-border pt-[10px] text-[13px] text-text-muted">
-                <span>Your rank</span>
-                <strong className="font-bold text-text-primary">
-                  {leaderboard?.currentStreakRank ? `#${leaderboard.currentStreakRank}` : "—"}
-                </strong>
-              </div>
-              <div className="mt-2 flex items-center justify-between border-t border-border pt-[10px] text-[13px] text-text-muted">
-                <span>Platform all-time best</span>
-                <strong className="font-bold text-text-primary">
-                  {leaderboard
-                    ? `${platformBest} ${platformBest === 1 ? "day" : "days"} · #1`
-                    : "—"}
-                </strong>
-              </div>
-            </div>
-            <div className="mt-[17px] inline-flex w-fit items-center gap-[7px] rounded-[20px] border border-blue-500/30 bg-card p-[7px_11px] text-[12px] font-bold text-blue-600 dark:text-blue-400">
-              {comparisonCopy}
-            </div>
-          </article>
-        </section>
-
-        <section className="mb-7 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <article className="rounded-[15px] border border-border bg-card p-[18px_20px]">
-            <p className="mb-[7px] text-[13px] font-medium tracking-wide text-text-muted">YOUR CHALLENGES / DAY</p>
-            <p className="text-[24px] font-[750] text-text-primary">{dashboard.practicePerDay.toFixed(1)}</p>
-            <p className="mt-1 text-[12px] text-text-muted">7-day average · Rank {leaderboard?.practicePerDayRank ? `#${leaderboard.practicePerDayRank}` : "—"}</p>
-          </article>
-          <article className="rounded-[15px] border border-blue-500/30 bg-blue-500/5 p-[18px_20px] dark:bg-blue-950/20">
-            <p className="mb-[7px] text-[13px] font-medium tracking-wide text-blue-600 dark:text-blue-400">TOP CHALLENGES / DAY</p>
-            <p className="text-[24px] font-[750] text-text-primary">{leaderboard ? leaderboard.topPracticePerDay.toFixed(1) : "—"}</p>
-            <p className="mt-1 text-[12px] text-text-muted">Current #1 · 7-day average</p>
-          </article>
-          <article className="rounded-[15px] border border-border bg-card p-[18px_20px]">
-            <p className="mb-[7px] text-[13px] font-medium tracking-wide text-text-muted">CHALLENGES PASSED</p>
-            <p className="text-[24px] font-[750] text-text-primary">{dashboard.passedThisMonth}</p>
-            <p className="mt-1 text-[12px] text-text-muted">This month · {dashboard.passedThisWeek} this week</p>
-          </article>
-          <article className="rounded-[15px] border border-border bg-card p-[18px_20px]">
-            <p className="mb-[7px] text-[13px] font-medium tracking-wide text-text-muted">CHALLENGE PASS RATE</p>
-            <p className="text-[24px] font-[750] text-text-primary">{percent(dashboard.passRateLast30Days)}</p>
-            <p className="mt-1 text-[12px] text-text-muted">Last 30 days</p>
-          </article>
-        </section>
-
-        <section>
-          <div className="mb-[14px] mt-[30px] flex items-end justify-between">
-            <div>
-              <h2 className="m-0 text-[22px] font-[750] tracking-[-.5px] text-text-primary">
-                {dashboard.scope ? `${dashboard.scope.subjectName} challenges` : "Today's challenges"}
-              </h2>
-              <p className="mb-0 mt-1.5 text-[13px] text-text-muted">
-                {dashboard.scope
-                  ? "These challenges come from this community subject's extracted topics."
-                  : "Passing one brings the next eligible course topic to the top."}
+            <div className="min-w-0">
+              <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+                Challenge Hub
+              </h1>
+              <p className="mt-1 text-sm text-text-muted">
+                Build mastery with short challenges from your course topics.
               </p>
             </div>
+          </div>
+
+          <div className="min-w-0">
+            <label
+              htmlFor="priority-subject"
+              className="text-xs font-semibold uppercase tracking-wide text-text-muted"
+            >
+              Priority subject
+            </label>
+            <select
+              id="priority-subject"
+              value={selectedScopeKey}
+              onChange={(event) => changePrioritySubject(event.target.value)}
+              className="mt-2 min-h-11 w-full cursor-pointer rounded-lg border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-100 hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary motion-reduce:transition-none"
+            >
+              <option value="all">All subjects</option>
+              {dashboard.subjectOptions.map((subject) => (
+                <option key={subject.scopeKey} value={subject.scopeKey}>
+                  {subject.subjectName}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-text-muted">
+              {selectedSubject
+                ? `Showing ${selectedSubject.subjectName} challenges.`
+                : "Showing challenges across all enrolled subjects."}
+            </p>
+          </div>
+        </header>
+
+        <section className="mb-6 grid gap-4 md:grid-cols-3" aria-label="Weekly challenge summary">
+          <article className="rounded-xl border border-border bg-card p-6">
+            <p className="text-sm text-text-muted">Weekly Target Progress</p>
+            <p className="mt-1 text-2xl font-bold">
+              {dashboard.passedThisWeek} / {WEEKLY_CHALLENGE_TARGET} Completed
+            </p>
+            <div
+              className="mt-4 h-2 overflow-hidden rounded-full bg-bg-tertiary"
+              aria-hidden="true"
+            >
+              <span
+                className="block h-full rounded-full bg-blue-600 transition-[width] duration-300 motion-reduce:transition-none"
+                style={{ width: `${weeklyProgress}%` }}
+              />
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-border bg-card p-6">
+            <p className="text-sm text-text-muted">Avg. Test Score</p>
+            <p className="mt-1 text-2xl font-bold text-success">
+              {dashboard.averageTestScore === null
+                ? "—"
+                : `${dashboard.averageTestScore.toFixed(1)}%`}
+            </p>
+            <p className="mt-1 text-xs text-text-muted">Passing threshold: 40%</p>
+          </article>
+
+          <article className="rounded-xl border border-border bg-card p-6">
+            <p className="text-sm text-text-muted">Weekly Peer Leaderboard</p>
+            <p className="mt-1 text-2xl font-bold">
+              {dashboard.leaderboard?.practicePerDayRank
+                ? `Rank #${dashboard.leaderboard.practicePerDayRank}`
+                : "Not ranked yet"}
+            </p>
+            <p className="mt-1 text-xs font-medium text-blue-700 dark:text-blue-300">
+              {challengesBehind > 0
+                ? `${challengesBehind} challenge${challengesBehind === 1 ? "" : "s"} behind the weekly leader`
+                : dashboard.passedThisWeek > 0
+                  ? "You are level with the weekly leader"
+                  : "Complete a challenge to enter the ranking"}
+            </p>
+          </article>
+        </section>
+
+        <section className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="border-b border-border px-5 py-5 md:px-6">
+            <h2 className="text-xl font-semibold">Available Daily Micro-Topic Challenges</h2>
+            {dashboard.scope ? (
+              <p className="mt-1 text-sm text-text-muted">
+                Showing {dashboard.scope.subjectName} challenges only.
+              </p>
+            ) : null}
           </div>
 
           {dashboard.challenges.length ? (
-            dashboard.challenges.map((challenge) => (
-              <ChallengeCard
-                key={challenge.id}
-                challenge={challenge}
-                subject={dashboard.subjects.find(
-                  (subject) =>
-                    subject.slug === challenge.subjectSlug &&
-                    subject.courseId === challenge.courseId,
-                )}
-                busy={openingId === challenge.id}
-                onOpen={() => void openChallenge(challenge)}
-              />
-            ))
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+                <thead className="bg-bg-secondary text-text-secondary">
+                  <tr>
+                    <th scope="col" className="px-5 py-4 font-semibold md:px-6">
+                      Subject
+                    </th>
+                    <th scope="col" className="px-5 py-4 font-semibold">
+                      Micro Topic
+                    </th>
+                    <th scope="col" className="px-5 py-4 font-semibold">
+                      Est. Time
+                    </th>
+                    <th scope="col" className="px-5 py-4 font-semibold">
+                      XP Reward
+                    </th>
+                    <th scope="col" className="px-5 py-4 font-semibold">
+                      Status
+                    </th>
+                    <th scope="col" className="px-5 py-4 font-semibold md:px-6">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dashboard.challenges.map((challenge) => {
+                    const score = challengeScore(challenge);
+                    const completed = challenge.status === "completed";
+                    const started = challenge.status === "started";
+                    return (
+                      <tr key={challenge.id} className="border-t border-border">
+                        <td className="px-5 py-4 font-medium md:px-6">{challenge.subjectName}</td>
+                        <td className="max-w-xs px-5 py-4">
+                          <span className="block font-medium">{challenge.topicTitle}</span>
+                          <span className="mt-1 line-clamp-1 block text-xs text-text-muted">
+                            {challenge.recommendationReason}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-4">
+                          {challenge.durationMinutes} mins
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-4 font-semibold">+50 XP</td>
+                        <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex min-h-7 items-center whitespace-nowrap rounded-full px-3 text-xs font-semibold ${
+                              completed
+                                ? "bg-success/15 text-success"
+                                : started
+                                  ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                                  : "bg-warning/15 text-warning"
+                            }`}
+                          >
+                            {completed
+                              ? `Completed${score === null ? "" : ` (${Math.round(score)}%)`}`
+                              : started
+                                ? "In Progress"
+                                : "New Available"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 md:px-6">
+                          <button
+                            type="button"
+                            onClick={() => void openChallenge(challenge)}
+                            disabled={openingId === challenge.id}
+                            aria-busy={openingId === challenge.id}
+                            className={`inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-lg px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary disabled:opacity-60 ${
+                              completed
+                                ? "border border-border bg-bg-primary text-text-primary hover:bg-bg-secondary"
+                                : "bg-blue-600 text-white hover:bg-blue-700"
+                            }`}
+                          >
+                            {openingId === challenge.id
+                              ? "Opening…"
+                              : completed
+                                ? "View Details"
+                                : started
+                                  ? "Continue"
+                                  : "Start Challenge"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <div className="rounded-[14px] border border-dashed border-border bg-bg-secondary/40 p-6 text-center">
-              <p className="text-[15px] font-semibold text-text-primary">
-                {dashboard.scope ? "No challenge is ready for this subject yet" : "No challenges yet"}
-              </p>
-              <p className="mt-1 text-[13px] text-text-muted">
+            <div className="px-6 py-12 text-center">
+              <p className="font-semibold">
                 {dashboard.scope
-                  ? "Ask the community creator to refresh the extracted topics, then try again."
-                  : "Join a community and its real topics will appear here."}
+                  ? "No challenge is ready for this subject yet"
+                  : "No challenges yet"}
+              </p>
+              <p className="mt-2 text-sm text-text-muted">
+                {dashboard.scope
+                  ? "Ask the community creator to refresh this subject's extracted topics."
+                  : "Join a community and its real micro-topics will appear here."}
               </p>
               <Link
                 href="/app/communities"
-                className="mt-4 inline-flex min-h-10 items-center rounded-[22px] bg-text-primary px-4 text-[13px] font-[700] text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
+                className="mt-5 inline-flex min-h-10 items-center rounded-lg bg-text-primary px-4 text-sm font-semibold text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               >
-                {dashboard.scope ? "Back to communities" : "Browse communities"}
+                Browse communities
               </Link>
             </div>
           )}
-          {openError ? <p className="mt-4 rounded-xl border border-destructive/40 p-3 text-sm text-destructive">{openError}</p> : null}
         </section>
 
+        {openError ? (
+          <p
+            role="alert"
+            className="mt-4 rounded-lg border border-destructive/40 bg-card p-4 text-sm text-destructive"
+          >
+            {openError}
+          </p>
+        ) : null}
+
         {dashboard.completedChallengeTotal > 0 ? (
-          <section id="completed-challenges" className="mt-10 border-t border-border pt-8">
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <section
+            id="completed-challenges"
+            className="mt-8 overflow-hidden rounded-xl border border-border bg-card"
+          >
+            <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border px-5 py-5 md:px-6">
               <div>
-                <h2 className="text-[20px] font-[750] tracking-[-.4px] text-text-primary">Completed challenges</h2>
-                <p className="mt-1 text-[13px] text-text-muted">
-                  {dashboard.completedChallengeTotal} passed challenge{dashboard.completedChallengeTotal === 1 ? "" : "s"}, newest first.
+                <h2 className="text-xl font-semibold">Completed Challenges</h2>
+                <p className="mt-1 text-sm text-text-muted">
+                  {dashboard.completedChallengeTotal} passed, newest first.
                 </p>
               </div>
               {dashboard.completedChallengeTotalPages > 1 ? (
                 <p className="text-xs text-text-muted">
-                  Page {dashboard.completedChallengePage} of {dashboard.completedChallengeTotalPages}
+                  Page {dashboard.completedChallengePage} of{" "}
+                  {dashboard.completedChallengeTotalPages}
                 </p>
               ) : null}
             </div>
-
-            <div className="space-y-3">
-              {dashboard.completedChallenges.map((challenge) => (
-                <CompletedChallengeCard
-                  key={challenge.id}
-                  challenge={challenge}
-                  busy={openingId === challenge.id}
-                  onOpen={() => void openChallenge(challenge)}
-                />
-              ))}
+            <div className="divide-y divide-border">
+              {dashboard.completedChallenges.map((challenge) => {
+                const score = challengeScore(challenge);
+                return (
+                  <button
+                    key={challenge.id}
+                    type="button"
+                    onClick={() => void openChallenge(challenge)}
+                    disabled={openingId === challenge.id}
+                    className="grid min-h-16 w-full grid-cols-[1fr_auto] items-center gap-4 px-5 py-4 text-left hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 disabled:opacity-60 md:px-6"
+                  >
+                    <span>
+                      <span className="block font-medium">{challenge.topicTitle}</span>
+                      <span className="mt-1 block text-xs text-text-muted">
+                        {challenge.subjectName} · {challenge.date}
+                      </span>
+                    </span>
+                    <span className="text-sm font-semibold text-text-secondary">
+                      {openingId === challenge.id
+                        ? "Opening…"
+                        : `${score === null ? "Passed" : `${Math.round(score)}%`} · Review →`}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-
             {dashboard.completedChallengeTotalPages > 1 ? (
-              <nav className="mt-5 flex items-center justify-between" aria-label="Completed challenges pagination">
+              <nav
+                className="flex items-center justify-between border-t border-border px-5 py-4 md:px-6"
+                aria-label="Completed challenges pagination"
+              >
                 {dashboard.completedChallengePage > 1 ? (
                   <Link
                     href={completedPageHref(dashboard.completedChallengePage - 1)}
-                    className="rounded-full border border-border px-4 py-2 text-sm font-semibold hover:border-blue-500/40"
+                    className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   >
                     ← Previous
                   </Link>
-                ) : <span />}
+                ) : (
+                  <span />
+                )}
                 {dashboard.completedChallengePage < dashboard.completedChallengeTotalPages ? (
                   <Link
                     href={completedPageHref(dashboard.completedChallengePage + 1)}
-                    className="rounded-full border border-border px-4 py-2 text-sm font-semibold hover:border-blue-500/40"
+                    className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   >
                     Next →
                   </Link>
-                ) : <span />}
+                ) : (
+                  <span />
+                )}
               </nav>
             ) : null}
           </section>

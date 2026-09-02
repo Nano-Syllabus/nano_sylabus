@@ -36,6 +36,14 @@ export type ChallengeRecommendation = {
   reason: string;
 };
 
+export type EnsureDailyChallengeOptions = {
+  /**
+   * A subject-scoped screen must retain its own daily set even when the
+   * general queue already contains assignments from other subjects.
+   */
+  minimumRecommendationCount?: number;
+};
+
 export type StudentChallengeSummary = {
   id: string;
   courseId: string | null;
@@ -151,9 +159,7 @@ function toSummary(row: ChallengeRow): StudentChallengeSummary {
     subjectName,
     topicKey: String(row.topic_key ?? ""),
     topicTitle,
-    title: topicTitle === rawTopicTitle
-      ? String(row.title ?? "")
-      : `Master ${topicTitle}`,
+    title: topicTitle === rawTopicTitle ? String(row.title ?? "") : `Master ${topicTitle}`,
     recommendationReason: String(row.recommendation_reason ?? ""),
     status: (row.status as ChallengeStatus) ?? "assigned",
     durationMinutes: number(row.duration_minutes) || 20,
@@ -199,19 +205,44 @@ function recommendationKey(recommendation: ChallengeRecommendation) {
 function rowRecommendationKey(row: ChallengeRow) {
   return [
     row.course_id ? String(row.course_id) : "owner-private",
-    String(row.subject_slug ?? "").trim().toLowerCase(),
-    String(row.topic_key ?? "").trim().toLowerCase(),
+    String(row.subject_slug ?? "")
+      .trim()
+      .toLowerCase(),
+    String(row.topic_key ?? "")
+      .trim()
+      .toLowerCase(),
   ].join(":");
 }
 
+export function dailyChallengeAssignmentCount({
+  activeCount,
+  activeRecommendationCount,
+  availableCount,
+  minimumRecommendationCount = 0,
+}: {
+  activeCount: number;
+  activeRecommendationCount: number;
+  availableCount: number;
+  minimumRecommendationCount?: number;
+}) {
+  const openSlots = Math.max(0, 3 - activeCount);
+  const scopedSlots = Math.max(0, minimumRecommendationCount - activeRecommendationCount);
+  const requested = Math.max(openSlots, scopedSlots);
+  return Math.min(availableCount, requested);
+}
+
 /**
- * Keeps three real, unfinished challenges in today's queue. Completed rows stay
- * immutable for history/metrics, while the next unused recommendation is
- * inserted as a fresh assignment and sorts above the older active rows.
+ * Keeps three real, unfinished challenges in today's general queue. Completed
+ * rows stay immutable for history/metrics, while the next unused recommendation
+ * is inserted as a fresh assignment and sorts above the older active rows. A
+ * subject-scoped caller can request its own three matching assignments so
+ * opening a subject preserves the same three-challenge experience even when
+ * other subjects already filled the general queue.
  */
 export async function ensureDailyChallenges(
   userId: string,
   recommendations: ChallengeRecommendation[],
+  options: EnsureDailyChallengeOptions = {},
 ): Promise<StudentChallengeSummary[]> {
   const date = nepaliChallengeDate();
   const existing = await listDailyRows(userId, date);
@@ -219,11 +250,22 @@ export async function ensureDailyChallenges(
 
   const active = existing.filter((row) => row.status !== "completed");
   const assignedKeys = new Set(existing.map(rowRecommendationKey));
+  const recommendationKeys = new Set(recommendations.map(recommendationKey));
+  const activeRecommendationCount = active.filter((row) =>
+    recommendationKeys.has(rowRecommendationKey(row)),
+  ).length;
   const available = recommendations.filter(
     (recommendation) => !assignedKeys.has(recommendationKey(recommendation)),
   );
-  const openSlots = Math.max(0, 3 - active.length);
-  const selected = available.slice(0, openSlots);
+  const selected = available.slice(
+    0,
+    dailyChallengeAssignmentCount({
+      activeCount: active.length,
+      activeRecommendationCount,
+      availableCount: available.length,
+      minimumRecommendationCount: options.minimumRecommendationCount,
+    }),
+  );
 
   if (!selected.length) {
     return active
@@ -404,11 +446,13 @@ function lessonParagraphs(content: string) {
 }
 
 function warningText(...warnings: Array<string | null | undefined | string[]>) {
-  return warnings
-    .flatMap((warning) => (Array.isArray(warning) ? warning : [warning]))
-    .map((warning) => String(warning || "").trim())
-    .filter(Boolean)
-    .join(" ") || null;
+  return (
+    warnings
+      .flatMap((warning) => (Array.isArray(warning) ? warning : [warning]))
+      .map((warning) => String(warning || "").trim())
+      .filter(Boolean)
+      .join(" ") || null
+  );
 }
 
 function contentWithExam(
@@ -521,7 +565,9 @@ export async function startStudentChallenge(
     });
   }
   if (!response.can_start || !response.exam?.attempt_id || !response.exam.questions?.length) {
-    throw new Error("This topic is not taught by the course material yet, so its challenge cannot start.");
+    throw new Error(
+      "This topic is not taught by the course material yet, so its challenge cannot start.",
+    );
   }
   const content = challengeContent(response, number(row.attempt_count) + 1);
   const selectedTopic = response.topics?.[0];

@@ -12,7 +12,12 @@ export const metadata: Metadata = {
     "Find and join university, faculty, year, semester, and subject communities on NanoSyllabus.",
 };
 
-export default async function CommunitiesPage() {
+export default async function CommunitiesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ create?: string }>;
+}) {
+  const params = await searchParams;
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -22,7 +27,11 @@ export default async function CommunitiesPage() {
   return (
     <div className="exam-prep-theme hero-glow min-h-screen bg-background text-foreground">
       <LandingHeader dark />
-      <CommunityCatalogClient initialCommunities={communities} signedIn={Boolean(user)} />
+      <CommunityCatalogClient
+        initialCommunities={communities}
+        signedIn={Boolean(user)}
+        initialShowCreate={params.create === "1"}
+      />
     </div>
   );
 }

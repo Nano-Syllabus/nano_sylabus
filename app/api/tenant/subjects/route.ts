@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { listCreatorPrivateSubjectAccess, listStudentCourses } from "@/lib/student-courses";
+import {
+  listCreatorPrivateSubjectAccess,
+  listStudentCommunitySubjectAccess,
+  listStudentCourses,
+} from "@/lib/student-courses";
 
 export async function GET() {
   try {
@@ -13,8 +17,9 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [courses, privateSubjects] = await Promise.all([
+    const [courses, communitySubjects, privateSubjects] = await Promise.all([
       listStudentCourses(user.id),
+      listStudentCommunitySubjectAccess(user.id),
       listCreatorPrivateSubjectAccess(user.id),
     ]);
     const subjects = [
@@ -25,6 +30,14 @@ export async function GET() {
         namespaceSlug: subject.subjectSlug,
         folderPath: subject.folderPath,
         private: true,
+      })),
+      ...communitySubjects.map((subject) => ({
+        courseId: subject.courseId,
+        name: subject.subjectName,
+        slug: subject.subjectSlug,
+        namespaceSlug: subject.subjectSlug,
+        folderPath: subject.folderPath,
+        community: true,
       })),
       ...courses.flatMap((course) =>
         course.subjects.map((subject) => ({

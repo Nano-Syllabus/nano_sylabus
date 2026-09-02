@@ -6,9 +6,9 @@ export default function AppCommunitiesError({ reset }: { error: Error; reset: ()
   return (
     <main className="w-full max-w-[900px] px-4 py-10 lg:p-7">
       <section className="rounded-xl border border-destructive/30 bg-bg-primary p-6">
-        <h1 className="font-display text-2xl font-semibold">Couldn&apos;t load your communities</h1>
+        <h1 className="font-display text-2xl font-semibold">Couldn&apos;t load Subject Explorer</h1>
         <p className="mt-2 text-sm leading-6 text-text-secondary">
-          Your membership is safe. Try loading the community list again.
+          Your membership is safe. Try loading your subjects again.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <button

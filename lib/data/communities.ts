@@ -11,10 +11,7 @@ import {
   type CreatorSubjectOption,
 } from "@/lib/communities";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import {
-  ensureCommunityLearningSpace,
-  markCommunityLearningError,
-} from "@/lib/community-learning";
+import { ensureCommunityLearningSpace, markCommunityLearningError } from "@/lib/community-learning";
 
 const communityColumns =
   "id,creator_id,slug,name,university,faculty,description,total_years,total_semesters,visibility,status,contribution_threshold,study_course_id,learning_status,learning_error,learning_ready_at,created_at,updated_at";
@@ -26,6 +23,60 @@ export class CommunityError extends Error {
     super(message);
     this.name = "CommunityError";
     this.status = status;
+  }
+}
+
+type CommunityStorageErrorLike = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
+function normalizeCommunityStorageError(error: unknown) {
+  if (error instanceof Error) return error;
+  const source = (error || {}) as CommunityStorageErrorLike;
+  const normalized = new Error(source.message || "The community service could not be reached.");
+  normalized.name = "CommunityStorageError";
+  normalized.cause = error;
+  return normalized;
+}
+
+function isTransientCommunityReadError(error: unknown) {
+  if (error instanceof CommunityError) return false;
+  const source = (error || {}) as CommunityStorageErrorLike;
+  const code = String(source.code || "").toUpperCase();
+  const message = [source.message, source.details, source.hint].filter(Boolean).join(" ");
+
+  return (
+    [
+      "PGRST000",
+      "PGRST001",
+      "PGRST002",
+      "08000",
+      "08001",
+      "08003",
+      "08004",
+      "08006",
+      "53300",
+      "57P01",
+    ].includes(code) || /fetch failed|network|timeout|timed out|connection|gateway/i.test(message)
+  );
+}
+
+async function withCommunityReadRetry<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (!isTransientCommunityReadError(error)) throw normalizeCommunityStorageError(error);
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  try {
+    return await operation();
+  } catch (error) {
+    throw normalizeCommunityStorageError(error);
   }
 }
 
@@ -108,10 +159,7 @@ export async function listPublicCommunities(
   );
 }
 
-export async function listJoinedCommunities(
-  userId: string,
-  admin: SupabaseClient = createSupabaseAdminClient(),
-) {
+async function listJoinedCommunitiesOnce(userId: string, admin: SupabaseClient) {
   const membershipResult = await admin
     .from("community_memberships")
     .select("community_id,role,status,joined_at")
@@ -140,10 +188,17 @@ export async function listJoinedCommunities(
   return summaries.sort((a, b) => (order.get(a.id) || 0) - (order.get(b.id) || 0));
 }
 
-export async function getCommunity(
-  slug: string,
-  viewerId?: string | null,
+export async function listJoinedCommunities(
+  userId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
+) {
+  return withCommunityReadRetry(() => listJoinedCommunitiesOnce(userId, admin));
+}
+
+async function getCommunityOnce(
+  slug: string,
+  viewerId: string | null | undefined,
+  admin: SupabaseClient,
 ): Promise<CommunityDetail | null> {
   const communityResult = await admin
     .from("communities")
@@ -170,7 +225,9 @@ export async function getCommunity(
       .order("position", { ascending: true }),
     admin
       .from("community_subjects")
-      .select("id,term_id,slug,name,code,description,position,teacher_id,external_subject_slug,folder_path,topic_sync_status,topic_synced_at")
+      .select(
+        "id,term_id,slug,name,code,description,position,teacher_id,external_subject_slug,folder_path,topic_sync_status,topic_synced_at",
+      )
       .eq("community_id", communityId)
       .eq("status", "active")
       .order("position", { ascending: true }),
@@ -190,9 +247,7 @@ export async function getCommunity(
       description: String(item.description || ""),
       position: Number(item.position) || 0,
       teacherId: item.teacher_id ? String(item.teacher_id) : null,
-      externalSubjectSlug: item.external_subject_slug
-        ? String(item.external_subject_slug)
-        : null,
+      externalSubjectSlug: item.external_subject_slug ? String(item.external_subject_slug) : null,
       folderPath: String(item.folder_path || ""),
       topicSyncStatus:
         item.topic_sync_status === "ready" ||
@@ -222,6 +277,14 @@ export async function getCommunity(
   );
 
   return { ...summary, terms, canManage };
+}
+
+export async function getCommunity(
+  slug: string,
+  viewerId?: string | null,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+) {
+  return withCommunityReadRetry(() => getCommunityOnce(slug, viewerId, admin));
 }
 
 async function availableCommunitySlug(admin: SupabaseClient, name: string) {
@@ -279,6 +342,34 @@ export async function joinCommunity(
   slug: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ) {
+  const targetResult = await admin
+    .from("communities")
+    .select("id,creator_id,status,visibility")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (targetResult.error) throw targetResult.error;
+  if (!targetResult.data) throw new CommunityError("Community not found.", 404);
+
+  const targetCommunityId = String(targetResult.data.id);
+  const isCreator = String(targetResult.data.creator_id) === userId;
+  if (!isCreator) {
+    const activeMembershipResult = await admin
+      .from("community_memberships")
+      .select("community_id")
+      .eq("user_id", userId)
+      .eq("role", "member")
+      .eq("status", "active")
+      .neq("community_id", targetCommunityId)
+      .limit(1);
+    if (activeMembershipResult.error) throw activeMembershipResult.error;
+    if (activeMembershipResult.data?.length) {
+      throw new CommunityError(
+        "You already joined another community. Students can join one community at a time.",
+        409,
+      );
+    }
+  }
+
   const result = await admin.rpc("join_community", {
     target_user_id: userId,
     target_community_slug: slug,
@@ -288,16 +379,24 @@ export async function joinCommunity(
     if (result.error.code === "42501") {
       throw new CommunityError("This community is not open to new members.", 403);
     }
+    if (result.error.code === "P0001" || result.error.code === "23505") {
+      throw new CommunityError(
+        "You already joined another community. Students can join one community at a time.",
+        409,
+      );
+    }
     throw result.error;
   }
   const joinedCommunityId = String(result.data || "");
   if (joinedCommunityId) {
     try {
       const learning = await ensureCommunityLearningSpace(admin, joinedCommunityId);
-      const enrollment = await admin.from("teacher_course_enrollments").upsert(
-        { course_id: learning.courseId, student_id: userId, status: "active" },
-        { onConflict: "course_id,student_id" },
-      );
+      const enrollment = await admin
+        .from("teacher_course_enrollments")
+        .upsert(
+          { course_id: learning.courseId, student_id: userId, status: "active" },
+          { onConflict: "course_id,student_id" },
+        );
       if (enrollment.error) throw enrollment.error;
     } catch (error) {
       await markCommunityLearningError(admin, joinedCommunityId, error);
@@ -426,7 +525,10 @@ export async function attachCommunitySubject(
     .maybeSingle();
   if (alreadyAttached.error) throw alreadyAttached.error;
   if (alreadyAttached.data) {
-    throw new CommunityError("This Creator Workspace subject is already attached to the community.", 409);
+    throw new CommunityError(
+      "This Creator Workspace subject is already attached to the community.",
+      409,
+    );
   }
 
   const subjectName = String(profileResult.data.subject_name || "").trim();
@@ -454,7 +556,10 @@ export async function attachCommunitySubject(
   });
   if (insertResult.error) {
     if (insertResult.error.code === "23505") {
-      throw new CommunityError("This subject is already attached to the selected semester or community.", 409);
+      throw new CommunityError(
+        "This subject is already attached to the selected semester or community.",
+        409,
+      );
     }
     throw insertResult.error;
   }

@@ -3,15 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowRight,
-  BookOpen,
-  ExternalLink,
-  Library,
-  Plus,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { ArrowRight, BookOpen, Library, Plus, RefreshCw, X } from "lucide-react";
 import {
   communitySubjectInputSchema,
   type CommunityDetail,
@@ -26,8 +18,14 @@ type LibraryState = "idle" | "loading" | "ready" | "error";
 
 export function CommunityStudySpaceClient({
   initialCommunity,
+  mode = "student",
+  onCreateSubject,
+  teacherWorkspaceBaseHref,
 }: {
   initialCommunity: CommunityDetail;
+  mode?: "student" | "teacher";
+  onCreateSubject?: (termId: string) => void;
+  teacherWorkspaceBaseHref?: string;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -41,12 +39,17 @@ export function CommunityStudySpaceClient({
   const [notice, setNotice] = useState("");
   const [attachingSlug, setAttachingSlug] = useState<string | null>(null);
   const autoAttachKey = useRef("");
+  const canManage = mode === "teacher" && community.canManage;
 
   const years = useMemo(
     () => Array.from({ length: community.totalYears }, (_, index) => index + 1),
     [community.totalYears],
   );
   const terms = community.terms.filter((term) => term.yearNumber === selectedYear);
+
+  useEffect(() => {
+    setCommunity(initialCommunity);
+  }, [initialCommunity]);
 
   const loadCreatorSubjects = useCallback(async () => {
     setLibraryState("loading");
@@ -124,7 +127,7 @@ export function CommunityStudySpaceClient({
   useEffect(() => {
     const termId = searchParams.get("term") || "";
     const subjectSlug = searchParams.get("attach") || "";
-    if (!community.canManage || !termId || !subjectSlug) return;
+    if (!canManage || !termId || !subjectSlug) return;
     const key = `${termId}:${subjectSlug}`;
     if (autoAttachKey.current === key) return;
     autoAttachKey.current = key;
@@ -139,7 +142,7 @@ export function CommunityStudySpaceClient({
     void attachSubject(termId, subjectSlug).finally(() => {
       router.replace(pathname, { scroll: false });
     });
-  }, [attachSubject, community.canManage, community.terms, pathname, router, searchParams]);
+  }, [attachSubject, canManage, community.terms, pathname, router, searchParams]);
 
   function closePicker() {
     setAddingToTerm(null);
@@ -180,9 +183,6 @@ export function CommunityStudySpaceClient({
       <div className="mt-6 grid gap-5 lg:grid-cols-2">
         {terms.map((term) => {
           const availableSubjects = creatorSubjects.filter((subject) => !subject.attachedTermId);
-          const returnTo = `/app/communities/${community.slug}?term=${encodeURIComponent(term.id)}`;
-          const createSubjectHref = `/teachers?view=subjects&newSubject=1&returnTo=${encodeURIComponent(returnTo)}`;
-          const manageSubjectsHref = `/teachers?view=subjects&returnTo=${encodeURIComponent(returnTo)}`;
           return (
             <section
               key={term.id}
@@ -198,7 +198,7 @@ export function CommunityStudySpaceClient({
                     Semester {term.semesterNumber}
                   </h2>
                 </div>
-                {community.canManage ? (
+                {canManage ? (
                   <button
                     type="button"
                     aria-expanded={addingToTerm === term.id}
@@ -210,7 +210,7 @@ export function CommunityStudySpaceClient({
                     ) : (
                       <Plus className="size-4" aria-hidden="true" />
                     )}
-                    {addingToTerm === term.id ? "Close" : "Add from workspace"}
+                    {addingToTerm === term.id ? "Close" : "Add subject"}
                   </button>
                 ) : null}
               </div>
@@ -222,12 +222,30 @@ export function CommunityStudySpaceClient({
                       <Library className="size-4" aria-hidden="true" />
                     </span>
                     <div>
-                      <h3 className="text-sm font-semibold">Add from Creator Workspace</h3>
+                      <h3 className="text-sm font-semibold">Community subject workspace</h3>
                       <p className="mt-1 text-xs leading-5 text-text-secondary">
-                        Your original subject, syllabus, notes, question bank, and extracted content
-                        stay in one workspace. This semester stores only the subject link.
+                        Create a new subject here or attach one you already prepared. Its syllabus,
+                        learning map, forum, and challenges remain reusable.
                       </p>
                     </div>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-border bg-bg-primary p-4">
+                    <p className="text-sm font-semibold">Create a new subject</p>
+                    <p className="mt-1 text-xs leading-5 text-text-secondary">
+                      Use the full Creator Workspace flow to add its syllabus, notes, and question
+                      bank. The completed subject will attach to Semester {term.semesterNumber}
+                      automatically.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onCreateSubject?.(term.id)}
+                      disabled={!onCreateSubject}
+                      className={`mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse disabled:opacity-50 ${focusRing}`}
+                    >
+                      <Plus className="size-4" aria-hidden="true" />
+                      Open subject creator
+                    </button>
                   </div>
 
                   {error ? (
@@ -253,7 +271,7 @@ export function CommunityStudySpaceClient({
                   ) : null}
 
                   {libraryState === "loading" ? (
-                    <div className="mt-4 space-y-2" aria-label="Loading Creator Workspace subjects">
+                    <div className="mt-4 space-y-2" aria-label="Loading reusable subjects">
                       {Array.from({ length: 2 }).map((_, index) => (
                         <div
                           key={index}
@@ -264,32 +282,37 @@ export function CommunityStudySpaceClient({
                   ) : null}
 
                   {libraryState === "ready" && availableSubjects.length ? (
-                    <ul className="mt-4 divide-y divide-border border-y border-border">
-                      {availableSubjects.map((subject) => (
-                        <li key={subject.slug} className="flex min-h-16 items-center gap-3 py-3">
-                          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-bg-primary">
-                            <BookOpen className="size-4" aria-hidden="true" />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">
-                              {titleCase(subject.name)}
+                    <div className="mt-4">
+                      <p className="text-xs font-medium uppercase tracking-widest text-text-muted">
+                        Reuse an existing subject
+                      </p>
+                      <ul className="mt-2 divide-y divide-border border-y border-border">
+                        {availableSubjects.map((subject) => (
+                          <li key={subject.slug} className="flex min-h-16 items-center gap-3 py-3">
+                            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-bg-primary">
+                              <BookOpen className="size-4" aria-hidden="true" />
                             </span>
-                            <span className="mt-0.5 block truncate text-xs text-text-muted">
-                              {subject.code || "Creator Workspace subject"}
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium">
+                                {titleCase(subject.name)}
+                              </span>
+                              <span className="mt-0.5 block truncate text-xs text-text-muted">
+                                {subject.code || "Creator Workspace subject"}
+                              </span>
                             </span>
-                          </span>
-                          <button
-                            type="button"
-                            disabled={Boolean(attachingSlug)}
-                            aria-busy={attachingSlug === subject.slug}
-                            onClick={() => void attachSubject(term.id, subject.slug)}
-                            className={`inline-flex min-h-10 items-center justify-center rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse disabled:opacity-50 ${focusRing}`}
-                          >
-                            {attachingSlug === subject.slug ? "Attaching…" : "Attach"}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                            <button
+                              type="button"
+                              disabled={Boolean(attachingSlug)}
+                              aria-busy={attachingSlug === subject.slug}
+                              onClick={() => void attachSubject(term.id, subject.slug)}
+                              className={`inline-flex min-h-10 items-center justify-center rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse disabled:opacity-50 ${focusRing}`}
+                            >
+                              {attachingSlug === subject.slug ? "Attaching…" : "Attach"}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ) : null}
 
                   {libraryState === "ready" && !availableSubjects.length ? (
@@ -297,50 +320,46 @@ export function CommunityStudySpaceClient({
                       <BookOpen className="mx-auto size-6 text-text-muted" aria-hidden="true" />
                       <p className="mt-3 text-sm font-medium">No reusable subjects available</p>
                       <p className="mt-1 text-xs leading-5 text-text-muted">
-                        Create the subject and upload its source material in Creator Workspace.
+                        Use the subject creator above to build this semester&apos;s first subject.
                       </p>
                     </div>
                   ) : null}
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Link
-                      href={createSubjectHref}
-                      className={`inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse ${focusRing}`}
-                    >
-                      <Plus className="size-4" aria-hidden="true" /> Create in Creator Workspace
-                    </Link>
-                    <Link
-                      href={manageSubjectsHref}
-                      className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-border bg-bg-primary px-4 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
-                    >
-                      Manage subjects <ExternalLink className="size-4" aria-hidden="true" />
-                    </Link>
-                  </div>
                 </div>
               ) : null}
 
               {term.subjects.length ? (
                 <div className="mt-5 divide-y divide-border border-y border-border">
                   {term.subjects.map((subject) => (
-                    <Link
+                    <div
                       key={subject.id}
-                      href={`/app/communities/${community.slug}/subjects/${subject.slug}?term=${encodeURIComponent(term.id)}`}
-                      className={`group flex min-h-16 items-center gap-3 py-3 ${focusRing}`}
+                      className="flex min-h-16 flex-wrap items-center gap-3 py-3"
                     >
                       <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-bg-secondary">
                         <BookOpen className="size-4" aria-hidden="true" />
                       </span>
-                      <span className="min-w-0 flex-1">
+                      <div className="min-w-40 flex-1">
                         <span className="block text-sm font-medium">{titleCase(subject.name)}</span>
                         <span className="mt-0.5 block text-xs text-text-muted">
-                          {subject.code || "Subject workspace"}
+                          {canManage
+                            ? subject.code || "Community subject workspace"
+                            : subject.code || "Subject workspace"}
                         </span>
-                      </span>
-                      <ArrowRight
-                        className="size-4 text-text-muted transition-transform motion-reduce:transition-none group-hover:translate-x-0.5"
-                        aria-hidden="true"
-                      />
-                    </Link>
+                      </div>
+                      {canManage ? (
+                        <Link
+                          href={`${teacherWorkspaceBaseHref || `/teachers?view=communities&community=${encodeURIComponent(community.slug)}`}&communitySubject=${encodeURIComponent(subject.slug)}&term=${encodeURIComponent(term.id)}`}
+                          className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-4 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
+                        >
+                          Open {titleCase(subject.name)} workspace
+                          <ArrowRight className="size-4" aria-hidden="true" />
+                        </Link>
+                      ) : (
+                        <ArrowRight
+                          className="size-4 text-text-muted transition-transform motion-reduce:transition-none group-hover:translate-x-0.5"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -348,7 +367,9 @@ export function CommunityStudySpaceClient({
                   <BookOpen className="mx-auto size-7 text-text-muted" aria-hidden="true" />
                   <p className="mt-3 text-sm font-medium">No subjects attached yet</p>
                   <p className="mt-1 text-xs leading-5 text-text-muted">
-                    The creator can attach an existing Creator Workspace subject here.
+                    {canManage
+                      ? "Use Add subject to create or attach this semester's first subject."
+                      : "The community creator has not added a subject to this semester yet."}
                   </p>
                 </div>
               )}

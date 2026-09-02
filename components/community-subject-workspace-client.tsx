@@ -25,10 +25,14 @@ export function CommunitySubjectWorkspaceClient({
   communitySlug,
   communitySubjectSlug,
   workspace,
+  creatorMode = false,
+  onRefresh,
 }: {
   communitySlug: string;
   communitySubjectSlug: string;
   workspace: CommunitySubjectWorkspace;
+  creatorMode?: boolean;
+  onRefresh?: () => Promise<void> | void;
 }) {
   const router = useRouter();
   const [syncingTopics, setSyncingTopics] = useState(false);
@@ -48,6 +52,14 @@ export function CommunitySubjectWorkspaceClient({
   const [votingPost, setVotingPost] = useState<string | null>(null);
   const [actingPost, setActingPost] = useState<string | null>(null);
 
+  async function refreshWorkspace() {
+    if (onRefresh) {
+      await onRefresh();
+      return;
+    }
+    router.refresh();
+  }
+
   async function refreshTopics() {
     setSyncingTopics(true);
     setSyncError("");
@@ -57,12 +69,15 @@ export function CommunitySubjectWorkspaceClient({
         `/api/communities/${encodeURIComponent(communitySlug)}/subjects/${encodeURIComponent(workspace.subjectId)}/sync-topics`,
         { method: "POST", headers: { Accept: "application/json" } },
       );
-      const syncPayload = (await sync.json().catch(() => ({}))) as { error?: string; topics?: unknown[] };
+      const syncPayload = (await sync.json().catch(() => ({}))) as {
+        error?: string;
+        topics?: unknown[];
+      };
       if (!sync.ok) throw new Error(syncPayload.error || "Topics could not be refreshed.");
       setSyncMessage(
         `${syncPayload.topics?.length || 0} topics extracted. Member challenges are ready.`,
       );
-      router.refresh();
+      await refreshWorkspace();
     } catch (error) {
       setSyncMessage("");
       setSyncError(error instanceof Error ? error.message : "Topic refresh failed. Try again.");
@@ -87,7 +102,7 @@ export function CommunitySubjectWorkspaceClient({
       if (!response.ok) throw new Error(payload.error || "Could not publish the post.");
       formElement.reset();
       setPostNotice("Post published. Community members can now open and upvote it.");
-      router.refresh();
+      await refreshWorkspace();
     } catch (error) {
       setPostError(error instanceof Error ? error.message : "Could not publish the post.");
     } finally {
@@ -104,7 +119,10 @@ export function CommunitySubjectWorkspaceClient({
         method: "POST",
         headers: { Accept: "application/json" },
       });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string; mergeError?: string };
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        mergeError?: string;
+      };
       if (!response.ok && response.status !== 202) throw new Error(payload.error || "Vote failed.");
       if (payload.mergeError) {
         setPostActionError({
@@ -114,7 +132,7 @@ export function CommunitySubjectWorkspaceClient({
       } else {
         setPostActionNotice({ postId, message: "Upvote counted." });
       }
-      router.refresh();
+      await refreshWorkspace();
     } catch (error) {
       setPostActionError({
         postId,
@@ -133,7 +151,11 @@ export function CommunitySubjectWorkspaceClient({
       const response = await fetch(
         `/api/community-posts/${encodeURIComponent(postId)}/${action === "hide" ? "moderate" : "report"}`,
         action === "report"
-          ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason: "Flagged by a community member for creator review." }) }
+          ? {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ reason: "Flagged by a community member for creator review." }),
+            }
           : { method: "POST" },
       );
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -144,7 +166,7 @@ export function CommunitySubjectWorkspaceClient({
           message: "Report saved. The community creator can review this post.",
         });
       }
-      router.refresh();
+      await refreshWorkspace();
     } catch (error) {
       setPostActionError({
         postId,
@@ -160,15 +182,19 @@ export function CommunitySubjectWorkspaceClient({
       <section aria-labelledby="topics-heading">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-text-muted">Learning map</p>
-            <h2 id="topics-heading" className="mt-2 font-display text-2xl font-semibold">Extracted topics</h2>
+            <p className="text-xs font-medium uppercase tracking-widest text-text-muted">
+              Learning map
+            </p>
+            <h2 id="topics-heading" className="mt-2 font-display text-2xl font-semibold">
+              Extracted topics
+            </h2>
           </div>
           {workspace.topics.length ? (
             <Link
               href={
                 workspace.courseId && workspace.externalSubjectSlug
-                  ? `/app/today?courseId=${encodeURIComponent(workspace.courseId)}&subject=${encodeURIComponent(workspace.externalSubjectSlug)}`
-                  : "/app/today"
+                  ? `/app/challenges?courseId=${encodeURIComponent(workspace.courseId)}&subject=${encodeURIComponent(workspace.externalSubjectSlug)}`
+                  : "/app/challenges"
               }
               className={`inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse ${focusRing}`}
             >
@@ -181,14 +207,29 @@ export function CommunitySubjectWorkspaceClient({
             {workspace.topics.map((topic) => {
               const complete = topic.masteryStatus === "strong";
               return (
-                <article key={topic.id} className="rounded-xl border border-border bg-bg-primary p-4">
-                  <span className={`flex size-8 items-center justify-center rounded-full ${complete ? "bg-emerald-500/10 text-emerald-600" : "bg-bg-secondary text-text-muted"}`}>
-                    {complete ? <Check className="size-4" aria-hidden="true" /> : <CircleDashed className="size-4" aria-hidden="true" />}
+                <article
+                  key={topic.id}
+                  className="rounded-xl border border-border bg-bg-primary p-4"
+                >
+                  <span
+                    className={`flex size-8 items-center justify-center rounded-full ${complete ? "bg-emerald-500/10 text-emerald-600" : "bg-bg-secondary text-text-muted"}`}
+                  >
+                    {complete ? (
+                      <Check className="size-4" aria-hidden="true" />
+                    ) : (
+                      <CircleDashed className="size-4" aria-hidden="true" />
+                    )}
                   </span>
                   <h3 className="mt-3 text-sm font-semibold">{topic.title}</h3>
-                  {topic.blurb ? <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-text-muted">{topic.blurb}</p> : null}
+                  {topic.blurb ? (
+                    <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-text-muted">
+                      {topic.blurb}
+                    </p>
+                  ) : null}
                   <p className="mt-3 text-xs text-text-secondary">
-                    {topic.masteryStatus === "not_attempted" ? "Challenge waiting" : `${Math.round(topic.percentage)}% mastery`}
+                    {topic.masteryStatus === "not_attempted"
+                      ? "Challenge waiting"
+                      : `${Math.round(topic.percentage)}% mastery`}
                   </p>
                 </article>
               );
@@ -197,56 +238,70 @@ export function CommunitySubjectWorkspaceClient({
         ) : (
           <div className="mt-5 rounded-xl border border-dashed border-border p-8 text-center">
             <Sparkles className="mx-auto size-6 text-text-muted" aria-hidden="true" />
-            <p className="mt-3 text-sm font-medium">Topics appear after the first material is indexed</p>
+            <p className="mt-3 text-sm font-medium">
+              Topics appear after the first material is indexed
+            </p>
             <p className="mt-1 text-xs text-text-muted">
-              The creator can add source files in Creator Workspace, then refresh this learning map.
+              The creator can add source material, then generate the member challenge map here.
             </p>
           </div>
         )}
       </section>
 
-      {workspace.canManage ? (
-        <section className="rounded-xl border border-border bg-bg-primary p-5" aria-labelledby="materials-heading">
+      {workspace.canManage && creatorMode ? (
+        <section
+          className="rounded-xl border border-border bg-bg-primary p-5"
+          aria-labelledby="materials-heading"
+        >
           <div className="flex items-start gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-bg-secondary">
               <FileText className="size-4" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
               <h2 id="materials-heading" className="font-display text-xl font-semibold">
-                Source material lives in Creator Workspace
+                Creator controls
               </h2>
               <p className="mt-1 text-sm leading-6 text-text-secondary">
-                Manage the syllabus, notes, question bank, folders, and source files in the original
-                subject workspace. This community reuses that same indexed content.
+                Refresh this subject&apos;s indexed topics to prepare member challenges. The
+                advanced source library remains available when you need to upload or reorganize
+                files.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {workspace.externalSubjectSlug ? (
-                  <Link
-                    href={`/teachers?view=subjects&subject=${encodeURIComponent(workspace.externalSubjectSlug)}&tab=syllabus&returnTo=${encodeURIComponent(`/app/communities/${communitySlug}/subjects/${communitySubjectSlug}`)}`}
-                    className={`inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse ${focusRing}`}
-                  >
-                    Open Creator Workspace <ExternalLink className="size-4" aria-hidden="true" />
-                  </Link>
-                ) : null}
                 <button
                   type="button"
                   disabled={syncingTopics}
                   aria-busy={syncingTopics}
                   onClick={() => void refreshTopics()}
-                  className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-4 text-sm font-medium hover:bg-bg-secondary disabled:opacity-50 ${focusRing}`}
+                  className={`inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse hover:opacity-90 disabled:opacity-50 ${focusRing}`}
                 >
                   {syncingTopics ? (
                     <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" />
                   ) : (
                     <RefreshCw className="size-4" aria-hidden="true" />
                   )}
-                  {syncingTopics ? "Refreshing…" : "Refresh extracted topics"}
+                  {syncingTopics ? "Preparing challenges…" : "Generate or refresh challenges"}
                 </button>
+                {workspace.externalSubjectSlug ? (
+                  <Link
+                    href={`/teachers?view=subjects&subject=${encodeURIComponent(workspace.externalSubjectSlug)}&tab=syllabus&returnTo=${encodeURIComponent(`/app/communities/${communitySlug}/subjects/${communitySubjectSlug}`)}`}
+                    className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-4 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
+                  >
+                    Advanced source library <ExternalLink className="size-4" aria-hidden="true" />
+                  </Link>
+                ) : null}
               </div>
             </div>
           </div>
-          {syncMessage ? <p role="status" className="mt-3 text-sm text-text-secondary">{syncMessage}</p> : null}
-          {syncError ? <p role="alert" className="mt-3 text-sm text-destructive">{syncError}</p> : null}
+          {syncMessage ? (
+            <p role="status" className="mt-3 text-sm text-text-secondary">
+              {syncMessage}
+            </p>
+          ) : null}
+          {syncError ? (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {syncError}
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -254,30 +309,104 @@ export function CommunitySubjectWorkspaceClient({
         <div className="flex items-start gap-3">
           <MessageSquareText className="mt-1 size-5 text-text-muted" aria-hidden="true" />
           <div>
-            <h2 id="forum-heading" className="font-display text-2xl font-semibold">Subject forum</h2>
-            <p className="mt-1 text-sm text-text-secondary">Resources merge into this subject automatically at {workspace.contributionThreshold} upvotes.</p>
+            <h2 id="forum-heading" className="font-display text-2xl font-semibold">
+              Subject forum
+            </h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              Resources merge into this subject automatically at {workspace.contributionThreshold}{" "}
+              upvotes.
+            </p>
           </div>
         </div>
-        <form onSubmit={createPost} className="mt-5 rounded-xl border border-border bg-bg-primary p-5">
+        <form
+          onSubmit={createPost}
+          className="mt-5 rounded-xl border border-border bg-bg-primary p-5"
+        >
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2"><label htmlFor="post-title" className="text-sm font-medium">Title</label><input id="post-title" name="title" required minLength={3} maxLength={160} placeholder="TCP/IP question bank from our college" className={`mt-2 ${inputClass}`} /></div>
-            <div><label htmlFor="post-type" className="text-sm font-medium">Post type</label><select id="post-type" name="postType" className={`mt-2 ${inputClass}`}><option value="resource">Resource contribution</option><option value="discussion">Discussion</option></select></div>
-            <div><label htmlFor="post-shelf" className="text-sm font-medium">Repository shelf</label><select id="post-shelf" name="shelf" className={`mt-2 ${inputClass}`}><option>Question Bank</option><option>Notes</option><option>Syllabus</option></select></div>
-            <div className="md:col-span-2"><label htmlFor="post-body" className="text-sm font-medium">Note</label><textarea id="post-body" name="body" rows={3} maxLength={4000} placeholder="What is useful about this resource?" className={`mt-2 w-full resize-y rounded-lg border border-border bg-bg-primary px-3 py-3 text-sm ${focusRing}`} /></div>
-            <div className="md:col-span-2"><label htmlFor="post-file" className="text-sm font-medium">Attachment <span className="font-normal text-text-muted">required for resources · max 20 MB</span></label><input id="post-file" name="file" type="file" accept=".pdf,.docx,.txt,image/jpeg,image/png,image/webp" className={`mt-2 block min-h-11 w-full rounded-lg border border-border px-3 py-2 text-sm ${focusRing}`} /></div>
+            <div className="md:col-span-2">
+              <label htmlFor="post-title" className="text-sm font-medium">
+                Title
+              </label>
+              <input
+                id="post-title"
+                name="title"
+                required
+                minLength={3}
+                maxLength={160}
+                placeholder="TCP/IP question bank from our college"
+                className={`mt-2 ${inputClass}`}
+              />
+            </div>
+            <div>
+              <label htmlFor="post-type" className="text-sm font-medium">
+                Post type
+              </label>
+              <select id="post-type" name="postType" className={`mt-2 ${inputClass}`}>
+                <option value="resource">Resource contribution</option>
+                <option value="discussion">Discussion</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="post-shelf" className="text-sm font-medium">
+                Repository shelf
+              </label>
+              <select id="post-shelf" name="shelf" className={`mt-2 ${inputClass}`}>
+                <option>Question Bank</option>
+                <option>Notes</option>
+                <option>Syllabus</option>
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label htmlFor="post-body" className="text-sm font-medium">
+                Note
+              </label>
+              <textarea
+                id="post-body"
+                name="body"
+                rows={3}
+                maxLength={4000}
+                placeholder="What is useful about this resource?"
+                className={`mt-2 w-full resize-y rounded-lg border border-border bg-bg-primary px-3 py-3 text-sm ${focusRing}`}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label htmlFor="post-file" className="text-sm font-medium">
+                Attachment{" "}
+                <span className="font-normal text-text-muted">
+                  required for resources · max 20 MB
+                </span>
+              </label>
+              <input
+                id="post-file"
+                name="file"
+                type="file"
+                accept=".pdf,.docx,.txt,image/jpeg,image/png,image/webp"
+                className={`mt-2 block min-h-11 w-full rounded-lg border border-border px-3 py-2 text-sm ${focusRing}`}
+              />
+            </div>
           </div>
-          <button type="submit" disabled={posting} className={`mt-4 inline-flex min-h-10 items-center rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse disabled:opacity-50 ${focusRing}`}>{posting ? "Publishing…" : "Publish to forum"}</button>
+          <button
+            type="submit"
+            disabled={posting}
+            className={`mt-4 inline-flex min-h-10 items-center rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse disabled:opacity-50 ${focusRing}`}
+          >
+            {posting ? "Publishing…" : "Publish to forum"}
+          </button>
         </form>
-        {postError ? <p role="alert" className="mt-3 text-sm text-destructive">{postError}</p> : null}
-        {postNotice ? <p role="status" className="mt-3 text-sm text-text-secondary">{postNotice}</p> : null}
+        {postError ? (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {postError}
+          </p>
+        ) : null}
+        {postNotice ? (
+          <p role="status" className="mt-3 text-sm text-text-secondary">
+            {postNotice}
+          </p>
+        ) : null}
         <div className="mt-5 space-y-3">
           {workspace.posts.map((post) => {
-            const votesRemaining = Math.max(
-              0,
-              workspace.contributionThreshold - post.voteCount,
-            );
-            const actionError =
-              postActionError?.postId === post.id ? postActionError.message : "";
+            const votesRemaining = Math.max(0, workspace.contributionThreshold - post.voteCount);
+            const actionError = postActionError?.postId === post.id ? postActionError.message : "";
             const actionNotice =
               postActionNotice?.postId === post.id ? postActionNotice.message : "";
             return (
@@ -329,10 +458,7 @@ export function CommunitySubjectWorkspaceClient({
                         className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full border px-4 text-sm font-medium disabled:opacity-60 ${post.viewerVoted ? "border-text-primary bg-text-primary text-text-inverse" : "border-border hover:bg-bg-secondary"} ${focusRing}`}
                       >
                         {votingPost === post.id ? (
-                          <Loader2
-                            className="size-4 motion-safe:animate-spin"
-                            aria-hidden="true"
-                          />
+                          <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" />
                         ) : post.viewerVoted ? (
                           <Check className="size-4" aria-hidden="true" />
                         ) : (
@@ -349,13 +475,16 @@ export function CommunitySubjectWorkspaceClient({
                         disabled={actingPost === post.id}
                         aria-busy={actingPost === post.id}
                         onClick={() =>
-                          void actOnPost(post.id, workspace.canManage ? "hide" : "report")
+                          void actOnPost(
+                            post.id,
+                            workspace.canManage && creatorMode ? "hide" : "report",
+                          )
                         }
                         className={`inline-flex min-h-10 items-center px-2 text-sm text-text-secondary underline-offset-4 hover:text-text-primary hover:underline disabled:opacity-50 ${focusRing}`}
                       >
                         {actingPost === post.id
                           ? "Saving…"
-                          : workspace.canManage
+                          : workspace.canManage && creatorMode
                             ? "Hide post"
                             : "Report post"}
                       </button>
@@ -413,7 +542,11 @@ export function CommunitySubjectWorkspaceClient({
               </article>
             );
           })}
-          {!workspace.posts.length ? <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-muted">No posts yet. Share the first useful resource or question.</div> : null}
+          {!workspace.posts.length ? (
+            <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-muted">
+              No posts yet. Share the first useful resource or question.
+            </div>
+          ) : null}
         </div>
       </section>
     </div>

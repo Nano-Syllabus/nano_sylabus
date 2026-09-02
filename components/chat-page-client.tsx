@@ -11,13 +11,22 @@ import {
   useContext,
   type ChangeEvent,
   type ClipboardEvent,
+  type CSSProperties,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
 import {
   ChatMaterialsLibrary,
   type ChatLibrarySubject,
 } from "@/components/chat-materials-library";
+import {
+  LibraryDocumentViewer,
+  LibraryNanoAiWorkspace,
+  type LibraryNanoAiMaterial,
+  type LibraryNanoAiSelection,
+  type LibraryNanoAiSubject,
+} from "@/components/library-nanoai-workspace";
 
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
@@ -40,6 +49,7 @@ import type {
   RevisionNoteDetail,
 } from "@/lib/types";
 import { cn, deriveSessionTitle, formatDate, groupDateLabel } from "@/lib/utils";
+import type { CommunityDetail } from "@/lib/communities";
 
 /** Strip chapter enrichment from subject context for UI display.
  * e.g. "Instrumentation > Measurement Systems" → "Instrumentation" */
@@ -560,6 +570,8 @@ export function ChatPageClient({
   initialPrompt,
   initialReferenceNote,
   noteSubjectOptions,
+  libraryCommunity,
+  initialLibrarySelection,
 }: {
   user: AppUser;
   defaultLanguage: Language;
@@ -573,6 +585,8 @@ export function ChatPageClient({
   initialPrompt: string | null;
   initialReferenceNote?: RevisionNoteDetail | null;
   noteSubjectOptions: NoteSubjectOption[];
+  libraryCommunity: CommunityDetail | null;
+  initialLibrarySelection: LibraryNanoAiSelection;
 }) {
   const [sessions, setSessions] = useState(initialSessions);
   const [hasMoreSessions, setHasMoreSessions] = useState(initialHasMore);
@@ -647,6 +661,10 @@ export function ChatPageClient({
   const [libraryWidth, setLibraryWidth] = useState(520);
   const [hasOpenedBooks, setHasOpenedBooks] = useState(false);
   const [showBooksSpotlight, setShowBooksSpotlight] = useState(false);
+  const [workspaceMaterial, setWorkspaceMaterial] = useState<LibraryNanoAiMaterial | null>(null);
+  const [workspaceSubject, setWorkspaceSubject] = useState<LibraryNanoAiSubject | null>(null);
+  const [nanoAiPanelWidth, setNanoAiPanelWidth] = useState(440);
+  const nanoAiResizeRef = useRef(false);
   const [viewportWidth, setViewportWidth] = useState(1440);
   const [composerElement, setComposerElement] = useState<HTMLFormElement | null>(null);
   const [compactComposerControls, setCompactComposerControls] = useState(false);
@@ -917,6 +935,8 @@ export function ChatPageClient({
       setMatchedScope(null);
       setLatestThinkingTrace(null);
       setShowThinkingTrace(false);
+      setWorkspaceMaterial(null);
+      setWorkspaceSubject(null);
       stopChatRef.current?.();
       if (requestWatchdogRef.current) {
         window.clearTimeout(requestWatchdogRef.current);
@@ -1162,7 +1182,7 @@ export function ChatPageClient({
   const activeSessionTitle =
     sessions.find((session) => session.id === currentSessionId)?.title ??
     sessionDetail?.title ??
-    "Start a new conversation";
+    (workspaceSubject ? `NanoAI · ${workspaceSubject.name}` : "Library & NanoAI");
 
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [hasMoreMessages, setHasMoreMessages] = useState(Boolean(initialSession?.hasMoreMessages));
@@ -2152,6 +2172,59 @@ export function ChatPageClient({
     [isLoading, messages.length, subjectContext, updateSessionSubjectContext],
   );
 
+  const handleWorkspaceSubjectSelect = useCallback(
+    (nextSubject: LibraryNanoAiSubject) => {
+      handleLibrarySubjectSelect({ name: nextSubject.name, slug: nextSubject.slug });
+    },
+    [handleLibrarySubjectSelect],
+  );
+
+  const handleWorkspaceMaterialOpen = useCallback(
+    (material: LibraryNanoAiMaterial, nextSubject: LibraryNanoAiSubject) => {
+      handleLibrarySubjectSelect({ name: nextSubject.name, slug: nextSubject.slug });
+      setWorkspaceSubject(nextSubject);
+      setWorkspaceMaterial(material);
+      setLibraryOpen(false);
+      setLibraryShowAllSubjects(false);
+    },
+    [handleLibrarySubjectSelect],
+  );
+
+  function clampNanoAiPanelWidth(width: number) {
+    if (typeof window === "undefined") return width;
+    const max = Math.max(360, Math.min(620, window.innerWidth - 520));
+    return Math.min(max, Math.max(360, width));
+  }
+
+  function resizeNanoAiPanel(clientX: number) {
+    setNanoAiPanelWidth(clampNanoAiPanelWidth(window.innerWidth - clientX));
+  }
+
+  function startNanoAiResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    nanoAiResizeRef.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  function continueNanoAiResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (!nanoAiResizeRef.current) return;
+    resizeNanoAiPanel(event.clientX);
+  }
+
+  function stopNanoAiResize() {
+    nanoAiResizeRef.current = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }
+
+  function handleNanoAiResizeKey(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const direction = event.key === "ArrowLeft" ? 24 : -24;
+    setNanoAiPanelWidth((current) => clampNanoAiPanelWidth(current + direction));
+  }
+
   async function copyAssistantMessage(message: { id: string; content: string }) {
     setCopyingMessageId(message.id);
     try {
@@ -2310,10 +2383,10 @@ export function ChatPageClient({
               onClick={toggleLibrary}
               aria-expanded={false}
               aria-controls="chat-course-library"
-              aria-label="Open books"
+              aria-label="Open library"
             >
               <LibraryBig className="h-4 w-4" aria-hidden="true" />
-              {!compactHeaderActions ? <span>Books</span> : null}
+              {!compactHeaderActions ? <span>Library</span> : null}
             </Button>
 
             {showBooksSpotlight ? (
@@ -2324,7 +2397,7 @@ export function ChatPageClient({
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-1.5 font-display text-sm font-semibold text-foreground">
                     <span>📚</span>
-                    <span>Course Books & Syllabus</span>
+                    <span>Course Library &amp; Syllabus</span>
                   </div>
                   <button
                     type="button"
@@ -2336,7 +2409,7 @@ export function ChatPageClient({
                   </button>
                 </div>
                 <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-                  Click <strong>Books</strong> here to browse your subject materials, notes, and chapters anytime while chatting.
+                  Open the <strong>Library</strong> to browse your subject materials, notes, and chapters while chatting.
                 </p>
                 <div className="mt-3 flex items-center justify-end gap-2">
                   <button
@@ -2353,7 +2426,7 @@ export function ChatPageClient({
                     }}
                     className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
                   >
-                    Open Books →
+                    Open Library →
                   </button>
                 </div>
               </div>
@@ -2394,9 +2467,6 @@ export function ChatPageClient({
   const showLoadingIndicator =
     isLoading && !(latestMessage?.role === "assistant" && latestMessage.content.length > 0);
   
-  const firstName = user?.fullName?.split(" ")[0] || "Student";
-  const capitalizedFirstName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
-
   const renderInputForm = () => (
     <form
       ref={setComposerElement}
@@ -2591,8 +2661,55 @@ export function ChatPageClient({
   );
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 overflow-hidden bg-bg-primary">
-      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <div
+      className={cn(
+        "flex h-full min-h-0 min-w-0 overflow-hidden bg-bg-primary",
+        workspaceMaterial ? "flex-col lg:flex-row" : "flex-row",
+      )}
+    >
+      {workspaceMaterial && workspaceSubject ? (
+        <LibraryDocumentViewer
+          material={workspaceMaterial}
+          subject={workspaceSubject}
+          onBack={() => {
+            setWorkspaceMaterial(null);
+            const url = new URL(window.location.href);
+            url.searchParams.delete("document");
+            window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+          }}
+        />
+      ) : null}
+
+      {workspaceMaterial ? (
+        <button
+          type="button"
+          role="separator"
+          aria-label="Resize NanoAI assistant"
+          aria-orientation="vertical"
+          aria-valuemin={360}
+          aria-valuemax={620}
+          aria-valuenow={nanoAiPanelWidth}
+          title="Drag or use the arrow keys to resize NanoAI"
+          onPointerDown={startNanoAiResize}
+          onPointerMove={continueNanoAiResize}
+          onPointerUp={stopNanoAiResize}
+          onPointerCancel={stopNanoAiResize}
+          onDoubleClick={() => setNanoAiPanelWidth(440)}
+          onKeyDown={handleNanoAiResizeKey}
+          className="group relative z-20 hidden h-full w-3 shrink-0 cursor-col-resize items-center justify-center bg-bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong lg:flex"
+        >
+          <span className="h-14 w-1 rounded-full bg-border transition-colors group-hover:bg-border-strong group-focus-visible:bg-border-strong motion-reduce:transition-none" />
+        </button>
+      ) : null}
+
+      <section
+        className={cn(
+          "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-bg-primary",
+          workspaceMaterial && "h-[44%] flex-none border-t border-border lg:h-full lg:w-[var(--nanoai-panel-width)] lg:border-l lg:border-t-0",
+        )}
+        style={workspaceMaterial ? ({ "--nanoai-panel-width": `${nanoAiPanelWidth}px` } as CSSProperties) : undefined}
+        aria-label={workspaceMaterial ? "NanoAI assistant" : undefined}
+      >
         {/* matchedScope banner hidden temporarily */}
 
 
@@ -2605,33 +2722,39 @@ export function ChatPageClient({
             {switchingSessionId ? (
               <ChatSessionLoadingSkeleton />
             ) : messages.length === 0 ? (
-              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center text-center">
-                <div className="flex flex-row items-center justify-center gap-4 sm:gap-5 text-text-primary mb-8 text-center animate-fade-in">
-                  <h1 className="font-display text-3xl sm:text-[40px] leading-tight font-normal tracking-tight">
-                    <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="url(#premium-blue)" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" className="mr-2 inline-block h-8 w-8 align-text-bottom drop-shadow-[0_0_10px_rgba(96,165,250,0.65)] sm:mr-4 sm:h-[42px] sm:w-[42px]">
-                      <defs>
-                        <linearGradient id="premium-blue" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#60A5FA" />
-                          <stop offset="100%" stopColor="#2563EB" />
-                        </linearGradient>
-                      </defs>
-                      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-                      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-                    </svg>
-                    One step closer to your dreams, {capitalizedFirstName}.
-                  </h1>
+              workspaceMaterial && workspaceSubject ? (
+                <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-1 text-left">
+                  <div className="mb-5 rounded-xl border border-border bg-bg-secondary p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-10 items-center justify-center rounded-lg bg-bg-primary text-text-secondary">
+                        <LibraryBig className="size-5" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0">
+                        <h1 className="font-display text-lg font-semibold">NanoAI Assistant</h1>
+                        <p className="mt-0.5 truncate text-xs text-text-muted">
+                          {workspaceMaterial.name} · {workspaceSubject.name}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-text-secondary">
+                      This conversation is grounded in {workspaceSubject.name}. Ask NanoAI to explain, summarize, or quiz you from the open resource.
+                    </p>
+                  </div>
+                  {chatError ? (
+                    <p className="mb-3 rounded-xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
+                      {chatError}
+                    </p>
+                  ) : null}
+                  {renderInputForm()}
                 </div>
-
-                <div className="w-full text-left animate-fade-in" style={{ animationDelay: '50ms', animationFillMode: 'both' }}>
-                    {chatError ? (
-                      <p className="mb-3 rounded-2xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
-                        {chatError}
-                      </p>
-                    ) : null}
-                    {renderInputForm()}
-                </div>
-
-              </div>
+              ) : (
+                <LibraryNanoAiWorkspace
+                  community={libraryCommunity}
+                  initialSelection={initialLibrarySelection}
+                  onSubjectSelect={handleWorkspaceSubjectSelect}
+                  onMaterialOpen={handleWorkspaceMaterialOpen}
+                />
+              )
             ) : (
               <div className="space-y-5">
                 {loadingOlderMessages ? (

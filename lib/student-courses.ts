@@ -485,7 +485,18 @@ export type StudentCourseSubjectAccess = {
   subjectSlug: string;
   subjectName: string;
   folderPath: string;
-  accessKind?: "course" | "owner-private";
+  accessKind?: "course" | "community" | "owner-private";
+  community?: {
+    id: string;
+    name: string;
+  };
+  term?: {
+    id: string;
+    yearNumber: number;
+    semesterNumber: number;
+    semesterInYear: number;
+    position: number;
+  };
 };
 
 async function getCommunitySubjectAccessForCourse(
@@ -530,6 +541,7 @@ async function getCommunitySubjectAccessForCourse(
     subjectSlug: String(subjectResult.data.external_subject_slug),
     subjectName: String(subjectResult.data.name || subjectSlug),
     folderPath: String(subjectResult.data.folder_path || subjectResult.data.name || subjectSlug),
+    accessKind: "community",
   };
 }
 
@@ -556,7 +568,7 @@ export async function listStudentCommunitySubjectAccess(
 
   const communitiesResult = await admin
     .from("communities")
-    .select("id,study_course_id")
+    .select("id,name,study_course_id")
     .in("id", communityIds)
     .eq("status", "active");
   if (communitiesResult.error) throw communitiesResult.error;
@@ -566,20 +578,47 @@ export async function listStudentCommunitySubjectAccess(
       .filter((row) => Boolean(row.study_course_id))
       .map((row) => [String(row.id), String(row.study_course_id)]),
   );
+  const communityNameById = new Map(
+    (communitiesResult.data || []).map((row) => [
+      String(row.id || ""),
+      String(row.name || "Community"),
+    ]),
+  );
   const readyCommunityIds = [...courseByCommunity.keys()];
   if (!readyCommunityIds.length) return [];
 
   const subjectResult = await admin
     .from("community_subjects")
-    .select("community_id,teacher_id,external_subject_slug,name,folder_path")
+    .select("community_id,term_id,teacher_id,external_subject_slug,name,folder_path")
     .in("community_id", readyCommunityIds)
     .eq("status", "active");
   if (subjectResult.error) throw subjectResult.error;
+
+  const termIds = [
+    ...new Set(
+      (subjectResult.data || [])
+        .map((row) => String(row.term_id || ""))
+        .filter(Boolean),
+    ),
+  ];
+  const termsResult = termIds.length
+    ? await admin
+        .from("community_terms")
+        .select("id,year_number,semester_number,semester_in_year,position")
+        .in("id", termIds)
+    : { data: [], error: null };
+  if (termsResult.error) throw termsResult.error;
+  const termById = new Map(
+    (termsResult.data || []).map((row) => [String(row.id || ""), row]),
+  );
 
   return (subjectResult.data || []).flatMap((row) => {
     const courseId = courseByCommunity.get(String(row.community_id || ""));
     const teacherId = String(row.teacher_id || "");
     const slug = String(row.external_subject_slug || "");
+    const communityId = String(row.community_id || "");
+    const termId = String(row.term_id || "");
+    const term = termById.get(termId);
     if (!courseId || !teacherId || !slug) return [];
     return [{
       courseId,
@@ -587,6 +626,20 @@ export async function listStudentCommunitySubjectAccess(
       subjectSlug: slug,
       subjectName: String(row.name || slug),
       folderPath: String(row.folder_path || row.name || slug),
+      accessKind: "community",
+      community: {
+        id: communityId,
+        name: communityNameById.get(communityId) || "Community",
+      },
+      term: term
+        ? {
+            id: termId,
+            yearNumber: Number(term.year_number) || 1,
+            semesterNumber: Number(term.semester_number) || 1,
+            semesterInYear: Number(term.semester_in_year) || 1,
+            position: Number(term.position) || 0,
+          }
+        : undefined,
     } satisfies StudentCourseSubjectAccess];
   });
 }
@@ -659,6 +712,15 @@ export async function getStudentCourseSubjectAccessForCourse(
     const access = await getCreatorPrivateSubjectAccess(studentId, subjectSlug, admin);
     return access?.courseId === courseId ? access : null;
   }
+  // Community membership is the primary entitlement for community subjects.
+  // The hidden study-course enrollment is only a compatibility/mastery row;
+  // preserve the community access kind for authorization and diagnostics.
+  const communityAccess = await getCommunitySubjectAccessForCourse(
+    studentId,
+    courseId,
+    subjectSlug,
+    admin,
+  );
   const enrollmentResult = await admin
     .from("teacher_course_enrollments")
     .select("course_id")
@@ -667,9 +729,6 @@ export async function getStudentCourseSubjectAccessForCourse(
     .in("status", ["active", "completed"])
     .maybeSingle();
   if (enrollmentResult.error) throw enrollmentResult.error;
-  const communityAccess = enrollmentResult.data
-    ? null
-    : await getCommunitySubjectAccessForCourse(studentId, courseId, subjectSlug, admin);
   if (!enrollmentResult.data && !communityAccess) return null;
 
   const courseResult = await admin
@@ -717,6 +776,17 @@ export async function getStudentCourseSubjectAccess(
 
   const privateAccess = await getCreatorPrivateSubjectAccess(studentId, subject, admin);
   if (privateAccess) return privateAccess;
+
+  // A community membership is itself the student's entitlement to every
+  // active subject attached to that community. Community workspaces use a
+  // hidden course for mastery data, but membership must not depend on a
+  // duplicate legacy teacher_course_enrollments row.
+  const communityAccess = (await listStudentCommunitySubjectAccess(studentId, admin)).find(
+    (item) =>
+      subjectAccessKey(item.subjectSlug) === requested ||
+      subjectAccessKey(item.subjectName) === requested,
+  );
+  if (communityAccess) return communityAccess;
 
   const enrollmentResult = await admin
     .from("teacher_course_enrollments")
@@ -791,6 +861,18 @@ export async function getStudentCourseSubjectAccessForDocumentPath(
     })
     .sort((left, right) => right.folderPath.length - left.folderPath.length)[0];
   if (privateMatch) return privateMatch;
+
+  const communityMatch = (await listStudentCommunitySubjectAccess(studentId, admin))
+    .filter((item) => item.teacherId === teacherId)
+    .filter((item) => {
+      const folder = normalizeCollectionPath(item.folderPath).toLowerCase();
+      return (
+        Boolean(folder) &&
+        (normalizedDocumentPath === folder || normalizedDocumentPath.startsWith(`${folder}/`))
+      );
+    })
+    .sort((left, right) => right.folderPath.length - left.folderPath.length)[0];
+  if (communityMatch) return communityMatch;
 
   const enrollmentResult = await admin
     .from("teacher_course_enrollments")
