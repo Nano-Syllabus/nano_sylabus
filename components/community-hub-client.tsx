@@ -40,6 +40,7 @@ import type {
 } from "@/lib/data/community-hub";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 import { cn, titleCase } from "@/lib/utils";
+import { CommunityLeaveControl } from "@/components/community-leave-control";
 
 type CommunitySection = "overview" | "subjects" | "forum" | "members";
 
@@ -216,8 +217,6 @@ export function CommunityHubClient({
   const [votingPostId, setVotingPostId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [termSaving, setTermSaving] = useState(false);
-  const [leaveConfirm, setLeaveConfirm] = useState(false);
-  const [leaving, setLeaving] = useState(false);
 
   const currentTerm =
     community.terms.find((term) => term.id === currentTermId) || initialData.currentTerm;
@@ -436,33 +435,13 @@ export function CommunityHubClient({
     }
   }
 
-  async function leaveCommunity() {
-    setLeaving(true);
-    setActionError("");
-    try {
-      const response = await fetch(
-        `/api/communities/${encodeURIComponent(community.slug)}/membership`,
-        {
-          method: "DELETE",
-          headers: { Accept: "application/json" },
-        },
-      );
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        setActionError(payload.error || "Could not leave this community. Try again.");
-        return;
-      }
-      router.push("/communities");
-      router.refresh();
-    } catch {
-      setActionError("Could not reach NanoSyllabus. Check your connection and try again.");
-    } finally {
-      setLeaving(false);
-    }
-  }
-
   return (
     <main className="mx-auto w-full max-w-[1480px] px-4 pb-20 pt-3 sm:px-6 md:px-8 lg:px-10">
+      {!initialData.canManage ? (
+        <div className="mb-4 flex justify-end">
+          <CommunityLeaveControl key={community.id} community={community} />
+        </div>
+      ) : null}
       <section className="relative isolate overflow-hidden rounded-2xl bg-[var(--community-banner)] px-5 py-5 text-white sm:px-7 sm:py-6 lg:px-8 lg:py-7">
         <div className="pointer-events-none absolute inset-0 opacity-15 [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:24px_24px]" />
         <div className="pointer-events-none absolute -right-20 -top-28 size-72 rounded-full border border-white/20" />
@@ -627,33 +606,8 @@ export function CommunityHubClient({
             >
               <ShieldCheck className="size-4" aria-hidden="true" /> Manage community
             </Link>
-          ) : leaveConfirm ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setLeaveConfirm(false)}
-                className={`min-h-11 rounded-full border border-border px-5 text-sm font-semibold hover:bg-bg-secondary ${focusRing}`}
-              >
-                Keep membership
-              </button>
-              <button
-                type="button"
-                onClick={leaveCommunity}
-                disabled={leaving}
-                aria-busy={leaving}
-                className={`min-h-11 rounded-full bg-destructive px-5 text-sm font-semibold text-white disabled:opacity-60 ${focusRing}`}
-              >
-                {leaving ? "Leaving…" : "Confirm leave"}
-              </button>
-            </>
           ) : (
-            <button
-              type="button"
-              onClick={() => setLeaveConfirm(true)}
-              className={`min-h-11 rounded-full border border-border px-5 text-sm font-semibold hover:border-destructive hover:text-destructive ${focusRing}`}
-            >
-              Leave and switch
-            </button>
+            <CommunityLeaveControl key={community.id} community={community} />
           )}
         </div>
       </section>

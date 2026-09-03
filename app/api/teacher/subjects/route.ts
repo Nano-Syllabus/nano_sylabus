@@ -53,8 +53,8 @@ export async function POST(request: Request) {
           subject_code: parsed.data.code,
           university: parsed.data.university,
           programme: parsed.data.programme,
-          // A subject is always private at the base level. Course visibility
-          // controls whether an attached subject can be discovered by students.
+          // Keep raw library storage non-public. Attaching this subject to a
+          // community grants its active members access independently of this flag.
           visibility: "private",
           updated_at: new Date().toISOString(),
         },
@@ -68,15 +68,12 @@ export async function POST(request: Request) {
           error:
             storageError instanceof Error
               ? storageError.message
-              : "The subject was created, but its privacy settings could not be saved.",
+              : "The subject was created, but its details could not be saved.",
         },
         { status: 502 },
       );
     }
-    return NextResponse.json(
-      { subject, profileSaved, visibility: "private" },
-      { status: 201 },
-    );
+    return NextResponse.json({ subject, profileSaved, visibility: "private" }, { status: 201 });
   } catch (error) {
     const apiError = error instanceof TeacherApiError ? error : null;
     const invalidKey = apiError?.status === 401;

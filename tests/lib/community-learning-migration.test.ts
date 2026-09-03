@@ -23,10 +23,16 @@ const communityHub = path.join(
   process.cwd(),
   "supabase/migrations/20260902120000_real_community_hub.sql",
 );
+const ownerDeletion = path.join(
+  process.cwd(),
+  "supabase/migrations/20260903100000_community_owner_deletion.sql",
+);
 
 describe("community learning migration", () => {
   let db: PGlite;
 
+  // PGlite's first WASM startup plus the full migration chain can exceed 10s
+  // while the production compiler is running on the same machine.
   beforeEach(async () => {
     db = new PGlite();
     await db.exec(`
@@ -46,7 +52,8 @@ describe("community learning migration", () => {
       create table public.teacher_courses (
         id uuid primary key default gen_random_uuid(),
         teacher_id uuid not null references public.teachers(id),
-        slug text not null unique
+        slug text not null unique,
+        status text not null default 'published'
       );
       create table public.teacher_course_enrollments (
         course_id uuid not null references public.teacher_courses(id),
@@ -86,14 +93,202 @@ describe("community learning migration", () => {
     await db.exec(await readFile(subjectReuse, "utf8"));
     await db.exec(await readFile(singleActiveCommunity, "utf8"));
     await db.exec(await readFile(communityHub, "utf8"));
+    await db.exec(await readFile(ownerDeletion, "utf8"));
+    await db.exec(await readFile(path.join(process.cwd(), "supabase/migrations/20260903153000_community_leave_access.sql"), "utf8"));
     await db.exec(`
       insert into auth.users(id) values
         ('11111111-1111-4111-8111-111111111111'),
         ('22222222-2222-4222-8222-222222222222');
     `);
-  });
+  }, 30_000);
 
   afterEach(async () => db.close());
+
+  const owner = "11111111-1111-4111-8111-111111111111";
+  const member = "22222222-2222-4222-8222-222222222222";
+  async function seedDeletion() {
+    await db.query("select public.create_community_with_terms($1,$2,$3,$4,$5,$6,$7,$8,$9)", [
+      owner,
+      "owned",
+      "Owned",
+      "TU",
+      "CS",
+      "",
+      1,
+      2,
+      "public",
+    ]);
+    await db.query("select public.create_community_with_terms($1,$2,$3,$4,$5,$6,$7,$8,$9)", [
+      owner,
+      "other",
+      "Other",
+      "TU",
+      "CS",
+      "",
+      1,
+      2,
+      "public",
+    ]);
+    await db.query("select public.join_community($1,$2)", [member, "owned"]);
+    await db.exec(`
+      insert into teachers(user_id,handle,collection_sk) values ('${owner}','owner','source-collection');
+      insert into teacher_courses(teacher_id,slug) select id, 'owned-course' from teachers;
+      update communities set study_course_id = (select id from teacher_courses) where slug = 'owned';
+      insert into teacher_course_enrollments(course_id,student_id) select id, '${member}' from teacher_courses;
+      insert into community_subjects(community_id,term_id,created_by,slug,name,teacher_id,external_subject_slug)
+      select c.id,t.id,c.creator_id,'math','Math',(select id from teachers),'source-math'
+      from communities c join community_terms t on t.community_id=c.id where t.semester_number=1;
+      insert into community_invites(community_id,created_by) select id,creator_id from communities where slug='owned';
+      insert into student_challenges(user_id,status) values ('${member}','completed');
+    `);
+  }
+
+  it.each(["active", "completed"])("leaving cancels %s access without deleting progress or the community", async (enrollmentStatus) => {
+    await seedDeletion();
+    await db.query("update teacher_course_enrollments set status = $1", [enrollmentStatus]);
+    await db.exec(`insert into student_topic_mastery(user_id,course_id,subject_slug,topic_key,percentage)
+      select '${member}', id, 'source-math', 'algebra', 80 from teacher_courses;`);
+    await db.query("select leave_community($1, (select id from communities where slug='owned'))", [member]);
+    expect((await db.query("select status, current_term_id, left_at is not null as has_left_at from community_memberships where user_id=$1", [member])).rows)
+      .toEqual([{ status: "left", current_term_id: null, has_left_at: true }]);
+    expect((await db.query("select status from teacher_course_enrollments")).rows).toEqual([{ status: "cancelled" }]);
+    expect((await db.query("select status from student_challenges")).rows).toEqual([{ status: "completed" }]);
+    expect((await db.query("select percentage from student_topic_mastery")).rows).toEqual([{ percentage: "80" }]);
+    expect((await db.query("select status from communities where slug='owned'")).rows).toEqual([{ status: "active" }]);
+    expect((await db.query("select status from community_memberships where user_id=$1", [owner])).rows)
+      .toEqual([{ status: "active" }, { status: "active" }]);
+    // Leaving does not consume an invite or delete material; a public rejoin still works.
+    await db.query("select join_community($1, 'owned')", [member]);
+    expect((await db.query("select status from community_memberships where user_id=$1", [member])).rows).toEqual([{ status: "active" }]);
+  });
+
+  it("rejects creator and non-member leave without changing community access", async () => {
+    await seedDeletion();
+    await expect(db.query("select leave_community($1, (select id from communities where slug='owned'))", [owner])).rejects.toThrow("creators cannot leave");
+    await expect(db.query("select leave_community($1, (select id from communities where slug='other'))", [member])).rejects.toThrow("Active community membership not found");
+    expect((await db.query("select status from teacher_course_enrollments")).rows).toEqual([{ status: "active" }]);
+  });
+
+  it("rolls back leave if enrollment revocation fails", async () => {
+    await seedDeletion();
+    await db.exec(`
+      create function reject_cancellation() returns trigger language plpgsql as $$
+      begin raise exception 'Enrollment unavailable'; end; $$;
+      create trigger reject_cancellation before update on teacher_course_enrollments
+      for each row execute function reject_cancellation();
+    `);
+    await expect(db.query("select leave_community($1, (select id from communities where slug='owned'))", [member]))
+      .rejects.toThrow("Enrollment unavailable");
+    expect((await db.query("select status from community_memberships where user_id=$1", [member])).rows)
+      .toEqual([{ status: "active" }]);
+  });
+
+  it("lets only the owner delete, with exact confirmation and no partial changes", async () => {
+    await seedDeletion();
+    await expect(
+      db.query("select delete_owned_community($1,$2,$3)", [member, "owned", "owned"]),
+    ).rejects.toThrow("Only the community creator");
+    await expect(
+      db.query("select delete_owned_community($1,$2,$3)", [null, "owned", "owned"]),
+    ).rejects.toThrow("Only the community creator");
+    await expect(
+      db.query("select delete_owned_community($1,$2,$3)", [owner, "owned", "wrong"]),
+    ).rejects.toThrow("Type the community");
+    await expect(
+      db.query("select delete_owned_community($1,$2,$3)", [owner, "missing", "missing"]),
+    ).rejects.toThrow("Community not found");
+    expect((await db.query("select status from communities where slug='owned'")).rows).toEqual([
+      { status: "active" },
+    ]);
+    expect((await db.query("select status from teacher_course_enrollments")).rows).toEqual([
+      { status: "active" },
+    ]);
+  });
+
+  it("archives atomically, closes access, keeps subjects/history, and supports safe retries", async () => {
+    await seedDeletion();
+    const first = await db.query("select delete_owned_community($1,$2,$3) as id", [
+      owner,
+      "owned",
+      "owned",
+    ]);
+    expect(
+      (await db.query("select delete_owned_community($1,$2,$3) as id", [owner, "owned", "owned"]))
+        .rows,
+    ).toEqual(first.rows);
+    expect((await db.query("select slug,status from communities order by slug")).rows).toEqual([
+      { slug: "other", status: "active" },
+      { slug: "owned", status: "archived" },
+    ]);
+    expect(
+      (
+        await db.query(
+          "select m.status from community_memberships m join communities c on c.id=m.community_id where c.slug='owned'",
+        )
+      ).rows,
+    ).toEqual([{ status: "left" }, { status: "left" }]);
+    expect((await db.query("select status from teacher_courses")).rows).toEqual([
+      { status: "archived" },
+    ]);
+    expect((await db.query("select status from teacher_course_enrollments")).rows).toEqual([
+      { status: "cancelled" },
+    ]);
+    expect(
+      (await db.query("select revoked_at is not null as revoked from community_invites")).rows,
+    ).toEqual([{ revoked: true }]);
+    expect((await db.query("select count(*)::int as count from community_subjects")).rows).toEqual([
+      { count: 2 },
+    ]);
+    expect((await db.query("select status from student_challenges")).rows).toEqual([
+      { status: "completed" },
+    ]);
+    await expect(db.query("select join_community($1,$2)", [member, "owned"])).rejects.toThrow();
+    const invite = await db.query<{ token: string }>("select token from community_invites");
+    await expect(
+      db.query("select redeem_community_invite($1,$2)", [member, invite.rows[0].token]),
+    ).rejects.toThrow();
+    // Former members are no longer blocked by the one-active-community rule.
+    await db.query("select join_community($1,$2)", [member, "other"]);
+    await expect(db.exec("update teacher_course_enrollments set status='active'")).rejects.toThrow(
+      "no longer active",
+    );
+    await expect(
+      db.exec(
+        "update community_memberships set status='active' where community_id=(select id from communities where slug='owned')",
+      ),
+    ).rejects.toThrow("no longer active");
+  });
+
+  it("rolls back every change if one access-revocation step fails", async () => {
+    await seedDeletion();
+    await db.exec(`create function fail_deletion_test() returns trigger language plpgsql as $$
+      begin raise exception 'forced failure'; end; $$;
+      create trigger fail_deletion_test before update on teacher_courses for each row execute function fail_deletion_test();`);
+    await expect(
+      db.query("select delete_owned_community($1,$2,$3)", [owner, "owned", "owned"]),
+    ).rejects.toThrow("forced failure");
+    expect((await db.query("select status from communities where slug='owned'")).rows).toEqual([
+      { status: "active" },
+    ]);
+    expect((await db.query("select revoked_at from community_invites")).rows).toEqual([
+      { revoked_at: null },
+    ]);
+    expect(
+      (
+        await db.query(
+          "select count(*)::int as count from community_memberships where status='active'",
+        )
+      ).rows,
+    ).toEqual([{ count: 3 }]);
+  });
+
+  it("does not expose owner impersonation through the database RPC", async () => {
+    const result = await db.query(`select
+      has_function_privilege('anon', 'delete_owned_community(uuid,text,text)', 'execute') as anon,
+      has_function_privilege('authenticated', 'delete_owned_community(uuid,text,text)', 'execute') as member,
+      has_function_privilege('service_role', 'delete_owned_community(uuid,text,text)', 'execute') as service`);
+    expect(result.rows).toEqual([{ anon: false, member: false, service: true }]);
+  });
 
   it("crosses a resource threshold exactly once", async () => {
     await db.query(`select public.create_community_with_terms($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [

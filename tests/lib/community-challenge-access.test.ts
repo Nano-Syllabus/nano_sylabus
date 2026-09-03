@@ -21,6 +21,17 @@ function singleResult(data: Record<string, unknown> | null) {
 }
 
 describe("community challenge subject access", () => {
+  it("denies subject access after membership and legacy enrollment are revoked", async () => {
+    const queries = {
+      communities: singleResult({ id: "community-1" }),
+      community_memberships: singleResult(null),
+      teacher_course_enrollments: singleResult(null),
+    };
+    const admin = { from: vi.fn((table: keyof typeof queries) => queries[table]) };
+    expect(await getStudentCourseSubjectAccessForCourse("student-1", "community-course", "computer-programming", admin as never)).toBeNull();
+    expect(queries.community_memberships.eq).toHaveBeenCalledWith("status", "active");
+    expect(admin.from).not.toHaveBeenCalledWith("community_subjects");
+  });
   it("treats active community membership as access even if a legacy enrollment row is missing", async () => {
     const queries = {
       teacher_course_enrollments: singleResult(null),

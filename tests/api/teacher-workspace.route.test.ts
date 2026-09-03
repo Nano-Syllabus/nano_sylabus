@@ -30,7 +30,9 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/app/teachers/actions", () => ({
   getTeacherProfile: mocks.getTeacherProfile,
 }));
-vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.createSupabaseAdminClient }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: mocks.createSupabaseAdminClient,
+}));
 
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherMe: mocks.getTeacherMe,
@@ -65,7 +67,11 @@ describe("GET /api/teacher/workspace", () => {
     mocks.getTeacherDocuments.mockResolvedValue([
       { document_id: "doc-1", name: "notes.pdf", path: "Physics/Notes/notes.pdf" },
     ]);
-    const chain = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(async () => ({ data: null, error: null })) };
+    const chain = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+    };
     chain.select.mockReturnValue(chain);
     chain.eq.mockReturnValue(chain);
     mocks.createSupabaseAdminClient.mockReturnValue({ from: vi.fn(() => chain) });
@@ -114,10 +120,57 @@ describe("GET /api/teacher/workspace", () => {
     expect(mocks.getTeacherProfile).not.toHaveBeenCalled();
   });
 
-  it("turns an invalid collection key into a recoverable workspace error", async () => {
-    mocks.getTeacherMe.mockRejectedValue(
-      new mocks.MockTeacherApiError("Unauthorized", 401),
+  it("returns active community access alongside existing private library profiles", async () => {
+    const admin = mocks.createSupabaseAdminClient();
+    const fallback = admin.from.getMockImplementation();
+    const profiles = queryResult([
+      { subject_slug: "physics", subject_name: "Physics", visibility: "private" },
+    ]);
+    const links = queryResult([
+      {
+        external_subject_slug: "physics",
+        status: "active",
+        communities: { slug: "engineering", name: "Engineering", status: "active" },
+      },
+    ]);
+    admin.from.mockImplementation((table: string) =>
+      table === "community_subjects"
+        ? links
+        : table === "teacher_subject_profiles"
+          ? profiles
+          : fallback(table),
     );
+
+    const response = await GET();
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.subjectProfiles[0]).toMatchObject({
+      subject_slug: "physics",
+      visibility: "private",
+      communities: [{ slug: "engineering", name: "Engineering" }],
+    });
+    expect(links.eq).toHaveBeenCalledWith("teacher_id", "teacher-1");
+    expect(links.eq).toHaveBeenCalledWith("status", "active");
+    expect(links.eq).toHaveBeenCalledWith("communities.status", "active");
+    expect(JSON.stringify(payload)).not.toContain("collection-secret");
+  });
+
+  it("returns a recoverable error instead of incorrect access labels when linkage lookup fails", async () => {
+    const admin = mocks.createSupabaseAdminClient();
+    const fallback = admin.from.getMockImplementation();
+    const links = queryResult([], { message: "Database unavailable" });
+    admin.from.mockImplementation((table: string) =>
+      table === "community_subjects" ? links : fallback(table),
+    );
+    const response = await GET();
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "Could not load subject community access. Please try again.",
+    });
+  });
+
+  it("turns an invalid collection key into a recoverable workspace error", async () => {
+    mocks.getTeacherMe.mockRejectedValue(new mocks.MockTeacherApiError("Unauthorized", 401));
 
     const response = await GET();
 
@@ -127,3 +180,10 @@ describe("GET /api/teacher/workspace", () => {
     });
   });
 });
+
+function queryResult(data: Record<string, unknown>[], error: { message: string } | null = null) {
+  const query = { data, error, select: vi.fn(), eq: vi.fn() };
+  query.select.mockReturnValue(query);
+  query.eq.mockReturnValue(query);
+  return query;
+}

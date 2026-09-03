@@ -1,6 +1,7 @@
 import type { CommunityDetail } from "@/lib/communities";
 import { listPracticeAttempts, listTopicMastery } from "@/lib/data/student-mastery";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { readCommunityLearningTopics } from "@/lib/data/community-learning-topics";
 
 export type CommunitySubjectExplorerInsight = {
   subjectId: string;
@@ -49,7 +50,6 @@ export async function getCommunitySubjectExplorerInsights(
   if (!subjects.length) return {};
 
   const admin = createSupabaseAdminClient();
-  const subjectIds = subjects.map((subject) => subject.id);
   const teacherIds = [
     ...new Set(
       subjects.map((subject) => subject.teacherId).filter((id): id is string => Boolean(id)),
@@ -57,10 +57,7 @@ export async function getCommunitySubjectExplorerInsights(
   ];
 
   const [topicsResult, documentsResult, masteryResult, attemptsResult] = await Promise.allSettled([
-    admin
-      .from("community_subject_topics")
-      .select("community_subject_id,topic_key,title,blurb,unit_number,position")
-      .in("community_subject_id", subjectIds),
+    readCommunityLearningTopics(subjects, admin),
     teacherIds.length
       ? admin
           .from("teacher_document_files")
@@ -72,8 +69,8 @@ export async function getCommunitySubjectExplorerInsights(
   ]);
 
   const topicRows =
-    topicsResult.status === "fulfilled" && !topicsResult.value.error
-      ? ((topicsResult.value.data || []) as TopicRow[])
+    topicsResult.status === "fulfilled"
+      ? (topicsResult.value as TopicRow[])
       : null;
   const documentRows =
     documentsResult.status === "fulfilled" && !documentsResult.value.error

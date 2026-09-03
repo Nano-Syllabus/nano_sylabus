@@ -10,6 +10,7 @@ import {
   type CommunitySummary,
 } from "@/lib/communities";
 import { titleCase } from "@/lib/utils";
+import { CommunityLeaveControl } from "@/components/community-leave-control";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -104,7 +105,7 @@ function CommunityCard({
         </span>
       </div>
 
-      <div className="mt-auto flex items-center gap-2 pt-6">
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-6">
         {joined ? (
           <Link
             href={
@@ -139,6 +140,7 @@ function CommunityCard({
             {creator ? "Creator" : "Joined"}
           </span>
         ) : null}
+        <CommunityLeaveControl community={community} />
       </div>
       {joinError ? (
         <div

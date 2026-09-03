@@ -8,7 +8,6 @@ import {
   Check, 
   Copy, 
   CheckCircle2, 
-  Sparkles, 
   X,
   Lock,
   Mail,
@@ -17,6 +16,13 @@ import {
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
+import {
+  hasCompletedStudyDiagnostic,
+  PENDING_STUDY_ANSWERS_KEY,
+  readPendingStudyAnswers,
+  saveStudyDiagnostic,
+  type StudyAnswer,
+} from "@/lib/study-diagnostic";
 import { cn } from "@/lib/utils";
 import type { PaymentMethodConfig, SubscriptionPlan } from "@/lib/types";
 
@@ -34,7 +40,6 @@ type CheckoutInvoice = {
 
 export type FlowStep = 
   | "q1" | "q2" | "q3" 
-  | "fact1" 
   | "q4" | "q5" | "q6" 
   | "founderSlide" 
   | "solutionSlide" 
@@ -57,7 +62,6 @@ const FLOW_STEPS = new Set<FlowStep>([
   "q1",
   "q2",
   "q3",
-  "fact1",
   "q4",
   "q5",
   "q6",
@@ -74,11 +78,15 @@ function resolveInitialStep(value: string | null): FlowStep {
   return requested;
 }
 
-export type UserAnswer = {
-  questionIndex: number;
-  optionIndex: number;
-  text: string;
-};
+export type UserAnswer = StudyAnswer;
+
+function clearPendingStudyAnswers() {
+  try {
+    sessionStorage.removeItem(PENDING_STUDY_ANSWERS_KEY);
+  } catch {
+    // Local cleanup must not block navigation after the account save succeeds.
+  }
+}
 
 const QUESTIONS = [
   {
@@ -115,12 +123,13 @@ const QUESTIONS = [
 
 export function SaaSFlowClient({
   initialUser = null,
+  completionDestination = "/app/today",
 }: {
   initialUser?: { id: string; email?: string; fullName?: string } | null;
+  completionDestination?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const completionDestination = "/app/today";
   
   const initialStep = resolveInitialStep(searchParams.get("step"));
   const [currentStep, setCurrentStep] = useState<FlowStep>(initialStep);
@@ -135,7 +144,59 @@ export function SaaSFlowClient({
   const [authLoading, setAuthLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [resumingDiagnostic, setResumingDiagnostic] = useState(
+    Boolean(initialUser && searchParams.get("resumeDiagnostic") === "1"),
+  );
   const googleAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true";
+
+  // OAuth leaves the page before an account exists. Recover that one pending
+  // submission, save it to the signed-in account, then discard the local copy.
+  useEffect(() => {
+    if (!initialUser || searchParams.get("resumeDiagnostic") !== "1") return;
+    let cancelled = false;
+    async function resume() {
+      try {
+        const pending = readPendingStudyAnswers(sessionStorage.getItem(PENDING_STUDY_ANSWERS_KEY));
+        if (!pending) return;
+        setAnswers(pending);
+        setCurrentStep("solutionSlide");
+        await saveStudyDiagnostic(createSupabaseBrowserClient(), pending);
+        if (cancelled) return;
+        clearPendingStudyAnswers();
+        router.replace(completionDestination);
+        router.refresh();
+      } catch {
+        if (!cancelled) setAuthError("Could not save your study answers. Please try again.");
+      } finally {
+        if (!cancelled) setResumingDiagnostic(false);
+      }
+    }
+    void resume();
+    return () => { cancelled = true; };
+  }, [initialUser, searchParams, completionDestination, router]);
+
+  const finishStudyFlow = async () => {
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      const completed = await saveStudyDiagnostic(createSupabaseBrowserClient(), answers);
+      if (!completed) {
+        setCurrentStep("q1");
+        return;
+      }
+      clearPendingStudyAnswers();
+      if (PAYMENT_FLOW_ENABLED) {
+        setCurrentStep("pricing");
+      } else {
+        router.replace(completionDestination);
+        router.refresh();
+      }
+    } catch {
+      setAuthError("Could not save your study answers. Please try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const continueWithGoogle = async () => {
     if (!googleAuthEnabled) {
@@ -145,21 +206,29 @@ export function SaaSFlowClient({
 
     setAuthError("");
     setGoogleLoading(true);
-    const supabase = createSupabaseBrowserClient();
-    const redirectTo = getGoogleAuthRedirectUrl();
-    setOAuthNextCookie(PAYMENT_FLOW_ENABLED ? "/flow?step=pricing" : completionDestination);
+    try {
+      if (hasCompletedStudyDiagnostic(answers)) {
+        sessionStorage.setItem(PENDING_STUDY_ANSWERS_KEY, JSON.stringify({
+          answers,
+          expiresAt: Date.now() + 30 * 60 * 1000,
+        }));
+      } else {
+        clearPendingStudyAnswers();
+      }
+      const resumeParams = new URLSearchParams({ resumeDiagnostic: "1" });
+      const community = searchParams.get("community");
+      if (community) resumeParams.set("community", community);
+      setOAuthNextCookie(`/flow?${resumeParams}`);
 
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo,
-      },
-    });
-
-    setGoogleLoading(false);
-
-    if (oauthError) {
-      setAuthError(oauthError.message);
+      const { error } = await createSupabaseBrowserClient().auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: getGoogleAuthRedirectUrl() },
+      });
+      if (error) throw error;
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Could not start Google sign-in. Please try again.");
+    } finally {
+      setGoogleLoading(false);
     }
   };
   
@@ -210,7 +279,7 @@ export function SaaSFlowClient({
 
     setTimeout(() => {
       if (qNum === 3) {
-        setCurrentStep("fact1");
+        setCurrentStep("q4");
       } else if (qNum === 6) {
         setCurrentStep("founderSlide");
       } else {
@@ -220,8 +289,6 @@ export function SaaSFlowClient({
     }, 220);
   };
 
-  // Dynamic analysis for Fact 1
-  const recallStruggleCount = [1, 2, 3].filter(isStruggle).length;
   // Dynamic analysis for Founder slide
   const totalStruggles = [1, 2, 3, 4, 5, 6].filter(isStruggle).length;
 
@@ -240,7 +307,7 @@ export function SaaSFlowClient({
           options: {
             data: {
               full_name: authName || "Student",
-              study_answers: answers,
+              ...(hasCompletedStudyDiagnostic(answers) ? { study_answers: answers } : {}),
             },
           },
         });
@@ -266,6 +333,11 @@ export function SaaSFlowClient({
             email: data.user.email,
             fullName: data.user.user_metadata?.full_name || "Student",
           });
+          const completed = await saveStudyDiagnostic(supabase, answers);
+          if (!completed) {
+            setCurrentStep("q1");
+            return;
+          }
         }
       }
 
@@ -444,11 +516,8 @@ export function SaaSFlowClient({
       case "q3":
         setCurrentStep("q2");
         break;
-      case "fact1":
-        setCurrentStep("q3");
-        break;
       case "q4":
-        setCurrentStep("fact1");
+        setCurrentStep("q3");
         break;
       case "q5":
         setCurrentStep("q4");
@@ -505,6 +574,14 @@ export function SaaSFlowClient({
       </button>
     </div>
   );
+
+  if (resumingDiagnostic) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-bg-primary px-6 text-text-primary">
+        <p role="status">Saving your study answers…</p>
+      </main>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white text-[#111111] antialiased">
@@ -570,74 +647,7 @@ export function SaaSFlowClient({
       })()}
 
       {/* ═════════════════════════════════════════════════════════════════════
-          2. EVIDENCE / RESEARCH SLIDE (fact1)
-          ═════════════════════════════════════════════════════════════════════ */}
-      {currentStep === "fact1" && (
-        <main className="mx-auto max-w-[840px] px-6 py-12 sm:py-16">
-          {renderFlowHeader()}
-
-          <div className="rounded-[22px] border border-[#e2e7ef] bg-gradient-to-br from-[#f7faff] to-white p-7 sm:p-9 shadow-sm">
-            <div className="text-[11px] font-[800] uppercase tracking-[1.8px] text-[#5d91ef]">
-              YOUR ANSWERS + REAL STUDENT EXPERIENCES
-            </div>
-
-            <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#edf4ff] px-3 py-1.5 text-[12px] font-[800] text-[#477bd4]">
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>
-                {recallStruggleCount > 0
-                  ? `${recallStruggleCount} of your first 3 answers point to a recall gap`
-                  : "Your recall foundation looks strong. Keep protecting it."}
-              </span>
-            </div>
-
-            <h2 className="mt-3 text-[28px] sm:text-[34px] font-[760] tracking-[-1.3px] leading-[1.2] text-[#111111]">
-              {recallStruggleCount > 0
-                ? "You are putting in effort—but recall is blocking the result."
-                : "Studying longer does not always mean remembering more."}
-            </h2>
-
-            <p className="mt-3 text-[15px] leading-[1.65] text-[#666]">
-              {recallStruggleCount > 0 ? (
-                <>
-                  You are not alone. One student on Reddit described <b>failing after 250 hours of studying</b>. Another reported studying <b>11–13 hours a day</b> and still forgetting calculus before the exam.
-                </>
-              ) : (
-                <>
-                  Even students who study for long hours report forgetting under exam pressure. One Reddit post described <b>250 hours of preparation</b> that still ended in failure.
-                </>
-              )}
-            </p>
-
-            <p className="mt-2 text-[15px] leading-[1.65] text-[#666]">
-              {recallStruggleCount > 0
-                ? "Your answers suggest the problem is not simply effort. You need more chances to retrieve formulas, steps and concepts without looking."
-                : "Your answers do not show a major recall problem right now. Regular self-testing can help keep it that way."}
-            </p>
-
-            {/* Research Callout */}
-            <div className="mt-5 rounded-[14px] border border-[#dbe7fa] bg-[#f5f8ff] p-[17px_19px] text-[14px] leading-[1.6] text-[#596574]">
-              <strong className="block text-[#111] font-bold mb-1">
-                61% remembered after one week with retrieval practice—versus 40% with repeated studying.
-              </strong>
-              In the classic experiment, students who tested themselves remembered 21 percentage points more after one week.
-            </div>
-
-            <div className="mt-4 text-[12px] text-[#8a9099]">
-              Student experiences: <a href="https://www.reddit.com/r/GetStudying/comments/1ldvpwb/failed_exam_despite_250_hours_of_studying_feeling/" target="_blank" rel="noopener noreferrer" className="text-[#5d84c8] underline underline-offset-2">250 hours but failed · Reddit</a> and <a href="https://pubmed.ncbi.nlm.nih.gov/16507066/" target="_blank" rel="noopener noreferrer" className="text-[#5d84c8] underline underline-offset-2">Roediger &amp; Karpicke, 2006</a>.
-            </div>
-          </div>
-
-          <button
-            onClick={() => setCurrentStep("q4")}
-            className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-3.5 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] cursor-pointer"
-          >
-            Continue →
-          </button>
-        </main>
-      )}
-
-      {/* ═════════════════════════════════════════════════════════════════════
-          3. FOUNDER'S MESSAGE SLIDE (founderSlide)
+          2. FOUNDER'S MESSAGE SLIDE (founderSlide)
           ═════════════════════════════════════════════════════════════════════ */}
       {currentStep === "founderSlide" && (
         <main className="mx-auto max-w-[790px] px-6 py-12 sm:py-16">
@@ -670,16 +680,6 @@ export function SaaSFlowClient({
               You do not need to fix everything today. Start with one weak topic, study one clear example, attempt one real question, and improve from the feedback.
             </p>
 
-            <div className="mt-6 flex items-center gap-3 border-t border-[#eee] pt-5">
-              <div className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-[#111] text-[16px] font-[850] text-white">
-                P
-              </div>
-              <div>
-                <div className="font-bold text-[#111] text-[16px]">Prashant Soni</div>
-                <div className="text-[13px] text-[#858a92]">Founder, Nano Syllabus</div>
-              </div>
-            </div>
-
             <button
               onClick={() => setCurrentStep("solutionSlide")}
               className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] cursor-pointer"
@@ -691,7 +691,7 @@ export function SaaSFlowClient({
       )}
 
       {/* ═════════════════════════════════════════════════════════════════════
-          4. SOLUTION ROADMAP SLIDE (solutionSlide)
+          3. SOLUTION ROADMAP SLIDE (solutionSlide)
           ═════════════════════════════════════════════════════════════════════ */}
       {currentStep === "solutionSlide" && (
         <main className="mx-auto max-w-[1200px] px-6 py-10 sm:py-14">
@@ -762,18 +762,19 @@ export function SaaSFlowClient({
           <div className="mt-16 text-center">
             <button
               onClick={() => {
-                if (user && PAYMENT_FLOW_ENABLED) {
-                  setCurrentStep("pricing");
-                } else if (user) {
-                  router.push(completionDestination);
+                if (user) {
+                  void finishStudyFlow();
                 } else {
                   setCurrentStep("login");
                 }
               }}
-              className="inline-flex w-full max-w-[380px] items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[15px] font-[700] text-white shadow-sm transition hover:opacity-90 active:scale-[0.99] cursor-pointer"
+              disabled={authLoading}
+              aria-busy={authLoading}
+              className="inline-flex w-full max-w-[380px] items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[15px] font-[700] text-white shadow-sm transition hover:opacity-90 active:scale-[0.99] cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2"
             >
-              Create my Nano Syllabus →
+              {authLoading ? "Saving answers…" : "Join Nano Syllabus →"}
             </button>
+            {authError && <p role="alert" className="mt-3 text-sm text-destructive">{authError}</p>}
           </div>
         </main>
       )}

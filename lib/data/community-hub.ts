@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CommunityDetail, CommunityTerm } from "@/lib/communities";
 import { CommunityError, getCommunity, listJoinedCommunities } from "@/lib/data/communities";
 import { getCommunitySubjectExplorerInsights } from "@/lib/data/community-subject-explorer";
+import { readCommunityLearningTopics } from "@/lib/data/community-learning-topics";
 import { ensureCommunityLearningSpace, markCommunityLearningError } from "@/lib/community-learning";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -246,7 +247,6 @@ export async function getCommunityHubForUser(
   const membershipRows = (membershipResult.data || []) as MembershipRow[];
   const memberIds = membershipRows.map((row) => String(row.user_id));
   const subjectRows = community.terms.flatMap((term) => term.subjects);
-  const subjectIds = subjectRows.map((subject) => subject.id);
   const teacherIds = [
     ...new Set(
       subjectRows.map((subject) => subject.teacherId).filter((id): id is string => Boolean(id)),
@@ -274,12 +274,8 @@ export async function getCommunityHubForUser(
     memberIds.length
       ? admin.from("student_profiles").select("user_id,full_name").in("user_id", memberIds)
       : Promise.resolve({ data: [], error: null }),
-    subjectIds.length
-      ? admin
-          .from("community_subject_topics")
-          .select("community_subject_id,topic_key")
-          .in("community_subject_id", subjectIds)
-      : Promise.resolve({ data: [], error: null }),
+    readCommunityLearningTopics(community.terms.flatMap((term) => term.subjects), admin)
+      .then((data) => ({ data, error: null })),
     teacherIds.length
       ? admin
           .from("teacher_document_files")
@@ -746,7 +742,7 @@ export async function leaveCommunityMembership(
   admin: SupabaseClient = createSupabaseAdminClient(),
 ) {
   const { community, membership } = await requireActiveCommunityMembership(admin, userId, slug);
-  if (membership.role === "creator") {
+  if (membership.role === "creator" || String(community.creator_id) === userId) {
     throw new CommunityError("Community creators cannot leave their own community.", 403);
   }
   const result = await admin.rpc("leave_community", {

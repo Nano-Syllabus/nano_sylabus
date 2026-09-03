@@ -1,12 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, BarChart3, BookOpen, CalendarRange, Target, X } from "lucide-react";
 import { academicOrdinalLabel } from "@/lib/academic";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
 import { titleCase } from "@/lib/utils";
+import { CommunityLeaveControl } from "@/components/community-leave-control";
+import {
+  initialSemesterSelection,
+  semesterSelectionReducer,
+} from "@/lib/community-semester-selection";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -320,22 +326,89 @@ export function CommunitySubjectExplorer({
   community: CommunityDetail;
   insights: Record<string, CommunitySubjectExplorerInsight>;
 }) {
+  const router = useRouter();
   const availableTerms = useMemo(
     () => [...community.terms].sort((a, b) => a.position - b.position),
     [community.terms],
   );
-  const initialTerm = availableTerms.find((term) => term.subjects.length > 0) || availableTerms[0];
-  const [selectedTermId, setSelectedTermId] = useState(initialTerm?.id || "");
+  const savedSelection = initialSemesterSelection(
+    availableTerms,
+    community.membership?.currentTermId,
+  );
+  const [semester, dispatchSemester] = useReducer(semesterSelectionReducer, savedSelection);
+  const [savingCurrent, setSavingCurrent] = useState(false);
+  const [currentError, setCurrentError] = useState("");
+  const [currentNotice, setCurrentNotice] = useState("");
+  const savingRef = useRef(false);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const selectedTerm =
-    availableTerms.find((term) => term.id === selectedTermId) || initialTerm || null;
+    availableTerms.find((term) => term.id === semester.viewedTermId) || availableTerms[0] || null;
+  const hasSavedCurrent = availableTerms.some(
+    (term) => term.id === community.membership?.currentTermId,
+  );
+  const canSaveCurrent =
+    community.membership?.status === "active" &&
+    (!hasSavedCurrent || semester.draftTermId !== semester.currentTermId);
   const selectedSubject = selectedTerm?.subjects.find(
     (subject) => subject.id === selectedSubjectId,
   );
 
+  useEffect(() => {
+    dispatchSemester({ type: "current-saved", termId: savedSelection.currentTermId });
+  }, [savedSelection.currentTermId]);
+
+  function browseSemester(termId: string) {
+    dispatchSemester({ type: "browse", termId });
+    setSelectedSubjectId(null);
+  }
+
+  async function saveCurrentSemester(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (savingRef.current || !canSaveCurrent) return;
+    const term = availableTerms.find((item) => item.id === semester.draftTermId);
+    if (!term) return;
+    savingRef.current = true;
+    setSavingCurrent(true);
+    setCurrentError("");
+    setCurrentNotice("");
+    try {
+      const response = await fetch(
+        `/api/communities/${encodeURIComponent(community.slug)}/membership`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ termId: term.id }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.currentTermId !== term.id) {
+        throw new Error(payload.error || "Could not save your current semester. Please try again.");
+      }
+      dispatchSemester({ type: "current-saved", termId: term.id });
+      setCurrentNotice(`Semester ${term.semesterNumber} saved as your current semester.`);
+    } catch (failure) {
+      setCurrentError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not save your current semester. Please try again.",
+      );
+      return;
+    } finally {
+      savingRef.current = false;
+      setSavingCurrent(false);
+    }
+    router.refresh();
+  }
+
   return (
     <main className="w-full max-w-[1240px] px-4 pb-24 pt-5 lg:p-7">
       <header className="border-b border-border pb-6">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-medium text-text-secondary">{titleCase(community.name)}</p>
+          {!community.canManage ? (
+            <CommunityLeaveControl key={community.id} community={community} />
+          ) : null}
+        </div>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
@@ -349,7 +422,7 @@ export function CommunitySubjectExplorer({
             </p>
           </div>
           {availableTerms.length > 0 ? (
-            <div className="w-full lg:w-56">
+            <form className="w-full lg:w-64" onSubmit={saveCurrentSemester}>
               <label
                 htmlFor="subject-explorer-semester"
                 className="mb-2 block text-sm font-medium text-text-secondary"
@@ -358,9 +431,20 @@ export function CommunitySubjectExplorer({
               </label>
               <select
                 id="subject-explorer-semester"
-                value={selectedTerm?.id || ""}
-                onChange={(event) => setSelectedTermId(event.target.value)}
-                className={`h-11 w-full rounded-lg border border-border bg-bg-primary px-3 text-sm text-text-primary ${focusRing}`}
+                value={semester.draftTermId}
+                disabled={savingCurrent || community.membership?.status !== "active"}
+                aria-describedby={
+                  currentError
+                    ? "subject-explorer-semester-help subject-explorer-semester-error"
+                    : "subject-explorer-semester-help"
+                }
+                aria-invalid={Boolean(currentError)}
+                onChange={(event) => {
+                  dispatchSemester({ type: "choose-current", termId: event.target.value });
+                  setCurrentError("");
+                  setCurrentNotice("");
+                }}
+                className={`h-11 w-full rounded-lg border border-border bg-bg-primary px-3 text-sm text-text-primary disabled:opacity-60 ${focusRing}`}
               >
                 {availableTerms.map((term) => (
                   <option key={term.id} value={term.id}>
@@ -368,7 +452,37 @@ export function CommunitySubjectExplorer({
                   </option>
                 ))}
               </select>
-            </div>
+              <p
+                id="subject-explorer-semester-help"
+                className="mt-2 text-xs leading-5 text-text-secondary"
+              >
+                Tabs below only change what you browse.
+              </p>
+              {canSaveCurrent ? (
+                <button
+                  type="submit"
+                  disabled={savingCurrent}
+                  aria-busy={savingCurrent}
+                  className={`mt-2 min-h-11 w-full rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse disabled:opacity-60 ${focusRing}`}
+                >
+                  {savingCurrent ? "Saving…" : currentError ? "Retry save" : "Set current semester"}
+                </button>
+              ) : null}
+              {currentError ? (
+                <p
+                  id="subject-explorer-semester-error"
+                  role="alert"
+                  className="mt-2 text-xs text-destructive"
+                >
+                  {currentError}
+                </p>
+              ) : null}
+              {currentNotice ? (
+                <p role="status" className="mt-2 text-xs text-text-secondary">
+                  {currentNotice}
+                </p>
+              ) : null}
+            </form>
           ) : null}
         </div>
       </header>
@@ -387,8 +501,28 @@ export function CommunitySubjectExplorer({
                   key={term.id}
                   type="button"
                   role="tab"
+                  id={`semester-tab-${term.id}`}
                   aria-selected={selected}
-                  onClick={() => setSelectedTermId(term.id)}
+                  aria-controls="semester-subjects-panel"
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => browseSemester(term.id)}
+                  onKeyDown={(event) => {
+                    const index = availableTerms.findIndex((item) => item.id === term.id);
+                    const next =
+                      event.key === "ArrowRight"
+                        ? (index + 1) % availableTerms.length
+                        : event.key === "ArrowLeft"
+                          ? (index - 1 + availableTerms.length) % availableTerms.length
+                          : event.key === "Home"
+                            ? 0
+                            : event.key === "End"
+                              ? availableTerms.length - 1
+                              : null;
+                    if (next === null) return;
+                    event.preventDefault();
+                    browseSemester(availableTerms[next].id);
+                    document.getElementById(`semester-tab-${availableTerms[next].id}`)?.focus();
+                  }}
                   className={`min-h-11 border-b-2 px-3 text-sm font-medium transition-colors motion-reduce:transition-none ${
                     selected
                       ? "border-text-primary text-text-primary"
@@ -396,7 +530,7 @@ export function CommunitySubjectExplorer({
                   } ${focusRing}`}
                 >
                   Semester {term.semesterNumber}
-                  {selected ? " · current" : ""}
+                  {term.id === semester.currentTermId ? " · current" : ""}
                 </button>
               );
             })}
@@ -404,7 +538,12 @@ export function CommunitySubjectExplorer({
         </div>
       ) : null}
 
-      <section className="py-7" aria-labelledby="selected-semester-subjects-heading">
+      <section
+        id="semester-subjects-panel"
+        role={selectedTerm ? "tabpanel" : undefined}
+        className="py-7"
+        aria-labelledby={selectedTerm ? `semester-tab-${selectedTerm.id}` : undefined}
+      >
         {selectedTerm ? (
           <>
             <div className="mb-5 flex flex-wrap items-end justify-between gap-3">

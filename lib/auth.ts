@@ -14,6 +14,7 @@ import {
   normalizeTargetGrade,
 } from "@/lib/profile-normalization";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { hasCompletedStudyDiagnostic } from "@/lib/study-diagnostic";
 import type { AppUser, StudentProfile } from "@/lib/types";
 
 function normalizeProfile(row: any): StudentProfile {
@@ -68,7 +69,7 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { user: null, profile: null };
+  if (!user) return { user: null, profile: null, studyDiagnosticCompleted: false };
 
   // The profile decides whether the user is onboarded and the ledger row
   // carries the credit balance. Neither depends on the other, so they go out
@@ -112,6 +113,7 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
   return {
     user: toAppUser(user, profile, creditBalance, hasUnlimitedAccess),
     profile,
+    studyDiagnosticCompleted: hasCompletedStudyDiagnostic(user.user_metadata?.study_answers),
   };
 });
 

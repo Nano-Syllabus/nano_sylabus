@@ -6,15 +6,7 @@ import { TeacherWorkspaceV2 } from "@/app/teachers-v2/teacher-workspace-v2";
 
 export const dynamic = "force-dynamic";
 
-export default async function TeachersPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ community?: string; communitySubject?: string; term?: string }>;
-}) {
-  const params = await searchParams;
-  const communitySlug = String(params.community || "").trim();
-  const communitySubjectSlug = String(params.communitySubject || "").trim();
-  const communityTermId = String(params.term || "").trim();
+export default async function TeachersPage() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -29,14 +21,7 @@ export default async function TeachersPage({
     return <TeacherOnboarding userEmail={user.email || ""} />;
   }
 
-  return (
-    <TeacherWorkspaceV2
-      teacherHandle={teacher.handle}
-      initialCommunitySlug={communitySlug}
-      initialCommunitySubjectSlug={communitySubjectSlug}
-      initialCommunityTermId={communityTermId}
-    />
-  );
+  return <TeacherWorkspaceV2 teacherHandle={teacher.handle} />;
 }
 
 function TeacherLoginRequired() {

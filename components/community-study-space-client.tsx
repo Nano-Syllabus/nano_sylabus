@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, BookOpen, Library, Plus, RefreshCw, X } from "lucide-react";
+import { ArrowRight, BookOpen, Plus, RefreshCw, X } from "lucide-react";
 import {
   communitySubjectInputSchema,
   type CommunityDetail,
   type CreatorSubjectOption,
 } from "@/lib/communities";
 import { titleCase } from "@/lib/utils";
+import { teacherCommunitySubjectHref, teacherSemesterYear } from "@/lib/teacher-subject-navigation";
+import { CommunityTopicExtractionControl } from "@/components/community-topic-extraction-control";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -21,17 +23,23 @@ export function CommunityStudySpaceClient({
   mode = "student",
   onCreateSubject,
   teacherWorkspaceBaseHref,
+  onSubjectAttached,
 }: {
   initialCommunity: CommunityDetail;
   mode?: "student" | "teacher";
   onCreateSubject?: (termId: string) => void;
   teacherWorkspaceBaseHref?: string;
+  onSubjectAttached?: () => Promise<unknown> | void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [community, setCommunity] = useState(initialCommunity);
-  const [selectedYear, setSelectedYear] = useState(1);
+  const selectedTermId =
+    mode === "teacher" ? searchParams.get("term") || searchParams.get("attachTerm") || "" : "";
+  const [selectedYear, setSelectedYear] = useState(() =>
+    teacherSemesterYear(initialCommunity.terms, selectedTermId),
+  );
   const [addingToTerm, setAddingToTerm] = useState<string | null>(null);
   const [creatorSubjects, setCreatorSubjects] = useState<CreatorSubjectOption[]>([]);
   const [libraryState, setLibraryState] = useState<LibraryState>("idle");
@@ -50,6 +58,10 @@ export function CommunityStudySpaceClient({
   useEffect(() => {
     setCommunity(initialCommunity);
   }, [initialCommunity]);
+  useEffect(() => {
+    if (mode === "teacher")
+      setSelectedYear(teacherSemesterYear(initialCommunity.terms, selectedTermId));
+  }, [initialCommunity.terms, mode, selectedTermId]);
 
   const loadCreatorSubjects = useCallback(async () => {
     setLibraryState("loading");
@@ -113,6 +125,7 @@ export function CommunityStudySpaceClient({
           .flatMap((term) => term.subjects)
           .find((subject) => subject.externalSubjectSlug === subjectSlug);
         setNotice(`${attached?.name || "Subject"} attached to this semester.`);
+        await onSubjectAttached?.();
         return true;
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Could not attach the subject.");
@@ -121,7 +134,7 @@ export function CommunityStudySpaceClient({
         setAttachingSlug(null);
       }
     },
-    [community.slug],
+    [community.slug, onSubjectAttached],
   );
 
   useEffect(() => {
@@ -132,15 +145,18 @@ export function CommunityStudySpaceClient({
     if (autoAttachKey.current === key) return;
     autoAttachKey.current = key;
     const term = community.terms.find((item) => item.id === termId);
+    const cleanedParams = new URLSearchParams(searchParams.toString());
+    cleanedParams.delete("attach");
+    const returnHref = `${pathname}${cleanedParams.size ? `?${cleanedParams}` : ""}`;
     if (!term) {
       setError("The selected semester no longer exists in this community.");
-      router.replace(pathname, { scroll: false });
+      router.replace(returnHref, { scroll: false });
       return;
     }
     setSelectedYear(term.yearNumber);
     setAddingToTerm(termId);
     void attachSubject(termId, subjectSlug).finally(() => {
-      router.replace(pathname, { scroll: false });
+      router.replace(returnHref, { scroll: false });
     });
   }, [attachSubject, canManage, community.terms, pathname, router, searchParams]);
 
@@ -172,6 +188,13 @@ export function CommunityStudySpaceClient({
             onClick={() => {
               setSelectedYear(year);
               closePicker();
+              if (mode === "teacher") {
+                const params = new URLSearchParams(searchParams.toString());
+                const firstTerm = community.terms.find((term) => term.yearNumber === year);
+                if (firstTerm) params.set("term", firstTerm.id);
+                else params.delete("term");
+                window.history.replaceState(null, "", `${pathname}?${params}`);
+              }
             }}
             className={`inline-flex min-h-10 items-center rounded-full border px-4 text-sm font-medium transition ${focusRing} ${selectedYear === year ? "border-text-primary bg-text-primary text-text-inverse" : "border-border bg-bg-primary text-text-secondary hover:bg-bg-secondary"}`}
           >
@@ -197,56 +220,45 @@ export function CommunityStudySpaceClient({
                   <h2 id={`term-${term.id}`} className="mt-2 font-display text-xl font-semibold">
                     Semester {term.semesterNumber}
                   </h2>
+                  {canManage ? (
+                    <p className="mt-1 text-xs text-text-secondary">
+                      {term.subjects.length} {term.subjects.length === 1 ? "subject" : "subjects"}
+                    </p>
+                  ) : null}
                 </div>
                 {canManage ? (
                   <button
                     type="button"
-                    aria-expanded={addingToTerm === term.id}
-                    onClick={() => togglePicker(term.id)}
-                    className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-3 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
+                    aria-label={`Add subject to Semester ${term.semesterNumber}`}
+                    onClick={() => onCreateSubject?.(term.id)}
+                    disabled={!onCreateSubject}
+                    className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse hover:opacity-90 disabled:opacity-50 ${focusRing}`}
                   >
-                    {addingToTerm === term.id ? (
-                      <X className="size-4" aria-hidden="true" />
-                    ) : (
-                      <Plus className="size-4" aria-hidden="true" />
-                    )}
-                    {addingToTerm === term.id ? "Close" : "Add subject"}
+                    <Plus className="size-4" aria-hidden="true" />
+                    Add subject
                   </button>
                 ) : null}
               </div>
 
-              {addingToTerm === term.id ? (
-                <div className="mt-5 rounded-lg border border-border bg-bg-secondary p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-bg-primary">
-                      <Library className="size-4" aria-hidden="true" />
-                    </span>
-                    <div>
-                      <h3 className="text-sm font-semibold">Community subject workspace</h3>
-                      <p className="mt-1 text-xs leading-5 text-text-secondary">
-                        Create a new subject here or attach one you already prepared. Its syllabus,
-                        learning map, forum, and challenges remain reusable.
-                      </p>
-                    </div>
-                  </div>
+              {canManage ? (
+                <button
+                  type="button"
+                  aria-expanded={addingToTerm === term.id}
+                  aria-controls={`reuse-${term.id}`}
+                  onClick={() => togglePicker(term.id)}
+                  className={`mt-2 inline-flex min-h-10 items-center gap-2 rounded-md text-sm text-text-secondary hover:text-text-primary ${focusRing}`}
+                >
+                  {addingToTerm === term.id ? <X className="size-4" aria-hidden="true" /> : null}
+                  {addingToTerm === term.id ? "Close existing subjects" : "Use an existing subject"}
+                </button>
+              ) : null}
 
-                  <div className="mt-4 rounded-lg border border-border bg-bg-primary p-4">
-                    <p className="text-sm font-semibold">Create a new subject</p>
-                    <p className="mt-1 text-xs leading-5 text-text-secondary">
-                      Use the full Creator Workspace flow to add its syllabus, notes, and question
-                      bank. The completed subject will attach to Semester {term.semesterNumber}
-                      automatically.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => onCreateSubject?.(term.id)}
-                      disabled={!onCreateSubject}
-                      className={`mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse disabled:opacity-50 ${focusRing}`}
-                    >
-                      <Plus className="size-4" aria-hidden="true" />
-                      Open subject creator
-                    </button>
-                  </div>
+              {addingToTerm === term.id ? (
+                <div
+                  id={`reuse-${term.id}`}
+                  className="mt-2 rounded-lg border border-border bg-bg-secondary p-4"
+                >
+                  <h3 className="text-sm font-semibold">Add from your subject library</h3>
 
                   {error ? (
                     <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
@@ -320,7 +332,7 @@ export function CommunityStudySpaceClient({
                       <BookOpen className="mx-auto size-6 text-text-muted" aria-hidden="true" />
                       <p className="mt-3 text-sm font-medium">No reusable subjects available</p>
                       <p className="mt-1 text-xs leading-5 text-text-muted">
-                        Use the subject creator above to build this semester&apos;s first subject.
+                        Use Add subject to create a new one for this semester.
                       </p>
                     </div>
                   ) : null}
@@ -341,34 +353,48 @@ export function CommunityStudySpaceClient({
                         <span className="block text-sm font-medium">{titleCase(subject.name)}</span>
                         <span className="mt-0.5 block text-xs text-text-muted">
                           {canManage
-                            ? subject.code || "Community subject workspace"
+                            ? [subject.code, "Community members"].filter(Boolean).join(" · ")
                             : subject.code || "Subject workspace"}
                         </span>
                       </div>
-                      {canManage ? (
+                      {canManage && subject.externalSubjectSlug ? (
                         <Link
-                          href={`${teacherWorkspaceBaseHref || `/teachers?view=communities&community=${encodeURIComponent(community.slug)}`}&communitySubject=${encodeURIComponent(subject.slug)}&term=${encodeURIComponent(term.id)}`}
+                          href={teacherCommunitySubjectHref(
+                            teacherWorkspaceBaseHref ||
+                              `/teachers?view=communities&community=${encodeURIComponent(community.slug)}`,
+                            subject.externalSubjectSlug,
+                            term.id,
+                          )}
                           className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-4 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
                         >
-                          Open {titleCase(subject.name)} workspace
+                          Open {titleCase(subject.name)}
                           <ArrowRight className="size-4" aria-hidden="true" />
                         </Link>
+                      ) : canManage ? (
+                        <span className="text-xs text-text-muted">Subject editor unavailable</span>
                       ) : (
                         <ArrowRight
                           className="size-4 text-text-muted transition-transform motion-reduce:transition-none group-hover:translate-x-0.5"
                           aria-hidden="true"
                         />
                       )}
+                      {canManage && subject.externalSubjectSlug ? (
+                        <CommunityTopicExtractionControl
+                          communitySlug={community.slug}
+                          subject={subject}
+                          onExtracted={onSubjectAttached}
+                        />
+                      ) : null}
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="mt-5 rounded-lg border border-dashed border-border p-6 text-center">
                   <BookOpen className="mx-auto size-7 text-text-muted" aria-hidden="true" />
-                  <p className="mt-3 text-sm font-medium">No subjects attached yet</p>
+                  <p className="mt-3 text-sm font-medium">No subjects yet</p>
                   <p className="mt-1 text-xs leading-5 text-text-muted">
                     {canManage
-                      ? "Use Add subject to create or attach this semester's first subject."
+                      ? "Add your first subject for this semester."
                       : "The community creator has not added a subject to this semester yet."}
                   </p>
                 </div>

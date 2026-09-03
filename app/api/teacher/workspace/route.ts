@@ -10,6 +10,7 @@ import {
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { profileFromUser, withTeacherAvatar } from "@/lib/teacher-public-profile";
+import { groupSubjectCommunities } from "@/lib/teacher-subject-access";
 
 export async function GET() {
   try {
@@ -34,7 +35,7 @@ export async function GET() {
       getTeacherDocuments(teacher.collection_sk),
     ]);
     const admin = createSupabaseAdminClient();
-    const [{ data: documentFiles }, { data: subjectProfiles }] = await Promise.all([
+    const [{ data: documentFiles }, { data: subjectProfiles }, communityLinks] = await Promise.all([
       admin
         .from("teacher_document_files")
         .select("id,collection_path,external_document_id")
@@ -45,7 +46,17 @@ export async function GET() {
           "subject_slug,subject_name,subject_code,university,programme,visibility,folder_path",
         )
         .eq("teacher_id", teacher.id),
+      admin
+        .from("community_subjects")
+        .select("external_subject_slug,status,communities!inner(slug,name,status)")
+        .eq("teacher_id", teacher.id)
+        .eq("status", "active")
+        .eq("communities.status", "active"),
     ]);
+    // Never mislabel shared material if its access metadata could not be read.
+    if (communityLinks.error)
+      throw new Error("Could not load subject community access. Please try again.");
+    const communitiesBySubject = groupSubjectCommunities(communityLinks.data || []);
     const { data: profile } = await admin
       .from("student_profiles")
       .select("full_name,language_pref")
@@ -71,7 +82,10 @@ export async function GET() {
       subjects,
       sourceTree,
       documents,
-      subjectProfiles: subjectProfiles || [],
+      subjectProfiles: (subjectProfiles || []).map((profile) => ({
+        ...profile,
+        communities: communitiesBySubject.get(String(profile.subject_slug)) || [],
+      })),
       previewPaths: (documentFiles || []).flatMap((item) =>
         [item.collection_path, item.external_document_id, item.id].filter(
           (value): value is string => typeof value === "string" && Boolean(value),

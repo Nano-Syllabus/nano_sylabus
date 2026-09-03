@@ -115,7 +115,7 @@ async function hydrateCommunitySummaries(
     viewerId
       ? admin
           .from("community_memberships")
-          .select("community_id,role,status,joined_at")
+          .select("community_id,role,status,joined_at,current_term_id")
           .in("community_id", ids)
           .eq("user_id", viewerId)
       : Promise.resolve({ data: [], error: null }),
@@ -567,6 +567,35 @@ export async function attachCommunitySubject(
   const community = await getCommunity(communitySlugValue, creatorId, admin);
   if (!community) throw new CommunityError("Community not found.", 404);
   return community;
+}
+
+export async function deleteOwnedCommunity(
+  userId: string,
+  slug: string,
+  confirmation: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+) {
+  const { data, error } = await admin.rpc("delete_owned_community", {
+    target_user_id: userId,
+    target_community_slug: slug,
+    confirmation_slug: confirmation,
+  });
+  if (error) {
+    if (error.code === "42501")
+      throw new CommunityError("Only the community creator can delete this community.", 403);
+    if (error.code === "P0002") throw new CommunityError("Community not found.", 404);
+    if (error.code === "22023")
+      throw new CommunityError("Type the community URL name exactly to confirm deletion.", 400);
+    if (error.code === "PGRST202" || error.code === "42883") {
+      throw new CommunityError(
+        "Community deletion is not available yet. The database update must be installed first.",
+        503,
+      );
+    }
+    throw error;
+  }
+  if (!data) throw new CommunityError("The community could not be deleted. Try again.", 502);
+  return { deleted: true, communityId: String(data) };
 }
 
 export function communityStorageError(error: unknown) {
