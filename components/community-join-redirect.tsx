@@ -53,7 +53,7 @@ export function CommunityJoinRedirect({ slug }: { slug: string }) {
         </h1>
         <p className="mt-2 text-sm leading-6 text-text-secondary">
           {joining
-            ? "Saving this academic community before your quick study questionnaire."
+            ? "Saving your membership and opening your community."
             : error}
         </p>
         {!joining && error ? (

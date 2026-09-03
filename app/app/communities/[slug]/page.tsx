@@ -21,7 +21,11 @@ export default async function CommunityStudySpacePage({ params }: PageProps) {
   return (
     <>
       <SetAppShell title="Subject Explorer" />
-      <CommunitySubjectExplorer community={community} insights={insights} />
+      <CommunitySubjectExplorer
+        key={`${user.id}:${community.id}`}
+        community={community}
+        insights={insights}
+      />
     </>
   );
 }

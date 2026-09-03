@@ -3,15 +3,35 @@ import { z } from "zod";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { askTeacherSubject, getTeacherSubjects, TeacherApiError } from "@/lib/teacher-app/client";
+import { syncTeacherSyllabusToCommunities } from "@/lib/data/community-subjects";
+import { revalidatePath } from "next/cache";
 
 type Context = { params: Promise<{ slug: string }> };
+
+export const maxDuration = 180;
 
 const topicSchema = z.object({ name: z.string().trim().min(1).max(200) });
 const chapterSchema = z.object({
   title: z.string().trim().min(1).max(200),
   topics: z.array(topicSchema).max(100),
 });
-const structureSchema = z.array(chapterSchema).max(100);
+const structureSchema = z.array(chapterSchema).min(1).max(100);
+
+async function publishSyllabus(userId: string, teacherId: string, slug: string) {
+  try {
+    const sync = await syncTeacherSyllabusToCommunities(userId, teacherId, slug);
+    if (sync.subjectsSynced > 0 && sync.topicCount === 0) {
+      throw new Error("No executable challenge topics were returned.");
+    }
+    revalidatePath("/teachers");
+    revalidatePath("/app", "layout");
+    return sync;
+  } catch {
+    throw new Error(
+      "The syllabus was saved, but its community topics could not be synced. Save the structure again to retry.",
+    );
+  }
+}
 
 async function teacherAndSubject(context: Context) {
   const teacher = await getTeacherProfile();
@@ -70,21 +90,28 @@ export async function PUT(request: Request, context: Context) {
     }
     const admin = createSupabaseAdminClient();
     const updatedAt = new Date().toISOString();
-    const { error } = await admin
-      .from("teacher_subject_syllabi")
-      .upsert(
-        {
-          teacher_id: teacher.id,
-          subject_slug: slug,
-          structure: parsed.data,
-          updated_at: updatedAt,
-        },
-        { onConflict: "teacher_id,subject_slug" },
-      );
+    const { error } = await admin.from("teacher_subject_syllabi").upsert(
+      {
+        teacher_id: teacher.id,
+        subject_slug: slug,
+        structure: parsed.data,
+        updated_at: updatedAt,
+      },
+      { onConflict: "teacher_id,subject_slug" },
+    );
     if (error) throw error;
-    return NextResponse.json({ structure: parsed.data, updatedAt });
-  } catch {
-    return NextResponse.json({ error: "Could not save the syllabus structure." }, { status: 502 });
+    const sync = await publishSyllabus(teacher.user_id, teacher.id, slug);
+    return NextResponse.json({ structure: parsed.data, updatedAt, sync });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error && error.message.startsWith("The syllabus was saved")
+            ? error.message
+            : "Could not save the syllabus structure.",
+      },
+      { status: 502 },
+    );
   }
 }
 
@@ -117,16 +144,19 @@ export async function POST(_request: Request, context: Context) {
         { onConflict: "teacher_id,subject_slug" },
       );
     if (error) throw error;
-    return NextResponse.json({ structure, updatedAt });
+    const sync = await publishSyllabus(teacher.user_id, teacher.id, slug);
+    return NextResponse.json({ structure, updatedAt, sync });
   } catch (error) {
     const apiError = error instanceof TeacherApiError ? error : null;
     const status = apiError?.status === 404 ? 404 : apiError?.status === 408 ? 504 : 502;
     const message =
-      apiError?.status === 404
-        ? "Index a syllabus file before extracting units."
-        : apiError?.message
-          ? `Could not extract the syllabus structure: ${apiError.message}`
-          : "Could not extract the syllabus structure.";
+      error instanceof Error && error.message.startsWith("The syllabus was saved")
+        ? error.message
+        : apiError?.status === 404
+          ? "Index a syllabus file before extracting units."
+          : apiError?.message
+            ? `Could not extract the syllabus structure: ${apiError.message}`
+            : "Could not extract the syllabus structure.";
     return NextResponse.json({ error: message }, { status });
   }
 }

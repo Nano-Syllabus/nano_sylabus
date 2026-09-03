@@ -82,10 +82,11 @@ describe("communities", () => {
       },
       12,
       6,
-      { role: "member", status: "active", joined_at: "2026-08-30T01:00:00.000Z" },
+      { role: "member", status: "active", joined_at: "2026-08-30T01:00:00.000Z", current_term_id: "semester-2" },
     );
     expect(community.memberCount).toBe(12);
     expect(community.subjectCount).toBe(6);
     expect(community.membership?.role).toBe("member");
+    expect(community.membership?.currentTermId).toBe("semester-2");
   });
 });

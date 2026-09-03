@@ -56,6 +56,7 @@ export type CommunityMembership = {
   role: "creator" | "member";
   status: "active" | "left";
   joinedAt: string;
+  currentTermId?: string | null;
 };
 
 export type CommunitySubject = {
@@ -173,6 +174,7 @@ export function mapCommunitySummary(
           role: membership.role === "creator" ? "creator" : "member",
           status: membership.status === "left" ? "left" : "active",
           joinedAt: String(membership.joined_at || ""),
+          currentTermId: membership.current_term_id ? String(membership.current_term_id) : null,
         }
       : null,
     createdAt: String(row.created_at || ""),

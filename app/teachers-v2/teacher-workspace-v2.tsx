@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -13,8 +14,8 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { CommunityStudySpaceClient } from "@/components/community-study-space-client";
-import { CommunitySubjectWorkspaceClient } from "@/components/community-subject-workspace-client";
-import { TeacherCoursesClient, TeacherCoursesOverview } from "@/components/teacher-courses-client";
+import { CommunityTopicExtractionControl } from "@/components/community-topic-extraction-control";
+import { TeacherCoursesClient } from "@/components/teacher-courses-client";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
@@ -23,6 +24,9 @@ import {
   scoreDistribution,
 } from "@/lib/teacher-score-insights";
 import { TEACHER_UPLOAD_MAX_LABEL, teacherUploadSizeError } from "@/lib/teacher-upload";
+import { teacherLegacySubjectHref, teacherSubjectsHref } from "@/lib/teacher-subject-navigation";
+import { CommunityDeleteControl } from "@/components/community-delete-control";
+import { subjectAccessLabel, type SubjectCommunity } from "@/lib/teacher-subject-access";
 import type { CommunityDetail } from "@/lib/communities";
 import type { CommunitySubjectWorkspace } from "@/lib/data/community-subjects";
 import { cn, titleCase } from "@/lib/utils";
@@ -59,6 +63,7 @@ type TeacherSubject = {
   university: string;
   programme: string;
   visibility: "public" | "private";
+  communities: SubjectCommunity[];
 };
 
 type TeacherDocument = {
@@ -558,10 +563,13 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
         code: text(profile.subject_code),
         university: text(profile.university),
         programme: text(profile.programme),
-        // Subject visibility is intentionally not user-selectable. A subject
-        // stays private in the creator library; course visibility controls
-        // whether attached content is exposed to enrolled students.
-        visibility: "private",
+        // Library storage visibility is separate from community member access.
+        visibility: profile.visibility === "public" ? "public" : "private",
+        communities: list(profile.communities).flatMap((community) => {
+          const slug = text(community.slug);
+          const name = text(community.name);
+          return slug && name ? [{ slug, name }] : [];
+        }),
       },
     ];
   });
@@ -1204,17 +1212,16 @@ function WorkspaceSkeleton() {
   );
 }
 
-export function TeacherWorkspaceV2({
-  teacherHandle,
-  initialCommunitySlug = "",
-  initialCommunitySubjectSlug = "",
-  initialCommunityTermId = "",
-}: {
-  teacherHandle: string;
-  initialCommunitySlug?: string;
-  initialCommunitySubjectSlug?: string;
-  initialCommunityTermId?: string;
-}) {
+export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string }) {
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
+  const communitySlug = searchParams.get("community") || searchParams.get("attachCommunity") || "";
+  const communitySubjectSlug = searchParams.get("communitySubject") || "";
+  const communityTermId = searchParams.get("term") || searchParams.get("attachTerm") || "";
+  const showSubjectLibrary = searchParams.get("library") === "1";
+  const dashboardKey = JSON.stringify([communitySlug]);
+  const dashboardRequest = useRef(0);
+  const [loadedDashboardKey, setLoadedDashboardKey] = useState("");
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>("loading");
   const [workspaceError, setWorkspaceError] = useState("");
   const [recoveryState, setRecoveryState] = useState<RecoveryState>("idle");
@@ -1223,7 +1230,8 @@ export function TeacherWorkspaceV2({
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [dashboardState, setDashboardState] = useState<DashboardState>("loading");
   const [dashboardError, setDashboardError] = useState("");
-  const [dashboard, setDashboard] = useState<TeacherDashboard | null>(null);
+  const [dashboardData, setDashboard] = useState<TeacherDashboard | null>(null);
+  const dashboard = loadedDashboardKey === dashboardKey ? dashboardData : null;
   const [view, setView] = useState<MainView>("communities");
   const [selectedSlug, setSelectedSlug] = useState("");
   const [selectedClassroomId, setSelectedClassroomId] = useState("");
@@ -1262,29 +1270,30 @@ export function TeacherWorkspaceV2({
   }, []);
 
   const loadDashboard = useCallback(async () => {
+    const request = ++dashboardRequest.current;
     setDashboardState("loading");
     setDashboardError("");
     try {
       const communityParams = new URLSearchParams();
-      if (initialCommunitySlug) communityParams.set("community", initialCommunitySlug);
-      if (initialCommunitySubjectSlug) {
-        communityParams.set("communitySubject", initialCommunitySubjectSlug);
-      }
+      if (communitySlug) communityParams.set("community", communitySlug);
       const communityQuery = communityParams.size ? `?${communityParams.toString()}` : "";
       const response = await fetch(`/api/teacher/dashboard${communityQuery}`, {
         headers: { Accept: "application/json" },
         cache: "no-store",
       });
       const payload = await responsePayload(response);
+      if (request !== dashboardRequest.current) return;
       setDashboard(normalizeDashboard(payload));
+      setLoadedDashboardKey(dashboardKey);
       setDashboardState("ready");
     } catch (error) {
+      if (request !== dashboardRequest.current) return;
       setDashboardError(
         error instanceof Error ? error.message : "Could not load the teacher dashboard.",
       );
       setDashboardState("error");
     }
-  }, [initialCommunitySlug, initialCommunitySubjectSlug]);
+  }, [communitySlug, dashboardKey]);
 
   const pollIndexingJob = useCallback(
     async (jobId: string, fileName: string) => {
@@ -1311,7 +1320,7 @@ export function TeacherWorkspaceV2({
           await loadWorkspace();
           setToast(
             state === "complete"
-              ? `${fileName} is indexed and ready`
+              ? `${fileName} is indexed. Extract challenge topics from Create Subjects to update the community learning map.`
               : `${fileName} could not be indexed`,
           );
           return;
@@ -1372,9 +1381,12 @@ export function TeacherWorkspaceV2({
   }, [loadWorkspace]);
   useEffect(() => {
     void loadDashboard();
+    return () => {
+      dashboardRequest.current += 1;
+    };
   }, [loadDashboard]);
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(search);
     const paperId = params.get("paper") || "";
     if (paperId) {
       setRequestedPaperId(paperId);
@@ -1384,7 +1396,7 @@ export function TeacherWorkspaceV2({
 
     const returnTo = safeCommunityReturnTo(params.get("returnTo"));
     setCommunityReturnTo(returnTo);
-    const requestedView = params.get("view");
+    const requestedView = params.get("view") || "communities";
     if (
       requestedView === "today" ||
       requestedView === "communities" ||
@@ -1396,12 +1408,12 @@ export function TeacherWorkspaceV2({
     ) {
       setView(requestedView);
     }
-    if (params.get("community")) setView("communities");
+    if (params.get("community") && requestedView !== "subjects") setView("communities");
     if (params.get("view") === "subjects" || params.get("subject") || params.get("newSubject")) {
       setView("subjects");
     }
     const subjectSlug = params.get("subject") || "";
-    if (subjectSlug) setSelectedSlug(subjectSlug);
+    setSelectedSlug(subjectSlug);
     const requestedTab = params.get("tab");
     if (
       requestedTab === "overview" ||
@@ -1415,9 +1427,44 @@ export function TeacherWorkspaceV2({
       setSubjectTab(requestedTab);
     }
     if (params.get("newSubject") === "1") {
-      setDialog({ type: "create-subject", communityReturnTo: returnTo || undefined });
+      const attachCommunity = params.get("attachCommunity") || "";
+      const attachTerm = params.get("attachTerm") || "";
+      setDialog((current) =>
+        current?.type === "create-subject" &&
+        current.communityAttach?.slug === attachCommunity &&
+        current.communityAttach?.termId === attachTerm
+          ? current
+          : {
+              type: "create-subject",
+              communityReturnTo: returnTo || undefined,
+              communityAttach:
+                attachCommunity && attachTerm
+                  ? {
+                      slug: attachCommunity,
+                      termId: attachTerm,
+                      university: "",
+                      programme: "",
+                    }
+                  : undefined,
+            },
+      );
+    } else {
+      setDialog((current) =>
+        current?.type === "create-subject" && current.communityAttach ? null : current,
+      );
     }
-  }, []);
+  }, [search]);
+  useEffect(() => {
+    if (!communitySubjectSlug || searchParams.get("subject") || !dashboard?.communityWorkspace) {
+      return;
+    }
+    const href = teacherLegacySubjectHref(
+      dashboard.communityWorkspace,
+      communitySubjectSlug,
+      communityTermId,
+    );
+    if (href) window.history.replaceState(null, "", href);
+  }, [communitySubjectSlug, communityTermId, dashboard, searchParams]);
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(""), 3000);
@@ -1426,6 +1473,10 @@ export function TeacherWorkspaceV2({
 
   const selectedSubject =
     workspace?.subjects.find((subject) => subject.slug === selectedSlug) || null;
+  const selectedCommunitySubject = dashboard?.communityWorkspace?.canManage
+    ? dashboard.communityWorkspace.terms.flatMap((term) => term.subjects)
+        .find((subject) => subject.externalSubjectSlug === selectedSubject?.slug)
+    : undefined;
   const subjectDocuments = useMemo(
     () =>
       selectedSubject && workspace
@@ -1479,21 +1530,62 @@ export function TeacherWorkspaceV2({
   }, [selectedSubject, subjectTab, syllabi]);
 
   function navigate(next: MainView) {
-    if (initialCommunitySlug) {
-      window.location.assign(
-        next === "communities" ? "/teachers?view=communities" : `/teachers?view=${next}`,
-      );
-      return;
-    }
+    window.history.pushState(null, "", `/teachers?view=${next}`);
     setView(next);
-    if (next !== "subjects") setSelectedSlug("");
+    setSelectedSlug("");
+    setDialog(null);
     if (next !== "classrooms") setSelectedClassroomId("");
   }
 
   function openSubject(subject: TeacherSubject) {
+    window.history.pushState(
+      null,
+      "",
+      teacherSubjectsHref({
+        community: communitySlug,
+        term: communityTermId,
+        library: true,
+        subject: subject.slug,
+      }),
+    );
     setView("subjects");
     setSelectedSlug(subject.slug);
     setSubjectTab("overview");
+  }
+
+  function openCommunitySubjectCreator(communityAttach: {
+    slug: string;
+    termId: string;
+    university: string;
+    programme: string;
+  }) {
+    window.history.pushState(
+      null,
+      "",
+      teacherSubjectsHref({
+        community: communityAttach.slug,
+        term: communityAttach.termId,
+        create: true,
+      }),
+    );
+    setView("subjects");
+    setSelectedSlug("");
+    setSelectedClassroomId("");
+    setDialog({ type: "create-subject", communityAttach });
+  }
+
+  function closeCreateSubjectDialog() {
+    if (dialog?.type === "create-subject" && dialog.communityAttach) {
+      window.history.replaceState(
+        null,
+        "",
+        teacherSubjectsHref({
+          community: dialog.communityAttach.slug,
+          term: dialog.communityAttach.termId,
+        }),
+      );
+    }
+    setDialog(null);
   }
 
   if (workspaceState === "loading" && !workspace) return <WorkspaceSkeleton />;
@@ -1602,7 +1694,6 @@ export function TeacherWorkspaceV2({
               ["today", "Analytics"],
               ["communities", "My Communities"],
               ["subjects", "Create Subjects"],
-              ["courses", "Publish Courses"],
               ["settings", "Your Public Profile"],
             ] as const
           ).map(([value, label]) => (
@@ -1750,7 +1841,6 @@ export function TeacherWorkspaceV2({
               ["today", "Analytics"],
               ["communities", "My Communities"],
               ["subjects", "Create Subjects"],
-              ["courses", "Publish Courses"],
               ["settings", "Your Public Profile"],
             ] as const
           ).map(([value, label]) => (
@@ -1782,7 +1872,6 @@ export function TeacherWorkspaceV2({
               state={dashboardState}
               error={dashboardError}
               onSetExam={() => navigate("exams")}
-              onCourses={() => navigate("courses")}
               profileComplete={workspace.teacher.publicProfile.complete}
               communityAdmin={dashboard?.communityAdmin || null}
               onSubjects={() => navigate("subjects")}
@@ -1796,12 +1885,12 @@ export function TeacherWorkspaceV2({
               state={dashboardState}
               error={dashboardError}
               onRetry={() => void loadDashboard()}
-              selectedSubjectSlug={initialCommunitySubjectSlug}
-              selectedTermId={initialCommunityTermId}
-              onRefresh={() => loadDashboard()}
-              onCreateSubject={(communityAttach) =>
-                setDialog({ type: "create-subject", communityAttach })
-              }
+              selectedSubjectSlug={communitySubjectSlug}
+              selectedTermId={communityTermId}
+              onRefresh={async () => {
+                await Promise.all([loadDashboard(), loadWorkspace()]);
+              }}
+              onCreateSubject={openCommunitySubjectCreator}
             />
           ) : null}
           {view === "courses" ? (
@@ -1846,22 +1935,70 @@ export function TeacherWorkspaceV2({
               onDashboardRefresh={() => void loadDashboard()}
             />
           ) : null}
-          {view === "subjects" && !selectedSubject ? (
-            <SubjectsView
-              workspace={workspace}
-              onCreate={() => setDialog({ type: "create-subject" })}
-              onOpen={openSubject}
-              onCollectionOverview={() => setDialog({ type: "collection-overview" })}
+          {view === "subjects" && !selectedSubject && !showSubjectLibrary ? (
+            <CommunitiesView
+              subjectsMode
+              dashboard={dashboard}
+              state={dashboardState}
+              error={dashboardError}
+              onRetry={() => void loadDashboard()}
+              selectedSubjectSlug={communitySubjectSlug}
+              selectedTermId={communityTermId}
+              onRefresh={async () => {
+                await Promise.all([loadDashboard(), loadWorkspace()]);
+              }}
+              onCreateSubject={openCommunitySubjectCreator}
             />
           ) : null}
+          {view === "subjects" && !selectedSubject && showSubjectLibrary ? (
+            <>
+              <Link
+                href={teacherSubjectsHref({ community: communitySlug, term: communityTermId })}
+                className={cn(
+                  "mb-5 inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
+                  interactive,
+                )}
+              >
+                ← Community subjects
+              </Link>
+              <SubjectsView
+                workspace={workspace}
+                onCreate={() => setDialog({ type: "create-subject" })}
+                onOpen={openSubject}
+                onCollectionOverview={() => setDialog({ type: "collection-overview" })}
+              />
+            </>
+          ) : null}
           {view === "subjects" && selectedSubject ? (
+            <>
+            {selectedCommunitySubject && dashboard?.communityWorkspace ? (
+              <div className="mb-5">
+                <CommunityTopicExtractionControl
+                  key={selectedCommunitySubject.id}
+                  communitySlug={dashboard.communityWorkspace.slug}
+                  subject={selectedCommunitySubject}
+                  onExtracted={loadDashboard}
+                />
+              </div>
+            ) : null}
             <SubjectView
               subject={selectedSubject}
               documents={subjectDocuments}
               sourceTree={workspace.sourceTree}
               tab={subjectTab}
               onTab={setSubjectTab}
-              onBack={() => setSelectedSlug("")}
+              onBack={() => {
+                setSelectedSlug("");
+                window.history.pushState(
+                  null,
+                  "",
+                  teacherSubjectsHref({
+                    community: communitySlug,
+                    term: communityTermId,
+                    library: showSubjectLibrary || !communitySlug,
+                  }),
+                );
+              }}
               onUpload={(shelf) => setDialog({ type: "upload", shelf })}
               onCreateFolder={(shelf) => setDialog({ type: "create-folder", shelf })}
               onDocument={(document) => setDialog({ type: "document", document })}
@@ -1886,6 +2023,7 @@ export function TeacherWorkspaceV2({
                 await loadWorkspace();
               }}
             />
+            </>
           ) : null}
           {view === "settings" ? (
             <TeacherSettingsView
@@ -1901,9 +2039,23 @@ export function TeacherWorkspaceV2({
 
       {dialog?.type === "create-subject" ? (
         <CreateSubjectDialog
-          initialUniversity={dialog.communityAttach?.university}
-          initialProgramme={dialog.communityAttach?.programme}
-          onClose={() => setDialog(null)}
+          communityContext={
+            dialog.communityAttach
+              ? {
+                  name: dashboard?.communityWorkspace?.name || dialog.communityAttach.slug,
+                  semester: dashboard?.communityWorkspace?.terms.find(
+                    (term) => term.id === dialog.communityAttach?.termId,
+                  )?.semesterNumber,
+                }
+              : undefined
+          }
+          initialUniversity={
+            dialog.communityAttach?.university || dashboard?.communityWorkspace?.university
+          }
+          initialProgramme={
+            dialog.communityAttach?.programme || dashboard?.communityWorkspace?.faculty
+          }
+          onClose={closeCreateSubjectDialog}
           onCreated={async (result) => {
             const returnTo = dialog.returnTo;
             const creatorReturnTo = dialog.communityReturnTo;
@@ -1927,10 +2079,21 @@ export function TeacherWorkspaceV2({
                   },
                 ),
               );
-              await loadDashboard();
+              await Promise.all([loadDashboard(), loadWorkspace()]);
               setDialog(null);
-              setView("communities");
-              setToast(`${result.name} created and attached to the selected semester`);
+              setView("subjects");
+              setSelectedSlug("");
+              window.history.replaceState(
+                null,
+                "",
+                teacherSubjectsHref({
+                  community: communityAttach.slug,
+                  term: communityAttach.termId,
+                }),
+              );
+              setToast(
+                `${result.name} created and attached. Once indexing finishes, use Extract topics for challenges.${result.failedUploads.length ? ` ${result.failedUploads.length} file uploads failed; retry them from the source library.` : ""}`,
+              );
               return;
             }
             setDialog(
@@ -2052,15 +2215,15 @@ export function TeacherWorkspaceV2({
   );
 }
 
-function CommunitiesView({
+export function CommunitiesView({
   dashboard,
   state,
   error,
   onRetry,
   onCreateSubject,
-  selectedSubjectSlug,
   selectedTermId,
   onRefresh,
+  subjectsMode = false,
 }: {
   dashboard: TeacherDashboard | null;
   state: DashboardState;
@@ -2069,6 +2232,7 @@ function CommunitiesView({
   selectedSubjectSlug: string;
   selectedTermId: string;
   onRefresh: () => Promise<unknown>;
+  subjectsMode?: boolean;
   onCreateSubject: (communityAttach: {
     slug: string;
     termId: string;
@@ -2077,13 +2241,17 @@ function CommunitiesView({
   }) => void;
 }) {
   if (state === "loading" && !dashboard) return <DashboardSkeleton />;
-  if (state === "error" && !dashboard) {
+  if (state === "error") {
     return <DashboardError message={error} onRetry={onRetry} />;
   }
   if (!dashboard) return null;
 
   const selected = dashboard.communityWorkspace;
   const admin = dashboard.communityAdmin;
+  const workspaceHref = (slug: string, term?: string) =>
+    subjectsMode
+      ? teacherSubjectsHref({ community: slug, term })
+      : `/teachers?${new URLSearchParams({ view: "communities", community: slug, ...(term ? { term } : {}) })}`;
 
   if (!selected) {
     return (
@@ -2091,14 +2259,15 @@ function CommunitiesView({
         <header className="flex flex-wrap items-end gap-4 border-b border-border pb-6">
           <div className="min-w-0 flex-1">
             <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
-              Community admin
+              {subjectsMode ? "Community curriculum" : "Community admin"}
             </p>
             <h1 className="mt-2 font-display text-[28px] font-semibold tracking-[-0.04em]">
-              My communities
+              {subjectsMode ? "Create Subjects" : "My communities"}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
-              Open a community you created to manage its semesters, subjects, members, and challenge
-              map.
+              {subjectsMode
+                ? "Choose a community to see its semesters, create subjects, and manage their details in one place."
+                : "Open a community you created to view its overview and members. Manage its subjects from Create Subjects."}
             </p>
           </div>
           <Link
@@ -2111,6 +2280,17 @@ function CommunitiesView({
             Create community
           </Link>
         </header>
+        {subjectsMode ? (
+          <Link
+            href={teacherSubjectsHref({ library: true })}
+            className={cn(
+              "mt-3 inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
+              interactive,
+            )}
+          >
+            Browse reusable subject library →
+          </Link>
+        ) : null}
 
         {dashboard.managedCommunities.length ? (
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -2135,13 +2315,13 @@ function CommunitiesView({
                   <span>{community.memberCount} members</span>
                 </div>
                 <Link
-                  href={`/teachers?view=communities&community=${encodeURIComponent(community.slug)}`}
+                  href={workspaceHref(community.slug)}
                   className={cn(
                     "mt-auto inline-flex min-h-10 items-center justify-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90",
                     interactive,
                   )}
                 >
-                  Open admin workspace →
+                  {subjectsMode ? "Manage subjects →" : "Open admin workspace →"}
                 </Link>
               </article>
             ))}
@@ -2150,7 +2330,9 @@ function CommunitiesView({
           <section className="mt-6 rounded-xl border border-dashed border-border bg-bg-primary px-6 py-14 text-center">
             <h2 className="font-display text-xl font-semibold">Create your first community</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-text-secondary">
-              Once created, every community you own will appear here as a separate admin workspace.
+              {subjectsMode
+                ? "Create a community first, then organise its subjects by semester here. Your reusable subject library is still available."
+                : "Once created, every community you own will appear here as a separate admin workspace."}
             </p>
             <Link
               href="/communities?create=1"
@@ -2167,149 +2349,164 @@ function CommunitiesView({
     );
   }
 
-  const selectedTerm =
-    selected.terms.find((term) => term.id === selectedTermId) ||
-    selected.terms.find((term) =>
-      term.subjects.some((subject) => subject.slug === selectedSubjectSlug),
-    );
-  const selectedSubject = selectedTerm?.subjects.find(
-    (subject) => subject.slug === selectedSubjectSlug,
-  );
-
-  if (selectedSubjectSlug && selectedTerm && selectedSubject) {
-    if (!dashboard.communitySubjectWorkspace) {
-      return (
-        <DashboardError
-          message="This subject workspace could not be loaded. Return to the community and try again."
-          onRetry={onRetry}
-        />
-      );
-    }
-
-    return (
-      <>
-        <Link
-          href={`/teachers?view=communities&community=${encodeURIComponent(selected.slug)}`}
-          className={cn(
-            "inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
-            interactive,
-          )}
-        >
-          ← {titleCase(selected.name)}
-        </Link>
-        <header className="border-b border-border pb-7 pt-3">
-          <p className="text-sm text-text-secondary">
-            Year {selectedTerm.yearNumber} · Semester {selectedTerm.semesterNumber}
-            {selectedSubject.code ? ` · ${selectedSubject.code}` : ""}
-          </p>
-          <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em]">
-            {titleCase(selectedSubject.name)} workspace
-          </h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
-            Extract the learning map, prepare member challenges, and manage community resources and
-            discussions from one place.
-          </p>
-        </header>
-        <CommunitySubjectWorkspaceClient
-          communitySlug={selected.slug}
-          communitySubjectSlug={selectedSubject.slug}
-          workspace={dashboard.communitySubjectWorkspace}
-          creatorMode
-          onRefresh={async () => {
-            await onRefresh();
-          }}
-        />
-      </>
-    );
-  }
-
   return (
     <>
-      <Link
-        href="/teachers?view=communities"
-        className={cn(
-          "inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
-          interactive,
-        )}
-      >
-        ← My communities
-      </Link>
-
-      <section className="mt-3 overflow-hidden rounded-xl border border-border bg-bg-primary">
-        <div className="bg-[var(--community-banner)] px-5 py-6 text-white sm:px-6">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
-                Community workspace
-              </p>
-              <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em]">
-                {titleCase(selected.name)}
-              </h1>
-              <p className="mt-2 text-sm text-white/65">
-                {selected.university} · {selected.faculty}
-              </p>
-            </div>
+      {subjectsMode ? (
+        <header className="flex flex-wrap items-end gap-5 border-b border-border pb-6">
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
+              Community curriculum
+            </p>
+            <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em]">
+              Create Subjects
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Add subjects by semester. Every subject here is available to this community&apos;s
+              members.
+            </p>
             <Link
-              href={`/app/communities/${encodeURIComponent(selected.slug)}`}
+              href={teacherSubjectsHref({
+                community: selected.slug,
+                term: selectedTermId,
+                library: true,
+              })}
               className={cn(
-                "inline-flex min-h-10 items-center justify-center rounded-lg border border-white/25 px-4 text-sm font-medium text-white transition hover:bg-white/10",
+                "mt-2 inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
                 interactive,
               )}
             >
-              Preview student view →
+              All saved subjects →
             </Link>
           </div>
-        </div>
-
-        {admin ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-            <CommunityMetric label="Active members" value={admin.memberCount} />
-            <CommunityMetric label="Linked subjects" value={admin.subjectCount} />
-            <CommunityMetric
-              label="Semesters filled"
-              value={`${admin.filledSemesterCount}/${admin.totalSemesters}`}
-            />
-            <CommunityMetric label="Resources waiting" value={admin.pendingResourceCount} />
-            <CommunityMetric label="Resources merged" value={admin.mergedResourceCount} />
-            <CommunityMetric label="Discussions" value={admin.discussionCount} />
-          </div>
-        ) : null}
-      </section>
-
-      <section className="mt-7" aria-labelledby="community-curriculum-heading">
-        <div className="mb-5 flex flex-wrap items-end gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
-              Curriculum manager
-            </p>
-            <h2
-              id="community-curriculum-heading"
-              className="mt-2 font-display text-2xl font-semibold"
+          <div className="w-full sm:w-72">
+            <label htmlFor="subject-community" className="mb-2 block text-sm font-medium">
+              Community
+            </label>
+            <select
+              id="subject-community"
+              value={selected.slug}
+              onChange={(event) =>
+                window.history.pushState(
+                  null,
+                  "",
+                  teacherSubjectsHref({ community: event.target.value }),
+                )
+              }
+              className={cn(
+                "min-h-11 w-full rounded-lg border border-border bg-bg-primary px-3 text-sm text-text-primary",
+                interactive,
+              )}
             >
-              Semesters, subjects, and challenges
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
-              Add a new or reusable Creator Workspace subject to a semester, then prepare its member
-              challenge map here.
-            </p>
+              <option value="">Choose another community…</option>
+              {dashboard.managedCommunities.map((community) => (
+                <option key={community.id} value={community.slug}>
+                  {titleCase(community.name)} · {community.faculty}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
-        <CommunityStudySpaceClient
-          initialCommunity={selected}
-          mode="teacher"
-          teacherWorkspaceBaseHref={`/teachers?view=communities&community=${encodeURIComponent(selected.slug)}`}
-          onCreateSubject={(termId) =>
-            onCreateSubject({
-              slug: selected.slug,
-              termId,
-              university: selected.university,
-              programme: selected.faculty,
-            })
-          }
-        />
-      </section>
+        </header>
+      ) : (
+        <>
+          <Link
+            href="/teachers?view=communities"
+            className={cn(
+              "inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
+              interactive,
+            )}
+          >
+            ← My communities
+          </Link>
 
-      {admin ? (
+          <section className="mt-3 overflow-hidden rounded-xl border border-border bg-bg-primary">
+            <div className="bg-[var(--community-banner)] px-5 py-6 text-white sm:px-6">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
+                    Community workspace
+                  </p>
+                  <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em]">
+                    {titleCase(selected.name)}
+                  </h1>
+                  <p className="mt-2 text-sm text-white/65">
+                    {selected.university} · {selected.faculty}
+                  </p>
+                </div>
+                <Link
+                  href={`/app/communities/${encodeURIComponent(selected.slug)}`}
+                  className={cn(
+                    "inline-flex min-h-10 items-center justify-center rounded-lg border border-white/25 px-4 text-sm font-medium text-white transition hover:bg-white/10",
+                    interactive,
+                  )}
+                >
+                  Preview student view →
+                </Link>
+              </div>
+            </div>
+
+            {admin ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+                <CommunityMetric label="Active members" value={admin.memberCount} />
+                <CommunityMetric label="Linked subjects" value={admin.subjectCount} />
+                <CommunityMetric
+                  label="Semesters filled"
+                  value={`${admin.filledSemesterCount}/${admin.totalSemesters}`}
+                />
+                <CommunityMetric label="Resources waiting" value={admin.pendingResourceCount} />
+                <CommunityMetric label="Resources merged" value={admin.mergedResourceCount} />
+                <CommunityMetric label="Discussions" value={admin.discussionCount} />
+              </div>
+            ) : null}
+          </section>
+        </>
+      )}
+
+      {subjectsMode ? (
+        <section className="mt-7" aria-labelledby="community-curriculum-heading">
+          <div className="mb-5 flex flex-wrap items-end gap-4">
+            <div className="min-w-0 flex-1">
+              <h2 id="community-curriculum-heading" className="font-display text-xl font-semibold">
+                Subjects by semester
+              </h2>
+            </div>
+          </div>
+          <CommunityStudySpaceClient
+            key={selected.slug}
+            initialCommunity={selected}
+            mode="teacher"
+            teacherWorkspaceBaseHref={workspaceHref(selected.slug)}
+            onSubjectAttached={onRefresh}
+            onCreateSubject={(termId) =>
+              onCreateSubject({
+                slug: selected.slug,
+                termId,
+                university: selected.university,
+                programme: selected.faculty,
+              })
+            }
+          />
+        </section>
+      ) : null}
+
+      {!subjectsMode && selected.canManage ? (
+        <section className="mt-7 rounded-xl border border-border bg-bg-primary p-5 sm:p-6">
+          <h2 className="font-display text-xl font-semibold">Delete community</h2>
+          <p className="mb-4 mt-2 text-sm text-text-secondary">
+            Only the creator can delete this community. Your reusable subject library will be kept.
+          </p>
+          <CommunityDeleteControl
+            key={selected.id}
+            slug={selected.slug}
+            name={selected.name}
+            onDeleted={async () => {
+              window.history.replaceState(null, "", "/teachers?view=communities");
+              await onRefresh();
+            }}
+          />
+        </section>
+      ) : null}
+
+      {admin && !subjectsMode ? (
         <section className="mt-7 rounded-xl border border-border bg-bg-primary p-5 sm:p-6">
           <div className="flex flex-wrap items-end gap-3 border-b border-border pb-4">
             <div className="min-w-0 flex-1">
@@ -2357,7 +2554,6 @@ function TodayView({
   state,
   error,
   onSetExam,
-  onCourses,
   profileComplete,
   communityAdmin,
   onSubjects,
@@ -2372,7 +2568,6 @@ function TodayView({
   state: DashboardState;
   error: string;
   onSetExam: () => void;
-  onCourses: () => void;
   profileComplete: boolean;
   communityAdmin: TeacherDashboard["communityAdmin"];
   onSubjects: () => void;
@@ -2612,24 +2807,6 @@ function TodayView({
             </p>
           </div>
         </div>
-      </section>
-
-      <section className="mt-[26px]">
-        <div className="flex items-baseline gap-3">
-          <h2 className="font-display text-lg font-semibold">Your courses</h2>
-          <span className="flex-1" />
-          <button
-            type="button"
-            onClick={onCourses}
-            className={cn(
-              "min-h-10 text-sm text-text-secondary hover:text-text-primary",
-              interactive,
-            )}
-          >
-            See all
-          </button>
-        </div>
-        <TeacherCoursesOverview onOpen={onCourses} />
       </section>
     </>
   );
@@ -8049,9 +8226,9 @@ function SubjectsView({
           <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
             Teacher collection
           </p>
-          <h1 className="mt-3 font-display text-3xl font-semibold">Subjects</h1>
+          <h1 className="mt-3 font-display text-3xl font-semibold">Reusable subject library</h1>
           <p className="mt-2 text-text-secondary">
-            Every subject is isolated inside this teacher&apos;s collection.
+            Your saved subjects and source files. Attach them to a community from its semester list.
           </p>
         </div>
         <span className="flex-1" />
@@ -8083,16 +8260,16 @@ function SubjectsView({
                   interactive,
                 )}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span
                     className={cn(
-                      "rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize",
-                      subject.visibility === "public"
+                      "rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                      subject.communities.length || subject.visibility === "public"
                         ? "border-success/30 bg-success/10 text-success"
                         : "border-border bg-bg-secondary text-text-secondary",
                     )}
                   >
-                    {subject.visibility}
+                    {subjectAccessLabel(subject.communities, subject.visibility)}
                   </span>
                   {subject.code ? (
                     <span className="rounded-full border border-border px-2.5 py-0.5 font-mono text-xs">
@@ -8106,6 +8283,12 @@ function SubjectsView({
                 <h2 className="mt-4 font-display text-xl font-semibold">
                   {titleCase(subject.name)}
                 </h2>
+                {subject.communities.length ? (
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Shared in{" "}
+                    {subject.communities.map((community) => titleCase(community.name)).join(", ")}
+                  </p>
+                ) : null}
                 {subject.programme || subject.university ? (
                   <p className="mt-1 truncate text-xs text-text-secondary">
                     {[subject.programme, subject.university].filter(Boolean).join(" · ")}
@@ -8120,8 +8303,8 @@ function SubjectsView({
         <section className="mt-8 rounded-lg border border-dashed border-border p-10 text-center">
           <h2 className="font-display text-xl font-semibold">No subjects created yet</h2>
           <p className="mt-2 text-sm text-text-secondary">
-            Create your first subject, then add its syllabus and material. Subjects start private;
-            attach one to a course later when you are ready to share it.
+            Create your first subject, then add its syllabus and material. Add it to a community
+            semester to make it available to that community&apos;s members.
           </p>
           <Button className="mt-5" onClick={onCreate}>
             Create first subject
@@ -9269,11 +9452,13 @@ function CreateSubjectDialog({
   onCreated,
   initialUniversity = "",
   initialProgramme = "",
+  communityContext,
 }: {
   onClose: () => void;
   onCreated: (result: SubjectCreationResult) => Promise<void>;
   initialUniversity?: string;
   initialProgramme?: string;
+  communityContext?: { name: string; semester?: number };
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [name, setName] = useState("");
@@ -9294,8 +9479,17 @@ function CreateSubjectDialog({
   const materialInputRef = useRef<HTMLInputElement>(null);
   const bankInputRef = useRef<HTMLInputElement>(null);
   const createdSubjectRef = useRef<{ slug: string; folderPath: string } | null>(null);
+  const universityEdited = useRef(false);
+  const programmeEdited = useRef(false);
   const completedUploadKeysRef = useRef(new Set<string>());
   const indexingJobsRef = useRef<SubjectCreationResult["jobs"]>([]);
+
+  useEffect(() => {
+    if (!universityEdited.current) setUniversity(initialUniversity);
+  }, [initialUniversity]);
+  useEffect(() => {
+    if (!programmeEdited.current) setProgramme(initialProgramme);
+  }, [initialProgramme]);
 
   function addFiles(current: File[], incoming: File[]) {
     const accepted = incoming.filter((file) => !teacherUploadSizeError(file.size));
@@ -9487,6 +9681,14 @@ function CreateSubjectDialog({
     (syllabusFile || syllabusText.trim() ? 1 : 0) + materialFiles.length + bankFiles.length;
   return (
     <Dialog title="Add a subject" onClose={busy ? () => undefined : onClose}>
+      {communityContext ? (
+        <p className="mb-5 rounded-lg border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+          {titleCase(communityContext.name)}
+          {communityContext.semester
+            ? ` · Semester ${communityContext.semester}`
+            : " · Selected semester"}
+        </p>
+      ) : null}
       <ol className="mb-7 grid grid-cols-3 gap-2" aria-label="Create subject progress">
         {stages.map((label, index) => {
           const stage = (index + 1) as 1 | 2 | 3;
@@ -9563,7 +9765,10 @@ function CreateSubjectDialog({
               <input
                 id="new-subject-university"
                 value={university}
-                onChange={(event) => setUniversity(event.target.value)}
+                onChange={(event) => {
+                  universityEdited.current = true;
+                  setUniversity(event.target.value);
+                }}
                 className={cn(inputClass, "mt-2")}
                 placeholder="Tribhuvan University"
                 maxLength={120}
@@ -9577,7 +9782,10 @@ function CreateSubjectDialog({
               <input
                 id="new-subject-programme"
                 value={programme}
-                onChange={(event) => setProgramme(event.target.value)}
+                onChange={(event) => {
+                  programmeEdited.current = true;
+                  setProgramme(event.target.value);
+                }}
                 className={cn(inputClass, "mt-2")}
                 placeholder="BE Electronics (BEI)"
                 maxLength={120}
@@ -9586,8 +9794,9 @@ function CreateSubjectDialog({
             </div>
           </div>
           <p className="mt-5 border-t border-border pt-5 text-sm leading-6 text-text-secondary">
-            New subjects start private and stay in your personal library. Add this subject to a
-            course later; the course&apos;s visibility controls who can access it.
+            {communityContext
+              ? "This subject will be attached to the selected community semester. Stay on Create Subjects while files are indexed, then use Extract topics for challenges."
+              : "Save this subject in your library, then add it to a community semester to make it available to that community’s members."}
           </p>
           <div className="mt-6 flex justify-end gap-2 border-t border-border pt-5">
             <Button type="button" variant="outline" onClick={onClose}>
@@ -9602,7 +9811,7 @@ function CreateSubjectDialog({
         <div>
           <p className="mb-4 text-sm leading-6 text-text-secondary">
             Upload the syllabus your university publishes, or paste it in. Text outlines can be
-            reviewed now; PDF and Word files are extracted after indexing.
+            reviewed now; PDF and Word outlines can be extracted once indexing finishes.
           </p>
           <input
             id="new-subject-syllabus-file"

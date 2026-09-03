@@ -13,6 +13,7 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { type PracticeTopic, type PracticeTopicStatus } from "@/lib/tenant/client";
 import { getTeacherPracticeTopics } from "@/lib/teacher-app/client";
+import { readCourseLearningTopics } from "@/lib/data/community-learning-topics";
 import {
   listCreatorPrivateSubjectAccess,
   listStudentCommunitySubjectAccess,
@@ -436,19 +437,24 @@ export async function getStudentChallengeDashboard(
         const scopeKey = subjectScopeKey(courseId, subjectSlug);
         const stored = storedBySubject.get(scopeKey) ?? new Map<string, TopicMastery>();
         const collectionKey = collectionKeyByTeacher.get(courseSubject.teacherId);
-        if (!collectionKey) {
-          return {
-            row: localSubjectRow(courseSubject, subjectSlug, subjectName, stored),
-            recommendations: [],
-          };
-        }
-
         try {
-          const response = await getTeacherPracticeTopics(collectionKey, subjectName, {
-            totalMarks: 20,
-            maxQuestions: 5,
-          });
-          const topics = (Array.isArray(response.topics) ? response.topics : []) as PracticeTopic[];
+          // Use the same catalogue as Subject Explorer, including syllabi saved
+          // before automatic publication existed. An empty community map must
+          // not be replaced by a different, stale provider topic list.
+          const sharedTopics = courseId
+            ? await readCourseLearningTopics(courseId, courseSubject.teacherId, subjectSlug, admin)
+            : null;
+          let topics: Array<Pick<PracticeTopic, "topic_key" | "title" | "blurb">>;
+          if (sharedTopics !== null) {
+            topics = sharedTopics;
+          } else {
+            if (!collectionKey) throw new Error("Subject collection is unavailable.");
+            const response = await getTeacherPracticeTopics(collectionKey, subjectName, {
+              totalMarks: 20,
+              maxQuestions: 5,
+            });
+            topics = (Array.isArray(response.topics) ? response.topics : []) as PracticeTopic[];
+          }
           const rankedTopics = topics
             .map((topic) => ({ topic, mastery: stored.get(topic.topic_key) }))
             .sort(

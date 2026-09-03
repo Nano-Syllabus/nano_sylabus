@@ -26,12 +26,14 @@ export function CommunitySubjectWorkspaceClient({
   communitySubjectSlug,
   workspace,
   creatorMode = false,
+  sourceLibraryHref,
   onRefresh,
 }: {
   communitySlug: string;
   communitySubjectSlug: string;
   workspace: CommunitySubjectWorkspace;
   creatorMode?: boolean;
+  sourceLibraryHref?: string;
   onRefresh?: () => Promise<void> | void;
 }) {
   const router = useRouter();
@@ -74,9 +76,9 @@ export function CommunitySubjectWorkspaceClient({
         topics?: unknown[];
       };
       if (!sync.ok) throw new Error(syncPayload.error || "Topics could not be refreshed.");
-      setSyncMessage(
-        `${syncPayload.topics?.length || 0} topics extracted. Member challenges are ready.`,
-      );
+      const count = syncPayload.topics?.length || 0;
+      setSyncMessage(count ? `${count} topics extracted and saved for member challenges.` : "");
+      if (!count) setSyncError("No topics found. Wait for the syllabus or notes to finish indexing, then retry extraction.");
       await refreshWorkspace();
     } catch (error) {
       setSyncMessage("");
@@ -239,10 +241,10 @@ export function CommunitySubjectWorkspaceClient({
           <div className="mt-5 rounded-xl border border-dashed border-border p-8 text-center">
             <Sparkles className="mx-auto size-6 text-text-muted" aria-hidden="true" />
             <p className="mt-3 text-sm font-medium">
-              Topics appear after the first material is indexed
+              No challenge topics extracted yet
             </p>
             <p className="mt-1 text-xs text-text-muted">
-              The creator can add source material, then generate the member challenge map here.
+              After indexing finishes, the creator must extract challenge topics from Create Subjects.
             </p>
           </div>
         )}
@@ -283,7 +285,10 @@ export function CommunitySubjectWorkspaceClient({
                 </button>
                 {workspace.externalSubjectSlug ? (
                   <Link
-                    href={`/teachers?view=subjects&subject=${encodeURIComponent(workspace.externalSubjectSlug)}&tab=syllabus&returnTo=${encodeURIComponent(`/app/communities/${communitySlug}/subjects/${communitySubjectSlug}`)}`}
+                    href={
+                      sourceLibraryHref ||
+                      `/teachers?view=subjects&subject=${encodeURIComponent(workspace.externalSubjectSlug)}&tab=syllabus&returnTo=${encodeURIComponent(`/app/communities/${communitySlug}/subjects/${communitySubjectSlug}`)}`
+                    }
                     className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-4 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
                   >
                     Advanced source library <ExternalLink className="size-4" aria-hidden="true" />

@@ -15,15 +15,17 @@ export default async function SubjectExplorerPage() {
     communities.find((community) => community.membership?.role === "member") ||
     communities.find((community) => community.membership?.status === "active");
   const community = joinedCommunity ? await getCommunity(joinedCommunity.slug, user.id) : null;
-  const insights = community
-    ? await getCommunitySubjectExplorerInsights(user.id, community)
-    : {};
+  const insights = community ? await getCommunitySubjectExplorerInsights(user.id, community) : {};
 
   return (
     <>
       <SetAppShell title="Subject Explorer" />
       {community ? (
-        <CommunitySubjectExplorer community={community} insights={insights} />
+        <CommunitySubjectExplorer
+          key={`${user.id}:${community.id}`}
+          community={community}
+          insights={insights}
+        />
       ) : (
         <main className="w-full max-w-[1240px] px-4 pb-24 pt-5 lg:p-7">
           <header className="border-b border-border pb-7">
