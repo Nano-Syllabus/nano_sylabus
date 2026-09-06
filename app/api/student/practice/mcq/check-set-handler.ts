@@ -10,6 +10,7 @@ import {
   type McqCheckResult,
 } from "@/lib/tenant/client";
 import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export const mcqSetCheckSchema = z.object({
   subject: z.string().trim().min(1),
@@ -33,7 +34,7 @@ function resultFeedback(result: McqCheckResult) {
 export async function handleMcqSetCheck(setId: string, payload: unknown) {
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const parsed = mcqSetCheckSchema.parse(payload);

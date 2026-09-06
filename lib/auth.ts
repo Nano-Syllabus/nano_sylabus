@@ -13,9 +13,11 @@ import {
   normalizeSubjects,
   normalizeTargetGrade,
 } from "@/lib/profile-normalization";
+import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { hasCompletedStudyDiagnostic } from "@/lib/study-diagnostic";
 import type { AppUser, StudentProfile } from "@/lib/types";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 function normalizeProfile(row: any): StudentProfile {
   return {
@@ -67,7 +69,7 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getVerifiedUser(supabase);
 
   if (!user) return { user: null, profile: null, studyDiagnosticCompleted: false };
 
@@ -97,18 +99,26 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
 
   // Only a brand-new onboarded account still needs the starter grant written;
   // everyone else already has a ledger row and reads it from the query above.
-  const creditBalance =
-    ledgerResult.data?.balance_after ??
-    (onboarded ? await grantStarterCredits(user.id) : 0);
+  //
+  // A bypassed development session owns no ledger row and no subscription, so
+  // without these two overrides every screen renders its out-of-credits state
+  // and the UI being worked on never appears. Both collapse to the real values
+  // outside development, where DEV_AUTH_BYPASS is false.
+  const creditBalance = DEV_AUTH_BYPASS
+    ? 999
+    : (ledgerResult.data?.balance_after ??
+      (onboarded ? await grantStarterCredits(user.id) : 0));
 
   const now = Date.now();
-  const hasUnlimitedAccess = (subscriptionResult.data ?? []).some((subscription: any) => {
-    const plan = Array.isArray(subscription.subscription_plans)
-      ? subscription.subscription_plans[0]
-      : subscription.subscription_plans;
-    const notExpired = !subscription.ends_at || new Date(subscription.ends_at).getTime() > now;
-    return Boolean(plan?.is_unlimited && notExpired);
-  });
+  const hasUnlimitedAccess =
+    DEV_AUTH_BYPASS ||
+    (subscriptionResult.data ?? []).some((subscription: any) => {
+      const plan = Array.isArray(subscription.subscription_plans)
+        ? subscription.subscription_plans[0]
+        : subscription.subscription_plans;
+      const notExpired = !subscription.ends_at || new Date(subscription.ends_at).getTime() > now;
+      return Boolean(plan?.is_unlimited && notExpired);
+    });
 
   return {
     user: toAppUser(user, profile, creditBalance, hasUnlimitedAccess),

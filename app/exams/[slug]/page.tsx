@@ -35,6 +35,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 import { LandingHeader } from "@/components/landing-header";
+import { examThemeClass } from "@/components/exam-theme";
 
 function RelatedCourseCard({ course }: { course: TeacherCourse }) {
   return (
@@ -66,7 +67,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
   const paymentHref = `/payment/${course.slug}`;
 
   return (
-    <div className="exam-prep-theme min-h-screen bg-background text-foreground">
+    <div className={`${examThemeClass} min-h-screen bg-background text-foreground`}>
       <LandingHeader dark />
       <main>
         <section className="hero-glow border-b border-border/60">

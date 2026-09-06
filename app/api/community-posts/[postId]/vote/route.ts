@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { communityStorageError } from "@/lib/data/communities";
 import { voteCommunityPost } from "@/lib/data/community-subjects";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RouteContext = { params: Promise<{ postId: string }> };
 
@@ -10,7 +11,7 @@ export const maxDuration = 300;
 export async function POST(_request: Request, context: RouteContext) {
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Sign in to vote." }, { status: 401 });
     const { postId } = await context.params;
     const result = await voteCommunityPost(user.id, postId);

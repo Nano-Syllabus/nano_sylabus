@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { communityStorageError } from "@/lib/data/communities";
 import { archiveCommunityAnnouncement } from "@/lib/data/community-hub";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RouteContext = { params: Promise<{ slug: string; announcementId: string }> };
 
@@ -10,7 +11,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user)
       return NextResponse.json({ error: "Sign in to manage announcements." }, { status: 401 });
     const { slug, announcementId } = await context.params;

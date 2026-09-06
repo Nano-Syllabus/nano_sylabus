@@ -8,6 +8,7 @@ import {
 import { persistStudentChallengeGrade } from "@/lib/data/student-challenge-grading";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { TeacherApiError } from "@/lib/teacher-app/client";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -20,7 +21,7 @@ export async function POST(
 ) {
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const form = await request.formData();
     const file = form.get("file");

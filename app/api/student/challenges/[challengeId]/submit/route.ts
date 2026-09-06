@@ -12,6 +12,7 @@ import { createPracticeAttemptHistory } from "@/lib/practice-history";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { TeacherApiError } from "@/lib/teacher-app/client";
 import type { StudentExam } from "@/lib/practice-sitting";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -35,7 +36,7 @@ export async function POST(
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const parsed = schema.parse(await request.json());

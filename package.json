@@ -13,7 +13,11 @@
     "test:tenant-api": "vitest run tests/integration/tenant-api.smoke.test.ts",
     "test:tenant-full": "vitest run tests/integration/tenant-api.full-integration.test.ts",
     "test:tenant-prompt": "vitest run tests/integration/tenant-prompt.indexed-sample.test.ts",
-    "test:tenant-subject-pairs": "vitest run tests/integration/tenant-prompt.subject-pairs.test.ts"
+    "test:tenant-subject-pairs": "vitest run tests/integration/tenant-prompt.subject-pairs.test.ts",
+    "perf:audit": "node scripts/perf/audit.mjs",
+    "perf:compare": "node scripts/perf/compare.mjs",
+    "perf:ui": "node scripts/perf/ui-profile.mjs",
+    "dev:nologin": "DEV_AUTH_BYPASS=1 npm run dev"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -39,7 +43,9 @@
     "@types/react-dom": "^19.1.2",
     "eslint": "^9.25.1",
     "eslint-config-next": "^15.3.1",
+    "lighthouse": "^13.4.1",
     "prettier": "^3.5.3",
+    "puppeteer": "^25.10.0",
     "typescript": "^5.8.3",
     "vitest": "^4.1.4"
   },

@@ -8,6 +8,7 @@ import {
 } from "@/lib/tenant/client";
 import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
 import { safeMcqSet } from "../safe-set";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function GET(
 ) {
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const subjectSlug = z.string().trim().min(1).parse(new URL(request.url).searchParams.get("subject"));

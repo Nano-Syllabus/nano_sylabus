@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isAdminRole } from "@/lib/admin-role";
 import { getAdminPaymentSubmissionDetail } from "@/lib/data/billing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 const actionSchema = z.object({
   action: z.enum(["approve", "reject"]),
@@ -16,7 +17,7 @@ export async function GET(
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -56,7 +57,7 @@ export async function PATCH(
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

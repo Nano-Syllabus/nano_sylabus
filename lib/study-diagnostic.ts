@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export type StudyAnswer = {
   questionIndex: number;
@@ -38,7 +39,7 @@ export async function saveStudyDiagnostic(
   supabase: Pick<SupabaseClient, "auth">,
   answers: unknown,
 ) {
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await getVerifiedUser(supabase);
   if (authError) throw authError;
   if (!user) throw new Error("Please sign in to save your study answers.");
   if (hasCompletedStudyDiagnostic(user.user_metadata?.study_answers)) return true;

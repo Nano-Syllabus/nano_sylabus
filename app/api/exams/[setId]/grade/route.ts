@@ -5,6 +5,7 @@ import { createPracticeAttemptHistory, studentExamHistorySchema } from "@/lib/pr
 import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findTenantSubject, gradeTeacherPaper, listTenantSubjects } from "@/lib/tenant/client";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 const requestSchema = z.object({
   subject: z.string().trim().min(1).max(200).optional(),
@@ -28,7 +29,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

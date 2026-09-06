@@ -1,5 +1,8 @@
 "use client";
 
+// Math is rendered here and nowhere else, so KaTeX's stylesheet loads with
+// this component instead of blocking the first paint of every page.
+import "katex/dist/katex.min.css";
 import { renderMarkdown } from "@/lib/markdown";
 import React, { useMemo, useRef } from "react";
 

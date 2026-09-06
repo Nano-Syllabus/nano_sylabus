@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2 } from "lucide-react";
+import { examThemeClass } from "@/components/exam-theme";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -43,7 +44,7 @@ export function CommunityJoinRedirect({ slug }: { slug: string }) {
   }, [join]);
 
   return (
-    <main className="exam-prep-theme hero-glow flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+    <main className={`${examThemeClass} hero-glow flex min-h-screen items-center justify-center bg-background px-4 text-foreground`}>
       <section className="glass-card w-full max-w-md rounded-3xl border border-border p-7 text-center sm:p-9">
         <span className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary/15 text-primary">
           <Building2 className="size-6" aria-hidden="true" />

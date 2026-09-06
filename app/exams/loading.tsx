@@ -1,3 +1,4 @@
+import { examThemeClass } from "@/components/exam-theme";
 function Skeleton({ className }: { className: string }) {
   return (
     <div
@@ -10,7 +11,7 @@ function Skeleton({ className }: { className: string }) {
 export default function PublicExamsLoading() {
   return (
     <div
-      className="exam-prep-theme min-h-screen bg-background text-foreground"
+      className={`${examThemeClass} min-h-screen bg-background text-foreground`}
       aria-busy="true"
       aria-label="Loading exams"
     >

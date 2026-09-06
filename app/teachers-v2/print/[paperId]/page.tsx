@@ -3,6 +3,7 @@ import { getTeacherProfile } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PrintActions } from "./print-actions";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RecordValue = Record<string, unknown>;
 
@@ -24,7 +25,7 @@ function values(value: unknown) {
 
 export default async function PrintableTeacherPaper({ params }: { params: Promise<{ paperId: string }> }) {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await getVerifiedUser(supabase);
   const { paperId } = await params;
   if (!user) redirect(`/login?next=${encodeURIComponent(`/teachers/print/${paperId}`)}`);
   const teacher = await getTeacherProfile();

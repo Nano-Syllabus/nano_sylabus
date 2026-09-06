@@ -24,6 +24,7 @@ import {
   regenerateTeacherCollectionKey,
   retrieveTeacherChunks,
 } from "@/lib/teacher-app/client";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type TeacherProfile = {
   id: string;
@@ -36,7 +37,7 @@ export async function getTeacherProfile(): Promise<TeacherProfile | null> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getVerifiedUser(supabase);
   if (!user) return null;
 
   return getTeacherProfileForUserId(user.id);
@@ -63,7 +64,7 @@ export async function onboardTeacher() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getVerifiedUser(supabase);
   if (!user) throw new Error("You must be logged in to become a teacher.");
 
   const existing = await getTeacherProfile();

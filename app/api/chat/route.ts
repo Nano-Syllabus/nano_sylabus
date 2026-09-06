@@ -39,6 +39,7 @@ import {
 } from "@/lib/tenant/client";
 import { deriveSessionTitle } from "@/lib/utils";
 import type { AssistantAnswerTrace, AssistantCitation } from "@/lib/types";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RetrievalMode = "default" | "web";
 type ResponseLanguage = "EN" | "RN";
@@ -703,7 +704,7 @@ export async function POST(request: Request) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

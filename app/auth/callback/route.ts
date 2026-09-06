@@ -3,6 +3,7 @@ import { isProfileComplete } from "@/lib/access";
 import { isAdminRole } from "@/lib/admin-role";
 import { resolvePostAuthDestination } from "@/lib/post-auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getVerifiedUser(supabase);
 
   if (!user) {
     return NextResponse.redirect(`${origin}/login?error=Missing%20session`);

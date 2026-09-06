@@ -7,6 +7,7 @@ import {
   listTenantSubjects,
 } from "@/lib/tenant/client";
 import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 const bandSchema = z.object({
   label: z.string().trim().min(1).max(80),
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

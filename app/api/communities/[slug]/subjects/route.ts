@@ -6,6 +6,7 @@ import {
   listCommunityCreatorSubjects,
 } from "@/lib/data/communities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
@@ -14,7 +15,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Sign in to manage subjects." }, { status: 401 });
 
     const { slug } = await context.params;
@@ -31,7 +32,7 @@ export async function POST(request: Request, context: RouteContext) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Sign in to add a subject." }, { status: 401 });
 
     const parsed = communitySubjectInputSchema.safeParse(await request.json().catch(() => null));

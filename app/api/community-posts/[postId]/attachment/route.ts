@@ -3,6 +3,7 @@ import { communityStorageError } from "@/lib/data/communities";
 import { getCommunityPostAttachment } from "@/lib/data/community-subjects";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RouteContext = { params: Promise<{ postId: string }> };
 
@@ -17,7 +18,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Sign in to open this file." }, { status: 401 });
 
     const { postId } = await context.params;

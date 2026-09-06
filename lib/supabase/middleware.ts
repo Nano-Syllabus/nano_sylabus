@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isProfileComplete, resolveAccess } from "@/lib/access";
 import { getSupabaseEnv } from "@/lib/env";
 import type { AppRole } from "@/lib/types";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type CookieToSet = {
   name: string;
@@ -55,7 +56,7 @@ export async function updateSession(request: NextRequest) {
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getVerifiedUser(supabase);
 
   const { pathname } = request.nextUrl;
   let onboarded = false;

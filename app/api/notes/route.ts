@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getNoteAccessPolicy } from "@/lib/data/note-access";
 import { getStudentCourseSubjectAccessForCourse } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 const noteSchema = z.object({
   sessionId: z.string().uuid(),
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

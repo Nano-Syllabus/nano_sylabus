@@ -4,6 +4,7 @@ import { createPracticeAttemptHistory, studentExamHistorySchema } from "@/lib/pr
 import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findTenantSubject, gradeTeacherPaperFile, listTenantSubjects } from "@/lib/tenant/client";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
 const ALLOWED_FILE_TYPES = new Set(["application/pdf", "image/png", "image/jpeg"]);
@@ -13,7 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ set
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

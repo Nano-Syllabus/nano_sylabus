@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 const claimSchema = z.object({ code: z.string().trim().min(1).max(32) });
 
@@ -9,7 +10,7 @@ export async function POST(request: Request) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Sign in before claiming this referral." }, { status: 401 });
 
     const parsed = claimSchema.safeParse(await request.json().catch(() => ({})));

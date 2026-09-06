@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/admin-role";
 import type { AppRole } from "@/lib/types";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type AdminRole = Extract<AppRole, "admin" | "super_admin">;
 
@@ -8,7 +9,7 @@ export async function assertAdminRequest() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getVerifiedUser(supabase);
 
   if (!user) {
     return { error: "Unauthorized" as const, status: 401 };

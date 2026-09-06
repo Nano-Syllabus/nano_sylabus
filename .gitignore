@@ -47,3 +47,7 @@ app/api/test-stream/
 app/api/test-tenant-stream/
 public/test-stream.html
 exam-prep-hub/
+
+# Perf harness artifacts (Lighthouse runs, baseline build snapshot)
+perf-results/
+.next-baseline

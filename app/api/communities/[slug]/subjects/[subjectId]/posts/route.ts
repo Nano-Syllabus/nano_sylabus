@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { communityStorageError } from "@/lib/data/communities";
 import { createCommunityPost } from "@/lib/data/community-subjects";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RouteContext = { params: Promise<{ slug: string; subjectId: string }> };
 
@@ -13,7 +14,7 @@ function value(form: FormData, name: string) {
 export async function POST(request: Request, context: RouteContext) {
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Sign in to post." }, { status: 401 });
     const form = await request.formData();
     const postType = value(form, "postType") === "discussion" ? "discussion" : "resource";

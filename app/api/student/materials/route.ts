@@ -10,6 +10,7 @@ import {
 } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getTenantSourceTree, type TenantSourceTreeNode } from "@/lib/tenant/client";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export const dynamic = "force-dynamic";
 
@@ -200,7 +201,7 @@ export async function GET(request: Request) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user)
       return NextResponse.json(
         { error: "Unauthorized" },

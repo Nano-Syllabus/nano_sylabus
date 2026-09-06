@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, DM_Mono, Inter, Inter_Tight, Outfit } from "next/font/google";
+import { DM_Mono, Inter, Outfit } from "next/font/google";
 import { ReactNode } from "react";
-import "katex/dist/katex.min.css";
+import { DevPerfHud } from "@/components/dev-perf-hud";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -13,7 +13,7 @@ const outfit = Outfit({
 
 const inter = Inter({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
+  weight: ["400", "500", "600"],
   variable: "--font-inter",
   display: "swap",
 });
@@ -22,20 +22,6 @@ const dmMono = DM_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
   variable: "--font-dm-mono",
-  display: "swap",
-});
-
-const examDisplay = Bricolage_Grotesque({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-exam-display",
-  display: "swap",
-});
-
-const examSans = Inter_Tight({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-exam-sans",
   display: "swap",
 });
 
@@ -57,14 +43,24 @@ export const metadata: Metadata = {
     "Bilingual AI study companion built for Nepal's curriculum. Ask in English or Roman Nepali and get personalized support.",
 };
 
+/**
+ * The HUD is a development instrument, not a feature. Both sides of this
+ * condition are constant-folded at build time, so the component and its module
+ * are dropped from the production bundle entirely. Set NEXT_PUBLIC_PERF_HUD=1
+ * to opt a production build in deliberately when checking real numbers.
+ */
+const SHOW_PERF_HUD =
+  process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_PERF_HUD === "1";
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${outfit.variable} ${inter.variable} ${dmMono.variable} ${examDisplay.variable} ${examSans.variable} font-sans antialiased`}
+        className={`${outfit.variable} ${inter.variable} ${dmMono.variable} font-sans antialiased`}
       >
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         {children}
+        {SHOW_PERF_HUD ? <DevPerfHud /> : null}
       </body>
     </html>
   );

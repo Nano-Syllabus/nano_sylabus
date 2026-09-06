@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { communityStorageError } from "@/lib/data/communities";
 import { createCommunityAnnouncement } from "@/lib/data/community-hub";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
@@ -10,7 +11,7 @@ export async function POST(request: Request, context: RouteContext) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user)
       return NextResponse.json({ error: "Sign in to publish an announcement." }, { status: 401 });
     const body = (await request.json().catch(() => null)) as {

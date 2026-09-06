@@ -5,6 +5,7 @@ import {
   leaveStudentCourse,
   StudentCourseError,
 } from "@/lib/student-courses";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
@@ -13,7 +14,7 @@ export async function POST(_request: Request, context: RouteContext) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { slug } = await context.params;
@@ -32,7 +33,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { slug } = await context.params;

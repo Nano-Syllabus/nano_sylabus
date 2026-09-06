@@ -3,6 +3,8 @@ import { CommunityCatalogClient } from "@/components/community-catalog-client";
 import { LandingHeader } from "@/components/landing-header";
 import { listPublicCommunities } from "@/lib/data/communities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { examThemeClass } from "@/components/exam-theme";
 
 export const dynamic = "force-dynamic";
 
@@ -21,11 +23,11 @@ export default async function CommunitiesPage({
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getVerifiedUser(supabase);
   const communities = await listPublicCommunities(user?.id);
 
   return (
-    <div className="exam-prep-theme hero-glow min-h-screen bg-background text-foreground">
+    <div className={`${examThemeClass} hero-glow min-h-screen bg-background text-foreground`}>
       <LandingHeader dark />
       <CommunityCatalogClient
         initialCommunities={communities}

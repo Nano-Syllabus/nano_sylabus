@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { communityStorageError } from "@/lib/data/communities";
 import { leaveCommunityMembership, setCommunityCurrentTerm } from "@/lib/data/community-hub";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
@@ -10,7 +11,7 @@ async function authenticatedUser() {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getVerifiedUser(supabase);
   return user;
 }
 

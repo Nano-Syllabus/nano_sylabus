@@ -3,6 +3,7 @@ import { z } from "zod";
 import { normalizeSubjects } from "@/lib/profile-normalization";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findPublishedSubject, getPublishedCatalog } from "@/lib/tenant/marketplace-catalog";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const parsed = requestSchema.parse(await request.json());

@@ -31,6 +31,7 @@ function ButtonLink({ href, children }: { href: string; children: ReactNode }) {
 }
 
 import { LandingHeader } from "@/components/landing-header";
+import { examThemeClass } from "@/components/exam-theme";
 
 function CourseCard({ course }: { course: TeacherCourse }) {
   return (
@@ -95,7 +96,7 @@ export function PublicExamsClient({ courses }: { courses: TeacherCourse[] }) {
   }
 
   return (
-    <div className="exam-prep-theme min-h-screen bg-background text-foreground">
+    <div className={`${examThemeClass} min-h-screen bg-background text-foreground`}>
       <LandingHeader dark />
       <main className="hero-glow">
         <div className="mx-auto max-w-6xl px-5 py-14">

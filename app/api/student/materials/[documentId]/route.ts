@@ -15,6 +15,7 @@ import {
   listTenantSubjects,
   type TenantSourceTreeNode,
 } from "@/lib/tenant/client";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export const dynamic = "force-dynamic";
 
@@ -268,7 +269,7 @@ export async function GET(
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { documentId } = await params;

@@ -245,21 +245,24 @@ export async function getStudentDailyDashboard(
   const activityEndTimestamp = new Date(
     `${shiftDateKey(today, 1)}T00:00:00+05:45`,
   ).toISOString();
-  const challenge = await getStudentChallengeDashboard(userId);
-
-  const [community, activityResult] = await Promise.all([
+  // The community hub does not depend on the challenge, so the two go out
+  // together. Only the activity query needs the challenge's course id, which
+  // keeps the dashboard at two round trips instead of the previous three.
+  const [challenge, community] = await Promise.all([
+    getStudentChallengeDashboard(userId),
     getCommunityHubForUser(userId, admin),
-    challenge.community?.courseId
-      ? admin
-          .from("student_practice_attempts")
-          .select("created_at,total_score,total_marks,passed")
-          .eq("user_id", userId)
-          .eq("course_id", challenge.community.courseId)
-          .gte("created_at", activityStartTimestamp)
-          .lt("created_at", activityEndTimestamp)
-          .order("created_at", { ascending: true })
-      : Promise.resolve({ data: [], error: null }),
   ]);
+
+  const activityResult = challenge.community?.courseId
+    ? await admin
+        .from("student_practice_attempts")
+        .select("created_at,total_score,total_marks,passed")
+        .eq("user_id", userId)
+        .eq("course_id", challenge.community.courseId)
+        .gte("created_at", activityStartTimestamp)
+        .lt("created_at", activityEndTimestamp)
+        .order("created_at", { ascending: true })
+    : { data: [], error: null };
 
   if (activityResult.error) throw activityResult.error;
   const scopedActivity = aggregateScopedPracticeActivity(

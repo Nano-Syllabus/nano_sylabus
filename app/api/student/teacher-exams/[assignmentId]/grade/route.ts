@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { gradeTeacherPracticePaper, TeacherApiError } from "@/lib/teacher-app/client";
 import { recordTeacherClassroomActivity } from "@/lib/teacher-classroom-activity";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 const schema = z.object({
   answers: z.array(z.object({
@@ -19,7 +20,7 @@ export async function POST(
 ) {
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const parsed = schema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: "Enter at least one answer." }, { status: 400 });

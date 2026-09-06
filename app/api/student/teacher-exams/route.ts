@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { studentVisibleGrade, submissionReviewStatus } from "@/lib/teacher-submission-review";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type SubmittedAttempt = { id: string; assignment_id: string; attempt_no: number; grade: unknown; created_at: string };
 
@@ -36,7 +37,7 @@ function studentPaper(value: unknown) {
 export async function GET() {
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const admin = createSupabaseAdminClient();
     const { data: memberships, error: memberError } = await withTimeout(
