@@ -66,11 +66,18 @@ describe("communities", () => {
     expect(communitySlug("  SEC — BEI 2026  ")).toBe("sec-bei-2026");
   });
 
-  it("selects only the external member community for the learner workspace", () => {
-    const owned = { membership: { role: "creator", status: "active" } } as const;
-    const joined = { membership: { role: "member", status: "active" } } as const;
+  it("defaults to the external community while allowing an owned learner workspace", () => {
+    const owned = {
+      slug: "owned",
+      membership: { role: "creator", status: "active" },
+    } as const;
+    const joined = {
+      slug: "joined",
+      membership: { role: "member", status: "active" },
+    } as const;
     expect(selectStudentCommunity([owned, joined])).toBe(joined);
-    expect(selectStudentCommunity([owned])).toBeNull();
+    expect(selectStudentCommunity([owned])).toBe(owned);
+    expect(selectStudentCommunity([owned, joined], "owned")).toBe(owned);
   });
 
   it("maps membership and counts for catalog cards", () => {

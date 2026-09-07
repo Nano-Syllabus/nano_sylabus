@@ -102,13 +102,13 @@ describe("community leave controls (without browser)", () => {
       }),
     );
     expect(html).toContain('href="/app/communities/henglish"');
-    expect(html).toContain("Preview as student");
+    expect(html).toContain("Open as student");
     expect(html).toContain('href="/teachers?view=communities&amp;community=henglish"');
     expect(html).toContain("Admin workspace");
     expect(html).toContain("do not use that join slot");
     expect(html).not.toContain("Leave Henglish community");
   });
-  it("labels an owned community learner route as a student preview", () => {
+  it("labels an owned community as full learner access", () => {
     const html = renderToStaticMarkup(
       createElement(CommunitySubjectExplorer, {
         community: {
@@ -119,10 +119,11 @@ describe("community leave controls (without browser)", () => {
         insights: {},
       }),
     );
-    expect(html).toContain("Student preview");
-    expect(html).toContain("is not your joined learner community");
+    expect(html).toContain("Your learner access");
+    expect(html).toContain("you are already joined");
+    expect(html).toContain('href="/app/community?community=henglish"');
     expect(html).toContain('href="/teachers?view=communities&amp;community=henglish"');
-    expect(html).toContain("Back to Admin Workspace");
+    expect(html).toContain("Admin Workspace");
   });
   it("shows leave near the top of Community Hub instead of only beneath the feed", () => {
     const data: CommunityHubData = {

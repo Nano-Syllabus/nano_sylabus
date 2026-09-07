@@ -23,7 +23,12 @@ import {
   gradeTopicEvaluation,
   scoreDistribution,
 } from "@/lib/teacher-score-insights";
-import { TEACHER_UPLOAD_MAX_LABEL, teacherUploadSizeError } from "@/lib/teacher-upload";
+import {
+  isTeacherSyllabusFileSupported,
+  TEACHER_SYLLABUS_FILE_ACCEPT,
+  TEACHER_UPLOAD_MAX_LABEL,
+  teacherUploadSizeError,
+} from "@/lib/teacher-upload";
 import { teacherLegacySubjectHref, teacherSubjectsHref } from "@/lib/teacher-subject-navigation";
 import { CommunityDeleteControl } from "@/components/community-delete-control";
 import { subjectAccessLabel, type SubjectCommunity } from "@/lib/teacher-subject-access";
@@ -2276,15 +2281,17 @@ export function CommunitiesView({
                 : "Open a community you created to view its overview and members. Manage its subjects from Create Subjects."}
             </p>
           </div>
-          <Link
-            href="/communities?create=1"
-            className={cn(
-              "inline-flex min-h-10 items-center justify-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90",
-              interactive,
-            )}
-          >
-            Create community
-          </Link>
+          {!subjectsMode ? (
+            <Link
+              href="/communities?create=1"
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90",
+                interactive,
+              )}
+            >
+              Create community
+            </Link>
+          ) : null}
         </header>
         {subjectsMode ? (
           <Link
@@ -2334,21 +2341,35 @@ export function CommunitiesView({
           </div>
         ) : (
           <section className="mt-6 rounded-xl border border-dashed border-border bg-bg-primary px-6 py-14 text-center">
-            <h2 className="font-display text-xl font-semibold">Create your first community</h2>
+            <h2 className="font-display text-xl font-semibold">
+              {subjectsMode ? "No communities available" : "Create your first community"}
+            </h2>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-text-secondary">
               {subjectsMode
-                ? "Create a community first, then organise its subjects by semester here. Your reusable subject library is still available."
+                ? "Create a community from My Communities, then return here to organise its subjects by semester. Your reusable subject library is still available."
                 : "Once created, every community you own will appear here as a separate admin workspace."}
             </p>
-            <Link
-              href="/communities?create=1"
-              className={cn(
-                "mt-5 inline-flex min-h-10 items-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse",
-                interactive,
-              )}
-            >
-              Create community
-            </Link>
+            {subjectsMode ? (
+              <Link
+                href="/teachers?view=communities"
+                className={cn(
+                  "mt-5 inline-flex min-h-10 items-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse",
+                  interactive,
+                )}
+              >
+                Open My Communities →
+              </Link>
+            ) : (
+              <Link
+                href="/communities?create=1"
+                className={cn(
+                  "mt-5 inline-flex min-h-10 items-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse",
+                  interactive,
+                )}
+              >
+                Create community
+              </Link>
+            )}
           </section>
         )}
       </>
@@ -9556,8 +9577,8 @@ function CreateSubjectDialog({
       setError(`${file.name}: ${sizeError}`);
       return;
     }
-    if (!/\.(pdf|doc|docx|txt|md)$/i.test(file.name)) {
-      setError("Choose a PDF, Word document, Markdown, or plain-text syllabus.");
+    if (!isTeacherSyllabusFileSupported(file.name)) {
+      setError("Choose a PDF, Word document, text file, or syllabus image.");
       return;
     }
     setError("");
@@ -9821,7 +9842,7 @@ function CreateSubjectDialog({
           <input
             id="new-subject-syllabus-file"
             type="file"
-            accept=".pdf,.doc,.docx,.txt,.md"
+            accept={TEACHER_SYLLABUS_FILE_ACCEPT}
             className="peer sr-only"
             onChange={(event) => {
               chooseSyllabusFile(event.target.files?.[0] || null);
@@ -9864,7 +9885,7 @@ function CreateSubjectDialog({
             <span className="mt-2 text-sm text-text-muted">
               {syllabusFile
                 ? `${fileSizeLabel(syllabusFile)} · Tap to replace`
-                : "PDF, Word or plain text"}
+                : "PDF, Word, text, JPG, PNG or WebP"}
             </span>
           </label>
           {syllabusFile ? (
@@ -10375,7 +10396,7 @@ function UploadDialog({
   const completedJobs = useRef<Array<{ jobId: string; fileName: string }>>([]);
   const accept =
     shelf === "Syllabus"
-      ? ".pdf,.doc,.docx,.txt,.md"
+      ? TEACHER_SYLLABUS_FILE_ACCEPT
       : ".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp";
 
   async function submit(event: FormEvent<HTMLFormElement>) {

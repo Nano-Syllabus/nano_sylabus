@@ -223,8 +223,12 @@ function documentShelf(pathValue: string | null) {
 export async function getCommunityHubForUser(
   userId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
+  preferredCommunitySlug?: string | null,
 ): Promise<CommunityHubData | null> {
-  const joined = selectStudentCommunity(await listJoinedCommunities(userId, admin));
+  const joined = selectStudentCommunity(
+    await listJoinedCommunities(userId, admin),
+    preferredCommunitySlug,
+  );
   if (!joined) return null;
   const community = await getCommunity(joined.slug, userId, admin);
   if (!community || community.membership?.status !== "active" || !community.terms.length)

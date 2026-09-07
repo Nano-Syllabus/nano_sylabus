@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getTeacherPracticeTopics, type ApiRecord } from "@/lib/teacher-app/client";
+import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
 
 export type LearningTopic = {
   topic_key: string;
@@ -36,6 +37,14 @@ export function extractedLearningTopics(payload: ApiRecord): LearningTopic[] {
     // the provider graph's IDs, never IDs synthesized from editable labels.
     if (!title || !key)
       throw new Error("The learning service returned a topic without a usable ID or title.");
+    if (
+      isChallengeSourceDocumentTopic({
+        topicKey: key,
+        title,
+        subjectName: typeof payload.subject === "string" ? payload.subject : "",
+      })
+    )
+      return [];
     if (seen.has(key)) return [];
     seen.add(key);
     const position = Number(row.order_index ?? index);
@@ -73,13 +82,21 @@ export async function readCommunityLearningTopics(
     .order("position", { ascending: true });
   if (stored.error) throw stored.error;
   const rows = (stored.data || []) as CommunityLearningTopic[];
+  const learningRows = rows.filter((row) => {
+    const subject = subjects.find((item) => item.id === row.community_subject_id);
+    return !isChallengeSourceDocumentTopic({
+      topicKey: row.topic_key,
+      title: row.title,
+      subjectName: subject?.name,
+    });
+  });
   const missing = subjects.filter(
     (subject) =>
       subject.teacherId &&
       subject.externalSubjectSlug &&
-      !rows.some((row) => row.community_subject_id === subject.id),
+      !learningRows.some((row) => row.community_subject_id === subject.id),
   );
-  if (!missing.length) return rows;
+  if (!missing.length) return learningRows;
   const teacherIds = [...new Set(missing.map((subject) => subject.teacherId as string))];
   const syllabi = await admin
     .from("teacher_subject_syllabi")
@@ -99,7 +116,7 @@ export async function readCommunityLearningTopics(
         syllabus.structure.length > 0,
     ),
   );
-  if (!recoverable.length) return rows;
+  if (!recoverable.length) return learningRows;
   const teachers = await admin.from("teachers").select("id,collection_sk").in("id", teacherIds);
   if (teachers.error) throw teachers.error;
   const recovered = await Promise.all(
@@ -114,7 +131,7 @@ export async function readCommunityLearningTopics(
       }));
     }),
   );
-  return [...rows, ...recovered.flat()];
+  return [...learningRows, ...recovered.flat()];
 }
 
 /** The caller has already checked this user's course/subject entitlement. */

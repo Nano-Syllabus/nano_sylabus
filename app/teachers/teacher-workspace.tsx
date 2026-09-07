@@ -4,6 +4,7 @@ import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { cn, titleCase } from "@/lib/utils";
+import { TEACHER_SYLLABUS_FILE_ACCEPT } from "@/lib/teacher-upload";
 import {
   createInitialTeacherWorkspace,
   workspaceStorageKey,
@@ -1099,7 +1100,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
               className={cn(inputClass, "py-2")}
               name="file"
               type="file"
-              accept=".pdf,.doc,.docx,.txt,.md"
+              accept={TEACHER_SYLLABUS_FILE_ACCEPT}
             />
           </Field>
           <Field
@@ -4919,12 +4920,12 @@ function CreateSubjectWizard({
             Upload the university syllabus or paste it below. Review every unit before it becomes
             part of the performance map.
           </p>
-          <Field label="Syllabus file" hint="PDF, Word, text or Markdown.">
+          <Field label="Syllabus file" hint="PDF, Word, text, JPG, PNG or WebP.">
             <input
               key={syllabusFile ? `${syllabusFile.name}-${syllabusFile.lastModified}` : "empty"}
               className={cn(inputClass, "py-2")}
               type="file"
-              accept=".pdf,.doc,.docx,.txt,.md"
+              accept={TEACHER_SYLLABUS_FILE_ACCEPT}
               onChange={(event) => {
                 const file = event.target.files?.[0] || null;
                 setSyllabusFile(file);

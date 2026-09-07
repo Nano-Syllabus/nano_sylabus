@@ -1,4 +1,5 @@
 "use client";
+import { CommunitySwitcher } from "@/components/community-switcher";
 
 import Link from "next/link";
 import {
@@ -178,11 +179,13 @@ function MetricCard({
 }
 
 export function CommunityHubClient({
+  communityOptions = [],
   initialData,
   initialSection = "overview",
   memberRanking = "xp",
   initialInviteOpen = false,
 }: {
+  communityOptions?: import("@/lib/community-switch").CommunitySwitchOption[];
   initialData: CommunityHubData;
   initialSection?: CommunitySection;
   memberRanking?: "xp" | "today";
@@ -437,6 +440,11 @@ export function CommunityHubClient({
 
   return (
     <main className="mx-auto w-full max-w-[1480px] px-4 pb-20 pt-3 sm:px-6 md:px-8 lg:px-10">
+      {communityOptions.length ? (
+        <div className="mb-5 flex justify-end">
+          <CommunitySwitcher options={communityOptions} selectedSlug={community.slug} />
+        </div>
+      ) : null}
       {!initialData.canManage ? (
         <div className="mb-4 flex justify-end">
           <CommunityLeaveControl key={community.id} community={community} />
@@ -1057,7 +1065,7 @@ function CommunityOverview({
               />
             </div>
             <Link
-              href="/app/challenges"
+              href={`/app/challenges?community=${encodeURIComponent(data.community.slug)}`}
               className={`mt-6 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-text-primary px-4 text-sm font-semibold text-text-inverse hover:opacity-90 ${focusRing}`}
             >
               Start a challenge <ArrowRight className="size-4" aria-hidden="true" />

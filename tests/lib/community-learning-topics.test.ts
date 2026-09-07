@@ -35,6 +35,21 @@ describe("canonical community challenge topics", () => {
     ]);
   });
 
+  it("keeps uploaded source documents out of the student topic catalogue", () => {
+    expect(
+      extractedLearningTopics({
+        subject: "Applied Mechanics",
+        topic_source: "stored",
+        topics: [
+          { topic_key: "applied_mechanics_qb", title: "Applied Mechanics QB" },
+          { topic_key: "applied_mechanics_syllabus", title: "Applied mechanics syllabus" },
+          { topic_key: "applied_mechanics_text_book", title: "Applied mechanics text book" },
+          { topic_key: "introduction", title: "Introduction" },
+        ],
+      }).map((topic) => topic.topic_key),
+    ).toEqual(["introduction"]);
+  });
+
   it("refuses to invent a challenge ID from a syllabus title", () => {
     expect(() => extractedLearningTopics({ topics: [{ title: "Identifiers" }] })).toThrow(
       "usable ID",
@@ -76,6 +91,33 @@ describe("canonical community challenge topics", () => {
     ).toEqual(["identifiers"]);
     expect(mocks.topics).not.toHaveBeenCalled();
     expect(db.from).not.toHaveBeenCalledWith("teacher_subject_syllabi");
+  });
+
+  it("filters source-document rows already stored by an older publication", async () => {
+    const db = communityLearningFixture();
+    db.tables.community_subjects[0].name = "Applied Mechanics";
+    db.tables.community_subject_topics.push(
+      {
+        id: "topic-qb",
+        community_subject_id: "subject-1",
+        topic_key: "applied_mechanics_qb",
+        title: "Applied Mechanics QB",
+        position: 0,
+      },
+      {
+        id: "topic-intro",
+        community_subject_id: "subject-1",
+        topic_key: "introduction",
+        title: "Introduction",
+        position: 1,
+      },
+    );
+
+    expect(
+      (await readCourseLearningTopics("course-1", "teacher-1", "teacher_nims", db.admin))?.map(
+        (row) => row.topic_key,
+      ),
+    ).toEqual(["introduction"]);
   });
 
   it("recovers old unpublished syllabi through real provider topics, not outline subheadings", async () => {

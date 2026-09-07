@@ -219,8 +219,7 @@ export function aggregateScopedPracticeActivity(
       score_percentage_sum: 0,
     };
     current.attempt_count = asNumber(current.attempt_count) + 1;
-    current.completed_count =
-      asNumber(current.completed_count) + (attempt.passed === true ? 1 : 0);
+    current.completed_count = asNumber(current.completed_count) + (attempt.passed === true ? 1 : 0);
     if (totalMarks > 0) {
       current.graded_attempt_count = asNumber(current.graded_attempt_count) + 1;
       current.score_percentage_sum =
@@ -238,31 +237,32 @@ export function aggregateScopedPracticeActivity(
 export async function getStudentDailyDashboard(
   userId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
+  preferredCommunitySlug?: string,
 ): Promise<StudentDailyDashboard> {
   const today = communityDateKey(new Date());
   const activityStart = calendarStart(today);
   const activityStartTimestamp = new Date(`${activityStart}T00:00:00+05:45`).toISOString();
-  const activityEndTimestamp = new Date(
-    `${shiftDateKey(today, 1)}T00:00:00+05:45`,
-  ).toISOString();
-  // The community hub does not depend on the challenge, so the two go out
-  // together. Only the activity query needs the challenge's course id, which
-  // keeps the dashboard at two round trips instead of the previous three.
-  const [challenge, community] = await Promise.all([
-    getStudentChallengeDashboard(userId),
-    getCommunityHubForUser(userId, admin),
-  ]);
+  const activityEndTimestamp = new Date(`${shiftDateKey(today, 1)}T00:00:00+05:45`).toISOString();
+  const challenge = await getStudentChallengeDashboard(
+    userId,
+    1,
+    undefined,
+    preferredCommunitySlug,
+  );
 
-  const activityResult = challenge.community?.courseId
-    ? await admin
-        .from("student_practice_attempts")
-        .select("created_at,total_score,total_marks,passed")
-        .eq("user_id", userId)
-        .eq("course_id", challenge.community.courseId)
-        .gte("created_at", activityStartTimestamp)
-        .lt("created_at", activityEndTimestamp)
-        .order("created_at", { ascending: true })
-    : { data: [], error: null };
+  const [community, activityResult] = await Promise.all([
+    getCommunityHubForUser(userId, admin, challenge.community?.slug ?? preferredCommunitySlug),
+    challenge.community?.courseId
+      ? admin
+          .from("student_practice_attempts")
+          .select("created_at,total_score,total_marks,passed")
+          .eq("user_id", userId)
+          .eq("course_id", challenge.community.courseId)
+          .gte("created_at", activityStartTimestamp)
+          .lt("created_at", activityEndTimestamp)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
   if (activityResult.error) throw activityResult.error;
   const scopedActivity = aggregateScopedPracticeActivity(

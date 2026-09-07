@@ -2,12 +2,17 @@ import http from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   askTeacherSubject,
+  createTeacherChallengeExam,
   generateTeacherCollectionPaper,
   generateTeacherPracticePaper,
+  getTeacherChallengePrerequisites,
+  getTeacherChallengeReading,
+  getTeacherChallengeSolvedQuestions,
   getTeacherCollectionReadiness,
   getTeacherCollectionWeightage,
   gradeTeacherPracticePaper,
   gradeTeacherPracticePaperFile,
+  submitTeacherChallengeExam,
   submitTeacherChallengeExamFile,
 } from "@/lib/teacher-app/client";
 
@@ -15,7 +20,8 @@ describe("generateTeacherPracticePaper", () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it("uses the collection key and collection-implied namespace", async () => {
-    let received: { path: string; authorization: string; body: Record<string, unknown> } | null = null;
+    let received: { path: string; authorization: string; body: Record<string, unknown> } | null =
+      null;
     const server = http.createServer((request, response) => {
       let raw = "";
       request.setEncoding("utf8");
@@ -92,6 +98,30 @@ describe("generateTeacherPracticePaper", () => {
       await askTeacherSubject("collection-secret", "Physics", "Explain flux", 5, "Be concise", []);
       await getTeacherCollectionWeightage("collection-secret", "Physics & Math");
       await getTeacherCollectionReadiness("collection-secret", "Physics & Math");
+      await getTeacherChallengePrerequisites("collection-secret", {
+        subject: "Physics",
+        topics: ["Induction"],
+        limit: 3,
+      });
+      await getTeacherChallengeReading("collection-secret", {
+        subject: "Physics",
+        topics: ["Induction"],
+      });
+      await getTeacherChallengeSolvedQuestions("collection-secret", {
+        subject: "Physics",
+        topics: ["Induction"],
+        limit: 2,
+      });
+      await createTeacherChallengeExam("collection-secret", {
+        subject: "Physics",
+        topics: ["Induction"],
+        questions: 2,
+        duration_minutes: 20,
+        pass_percent: 40,
+      });
+      await submitTeacherChallengeExam("collection-secret", "attempt/one", {
+        answers: [{ question_id: "q1", answer_text: "Flux is..." }],
+      });
       await generateTeacherCollectionPaper("collection-secret", {
         subject: "Physics",
         chapters: ["Induction"],
@@ -103,9 +133,16 @@ describe("generateTeacherPracticePaper", () => {
         "/v1/collection/ask",
         "/v1/collection/weightage?subject=Physics+%26+Math",
         "/v1/collection/readiness?subject=Physics+%26+Math",
+        "/v1/collection/challenge/prerequisites",
+        "/v1/collection/challenge/learn",
+        "/v1/collection/challenge/solved-questions",
+        "/v1/collection/challenge/exam",
+        "/v1/collection/challenge/exam/attempt%2Fone/submit",
         "/v1/collection/generate",
       ]);
-      expect(received.every((call) => call.authorization === "Bearer collection-secret")).toBe(true);
+      expect(received.every((call) => call.authorization === "Bearer collection-secret")).toBe(
+        true,
+      );
       expect(received[0].body).toEqual({
         subject: "Physics",
         query: "Explain flux",
@@ -115,18 +152,48 @@ describe("generateTeacherPracticePaper", () => {
       });
       expect(received[3].body).toEqual({
         subject: "Physics",
+        topics: ["Induction"],
+        limit: 3,
+      });
+      expect(received[4].body).toEqual({
+        subject: "Physics",
+        topics: ["Induction"],
+      });
+      expect(received[5].body).toEqual({
+        subject: "Physics",
+        topics: ["Induction"],
+        limit: 2,
+      });
+      expect(received[6].body).toEqual({
+        subject: "Physics",
+        topics: ["Induction"],
+        questions: 2,
+        duration_minutes: 20,
+        pass_percent: 40,
+      });
+      expect(received[7].body).toEqual({
+        answers: [{ question_id: "q1", answer_text: "Flux is..." }],
+      });
+      expect(received[8].body).toEqual({
+        subject: "Physics",
         chapters: ["Induction"],
         bands: [],
         mimic_question_bank: true,
       });
     } finally {
-      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
     }
   });
 
   it("uploads an answer sheet with the collection key", async () => {
-    let received: { path: string; authorization: string; contentType: string; body: string } | null =
-      null;
+    let received: {
+      path: string;
+      authorization: string;
+      contentType: string;
+      body: string;
+    } | null = null;
     const server = http.createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
@@ -187,17 +254,19 @@ describe("generateTeacherPracticePaper", () => {
           body: Buffer.concat(chunks).toString("utf8"),
         };
         response.setHeader("Content-Type", "application/json");
-        response.end(JSON.stringify({
-          attempt_id: "attempt/one",
-          graded: true,
-          total_score: 82,
-          total_marks: 100,
-          percentage: 82,
-          pass_marks: 40,
-          passed: true,
-          subject: "Computer Networks",
-          results: [],
-        }));
+        response.end(
+          JSON.stringify({
+            attempt_id: "attempt/one",
+            graded: true,
+            total_score: 82,
+            total_marks: 100,
+            percentage: 82,
+            pass_marks: 40,
+            passed: true,
+            subject: "Computer Networks",
+            results: [],
+          }),
+        );
       });
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -218,7 +287,9 @@ describe("generateTeacherPracticePaper", () => {
       expect(received?.body).toContain('filename="answer.jpg"');
       expect(received?.body).toContain("scan");
     } finally {
-      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
     }
   });
 
@@ -252,10 +323,15 @@ describe("generateTeacherPracticePaper", () => {
       expect(received).toEqual({
         path: "/api/v1/practice/papers/exam%2Fone/grade",
         authorization: "Bearer collection-secret",
-        body: { student_name: "Jane", answers: [{ question_id: "q-1", answer_text: "Typed answer" }] },
+        body: {
+          student_name: "Jane",
+          answers: [{ question_id: "q-1", answer_text: "Typed answer" }],
+        },
       });
     } finally {
-      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
     }
   });
 });

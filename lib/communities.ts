@@ -113,15 +113,30 @@ export type CommunityDetail = CommunitySummary & {
   canManage: boolean;
 };
 
-/** The learner workspace is scoped to the one community joined as a member. */
+/**
+ * Resolve the active learner workspace. A creator is already an active member
+ * of every community they own, so creator memberships are valid learner
+ * scopes too. The one externally joined community remains the default when it
+ * exists; an explicit slug lets the creator open one of their own communities.
+ */
 export function selectStudentCommunity<
-  T extends { membership: Pick<CommunityMembership, "role" | "status"> | null },
->(communities: T[]): T | null {
+  T extends {
+    slug?: string;
+    membership: Pick<CommunityMembership, "role" | "status"> | null;
+  },
+>(communities: T[], preferredSlug?: string | null): T | null {
+  const active = communities.filter(
+    (community) => community.membership?.status === "active",
+  );
+  const normalizedPreferred = preferredSlug?.trim().toLowerCase();
+  if (normalizedPreferred) {
+    const preferred = active.find(
+      (community) => community.slug?.trim().toLowerCase() === normalizedPreferred,
+    );
+    if (preferred) return preferred;
+  }
   return (
-    communities.find(
-      (community) =>
-        community.membership?.role === "member" && community.membership.status === "active",
-    ) || null
+    active.find((community) => community.membership?.role === "member") || active[0] || null
   );
 }
 

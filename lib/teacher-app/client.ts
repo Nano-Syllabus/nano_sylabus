@@ -37,7 +37,7 @@ export type TeacherChallengeSolvedQuestion = {
   solution: string;
   topic: string;
   topic_key: string;
-  marks: number;
+  marks?: number | null;
   year?: string | null;
   source?: string;
 };
@@ -61,19 +61,36 @@ export type TeacherChallengeExam = {
   warning?: string | null;
 };
 
-export type TeacherChallengeResponse = {
+export type TeacherChallengePrerequisitesResponse = {
   collection: string;
   subject: string;
   subject_slug: string;
-  challenge_id: string;
-  title: string;
   topics: TeacherChallengeTopic[];
-  topic_source: string;
+  topic_source: "syllabus" | "stored" | "index_chapters" | "none";
   can_start: boolean;
   prerequisites: TeacherChallengePrerequisite[];
+  blockers: string[];
+  warnings: string[];
+  note: string;
+};
+
+export type TeacherChallengeLearnResponse = {
+  collection: string;
+  subject: string;
+  subject_slug: string;
+  topics: TeacherChallengeTopic[];
   reading: TeacherChallengeReading;
-  solved_questions: TeacherChallengeSolvedQuestion[];
-  exam: TeacherChallengeExam;
+  served_from: string;
+  warnings: string[];
+};
+
+export type TeacherChallengeSolvedResponse = {
+  collection: string;
+  subject: string;
+  subject_slug: string;
+  topics: TeacherChallengeTopic[];
+  questions: TeacherChallengeSolvedQuestion[];
+  grounded: boolean;
   warnings: string[];
 };
 
@@ -99,6 +116,44 @@ export type TeacherChallengeGradeResponse = {
   stored?: boolean;
   evaluation?: import("@/lib/tenant/client").PracticeEvaluation;
   verdict?: string;
+};
+
+export type TeacherPracticePaper = {
+  id: string;
+  title: string;
+  subject: string;
+  chapters: string[];
+  questions: Array<{
+    id: string;
+    chapter: string;
+    band_label: string;
+    question_type: string;
+    marks: number;
+    text: string;
+  }>;
+  total_marks: number;
+  pass_marks: number;
+  warning?: string | null;
+};
+
+export type TeacherPracticePaperGradeResponse = {
+  submission_id: string;
+  set_id: string;
+  student_name: string;
+  source: string;
+  results: Array<{
+    question_id: string;
+    chapter?: string;
+    question: string;
+    marks: number;
+    student_answer?: string;
+    score: number;
+    feedback: string;
+  }>;
+  total_score: number;
+  total_marks: number;
+  graded: boolean;
+  evaluation: import("@/lib/tenant/client").PracticeEvaluation;
 };
 
 export type TeacherSubjectStreamEvent =
@@ -685,19 +740,31 @@ export const getTeacherCollectionPapers = (key: string, subject?: string) =>
 export const getTeacherCollectionPaper = (key: string, paperId: string) =>
   teacherRequest<ApiRecord>(`/v1/collection/papers/${encodeURIComponent(paperId)}`, key);
 
-export const createTeacherChallenge = (
+export const getTeacherChallengePrerequisites = (
   key: string,
-  input: {
-    subject: string;
-    topics: string[];
-    prerequisite_limit?: number;
-    solved_questions?: number;
-    exam_questions?: number;
-    duration_minutes?: number;
-    pass_percent?: number;
-  },
+  input: { subject: string; topics: string[]; limit?: number },
 ) =>
-  teacherRequest<TeacherChallengeResponse>("/v1/collection/challenge", key, {
+  teacherRequest<TeacherChallengePrerequisitesResponse>(
+    "/v1/collection/challenge/prerequisites",
+    key,
+    { method: "POST", body: input, timeoutMs: 120_000 },
+  );
+
+export const getTeacherChallengeReading = (
+  key: string,
+  input: { subject: string; topics: string[]; instruction?: string },
+) =>
+  teacherRequest<TeacherChallengeLearnResponse>("/v1/collection/challenge/learn", key, {
+    method: "POST",
+    body: input,
+    timeoutMs: 180_000,
+  });
+
+export const getTeacherChallengeSolvedQuestions = (
+  key: string,
+  input: { subject: string; topics: string[]; limit?: number },
+) =>
+  teacherRequest<TeacherChallengeSolvedResponse>("/v1/collection/challenge/solved-questions", key, {
     method: "POST",
     body: input,
     timeoutMs: 180_000,
@@ -838,7 +905,7 @@ export const generateTeacherPracticePaper = (
     pass_marks?: number;
   },
 ) =>
-  teacherRequest<ApiRecord>("/api/v1/practice/generate", key, {
+  teacherRequest<TeacherPracticePaper>("/api/v1/practice/generate", key, {
     method: "POST",
     body: input,
     timeoutMs: 120_000,
@@ -853,7 +920,7 @@ export const gradeTeacherPracticePaper = (
     answers: Array<{ question_id: string; answer_text: string }>;
   },
 ) =>
-  teacherRequest<ApiRecord>(`/api/v1/practice/papers/${encodeURIComponent(paperId)}/grade`, key, {
+  teacherRequest<TeacherPracticePaperGradeResponse>(`/api/v1/practice/papers/${encodeURIComponent(paperId)}/grade`, key, {
     method: "POST",
     body: input,
     timeoutMs: 120_000,
@@ -898,7 +965,7 @@ export async function gradeTeacherPracticePaperFile(
   return trackApiRequest(
     "collection",
     () =>
-      new Promise<ApiRecord>((resolve, reject) => {
+      new Promise<TeacherPracticePaperGradeResponse>((resolve, reject) => {
         const request = transport.request(
           url,
           {
@@ -939,7 +1006,7 @@ export async function gradeTeacherPracticePaperFile(
                 );
                 return;
               }
-              resolve(payload as ApiRecord);
+              resolve(payload as TeacherPracticePaperGradeResponse);
             });
           },
         );

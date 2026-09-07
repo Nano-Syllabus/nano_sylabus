@@ -143,11 +143,11 @@ function CommunityCard({
             href={`/app/communities/${community.slug}`}
             className={`inline-flex min-h-10 flex-1 items-center justify-center rounded-full border border-border bg-surface px-4 text-sm font-semibold text-text-primary transition-colors hover:bg-bg-secondary ${focusRing}`}
           >
-            Preview as student
+            Open as student
           </Link>
         ) : null}
         {joined ? (
-          <span className="inline-flex min-h-10 items-center rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 text-xs font-medium text-emerald-300">
+          <span className="inline-flex min-h-10 items-center rounded-full border border-emerald-600/25 bg-emerald-50 px-3 text-xs font-medium text-emerald-700">
             {creator ? "Creator" : "Joined"}
           </span>
         ) : null}
@@ -292,8 +292,9 @@ export function CommunityCatalogClient({
           </p>
           {signedIn ? (
             <p className="mt-2 max-w-2xl text-xs leading-5 text-text-secondary">
-              Your Subject Explorer follows the one community you join as a member. Communities you
-              create stay in Admin workspace and do not use that join slot.
+              Your Subject Explorer follows the community you select. Communities you create and
+              communities you join can be switched from the Community Hub; owned communities do
+              not use that join slot.
             </p>
           ) : null}
         </div>

@@ -108,6 +108,7 @@ describe("Create Subjects community manager (server-rendered, no browser)", () =
     expect(html).toContain("Manage subjects");
     expect(html).toContain("/teachers?view=subjects&amp;community=henglish");
     expect(html).toContain("/teachers?view=subjects&amp;library=1");
+    expect(html).not.toContain("Create community");
     expect(html).not.toContain("Open admin workspace");
   });
 
@@ -210,7 +211,10 @@ describe("Create Subjects community manager (server-rendered, no browser)", () =
   it("provides empty and error recovery states", () => {
     const empty = dashboard();
     empty.managedCommunities = [];
-    expect(render({ dashboard: empty })).toContain("Create your first community");
+    const html = render({ dashboard: empty });
+    expect(html).toContain("No communities available");
+    expect(html).toContain("Open My Communities");
+    expect(html).not.toContain("Create community");
     expect(
       render({ dashboard: null, state: "error", error: "Unable to load communities" }),
     ).toContain("Unable to load communities");

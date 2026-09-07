@@ -18,6 +18,7 @@ import {
   getStudentCommunityLearningScope,
   listStudentCommunitySubjectAccess,
 } from "@/lib/student-courses";
+import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
 
 export type ChallengeDashboardScope = {
   courseId: string;
@@ -270,7 +271,6 @@ async function loadScopedChallengeMetrics(
       .from("community_memberships")
       .select("user_id")
       .eq("community_id", communityId)
-      .eq("role", "member")
       .eq("status", "active"),
   ]);
   if (isMissingChallengeTable(error)) return emptyChallengeMetrics();
@@ -426,12 +426,16 @@ export async function getStudentChallengeDashboard(
   userId: string,
   completedChallengePage = 1,
   requestedScope?: ChallengeDashboardScope,
+  preferredCommunitySlug?: string,
 ): Promise<StudentChallengeDashboard> {
   const [allMastery, allCommunitySubjects, communityScope, allPracticeAttempts] = await Promise.all(
     [
       listTopicMastery(userId),
       listStudentCommunitySubjectAccess(userId),
-      getStudentCommunityLearningScope(userId),
+      getStudentCommunityLearningScope(userId, undefined, {
+        communitySlug: preferredCommunitySlug,
+        courseId: requestedScope?.courseId,
+      }),
       listPracticeAttempts(userId, 200),
     ],
   );
@@ -537,7 +541,15 @@ export async function getStudentChallengeDashboard(
             });
             topics = (Array.isArray(response.topics) ? response.topics : []) as PracticeTopic[];
           }
-          const rankedTopics = topics
+          const learningTopics = topics.filter(
+            (topic) =>
+              !isChallengeSourceDocumentTopic({
+                topicKey: topic.topic_key,
+                title: topic.title,
+                subjectName,
+              }),
+          );
+          const rankedTopics = learningTopics
             .map((topic) => ({ topic, mastery: stored.get(topic.topic_key) }))
             .sort(
               (left, right) =>
@@ -552,18 +564,19 @@ export async function getStudentChallengeDashboard(
               scopeKey,
               slug: subjectSlug,
               name: subjectName,
-              readiness: topics.length
-                ? topics.reduce(
+              readiness: learningTopics.length
+                ? learningTopics.reduce(
                     (sum, topic) => sum + (stored.get(topic.topic_key)?.percentage ?? 0),
                     0,
-                  ) / topics.length
+                  ) / learningTopics.length
                 : null,
-              totalTopics: topics.length,
-              practicedTopics: topics.filter(
+              totalTopics: learningTopics.length,
+              practicedTopics: learningTopics.filter(
                 (topic) => (stored.get(topic.topic_key)?.attempts ?? 0) > 0,
               ).length,
-              weakTopics: topics.filter((topic) => stored.get(topic.topic_key)?.status === "weak")
-                .length,
+              weakTopics: learningTopics.filter(
+                (topic) => stored.get(topic.topic_key)?.status === "weak",
+              ).length,
               nextTopic: next ? { key: next.topic_key, title: next.title } : null,
               topicDataAvailable: true,
             },

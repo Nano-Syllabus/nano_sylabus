@@ -31,38 +31,62 @@ export type StudentCommunityLearningScope = {
   courseId: string | null;
 };
 
-/** Returns only the learner community; creator memberships never become student scope. */
+/**
+ * Returns the selected learner community. Both creator and regular member
+ * rows grant learner access; the unique-index limit still applies only to the
+ * single external `member` row.
+ */
 export async function getStudentCommunityLearningScope(
   studentId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
+  preferred?: { communitySlug?: string; courseId?: string },
 ): Promise<StudentCommunityLearningScope | null> {
   const membershipResult = await admin
     .from("community_memberships")
-    .select("community_id")
+    .select("community_id,role,joined_at")
     .eq("user_id", studentId)
-    .eq("role", "member")
     .eq("status", "active")
-    .maybeSingle();
+    .order("joined_at", { ascending: false });
   if (membershipResult.error) throw membershipResult.error;
-  const communityId = String(membershipResult.data?.community_id || "");
-  if (!communityId) return null;
+  const memberships = membershipResult.data || [];
+  const communityIds = memberships
+    .map((row) => String(row.community_id || ""))
+    .filter(Boolean);
+  if (!communityIds.length) return null;
 
   const communityResult = await admin
     .from("communities")
     .select("id,slug,name,study_course_id")
-    .eq("id", communityId)
-    .eq("status", "active")
-    .maybeSingle();
+    .in("id", communityIds)
+    .eq("status", "active");
   if (communityResult.error) throw communityResult.error;
-  if (!communityResult.data) return null;
+  const communities = communityResult.data || [];
+  const communityById = new Map(communities.map((row) => [String(row.id), row]));
+  const activeMemberships = memberships.filter((row) =>
+    communityById.has(String(row.community_id || "")),
+  );
+  const normalizedSlug = preferred?.communitySlug?.trim().toLowerCase();
+  const preferredMembership = activeMemberships.find((membership) => {
+    const community = communityById.get(String(membership.community_id));
+    return (
+      (normalizedSlug && String(community?.slug || "").toLowerCase() === normalizedSlug) ||
+      (preferred?.courseId && String(community?.study_course_id || "") === preferred.courseId)
+    );
+  });
+  const membership =
+    preferredMembership ||
+    activeMemberships.find((row) => row.role === "member") ||
+    activeMemberships[0];
+  const community = membership
+    ? communityById.get(String(membership.community_id || ""))
+    : undefined;
+  if (!community) return null;
 
   return {
-    communityId,
-    communitySlug: String(communityResult.data.slug || ""),
-    communityName: String(communityResult.data.name || "Community"),
-    courseId: communityResult.data.study_course_id
-      ? String(communityResult.data.study_course_id)
-      : null,
+    communityId: String(community.id),
+    communitySlug: String(community.slug || ""),
+    communityName: String(community.name || "Community"),
+    courseId: community.study_course_id ? String(community.study_course_id) : null,
   };
 }
 
@@ -597,7 +621,6 @@ export async function listStudentCommunitySubjectAccess(
     .from("community_memberships")
     .select("community_id")
     .eq("user_id", studentId)
-    .eq("role", "member")
     .eq("status", "active");
   if (membershipResult.error) throw membershipResult.error;
 

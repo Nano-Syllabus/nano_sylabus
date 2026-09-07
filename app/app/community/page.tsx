@@ -4,6 +4,7 @@ import { CommunityHubClient } from "@/components/community-hub-client";
 import { SetAppShell } from "@/components/set-app-shell";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getCommunityHubForUser } from "@/lib/data/community-hub";
+import { getActiveCommunity } from "@/lib/data/active-community";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,13 @@ export default async function CommunityPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { user } = await requireOnboardedUser();
-  const [data, params] = await Promise.all([getCommunityHubForUser(user.id), searchParams]);
+  const params = await searchParams;
+  const preferredCommunity =
+    typeof params.community === "string" ? params.community.trim() : undefined;
+  const active = await getActiveCommunity(user.id, preferredCommunity);
+  const data = active.selected
+    ? await getCommunityHubForUser(user.id, undefined, active.selected.slug)
+    : null;
   const tab = typeof params.tab === "string" ? params.tab : "overview";
   const initialSection = ["overview", "subjects", "forum", "members"].includes(tab)
     ? (tab as "overview" | "subjects" | "forum" | "members")
@@ -26,6 +33,8 @@ export default async function CommunityPage({
       <SetAppShell title="Community Hub" />
       {data ? (
         <CommunityHubClient
+          key={data.community.id}
+          communityOptions={active.options}
           initialData={data}
           initialSection={initialSection}
           memberRanking={memberRanking}

@@ -129,22 +129,38 @@ describe("community subject publication access", () => {
       ],
     });
 
-    const [access, scope] = await Promise.all([
+    const [access, scope, ownedScope] = await Promise.all([
       listStudentCommunitySubjectAccess("member-1", admin),
       getStudentCommunityLearningScope("member-1", admin),
+      getStudentCommunityLearningScope("member-1", admin, { communitySlug: "my-community" }),
     ]);
 
-    expect(access).toHaveLength(1);
-    expect(access[0]).toMatchObject({
-      subjectSlug: "teacher_c_programming",
-      subjectName: "C Programming",
-      accessKind: "community",
-    });
+    expect(access).toHaveLength(2);
+    expect(access).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          subjectSlug: "teacher_c_programming",
+          subjectName: "C Programming",
+          accessKind: "community",
+        }),
+        expect.objectContaining({
+          subjectSlug: "teacher_owned_subject",
+          subjectName: "Owned Subject",
+          accessKind: "community",
+        }),
+      ]),
+    );
     expect(scope).toEqual({
       communityId: "community-1",
       communitySlug: "coding",
       communityName: "Coding",
       courseId: "course-1",
+    });
+    expect(ownedScope).toEqual({
+      communityId: "community-2",
+      communitySlug: "my-community",
+      communityName: "My Community",
+      courseId: "course-2",
     });
   });
 });

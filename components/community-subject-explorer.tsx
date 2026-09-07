@@ -177,7 +177,7 @@ function SubjectProgressModal({
 
   const challengeHref =
     community.studyCourseId && subject.externalSubjectSlug
-      ? `/app/challenges?courseId=${encodeURIComponent(community.studyCourseId)}&subject=${encodeURIComponent(subject.externalSubjectSlug)}`
+      ? `/app/challenges?community=${encodeURIComponent(community.slug)}&courseId=${encodeURIComponent(community.studyCourseId)}&subject=${encodeURIComponent(subject.externalSubjectSlug)}`
       : null;
   const averageScore = insight?.averageScore ?? null;
 
@@ -490,18 +490,26 @@ export function CommunitySubjectExplorer({
       {community.canManage ? (
         <aside className="mt-5 flex flex-col gap-3 rounded-xl border border-border bg-bg-secondary p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-text-primary">Student preview</p>
+            <p className="text-sm font-semibold text-text-primary">Your learner access</p>
             <p className="mt-1 text-sm leading-6 text-text-secondary">
-              You are previewing your own community. It stays in Admin Workspace and is not your
-              joined learner community.
+              You created this community, so you are already joined. Study its published materials
+              here without using your external community slot.
             </p>
           </div>
-          <Link
-            href={`/teachers?view=communities&community=${encodeURIComponent(community.slug)}`}
-            className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-full border border-border bg-bg-primary px-4 text-sm font-medium text-text-primary hover:bg-bg-tertiary ${focusRing}`}
-          >
-            Back to Admin Workspace
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/app/community?community=${encodeURIComponent(community.slug)}`}
+              className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse hover:opacity-90 ${focusRing}`}
+            >
+              Open Community Hub
+            </Link>
+            <Link
+              href={`/teachers?view=communities&community=${encodeURIComponent(community.slug)}`}
+              className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-full border border-border bg-bg-primary px-4 text-sm font-medium text-text-primary hover:bg-bg-tertiary ${focusRing}`}
+            >
+              Admin Workspace
+            </Link>
+          </div>
         </aside>
       ) : null}
 

@@ -251,6 +251,43 @@ body:has(.exam-prep-theme) {
   font-family: var(--font-exam-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* The public community catalogue stays light even when the signed-in app uses
+   a dark preference. This page belongs to the public marketing surface. */
+.exam-prep-theme.community-catalog-light {
+  color-scheme: light;
+  --background: #f7f9fc;
+  --foreground: #111b33;
+  --bg-primary: #ffffff;
+  --text-primary: #111b33;
+  --text-secondary: #4f5f75;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+  --border: rgb(17 27 51 / 12%);
+  --border-strong: #2f6fff;
+  --surface: #f1f5f9;
+  --surface-2: #e8eef7;
+  --card: #ffffff;
+  --card-foreground: #111b33;
+  --popover: #ffffff;
+  --popover-foreground: #111b33;
+  --primary: #2463eb;
+  --primary-foreground: #ffffff;
+  --secondary: #e8eef7;
+  --secondary-foreground: #111b33;
+  --muted: #edf2f8;
+  --muted-foreground: #526176;
+  --accent: #e7efff;
+  --accent-foreground: #173b80;
+  --input: rgb(17 27 51 / 16%);
+  --ring: #2463eb;
+  --gradient-hero:
+    radial-gradient(95% 65% at 50% -10%, rgb(47 111 255 / 14%) 0%, transparent 64%),
+    linear-gradient(180deg, #ffffff 0%, #f7f9fc 72%);
+  --gradient-card: linear-gradient(160deg, #ffffff 0%, #fbfcff 100%);
+  --shadow-glow: 0 20px 55px -28px rgb(47 111 255 / 30%);
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 80%) inset, 0 18px 45px -34px rgb(17 27 51 / 35%);
+}
+
 .exam-prep-theme h1,
 .exam-prep-theme h2,
 .exam-prep-theme h3,

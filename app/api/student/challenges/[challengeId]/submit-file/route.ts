@@ -43,6 +43,16 @@ export async function POST(
       return NextResponse.json({ error: "Finish the lesson and worked examples before submitting." }, { status: 409 });
     }
     if (!challenge.content || !externalPaperId) return NextResponse.json({ error: "Start the challenge first." }, { status: 409 });
+    if (challenge.content.examProvider !== "practice-paper-v1") {
+      const refreshed = await refreshStudentChallengeExam(user.id, challengeId);
+      return NextResponse.json(
+        {
+          error: "Your answer-sheet grader was upgraded. A fresh compatible exam is ready.",
+          challenge: refreshed,
+        },
+        { status: 409 },
+      );
+    }
     if (challengeExamExpired(challenge)) {
       const refreshed = await refreshStudentChallengeExam(user.id, challengeId);
       return NextResponse.json({ error: "That sitting expired. A fresh exam is ready.", challenge: refreshed }, { status: 409 });
