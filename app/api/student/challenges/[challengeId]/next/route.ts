@@ -23,10 +23,12 @@ export async function POST(
     const url = new URL(request.url);
     const courseId = url.searchParams.get("courseId")?.trim() || "";
     const subjectSlug = url.searchParams.get("subject")?.trim() || "";
+    const communitySlug = url.searchParams.get("community")?.trim() || "";
     const dashboard = await getStudentChallengeDashboard(
       user.id,
       1,
       courseId && subjectSlug ? { courseId, subjectSlug } : undefined,
+      communitySlug || undefined,
     );
     // Loading the dashboard also tops up today's queue with unassigned real
     // topics. This makes Next work even when the client holds an old snapshot.

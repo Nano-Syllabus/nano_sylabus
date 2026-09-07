@@ -4,21 +4,31 @@ import {
   getStudentCourseSubjectAccessForCourse,
 } from "@/lib/student-courses";
 import {
-  createTeacherChallenge,
   generateTeacherPracticePaper,
   gradeTeacherPracticePaper,
   gradeTeacherPracticePaperFile,
+  getTeacherChallengePrerequisites,
+  getTeacherChallengeReading,
+  getTeacherChallengeSolvedQuestions,
+  getTeacherPracticeTopics,
   TeacherApiError,
   type ApiRecord,
   type TeacherChallengeExam,
   type TeacherChallengeGradeResponse,
-  type TeacherChallengeResponse,
+  type TeacherChallengeLearnResponse,
+  type TeacherChallengePrerequisitesResponse,
   type TeacherChallengeSolvedQuestion,
+  type TeacherChallengeSolvedResponse,
+  type TeacherPracticePaperGradeResponse,
 } from "@/lib/teacher-app/client";
+import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
+import type { PracticeEvaluation } from "@/lib/tenant/client";
 
 const UNDEFINED_TABLE = "42P01";
 const POSTGREST_MISSING_TABLE = "PGRST205";
 export const CHALLENGE_PASS_PERCENT = 40;
+export const CHALLENGE_QUESTIONS = 2;
+export const CHALLENGE_MARKS_PER_QUESTION = 10;
 
 export function isMissingChallengeTable(error: { code?: string } | null) {
   return error?.code === UNDEFINED_TABLE || error?.code === POSTGREST_MISSING_TABLE;
@@ -80,7 +90,10 @@ export type ChallengeSolvedExample = {
 export type ChallengePrerequisite = {
   topicKey: string;
   title: string;
+  unitNumber: string;
+  orderIndex: number;
   taught: boolean;
+  bankQuestions: number;
   reason: string;
 };
 
@@ -94,10 +107,18 @@ export type ChallengeExamQuestion = {
 
 export type StudentChallengeContent = {
   provider?: "collection-challenge-v1";
+  examProvider?: "practice-paper-v1";
   upstreamChallengeId?: string;
   topicKeys?: string[];
   canStart?: boolean;
   prerequisites?: ChallengePrerequisite[];
+  prerequisiteNote?: string;
+  prerequisiteSource?: "syllabus" | "stored" | "index_chapters" | "none";
+  prerequisiteBlockers?: string[];
+  prerequisiteWarnings?: string[];
+  learningWarning?: string | null;
+  solvedWarning?: string | null;
+  examWarning?: string | null;
   lesson: {
     title: string;
     content: string[];
@@ -116,9 +137,18 @@ export type StudentChallengeDetail = StudentChallengeSummary & {
   latestAttempt: ChallengeAttemptReview | null;
 };
 
+export type StudentChallengePrerequisiteReading = {
+  topicKey: string;
+  title: string;
+  content: string[];
+  focus: string;
+  warning: string | null;
+};
+
 export type ChallengeAttemptReview = {
   attemptId: string;
   handedInAt: string | null;
+  evaluation?: PracticeEvaluation;
   answers: Array<{
     questionId: string;
     answerText: string;
@@ -126,6 +156,62 @@ export type ChallengeAttemptReview = {
     feedback: string;
   }>;
 };
+
+function practiceEvaluationFromUnknown(value: unknown): PracticeEvaluation | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const required = [
+    "total_score",
+    "total_marks",
+    "percentage",
+    "marks_lost",
+    "questions",
+    "questions_answered",
+    "summary",
+  ];
+  if (required.some((key) => !(key in record))) return null;
+
+  const parseChapter = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const chapter = value as Record<string, unknown>;
+    const status = String(chapter.status ?? "developing");
+    return {
+      chapter: String(chapter.chapter ?? ""),
+      topic_key: String(chapter.topic_key ?? ""),
+      questions: number(chapter.questions),
+      questions_answered: number(chapter.questions_answered),
+      marks: number(chapter.marks),
+      score: number(chapter.score),
+      marks_lost: number(chapter.marks_lost),
+      percentage: number(chapter.percentage),
+      weightage: number(chapter.weightage),
+      lost_weightage: number(chapter.lost_weightage),
+      status: ["strong", "developing", "weak", "not_attempted"].includes(status)
+        ? (status as PracticeEvaluation["chapters"][number]["status"])
+        : "developing",
+    };
+  };
+  const parseChapters = (key: string) =>
+    (Array.isArray(record[key]) ? record[key] : [])
+      .map(parseChapter)
+      .filter((chapter): chapter is NonNullable<ReturnType<typeof parseChapter>> =>
+        Boolean(chapter),
+      );
+
+  return {
+    total_score: number(record.total_score),
+    total_marks: number(record.total_marks),
+    percentage: number(record.percentage),
+    marks_lost: number(record.marks_lost),
+    questions: number(record.questions),
+    questions_answered: number(record.questions_answered),
+    chapters: parseChapters("chapters"),
+    strong_topics: parseChapters("strong_topics"),
+    weak_topics: parseChapters("weak_topics"),
+    not_attempted: parseChapters("not_attempted"),
+    summary: String(record.summary ?? ""),
+  };
+}
 
 type ChallengeRow = Record<string, unknown>;
 
@@ -219,6 +305,7 @@ export function challengeAttemptReviewFromEvaluation(
   return {
     attemptId,
     handedInAt: historyRecord.handedInAt ? String(historyRecord.handedInAt) : createdAt || null,
+    evaluation: practiceEvaluationFromUnknown(evaluation) ?? undefined,
     answers,
   };
 }
@@ -343,6 +430,14 @@ function rowRecommendationKey(row: ChallengeRow) {
   ].join(":");
 }
 
+function isSourceDocumentChallengeRow(row: ChallengeRow) {
+  return isChallengeSourceDocumentTopic({
+    topicKey: String(row.topic_key || ""),
+    title: String(row.topic_title || ""),
+    subjectName: String(row.subject_name || ""),
+  });
+}
+
 export function dailyChallengeAssignmentCount({
   activeCount,
   activeRecommendationCount,
@@ -377,7 +472,13 @@ export async function ensureDailyChallenges(
   const existing = await listDailyRows(userId, date);
   if (existing === null) return [];
 
-  const active = existing.filter((row) => row.status !== "completed");
+  // Old catalogues sometimes exposed uploaded files (for example
+  // "Applied Mechanics QB") as if they were syllabus chapters. Keep those
+  // rows in storage for auditability, but do not let them occupy today's
+  // student challenge slots.
+  const active = existing.filter(
+    (row) => row.status !== "completed" && !isSourceDocumentChallengeRow(row),
+  );
   const assignedKeys = new Set(existing.map(rowRecommendationKey));
   const recommendationKeys = new Set(recommendations.map(recommendationKey));
   const activeRecommendationCount = active.filter((row) =>
@@ -435,7 +536,7 @@ export async function ensureDailyChallenges(
   if (error?.code === "23505") {
     const concurrent = (await listDailyRows(userId, date)) ?? [];
     return concurrent
-      .filter((row) => row.status !== "completed")
+      .filter((row) => row.status !== "completed" && !isSourceDocumentChallengeRow(row))
       .sort((left, right) => {
         const created = String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""));
         return created || number(left.position) - number(right.position);
@@ -445,7 +546,7 @@ export async function ensureDailyChallenges(
   if (error) throw error;
 
   return (((await listDailyRows(userId, date)) ?? []) as ChallengeRow[])
-    .filter((row) => row.status !== "completed")
+    .filter((row) => row.status !== "completed" && !isSourceDocumentChallengeRow(row))
     .sort((left, right) => {
       const created = String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""));
       return created || number(left.position) - number(right.position);
@@ -525,6 +626,46 @@ export async function getStudentChallengeGradeContext(userId: string, challengeI
   };
 }
 
+/** Loads a prerequisite lesson only when the student asks to read it. */
+export async function getStudentChallengePrerequisiteReading(
+  userId: string,
+  challengeId: string,
+  topicKey: string,
+): Promise<StudentChallengePrerequisiteReading | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as ChallengeRow;
+  const detail = toDetail(row);
+  const prerequisite = detail.content?.prerequisites?.find(
+    (candidate) => candidate.topicKey === topicKey,
+  );
+  if (!prerequisite) throw new Error("This topic is not a prerequisite for this challenge.");
+  if (!prerequisite.taught) {
+    throw new Error("No course notes are available for this prerequisite yet.");
+  }
+
+  const lane = await resolveChallengeLane(userId, row);
+  const learning = await getTeacherChallengeReading(lane.collectionKey, {
+    subject: lane.subject,
+    topics: [prerequisite.topicKey],
+  });
+  return {
+    topicKey: prerequisite.topicKey,
+    title: learning.reading.headline || prerequisite.title,
+    content: lessonParagraphs(learning.reading.content),
+    focus: learning.reading.focus || "",
+    warning: warningText(learning.warnings),
+  };
+}
+
 function solvedExample(question: TeacherChallengeSolvedQuestion): ChallengeSolvedExample {
   const source = String(question.source || "").trim();
   return {
@@ -548,92 +689,58 @@ function examQuestion(question: TeacherChallengeExam["questions"][number]): Chal
   };
 }
 
-function practicePaperQuestion(
-  value: unknown,
-  fallbackTopic: string,
-): ChallengeExamQuestion | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const question = value as ApiRecord;
-  const id = String(question.id || "");
-  const text = String(question.text || "");
-  if (!id || !text) return null;
-  return {
-    id,
-    question: text,
-    topic: String(question.chapter || fallbackTopic),
-    marks: number(question.marks),
-    questionType: String(question.question_type || question.band_label || "Short answer"),
-  };
-}
-
-function challengePaperBands(questions: ChallengeExamQuestion[]) {
-  const groups = new Map<
-    string,
-    { label: string; question_type: string; count: number; marks_each: number }
-  >();
-  questions.forEach((question) => {
-    const marks = question.marks || 1;
-    const questionType = question.questionType || "Short answer";
-    const key = `${questionType}:${marks}`;
-    const current = groups.get(key);
-    if (current) current.count += 1;
-    else
-      groups.set(key, {
-        label: questionType,
-        question_type: questionType,
-        count: 1,
-        marks_each: marks,
-      });
-  });
-  return [...groups.values()];
-}
-
-async function createPracticeChallengeExam(input: {
+async function issueChallengeExam(input: {
   collectionKey: string;
   subject: string;
-  topicTitle: string;
-  title: string;
+  topicKeys: string[];
+  chapters?: string[];
+  questionCount: number;
   durationMinutes: number;
-  passMarks: number;
-  questions: ChallengeExamQuestion[];
 }): Promise<TeacherChallengeExam> {
-  const result = (await generateTeacherPracticePaper(input.collectionKey, {
+  const questionCount = Math.max(1, input.questionCount);
+  const marksEach = CHALLENGE_MARKS_PER_QUESTION;
+  const totalMarks = questionCount * marksEach;
+  const paper = await generateTeacherPracticePaper(input.collectionKey, {
     subject: input.subject,
-    chapters: [input.topicTitle].filter(Boolean),
-    bands: challengePaperBands(input.questions),
-    title: input.title,
-    instruction: `Keep every question strictly within ${input.topicTitle}.`,
-    pass_marks: input.passMarks,
-  })) as ApiRecord;
-  const questions = Array.isArray(result.questions)
-    ? result.questions
-        .map((question) => practicePaperQuestion(question, input.topicTitle))
-        .filter((question): question is ChallengeExamQuestion => question !== null)
-    : [];
-  const paperId = String(result.id || "");
-  if (!paperId || !questions.length) {
-    throw new Error("The course API could not prepare a handwritten challenge paper.");
+    chapters: input.chapters?.length ? input.chapters : input.topicKeys,
+    title: `${input.subject} challenge`,
+    instruction: "Set concise handwritten-answer questions on only the requested topic.",
+    pass_marks: Math.ceil((totalMarks * CHALLENGE_PASS_PERCENT) / 100),
+    bands: [
+      {
+        label: "Challenge",
+        question_type: "Short answer",
+        count: questionCount,
+        marks_each: marksEach,
+      },
+    ],
+  });
+  if (!paper.id || !paper.questions?.length) {
+    throw new Error("The course API could not issue a live challenge exam.");
   }
-  const durationMinutes = number(result.duration_minutes) || input.durationMinutes;
   return {
-    attempt_id: paperId,
-    subject: String(result.subject || input.subject),
-    topics: [],
-    questions: questions.map((question) => ({
-      id: question.id,
-      topic_key: "",
-      topic: question.topic,
-      marks: question.marks,
-      question_type: question.questionType,
-      text: question.question,
+    attempt_id: paper.id,
+    subject: paper.subject || input.subject,
+    topics: input.topicKeys.map((topicKey, index) => ({
+      topic_key: topicKey,
+      title: input.chapters?.[index] || paper.chapters?.[index] || topicKey,
+      order_index: index,
     })),
-    total_marks:
-      number(result.total_marks) ||
-      questions.reduce((total, question) => total + question.marks, 0),
-    pass_marks: number(result.pass_marks) || input.passMarks,
-    duration_minutes: durationMinutes,
-    expires_at: new Date(Date.now() + durationMinutes * 60_000).toISOString(),
-    warning: typeof result.warning === "string" ? result.warning : null,
+    questions: paper.questions.map((question) => ({
+      id: question.id,
+      topic_key: input.topicKeys[0] || question.chapter,
+      topic: question.chapter || input.topicKeys[0] || "",
+      marks: number(question.marks),
+      question_type: question.question_type || "Short answer",
+      text: question.text,
+    })),
+    total_marks: number(paper.total_marks),
+    pass_marks:
+      number(paper.pass_marks) ||
+      Math.ceil((number(paper.total_marks) * CHALLENGE_PASS_PERCENT) / 100),
+    duration_minutes: input.durationMinutes,
+    expires_at: new Date(Date.now() + input.durationMinutes * 60_000).toISOString(),
+    warning: paper.warning,
   };
 }
 
@@ -684,6 +791,42 @@ function warningText(...warnings: Array<string | null | undefined | string[]>) {
   );
 }
 
+function questionBankCoverage(payload: ApiRecord | null, topicKeys: string[]) {
+  const topics = Array.isArray(payload?.topics) ? payload.topics : [];
+  const requested = new Set(topicKeys.map((key) => key.trim().toLowerCase()).filter(Boolean));
+  const topicQuestions = topics.reduce((sum, item) => {
+    if (!item || typeof item !== "object") return sum;
+    const row = item as ApiRecord;
+    const key = String(row.topic_key || "")
+      .trim()
+      .toLowerCase();
+    return requested.has(key) ? sum + number(row.qb_question_count) : sum;
+  }, 0);
+  return {
+    totalQuestions: number(payload?.question_bank_questions),
+    topicQuestions,
+  };
+}
+
+function studentFacingSolvedWarning(
+  solved: TeacherChallengeSolvedResponse,
+  practiceTopics: ApiRecord | null,
+  topicKeys: string[],
+  topicTitle: string,
+) {
+  const providerWarning = warningText(solved.warnings);
+  if (solved.grounded || !providerWarning) return providerWarning;
+
+  const coverage = questionBankCoverage(practiceTopics, topicKeys);
+  if (coverage.topicQuestions > 0) {
+    return `Past questions are indexed for ${topicTitle}, but a complete worked solution could not be matched from them. These examples were prepared from the course notes.`;
+  }
+  if (coverage.totalQuestions > 0) {
+    return `This course has an indexed Question Bank, but no past question is currently matched to ${topicTitle}. These examples were prepared from the course notes.`;
+  }
+  return providerWarning;
+}
+
 function contentWithExam(
   content: StudentChallengeContent,
   exam: TeacherChallengeExam,
@@ -691,57 +834,72 @@ function contentWithExam(
 ): StudentChallengeContent {
   return {
     ...content,
+    examProvider: "practice-paper-v1",
     examQuestions: (exam.questions || []).map(examQuestion),
     examExpiresAt: exam.expires_at,
     examAttemptNumber: attemptNumber,
-    warning: warningText(content.warning, exam.warning),
+    examWarning: warningText(content.examWarning, exam.warning),
   };
 }
 
-function challengeContent(
-  response: TeacherChallengeResponse,
-  attemptNumber: number,
+function granularChallengeContent(
+  prerequisites: TeacherChallengePrerequisitesResponse,
+  learning: TeacherChallengeLearnResponse,
+  solved: TeacherChallengeSolvedResponse,
+  practiceTopics: ApiRecord | null = null,
 ): StudentChallengeContent {
-  return contentWithExam(
-    {
-      provider: "collection-challenge-v1",
-      upstreamChallengeId: response.challenge_id,
-      topicKeys: (response.topics || []).map((topic) => topic.topic_key).filter(Boolean),
-      canStart: response.can_start,
-      prerequisites: (response.prerequisites || []).map((prerequisite) => ({
-        topicKey: prerequisite.topic_key,
-        title: prerequisite.title,
-        taught: prerequisite.taught,
-        reason: prerequisite.reason,
+  const topicKeys = (prerequisites.topics || []).map((topic) => topic.topic_key).filter(Boolean);
+  const topicTitle = prerequisites.topics?.[0]?.title || "this topic";
+  return {
+    provider: "collection-challenge-v1",
+    topicKeys,
+    canStart: prerequisites.can_start,
+    prerequisites: (prerequisites.prerequisites || []).map((prerequisite) => ({
+      topicKey: prerequisite.topic_key,
+      title: prerequisite.title,
+      unitNumber: prerequisite.unit_number || "",
+      orderIndex: number(prerequisite.order_index),
+      taught: prerequisite.taught,
+      bankQuestions: number(prerequisite.bank_questions),
+      reason: prerequisite.reason,
+    })),
+    prerequisiteNote: prerequisites.note || "",
+    prerequisiteSource: prerequisites.topic_source,
+    prerequisiteBlockers: prerequisites.blockers || [],
+    prerequisiteWarnings: prerequisites.warnings || [],
+    learningWarning: warningText(learning.warnings),
+    solvedWarning: studentFacingSolvedWarning(solved, practiceTopics, topicKeys, topicTitle),
+    lesson: {
+      title: learning.reading.headline || "What you need to know",
+      content: lessonParagraphs(learning.reading.content),
+      focus: learning.reading.focus || "",
+      sources: (learning.reading.sources || []).map((source) => ({
+        title: source.chapter?.trim() || source.filename?.trim() || "Course material",
+        source: source.source_path?.trim() || source.filename?.trim() || "Indexed source",
+        excerpt: "",
       })),
-      lesson: {
-        title: response.reading.headline || "What you need to know",
-        content: lessonParagraphs(response.reading.content),
-        focus: response.reading.focus || "",
-        sources: (response.reading.sources || []).map((source) => ({
-          title: source.chapter?.trim() || source.filename?.trim() || "Course material",
-          source: source.source_path?.trim() || source.filename?.trim() || "Indexed source",
-          excerpt: "",
-        })),
-      },
-      solvedExamples: (response.solved_questions || []).map(solvedExample),
-      examQuestions: [],
-      warning: warningText(response.warnings),
     },
-    response.exam,
-    attemptNumber,
-  );
+    solvedExamples: (solved.questions || []).map(solvedExample),
+    examQuestions: [],
+    warning: null,
+  };
 }
 
 function hasLiveExam(detail: StudentChallengeDetail, externalAttemptId: string) {
   if (
     detail.content?.provider !== "collection-challenge-v1" ||
+    detail.content.examProvider !== "practice-paper-v1" ||
     !externalAttemptId ||
-    externalAttemptId.startsWith("chal_") ||
     !detail.content.examExpiresAt
   ) {
     return false;
   }
+  const hasCurrentMarkingShape =
+    detail.content.examQuestions.length === CHALLENGE_QUESTIONS &&
+    detail.content.examQuestions.every(
+      (question) => question.marks === CHALLENGE_MARKS_PER_QUESTION,
+    );
+  if (!hasCurrentMarkingShape) return false;
   const expiresAt = Date.parse(detail.content.examExpiresAt);
   return (
     Number.isFinite(expiresAt) &&
@@ -769,53 +927,73 @@ export async function startStudentChallenge(
   await requireChallengeAccess(userId, row);
   const current = toDetail(row);
   const externalAttemptId = String(row.external_paper_id || "");
+  const sourceDocumentTopic = isSourceDocumentChallengeRow(row);
   if (current.status === "completed" && !options.restart) {
     return withLatestAttemptReview(userId, row, current);
   }
-  if (hasLiveExam(current, externalAttemptId)) return current;
-  if (current.content?.provider === "collection-challenge-v1") {
+  if (!sourceDocumentTopic && hasLiveExam(current, externalAttemptId)) return current;
+  if (!sourceDocumentTopic && current.content?.provider === "collection-challenge-v1") {
     return refreshStudentChallengeExam(userId, challengeId, { allowCompleted: options.restart });
   }
 
   const lane = await resolveChallengeLane(userId, row);
-  const challengeRequest = {
+  const prerequisiteRequest = {
     subject: lane.subject,
-    topics: [String(row.topic_key || row.topic_title || "")].filter(Boolean),
-    prerequisite_limit: 3,
-    solved_questions: 2,
-    exam_questions: 2,
-    duration_minutes: number(row.duration_minutes) || 20,
-    pass_percent: CHALLENGE_PASS_PERCENT,
+    // A legacy row may point at the uploaded QB/syllabus file itself. Let the
+    // provider choose a real syllabus topic instead of building a challenge on
+    // a document container.
+    topics: sourceDocumentTopic
+      ? []
+      : [String(row.topic_key || row.topic_title || "")].filter(Boolean),
+    limit: 3,
   };
-  let response: TeacherChallengeResponse;
+  let prerequisites: TeacherChallengePrerequisitesResponse;
   try {
-    response = await createTeacherChallenge(lane.collectionKey, challengeRequest);
+    prerequisites = await getTeacherChallengePrerequisites(lane.collectionKey, prerequisiteRequest);
   } catch (error) {
     // Daily rows assigned before the collection-scoped wiring may carry a
     // legacy topic key. Let the API choose the real highest-weight topic once.
     if (!(error instanceof TeacherApiError) || ![404, 422].includes(error.status)) throw error;
-    response = await createTeacherChallenge(lane.collectionKey, {
-      ...challengeRequest,
+    prerequisites = await getTeacherChallengePrerequisites(lane.collectionKey, {
+      ...prerequisiteRequest,
       topics: [],
     });
   }
-  if (!response.can_start || !response.exam?.attempt_id || !response.exam.questions?.length) {
+  if (!prerequisites.can_start) {
     throw new Error(
       "This topic is not taught by the course material yet, so its challenge cannot start.",
     );
   }
-  const selectedTopic = response.topics?.[0];
-  const challengeExam = await createPracticeChallengeExam({
-    collectionKey: lane.collectionKey,
-    subject: lane.subject,
-    topicTitle: selectedTopic?.title || String(row.topic_title || ""),
-    title: response.title || `Master ${selectedTopic?.title || row.topic_title || lane.subject}`,
-    durationMinutes: response.exam.duration_minutes,
-    passMarks: response.exam.pass_marks,
-    questions: (response.exam.questions || []).map(examQuestion),
-  });
+  const selectedTopic = prerequisites.topics?.[0];
+  const selectedTopicKeys = (prerequisites.topics || [])
+    .map((topic) => topic.topic_key)
+    .filter(Boolean);
+  const [learning, solved, challengeExam, practiceTopics] = await Promise.all([
+    getTeacherChallengeReading(lane.collectionKey, {
+      subject: lane.subject,
+      topics: selectedTopicKeys,
+    }),
+    getTeacherChallengeSolvedQuestions(lane.collectionKey, {
+      subject: lane.subject,
+      topics: selectedTopicKeys,
+      limit: 2,
+    }),
+    issueChallengeExam({
+      collectionKey: lane.collectionKey,
+      subject: lane.subject,
+      topicKeys: selectedTopicKeys,
+      chapters: (prerequisites.topics || []).map((topic) => topic.title).filter(Boolean),
+      questionCount: CHALLENGE_QUESTIONS,
+      durationMinutes: number(row.duration_minutes) || 20,
+    }),
+    getTeacherPracticeTopics(lane.collectionKey, lane.subject, {
+      totalMarks: CHALLENGE_QUESTIONS * CHALLENGE_MARKS_PER_QUESTION,
+      maxQuestions: CHALLENGE_QUESTIONS,
+    }).catch(() => null),
+  ]);
+  const title = `Master ${selectedTopic?.title || row.topic_title || lane.subject}`;
   const content = contentWithExam(
-    { ...challengeContent(response, number(row.attempt_count) + 1), examQuestions: [] },
+    granularChallengeContent(prerequisites, learning, solved, practiceTopics),
     challengeExam,
     number(row.attempt_count) + 1,
   );
@@ -833,7 +1011,7 @@ export async function startStudentChallenge(
         ? {
             topic_key: selectedTopic.topic_key,
             topic_title: selectedTopic.title,
-            title: response.title || `Master ${selectedTopic.title}`,
+            title,
           }
         : {}),
       started_at: now,
@@ -879,14 +1057,15 @@ export async function refreshStudentChallengeExam(
   }
 
   const lane = await resolveChallengeLane(userId, row);
-  const exam = await createPracticeChallengeExam({
+  const exam = await issueChallengeExam({
     collectionKey: lane.collectionKey,
     subject: lane.subject,
-    topicTitle: String(row.topic_title || detail.topicTitle),
-    title: detail.title,
+    topicKeys: detail.content.topicKeys?.length
+      ? detail.content.topicKeys
+      : [String(row.topic_key || "")].filter(Boolean),
+    chapters: [String(row.topic_title || detail.topicTitle)].filter(Boolean),
+    questionCount: CHALLENGE_QUESTIONS,
     durationMinutes: detail.durationMinutes,
-    passMarks: detail.passMarks,
-    questions: detail.content.examQuestions,
   });
   if (!exam.attempt_id || !exam.questions?.length) {
     throw new Error("The course API could not issue a fresh challenge exam.");
@@ -937,49 +1116,38 @@ export async function submitStudentChallengeAttempt(input: {
   if (!attemptId) throw new Error("Start the challenge before submitting it.");
   const lane = await resolveChallengeLane(input.userId, row);
   const graded = await gradeTeacherPracticePaper(lane.collectionKey, attemptId, {
+    student_name: "Student",
     answers: input.answers.map((answer) => ({
       question_id: answer.questionId,
       answer_text: answer.answerText,
     })),
   });
-  return practicePaperGradeResponse(row, lane.subject, attemptId, graded);
+  return practiceGradeAsChallengeGrade(graded, attemptId, lane.subject, number(row.pass_marks));
 }
 
-function practicePaperGradeResponse(
-  row: ChallengeRow,
+function practiceGradeAsChallengeGrade(
+  graded: TeacherPracticePaperGradeResponse,
+  setId: string,
   subject: string,
-  attemptId: string,
-  graded: ApiRecord,
+  passMarks: number,
 ): TeacherChallengeGradeResponse {
-  const results = Array.isArray(graded.results)
-    ? graded.results.filter((result): result is ApiRecord =>
-        Boolean(result && typeof result === "object"),
-      )
-    : [];
   const totalScore = number(graded.total_score);
-  const totalMarks = number(graded.total_marks) || number(row.total_marks);
-  const passMarks =
-    number(row.pass_marks) || Math.ceil(totalMarks * (CHALLENGE_PASS_PERCENT / 100));
+  const totalMarks = number(graded.total_marks);
   return {
-    attempt_id: attemptId,
-    subject: String(row.subject_name || subject),
-    results: results.map((result) => ({
-      question_id: String(result.question_id || ""),
-      topic: String(result.chapter || ""),
-      question: String(result.question || ""),
-      marks: number(result.marks),
-      student_answer: String(result.student_answer || "[Handwritten answer]"),
-      score: number(result.score),
-      feedback: String(result.feedback || ""),
+    attempt_id: setId,
+    subject,
+    results: (graded.results || []).map((result) => ({
+      ...result,
+      topic: result.chapter || "",
     })),
     total_score: totalScore,
     total_marks: totalMarks,
-    percentage: totalMarks ? (totalScore / totalMarks) * 100 : 0,
+    percentage: totalMarks > 0 ? (totalScore / totalMarks) * 100 : 0,
     pass_marks: passMarks,
     passed: totalScore >= passMarks,
-    graded: Boolean(graded.graded),
+    graded: graded.graded,
     stored: true,
-    evaluation: graded.evaluation as TeacherChallengeGradeResponse["evaluation"],
+    evaluation: graded.evaluation,
   };
 }
 
@@ -1006,7 +1174,7 @@ export async function submitStudentChallengeFile(input: {
     studentName: input.studentName,
     file: input.file,
   });
-  return practicePaperGradeResponse(row, lane.subject, attemptId, graded);
+  return practiceGradeAsChallengeGrade(graded, attemptId, lane.subject, number(row.pass_marks));
 }
 
 export async function markStudentChallengeStep(

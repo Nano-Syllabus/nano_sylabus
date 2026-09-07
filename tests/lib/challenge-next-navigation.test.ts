@@ -40,11 +40,7 @@ describe("next challenge navigation", () => {
   it("opens the next in-progress card after the completed first challenge", () => {
     const first = challenge("number-properties", "completed", 0);
     const next = nextAvailableChallenge(
-      [
-        first,
-        challenge("fractions", "started", 1),
-        challenge("ratio", "started", 2),
-      ],
+      [first, challenge("fractions", "started", 1), challenge("ratio", "started", 2)],
       first,
     );
 
@@ -53,10 +49,7 @@ describe("next challenge navigation", () => {
 
   it("uses queue position when the completed card has disappeared after refresh", () => {
     const second = challenge("fractions", "completed", 1);
-    const next = nextAvailableChallenge(
-      [challenge("ratio", "started", 2)],
-      second,
-    );
+    const next = nextAvailableChallenge([challenge("ratio", "started", 2)], second);
 
     expect(next?.id).toBe("ratio");
   });
@@ -71,7 +64,7 @@ describe("next challenge navigation", () => {
     expect(next).toBeNull();
   });
 
-  it("starts the next untouched challenge from concept reading", () => {
+  it("starts an untouched challenge from prerequisites", () => {
     expect(
       initialChallengeStep({
         ...challenge("ratio", "assigned", 2),
@@ -83,5 +76,21 @@ describe("next challenge navigation", () => {
         latestAttempt: null,
       } as StudentChallengeDetail),
     ).toBe(1);
+  });
+
+  it("resumes after the separately completed learn and example steps", () => {
+    const base = {
+      ...challenge("ratio", "started", 2),
+      content: {
+        lesson: { title: "Ratio", content: [], focus: "Ratio" },
+        solvedExamples: [],
+        examQuestions: [],
+      },
+      latestAttempt: null,
+    } as StudentChallengeDetail;
+
+    expect(initialChallengeStep({ ...base, lessonRead: true })).toBe(3);
+    expect(initialChallengeStep({ ...base, lessonRead: true, examplesReviewed: true })).toBe(4);
+    expect(initialChallengeStep({ ...base, status: "completed" })).toBe(6);
   });
 });

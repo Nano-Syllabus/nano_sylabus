@@ -1,15 +1,31 @@
 "use client";
 
-import { FileCheck2, Maximize2, Minimize2, Target, Upload, X } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  FileCheck2,
+  ListChecks,
+  LoaderCircle,
+  Maximize2,
+  Minimize2,
+  Target,
+  Upload,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useContext, useEffect, useRef, useState } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
+import { Markdown } from "@/components/markdown";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
 import type {
   StudentChallengeDetail,
+  StudentChallengePrerequisiteReading,
   StudentChallengeSummary,
 } from "@/lib/data/student-challenges";
+import type { PracticeEvaluation } from "@/lib/tenant/client";
 
 const WEEKLY_CHALLENGE_TARGET = 15;
 
@@ -39,30 +55,79 @@ export function nextAvailableChallenge(
 
 type GradeResult = {
   question_id: string;
-  score: number;
+  chapter?: string;
+  topic?: string;
+  question?: string;
   marks: number;
+  student_answer?: string;
+  score: number;
   feedback: string;
 };
 
-type ChallengeStep = 1 | 2 | 3 | 4;
+type ChallengeStep = 1 | 2 | 3 | 4 | 5 | 6;
 
 export function initialChallengeStep(challenge: StudentChallengeDetail): ChallengeStep {
-  if (challenge.status === "completed") return 4;
-  if (challenge.examplesReviewed) return 3;
-  if (challenge.lessonRead) return 2;
+  if (challenge.status === "completed") return 6;
+  if (challenge.examplesReviewed) return 4;
+  if (challenge.lessonRead) return 3;
   return 1;
 }
 
 function savedResults(challenge: StudentChallengeDetail): GradeResult[] {
-  const marksByQuestion = new Map(
-    (challenge.content?.examQuestions ?? []).map((question) => [question.id, question.marks]),
+  const questionsById = new Map(
+    (challenge.content?.examQuestions ?? []).map((question) => [question.id, question]),
   );
   return (challenge.latestAttempt?.answers ?? []).map((answer) => ({
     question_id: answer.questionId,
+    chapter: questionsById.get(answer.questionId)?.topic,
+    topic: questionsById.get(answer.questionId)?.topic,
+    question: questionsById.get(answer.questionId)?.question,
     score: answer.score,
-    marks: marksByQuestion.get(answer.questionId) ?? 0,
+    marks: questionsById.get(answer.questionId)?.marks ?? 0,
+    student_answer: answer.answerText,
     feedback: answer.feedback,
   }));
+}
+
+function displayNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
+}
+
+function percentageValue(value: number) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  // The practice API reports some percentages as ratios (0..1), while older
+  // responses use the already-expanded 0..100 form. Keep either shape honest.
+  return Math.abs(numeric) <= 1 ? numeric * 100 : numeric;
+}
+
+function displayPercent(value: number) {
+  return `${displayNumber(percentageValue(value))}%`;
+}
+
+function topicPercentage(topic: PracticeEvaluation["chapters"][number]) {
+  const value = topic.marks > 0 ? (topic.score / topic.marks) * 100 : percentageValue(topic.percentage);
+  return Math.max(0, Math.min(100, value));
+}
+
+function topicStatusLabel(status: PracticeEvaluation["chapters"][number]["status"]) {
+  return status === "not_attempted"
+    ? "Not attempted"
+    : status === "strong"
+      ? "Strong"
+      : status === "weak"
+        ? "Needs practice"
+        : "Developing";
+}
+
+function topicStatusClass(status: PracticeEvaluation["chapters"][number]["status"]) {
+  return status === "strong"
+    ? "bg-success/10 text-success"
+    : status === "weak"
+      ? "bg-warning/10 text-warning"
+      : status === "not_attempted"
+        ? "bg-bg-secondary text-text-muted"
+        : "bg-blue-500/10 text-blue-700 dark:text-blue-300";
 }
 
 async function apiJson<T>(response: Response): Promise<T> {
@@ -90,6 +155,7 @@ function ChallengeDetail({
   const exitFocusButtonRef = useRef<HTMLButtonElement>(null);
   const answerSheetInputRef = useRef<HTMLInputElement>(null);
   const focusModeWasActiveRef = useRef(false);
+  const previousChallengeIdRef = useRef(challenge.id);
   const incomingStep = initialChallengeStep(challenge);
   const isCompletedChallenge = challenge.status === "completed";
   const [focusMode, setFocusMode] = useState(false);
@@ -101,7 +167,16 @@ function ChallengeDetail({
   const [openingNext, setOpeningNext] = useState(false);
   const [noNextAvailable, setNoNextAvailable] = useState(false);
   const [error, setError] = useState("");
+  const [openPrerequisiteKey, setOpenPrerequisiteKey] = useState<string | null>(null);
+  const [loadingPrerequisiteKey, setLoadingPrerequisiteKey] = useState<string | null>(null);
+  const [prerequisiteError, setPrerequisiteError] = useState("");
+  const [prerequisiteReadings, setPrerequisiteReadings] = useState<
+    Record<string, StudentChallengePrerequisiteReading>
+  >({});
   const [results, setResults] = useState<GradeResult[]>(() => savedResults(challenge));
+  const [evaluation, setEvaluation] = useState<PracticeEvaluation | null>(
+    () => challenge.latestAttempt?.evaluation ?? null,
+  );
   const [score, setScore] = useState<{ earned: number; total: number; passed: boolean } | null>(
     () =>
       challenge.status === "completed" && challenge.lastScore !== null && challenge.lastTotalMarks
@@ -145,7 +220,9 @@ function ChallengeDetail({
 
   useEffect(() => {
     if (challenge.status !== "completed" || !challenge.latestAttempt) return;
-    setResults(savedResults(challenge));
+    const restoredResults = savedResults(challenge);
+    if (restoredResults.length) setResults(restoredResults);
+    if (challenge.latestAttempt.evaluation) setEvaluation(challenge.latestAttempt.evaluation);
     if (challenge.lastScore !== null && challenge.lastTotalMarks) {
       setScore({ earned: challenge.lastScore, total: challenge.lastTotalMarks, passed: true });
     }
@@ -153,19 +230,61 @@ function ChallengeDetail({
 
   // The detail component remains mounted when Next changes the selected card.
   // Reset local navigation and answer state for that new challenge instead of
-  // carrying step four (the previous challenge's submission screen) forward.
+  // carrying the previous challenge's submission screen forward.
   useEffect(() => {
+    if (previousChallengeIdRef.current === challenge.id) return;
+    previousChallengeIdRef.current = challenge.id;
     setActiveStep(incomingStep);
     setScanFile(null);
     setError("");
+    setOpenPrerequisiteKey(null);
+    setLoadingPrerequisiteKey(null);
+    setPrerequisiteError("");
+    setPrerequisiteReadings({});
     setClock(Date.now());
-    if (!isCompletedChallenge) {
-      setResults([]);
-      setScore(null);
-    }
-  }, [challenge.id, incomingStep, isCompletedChallenge]);
+    setResults(isCompletedChallenge ? savedResults(challenge) : []);
+    setEvaluation(isCompletedChallenge ? challenge.latestAttempt?.evaluation ?? null : null);
+    setScore(
+      isCompletedChallenge && challenge.lastScore !== null && challenge.lastTotalMarks
+        ? { earned: challenge.lastScore, total: challenge.lastTotalMarks, passed: true }
+        : null,
+    );
+  }, [challenge, challenge.id, incomingStep, isCompletedChallenge]);
 
   if (!content) return null;
+
+  const togglePrerequisiteReading = async (topicKey: string) => {
+    if (openPrerequisiteKey === topicKey) {
+      setOpenPrerequisiteKey(null);
+      return;
+    }
+    if (prerequisiteReadings[topicKey]) {
+      setOpenPrerequisiteKey(topicKey);
+      setPrerequisiteError("");
+      return;
+    }
+
+    setLoadingPrerequisiteKey(topicKey);
+    setPrerequisiteError("");
+    try {
+      const payload = await apiJson<{ reading: StudentChallengePrerequisiteReading }>(
+        await fetch(
+          `/api/student/challenges/${challenge.id}/prerequisites/${encodeURIComponent(topicKey)}`,
+        ),
+      );
+      setPrerequisiteReadings((current) => ({
+        ...current,
+        [topicKey]: payload.reading,
+      }));
+      setOpenPrerequisiteKey(topicKey);
+    } catch (cause) {
+      setPrerequisiteError(
+        cause instanceof Error ? cause.message : "Could not load this prerequisite.",
+      );
+    } finally {
+      setLoadingPrerequisiteKey(null);
+    }
+  };
 
   const markStep = async (step: "lesson" | "examples") => {
     setSavingStep(step);
@@ -202,6 +321,7 @@ function ChallengeDetail({
       const payload = (await response.json().catch(() => ({}))) as {
         challenge: StudentChallengeDetail;
         results: GradeResult[];
+        evaluation?: PracticeEvaluation;
         totalScore: number;
         totalMarks: number;
         passed: boolean;
@@ -212,9 +332,11 @@ function ChallengeDetail({
         throw new Error(payload.error || "Could not grade the handwritten answer.");
       }
       setResults(payload.results);
+      setEvaluation(payload.evaluation ?? null);
       setScore({ earned: payload.totalScore, total: payload.totalMarks, passed: payload.passed });
       setScanFile(null);
       onChange(payload.challenge);
+      setActiveStep(6);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not grade the handwritten answer.");
@@ -241,7 +363,9 @@ function ChallengeDetail({
         await fetch(`/api/student/challenges/${challenge.id}/start`, { method: "POST" }),
       );
       setResults([]);
+      setEvaluation(null);
       setScore(null);
+      setScanFile(null);
       setClock(Date.now());
       onChange(payload.challenge);
     } catch (cause) {
@@ -259,11 +383,10 @@ function ChallengeDetail({
         await fetch(`/api/student/challenges/${challenge.id}/restart`, { method: "POST" }),
       );
       setResults([]);
+      setEvaluation(null);
       setScore(null);
       setClock(Date.now());
-      setActiveStep(
-        initialChallengeStep(payload.challenge),
-      );
+      setActiveStep(initialChallengeStep(payload.challenge));
       onChange(payload.challenge);
       router.refresh();
     } catch (cause) {
@@ -291,28 +414,63 @@ function ChallengeDetail({
 
   const goNext = async () => {
     if (activeStep === 1) {
-      const saved = challenge.lessonRead || (await markStep("lesson"));
-      if (saved) setActiveStep(2);
+      setActiveStep(2);
       return;
     }
     if (activeStep === 2) {
-      const saved = challenge.examplesReviewed || (await markStep("examples"));
+      const saved = challenge.lessonRead || (await markStep("lesson"));
       if (saved) setActiveStep(3);
       return;
     }
-    if (activeStep === 3) setActiveStep(4);
+    if (activeStep === 3) {
+      const saved = challenge.examplesReviewed || (await markStep("examples"));
+      if (saved) setActiveStep(4);
+      return;
+    }
+    if (activeStep === 4) setActiveStep(5);
   };
 
   const steps = [
-    { number: 1, label: "Concept Reading", complete: challenge.lessonRead },
-    { number: 2, label: "Solved Example", complete: challenge.examplesReviewed },
     {
-      number: 3,
-      label: "Practice Question",
-      complete: activeStep === 4 || challenge.status === "completed",
+      number: 1,
+      label: "Prerequisites",
+      complete: activeStep > 1 || challenge.lessonRead,
     },
-    { number: 4, label: "Submit Answer", complete: challenge.status === "completed" },
+    { number: 2, label: "Concept Reading", complete: challenge.lessonRead },
+    { number: 3, label: "Solved Example", complete: challenge.examplesReviewed },
+    {
+      number: 4,
+      label: "Practice Question",
+      complete: activeStep >= 5 || challenge.status === "completed",
+    },
+    { number: 5, label: "Submit Answer", complete: activeStep >= 6 },
+    { number: 6, label: "Result", complete: challenge.status === "completed" },
   ] as const;
+
+  const activeWarning =
+    activeStep === 1
+      ? [...(content.prerequisiteBlockers || []), ...(content.prerequisiteWarnings || [])]
+          .filter(Boolean)
+          .join(" ")
+      : activeStep === 2
+        ? content.learningWarning
+        : activeStep === 3
+          ? content.solvedWarning || content.warning
+          : activeStep === 4 || activeStep === 5
+            ? content.examWarning
+            : null;
+
+  const resultEvaluation = evaluation ?? challenge.latestAttempt?.evaluation ?? null;
+  const resultPercentage =
+    resultEvaluation?.percentage ??
+    (score && score.total > 0 ? (score.earned / score.total) * 100 : 0);
+  const resultQuestionCount = resultEvaluation?.questions ?? (results.length || content.examQuestions.length);
+  const resultAnsweredCount =
+    resultEvaluation?.questions_answered ??
+    results.filter((result) => Boolean(result.student_answer?.trim())).length;
+  const resultMarksLost =
+    resultEvaluation?.marks_lost ?? (score ? Math.max(0, score.total - score.earned) : 0);
+  const resultReady = activeStep === 6 && Boolean(score && challenge.status === "completed");
 
   const focusButtonClass =
     "min-h-10 rounded-lg px-5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary disabled:cursor-not-allowed disabled:opacity-50";
@@ -388,7 +546,7 @@ function ChallengeDetail({
             aria-label="Challenge progress"
             className="mt-6 rounded-2xl border border-border bg-card px-3 py-4 sm:px-6"
           >
-            <ol className="grid grid-cols-4">
+            <ol className="grid grid-cols-6">
               {steps.map((step, index) => {
                 const isActive = activeStep === step.number;
                 return (
@@ -439,45 +597,164 @@ function ChallengeDetail({
         >
           {activeStep === 1 ? (
             <div>
+              <div className="flex items-start gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                  <ListChecks className="size-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 className="text-xl font-semibold">Prerequisites</h2>
+                  <p className="mt-1 max-w-prose text-sm leading-6 text-text-muted">
+                    Follow the syllabus path and review the foundations for this challenge.
+                  </p>
+                </div>
+              </div>
+              {content.prerequisites?.length ? (
+                <div className="mt-6 space-y-4">
+                  <ol className="space-y-3">
+                    {content.prerequisites.map((prerequisite, index) => (
+                      <li
+                        key={prerequisite.topicKey}
+                        className="rounded-xl border border-border bg-bg-secondary p-4 sm:p-5"
+                      >
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+                              {index === 0 ? "Recommended first" : "Earlier foundation"}
+                            </p>
+                            <h3 className="mt-1 text-base font-semibold leading-6 text-text-primary">
+                              {prerequisite.title}
+                            </h3>
+                            {prerequisite.reason ? (
+                              <Markdown
+                                text={prerequisite.reason}
+                                className="mt-2 max-w-prose text-sm leading-6 text-text-secondary"
+                              />
+                            ) : null}
+                          </div>
+                          {prerequisite.taught ? (
+                            <button
+                              type="button"
+                              aria-expanded={openPrerequisiteKey === prerequisite.topicKey}
+                              aria-controls={"prerequisite-reading-" + prerequisite.topicKey}
+                              aria-busy={loadingPrerequisiteKey === prerequisite.topicKey}
+                              disabled={loadingPrerequisiteKey === prerequisite.topicKey}
+                              onClick={() => void togglePrerequisiteReading(prerequisite.topicKey)}
+                              className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition-colors duration-100 ease-out hover:bg-blue-700 active:translate-y-px disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                            >
+                              {loadingPrerequisiteKey === prerequisite.topicKey ? (
+                                <LoaderCircle
+                                  className="size-4 animate-spin motion-reduce:animate-none"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <BookOpen className="size-4" aria-hidden="true" />
+                              )}
+                              {loadingPrerequisiteKey === prerequisite.topicKey
+                                ? "Loading..."
+                                : openPrerequisiteKey === prerequisite.topicKey
+                                  ? "Close reading"
+                                  : "Read prerequisite"}
+                              {openPrerequisiteKey === prerequisite.topicKey ? (
+                                <ChevronUp className="size-4" aria-hidden="true" />
+                              ) : (
+                                <ChevronDown className="size-4" aria-hidden="true" />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="inline-flex min-h-10 w-fit shrink-0 items-center gap-2 rounded-lg bg-warning/10 px-3 text-sm font-semibold text-warning">
+                              <AlertTriangle className="size-4" aria-hidden="true" />
+                              Reading unavailable
+                            </span>
+                          )}
+                        </div>
+
+                        {openPrerequisiteKey === prerequisite.topicKey &&
+                        prerequisiteReadings[prerequisite.topicKey] ? (
+                          <div
+                            id={"prerequisite-reading-" + prerequisite.topicKey}
+                            className="mt-5 border-t border-border pt-5"
+                          >
+                            <h4 className="text-base font-semibold text-text-primary">
+                              {prerequisiteReadings[prerequisite.topicKey].title}
+                            </h4>
+                            <div className="mt-3 space-y-3">
+                              {prerequisiteReadings[prerequisite.topicKey].content.length ? (
+                                prerequisiteReadings[prerequisite.topicKey].content.map(
+                                  (paragraph, paragraphIndex) => (
+                                    <Markdown
+                                      key={prerequisite.topicKey + "-" + paragraphIndex}
+                                      text={paragraph}
+                                      className="max-w-prose text-sm leading-7 text-text-secondary"
+                                    >
+                                    </Markdown>
+                                  ),
+                                )
+                              ) : (
+                                <p className="text-sm text-text-muted">
+                                  No reading is available for this topic yet.
+                                </p>
+                              )}
+                            </div>
+                            {prerequisiteReadings[prerequisite.topicKey].focus ? (
+                              <div className="mt-4 rounded-lg bg-blue-500/10 p-4">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+                                  Remember this
+                                </p>
+                                <Markdown
+                                  text={prerequisiteReadings[prerequisite.topicKey].focus}
+                                  className="mt-1 text-sm leading-6 text-text-secondary"
+                                />
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+
+                  {prerequisiteError ? (
+                    <p
+                      role="alert"
+                      className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                    >
+                      {prerequisiteError} Try again in a moment.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="mt-6 rounded-xl border border-success/30 bg-success/10 p-5">
+                  <p className="text-sm font-semibold text-success">Ready to start</p>
+                  <p className="mt-1 text-sm leading-6 text-text-secondary">
+                    No earlier prerequisite topics are required. Continue to the concept reading.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {activeStep === 2 ? (
+            <div>
               <h2 className="text-xl font-semibold">📘 Key Concepts</h2>
               <p className="mt-2 text-sm text-text-muted">
                 Read these concepts carefully before moving to the worked example.
               </p>
               <h3 className="mt-6 text-base font-semibold">{content.lesson.title}</h3>
               <div className="mt-3 space-y-3">
-                {content.lesson.content.map((paragraph) => (
-                  <p key={paragraph} className="max-w-prose text-sm leading-7 text-text-secondary">
-                    {paragraph}
-                  </p>
+                {content.lesson.content.map((paragraph, index) => (
+                  <Markdown
+                    key={`${paragraph}-${index}`}
+                    text={paragraph}
+                    className="max-w-prose text-sm leading-7 text-text-secondary"
+                  />
                 ))}
               </div>
               <div className="mt-5 rounded-xl bg-blue-500/10 p-4">
                 <p className="text-sm font-semibold">Core focus</p>
-                <p className="mt-1 text-sm leading-6 text-text-secondary">{content.lesson.focus}</p>
+                <Markdown
+                  text={content.lesson.focus}
+                  className="mt-1 text-sm leading-6 text-text-secondary"
+                />
               </div>
-              {content.prerequisites?.length ? (
-                <div className="mt-6">
-                  <h3 className="text-sm font-semibold">Before this topic</h3>
-                  <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {content.prerequisites.map((prerequisite) => (
-                      <li
-                        key={prerequisite.topicKey}
-                        className="rounded-xl bg-bg-secondary p-4 text-sm"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <strong>{prerequisite.title}</strong>
-                          <span className={prerequisite.taught ? "text-success" : "text-warning"}>
-                            {prerequisite.taught ? "Available" : "Notes missing"}
-                          </span>
-                        </div>
-                        {prerequisite.reason ? (
-                          <p className="mt-1 text-text-muted">{prerequisite.reason}</p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
               {content.lesson.sources?.length ? (
                 <p className="mt-5 text-xs text-text-muted">
                   Grounded in {content.lesson.sources.length} uploaded course{" "}
@@ -487,7 +764,7 @@ function ChallengeDetail({
             </div>
           ) : null}
 
-          {activeStep === 2 ? (
+          {activeStep === 3 ? (
             <div>
               <h2 className="text-xl font-semibold">✅ Solved Example</h2>
               <p className="mt-2 text-sm text-text-muted">
@@ -503,10 +780,16 @@ function ChallengeDetail({
                       <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                         Example {index + 1} · {example.marks} marks
                       </p>
-                      <p className="mt-3 text-sm font-semibold leading-6">{example.question}</p>
+                      <Markdown
+                        text={example.question}
+                        className="mt-3 text-sm font-semibold leading-6"
+                      />
                       <div className="mt-4 rounded-lg bg-card p-4 text-sm leading-7 text-text-secondary">
                         <strong className="text-text-primary">Solution</strong>
-                        <p className="mt-1 whitespace-pre-wrap">{example.solution}</p>
+                        <Markdown
+                          text={example.solution}
+                          className="mt-1 whitespace-pre-wrap text-text-secondary"
+                        />
                       </div>
                     </article>
                   ))}
@@ -519,7 +802,7 @@ function ChallengeDetail({
             </div>
           ) : null}
 
-          {activeStep === 3 ? (
+          {activeStep === 4 ? (
             <div>
               <h2 className="text-xl font-semibold">📝 Your Turn — Practice Question</h2>
               <p className="mt-2 text-sm text-text-muted">
@@ -539,7 +822,10 @@ function ChallengeDetail({
                       <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                         Question {index + 1} · {question.marks} marks
                       </p>
-                      <p className="mt-2 text-sm font-semibold leading-6">{question.question}</p>
+                      <Markdown
+                        text={question.question}
+                        className="mt-2 text-sm font-semibold leading-6"
+                      />
                     </article>
                   ))}
                 </div>
@@ -557,7 +843,7 @@ function ChallengeDetail({
             </div>
           ) : null}
 
-          {activeStep === 4 ? (
+          {activeStep === 5 ? (
             <div>
               <h2 className="text-xl font-semibold">📤 Submit Your Answer Sheet</h2>
               <p className="mt-2 text-sm text-text-muted">
@@ -646,6 +932,7 @@ function ChallengeDetail({
                     </button>
                     <button
                       type="button"
+                      aria-busy={submitting}
                       disabled={!scanFile || submitting}
                       onClick={() => void submitScan()}
                       className={`${focusButtonClass} mx-auto mt-3 block bg-blue-600 text-white`}
@@ -655,19 +942,279 @@ function ChallengeDetail({
                   </div>
                 </div>
               ) : null}
+            </div>
+          ) : null}
+
+          {activeStep === 6 ? (
+            <div>
+              <h2 className="text-xl font-semibold">📊 Challenge Result</h2>
+              <p className="mt-2 text-sm text-text-muted">
+                Your handwritten answer sheet has been read and graded against this challenge.
+              </p>
               {score ? (
-                <div
-                  className={`mt-6 rounded-xl border p-5 ${score.passed ? "border-success/40 bg-success/10" : "border-warning/40 bg-warning/10"}`}
-                >
-                  <p className="font-semibold">
-                    {score.earned} / {score.total} ·{" "}
-                    {score.passed ? "Challenge completed · +50 XP ✓" : "Not passed yet"}
-                  </p>
-                  <div className="mt-3 space-y-2 text-sm text-text-secondary">
-                    {results.map((result) => (
-                      <p key={result.question_id}>{result.feedback}</p>
-                    ))}
+                <div className="mt-6 space-y-6">
+                  <div
+                    className={`rounded-xl border p-5 sm:p-6 ${score.passed ? "border-success/40 bg-success/10" : "border-warning/40 bg-warning/10"}`}
+                  >
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                          Your score
+                        </p>
+                        <p className="mt-1 font-mono text-4xl font-bold tabular-nums text-text-primary">
+                          {displayNumber(score.earned)}{" "}
+                          <span className="text-lg font-semibold text-text-muted">
+                            / {displayNumber(score.total)}
+                          </span>
+                        </p>
+                      </div>
+                      <p
+                        className={`text-sm font-semibold ${score.passed ? "text-success" : "text-warning"}`}
+                      >
+                        {score.passed ? "Challenge passed · +50 XP ✓" : "Not passed yet"}
+                      </p>
+                    </div>
+
+                    <div className="mt-6 grid gap-3 border-t border-border/70 pt-5 sm:grid-cols-3">
+                      <div className="rounded-lg bg-card/80 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                          Percentage
+                        </p>
+                        <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-text-primary">
+                          {displayPercent(resultPercentage)}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-card/80 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                          Questions answered
+                        </p>
+                        <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-text-primary">
+                          {resultAnsweredCount} <span className="text-sm text-text-muted">/ {resultQuestionCount}</span>
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-card/80 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                          Marks lost
+                        </p>
+                        <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-text-primary">
+                          {displayNumber(resultMarksLost)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
+
+                  {resultEvaluation ? (
+                    <>
+                      {resultEvaluation.strong_topics.length || resultEvaluation.weak_topics.length ? (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {resultEvaluation.strong_topics.length ? (
+                            <section className="rounded-xl border border-success/30 bg-success/5 p-5">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-success">
+                                What you did well
+                              </p>
+                              <ul className="mt-3 space-y-3">
+                                {resultEvaluation.strong_topics.map((topic) => (
+                                  <li key={`strong-${topic.topic_key || topic.chapter}`} className="flex items-start justify-between gap-3">
+                                    <span className="text-sm font-semibold text-text-primary">{topic.chapter}</span>
+                                    <span className="shrink-0 font-mono text-xs font-semibold text-success">
+                                      {displayPercent(topicPercentage(topic))}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </section>
+                          ) : null}
+
+                          {resultEvaluation.weak_topics.length ? (
+                            <section className="rounded-xl border border-warning/30 bg-warning/5 p-5">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-warning">
+                                Focus next
+                              </p>
+                              <ul className="mt-3 space-y-3">
+                                {resultEvaluation.weak_topics.map((topic) => (
+                                  <li key={`weak-${topic.topic_key || topic.chapter}`} className="flex items-start justify-between gap-3">
+                                    <span className="text-sm font-semibold text-text-primary">{topic.chapter}</span>
+                                    <span className="shrink-0 text-right font-mono text-xs font-semibold text-warning">
+                                      {displayNumber(topic.marks_lost)} lost
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </section>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {resultEvaluation.chapters.length ? (
+                        <section className="rounded-xl border border-border bg-bg-secondary p-5">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                Chapter performance
+                              </p>
+                              <h3 className="mt-1 text-base font-semibold text-text-primary">
+                                Where your marks went
+                              </h3>
+                            </div>
+                            <p className="text-xs text-text-muted">
+                              {resultEvaluation.chapters.length} {resultEvaluation.chapters.length === 1 ? "chapter" : "chapters"} analysed
+                            </p>
+                          </div>
+                          <div className="mt-4 overflow-x-auto">
+                            <table className="w-full min-w-[820px] text-left text-sm">
+                              <thead className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
+                                <tr>
+                                  <th className="px-3 py-3 font-semibold">Chapter</th>
+                                  <th className="px-3 py-3 font-semibold">Score</th>
+                                  <th className="px-3 py-3 font-semibold">Answered</th>
+                                  <th className="px-3 py-3 font-semibold">Lost</th>
+                                  <th className="px-3 py-3 font-semibold">Paper share</th>
+                                  <th className="px-3 py-3 font-semibold">Lost share</th>
+                                  <th className="px-3 py-3 font-semibold">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {resultEvaluation.chapters.map((topic) => (
+                                  <tr key={`chapter-${topic.topic_key || topic.chapter}`}>
+                                    <td className="px-3 py-3 font-semibold text-text-primary">{topic.chapter}</td>
+                                    <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
+                                      {displayNumber(topic.score)} / {displayNumber(topic.marks)} <span className="text-xs text-text-muted">({displayPercent(topicPercentage(topic))})</span>
+                                    </td>
+                                    <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
+                                      {topic.questions_answered} / {topic.questions}
+                                    </td>
+                                    <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
+                                      {displayNumber(topic.marks_lost)}
+                                    </td>
+                                    <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
+                                      {displayPercent(topic.weightage)}
+                                    </td>
+                                    <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
+                                      {displayPercent(topic.lost_weightage)}
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${topicStatusClass(topic.status)}`}>
+                                        {topicStatusLabel(topic.status)}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      ) : null}
+
+                      {resultEvaluation.not_attempted.length ? (
+                        <section className="rounded-xl border border-border bg-bg-secondary p-5">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                            Not attempted
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {resultEvaluation.not_attempted.map((topic) => (
+                              <span key={`not-attempted-${topic.topic_key || topic.chapter}`} className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-text-secondary">
+                                {topic.chapter}
+                              </span>
+                            ))}
+                          </div>
+                        </section>
+                      ) : null}
+
+                      {resultEvaluation.summary ? (
+                        <section className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-5">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                            Grader summary
+                          </p>
+                          <Markdown
+                            text={resultEvaluation.summary}
+                            className="mt-2 text-sm leading-7 text-text-secondary"
+                          />
+                        </section>
+                      ) : null}
+                    </>
+                  ) : null}
+
+                  {results.length ? (
+                    <section>
+                      <div className="mb-3 flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                            Question feedback
+                          </p>
+                          <h3 className="mt-1 text-base font-semibold text-text-primary">
+                            Review every answer
+                          </h3>
+                        </div>
+                        <p className="text-xs text-text-muted">{results.length} graded</p>
+                      </div>
+                      <div className="space-y-4">
+                        {results.map((result, index) => {
+                          const question = content.examQuestions.find(
+                            (candidate) => candidate.id === result.question_id,
+                          );
+                          const prompt = result.question || question?.question;
+                          const marks = result.marks || question?.marks || 0;
+                          return (
+                            <article
+                              key={result.question_id}
+                              className="rounded-xl border border-border bg-card p-5"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                    Question {index + 1}{result.chapter || result.topic ? ` · ${result.chapter || result.topic}` : ""}
+                                  </p>
+                                  {prompt ? (
+                                    <Markdown
+                                      text={prompt}
+                                      className="mt-2 text-sm font-semibold leading-6 text-text-primary"
+                                    />
+                                  ) : null}
+                                </div>
+                                <span className="shrink-0 rounded-lg bg-bg-secondary px-2.5 py-1.5 font-mono text-sm font-semibold tabular-nums text-text-secondary">
+                                  {displayNumber(result.score)} / {displayNumber(marks)}
+                                </span>
+                              </div>
+                              <div className="mt-4 rounded-lg border border-border bg-bg-secondary p-4">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                  What we read from your sheet
+                                </p>
+                                {result.student_answer?.trim() ? (
+                                  <Markdown
+                                    text={result.student_answer.trim()}
+                                    className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-secondary"
+                                  />
+                                ) : (
+                                  <p className="mt-2 text-sm leading-6 text-text-muted">
+                                    No answer was detected for this question.
+                                  </p>
+                                )}
+                              </div>
+                              <div className="mt-4 rounded-lg bg-blue-500/10 p-4">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                                  Feedback
+                                </p>
+                                {result.feedback ? (
+                                  <Markdown
+                                    text={result.feedback}
+                                    className="mt-2 text-sm leading-6 text-text-secondary"
+                                  />
+                                ) : (
+                                  <p className="mt-2 text-sm leading-6 text-text-muted">
+                                    No feedback was returned for this question.
+                                  </p>
+                                )}
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : (
+                    <div className="rounded-xl border border-warning/40 bg-warning/10 p-5 text-sm text-text-secondary">
+                      The score was saved, but per-question answer details are unavailable for this sitting.
+                    </div>
+                  )}
                 </div>
               ) : challenge.status === "completed" ? (
                 <div className="mt-6 rounded-xl border border-success/40 bg-success/10 p-5">
@@ -676,12 +1223,18 @@ function ChallengeDetail({
                     Your result is saved in Challenge Hub.
                   </p>
                 </div>
-              ) : null}
+              ) : (
+                <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
+                  Submit your answer sheet to see the result here.
+                </div>
+              )}
             </div>
           ) : null}
         </section>
 
-        {content.warning ? <p className="mt-4 text-xs text-warning">{content.warning}</p> : null}
+        {activeWarning ? (
+          <p className="mt-4 text-xs leading-5 text-warning">{activeWarning}</p>
+        ) : null}
         {error ? (
           <p
             role="alert"
@@ -701,25 +1254,25 @@ function ChallengeDetail({
           <button
             type="button"
             disabled={activeStep === 1 || submitting || savingStep !== null}
-            onClick={() => setActiveStep((current) => Math.max(1, current - 1) as 1 | 2 | 3 | 4)}
+            onClick={() => setActiveStep((current) => Math.max(1, current - 1) as ChallengeStep)}
             className={`${focusButtonClass} border border-border bg-card text-text-primary`}
           >
             ← Previous
           </button>
-          {activeStep < 4 ? (
+          {activeStep < 5 ? (
             <button
               type="button"
               disabled={
                 savingStep !== null ||
                 submitting ||
-                (activeStep === 3 && !content.examQuestions.length)
+                (activeStep === 4 && !content.examQuestions.length)
               }
               onClick={() => void goNext()}
               className={`${focusButtonClass} bg-blue-600 text-white`}
             >
-              {savingStep ? "Saving…" : activeStep === 3 ? "Continue to submission →" : "Next →"}
+              {savingStep ? "Saving…" : activeStep === 4 ? "Continue to submission →" : "Next →"}
             </button>
-          ) : (
+          ) : resultReady ? (
             <div className="flex flex-wrap justify-end gap-3">
               <button
                 type="button"
@@ -749,7 +1302,7 @@ function ChallengeDetail({
                     : "Next challenge →"}
               </button>
             </div>
-          )}
+          ) : null}
         </footer>
       </div>
     </main>
@@ -773,6 +1326,7 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
 
   const completedPageHref = (page: number) => {
     const params = new URLSearchParams({ completedPage: String(page) });
+    if (dashboard.community) params.set("community", dashboard.community.slug);
     if (dashboard.scope) {
       params.set("courseId", dashboard.scope.courseId);
       params.set("subject", dashboard.scope.subjectSlug);
@@ -782,7 +1336,10 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
 
   const changePrioritySubject = (scopeKey: string) => {
     if (scopeKey === "all") {
-      router.replace("/app/challenges");
+      const communityQuery = dashboard.community
+        ? `?community=${encodeURIComponent(dashboard.community.slug)}`
+        : "";
+      router.replace(`/app/challenges${communityQuery}`);
       return;
     }
     const subject = dashboard.subjectOptions.find((option) => option.scopeKey === scopeKey);
@@ -791,6 +1348,7 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
       courseId: subject.courseId,
       subject: subject.subjectSlug,
     });
+    if (dashboard.community) params.set("community", dashboard.community.slug);
     router.replace(`/app/challenges?${params.toString()}`);
   };
 
@@ -826,6 +1384,7 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
             params.set("courseId", dashboard.scope.courseId);
             params.set("subject", dashboard.scope.subjectSlug);
           }
+          if (dashboard.community) params.set("community", dashboard.community.slug);
           const suffix = params.size ? `?${params.toString()}` : "";
           const payload = await apiJson<{ challenge: StudentChallengeDetail }>(
             await fetch(`/api/student/challenges/${selected.id}/next${suffix}`, { method: "POST" }),

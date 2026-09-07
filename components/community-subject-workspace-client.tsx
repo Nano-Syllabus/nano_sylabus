@@ -195,8 +195,8 @@ export function CommunitySubjectWorkspaceClient({
             <Link
               href={
                 workspace.courseId && workspace.externalSubjectSlug
-                  ? `/app/challenges?courseId=${encodeURIComponent(workspace.courseId)}&subject=${encodeURIComponent(workspace.externalSubjectSlug)}`
-                  : "/app/challenges"
+                  ? `/app/challenges?community=${encodeURIComponent(communitySlug)}&courseId=${encodeURIComponent(workspace.courseId)}&subject=${encodeURIComponent(workspace.externalSubjectSlug)}`
+                  : `/app/challenges?community=${encodeURIComponent(communitySlug)}`
               }
               className={`inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse ${focusRing}`}
             >

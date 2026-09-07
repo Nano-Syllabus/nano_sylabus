@@ -8,7 +8,12 @@ export const dynamic = "force-dynamic";
 export default async function ChallengesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ completedPage?: string; courseId?: string; subject?: string }>;
+  searchParams: Promise<{
+    completedPage?: string;
+    courseId?: string;
+    subject?: string;
+    community?: string;
+  }>;
 }) {
   const { user } = await requireOnboardedUser();
   const params = await searchParams;
@@ -19,6 +24,7 @@ export default async function ChallengesPage({
     user.id,
     Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1,
     courseId && subjectSlug ? { courseId, subjectSlug } : undefined,
+    String(params.community || "").trim() || undefined,
   );
 
   return (

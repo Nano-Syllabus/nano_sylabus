@@ -177,7 +177,7 @@ function SubjectProgressModal({
 
   const challengeHref =
     community.studyCourseId && subject.externalSubjectSlug
-      ? `/app/challenges?courseId=${encodeURIComponent(community.studyCourseId)}&subject=${encodeURIComponent(subject.externalSubjectSlug)}`
+      ? `/app/challenges?community=${encodeURIComponent(community.slug)}&courseId=${encodeURIComponent(community.studyCourseId)}&subject=${encodeURIComponent(subject.externalSubjectSlug)}`
       : null;
   const averageScore = insight?.averageScore ?? null;
 

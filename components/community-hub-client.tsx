@@ -1057,7 +1057,7 @@ function CommunityOverview({
               />
             </div>
             <Link
-              href="/app/challenges"
+              href={`/app/challenges?community=${encodeURIComponent(data.community.slug)}`}
               className={`mt-6 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-text-primary px-4 text-sm font-semibold text-text-inverse hover:opacity-90 ${focusRing}`}
             >
               Start a challenge <ArrowRight className="size-4" aria-hidden="true" />
