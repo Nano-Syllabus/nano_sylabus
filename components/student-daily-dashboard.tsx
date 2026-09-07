@@ -1,4 +1,5 @@
 "use client";
+import { CommunitySwitcher } from "@/components/community-switcher";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -550,7 +551,7 @@ function DailyLeaderboard({ dashboard }: { dashboard: StudentDailyDashboard }) {
       ) : null}
       <div className="mt-3 border-t border-border pt-3 text-center">
         <Link
-          href="/app/community?tab=members&sort=today"
+          href={`/app/community?community=${encodeURIComponent(community.slug)}&tab=members&sort=today`}
           className={cn(
             "inline-flex min-h-10 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--community-accent)] hover:underline",
             focusRing,
@@ -711,12 +712,14 @@ function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
 }
 
 export function StudentDailyDashboardView({
+  communityOptions = [],
   fullName,
   creditBalance,
   hasUnlimitedAccess,
   unlimitedPlan,
   dashboard,
 }: {
+  communityOptions?: import("@/lib/community-switch").CommunitySwitchOption[];
   fullName: string;
   creditBalance: number;
   hasUnlimitedAccess: boolean;
@@ -740,6 +743,14 @@ export function StudentDailyDashboardView({
 
   return (
     <main className="mx-auto w-full max-w-[1440px] px-4 pb-20 pt-4 sm:px-6 lg:px-8">
+      {communityOptions.length ? (
+        <div className="mb-5 flex justify-end">
+          <CommunitySwitcher
+            options={communityOptions}
+            selectedSlug={challenge.community?.slug ?? ""}
+          />
+        </div>
+      ) : null}
       <header className="flex flex-col gap-5 border-b border-border pb-7 pt-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">
@@ -768,7 +779,11 @@ export function StudentDailyDashboardView({
             </button>
           ) : null}
           <Link
-            href="/app/challenges"
+            href={
+              challenge.community
+                ? `/app/challenges?community=${encodeURIComponent(challenge.community.slug)}`
+                : "/app/challenges"
+            }
             className={cn(
               "inline-flex min-h-11 items-center gap-2 rounded-full bg-text-primary px-5 text-sm font-semibold text-text-inverse hover:opacity-90",
               focusRing,

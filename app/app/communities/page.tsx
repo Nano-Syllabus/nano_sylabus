@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { ArrowRight, Building2 } from "lucide-react";
 import { CommunitySubjectExplorer } from "@/components/community-subject-explorer";
+import { CommunitySwitcher } from "@/components/community-switcher";
 import { SetAppShell } from "@/components/set-app-shell";
 import { requireOnboardedUser } from "@/lib/auth";
-import { selectStudentCommunity } from "@/lib/communities";
-import { getCommunity, listJoinedCommunities } from "@/lib/data/communities";
+import { getCommunity } from "@/lib/data/communities";
 import { getCommunitySubjectExplorerInsights } from "@/lib/data/community-subject-explorer";
+import { getActiveCommunity } from "@/lib/data/active-community";
 
 export const dynamic = "force-dynamic";
 
@@ -16,20 +17,26 @@ export default async function SubjectExplorerPage({
 }) {
   const { user } = await requireOnboardedUser();
   const params = await searchParams;
-  const communities = await listJoinedCommunities(user.id);
-  const joinedCommunity = selectStudentCommunity(communities, params.community);
-  const community = joinedCommunity ? await getCommunity(joinedCommunity.slug, user.id) : null;
+  const active = await getActiveCommunity(user.id, params.community);
+  const community = active.selected ? await getCommunity(active.selected.slug, user.id) : null;
   const insights = community ? await getCommunitySubjectExplorerInsights(user.id, community) : {};
 
   return (
     <>
       <SetAppShell title="Subject Explorer" />
       {community ? (
-        <CommunitySubjectExplorer
-          key={`${user.id}:${community.id}`}
-          community={community}
-          insights={insights}
-        />
+        <>
+          {active.options.length ? (
+            <div className="mx-auto flex w-full max-w-[1240px] justify-end px-4 pt-5 lg:px-7">
+              <CommunitySwitcher options={active.options} selectedSlug={community.slug} />
+            </div>
+          ) : null}
+          <CommunitySubjectExplorer
+            key={`${user.id}:${community.id}`}
+            community={community}
+            insights={insights}
+          />
+        </>
       ) : (
         <main className="w-full max-w-[1240px] px-4 pb-24 pt-5 lg:p-7">
           <header className="border-b border-border pb-7">

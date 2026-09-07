@@ -25,8 +25,8 @@ export default async function CommunitiesPage({
   const communities = await listPublicCommunities(user?.id);
 
   return (
-    <div className="exam-prep-theme hero-glow min-h-screen bg-background text-foreground">
-      <LandingHeader dark />
+    <div className="exam-prep-theme community-catalog-light hero-glow min-h-screen bg-background text-foreground">
+      <LandingHeader />
       <CommunityCatalogClient
         initialCommunities={communities}
         signedIn={Boolean(user)}

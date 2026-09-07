@@ -1,11 +1,11 @@
 import { SetAppShell } from "@/components/set-app-shell";
 import { ChatPageClient } from "@/components/chat-page-client";
 import { requireOnboardedUser } from "@/lib/auth";
-import { selectStudentCommunity } from "@/lib/communities";
 import { getChatSessionDetail, listChatSessions } from "@/lib/data/chat";
 import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 import { getRevisionNoteDetail } from "@/lib/data/notes";
-import { getCommunity, listJoinedCommunities } from "@/lib/data/communities";
+import { getCommunity } from "@/lib/data/communities";
+import { getActiveCommunity } from "@/lib/data/active-community";
 import { listCreatorPrivateSubjectAccess, listStudentCourseSubjects } from "@/lib/student-courses";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ export default async function ChatPage({
     courseSubjects,
     privateSubjects,
     referenceNote,
-    joinedCommunities,
+    activeCommunity,
   ] = await Promise.all([
     listChatSessions(user.id, { limit: 12, offset: 0 }),
     params.session
@@ -49,10 +49,10 @@ export default async function ChatPage({
       ? // Silently ignore – the note may have been deleted.
         getRevisionNoteDetail(params.referenceNoteId, user.id).catch(() => null)
       : Promise.resolve(null),
-    listJoinedCommunities(user.id),
+    getActiveCommunity(user.id, params.community),
   ]);
 
-  const activeStudentCommunity = selectStudentCommunity(joinedCommunities, params.community);
+  const activeStudentCommunity = activeCommunity.selected;
   const libraryCommunity = activeStudentCommunity
     ? await getCommunity(activeStudentCommunity.slug, user.id)
     : null;

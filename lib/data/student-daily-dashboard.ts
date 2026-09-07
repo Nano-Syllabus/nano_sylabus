@@ -219,8 +219,7 @@ export function aggregateScopedPracticeActivity(
       score_percentage_sum: 0,
     };
     current.attempt_count = asNumber(current.attempt_count) + 1;
-    current.completed_count =
-      asNumber(current.completed_count) + (attempt.passed === true ? 1 : 0);
+    current.completed_count = asNumber(current.completed_count) + (attempt.passed === true ? 1 : 0);
     if (totalMarks > 0) {
       current.graded_attempt_count = asNumber(current.graded_attempt_count) + 1;
       current.score_percentage_sum =
@@ -238,17 +237,21 @@ export function aggregateScopedPracticeActivity(
 export async function getStudentDailyDashboard(
   userId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
+  preferredCommunitySlug?: string,
 ): Promise<StudentDailyDashboard> {
   const today = communityDateKey(new Date());
   const activityStart = calendarStart(today);
   const activityStartTimestamp = new Date(`${activityStart}T00:00:00+05:45`).toISOString();
-  const activityEndTimestamp = new Date(
-    `${shiftDateKey(today, 1)}T00:00:00+05:45`,
-  ).toISOString();
-  const challenge = await getStudentChallengeDashboard(userId);
+  const activityEndTimestamp = new Date(`${shiftDateKey(today, 1)}T00:00:00+05:45`).toISOString();
+  const challenge = await getStudentChallengeDashboard(
+    userId,
+    1,
+    undefined,
+    preferredCommunitySlug,
+  );
 
   const [community, activityResult] = await Promise.all([
-    getCommunityHubForUser(userId, admin),
+    getCommunityHubForUser(userId, admin, challenge.community?.slug ?? preferredCommunitySlug),
     challenge.community?.courseId
       ? admin
           .from("student_practice_attempts")

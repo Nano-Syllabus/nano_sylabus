@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState, useTransition } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
 import { Markdown } from "@/components/markdown";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
@@ -106,7 +106,8 @@ function displayPercent(value: number) {
 }
 
 function topicPercentage(topic: PracticeEvaluation["chapters"][number]) {
-  const value = topic.marks > 0 ? (topic.score / topic.marks) * 100 : percentageValue(topic.percentage);
+  const value =
+    topic.marks > 0 ? (topic.score / topic.marks) * 100 : percentageValue(topic.percentage);
   return Math.max(0, Math.min(100, value));
 }
 
@@ -243,7 +244,7 @@ function ChallengeDetail({
     setPrerequisiteReadings({});
     setClock(Date.now());
     setResults(isCompletedChallenge ? savedResults(challenge) : []);
-    setEvaluation(isCompletedChallenge ? challenge.latestAttempt?.evaluation ?? null : null);
+    setEvaluation(isCompletedChallenge ? (challenge.latestAttempt?.evaluation ?? null) : null);
     setScore(
       isCompletedChallenge && challenge.lastScore !== null && challenge.lastTotalMarks
         ? { earned: challenge.lastScore, total: challenge.lastTotalMarks, passed: true }
@@ -464,7 +465,8 @@ function ChallengeDetail({
   const resultPercentage =
     resultEvaluation?.percentage ??
     (score && score.total > 0 ? (score.earned / score.total) * 100 : 0);
-  const resultQuestionCount = resultEvaluation?.questions ?? (results.length || content.examQuestions.length);
+  const resultQuestionCount =
+    resultEvaluation?.questions ?? (results.length || content.examQuestions.length);
   const resultAnsweredCount =
     resultEvaluation?.questions_answered ??
     results.filter((result) => Boolean(result.student_answer?.trim())).length;
@@ -685,8 +687,7 @@ function ChallengeDetail({
                                       key={prerequisite.topicKey + "-" + paragraphIndex}
                                       text={paragraph}
                                       className="max-w-prose text-sm leading-7 text-text-secondary"
-                                    >
-                                    </Markdown>
+                                    ></Markdown>
                                   ),
                                 )
                               ) : (
@@ -989,7 +990,8 @@ function ChallengeDetail({
                           Questions answered
                         </p>
                         <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-text-primary">
-                          {resultAnsweredCount} <span className="text-sm text-text-muted">/ {resultQuestionCount}</span>
+                          {resultAnsweredCount}{" "}
+                          <span className="text-sm text-text-muted">/ {resultQuestionCount}</span>
                         </p>
                       </div>
                       <div className="rounded-lg bg-card/80 p-3">
@@ -1005,7 +1007,8 @@ function ChallengeDetail({
 
                   {resultEvaluation ? (
                     <>
-                      {resultEvaluation.strong_topics.length || resultEvaluation.weak_topics.length ? (
+                      {resultEvaluation.strong_topics.length ||
+                      resultEvaluation.weak_topics.length ? (
                         <div className="grid gap-4 md:grid-cols-2">
                           {resultEvaluation.strong_topics.length ? (
                             <section className="rounded-xl border border-success/30 bg-success/5 p-5">
@@ -1014,8 +1017,13 @@ function ChallengeDetail({
                               </p>
                               <ul className="mt-3 space-y-3">
                                 {resultEvaluation.strong_topics.map((topic) => (
-                                  <li key={`strong-${topic.topic_key || topic.chapter}`} className="flex items-start justify-between gap-3">
-                                    <span className="text-sm font-semibold text-text-primary">{topic.chapter}</span>
+                                  <li
+                                    key={`strong-${topic.topic_key || topic.chapter}`}
+                                    className="flex items-start justify-between gap-3"
+                                  >
+                                    <span className="text-sm font-semibold text-text-primary">
+                                      {topic.chapter}
+                                    </span>
                                     <span className="shrink-0 font-mono text-xs font-semibold text-success">
                                       {displayPercent(topicPercentage(topic))}
                                     </span>
@@ -1032,8 +1040,13 @@ function ChallengeDetail({
                               </p>
                               <ul className="mt-3 space-y-3">
                                 {resultEvaluation.weak_topics.map((topic) => (
-                                  <li key={`weak-${topic.topic_key || topic.chapter}`} className="flex items-start justify-between gap-3">
-                                    <span className="text-sm font-semibold text-text-primary">{topic.chapter}</span>
+                                  <li
+                                    key={`weak-${topic.topic_key || topic.chapter}`}
+                                    className="flex items-start justify-between gap-3"
+                                  >
+                                    <span className="text-sm font-semibold text-text-primary">
+                                      {topic.chapter}
+                                    </span>
                                     <span className="shrink-0 text-right font-mono text-xs font-semibold text-warning">
                                       {displayNumber(topic.marks_lost)} lost
                                     </span>
@@ -1057,7 +1070,9 @@ function ChallengeDetail({
                               </h3>
                             </div>
                             <p className="text-xs text-text-muted">
-                              {resultEvaluation.chapters.length} {resultEvaluation.chapters.length === 1 ? "chapter" : "chapters"} analysed
+                              {resultEvaluation.chapters.length}{" "}
+                              {resultEvaluation.chapters.length === 1 ? "chapter" : "chapters"}{" "}
+                              analysed
                             </p>
                           </div>
                           <div className="mt-4 overflow-x-auto">
@@ -1076,9 +1091,14 @@ function ChallengeDetail({
                               <tbody className="divide-y divide-border">
                                 {resultEvaluation.chapters.map((topic) => (
                                   <tr key={`chapter-${topic.topic_key || topic.chapter}`}>
-                                    <td className="px-3 py-3 font-semibold text-text-primary">{topic.chapter}</td>
+                                    <td className="px-3 py-3 font-semibold text-text-primary">
+                                      {topic.chapter}
+                                    </td>
                                     <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
-                                      {displayNumber(topic.score)} / {displayNumber(topic.marks)} <span className="text-xs text-text-muted">({displayPercent(topicPercentage(topic))})</span>
+                                      {displayNumber(topic.score)} / {displayNumber(topic.marks)}{" "}
+                                      <span className="text-xs text-text-muted">
+                                        ({displayPercent(topicPercentage(topic))})
+                                      </span>
                                     </td>
                                     <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
                                       {topic.questions_answered} / {topic.questions}
@@ -1093,7 +1113,9 @@ function ChallengeDetail({
                                       {displayPercent(topic.lost_weightage)}
                                     </td>
                                     <td className="px-3 py-3">
-                                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${topicStatusClass(topic.status)}`}>
+                                      <span
+                                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${topicStatusClass(topic.status)}`}
+                                      >
                                         {topicStatusLabel(topic.status)}
                                       </span>
                                     </td>
@@ -1112,7 +1134,10 @@ function ChallengeDetail({
                           </p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             {resultEvaluation.not_attempted.map((topic) => (
-                              <span key={`not-attempted-${topic.topic_key || topic.chapter}`} className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-text-secondary">
+                              <span
+                                key={`not-attempted-${topic.topic_key || topic.chapter}`}
+                                className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-text-secondary"
+                              >
                                 {topic.chapter}
                               </span>
                             ))}
@@ -1162,7 +1187,10 @@ function ChallengeDetail({
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                                    Question {index + 1}{result.chapter || result.topic ? ` · ${result.chapter || result.topic}` : ""}
+                                    Question {index + 1}
+                                    {result.chapter || result.topic
+                                      ? ` · ${result.chapter || result.topic}`
+                                      : ""}
                                   </p>
                                   {prompt ? (
                                     <Markdown
@@ -1212,7 +1240,8 @@ function ChallengeDetail({
                     </section>
                   ) : (
                     <div className="rounded-xl border border-warning/40 bg-warning/10 p-5 text-sm text-text-secondary">
-                      The score was saved, but per-question answer details are unavailable for this sitting.
+                      The score was saved, but per-question answer details are unavailable for this
+                      sitting.
                     </div>
                   )}
                 </div>
@@ -1311,6 +1340,28 @@ function ChallengeDetail({
 
 export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentChallengeDashboard }) {
   const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
+  const [retryCount, setRetryCount] = useState(0);
+  const retryScope = `${dashboard.community?.id ?? "none"}:${dashboard.scope?.subjectSlug ?? "all"}`;
+  const topicsUnavailable = dashboard.subjects.some((subject) => !subject.topicDataAvailable);
+  const needsRecovery =
+    Boolean(dashboard.community) &&
+    !dashboard.challenges.length &&
+    (topicsUnavailable || (dashboard.subjects.length > 0 && retryCount === 0));
+
+  useEffect(() => {
+    setRetryCount(0);
+  }, [retryScope]);
+
+  useEffect(() => {
+    if (!needsRecovery || refreshing || retryCount >= 2) return;
+    const timer = window.setTimeout(() => {
+      setRetryCount((count) => count + 1);
+      startRefresh(() => router.refresh());
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [needsRecovery, refreshing, retryCount, router]);
+
   const [selected, setSelected] = useState<StudentChallengeDetail | null>(null);
   const [openingId, setOpeningId] = useState("");
   const [openError, setOpenError] = useState("");
@@ -1587,6 +1638,39 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
                   })}
                 </tbody>
               </table>
+            </div>
+          ) : refreshing || (needsRecovery && retryCount < 2) ? (
+            <div
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+              className="flex flex-col items-center gap-3 px-6 py-12 text-center"
+            >
+              <LoaderCircle
+                aria-hidden="true"
+                className="size-6 animate-spin text-blue-600 motion-reduce:animate-none"
+              />
+              <p className="font-semibold">Loading your challenges…</p>
+              <p className="text-sm text-text-muted">
+                Getting the available topics for your subjects.
+              </p>
+            </div>
+          ) : topicsUnavailable ? (
+            <div role="alert" className="px-6 py-12 text-center">
+              <p className="font-semibold">Challenges couldn’t be loaded</p>
+              <p className="mt-2 text-sm text-text-muted">
+                Please try loading your subjects again.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setRetryCount(0);
+                  startRefresh(() => router.refresh());
+                }}
+                className="mt-5 inline-flex min-h-10 items-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white"
+              >
+                Retry
+              </button>
             </div>
           ) : (
             <div className="px-6 py-12 text-center">
