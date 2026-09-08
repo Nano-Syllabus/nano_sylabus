@@ -92,6 +92,23 @@ export function BillingPageClient({ overview, paymentConfig, user }: {
     };
   }, [overview.plans]);
 
+  const activeSubscription = useMemo(() => {
+    const now = Date.now();
+    return overview.subscriptions.find((subscription) => {
+      if (subscription.status !== "active") return false;
+      return !subscription.endsAt || new Date(subscription.endsAt).getTime() > now;
+    }) ?? null;
+  }, [overview.subscriptions]);
+
+  const activePlan = useMemo(() => {
+    if (!activeSubscription) return null;
+    return overview.plans.find((plan) => plan.id === activeSubscription.planId)
+      ?? overview.invoices.find((invoice) => invoice.planId === activeSubscription.planId)?.plan
+      ?? null;
+  }, [activeSubscription, overview.invoices, overview.plans]);
+
+  const activePlanLabel = activePlan?.productType === "group" ? "Group Unlimited" : "Individual Unlimited";
+
   async function requestInvoice(plan: SubscriptionPlan, purchaseDetails?: {
     groupName: string; organizerEmail: string; studentEmails: string[];
   }): Promise<CheckoutInvoice> {
@@ -142,7 +159,9 @@ export function BillingPageClient({ overview, paymentConfig, user }: {
             Study without limits!
           </h1>
           <p className="mt-[13px] text-[14px] font-medium leading-[1.5] tracking-[-0.14px] text-[#494949]">
-            Start learning for free. Upgrade when you’re ready for more.
+            {user.hasUnlimitedAccess
+              ? `Your ${activePlanLabel} plan is active with unlimited NanoAI access.`
+              : "Start learning for free. Upgrade when you’re ready for more."}
           </p>
           <div className="mt-[24px] inline-flex h-[39px] items-center rounded-full border border-[#d5d5d5] bg-white p-[3px] shadow-[0_2px_5px_rgba(0,0,0,0.16)]" aria-label="Billing period">
             <button
@@ -170,8 +189,9 @@ export function BillingPageClient({ overview, paymentConfig, user }: {
             price="Rs. 0"
             features={FREE_FEATURES}
             featureVariant="free"
-            actionLabel="Get Started"
+            actionLabel={user.hasUnlimitedAccess ? "Included with your plan" : "Get Started"}
             onAction={() => router.push("/app/today")}
+            disabled={user.hasUnlimitedAccess}
           />
           <PricingCard
             title={PLAN_COPY.individual.title}
@@ -179,9 +199,12 @@ export function BillingPageClient({ overview, paymentConfig, user }: {
             price={plans.individual ? formatMoney(plans.individual) : "Rs. 1,500"}
             features={[...PLAN_COPY.individual.fallbackFeatures]}
             featureVariant="individual"
-            actionLabel="Get Individual"
+            actionLabel={activePlan?.productType === "individual" ? "Current plan" : "Get Individual"}
             loading={creatingPlanId === plans.individual?.id}
             onAction={() => startPlan(plans.individual)}
+            disabled={activePlan?.productType === "individual"}
+            current={activePlan?.productType === "individual"}
+            accessEndsAt={activePlan?.productType === "individual" ? activeSubscription?.endsAt : null}
             featured
           />
           <PricingCard
@@ -190,9 +213,12 @@ export function BillingPageClient({ overview, paymentConfig, user }: {
             price={plans.group ? formatMoney(plans.group) : "Rs. 5,000"}
             features={[...PLAN_COPY.group.fallbackFeatures]}
             featureVariant="group"
-            actionLabel="Get Group"
+            actionLabel={activePlan?.productType === "group" ? "Current plan" : user.hasUnlimitedAccess ? "Upgrade to Group" : "Get Group"}
             loading={creatingPlanId === plans.group?.id}
             onAction={() => startPlan(plans.group)}
+            disabled={activePlan?.productType === "group"}
+            current={activePlan?.productType === "group"}
+            accessEndsAt={activePlan?.productType === "group" ? activeSubscription?.endsAt : null}
           />
         </section>
 
@@ -247,12 +273,12 @@ export function BillingPageClient({ overview, paymentConfig, user }: {
   );
 }
 
-function PricingCard({ title, description, price, features, featureVariant, actionLabel, loading = false, onAction, featured = false }: {
-  title: string; description: string; price: string; features: string[]; featureVariant: "free" | "individual" | "group"; actionLabel: string; loading?: boolean; onAction: () => void; featured?: boolean;
+function PricingCard({ title, description, price, features, featureVariant, actionLabel, loading = false, disabled = false, current = false, accessEndsAt = null, onAction, featured = false }: {
+  title: string; description: string; price: string; features: string[]; featureVariant: "free" | "individual" | "group"; actionLabel: string; loading?: boolean; disabled?: boolean; current?: boolean; accessEndsAt?: string | null; onAction: () => void; featured?: boolean;
 }) {
   return (
     <article className={cn("relative mx-auto h-[570px] w-full max-w-[330px] overflow-visible rounded-[28px] border border-[#979797] bg-white font-[family-name:var(--font-poppins)]", featured && "h-[580px] border-2 border-[#20a8ff] bg-gradient-to-b from-white to-[#eef7ff]")}>
-      {featured ? <span className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-[20px] bg-[linear-gradient(175deg,#4db3ff_13.6%,#1689f5_84.5%)] px-[23.5px] py-[6px] text-[12px] font-semibold tracking-[0.621px] text-white">Most Popular</span> : null}
+      {featured || current ? <span className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-[20px] bg-[linear-gradient(175deg,#4db3ff_13.6%,#1689f5_84.5%)] px-[23.5px] py-[6px] text-[12px] font-semibold tracking-[0.621px] text-white">{current ? "Current Plan" : "Most Popular"}</span> : null}
       <div className={cn("flex h-full flex-col px-8 pb-[52px] pt-[50px]", featured && "px-8 pb-[38px] pt-[52px]")}>
         <div>
           <h2 className="text-[25px] font-medium leading-normal tracking-[0.48px] text-black">{title}</h2>
@@ -264,10 +290,16 @@ function PricingCard({ title, description, price, features, featureVariant, acti
           <FeatureList features={features} variant={featureVariant} />
         </div>
         <div className="mt-[30px]">
-          <button type="button" className={cn("flex min-h-[40px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-black px-[19px] py-[9px] font-[family-name:var(--font-inter)] text-[14px] font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1689f5] focus-visible:ring-offset-2 disabled:opacity-50", featured && "bg-[linear-gradient(180deg,#4db3ff,#1689f5)]")} onClick={onAction} disabled={loading} aria-busy={loading}>
+          <button type="button" className={cn("flex min-h-[40px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-black px-[19px] py-[9px] font-[family-name:var(--font-inter)] text-[14px] font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1689f5] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70", featured && "bg-[linear-gradient(180deg,#4db3ff,#1689f5)]", current && "bg-[#e8f6ee] text-[#187a42]")} onClick={onAction} disabled={loading || disabled} aria-busy={loading}>
+            {current ? <CheckCircle2 className="size-4" aria-hidden="true" /> : null}
             {loading ? "Preparing payment..." : actionLabel}
-            {!loading ? <Image src="/figma-pricing-arrow.svg" alt="" width={20} height={20} aria-hidden="true" className="size-5" /> : null}
+            {!loading && !disabled ? <Image src="/figma-pricing-arrow.svg" alt="" width={20} height={20} aria-hidden="true" className="size-5" /> : null}
           </button>
+          {current ? (
+            <p className="mt-2 text-center text-[12px] font-medium text-[#5f6875]">
+              {accessEndsAt ? `Active until ${formatDate(accessEndsAt)}` : "Active with no expiry date"}
+            </p>
+          ) : null}
         </div>
       </div>
     </article>

@@ -951,7 +951,9 @@ export function AppSidebar({
                   <p className="truncate text-[15px] font-medium leading-[22px] text-text-primary capitalize">
                     {user.fullName || user.email?.split("@")[0] || "User"}
                   </p>
-                  <p className="truncate text-[13px] text-text-muted mt-0.5">Free plan</p>
+                  <p className="truncate text-[13px] text-text-muted mt-0.5">
+                    {user.hasUnlimitedAccess ? "Unlimited plan" : "Free plan"}
+                  </p>
                 </div>
               </div>
             </div>
@@ -1091,7 +1093,9 @@ export function AppSidebar({
                 <p className="truncate text-[15px] font-medium leading-[22px] text-text-primary capitalize">
                   {user.fullName || user.email?.split("@")[0] || "User"}
                 </p>
-                <p className="truncate text-[13px] text-text-muted mt-0.5">Free plan</p>
+                <p className="truncate text-[13px] text-text-muted mt-0.5">
+                  {user.hasUnlimitedAccess ? "Unlimited plan" : "Free plan"}
+                </p>
               </div>
               <div className="flex items-center pr-1 text-text-muted">
                 <svg

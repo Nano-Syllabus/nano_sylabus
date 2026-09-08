@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import type { AppUser, StudentBillingOverview, SubscriptionPlan } from "@/lib/types";
+import type { AppUser, StudentBillingOverview, SubscriptionPlan, UserSubscription } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -39,6 +39,19 @@ const user: AppUser = {
   hasUnlimitedAccess: false,
 };
 
+function activeSubscription(planId: string): UserSubscription {
+  return {
+    id: "subscription-id",
+    userId: "user-id",
+    planId,
+    invoiceId: "invoice-id",
+    status: "active",
+    startsAt: "2026-09-09T00:00:00.000Z",
+    endsAt: "2026-10-09T00:00:00.000Z",
+    createdAt: "2026-09-09T00:00:00.000Z",
+  };
+}
+
 describe("billing pricing UI", () => {
   it("renders the Figma plan hierarchy while keeping paid values API-driven", () => {
     const overview: StudentBillingOverview = {
@@ -70,9 +83,9 @@ describe("billing pricing UI", () => {
     const source = readFileSync("components/billing-page-client.tsx", "utf8");
 
     expect(source).not.toMatch(/discount|coupon/i);
-    expect(source).toContain('actionLabel="Get Started"');
+    expect(source).toContain('"Included with your plan" : "Get Started"');
     expect(source).toContain('onAction={() => router.push("/app/today")}');
-    expect(source).toContain('actionLabel="Get Individual"');
+    expect(source).toContain('"Current plan" : "Get Individual"');
     expect(source).toContain("onAction={() => startPlan(plans.individual)}");
     expect(source).toContain('className="mt-[30px]"');
   });
@@ -84,5 +97,25 @@ describe("billing pricing UI", () => {
     expect(source).toContain("Verification usually takes 2–5 minutes");
     expect(source).toContain("We’ll email you as soon as your paid access is activated.");
     expect(source).toContain("Activation update will be sent to {email}");
+  });
+
+  it("shows the approved plan as current and prevents duplicate checkout", () => {
+    const individual = plan("individual", 1500);
+    const paidUser = { ...user, hasUnlimitedAccess: true };
+    const overview: StudentBillingOverview = {
+      balance: 1,
+      plans: [individual, plan("group", 5000)],
+      invoices: [],
+      subscriptions: [activeSubscription(individual.id)],
+    };
+
+    const html = renderToStaticMarkup(createElement(BillingPageClient, { overview, paymentConfig: null, user: paidUser }));
+
+    expect(html).toContain("Your Individual Unlimited plan is active with unlimited NanoAI access.");
+    expect(html).toContain("Current Plan");
+    expect(html).toContain("Current plan");
+    expect(html).toContain("Active until");
+    expect(html).toContain("Upgrade to Group");
+    expect(html).toContain("Unlimited plan active");
   });
 });
