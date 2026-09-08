@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { CACHE, errorJson, privateJson } from "@/lib/http/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
@@ -6,13 +6,13 @@ import { getVerifiedUser } from "@/lib/supabase/verified-user";
 export const dynamic = "force-dynamic";
 
 /** The classrooms this student has joined, with how much is waiting in each. */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await getVerifiedUser(supabase);
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) return errorJson("Unauthorized", 401);
 
     const admin = createSupabaseAdminClient();
     const { data: memberships, error: memberError } = await admin
@@ -24,7 +24,8 @@ export async function GET() {
     const classroomIds = (memberships ?? [])
       .map((row) => row.classroom_id)
       .filter((id): id is string => typeof id === "string" && id.length > 0);
-    if (!classroomIds.length) return NextResponse.json({ classrooms: [] });
+    if (!classroomIds.length)
+      return privateJson({ classrooms: [] }, { request, profile: CACHE.SHORT });
 
     const [{ data: classrooms, error }, { data: assignments }, { data: members }] = await Promise.all([
       admin
@@ -47,8 +48,9 @@ export async function GET() {
       memberCounts.set(row.classroom_id, (memberCounts.get(row.classroom_id) ?? 0) + 1);
     }
 
-    return NextResponse.json({
-      classrooms: (classrooms ?? []).map((row) => ({
+    return privateJson(
+      {
+        classrooms: (classrooms ?? []).map((row) => ({
         id: row.id,
         name: row.name,
         subjectName: row.subject_name,
@@ -58,10 +60,12 @@ export async function GET() {
         // Archived classrooms stay visible as "earlier", the way the term
         // switch worked, rather than vanishing from a student's history.
         archived: Boolean(row.archived_at),
-        joinedAt: row.created_at,
-      })),
-    });
+          joinedAt: row.created_at,
+        })),
+      },
+      { request, profile: CACHE.SHORT },
+    );
   } catch {
-    return NextResponse.json({ error: "Could not load your classrooms." }, { status: 502 });
+    return errorJson("Could not load your classrooms.", 502);
   }
 }

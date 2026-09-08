@@ -6,7 +6,7 @@ import { FormEvent, useState } from "react";
 import { AuthShell } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { loadSupabaseBrowserClient, warmSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -27,7 +27,7 @@ export function ResetPasswordForm() {
     }
 
     setLoading(true);
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     const { error: updateError } = await supabase.auth.updateUser({ password });
     setLoading(false);
 
@@ -43,7 +43,7 @@ export function ResetPasswordForm() {
 
   return (
     <AuthShell title="Choose a new password" subtitle="This will replace your old password immediately.">
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form onSubmit={onSubmit} onFocus={warmSupabaseBrowserClient} className="space-y-4">
         <Field label="New password">
           <Input
             type="password"

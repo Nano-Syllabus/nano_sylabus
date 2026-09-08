@@ -7,7 +7,7 @@ import { AuthShell, DividerOr } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { loadSupabaseBrowserClient, warmSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 
 export function LoginForm({
   nextPath,
@@ -40,7 +40,7 @@ export function LoginForm({
     setError("");
     setLoading(true);
 
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     const { error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -70,7 +70,7 @@ export function LoginForm({
 
     setError("");
     setGoogleLoading(true);
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     const redirectTo = getGoogleAuthRedirectUrl();
     setOAuthNextCookie(nextPath);
 
@@ -114,7 +114,7 @@ export function LoginForm({
         </>
       ) : null}
 
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form onSubmit={onSubmit} onFocus={warmSupabaseBrowserClient} className="space-y-4">
         <Field label="Email">
           <Input
             type="email"

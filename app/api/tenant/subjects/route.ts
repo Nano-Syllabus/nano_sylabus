@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { CACHE, errorJson, privateJson } from "@/lib/http/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   listCreatorPrivateSubjectAccess,
@@ -7,7 +7,8 @@ import {
 } from "@/lib/student-courses";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
-export async function GET() {
+/** The subjects this student may scope chat and practice to. */
+export async function GET(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -15,7 +16,7 @@ export async function GET() {
     } = await getVerifiedUser(supabase);
 
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorJson("Unauthorized", 401);
     }
 
     const [courses, communitySubjects, privateSubjects] = await Promise.all([
@@ -51,15 +52,14 @@ export async function GET() {
       ),
     ];
 
-    return NextResponse.json({
-      subjects,
-    });
+    // SHORT, not SESSION: joining a course has to show up in the chat subject
+    // picker on the next navigation, and the mutation that joins one lives in a
+    // different component from the one that reads this.
+    return privateJson({ subjects }, { request, profile: CACHE.SHORT });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to load tenant subjects.",
-      },
-      { status: 500 },
+    return errorJson(
+      error instanceof Error ? error.message : "Failed to load tenant subjects.",
+      500,
     );
   }
 }

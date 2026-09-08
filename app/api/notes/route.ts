@@ -28,12 +28,12 @@ export async function POST(request: Request) {
     }
 
     const payload = noteSchema.parse(await request.json());
-    const access = await getNoteAccessPolicy(user.id);
-    const subjectAccess = await getStudentCourseSubjectAccessForCourse(
-      user.id,
-      payload.courseId,
-      payload.subjectSlug,
-    );
+    // Two independent access checks against the same user; neither reads the
+    // other, so they go together rather than one after the other.
+    const [access, subjectAccess] = await Promise.all([
+      getNoteAccessPolicy(user.id),
+      getStudentCourseSubjectAccessForCourse(user.id, payload.courseId, payload.subjectSlug),
+    ]);
 
     if (!subjectAccess) {
       return NextResponse.json(

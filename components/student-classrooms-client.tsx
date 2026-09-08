@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { queryFetcher } from "@/lib/query/api";
+import { keys } from "@/lib/query/keys";
+import { STALE } from "@/lib/query/client";
 
 type Classroom = {
   id: string;
@@ -49,34 +52,35 @@ function ClassroomCard({ classroom }: { classroom: Classroom }) {
 }
 
 export function StudentClassroomsClient() {
-  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
-  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = useState("");
+  /**
+   * The student's classrooms, cached for the tab rather than for this mount.
+   *
+   * The `useEffect` this replaces refetched on every arrival at the page and
+   * showed "Loading your classrooms…" while it did — so leaving the page and
+   * coming back was always a spinner, even a second later, for a list that
+   * changes when a teacher adds you to a class. `STALE.SHORT` means a return
+   * inside thirty seconds paints from cache with no request, and a return
+   * after that paints from cache and revalidates behind it.
+   *
+   * The `active` cancellation flag is gone with it: the query is cancelled by
+   * its own signal on unmount, so a late response cannot write into an
+   * unmounted component.
+   */
+  const {
+    data,
+    isPending,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: keys.student.classrooms(),
+    queryFn: queryFetcher<{ classrooms?: Classroom[] }>("/api/student/classrooms"),
+    staleTime: STALE.SHORT,
+  });
 
-  useEffect(() => {
-    let active = true;
-
-    const load = async () => {
-      try {
-        const response = await fetch("/api/student/classrooms", { headers: { Accept: "application/json" } });
-        const payload = (await response.json()) as { classrooms?: Classroom[]; error?: string };
-        if (!active) return;
-        if (!response.ok) throw new Error(payload.error || "Could not load your classrooms.");
-
-        setClassrooms(Array.isArray(payload.classrooms) ? payload.classrooms : []);
-        setState("ready");
-      } catch (caught) {
-        if (!active) return;
-        setError(caught instanceof Error ? caught.message : "Could not load your classrooms.");
-        setState("error");
-      }
-    };
-
-    void load();
-    return () => {
-      active = false;
-    };
-  }, []);
+  const classrooms = Array.isArray(data?.classrooms) ? data.classrooms : [];
+  // `isPending` is "nothing cached yet" — the only state worth a spinner. A
+  // background revalidation happens under the list already on screen.
+  const state = isError ? "error" : isPending ? "loading" : "ready";
 
   const active = classrooms.filter((classroom) => !classroom.archived);
   const earlier = classrooms.filter((classroom) => classroom.archived);
@@ -96,7 +100,9 @@ export function StudentClassroomsClient() {
       {state === "error" ? (
         <div className="rounded-[14px] border border-border p-4">
           <p className="text-sm font-medium">Could not load your classrooms</p>
-          <p className="mt-1 text-sm text-text-secondary">{error}</p>
+          <p className="mt-1 text-sm text-text-secondary">
+            {error?.message || "Could not load your classrooms."}
+          </p>
         </div>
       ) : null}
 

@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 import { AuthShell } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { loadSupabaseBrowserClient, warmSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
@@ -19,7 +19,7 @@ export function ForgotPasswordForm() {
     setNotice("");
     setLoading(true);
 
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     const redirectTo =
       typeof window !== "undefined" ? `${window.location.origin}/reset-password` : undefined;
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
@@ -38,7 +38,7 @@ export function ForgotPasswordForm() {
 
   return (
     <AuthShell title="Reset your password" subtitle="We’ll send you a secure recovery link.">
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form onSubmit={onSubmit} onFocus={warmSupabaseBrowserClient} className="space-y-4">
         <Field label="Email" error={error || undefined}>
           <Input
             type="email"

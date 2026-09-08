@@ -18,6 +18,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { hasCompletedStudyDiagnostic } from "@/lib/study-diagnostic";
 import type { AppUser, StudentProfile } from "@/lib/types";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { timed } from "@/lib/dev-timing";
 
 function normalizeProfile(row: any): StudentProfile {
   return {
@@ -76,7 +77,9 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
   // The profile decides whether the user is onboarded and the ledger row
   // carries the credit balance. Neither depends on the other, so they go out
   // together instead of one after the next.
-  const [profileResult, ledgerResult, subscriptionResult] = await Promise.all([
+  const [profileResult, ledgerResult, subscriptionResult] = await timed(
+    "page:getCurrentAuth-batch(3)",
+    async () => Promise.all([
     supabase.from("student_profiles").select("*").eq("user_id", user.id).maybeSingle(),
     supabase
       .from("credits_ledger")
@@ -91,7 +94,7 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
       .eq("user_id", user.id)
       .eq("status", "active")
       .order("starts_at", { ascending: false }),
-  ]);
+  ]));
 
   const profileRow = profileResult.data;
   const profile: StudentProfile | null = profileRow ? normalizeProfile(profileRow) : null;

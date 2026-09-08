@@ -19,6 +19,7 @@ import {
   listStudentCommunitySubjectAccess,
 } from "@/lib/student-courses";
 import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
+import { timed } from "@/lib/dev-timing";
 
 export type ChallengeDashboardScope = {
   courseId: string;
@@ -428,16 +429,22 @@ export async function getStudentChallengeDashboard(
   requestedScope?: ChallengeDashboardScope,
   preferredCommunitySlug?: string,
 ): Promise<StudentChallengeDashboard> {
-  const [allMastery, allCommunitySubjects, communityScope, allPracticeAttempts] = await Promise.all(
-    [
-      listTopicMastery(userId),
-      listStudentCommunitySubjectAccess(userId),
-      getStudentCommunityLearningScope(userId, undefined, {
-        communitySlug: preferredCommunitySlug,
-        courseId: requestedScope?.courseId,
-      }),
-      listPracticeAttempts(userId, 200),
-    ],
+  const [allMastery, allCommunitySubjects, communityScope, allPracticeAttempts] = await timed(
+    "challenge:scope-batch(4)",
+    async () =>
+      Promise.all([
+        timed("  challenge:listTopicMastery", () => listTopicMastery(userId)),
+        timed("  challenge:listStudentCommunitySubjectAccess", () =>
+          listStudentCommunitySubjectAccess(userId),
+        ),
+        timed("  challenge:getStudentCommunityLearningScope", () =>
+          getStudentCommunityLearningScope(userId, undefined, {
+            communitySlug: preferredCommunitySlug,
+            courseId: requestedScope?.courseId,
+          }),
+        ),
+        timed("  challenge:listPracticeAttempts(200)", () => listPracticeAttempts(userId, 200)),
+      ]),
   );
   const currentCourseId = communityScope?.courseId ?? null;
   const communitySubjects = currentCourseId
@@ -453,7 +460,8 @@ export async function getStudentChallengeDashboard(
     currentCourseId && requestedScope?.courseId === currentCourseId ? requestedScope : undefined;
   const metrics =
     communityScope && currentCourseId
-      ? await loadScopedChallengeMetrics(
+      ? await timed("challenge:loadScopedChallengeMetrics", () =>
+          loadScopedChallengeMetrics(
           userId,
           communityScope.communityId,
           currentCourseId,
@@ -465,7 +473,7 @@ export async function getStudentChallengeDashboard(
               createdAt: attempt.createdAt,
               passed: attempt.passed,
             })),
-        )
+        ))
       : emptyChallengeMetrics();
   const storedBySubject = masteryBySubject(mastery);
   const accessibleSubjects = uniqueSubjects(communitySubjects);
@@ -508,7 +516,8 @@ export async function getStudentChallengeDashboard(
     }
   }
 
-  const subjectResults = await Promise.all(
+  const subjectResults = await timed(`challenge:per-subject-fanout(${subjects.length})`, async () =>
+    Promise.all(
     subjects.map(
       async (
         courseSubject,
@@ -600,13 +609,14 @@ export async function getStudentChallengeDashboard(
         }
       },
     ),
-  );
+  ));
   const subjectRows = subjectResults.map((result) => result.row);
   const recommendationDepth = Math.max(
     0,
     ...subjectResults.map((result) => result.recommendations.length),
   );
-  const dailyChallenges = await ensureDailyChallenges(
+  const dailyChallenges = await timed("challenge:ensureDailyChallenges", () =>
+    ensureDailyChallenges(
     userId,
     // Round-robin keeps one large subject from monopolising the daily queue.
     Array.from({ length: recommendationDepth }, (_, position) => position).flatMap((position) =>
@@ -617,7 +627,7 @@ export async function getStudentChallengeDashboard(
     // Assign the joined community its own three-card queue even when stale,
     // unfinished rows from a previously joined community still exist.
     { minimumRecommendationCount: currentCourseId ? 3 : 0 },
-  );
+  ));
   const accessibleChallenges = dailyChallenges.filter((challenge) =>
     accessibleScopeKeys.has(subjectScopeKey(challenge.courseId, challenge.subjectSlug)),
   );

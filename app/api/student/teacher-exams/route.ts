@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { CACHE, errorJson, privateJson } from "@/lib/http/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { studentVisibleGrade, submissionReviewStatus } from "@/lib/teacher-submission-review";
@@ -34,11 +34,11 @@ function studentPaper(value: unknown) {
   return { ...safePaper, questions };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await getVerifiedUser(supabase);
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) return errorJson("Unauthorized", 401);
     const admin = createSupabaseAdminClient();
     const { data: memberships, error: memberError } = await withTimeout(
       admin
@@ -49,7 +49,8 @@ export async function GET() {
     );
     if (memberError) throw memberError;
     const classroomIds = (memberships || []).map((item) => item.classroom_id);
-    if (!classroomIds.length) return NextResponse.json({ assignments: [] });
+    if (!classroomIds.length)
+      return privateJson({ assignments: [] }, { request, profile: CACHE.SHORT });
     const { data, error } = await withTimeout(
       admin
         .from("teacher_exam_assignments")
@@ -112,7 +113,7 @@ export async function GET() {
       attempts.push({ id: row.id, assignment_id: row.assignment_id, attempt_no: row.attempt_no, grade: row.grade, created_at: row.created_at });
       attemptsByAssignment.set(row.assignment_id, attempts);
     }
-    return NextResponse.json({
+    return privateJson({
       assignments: (data || []).flatMap((row) => {
         const paperRow = Array.isArray(row.teacher_exam_papers) ? row.teacher_exam_papers[0] : row.teacher_exam_papers;
         const classroom = Array.isArray(row.teacher_classrooms) ? row.teacher_classrooms[0] : row.teacher_classrooms;
@@ -148,8 +149,8 @@ export async function GET() {
           })(),
         }];
       }),
-    });
+    }, { request, profile: CACHE.SHORT });
   } catch {
-    return NextResponse.json({ error: "Could not load teacher exams." }, { status: 502 });
+    return errorJson("Could not load teacher exams.", 502);
   }
 }

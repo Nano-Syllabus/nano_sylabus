@@ -631,12 +631,44 @@ export async function listStudentCommunitySubjectAccess(
   ];
   if (!communityIds.length) return [];
 
-  const communitiesResult = await admin
-    .from("communities")
-    .select("id,name,study_course_id")
-    .in("id", communityIds)
-    .eq("status", "active");
+  /**
+   * FOUR SERIAL ROUND TRIPS BECAME TWO.
+   *
+   * The communities, their subjects and those subjects' terms were each
+   * awaited before the next was issued, so this function cost four sequential
+   * trips to Supabase — measured at ~474ms, and it is the slowest member of the
+   * batch that opens the Challenge Hub, so it alone set that page's floor.
+   *
+   * Only the FIRST query is a real dependency: everything below is scoped by
+   * `communityIds`, which it has already produced. The two follow-ups were
+   * chained only because each narrowed its filter using the previous result —
+   * subjects by the communities that turned out to have a study course, terms
+   * by the term ids that turned out to be referenced.
+   *
+   * Narrowing in SQL was not buying anything here. A student is in a handful of
+   * communities, so fetching every published subject and every term for all of
+   * them and discarding the few that do not apply costs a trivial amount of
+   * extra rows, and it lets all three go out at once. The filtering that used
+   * to happen in the `.in(...)` clauses now happens in memory below, and is
+   * identical: a subject whose community has no `study_course_id` is dropped by
+   * the `courseId` guard in the final `flatMap`, exactly as before.
+   */
+  const [communitiesResult, subjectResult, termsResult] = await Promise.all([
+    admin.from("communities").select("id,name,study_course_id").in("id", communityIds).eq("status", "active"),
+    admin
+      .from("community_subjects")
+      .select("community_id,term_id,teacher_id,external_subject_slug,name,folder_path")
+      .in("community_id", communityIds)
+      .eq("status", "active")
+      .eq("publication_status", "published"),
+    admin
+      .from("community_terms")
+      .select("id,year_number,semester_number,semester_in_year,position")
+      .in("community_id", communityIds),
+  ]);
   if (communitiesResult.error) throw communitiesResult.error;
+  if (subjectResult.error) throw subjectResult.error;
+  if (termsResult.error) throw termsResult.error;
 
   const courseByCommunity = new Map(
     (communitiesResult.data || [])
@@ -649,27 +681,8 @@ export async function listStudentCommunitySubjectAccess(
       String(row.name || "Community"),
     ]),
   );
-  const readyCommunityIds = [...courseByCommunity.keys()];
-  if (!readyCommunityIds.length) return [];
+  if (!courseByCommunity.size) return [];
 
-  const subjectResult = await admin
-    .from("community_subjects")
-    .select("community_id,term_id,teacher_id,external_subject_slug,name,folder_path")
-    .in("community_id", readyCommunityIds)
-    .eq("status", "active")
-    .eq("publication_status", "published");
-  if (subjectResult.error) throw subjectResult.error;
-
-  const termIds = [
-    ...new Set((subjectResult.data || []).map((row) => String(row.term_id || "")).filter(Boolean)),
-  ];
-  const termsResult = termIds.length
-    ? await admin
-        .from("community_terms")
-        .select("id,year_number,semester_number,semester_in_year,position")
-        .in("id", termIds)
-    : { data: [], error: null };
-  if (termsResult.error) throw termsResult.error;
   const termById = new Map((termsResult.data || []).map((row) => [String(row.id || ""), row]));
 
   return (subjectResult.data || []).flatMap((row) => {

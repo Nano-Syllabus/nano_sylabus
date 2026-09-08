@@ -9,6 +9,10 @@ This folder keeps the current operating notes for Nano Syllabus.
 3. [Architecture](./architecture.md)
 4. [Local Setup](./local-setup.md)
 5. [Tenant API Use Cases](./tenant-api-use-cases.md)
+6. [Caching, end to end](./caching.md) — the query cache, the ETag layer, the
+   server-side memos, and how the three services' windows line up. Read this
+   before changing any `staleTime`, `Cache-Control` or TTL: they are chosen
+   against each other, not independently.
 
 ## Current System Boundary
 

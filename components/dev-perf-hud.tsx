@@ -18,7 +18,7 @@
  * ctrl+alt+H hides it for the session.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useReportWebVitals } from "next/web-vitals";
 
@@ -272,10 +272,43 @@ export function DevPerfHud() {
 
   useLiveVitals((patch) => setVitals((previous) => ({ ...previous, ...patch })));
 
-  useReportWebVitals((metric) => {
+  /**
+   * THE CALLBACK MUST BE STABLE, AND THIS IS NOT A STYLE POINT.
+   *
+   * `useReportWebVitals` is, in full:
+   *
+   *     useEffect(() => {
+   *       onCLS(fn); onFID(fn); onLCP(fn); onINP(fn); onFCP(fn); onTTFB(fn);
+   *     }, [reportWebVitalsFn]);
+   *
+   * The dependency is the callback's IDENTITY, and the effect has no cleanup —
+   * because `web-vitals` offers no way to unsubscribe. So an inline arrow, new
+   * on every render, re-subscribed all six metrics every time this component
+   * rendered, and every one of those subscriptions permanently attached its own
+   * `visibilitychange`, `pageshow`, `keydown` and `click` listeners.
+   *
+   * This component re-renders constantly by design: `useServerCalls` sets state
+   * on every fetch, `useLiveVitals` sets state on every layout-shift entry, and
+   * the callback below sets state too. That closed the loop — each render added
+   * ~24 permanent listeners, which made every subsequent `addEventListener`
+   * slower, which lengthened tasks, which produced more entries, which caused
+   * more renders.
+   *
+   * Measured before this fix: 42,776 listeners on a 1,115-node page right after
+   * login, climbing ~5,000 per navigation to 95,966, with single main-thread
+   * tasks of 4.7s and 8.9s. The app was not slow; it was strangling itself with
+   * its own instrument.
+   *
+   * `useCallback` with an empty dependency list is correct here: the body
+   * closes over nothing but `setVitals`, and a `useState` setter is guaranteed
+   * stable for the life of the component.
+   */
+  const reportVital = useCallback((metric: { name: string; value: number }) => {
     if (!["TTFB", "FCP", "LCP", "CLS", "INP"].includes(metric.name)) return;
     setVitals((previous) => ({ ...previous, [metric.name]: metric.value }));
-  });
+  }, []);
+
+  useReportWebVitals(reportVital);
 
   // Hydration is done once React has committed on the client; the first frame
   // after mount is a close enough marker and costs nothing to measure.

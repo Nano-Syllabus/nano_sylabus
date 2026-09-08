@@ -7,7 +7,7 @@ import { AuthShell, DividerOr } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { loadSupabaseBrowserClient, warmSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 
 function passwordStrength(password: string) {
   let score = 0;
@@ -54,7 +54,7 @@ export function SignupForm({ nextPath }: { nextPath?: string }) {
     setError("");
     setNotice("");
 
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -100,7 +100,7 @@ export function SignupForm({ nextPath }: { nextPath?: string }) {
     setNotice("");
     setGoogleLoading(true);
 
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     const redirectTo = getGoogleAuthRedirectUrl();
     setOAuthNextCookie(nextPath);
 
@@ -144,7 +144,7 @@ export function SignupForm({ nextPath }: { nextPath?: string }) {
         </>
       ) : null}
 
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form onSubmit={onSubmit} onFocus={warmSupabaseBrowserClient} className="space-y-4">
         <Field label="Full name">
           <Input
             value={name}

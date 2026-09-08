@@ -1,6 +1,5 @@
-import http from "node:http";
-import https from "node:https";
 import { getTenantApiEnv } from "@/lib/env";
+import { agentFor, transportFor } from "@/lib/http-agents";
 import { trackApiRequest } from "@/lib/api-request-tracking";
 
 function extractErrorMessage(url: URL, statusCode: number, raw: string): string {
@@ -46,15 +45,6 @@ export type TenantDocumentDetail = {
   indexing_cost?: number | string | null;
 };
 
-export type TenantPromptCitation = {
-  excerpt?: string;
-  source?: string;
-  title?: string;
-  page?: number;
-  chapter?: string;
-  topic?: string;
-};
-
 export type TenantChatSource = {
   rank?: number;
   title?: string;
@@ -85,22 +75,6 @@ export type TenantChatAttachment = {
   name: string;
   mimeType: string;
   dataUrl: string;
-};
-
-export type TenantPromptResponse = {
-  answer?: string;
-  detail?: string;
-  citations?: TenantPromptCitation[];
-};
-
-export type TenantChatResponse = {
-  answer?: string;
-  sources?: TenantChatSource[];
-  query?: string;
-  chunks_retrieved?: number;
-  served_from?: string;
-  context_summary?: string;
-  detail?: string;
 };
 
 export type TenantStreamEvent =
@@ -441,15 +415,6 @@ export type McqSelfCheckItem = {
   explanation?: string;
 };
 
-/**
- * Every tenant call used to open a fresh socket, so each one paid a TCP
- * handshake — and over https a full TLS handshake on top — before a single byte
- * of the request went out. Pooling the connections turns that into one setup
- * cost for the whole process.
- */
-const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 64, keepAliveMsecs: 15_000 });
-const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 64, keepAliveMsecs: 15_000 });
-
 function requestJson<T>(
   path: string,
   options: {
@@ -463,9 +428,8 @@ function requestJson<T>(
 
   return trackApiRequest("tenant", () => new Promise<T>((resolve, reject) => {
     const url = new URL(path, baseUrl);
-    const isHttps = url.protocol === "https:";
-    const transport = isHttps ? https : http;
-    const agent = isHttps ? httpsAgent : httpAgent;
+    const transport = transportFor(url);
+    const agent = agentFor(url);
     const serializedBody = options.body == null ? null : JSON.stringify(options.body);
     let settled = false;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = setTimeout(() => {
@@ -702,12 +666,12 @@ export async function getMarketplace() {
 export function fetchTenantDocumentRaw(documentId: string) {
   const { baseUrl, token, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
   const url = new URL(`/api/v1/documents/${encodeURIComponent(documentId)}/raw`, baseUrl);
-  const transport = url.protocol === "https:" ? https : http;
+  const transport = transportFor(url);
 
   return trackApiRequest("tenant", () => new Promise<{ body: Buffer; contentType: string }>((resolve, reject) => {
     const request = transport.request(
       url,
-      { method: "GET", rejectUnauthorized, headers: { Authorization: `Bearer ${token}` } },
+      { method: "GET", rejectUnauthorized, agent: agentFor(url), headers: { Authorization: `Bearer ${token}` } },
       (response) => {
         const chunks: Buffer[] = [];
         response.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -907,7 +871,7 @@ export async function gradeTeacherPaperFile(
   const { baseUrl, token, rejectUnauthorized, timeoutMs: defaultTimeoutMs } = getTenantApiEnv();
   const timeoutMs = Math.max(defaultTimeoutMs, 120000);
   const url = new URL(`/api/v1/practice/papers/${encodeURIComponent(setId)}/grade-file`, baseUrl);
-  const transport = url.protocol === "https:" ? https : http;
+  const transport = transportFor(url);
   const multipartBody = createTeacherGradeFileMultipartBody(input);
 
   return trackApiRequest("tenant", () => new Promise<TeacherGradeResponse>((resolve, reject) => {
@@ -917,6 +881,7 @@ export async function gradeTeacherPaperFile(
       {
         method: "POST",
         rejectUnauthorized,
+        agent: agentFor(url),
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
@@ -966,48 +931,19 @@ export async function gradeTeacherPaperFile(
   }));
 }
 
-export async function promptTenant(input: {
-  userId: string;
-  subject: string;
-  folderPath: string;
-  prompt: string;
-  namespace: string;
-}) {
-  return requestJson<TenantPromptResponse>("/v1/prompt", {
-    method: "POST",
-    body: {
-      user_id: input.userId,
-      subject: input.subject,
-      folder_path: input.folderPath,
-      prompt: input.prompt,
-      namespace: input.namespace,
-    },
-  });
-}
-
-export async function chatTenant(input: {
-  question: string;
-  contextSummary: string;
-  subject: string;
-  tenant: string;
-  namespaces: string[];
-  topK: number;
-  responseLanguage?: "EN" | "RN";
-}) {
-  return requestJson<TenantChatResponse>("/api/chat", {
-    method: "POST",
-    body: {
-      question: input.question,
-      context_summary: input.contextSummary,
-      subject: input.subject,
-      tenant: input.tenant,
-      namespaces: input.namespaces,
-      top_k: input.topK,
-      response_language: input.responseLanguage,
-      language: input.responseLanguage,
-    },
-  });
-}
+/*
+ * `promptTenant` and `chatTenant` used to live here and are deliberately gone.
+ *
+ * `promptTenant` posted to `/v1/prompt`, which the backend has never served —
+ * every call it could have made would have been a 404. Nothing called it.
+ *
+ * `chatTenant` posted to `/api/chat`, the backend's NON-streaming chat route.
+ * Chat has one path now and it is the streaming one: `chatTenantStream` below,
+ * feeding the SSE the /api/chat route hands to the browser. Keeping a
+ * second, blocking way to ask the same question meant a way for an answer to
+ * arrive all at once after thirty seconds of nothing, which is the behaviour
+ * streaming exists to remove.
+ */
 
 function parseSseEvent(rawEvent: string): TenantStreamEvent | null {
   const eventName = rawEvent.match(/^event:\s*(.+)$/m)?.[1]?.trim() ?? "message";
@@ -1172,7 +1108,7 @@ export async function chatTenantStream(
 ) {
   const { baseUrl, token, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
   const url = new URL("/api/chat/stream", baseUrl);
-  const transport = url.protocol === "https:" ? https : http;
+  const transport = transportFor(url);
   const requestPayload = {
     question: input.question,
     answer_instruction: input.answerInstruction,
@@ -1197,6 +1133,7 @@ export async function chatTenantStream(
       {
         method: "POST",
         rejectUnauthorized,
+        agent: agentFor(url),
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "text/event-stream",
@@ -1222,21 +1159,46 @@ export async function chatTenantStream(
           return;
         }
 
-        response.on("data", async (chunk) => {
+        // EVENTS ARE DELIVERED ONE AT A TIME, IN ORDER.
+        //
+        // This handler used to be `async` and to `await onEvent(event)` inside a
+        // loop. Node does not await a listener: it calls it and moves on, so with
+        // an async consumer — which the `onEvent` signature explicitly allows —
+        // two chunks arriving close together would run their handlers
+        // concurrently and the tokens could land out of order. An answer that
+        // reads as shuffled sentences is not a failure anything reports; it just
+        // looks like the model wrote nonsense.
+        //
+        // So the work is chained instead, and the socket is paused while the
+        // chain is outstanding. That gives ordering AND backpressure: a slow
+        // consumer stops the kernel buffer growing behind it rather than being
+        // handed the whole answer at once.
+        let chain: Promise<void> = Promise.resolve();
+        let consumerFailed = false;
+        const deliver = (event: TenantStreamEvent) => {
+          chain = chain.then(() => {
+            if (consumerFailed) return;
+            return onEvent(event);
+          }).catch((error) => {
+            consumerFailed = true;
+            request.destroy(error instanceof Error ? error : new Error(String(error)));
+          });
+        };
+
+        response.on("data", (chunk) => {
           buffer += chunk;
           const parts = buffer.split(/\r?\n\r?\n/);
           buffer = parts.pop() ?? "";
+          if (parts.length === 0) return;
 
+          response.pause();
           for (const part of parts) {
             const event = parseSseEvent(part);
-            if (!event) continue;
-            try {
-              await onEvent(event);
-            } catch (error) {
-              request.destroy(error instanceof Error ? error : new Error(String(error)));
-              return;
-            }
+            if (event) deliver(event);
           }
+          chain = chain.then(() => {
+            if (!consumerFailed) response.resume();
+          });
         });
 
         response.on("aborted", () => {
@@ -1255,17 +1217,18 @@ export async function chatTenantStream(
           if (settled) return;
           if (buffer.trim()) {
             const event = parseSseEvent(buffer);
-            if (event) {
-              try {
-                await onEvent(event);
-              } catch (error) {
-                settled = true;
-                reject(error);
-                return;
-              }
-            }
+            if (event) deliver(event);
           }
+          // The socket has ended, but queued events may still be in flight —
+          // resolving now would tell the caller the stream finished before it had
+          // seen the last of it, which is how a `done` event gets dropped.
+          await chain;
+          if (settled) return;
           settled = true;
+          if (consumerFailed) {
+            reject(new Error(`Tenant API ${url.pathname} stream consumer failed.`));
+            return;
+          }
           resolve();
         });
       },

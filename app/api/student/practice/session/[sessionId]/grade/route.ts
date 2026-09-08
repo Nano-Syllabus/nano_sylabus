@@ -42,8 +42,13 @@ export async function POST(
     const { sessionId } = await params;
     const parsed = requestSchema.parse(await request.json());
 
-    const subjects = await listTenantSubjects();
-    const access = await getStudentCourseSubjectAccess(user.id, parsed.subject);
+    // One upstream HTTP call and one Supabase query, and neither needs the
+    // other's answer — running them in sequence put a whole round trip in front
+    // of every request on this route for nothing.
+    const [subjects, access] = await Promise.all([
+      listTenantSubjects(),
+      getStudentCourseSubjectAccess(user.id, parsed.subject),
+    ]);
     if (!access) {
       return NextResponse.json(
         { error: "Enroll in a course containing this subject first." },

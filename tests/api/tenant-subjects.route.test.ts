@@ -42,7 +42,7 @@ describe("GET /api/tenant/subjects", () => {
   });
 
   it("returns only subjects from the student's enrolled courses", async () => {
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/tenant/subjects"));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -69,7 +69,7 @@ describe("GET /api/tenant/subjects", () => {
   it("returns an empty picker when the student has no enrolled courses", async () => {
     mocks.listStudentCourses.mockResolvedValueOnce([]);
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/tenant/subjects"));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ subjects: [] });
@@ -86,7 +86,7 @@ describe("GET /api/tenant/subjects", () => {
       },
     ]);
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/tenant/subjects"));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -108,7 +108,7 @@ describe("GET /api/tenant/subjects", () => {
       auth: { getUser: vi.fn(async () => ({ data: { user: null } })) },
     });
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/tenant/subjects"));
 
     expect(response.status).toBe(401);
     expect(mocks.listStudentCourses).not.toHaveBeenCalled();

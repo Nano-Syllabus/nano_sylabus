@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { CACHE, errorJson, privateJson } from "@/lib/http/cache";
 import { z } from "zod";
 import { listChatSessions } from "@/lib/data/chat";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     } = await getVerifiedUser(supabase);
 
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorJson("Unauthorized", 401);
     }
 
     const params = new URL(request.url).searchParams;
@@ -34,11 +34,17 @@ export async function GET(request: Request) {
       limit: parsed.limit,
     });
 
-    return NextResponse.json(result);
+    // REVALIDATE rather than a window: the sidebar list has to be correct the
+    // instant after a rename, a pin or a delete, and those all happen in the
+    // component rendering it. What the ETag buys here is not skipped work but
+    // skipped BYTES — the common case is a student scrolling back to a search
+    // they already ran, and that answer is a 304 with no page of titles behind
+    // it. TanStack Query's staleTime is what actually removes the request.
+    return privateJson(result, { request, profile: CACHE.REVALIDATE });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load chat sessions." },
-      { status: 500 },
+    return errorJson(
+      error instanceof Error ? error.message : "Failed to load chat sessions.",
+      500,
     );
   }
 }

@@ -1,4 +1,5 @@
 import { getMarketplace, listTenantSubjects, type TenantSubject } from "@/lib/tenant/client";
+import { invalidateMemo, memo } from "@/lib/http/memo";
 
 /**
  * Content is teacher-managed: every subject lives at
@@ -105,17 +106,63 @@ export function joinMarketplaceWithSubjects(
   };
 }
 
+/** The memo key the catalog is cached under. Exported so the routes that
+ *  publish or unpublish a subject can drop it by name rather than by string. */
+export const PUBLISHED_CATALOG_MEMO_KEY = "tenant:published-catalog";
+
+/**
+ * The published catalog, joined and cached in the process for two minutes.
+ *
+ * WHY THIS ONE IS MEMOISED AND MOST READS ARE NOT
+ * -----------------------------------------------
+ * It is the slowest read in the product and the least personal. Two upstream
+ * calls to the tenant VPS (`/api/marketplace` and `/api/v1/subjects`), joined
+ * and sorted, and the answer is byte-identical for every student in the
+ * country. It is also on the critical path of surfaces students open
+ * constantly: onboarding, the course browser on Today, the subject picker in
+ * chat, settings.
+ *
+ * Uncached, twenty students opening the course browser in the same minute was
+ * forty round trips to Kathmandu for one answer. `memo` makes it one, and its
+ * stale-while-revalidate window means that even the request that finds the
+ * entry expired is served from memory while the refresh runs behind it — so
+ * after the first cold load, nobody waits on the tenant API for this again.
+ *
+ * `listTenantSubjects` keeps its own TTL inside the tenant client and that is
+ * fine: the two layers nest rather than fight, and the inner one still covers
+ * the callers that ask for subjects without the marketplace join.
+ *
+ * TTL 120s / stale 600s. Publishing is an admin action minutes apart, not a
+ * student action, and `invalidatePublishedCatalog()` exists for the moment it
+ * has to be immediate.
+ */
 export async function getPublishedCatalog(): Promise<PublishedCatalog> {
-  try {
-    const [marketplace, tenantSubjects] = await Promise.all([
-      getMarketplace(),
-      listTenantSubjects(),
-    ]);
-    return joinMarketplaceWithSubjects(marketplace, tenantSubjects);
-  } catch (error) {
-    console.error("[marketplace] published catalog unavailable", error);
-    return { providers: [], subjects: [] };
-  }
+  return memo(
+    PUBLISHED_CATALOG_MEMO_KEY,
+    async () => {
+      try {
+        const [marketplace, tenantSubjects] = await Promise.all([
+          getMarketplace(),
+          listTenantSubjects(),
+        ]);
+        return joinMarketplaceWithSubjects(marketplace, tenantSubjects);
+      } catch (error) {
+        console.error("[marketplace] published catalog unavailable", error);
+        // An empty catalog is a legitimate value to return but a terrible one
+        // to cache: a single upstream blip would blank every student's course
+        // browser for the whole TTL. Rethrowing keeps `memo` from storing it —
+        // it does not cache rejections — and the caller below turns it back
+        // into the same empty catalog for this one request only.
+        throw error;
+      }
+    },
+    { ttlSeconds: 120, staleSeconds: 600 },
+  ).catch(() => ({ providers: [], subjects: [] }) as PublishedCatalog);
+}
+
+/** Drops the memoised catalog so a publish or unpublish is visible at once. */
+export function invalidatePublishedCatalog() {
+  invalidateMemo(PUBLISHED_CATALOG_MEMO_KEY);
 }
 
 /**

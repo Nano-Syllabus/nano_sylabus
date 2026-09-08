@@ -131,6 +131,10 @@ describe("community challenge subject access", () => {
           folder_path: "Math",
         },
       ]),
+      // `listStudentCommunitySubjectAccess` now fetches terms for the student's
+      // communities in parallel with the subjects, rather than afterwards by
+      // term id, so this table is always touched even when no subject has a term.
+      community_terms: listResult([]),
       teacher_course_enrollments: listResult([]),
     };
     const admin = {
@@ -164,6 +168,10 @@ describe("community challenge subject access", () => {
           folder_path: "Math",
         },
       ]),
+      // `listStudentCommunitySubjectAccess` now fetches terms for the student's
+      // communities in parallel with the subjects, rather than afterwards by
+      // term id, so this table is always touched even when no subject has a term.
+      community_terms: listResult([]),
       teacher_course_enrollments: listResult([]),
     };
     const admin = {

@@ -93,14 +93,23 @@ function membershipsByCommunity(rows: Record<string, unknown>[]) {
   return new Map(rows.map((row) => [String(row.community_id || ""), row]));
 }
 
-async function hydrateCommunitySummaries(
+/**
+ * The per-community aggregates: member count, published-subject count, and the
+ * viewer's own membership row.
+ *
+ * SPLIT OUT OF `hydrateCommunitySummaries` BECAUSE IT NEEDS ONLY THE IDS.
+ * The mapping step needs the full community rows, but these three queries need
+ * nothing but the ids — and a caller that already knows the ids (because it
+ * just read them from `community_memberships`) can therefore run this at the
+ * same time as it fetches the rows, instead of after. See
+ * `listJoinedCommunitiesOnce`, where that turned three serial round trips into
+ * two on a path every /app page goes through.
+ */
+async function fetchCommunityAggregates(
   admin: SupabaseClient,
-  rows: Record<string, unknown>[],
+  ids: string[],
   viewerId?: string | null,
-): Promise<CommunitySummary[]> {
-  const ids = rows.map((row) => String(row.id || "")).filter(Boolean);
-  if (!ids.length) return [];
-
+) {
   const [membersResult, subjectsResult, viewerMembershipResult] = await Promise.all([
     admin
       .from("community_memberships")
@@ -125,21 +134,46 @@ async function hydrateCommunitySummaries(
   if (subjectsResult.error) throw subjectsResult.error;
   if (viewerMembershipResult.error) throw viewerMembershipResult.error;
 
-  const memberCounts = groupedCounts((membersResult.data || []) as Record<string, unknown>[]);
-  const subjectCounts = groupedCounts((subjectsResult.data || []) as Record<string, unknown>[]);
-  const viewerMemberships = membershipsByCommunity(
-    (viewerMembershipResult.data || []) as Record<string, unknown>[],
-  );
+  return {
+    memberCounts: groupedCounts((membersResult.data || []) as Record<string, unknown>[]),
+    subjectCounts: groupedCounts((subjectsResult.data || []) as Record<string, unknown>[]),
+    viewerMemberships: membershipsByCommunity(
+      (viewerMembershipResult.data || []) as Record<string, unknown>[],
+    ),
+  };
+}
 
+/** Rows plus their aggregates, as summaries. Pure — no queries of its own. */
+function buildCommunitySummaries(
+  rows: Record<string, unknown>[],
+  aggregates: Awaited<ReturnType<typeof fetchCommunityAggregates>>,
+): CommunitySummary[] {
   return rows.map((row) => {
     const id = String(row.id || "");
     return mapCommunitySummary(
       row,
-      memberCounts.get(id) || 0,
-      subjectCounts.get(id) || 0,
-      viewerMemberships.get(id) || null,
+      aggregates.memberCounts.get(id) || 0,
+      aggregates.subjectCounts.get(id) || 0,
+      aggregates.viewerMemberships.get(id) || null,
     );
   });
+}
+
+/**
+ * Rows -> summaries, fetching the aggregates for them.
+ *
+ * Unchanged for callers that only have rows. Callers that already know the ids
+ * should use `fetchCommunityAggregates` directly and overlap it with whatever
+ * produced the rows.
+ */
+async function hydrateCommunitySummaries(
+  admin: SupabaseClient,
+  rows: Record<string, unknown>[],
+  viewerId?: string | null,
+): Promise<CommunitySummary[]> {
+  const ids = rows.map((row) => String(row.id || "")).filter(Boolean);
+  if (!ids.length) return [];
+  return buildCommunitySummaries(rows, await fetchCommunityAggregates(admin, ids, viewerId));
 }
 
 export async function listPublicCommunities(
@@ -173,18 +207,26 @@ async function listJoinedCommunitiesOnce(userId: string, admin: SupabaseClient) 
   const communityIds = memberships.map((row) => String(row.community_id || "")).filter(Boolean);
   if (!communityIds.length) return [];
 
-  const communityResult = await admin
-    .from("communities")
-    .select(communityColumns)
-    .in("id", communityIds)
-    .eq("status", "active");
+  /**
+   * THE COMMUNITY ROWS AND THEIR AGGREGATES, TOGETHER.
+   *
+   * These were awaited one after the other, and they never needed to be: the
+   * aggregates key off `communityIds`, which the membership query above has
+   * already produced, so waiting for the `communities` rows first was a round
+   * trip spent on nothing. This function runs on every /app page (through
+   * `getActiveCommunity`), so that wait was on the critical path of the whole
+   * authenticated app.
+   */
+  const [communityResult, aggregates] = await Promise.all([
+    admin.from("communities").select(communityColumns).in("id", communityIds).eq("status", "active"),
+    fetchCommunityAggregates(admin, communityIds, userId),
+  ]);
   if (communityResult.error) throw communityResult.error;
 
   const order = new Map(communityIds.map((id, index) => [id, index]));
-  const summaries = await hydrateCommunitySummaries(
-    admin,
+  const summaries = buildCommunitySummaries(
     (communityResult.data || []) as Record<string, unknown>[],
-    userId,
+    aggregates,
   );
   return summaries.sort((a, b) => (order.get(a.id) || 0) - (order.get(b.id) || 0));
 }
@@ -211,14 +253,26 @@ async function getCommunityOnce(
 
   const row = communityResult.data as Record<string, unknown>;
   const communityId = String(row.id || "");
-  const [summary] = await hydrateCommunitySummaries(admin, [row], viewerId);
-  const canManage = Boolean(viewerId && viewerId === String(row.creator_id || ""));
-  const canView =
-    row.status === "active" &&
-    (row.visibility === "public" || canManage || summary.membership?.status === "active");
-  if (!canView) return null;
 
-  const [termsResult, subjectsResult] = await Promise.all([
+  /**
+   * THREE SERIAL ROUND TRIPS BECAME TWO.
+   *
+   * The summary hydration and the terms/subjects read both need only `row`,
+   * which the query above already returned — they never needed each other. But
+   * they were awaited one after the other, so a page paid two full Supabase
+   * round trips in sequence for work that could go out together. Measured on
+   * this path at ~400ms, of which roughly a third was purely the second wait.
+   *
+   * WHAT THIS COSTS: when `canView` turns out false, the terms and subjects
+   * were fetched for nothing. That is a deliberate trade and a cheap one — the
+   * overwhelmingly common case is a member opening their own community, the
+   * refused case still returns `null` before any of it is used, and no row
+   * fetched here ever reaches a caller who is not allowed to see the community.
+   * Two indexed reads on a rejected request beats a serialised wait on every
+   * accepted one.
+   */
+  const [[summary], termsResult, subjectsResult] = await Promise.all([
+    hydrateCommunitySummaries(admin, [row], viewerId),
     admin
       .from("community_terms")
       .select("id,year_number,semester_number,semester_in_year,position")
@@ -233,6 +287,13 @@ async function getCommunityOnce(
       .eq("status", "active")
       .order("position", { ascending: true }),
   ]);
+
+  const canManage = Boolean(viewerId && viewerId === String(row.creator_id || ""));
+  const canView =
+    row.status === "active" &&
+    (row.visibility === "public" || canManage || summary.membership?.status === "active");
+  if (!canView) return null;
+
   if (termsResult.error) throw termsResult.error;
   if (subjectsResult.error) throw subjectsResult.error;
 

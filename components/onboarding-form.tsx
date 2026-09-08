@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { normalizeFullName, normalizeSubjects } from "@/lib/profile-normalization";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { StudentProfile } from "@/lib/types";
 
 /**
@@ -72,7 +72,7 @@ export function OnboardingForm({
     setLoading(true);
     setError("");
 
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     const { error: upsertError } = await supabase.from("student_profiles").upsert({
       user_id: userId,
       full_name: normalizeFullName(fullName) || "Student",

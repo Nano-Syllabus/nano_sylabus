@@ -6,12 +6,27 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Badge } from "@/components/ui/badge";
 import type { AppUser } from "@/lib/types";
 import { AppShellContext } from "@/components/app-shell-context";
-import { AppRouteLoading } from "@/components/app-route-loading";
 
-type PendingNavigation = {
-  href: string;
-  variant: "chat" | "exams" | "subjects" | "notes" | "billing" | "settings";
-};
+/**
+ * WHY THERE IS NO ROUTE-LOADING OVERLAY HERE ANY MORE
+ * ---------------------------------------------------
+ * There used to be one: a `pendingNavigation` state, set from an
+ * `app:navigation-start` event the sidebar dispatched on click, which replaced
+ * `children` with `<AppRouteLoading />` until the pathname matched.
+ *
+ * It was the cause of the app appearing to hang. `<Link>`/`router.push`
+ * navigate inside a React transition; setting that state was a synchronous
+ * update, which outranks a transition and therefore interrupted the very
+ * navigation it was announcing. React restarted the transition, the click
+ * handler had already run, and the URL never committed — so the clearing
+ * condition (`pathname` matching the href) could never become true and the
+ * skeleton stayed up forever, over a page that was still perfectly alive
+ * underneath it.
+ *
+ * Every route under /app has a `loading.tsx`. That is a Suspense boundary the
+ * router schedules as PART of the transition rather than against it, it shows
+ * the same skeletons, and it cannot deadlock. Deleting this was the fix.
+ */
 
 export function AppShell({
   user,
@@ -32,7 +47,6 @@ export function AppShell({
   const [sidebarSuppressed, setSidebarSuppressed] = useState(false);
   const [sidebarCollapsedOverride, setSidebarCollapsedOverride] = useState(false);
   const [rightRailWidth, setRightRailWidth] = useState(0);
-  const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
 
 
   useEffect(() => {
@@ -46,27 +60,6 @@ export function AppShell({
   useEffect(() => {
     if (sidebarSuppressed) setOpen(false);
   }, [sidebarSuppressed]);
-
-  useEffect(() => {
-    function handleNavigationStart(event: Event) {
-      const detail = (event as CustomEvent<PendingNavigation>).detail;
-      if (!detail?.href || !detail.variant) return;
-      setDynamicActions(null);
-      setPendingNavigation(detail);
-    }
-
-    window.addEventListener("app:navigation-start", handleNavigationStart);
-    return () => {
-      window.removeEventListener("app:navigation-start", handleNavigationStart);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!pendingNavigation) return;
-    if (pathname.startsWith(pendingNavigation.href)) {
-      setPendingNavigation(null);
-    }
-  }, [pathname, pendingNavigation]);
 
   const shellContextValue = useMemo(
     () => ({
@@ -141,7 +134,7 @@ export function AppShell({
             </div>
           </header>
           <div className="flex-1 overflow-y-auto">
-            {pendingNavigation ? <AppRouteLoading variant={pendingNavigation.variant} /> : children}
+            {children}
           </div>
         </main>
       </div>

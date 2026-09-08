@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { CACHE, errorJson, privateJson } from "@/lib/http/cache";
 import { getActiveManualPaymentConfig, listSubscriptionPlans } from "@/lib/data/billing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
-export async function GET() {
+/** Plan prices and the manual-payment config. Editorial data — cache it. */
+export async function GET(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -11,14 +13,14 @@ export async function GET() {
     } = await getVerifiedUser(supabase);
 
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorJson("Unauthorized", 401);
     }
 
     const [plans, paymentConfig] = await Promise.all([
       listSubscriptionPlans(),
       getActiveManualPaymentConfig(),
     ]);
-    return NextResponse.json({ plans, paymentConfig });
+    return privateJson({ plans, paymentConfig }, { request, profile: CACHE.STATIC });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load plans." },

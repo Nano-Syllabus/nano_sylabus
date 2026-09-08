@@ -6,6 +6,7 @@ import { getCommunitySubjectExplorerInsights } from "@/lib/data/community-subjec
 import { readCommunityLearningTopics } from "@/lib/data/community-learning-topics";
 import { ensureCommunityLearningSpace, markCommunityLearningError } from "@/lib/community-learning";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { timed } from "@/lib/dev-timing";
 
 export type CommunityHubSubject = {
   id: string;
@@ -226,20 +227,26 @@ export async function getCommunityHubForUser(
   preferredCommunitySlug?: string | null,
 ): Promise<CommunityHubData | null> {
   const joined = selectStudentCommunity(
-    await listJoinedCommunities(userId, admin),
+    await timed("community-hub:listJoinedCommunities", () =>
+      listJoinedCommunities(userId, admin),
+    ),
     preferredCommunitySlug,
   );
   if (!joined) return null;
-  const community = await getCommunity(joined.slug, userId, admin);
+  const community = await timed("community-hub:getCommunity", () =>
+    getCommunity(joined.slug, userId, admin),
+  );
   if (!community || community.membership?.status !== "active" || !community.terms.length)
     return null;
 
-  const membershipResult = await admin
-    .from("community_memberships")
-    .select("user_id,role,joined_at,current_term_id")
-    .eq("community_id", community.id)
-    .eq("status", "active")
-    .order("joined_at", { ascending: true });
+  const membershipResult = await timed("community-hub:memberships", async () =>
+    admin
+      .from("community_memberships")
+      .select("user_id,role,joined_at,current_term_id")
+      .eq("community_id", community.id)
+      .eq("status", "active")
+      .order("joined_at", { ascending: true }),
+  );
   if (membershipResult.error) throw membershipResult.error;
   const membershipRows = (membershipResult.data || []) as MembershipRow[];
   const memberIds = membershipRows.map((row) => String(row.user_id));
@@ -267,7 +274,7 @@ export async function getCommunityHubForUser(
     votesResult,
     announcementsResult,
     insights,
-  ] = await Promise.all([
+  ] = await timed("community-hub:parallel-batch(10)", async () => Promise.all([
     memberIds.length
       ? admin.from("student_profiles").select("user_id,full_name").in("user_id", memberIds)
       : Promise.resolve({ data: [], error: null }),
@@ -321,7 +328,7 @@ export async function getCommunityHubForUser(
       .order("published_at", { ascending: false })
       .limit(20),
     getCommunitySubjectExplorerInsights(userId, community),
-  ]);
+  ]));
 
   for (const result of [
     profilesResult,

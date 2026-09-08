@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Mono, Inter, Outfit } from "next/font/google";
 import { ReactNode } from "react";
 import { DevPerfHud } from "@/components/dev-perf-hud";
+import { QueryProvider } from "@/components/query-provider";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -59,8 +60,22 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         className={`${outfit.variable} ${inter.variable} ${dmMono.variable} font-sans antialiased`}
       >
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
-        {children}
-        {SHOW_PERF_HUD ? <DevPerfHud /> : null}
+        {/*
+          The query cache wraps everything, including the marketing routes.
+          It has to sit at the root rather than inside /app: a provider mounted
+          per-section is a cache created per-section, so moving from a public
+          course page into the app would throw away the catalog that page just
+          fetched. One provider, one cache, for the life of the tab.
+
+          It is a client component with a server-rendered subtree, which is
+          allowed and costs nothing extra — `children` is already rendered by
+          the time it is passed in, so nothing below here becomes a client
+          component by being wrapped.
+        */}
+        <QueryProvider>
+          {children}
+          {SHOW_PERF_HUD ? <DevPerfHud /> : null}
+        </QueryProvider>
       </body>
     </html>
   );

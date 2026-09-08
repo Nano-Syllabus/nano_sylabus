@@ -7,6 +7,7 @@ different causes and they need different instruments.
 | --- | --- | --- |
 | `npm run perf:audit` | End-to-end: TTFB, route-change cost, Lighthouse | Yes |
 | `npm run perf:ui` | Browser-side only: JS execution, hydration, DOM, scroll | No, in dev |
+| `npm run perf:security` | HTTP response headers, and optionally TLS | No |
 | `components/dev-perf-hud.tsx` | Live numbers while you click around | No, in dev |
 
 ## Working on the UI without logging in
@@ -101,3 +102,29 @@ the real one when deliberately profiling a production build.
 
 Runs land in `perf-results/` (gitignored) as JSON, named `<label>-<mode>.json`
 for audits and `ui-<label>.json` for UI profiles.
+
+## HTTP and TLS audit
+
+```bash
+npm run perf:security -- --url=https://nano-sylabus-ten.vercel.app
+npm run perf:security -- --url=https://nano-sylabus-ten.vercel.app --all
+```
+
+Without flags it only reads the site's own response headers and grades them
+here — no third party, and it works against `http://localhost:3000` too, so a
+header change can be checked before it ships. The grade mirrors what
+securityheaders.com scores: one step down per missing header from CSP, HSTS,
+X-Content-Type-Options, X-Frame-Options, Referrer-Policy and Permissions-Policy.
+
+`--all` adds the two external services, which do send the hostname to a third
+party:
+
+- **securityheaders.com** for an independent grade. It answers a plain `fetch`
+  with HTTP 403, so this drives a real browser for one page load.
+- **SSL Labs** for the TLS configuration — protocols, ciphers, chain. Queried
+  with `publish=off` so the result is not added to their public listings. A cold
+  scan takes several minutes.
+
+The headers themselves are set in `next.config.ts`. `script-src` is deliberately
+not among them: it needs per-request nonces through middleware, and the TikZ
+renderer pulls from unpkg.com at runtime, so it needs its own rollout.

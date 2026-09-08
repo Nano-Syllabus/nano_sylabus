@@ -24,6 +24,10 @@ import {
   type PointerEvent as ReactPointerEvent,
   type TouchEvent as ReactTouchEvent,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { queryFetcher } from "@/lib/query/api";
+import { keys } from "@/lib/query/keys";
+import { STALE } from "@/lib/query/client";
 import { cn } from "@/lib/utils";
 
 export type ChatLibrarySubject = {
@@ -65,6 +69,35 @@ type PdfViewState = {
 };
 
 type LoadState = "idle" | "loading" | "ready" | "error";
+
+/**
+ * What `/api/student/materials` answers with.
+ *
+ * Named rather than inlined at the call site because it is now the query's
+ * type parameter, and an inline object literal there would be re-declared
+ * every render for no reason. The shape is the route's, unchanged: `materials`
+ * and `subject` when a subject was asked for, `subjects` when the whole
+ * library was.
+ */
+type MaterialsPayload = {
+  materials?: Material[];
+  subjects?: Array<{
+    courseId?: string;
+    courseName?: string;
+    community?: boolean;
+    communityInfo?: { id?: string; name?: string };
+    term?: {
+      id?: string;
+      yearNumber?: number;
+      semesterNumber?: number;
+      semesterInYear?: number;
+      position?: number;
+    };
+    subject?: { name?: string; slug?: string };
+    materials?: Material[];
+  }>;
+  subject?: { name?: string; slug?: string; courseId?: string };
+};
 const MIN_PANEL_WIDTH = 380;
 const DEFAULT_PANEL_WIDTH = 520;
 const MIN_CHAT_WIDTH = 480;
@@ -161,9 +194,6 @@ export function ChatMaterialsLibrary({
   const resizingRef = useRef(false);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [librarySubjects, setLibrarySubjects] = useState<LibrarySubject[]>([]);
-  const [loadState, setLoadState] = useState<LoadState>("idle");
-  const [loadError, setLoadError] = useState("");
-  const [reloadKey, setReloadKey] = useState(0);
   const [query, setQuery] = useState("");
   const [openShelves, setOpenShelves] = useState<Set<string>>(new Set());
   const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
@@ -266,136 +296,138 @@ export function ChatMaterialsLibrary({
     };
   }, [onWidthChange, open, width]);
 
+  /**
+   * The course library payload, cached per subject.
+   *
+   * WHAT CHANGED, AND WHY IT MATTERS HERE
+   * -------------------------------------
+   * This panel is opened and closed constantly while a student reads an
+   * answer, and the effect this replaces refetched the whole library every
+   * single time — full skeleton, full round trip, for a document index that
+   * only changes when a teacher uploads something. `staleTime: SESSION` means
+   * reopening it within five minutes is instant and silent.
+   *
+   * The FETCH is a query; the DERIVATION stayed an effect below it, and that
+   * split is deliberate. Which shelf, subject and semester start open depends
+   * on the payload AND on the subject currently in view, so folding it into
+   * the query would make a different cache entry per accordion state. The
+   * query answers "what is in the library"; the effect answers "what should be
+   * open when it appears".
+   *
+   * The `AbortController` that used to be here is gone with it — a query is
+   * cancelled by its own signal when its key changes or the component
+   * unmounts, so a late response can no longer write into a closed panel.
+   */
+  const requestedSubject = subject ? subject.slug || subject.name : "";
+  const materialsQuery = useQuery({
+    queryKey: keys.student.materials({ subject: requestedSubject || undefined }),
+    queryFn: queryFetcher<MaterialsPayload>(
+      requestedSubject
+        ? `/api/student/materials?subject=${encodeURIComponent(requestedSubject)}`
+        : "/api/student/materials",
+    ),
+    // A closed panel has no business holding a request open, or starting one
+    // on a page that is not showing it.
+    enabled: open,
+    staleTime: STALE.SESSION,
+  });
+
+  const loadState: LoadState = !open
+    ? "idle"
+    : materialsQuery.isError
+      ? "error"
+      : materialsQuery.isPending
+        ? "loading"
+        : "ready";
+  const loadError = materialsQuery.error
+    ? materialsQuery.error.message || "Could not load the course library."
+    : "";
+
+  // Closing the panel clears what was on screen, so reopening it on a
+  // different subject never flashes the previous subject's shelves.
   useEffect(() => {
+    if (open) return;
     setQuery("");
     setMaterials([]);
     setLibrarySubjects([]);
     setOpenShelves(new Set());
     setOpenSubjects(new Set());
     setOpenSemesters(new Set());
-    setLoadError("");
+  }, [open]);
 
-    if (!open) {
-      setLoadState("idle");
+  useEffect(() => {
+    const payload = materialsQuery.data;
+    if (!open || !payload) return;
+
+    const nextMaterials = Array.isArray(payload.materials) ? payload.materials : [];
+    if (subject) {
+      setMaterials(nextMaterials);
+      const subjectEntry: LibrarySubject = {
+        name: payload.subject?.name || subject.name,
+        slug: payload.subject?.slug || subject.slug,
+        courseId: payload.subject?.courseId || "",
+        courseName: "",
+        community: false,
+        materials: nextMaterials,
+      };
+      setLibrarySubjects([subjectEntry]);
+      const firstShelf = nextMaterials[0] ? shelfLabel(nextMaterials[0].shelf) : "";
+      setOpenShelves(firstShelf ? new Set([firstShelf]) : new Set());
+      setOpenSubjects(new Set([subjectEntry.slug]));
       return;
     }
 
-    const controller = new AbortController();
-    setLoadState("loading");
+    const nextSubjects = (Array.isArray(payload.subjects) ? payload.subjects : [])
+      .map((entry) => ({
+        name: entry.subject?.name || "Subject",
+        slug: entry.subject?.slug || entry.subject?.name || "subject",
+        courseId: entry.courseId || "",
+        courseName: entry.courseName || "",
+        community: entry.community === true,
+        communityInfo: entry.communityInfo?.id
+          ? {
+              id: entry.communityInfo.id,
+              name: entry.communityInfo.name || entry.courseName || "Community",
+            }
+          : undefined,
+        term: entry.term?.id
+          ? {
+              id: entry.term.id,
+              yearNumber: Number(entry.term.yearNumber) || 1,
+              semesterNumber: Number(entry.term.semesterNumber) || 1,
+              semesterInYear: Number(entry.term.semesterInYear) || 1,
+              position: Number(entry.term.position) || 0,
+            }
+          : undefined,
+        materials: Array.isArray(entry.materials) ? entry.materials : [],
+      }))
+      .filter((entry) => entry.slug);
 
-    async function loadMaterials() {
-      try {
-        const requestedSubject = subject ? subject.slug || subject.name : "";
-        const response = await fetch(
-          subject
-            ? `/api/student/materials?subject=${encodeURIComponent(requestedSubject)}`
-            : "/api/student/materials",
-          { cache: "no-store", signal: controller.signal },
-        );
-        const payload = (await response.json().catch(() => null)) as {
-          materials?: Material[];
-          subjects?: Array<{
-            courseId?: string;
-            courseName?: string;
-            community?: boolean;
-            communityInfo?: { id?: string; name?: string };
-            term?: {
-              id?: string;
-              yearNumber?: number;
-              semesterNumber?: number;
-              semesterInYear?: number;
-              position?: number;
-            };
-            subject?: { name?: string; slug?: string };
-            materials?: Material[];
-          }>;
-          subject?: { name?: string; slug?: string; courseId?: string };
-          error?: string;
-        } | null;
-        if (!response.ok) {
-          throw new Error(payload?.error || "Could not load the course library.");
-        }
-
-        const nextMaterials = Array.isArray(payload?.materials) ? payload.materials : [];
-        if (subject) {
-          setMaterials(nextMaterials);
-          const subjectEntry: LibrarySubject = {
-            name: payload?.subject?.name || subject.name,
-            slug: payload?.subject?.slug || subject.slug,
-            courseId: payload?.subject?.courseId || "",
-            courseName: "",
-            community: false,
-            materials: nextMaterials,
-          };
-          setLibrarySubjects([subjectEntry]);
-          const firstShelf = nextMaterials[0] ? shelfLabel(nextMaterials[0].shelf) : "";
-          setOpenShelves(firstShelf ? new Set([firstShelf]) : new Set());
-          setOpenSubjects(new Set([subjectEntry.slug]));
-        } else {
-          const nextSubjects = (Array.isArray(payload?.subjects) ? payload.subjects : [])
-            .map((entry) => ({
-              name: entry.subject?.name || "Subject",
-              slug: entry.subject?.slug || entry.subject?.name || "subject",
-              courseId: entry.courseId || "",
-              courseName: entry.courseName || "",
-              community: entry.community === true,
-              communityInfo: entry.communityInfo?.id
-                ? {
-                    id: entry.communityInfo.id,
-                    name: entry.communityInfo.name || entry.courseName || "Community",
-                  }
-                : undefined,
-              term: entry.term?.id
-                ? {
-                    id: entry.term.id,
-                    yearNumber: Number(entry.term.yearNumber) || 1,
-                    semesterNumber: Number(entry.term.semesterNumber) || 1,
-                    semesterInYear: Number(entry.term.semesterInYear) || 1,
-                    position: Number(entry.term.position) || 0,
-                  }
-                : undefined,
-              materials: Array.isArray(entry.materials) ? entry.materials : [],
-            }))
-            .filter((entry) => entry.slug);
-          setLibrarySubjects(nextSubjects);
-          const activeEntry = nextSubjects.find(
-            (s) =>
-              (activeSubjectSlug && s.slug === activeSubjectSlug) ||
-              (activeSubject?.name && s.name.trim().toLowerCase() === activeSubject.name.trim().toLowerCase()),
-          );
-          const targetSubject = activeEntry || nextSubjects[0];
-          setOpenSubjects(targetSubject ? new Set([librarySubjectKey(targetSubject)]) : new Set());
-          setOpenSemesters(
-            targetSubject?.term
-              ? new Set([
-                  `${targetSubject.communityInfo?.id || targetSubject.courseId}:${targetSubject.term.id}`,
-                ])
-              : new Set(),
-          );
-          const firstShelf = targetSubject?.materials[0]
-            ? shelfLabel(targetSubject.materials[0].shelf)
-            : "";
-          setOpenShelves(
-            firstShelf && targetSubject
-              ? new Set([`${librarySubjectKey(targetSubject)}:${firstShelf}`])
-              : new Set(),
-          );
-        }
-        setLoadState("ready");
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setMaterials([]);
-        setLibrarySubjects([]);
-        setLoadError(
-          error instanceof Error ? error.message : "Could not load the course library.",
-        );
-        setLoadState("error");
-      }
-    }
-
-    void loadMaterials();
-    return () => controller.abort();
-  }, [activeSubject?.name, activeSubjectSlug, open, reloadKey, subject]);
+    setLibrarySubjects(nextSubjects);
+    const activeEntry = nextSubjects.find(
+      (entry) =>
+        (activeSubjectSlug && entry.slug === activeSubjectSlug) ||
+        (activeSubject?.name &&
+          entry.name.trim().toLowerCase() === activeSubject.name.trim().toLowerCase()),
+    );
+    const targetSubject = activeEntry || nextSubjects[0];
+    setOpenSubjects(targetSubject ? new Set([librarySubjectKey(targetSubject)]) : new Set());
+    setOpenSemesters(
+      targetSubject?.term
+        ? new Set([
+            `${targetSubject.communityInfo?.id || targetSubject.courseId}:${targetSubject.term.id}`,
+          ])
+        : new Set(),
+    );
+    const firstShelf = targetSubject?.materials[0]
+      ? shelfLabel(targetSubject.materials[0].shelf)
+      : "";
+    setOpenShelves(
+      firstShelf && targetSubject
+        ? new Set([`${librarySubjectKey(targetSubject)}:${firstShelf}`])
+        : new Set(),
+    );
+  }, [activeSubject?.name, activeSubjectSlug, materialsQuery.data, open, subject]);
 
   useEffect(() => {
     setPdfObjectUrl("");
@@ -1025,7 +1057,7 @@ export function ChatMaterialsLibrary({
                   <p className="mt-2 text-sm text-text-secondary">{loadError}</p>
                   <button
                     type="button"
-                    onClick={() => setReloadKey((current) => current + 1)}
+                    onClick={() => void materialsQuery.refetch()}
                     className={cn("mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-text-primary px-4 text-sm font-medium text-text-inverse", focusRing)}
                   >
                     <RefreshCw className="h-4 w-4" aria-hidden="true" />

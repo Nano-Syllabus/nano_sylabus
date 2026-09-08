@@ -16,6 +16,7 @@ import {
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 import { cn } from "@/lib/utils";
 import { McqCheckerDialog } from "@/components/mcq-checker-dialog";
+import { MathText } from "@/components/math-text";
 
 type ResultLine = { question: StudentExamQuestion; got: number; note: string; answer: string };
 /** How the rest of the classroom did — aggregate only, nobody is named. */
@@ -977,9 +978,7 @@ function PracticeDialog({
                     <strong className="font-display text-3xl">{checkerResult.score}</strong>
                     <span className="text-sm text-text-muted">of {checkerResult.marks}</span>
                   </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
-                    {checkerResult.feedback}
-                  </p>
+                  <MathText as="div" text={checkerResult.feedback} className="mt-2 whitespace-pre-wrap text-sm leading-6" />
                   {checkerResult.evaluation?.summary ? (
                     <p className="mt-3 border-t border-border pt-3 text-[13px] leading-5 text-text-secondary">
                       {checkerResult.evaluation.summary}
@@ -3101,7 +3100,7 @@ function HandwrittenAttemptView({
                       {question.marks} {question.marks === 1 ? "mark" : "marks"}
                     </p>
                   </div>
-                  <p className="mt-3 max-w-prose text-base leading-7">{question.prompt}</p>
+                  <MathText as="div" text={question.prompt} className="mt-3 max-w-prose text-base leading-7" />
                   {question.type === "choice" && question.options?.length ? (
                     <ol className="mt-4 grid gap-2 sm:grid-cols-2">
                       {question.options.map((option, optionIndex) => (
@@ -3276,7 +3275,7 @@ function AttemptView({
               <Chip>{questionTypeLabel(question.questionType)}</Chip>
             ) : null}
           </div>
-          <p className="mt-4 text-base leading-7">{question.prompt}</p>
+          <MathText as="div" text={question.prompt} className="mt-4 text-base leading-7" />
           {question.type === "choice" ? (
             <fieldset className="mt-4 space-y-2">
               <legend className="sr-only">Choose one answer</legend>
@@ -3628,7 +3627,7 @@ function ResultSummary({ result, percent }: { result: Result; percent: number })
         <h2 className="font-display text-lg font-semibold">What the marker said</h2>
         {evaluation ? (
           <>
-            <p className="mt-4 text-sm leading-6">{evaluation.summary}</p>
+            <MathText as="div" text={evaluation.summary} className="mt-4 text-sm leading-6" />
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <div>
                 <p className="text-sm text-text-muted">Went well</p>

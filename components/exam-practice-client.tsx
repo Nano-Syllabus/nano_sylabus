@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
+import { MathText } from "@/components/math-text";
 
 type ExamTab = "take" | "history" | "map";
 type ExamStage = "configure" | "started" | "submission" | "submitted" | "result";
@@ -1403,7 +1404,7 @@ function ExamInProgress({
                 {String(question.number).padStart(2, "0")}
               </span>
               <div>
-                <p className="text-base leading-7">{question.prompt}</p>
+                <MathText as="div" text={question.prompt} className="text-base leading-7" />
                 {questionMetadata(question) ? (
                   <p className="mt-2 text-xs text-text-muted">{questionMetadata(question)}</p>
                 ) : null}
@@ -1599,7 +1600,7 @@ function ResultPanel({
                       Question {question.number}
                       {questionMetadata(question) ? ` · ${questionMetadata(question)}` : ""}
                     </p>
-                    <p className="mt-2 text-sm leading-6">{question.prompt}</p>
+                    <MathText as="div" text={question.prompt} className="mt-2 text-sm leading-6" />
                   </div>
                   <span
                     className={cn(

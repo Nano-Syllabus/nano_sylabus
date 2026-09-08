@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getTeacherPracticeTopics, type ApiRecord } from "@/lib/teacher-app/client";
 import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
+import { cache } from "react";
 
 export type LearningTopic = {
   topic_key: string;
@@ -134,13 +135,29 @@ export async function readCommunityLearningTopics(
   return [...learningRows, ...recovered.flat()];
 }
 
-/** The caller has already checked this user's course/subject entitlement. */
-export async function readCourseLearningTopics(
+/**
+ * The community that owns a study course, resolved once per request.
+ *
+ * `readCourseLearningTopics` is called once per subject, in parallel, and every
+ * one of those calls looked up the SAME community — a student's subjects all
+ * belong to the community they joined, so `courseId` is identical across the
+ * fan-out. That was one redundant round trip per subject on the Challenge Hub's
+ * critical path.
+ *
+ * `cache()` is React's per-request memo: the first caller issues the query and
+ * the rest await that same promise, so N subjects cost one lookup instead of N.
+ * Per-request is the important half — it is scoped to a single server render
+ * and shares nothing between users or requests, which is what makes memoising a
+ * tenant-scoped row safe here.
+ *
+ * Keyed on `courseId` alone. The admin client is a process-wide singleton
+ * (lib/supabase/admin.ts), so including it would only defeat the memo without
+ * changing what is fetched.
+ */
+const communityIdForCourse = cache(async function communityIdForCourse(
   courseId: string,
-  teacherId: string,
-  subjectSlug: string,
   admin: SupabaseClient,
-): Promise<CommunityLearningTopic[] | null> {
+): Promise<string | null> {
   const community = await admin
     .from("communities")
     .select("id")
@@ -148,11 +165,22 @@ export async function readCourseLearningTopics(
     .eq("status", "active")
     .maybeSingle();
   if (community.error) throw community.error;
-  if (!community.data) return null;
+  return community.data ? String(community.data.id) : null;
+});
+
+/** The caller has already checked this user's course/subject entitlement. */
+export async function readCourseLearningTopics(
+  courseId: string,
+  teacherId: string,
+  subjectSlug: string,
+  admin: SupabaseClient,
+): Promise<CommunityLearningTopic[] | null> {
+  const communityId = await communityIdForCourse(courseId, admin);
+  if (!communityId) return null;
   const subject = await admin
     .from("community_subjects")
     .select("id,name,teacher_id,external_subject_slug")
-    .eq("community_id", community.data.id)
+    .eq("community_id", communityId)
     .eq("teacher_id", teacherId)
     .eq("external_subject_slug", subjectSlug)
     .eq("status", "active")

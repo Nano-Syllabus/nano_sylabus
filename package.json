@@ -2,7 +2,7 @@
   "name": "nano-syllabus",
   "private": true,
   "scripts": {
-    "dev": "NEXT_DIST_DIR=.next-dev node node_modules/next/dist/bin/next dev --port 3000",
+    "dev": "NEXT_DIST_DIR=.next-dev node node_modules/next/dist/bin/next dev --turbopack --port 3000",
     "build": "node node_modules/next/dist/bin/next build",
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "eslint .",
@@ -17,11 +17,17 @@
     "perf:audit": "node scripts/perf/audit.mjs",
     "perf:compare": "node scripts/perf/compare.mjs",
     "perf:ui": "node scripts/perf/ui-profile.mjs",
-    "dev:nologin": "DEV_AUTH_BYPASS=1 npm run dev"
+    "dev:nologin": "DEV_AUTH_BYPASS=1 npm run dev",
+    "perf:security": "node scripts/perf/security-audit.mjs",
+    "dev:webpack": "NEXT_DIST_DIR=.next-dev-webpack node node_modules/next/dist/bin/next dev --port 3000"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.110.0",
+    "@tanstack/query-sync-storage-persister": "^5.102.8",
+    "@tanstack/react-query": "^5.102.8",
+    "@tanstack/react-query-devtools": "^5.102.8",
+    "@tanstack/react-query-persist-client": "^5.102.8",
     "clsx": "^2.1.1",
     "cookie": "^0.7.0",
     "katex": "^0.17.0",

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { StudentToday, TodayChapter, TodayExam } from "@/lib/data/student-today";
 import { countAnswered, readSavedSitting, type SavedSitting } from "@/lib/practice-sitting";
 import { titleCase } from "@/lib/utils";
+import { usePrefetchPublishedCatalog, usePublishedCatalog } from "@/lib/query/catalog";
 
 function firstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] || "Student";
@@ -114,9 +115,39 @@ export function StudentTodayDashboard({
   const [joinError, setJoinError] = useState("");
   const [joinMessage, setJoinMessage] = useState("");
   const [joining, setJoining] = useState(false);
-  const [providers, setProviders] = useState<PublishedProvider[]>([]);
-  const [browseState, setBrowseState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [browseError, setBrowseError] = useState("");
+  /**
+   * The published catalog behind the "Browse courses" dialog.
+   *
+   * `enabled: browseOpen` keeps this off the Today page's critical path — the
+   * dashboard itself never needs it, and firing it on mount would put a slow
+   * tenant-API read in front of a page the student is already looking at. The
+   * dialog is what needs it, so the dialog is what asks.
+   *
+   * The prefetch below is what makes that free: hovering or focusing the
+   * button starts the request, so by the time the click lands and this query
+   * enables, the answer is usually already in the cache and the dialog opens
+   * populated. On a second visit the persisted entry means it opens populated
+   * with no request at all.
+   */
+  const catalogQuery = usePublishedCatalog(browseOpen);
+  const prefetchCatalog = usePrefetchPublishedCatalog();
+  const providers = useMemo<PublishedProvider[]>(
+    () => (Array.isArray(catalogQuery.data?.providers) ? catalogQuery.data.providers : []),
+    [catalogQuery.data],
+  );
+  const browseState: "idle" | "loading" | "ready" | "error" = !browseOpen
+    ? "idle"
+    : catalogQuery.isError
+      ? "error"
+      : catalogQuery.isPending
+        ? "loading"
+        : "ready";
+  const [addError, setAddError] = useState("");
+  const browseError =
+    addError ||
+    (catalogQuery.error
+      ? catalogQuery.error.message || "Could not load published courses."
+      : "");
   const [browseQuery, setBrowseQuery] = useState("");
   const [browseUniversity, setBrowseUniversity] = useState("");
   const [browseProgramme, setBrowseProgramme] = useState("");
@@ -161,11 +192,6 @@ export function StudentTodayDashboard({
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [browseOpen]);
 
-  useEffect(() => {
-    if (!browseOpen || browseState !== "idle") return;
-    void loadCourses();
-  }, [browseOpen, browseState]);
-
   function closeJoin() {
     setJoinOpen(false);
     setJoinError("");
@@ -174,6 +200,7 @@ export function StudentTodayDashboard({
 
   function openBrowse() {
     setJoinOpen(false);
+    setAddError("");
     setBrowseOpen(true);
   }
 
@@ -182,32 +209,9 @@ export function StudentTodayDashboard({
     joinTriggerRef.current?.focus();
   }
 
-  async function loadCourses() {
-    setBrowseState("loading");
-    setBrowseError("");
-
-    try {
-      const response = await fetch("/api/tenant/catalog", {
-        cache: "no-store",
-        headers: { Accept: "application/json" },
-      });
-      const payload = (await response.json()) as {
-        providers?: PublishedProvider[];
-        error?: string;
-      };
-      if (!response.ok) throw new Error(payload.error || "Could not load published courses.");
-
-      setProviders(Array.isArray(payload.providers) ? payload.providers : []);
-      setBrowseState("ready");
-    } catch (error) {
-      setBrowseError(error instanceof Error ? error.message : "Could not load published courses.");
-      setBrowseState("error");
-    }
-  }
-
   async function addCourse(course: OpenCourse) {
     setAddingSubject(course.slug);
-    setBrowseError("");
+    setAddError("");
 
     try {
       const response = await fetch("/api/student/profile/subjects", {
@@ -221,7 +225,7 @@ export function StudentTodayDashboard({
       setBrowseOpen(false);
       router.refresh();
     } catch (error) {
-      setBrowseError(error instanceof Error ? error.message : "Could not join that course.");
+      setAddError(error instanceof Error ? error.message : "Could not join that course.");
     } finally {
       setAddingSubject("");
     }
@@ -711,7 +715,18 @@ export function StudentTodayDashboard({
                 </p>
               ) : null}
               <div className="mt-6 flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={openBrowse}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={openBrowse}
+                  // Start the catalog request on intent rather than on click.
+                  // It is the slowest read in the app and the dialog is the
+                  // only thing that waits on it, so moving it a few hundred
+                  // milliseconds earlier is the whole difference between the
+                  // dialog opening full and opening empty.
+                  onPointerEnter={prefetchCatalog}
+                  onFocus={prefetchCatalog}
+                >
                   Browse courses
                 </Button>
                 <Button type="button" variant="ghost" onClick={closeJoin}>
@@ -819,7 +834,7 @@ export function StudentTodayDashboard({
                   <button
                     type="button"
                     className={`mt-3 inline-flex min-h-10 items-center rounded-lg border border-border-strong px-4 text-sm font-medium ${focusRing}`}
-                    onClick={() => void loadCourses()}
+                    onClick={() => void catalogQuery.refetch()}
                   >
                     Try again
                   </button>

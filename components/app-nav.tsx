@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import type { AppUser } from "@/lib/types";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import { cn } from "@/lib/utils";
 
 // Mirrors the expanded sidebar flag. The route stays available for future use.
@@ -187,7 +187,7 @@ export function AppNav({ user }: { user: AppUser }) {
   const router = useRouter();
 
   async function handleLogout() {
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     await supabase.auth.signOut();
     router.replace("/login");
     router.refresh();

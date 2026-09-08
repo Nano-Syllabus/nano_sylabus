@@ -1,7 +1,7 @@
-import http from "node:http";
-import https from "node:https";
 import { getTenantApiEnv } from "@/lib/env";
+import { agentFor, transportFor } from "@/lib/http-agents";
 import { trackApiRequest } from "@/lib/api-request-tracking";
+import { invalidateMemo, memo } from "@/lib/http/memo";
 
 export type ApiRecord = Record<string, unknown>;
 
@@ -235,7 +235,7 @@ async function teacherRequest<T>(
     () =>
       new Promise<T>((resolve, reject) => {
         const url = new URL(path, baseUrl);
-        const transport = url.protocol === "https:" ? https : http;
+        const transport = transportFor(url);
         const serializedBody =
           options.body === undefined ? undefined : JSON.stringify(options.body);
         const request = transport.request(
@@ -243,6 +243,7 @@ async function teacherRequest<T>(
           {
             method: options.method ?? "GET",
             rejectUnauthorized,
+            agent: agentFor(url),
             headers: {
               Authorization: `Bearer ${collectionSk}`,
               Accept: "application/json",
@@ -397,13 +398,14 @@ async function teacherStreamRequest(
         let settled = false;
         let buffer = "";
         const url = new URL(path, baseUrl);
-        const transport = url.protocol === "https:" ? https : http;
+        const transport = transportFor(url);
         const serializedBody = JSON.stringify(body);
         const request = transport.request(
           url,
           {
             method: "POST",
             rejectUnauthorized,
+            agent: agentFor(url),
             headers: {
               Authorization: `Bearer ${collectionSk}`,
               Accept: "text/event-stream",
@@ -436,31 +438,53 @@ async function teacherStreamRequest(
               return;
             }
 
-            response.on("data", async (chunk: string) => {
+            // Ordered, one at a time, with backpressure — the same contract
+            // `chatTenantStream` holds and for the same reason: Node does not
+            // await a listener, so an `async` handler that awaited `onEvent`
+            // inside a loop let two chunks arriving together run concurrently
+            // and deliver an answer's tokens out of order.
+            let chain: Promise<void> = Promise.resolve();
+            let consumerFailed = false;
+            const deliver = (event: TeacherSubjectStreamEvent) => {
+              chain = chain.then(() => {
+                if (consumerFailed) return;
+                return onEvent(event);
+              }).catch((error) => {
+                consumerFailed = true;
+                request.destroy(error instanceof Error ? error : new Error(String(error)));
+              });
+            };
+
+            response.on("data", (chunk: string) => {
               buffer += chunk;
               const parts = buffer.split(/\r?\n\r?\n/);
               buffer = parts.pop() ?? "";
+              if (parts.length === 0) return;
+
+              response.pause();
               for (const part of parts) {
                 const event = parseTeacherSseEvent(part);
-                if (!event) continue;
-                try {
-                  await onEvent(event);
-                } catch (error) {
-                  request.destroy(error instanceof Error ? error : new Error(String(error)));
-                  return;
-                }
+                if (event) deliver(event);
               }
+              chain = chain.then(() => {
+                if (!consumerFailed) response.resume();
+              });
             });
 
-            response.on("end", () => {
+            response.on("end", async () => {
               if (settled) return;
-              settled = true;
               if (buffer.trim()) {
                 const event = parseTeacherSseEvent(buffer);
-                if (event) {
-                  Promise.resolve(onEvent(event)).then(() => resolve(), reject);
-                  return;
-                }
+                if (event) deliver(event);
+              }
+              // Queued events may still be in flight after the socket ends;
+              // resolving before they land drops the tail of the answer.
+              await chain;
+              if (settled) return;
+              settled = true;
+              if (consumerFailed) {
+                reject(new TeacherApiError("Teacher API stream consumer failed.", 500));
+                return;
               }
               resolve();
             });
@@ -504,10 +528,10 @@ export function fetchTeacherDocumentRaw(key: string, documentId: string) {
       () =>
         new Promise<{ body: Buffer; contentType: string }>((resolve, reject) => {
           const url = new URL(path, baseUrl);
-          const transport = url.protocol === "https:" ? https : http;
+          const transport = transportFor(url);
           const request = transport.request(
             url,
-            { method: "GET", rejectUnauthorized, headers: { Authorization: `Bearer ${key}` } },
+            { method: "GET", rejectUnauthorized, agent: agentFor(url), headers: { Authorization: `Bearer ${key}` } },
             (response) => {
               const chunks: Buffer[] = [];
               response.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -539,10 +563,20 @@ export function fetchTeacherDocumentRaw(key: string, documentId: string) {
         }),
     );
 
+  // The COLLECTION route first, because that is the one this key is scoped for.
+  // The order used to be the other way round, and the tenant route is gated on a
+  // `documents:read` scope that no collection key carries — so every teacher
+  // material download paid a guaranteed 403 round trip before falling back, and
+  // then fell back onto a path the backend did not serve at all. Both halves are
+  // fixed: the collection twin exists now, and it is asked first.
+  //
+  // The tenant route is kept as the fallback rather than dropped: a tenant-wide
+  // key (the teachers-app operator key) can read documents outside any one
+  // collection, and that is the case the collection route correctly refuses.
   const encodedId = encodeURIComponent(documentId);
-  return readRaw(`/api/v1/documents/${encodedId}/raw`).catch((error) => {
+  return readRaw(`/v1/collection/documents/${encodedId}/raw`).catch((error) => {
     if (error instanceof TeacherApiError && [401, 403, 404].includes(error.status)) {
-      return readRaw(`/v1/collection/documents/${encodedId}/raw`);
+      return readRaw(`/api/v1/documents/${encodedId}/raw`);
     }
     throw error;
   });
@@ -558,12 +592,22 @@ export const createTeacherFolder = (key: string, path: string) =>
   });
 
 export async function createTeacherSubject(key: string, subjectName: string) {
-  for (const shelf of ["Syllabus", "Notes", "Question Bank"]) {
-    try {
-      await createTeacherFolder(key, `${subjectName}/${shelf}`);
-    } catch (error) {
-      if (!(error instanceof TeacherApiError) || error.status !== 409) throw error;
-    }
+  // The three shelves are independent folders, so they are created together
+  // rather than one round trip after another — this is a teacher waiting on a
+  // "create subject" button, and it was three sequential calls to the VPS.
+  //
+  // `allSettled` rather than `all`: a 409 means the folder is already there,
+  // which is success for this purpose, and `all` would reject the whole batch on
+  // the first one. Anything else is still raised, once every shelf has reported.
+  const shelves = await Promise.allSettled(
+    ["Syllabus", "Notes", "Question Bank"].map((shelf) =>
+      createTeacherFolder(key, `${subjectName}/${shelf}`),
+    ),
+  );
+  for (const outcome of shelves) {
+    if (outcome.status !== "rejected") continue;
+    const error = outcome.reason;
+    if (!(error instanceof TeacherApiError) || error.status !== 409) throw error;
   }
   const response = await teacherRequest<{ collection: string; subject: ApiRecord }>(
     "/v1/collection/subjects",
@@ -713,20 +757,67 @@ export const getTeacherCollectionCapture = (key: string, subject: string) =>
 export const getTeacherCollectionReadiness = (key: string, subject: string) =>
   teacherRequest<ApiRecord>(withQuery("/v1/collection/readiness", { subject }), key);
 
+/**
+ * The topic list for one subject, memoised in-process.
+ *
+ * WHY THIS ONE MATTERS MORE THAN THE OTHERS ON THIS PAGE
+ * ------------------------------------------------------
+ * It is on the critical path of `/app/today`, and it is called ONCE PER
+ * SUBJECT: `getStudentChallengeDashboard` maps over every subject a student
+ * has and awaits this inside each one. A student with four subjects paid four
+ * round trips to the tenant VPS before the dashboard could render, every time
+ * they opened the app — and those sit behind an already deep chain of Supabase
+ * queries, so they land at the worst possible moment. That is the difference
+ * between a Today page that renders in under a second and one that takes
+ * fifteen.
+ *
+ * It is also the most cacheable thing in the request. A topic list is
+ * editorial: it is derived from what a teacher indexed, it is identical for
+ * every student in that collection, and it changes when someone uploads
+ * material — not when a student opens a page.
+ *
+ * `refresh: true` BYPASSES THE MEMO, and must. It is the caller explicitly
+ * asking the tenant API to recompute, which is what the teacher-facing
+ * "regenerate topics" path uses; serving that from a cache would make the
+ * button appear broken.
+ *
+ * TTL 300s / stale 900s: after the first load nobody waits for this again,
+ * including the request that finds the entry expired — it is served from
+ * memory while the refresh runs behind it.
+ */
 export const getTeacherPracticeTopics = (
   key: string,
   subject: string,
   options: { totalMarks?: number; maxQuestions?: number; refresh?: boolean } = {},
-) =>
-  teacherRequest<ApiRecord>(
-    withQuery("/api/v1/practice/topics", {
-      subject,
-      total_marks: options.totalMarks,
-      max_questions: options.maxQuestions,
-      refresh: options.refresh,
-    }),
-    key,
+) => {
+  const request = () =>
+    teacherRequest<ApiRecord>(
+      withQuery("/api/v1/practice/topics", {
+        subject,
+        total_marks: options.totalMarks,
+        max_questions: options.maxQuestions,
+        refresh: options.refresh,
+      }),
+      key,
+    );
+
+  if (options.refresh) return request();
+
+  // The key carries everything that changes the answer. `totalMarks` and
+  // `maxQuestions` are in it because they are query parameters the tenant API
+  // shapes its response by — two callers asking with different budgets must
+  // not share an entry.
+  return memo(
+    `teacher:practice-topics:${key}:${subject}:${options.totalMarks ?? ""}:${options.maxQuestions ?? ""}`,
+    request,
+    { ttlSeconds: 300, staleSeconds: 900 },
   );
+};
+
+/** Drop cached topic lists for a collection, after material is (re)indexed. */
+export function invalidateTeacherPracticeTopics(key: string) {
+  invalidateMemo(`teacher:practice-topics:${key}`);
+}
 
 export const getTeacherPracticeChapters = (key: string, subject: string) =>
   teacherRequest<ApiRecord>(withQuery("/api/v1/practice/chapters", { subject }), key);
@@ -819,7 +910,7 @@ export async function submitTeacherChallengeExamFile(
     input.file.buffer,
     Buffer.from(`\r\n--${boundary}--\r\n`),
   ]);
-  const transport = url.protocol === "https:" ? https : http;
+  const transport = transportFor(url);
   return trackApiRequest(
     "collection",
     () =>
@@ -829,6 +920,7 @@ export async function submitTeacherChallengeExamFile(
           {
             method: "POST",
             rejectUnauthorized,
+            agent: agentFor(url),
             headers: {
               Authorization: `Bearer ${key}`,
               Accept: "application/json",
@@ -959,7 +1051,7 @@ export async function gradeTeacherPracticePaperFile(
   pushText("\r\n");
   pushText(`--${boundary}--\r\n`);
   const body = Buffer.concat(chunks);
-  const transport = url.protocol === "https:" ? https : http;
+  const transport = transportFor(url);
   const timeoutMs = Math.max(defaultTimeoutMs, 120_000);
 
   return trackApiRequest(
@@ -971,6 +1063,7 @@ export async function gradeTeacherPracticePaperFile(
           {
             method: "POST",
             rejectUnauthorized,
+            agent: agentFor(url),
             headers: {
               Authorization: `Bearer ${key}`,
               Accept: "application/json",

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { CACHE, privateJson } from "@/lib/http/cache";
 import { communityInputSchema } from "@/lib/communities";
 import {
   communityStorageError,
@@ -10,14 +11,14 @@ import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await getVerifiedUser(supabase);
     const communities = await listPublicCommunities(user?.id);
-    return NextResponse.json({ communities });
+    return privateJson({ communities }, { request, profile: CACHE.SHORT });
   } catch (error) {
     const mapped = communityStorageError(error);
     return NextResponse.json({ error: mapped.message }, { status: mapped.status });

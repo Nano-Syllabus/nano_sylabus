@@ -4,12 +4,19 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { AppUser, ChatSessionSummary } from "@/lib/types";
 import { cn, compactSessionTitle, groupDateLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { isAdminRole } from "@/lib/admin-role";
+import {
+  useChatSessionEvents,
+  useChatSessions,
+  useDeleteSession,
+  useRenameSession,
+  useToggleSessionPin,
+} from "@/lib/query/chat-sessions";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 
 // Keep the exam experience available by direct URL while it is temporarily
@@ -91,16 +98,6 @@ const NAV = [
   },
 ] as const;
 
-function routeLoadingVariant(href: string) {
-  if (href.startsWith("/app/exams")) return "exams";
-  if (href.startsWith("/app/communities")) return "subjects";
-  if (href.startsWith("/app/courses")) return "subjects";
-  if (href.startsWith("/app/explore")) return "subjects";
-  if (href.startsWith("/app/notes")) return "notes";
-  if (href.startsWith("/app/billing")) return "billing";
-  if (href.startsWith("/app/settings")) return "settings";
-  return "chat";
-}
 
 async function readActionError(response: Response, fallback: string) {
   try {
@@ -130,17 +127,33 @@ export function AppSidebar({
   const activeSessionId = pendingSessionId ?? currentSessionId;
   const [pendingRouteHref, setPendingRouteHref] = useState<string | null>(null);
 
-  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
-  const [hasMoreSessions, setHasMoreSessions] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
-  const [historyLoading, setHistoryLoading] = useState(true);
-  const [historyError, setHistoryError] = useState("");
+  /**
+   * The search term the QUERY is keyed by, updated 250ms behind the input.
+   *
+   * Two separate values on purpose. `historySearch` drives the text box and
+   * must update on every keystroke or typing feels laggy; `debouncedSearch` is
+   * what reaches the cache key, and a key that changed per keystroke would be
+   * a cache entry per keystroke — each one a request, and each one evicting
+   * the last. Debouncing the KEY rather than the request is what makes going
+   * back to a term you already typed free.
+   */
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  /**
+   * The chat history is only DRAWN on /app/chat (see the panel further down),
+   * so it is only FETCHED there. Every other page was paying a Supabase-backed
+   * request for a list it never rendered — see the note on `enabled` in
+   * lib/query/chat-sessions.ts for why that was the expensive mistake it looks
+   * like.
+   */
+  const showChatHistory = pathname.startsWith("/app/chat");
+  const [historyErrorOverride, setHistoryErrorOverride] = useState("");
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [contextMenuId, setContextMenuId] = useState<string | null>(null);
   const [renameSession, setRenameSession] = useState<ChatSessionSummary | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -156,185 +169,135 @@ export function AppSidebar({
     }
   }, [pathname, pendingRouteHref]);
 
-  const handleTogglePin = async (session: ChatSessionSummary) => {
-    const nextPinned = !session.isPinned;
-    setHistoryError("");
+  /**
+   * Chat history: cached, paged, and shared with every other page in /app.
+   *
+   * The list, the paging state and the three write paths below all used to be
+   * hand-rolled here — an accumulating `useState` array, a manual offset, and
+   * three copies of "apply, call, revert on failure". They are in
+   * lib/query/chat-sessions.ts now, which is what lets the sidebar keep its
+   * scrolled-in pages across a navigation instead of refetching page one and
+   * flashing empty every time /app remounts it.
+   */
+  const {
+    sessions,
+    isPending: historyPending,
+    isFetching: historyFetching,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error: historyQueryError,
+  } = useChatSessions(debouncedSearch, showChatHistory);
+
+  const togglePin = useToggleSessionPin();
+  const renameMutation = useRenameSession();
+  const deleteMutation = useDeleteSession();
+
+  // A refetch triggered by the chat page creating or titling a session.
+  useChatSessionEvents();
+
+  const actionLoading = renameMutation.isPending || deleteMutation.isPending;
+  const hasMoreSessions = Boolean(hasNextPage);
+  // `isPending` is "no cached data yet", which is the only state that should
+  // show a skeleton. A background revalidation over a list already on screen
+  // is `isFetching`, and surfacing that as loading is what made the sidebar
+  // appear to reload on every navigation.
+  const historyLoading = historyPending || isFetchingNextPage;
+  const historyError =
+    historyErrorOverride ||
+    (historyQueryError ? historyQueryError.message || "Failed to load chat history." : "");
+
+  const handleTogglePin = (session: ChatSessionSummary) => {
+    setHistoryErrorOverride("");
     setContextMenuId(null);
-    setSessions((prev) =>
-      prev.map((s) => (s.id === session.id ? { ...s, isPinned: nextPinned } : s)),
+    togglePin.mutate(
+      { session },
+      {
+        onError: (error) =>
+          setHistoryErrorOverride(error.message || "Failed to update pinned chat."),
+        onSuccess: () => window.dispatchEvent(new Event("chat-session-updated")),
+      },
     );
-    try {
-      const response = await fetch(`/api/chat/sessions/${session.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isPinned: nextPinned }),
-      });
-      if (!response.ok) {
-        setSessions((prev) =>
-          prev.map((s) => (s.id === session.id ? { ...s, isPinned: session.isPinned } : s)),
-        );
-        setHistoryError(await readActionError(response, "Failed to update pinned chat."));
-        return;
-      }
-      const updated = (await response.json()) as ChatSessionSummary;
-      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      window.dispatchEvent(new Event("chat-session-updated"));
-    } catch (e) {
-      setSessions((prev) =>
-        prev.map((s) => (s.id === session.id ? { ...s, isPinned: session.isPinned } : s)),
-      );
-      setHistoryError("Failed to update pinned chat.");
-    }
   };
 
-  const searchDebounceRef = useRef<number | null>(null);
-  const hasLoadedHistoryRef = useRef(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const historyScrollRef = useRef<HTMLDivElement>(null);
 
-  const fetchSessions = useCallback(
-    async function fetchSessions({ reset, offset }: { reset: boolean; offset?: number }) {
-      setHistoryLoading(true);
-      setHistoryError("");
-      const query = new URLSearchParams();
-      query.set("limit", "12");
-      query.set("offset", String(offset ?? 0));
-      if (historySearch.trim()) {
-        query.set("q", historySearch.trim());
-      }
-
-      try {
-        const response = await fetch(`/api/chat/sessions?${query.toString()}`, {
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          const payload = (await response.json()) as { error?: string };
-          setHistoryError(payload.error || "Failed to load chat history.");
-          return;
-        }
-
-        const payload = (await response.json()) as {
-          sessions: ChatSessionSummary[];
-          hasMore: boolean;
-        };
-
-        setHasMoreSessions(payload.hasMore);
-        setSessions((prev) => {
-          if (reset) return payload.sessions;
-          const existingIds = new Set(prev.map((session) => session.id));
-          return [...prev, ...payload.sessions.filter((session) => !existingIds.has(session.id))];
-        });
-      } catch (e) {
-        setHistoryError("Failed to load chat history.");
-      } finally {
-        setHistoryLoading(false);
-      }
-    },
-    [historySearch],
-  );
-
+  /**
+   * Load the next page when the list is nearly scrolled out.
+   *
+   * `isFetchingNextPage` rather than a general loading flag is what guards
+   * this: a background revalidation of page one must not block paging, and
+   * without the distinction a slow refetch froze the infinite scroll.
+   */
   const handleHistoryScroll = useCallback(() => {
     const element = historyScrollRef.current;
-    if (!element || historyLoading || !hasMoreSessions) return;
+    if (!element || isFetchingNextPage || !hasNextPage) return;
 
     const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
     if (distanceFromBottom > 96) return;
 
-    void fetchSessions({ reset: false, offset: sessions.length });
-  }, [fetchSessions, hasMoreSessions, historyLoading, sessions.length]);
+    void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
+  // A short history on a tall sidebar never fires a scroll event, so nothing
+  // would ask for page two even though there is one. Fill the viewport first.
   useEffect(() => {
     const element = historyScrollRef.current;
-    if (!element || historyLoading || !hasMoreSessions || sessions.length === 0) return;
+    if (!element || isFetchingNextPage || !hasNextPage || sessions.length === 0) return;
     if (element.scrollHeight > element.clientHeight + 96) return;
 
-    void fetchSessions({ reset: false, offset: sessions.length });
-  }, [fetchSessions, hasMoreSessions, historyLoading, sessions.length]);
+    void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage, sessions.length]);
 
-  const handleRenameSession = async (title: string) => {
+  const handleRenameSession = (title: string) => {
     if (!renameSession || !title.trim()) return;
-    setActionLoading(true);
-    setHistoryError("");
-    try {
-      const response = await fetch(`/api/chat/sessions/${renameSession.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim() }),
-      });
-      if (!response.ok) {
-        setHistoryError(await readActionError(response, "Failed to rename chat."));
-        return;
-      }
-      const updated = (await response.json()) as ChatSessionSummary;
-      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      setRenameSession(null);
-      window.dispatchEvent(new Event("chat-session-updated"));
-    } catch (e) {
-      setHistoryError("Failed to rename chat.");
-    } finally {
-      setActionLoading(false);
-    }
+    setHistoryErrorOverride("");
+    renameMutation.mutate(
+      { sessionId: renameSession.id, title: title.trim() },
+      {
+        onSuccess: () => {
+          setRenameSession(null);
+          window.dispatchEvent(new Event("chat-session-updated"));
+        },
+        onError: (error) => setHistoryErrorOverride(error.message || "Failed to rename chat."),
+      },
+    );
   };
 
-  const handleDeleteSession = async () => {
+  const handleDeleteSession = () => {
     if (!deleteSessionId) return;
-    setActionLoading(true);
-    setHistoryError("");
-    try {
-      const response = await fetch(`/api/chat/sessions/${deleteSessionId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        setHistoryError(await readActionError(response, "Failed to delete chat."));
-        return;
-      }
-      setSessions((prev) => prev.filter((s) => s.id !== deleteSessionId));
-      setDeleteSessionId(null);
-      window.dispatchEvent(new Event("chat-session-updated"));
-      if (currentSessionId === deleteSessionId) {
-        router.push("/app/chat");
-      }
-    } catch (e) {
-      setHistoryError("Failed to delete chat.");
-    } finally {
-      setActionLoading(false);
-    }
+    const sessionId = deleteSessionId;
+    setHistoryErrorOverride("");
+    deleteMutation.mutate(
+      { sessionId },
+      {
+        onSuccess: () => {
+          setDeleteSessionId(null);
+          window.dispatchEvent(new Event("chat-session-updated"));
+          if (currentSessionId === sessionId) {
+            router.push("/app/chat");
+          }
+        },
+        onError: (error) => setHistoryErrorOverride(error.message || "Failed to delete chat."),
+      },
+    );
   };
 
+  /**
+   * Move the typed term onto the query key, 250ms behind the keystroke.
+   *
+   * The first term is applied immediately: on a cold mount there is nothing to
+   * throttle, and waiting the full 250ms left the history blank for a quarter
+   * second every time the app opened. That was true of the old debounce too
+   * and is kept for the same reason.
+   */
   useEffect(() => {
-    if (searchDebounceRef.current) {
-      window.clearTimeout(searchDebounceRef.current);
-    }
-
-    // The debounce exists to throttle typing in the search box. On first paint
-    // there is nothing to throttle, and waiting on it left the chat history
-    // blank for a quarter second every time the app loaded.
-    if (!hasLoadedHistoryRef.current) {
-      hasLoadedHistoryRef.current = true;
-      void fetchSessions({ reset: true });
-      return;
-    }
-
-    searchDebounceRef.current = window.setTimeout(() => {
-      void fetchSessions({ reset: true });
-    }, 250);
-    return () => {
-      if (searchDebounceRef.current) {
-        window.clearTimeout(searchDebounceRef.current);
-      }
-    };
-  }, [historySearch, fetchSessions]);
-
-  useEffect(() => {
-    const handleRefresh = () => {
-      void fetchSessions({ reset: true });
-    };
-    window.addEventListener("chat-session-updated", handleRefresh);
-    return () => {
-      window.removeEventListener("chat-session-updated", handleRefresh);
-    };
-  }, [fetchSessions]);
+    const next = historySearch.trim();
+    if (next === debouncedSearch) return;
+    const timer = window.setTimeout(() => setDebouncedSearch(next), next ? 250 : 0);
+    return () => window.clearTimeout(timer);
+  }, [historySearch, debouncedSearch]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -379,7 +342,7 @@ export function AppSidebar({
   }, [sessions]);
 
   async function handleLogout() {
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     await supabase.auth.signOut();
     router.replace("/login");
     router.refresh();
@@ -616,19 +579,31 @@ export function AppSidebar({
             <Link
               key={item.href}
               href={item.href}
-              onClick={(event) => {
-                event.preventDefault();
+              /**
+               * NO `preventDefault`, NO `router.push`, NO loading event.
+               *
+               * All three used to be here and together they were why the app
+               * halted. `<Link>` navigates inside a React transition; the
+               * handler then fired a SYNCHRONOUS `setState` that made AppShell
+               * swap the whole page subtree for a skeleton. A sync update
+               * outranks a transition, so it interrupted the navigation and
+               * restarted it — the first click usually squeaked through and
+               * every one after it starved, leaving the URL unchanged and the
+               * skeleton up forever. That is the "stuck loading" and the
+               * "15 seconds": not slow work, a navigation being cancelled by
+               * its own loading indicator on a loop.
+               *
+               * Next already does this correctly. Every route under /app has a
+               * `loading.tsx`, which is a Suspense boundary the router owns and
+               * schedules WITH the transition instead of against it.
+               *
+               * `pendingRouteHref` stays, but only to tint the clicked item
+               * immediately. It changes a class name and unmounts nothing, so
+               * it cannot interrupt anything.
+               */
+              onClick={() => {
                 setPendingRouteHref(item.href);
                 setPendingSessionId(null);
-                window.dispatchEvent(
-                  new CustomEvent("app:navigation-start", {
-                    detail: {
-                      href: item.href,
-                      variant: routeLoadingVariant(item.href),
-                    },
-                  }),
-                );
-                router.push(item.href, { scroll: false });
                 onCloseMobile?.();
               }}
               onPointerEnter={() => router.prefetch(item.href)}

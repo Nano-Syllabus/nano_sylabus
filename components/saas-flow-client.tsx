@@ -14,7 +14,7 @@ import {
   User,
   ArrowLeft
 } from "lucide-react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
 import {
   hasCompletedStudyDiagnostic,
@@ -160,7 +160,7 @@ export function SaaSFlowClient({
         if (!pending) return;
         setAnswers(pending);
         setCurrentStep("solutionSlide");
-        await saveStudyDiagnostic(createSupabaseBrowserClient(), pending);
+        await saveStudyDiagnostic(await loadSupabaseBrowserClient(), pending);
         if (cancelled) return;
         clearPendingStudyAnswers();
         router.replace(completionDestination);
@@ -179,7 +179,7 @@ export function SaaSFlowClient({
     setAuthError("");
     setAuthLoading(true);
     try {
-      const completed = await saveStudyDiagnostic(createSupabaseBrowserClient(), answers);
+      const completed = await saveStudyDiagnostic(await loadSupabaseBrowserClient(), answers);
       if (!completed) {
         setCurrentStep("q1");
         return;
@@ -220,7 +220,8 @@ export function SaaSFlowClient({
       if (community) resumeParams.set("community", community);
       setOAuthNextCookie(`/flow?${resumeParams}`);
 
-      const { error } = await createSupabaseBrowserClient().auth.signInWithOAuth({
+      const supabase = await loadSupabaseBrowserClient();
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: getGoogleAuthRedirectUrl() },
       });
@@ -297,7 +298,7 @@ export function SaaSFlowClient({
     setAuthError("");
     setAuthLoading(true);
 
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
 
     try {
       if (authMode === "signup") {

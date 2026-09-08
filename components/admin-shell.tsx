@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { ADMIN_SURFACES } from "@/lib/admin-registry";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import { cn } from "@/lib/utils";
 
 export function AdminShell({
@@ -44,7 +44,7 @@ export function AdminShell({
   }
 
   async function handleLogout() {
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     await supabase.auth.signOut();
     router.replace("/login");
     router.refresh();

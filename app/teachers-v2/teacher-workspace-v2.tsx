@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import {
   useCallback,
@@ -14,8 +15,13 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { CommunityStudySpaceClient } from "@/components/community-study-space-client";
-import { CommunityTopicExtractionControl } from "@/components/community-topic-extraction-control";
-import { TeacherCoursesClient } from "@/components/teacher-courses-client";
+const CommunityTopicExtractionControl = dynamic(
+  () => import("@/components/community-topic-extraction-control").then((m) => m.CommunityTopicExtractionControl),
+);
+const TeacherCoursesClient = dynamic(
+  () => import("@/components/teacher-courses-client").then((m) => m.TeacherCoursesClient),
+  { loading: () => <SkeletonCard lines={6} /> },
+);
 import { ThemeToggle } from "@/components/theme-toggle";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
@@ -35,7 +41,12 @@ import { subjectAccessLabel, type SubjectCommunity } from "@/lib/teacher-subject
 import type { CommunityDetail } from "@/lib/communities";
 import type { CommunitySubjectWorkspace } from "@/lib/data/community-subjects";
 import { cn, titleCase } from "@/lib/utils";
-import { QRCodeSVG } from "qrcode.react";
+// The whole QR library, for one dialog inside one view. It was in the initial
+// chunk of every teacher who opened the page, including the ones who never
+// share a classroom code.
+const QRCodeSVG = dynamic(() => import("qrcode.react").then((m) => m.QRCodeSVG), {
+  loading: () => <div className="h-[180px] w-[180px] animate-pulse rounded bg-bg-tertiary" />,
+});
 
 type ApiRecord = Record<string, unknown>;
 type WorkspaceState = "loading" | "ready" | "error";

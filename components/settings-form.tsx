@@ -19,9 +19,10 @@ import {
   normalizeSubjects,
   normalizeTargetGrade,
 } from "@/lib/profile-normalization";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { AppUser, StudentProfile } from "@/lib/types";
 import { ThemeSetting } from "@/components/theme-setting";
+import { usePublishedCatalog } from "@/lib/query/catalog";
 
 function engineeringBoard(value: string) {
   return normalizeBoard(value) === "IOE" ? "IOE" : "IOE";
@@ -60,7 +61,20 @@ export function SettingsForm({
   const [deleting, setDeleting] = useState(false);
   const [catalogBoards, setCatalogBoards] = useState<string[]>([]);
   const [catalogGradesByBoard, setCatalogGradesByBoard] = useState<Record<string, string[]>>({});
-  const [publishedSubjects, setPublishedSubjects] = useState<string[]>([]);
+  /**
+   * The published subject list, shared with every other surface that shows it.
+   *
+   * Settings used to fetch this itself on mount, into its own state, with no
+   * cache — so opening settings after the course browser downloaded the same
+   * catalog a moment earlier downloaded it again. It is now the same query
+   * entry, which in practice means this form renders its subject chips from
+   * memory with no request at all.
+   */
+  const { data: catalog } = usePublishedCatalog();
+  const publishedSubjects = useMemo(
+    () => normalizeSubjects((catalog?.subjects ?? []).map((subject) => subject.name)),
+    [catalog],
+  );
 
   const normalizedBoard = normalizeBoard(board);
   const normalizedGrade = normalizeGrade(grade);
@@ -102,25 +116,6 @@ export function SettingsForm({
     }
   }, [program, programOptions]);
 
-  useEffect(() => {
-    let active = true;
-    const loadCatalog = async () => {
-      const response = await fetch("/api/tenant/catalog", { cache: "no-store" });
-      if (!response.ok) return;
-      const payload = (await response.json()) as {
-        subjects?: Array<{ name: string }>;
-      };
-      if (!active) return;
-      setPublishedSubjects(
-        normalizeSubjects((payload.subjects ?? []).map((subject) => subject.name)),
-      );
-    };
-    void loadCatalog();
-    return () => {
-      active = false;
-    };
-  }, []);
-
   function toggleSubject(subject: string) {
     setSelectedSubjects((current) => {
       const exists = current.some((item) => item.toLowerCase() === subject.toLowerCase());
@@ -152,7 +147,7 @@ export function SettingsForm({
 
     setSaving(true);
     setStatus("");
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     const { error } = await supabase.from("student_profiles").upsert({
       user_id: user.id,
       full_name: normalizedFullName,
@@ -213,7 +208,7 @@ export function SettingsForm({
       return;
     }
 
-    const supabase = createSupabaseBrowserClient();
+    const supabase = await loadSupabaseBrowserClient();
     await supabase.auth.signOut();
     router.replace("/");
     router.refresh();
