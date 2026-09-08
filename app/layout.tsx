@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Mono, Inter, Outfit } from "next/font/google";
+import { DM_Mono, Inter, Outfit, Poppins } from "next/font/google";
 import { ReactNode } from "react";
 import { DevPerfHud } from "@/components/dev-perf-hud";
 import { QueryProvider } from "@/components/query-provider";
@@ -16,6 +16,13 @@ const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-poppins",
   display: "swap",
 });
 
@@ -57,7 +64,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${outfit.variable} ${inter.variable} ${dmMono.variable} font-sans antialiased`}
+        className={`${outfit.variable} ${inter.variable} ${poppins.variable} ${dmMono.variable} font-sans antialiased`}
       >
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         {/*

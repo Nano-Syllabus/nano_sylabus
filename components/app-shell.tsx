@@ -44,6 +44,7 @@ export function AppShell({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [dynamicTitle, setDynamicTitle] = useState<ReactNode>(null);
   const [dynamicActions, setDynamicActions] = useState<ReactNode>(null);
+  const [topbarSuppressed, setTopbarSuppressed] = useState(false);
   const [sidebarSuppressed, setSidebarSuppressed] = useState(false);
   const [sidebarCollapsedOverride, setSidebarCollapsedOverride] = useState(false);
   const [rightRailWidth, setRightRailWidth] = useState(0);
@@ -65,6 +66,7 @@ export function AppShell({
     () => ({
       setTitle: setDynamicTitle,
       setActions: setDynamicActions,
+      setTopbarSuppressed,
       setSidebarSuppressed,
       setSidebarCollapsed: setSidebarCollapsedOverride,
       setRightRailWidth,
@@ -108,7 +110,14 @@ export function AppShell({
           className="flex min-w-0 flex-1 flex-col overflow-hidden"
           style={{ paddingRight: rightRailWidth > 0 ? `${rightRailWidth}px` : undefined }}
         >
-          <header className="flex min-h-12 items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4 md:px-8">
+          <header
+            aria-hidden={topbarSuppressed}
+            className={
+              topbarSuppressed
+                ? "hidden"
+                : "flex min-h-12 items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4 md:px-8"
+            }
+          >
             <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
               {!sidebarSuppressed ? (
                 <button

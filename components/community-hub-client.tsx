@@ -1247,7 +1247,7 @@ function CommunitySubjects({
                   </div>
                 </div>
                 <Link
-                  href={`/app/communities/${encodeURIComponent(data.community.slug)}/subjects/${encodeURIComponent(subject.slug)}`}
+                  href={`/app/chat?community=${encodeURIComponent(data.community.slug)}&semester=${encodeURIComponent(subject.termId)}&librarySubject=${encodeURIComponent(subject.slug)}`}
                   className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-border px-4 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
                 >
                   Open <ArrowRight className="size-4" aria-hidden="true" />

@@ -162,6 +162,10 @@ body:has(.exam-prep-theme) {
   letter-spacing: -0.01em;
 }
 
+@utility font-figma-library {
+  font-family: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+}
+
 @utility text-sidebar-crisp {
   color: var(--text-primary);
   font-weight: 500;

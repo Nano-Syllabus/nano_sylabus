@@ -2,17 +2,17 @@
 
 import {
   ArrowLeft,
-  ArrowRight,
   BookOpen,
   Download,
   FileText,
-  FolderOpen,
   LibraryBig,
   RefreshCw,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
+import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
 import { cn, titleCase } from "@/lib/utils";
 
 export type LibraryNanoAiMaterial = {
@@ -29,7 +29,7 @@ export type LibraryNanoAiMaterial = {
 export type LibraryNanoAiSubject = Pick<
   CommunitySubject,
   "id" | "slug" | "name" | "code" | "description" | "externalSubjectSlug"
->;
+> & { progress?: CommunitySubjectExplorerInsight };
 
 export type LibraryNanoAiSelection = {
   termId: string | null;
@@ -42,21 +42,19 @@ type LoadState = "idle" | "loading" | "ready" | "error";
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
 
-const ORDINALS = [
-  "First",
-  "Second",
-  "Third",
-  "Fourth",
-  "Fifth",
-  "Sixth",
-  "Seventh",
-  "Eighth",
-  "Ninth",
-  "Tenth",
-];
-
 function academicLabel(value: number, noun: string) {
-  return `${ORDINALS[value - 1] || noun} ${ORDINALS[value - 1] ? noun : value}`;
+  const mod100 = value % 100;
+  const suffix =
+    mod100 >= 11 && mod100 <= 13
+      ? "th"
+      : value % 10 === 1
+        ? "st"
+        : value % 10 === 2
+          ? "nd"
+          : value % 10 === 3
+            ? "rd"
+            : "th";
+  return `${value}${suffix} ${noun}`;
 }
 
 function formatSize(bytes: number) {
@@ -87,80 +85,77 @@ function updateLibraryUrl(values: {
 
 function ExplorerSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Loading materials">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <div key={index} className="h-24 animate-pulse rounded-xl bg-bg-secondary motion-reduce:animate-none" />
+    <div className="space-y-3" aria-label="Loading chapters">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="h-[72px] animate-pulse rounded-2xl bg-[#f8fafc] motion-reduce:animate-none" />
       ))}
     </div>
   );
 }
 
-function SemesterCard({
-  term,
-  onSelect,
-}: {
-  term: CommunityTerm;
-  onSelect: (term: CommunityTerm) => void;
-}) {
+function readableMaterialName(name: string) {
+  return name.replace(/\.(pdf|docx?|pptx?|txt)$/i, "").replace(/[_-]+/g, " ").trim();
+}
+
+const SUBJECT_ACCENTS = [
+  { tile: "bg-[#eef2ff]", text: "text-[#1d57fd]" },
+  { tile: "bg-[#ecfdf3]", text: "text-[#159447]" },
+  { tile: "bg-[#f7edff]", text: "text-[#8b3fc7]" },
+  { tile: "bg-[#fff4dc]", text: "text-[#ce7a00]" },
+  { tile: "bg-[#fff0f0]", text: "text-[#df4242]" },
+  { tile: "bg-[#eaf8ff]", text: "text-[#1879a7]" },
+] as const;
+
+function SubjectIcon({ index }: { index: number }) {
+  const accent = SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length];
+  const glyphs = ["∿", "%", "ⓘ", "‹›", "ϟ", "▧"];
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(term)}
-      className={cn(
-        "group w-full rounded-xl border border-border bg-bg-primary p-4 text-left transition-colors hover:border-border-strong hover:bg-bg-secondary motion-reduce:transition-none",
-        focusRing,
-      )}
-    >
-      <div className="relative mt-3 aspect-[5/3] rounded-xl border border-border bg-bg-secondary p-5">
-        <span
-          className="absolute -top-3 left-5 h-4 w-20 rounded-t-lg border border-b-0 border-border bg-bg-secondary"
-          aria-hidden="true"
-        />
-        <div className="flex h-full items-center justify-center gap-2 text-text-muted">
-          <FileText className="size-7 -rotate-6" aria-hidden="true" />
-          <FolderOpen className="size-11 text-text-secondary" aria-hidden="true" />
-          <BookOpen className="size-7 rotate-6" aria-hidden="true" />
-        </div>
-      </div>
-      <div className="mt-4 flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-display text-base font-semibold text-text-primary">
-            {academicLabel(term.semesterNumber, "Semester")}
-          </h3>
-          <p className="mt-1 text-sm text-text-secondary">
-            {term.subjects.length} {term.subjects.length === 1 ? "subject" : "subjects"}
-          </p>
-        </div>
-        <ArrowRight
-          className="size-4 text-text-muted transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
-          aria-hidden="true"
-        />
-      </div>
-    </button>
+    <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl text-xl font-semibold", accent.tile, accent.text)}>
+      {glyphs[index % glyphs.length]}
+    </span>
   );
 }
 
 export function LibraryNanoAiWorkspace({
   community,
+  insights,
   initialSelection,
   onSubjectSelect,
   onMaterialOpen,
 }: {
   community: CommunityDetail | null;
+  insights: Record<string, CommunitySubjectExplorerInsight>;
   initialSelection: LibraryNanoAiSelection;
   onSubjectSelect: (subject: LibraryNanoAiSubject) => void;
   onMaterialOpen: (material: LibraryNanoAiMaterial, subject: LibraryNanoAiSubject) => void;
 }) {
-  const initialTerm = community?.terms.find((term) => term.id === initialSelection.termId) ?? null;
+  const orderedTerms = useMemo(
+    () => [...(community?.terms ?? [])].sort((a, b) => a.position - b.position),
+    [community?.terms],
+  );
+  const initialTerm =
+    orderedTerms.find((term) => term.id === initialSelection.termId) ??
+    orderedTerms.find((term) => term.id === community?.membership?.currentTermId) ??
+    orderedTerms[0] ??
+    null;
   const initialSubject =
-    initialTerm?.subjects.find((subject) => subject.slug === initialSelection.subjectSlug) ?? null;
+    initialTerm?.subjects.find((subject) => subject.slug === initialSelection.subjectSlug) ??
+    initialTerm?.subjects[0] ??
+    null;
   const [selectedTerm, setSelectedTerm] = useState<CommunityTerm | null>(initialTerm);
-  const [selectedSubject, setSelectedSubject] = useState<LibraryNanoAiSubject | null>(initialSubject);
+  const [selectedSubject, setSelectedSubject] = useState<LibraryNanoAiSubject | null>(
+    initialSubject ? { ...initialSubject, progress: insights[initialSubject.id] } : null,
+  );
   const [materials, setMaterials] = useState<LibraryNanoAiMaterial[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [restoredDocument, setRestoredDocument] = useState(false);
+  const [query, setQuery] = useState("");
+  const [onlyAvailable, setOnlyAvailable] = useState(false);
+  const [savingSemester, setSavingSemester] = useState(false);
+  const [semesterError, setSemesterError] = useState("");
+  const semesterRequestRef = useRef(0);
 
   useEffect(() => {
     if (!selectedSubject) {
@@ -176,7 +171,7 @@ export function LibraryNanoAiWorkspace({
     async function loadMaterials() {
       try {
         const response = await fetch(
-          `/api/student/materials?subject=${encodeURIComponent(materialApiSubject(selectedSubject!))}`,
+          `/api/student/materials?subject=${encodeURIComponent(materialApiSubject(selectedSubject!))}${community?.studyCourseId ? `&courseId=${encodeURIComponent(community.studyCourseId)}` : ""}`,
           { cache: "no-store", signal: controller.signal },
         );
         const payload = (await response.json().catch(() => null)) as {
@@ -197,7 +192,7 @@ export function LibraryNanoAiWorkspace({
 
     void loadMaterials();
     return () => controller.abort();
-  }, [reloadKey, selectedSubject]);
+  }, [community?.studyCourseId, reloadKey, selectedSubject]);
 
   useEffect(() => {
     if (
@@ -223,15 +218,59 @@ export function LibraryNanoAiWorkspace({
     return [...groups.entries()];
   }, [materials]);
 
-  function selectTerm(term: CommunityTerm) {
+  const visibleSubjects = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!selectedTerm || !normalized) return selectedTerm?.subjects ?? [];
+    return selectedTerm.subjects.filter((subject) =>
+      `${subject.name} ${subject.code} ${subject.description}`.toLowerCase().includes(normalized),
+    );
+  }, [query, selectedTerm]);
+
+  const visibleMaterials = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return materials.filter((material) => {
+      const matchesQuery =
+        !normalized || `${material.name} ${material.shelf}`.toLowerCase().includes(normalized);
+      const available = Boolean(material.documentId) && material.previewAvailable !== false;
+      return matchesQuery && (!onlyAvailable || available);
+    });
+  }, [materials, onlyAvailable, query]);
+
+  async function selectTerm(term: CommunityTerm) {
     setSelectedTerm(term);
     setSelectedSubject(null);
+    setQuery("");
     updateLibraryUrl({ semester: term.id, subject: null, document: null });
+    if (community?.membership?.status !== "active" || term.id === community.membership.currentTermId) {
+      return;
+    }
+    const requestId = ++semesterRequestRef.current;
+    setSavingSemester(true);
+    setSemesterError("");
+    try {
+      const response = await fetch(`/api/communities/${encodeURIComponent(community.slug)}/membership`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ termId: term.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.currentTermId !== term.id) {
+        throw new Error(payload.error || "Could not save your current semester.");
+      }
+    } catch (error) {
+      if (requestId === semesterRequestRef.current) {
+        setSemesterError(error instanceof Error ? error.message : "Could not save your current semester.");
+      }
+    } finally {
+      if (requestId === semesterRequestRef.current) setSavingSemester(false);
+    }
   }
 
   function selectSubject(subject: LibraryNanoAiSubject) {
-    setSelectedSubject(subject);
-    onSubjectSelect(subject);
+    const subjectWithProgress = { ...subject, progress: insights[subject.id] };
+    setSelectedSubject(subjectWithProgress);
+    setQuery("");
+    onSubjectSelect(subjectWithProgress);
     updateLibraryUrl({ semester: selectedTerm?.id, subject: subject.slug, document: null });
   }
 
@@ -259,123 +298,69 @@ export function LibraryNanoAiWorkspace({
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1240px] px-4 pb-24 pt-6 sm:px-6 lg:px-8">
-      <header className="border-b border-border pb-7">
-        <p className="text-xs font-medium uppercase tracking-widest text-text-muted">
-          Library &amp; NanoAI
-        </p>
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">
-          {selectedSubject
-            ? titleCase(selectedSubject.name)
-            : selectedTerm
-              ? `${academicLabel(selectedTerm.semesterNumber, "Semester")} subjects`
-              : "Your learning library"}
-        </h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">
-          {selectedSubject
-            ? "Open a resource to read it beside NanoAI."
-            : selectedTerm
-              ? "Choose a subject to see the resources shared by your community creator."
-              : "Choose a semester, then open a subject and study its real community resources with NanoAI."}
-        </p>
-        <p className="mt-4 text-sm font-medium text-text-secondary">
-          {titleCase(community.name)} · {community.university}
-        </p>
+    <main className="font-figma-library mx-auto min-h-full w-full max-w-[1240px] flex-1 bg-white px-5 pb-12 pt-9 text-[#1e293b] sm:px-8 lg:px-10">
+      <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-[32px] font-semibold leading-tight text-[#1e293b]">Library</h1>
+            <Image src="/figma/library/book-open.svg" alt="" width={28} height={28} aria-hidden="true" />
+          </div>
+          <p className="mt-2 text-sm text-[#475569]">
+            Choose your semester, subject and chapter to explore resources and study with Nano AI.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="flex h-11 w-full min-w-0 items-center gap-2.5 rounded-full border border-[#e2e8f0] bg-white px-4 sm:w-[300px]">
+            <Image src="/figma/library/search.svg" alt="" width={18} height={18} aria-hidden="true" />
+            <span className="sr-only">Search subjects and chapters</span>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search subjects, chapters..." className="min-w-0 flex-1 bg-transparent text-[13px] text-[#334155] outline-none placeholder:text-[#94a3b8]" />
+          </label>
+          <button type="button" aria-label="Show only available chapters" aria-pressed={onlyAvailable} onClick={() => setOnlyAvailable((value) => !value)} className={cn("flex size-11 shrink-0 items-center justify-center rounded-full border bg-white", onlyAvailable ? "border-[#1d57fd]" : "border-[#e2e8f0]", focusRing)}>
+            <Image src="/figma/library/sliders.svg" alt="" width={20} height={20} aria-hidden="true" />
+          </button>
+        </div>
       </header>
 
-      {selectedTerm ? (
-        <button
-          type="button"
-          onClick={() => {
-            if (selectedSubject) {
-              setSelectedSubject(null);
-              updateLibraryUrl({ semester: selectedTerm.id, subject: null, document: null });
-            } else {
-              setSelectedTerm(null);
-              updateLibraryUrl({ semester: null, subject: null, document: null });
-            }
-          }}
-          className={cn(
-            "mt-5 inline-flex min-h-10 items-center gap-2 rounded-md text-sm font-medium text-text-secondary hover:text-text-primary",
-            focusRing,
-          )}
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          {selectedSubject ? academicLabel(selectedTerm.semesterNumber, "Semester") : "All semesters"}
-        </button>
-      ) : null}
+      <section className="mt-7" aria-labelledby="library-semesters-heading">
+        <h2 id="library-semesters-heading" className="text-[17px] font-semibold text-[#1e293b]">1. Choose Semester</h2>
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          {orderedTerms.map((term) => {
+            const active = selectedTerm?.id === term.id;
+            return (
+              <button key={term.id} type="button" disabled={savingSemester && active} onClick={() => void selectTerm(term)} className={cn("h-10 shrink-0 rounded-full border px-[18px] text-[13px] font-medium transition-colors", active ? "border-[#1d57fd] bg-white text-[#1d57fd]" : "border-[#e2e8f0] bg-white text-[#475569] hover:border-[#a8b6cb]", focusRing)}>
+                {academicLabel(term.semesterNumber, "Semester")}
+              </button>
+            );
+          })}
+        </div>
+        {semesterError ? <p role="alert" className="mt-2 text-xs text-destructive">{semesterError}</p> : null}
+      </section>
 
-      {!selectedTerm ? (
-        <section className="py-8" aria-labelledby="library-semesters-heading">
-          <h2 id="library-semesters-heading" className="font-display text-xl font-semibold">
-            Semesters
-          </h2>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {community.terms.map((term) => (
-              <SemesterCard key={term.id} term={term} onSelect={selectTerm} />
-            ))}
-          </div>
-        </section>
-      ) : !selectedSubject ? (
-        <section className="py-8" aria-labelledby="library-subjects-heading">
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 id="library-subjects-heading" className="font-display text-xl font-semibold">
-              Available subjects
-            </h2>
-            <span className="text-sm text-text-muted">{selectedTerm.subjects.length} available</span>
-          </div>
-          {selectedTerm.subjects.length ? (
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {selectedTerm.subjects.map((subject) => (
-                <button
-                  key={subject.id}
-                  type="button"
-                  onClick={() => selectSubject(subject)}
-                  className={cn(
-                    "group flex min-h-48 flex-col rounded-xl border border-border bg-bg-primary p-5 text-left transition-colors hover:border-border-strong hover:bg-bg-secondary motion-reduce:transition-none",
-                    focusRing,
-                  )}
-                >
-                  <span className="flex size-11 items-center justify-center rounded-lg bg-bg-secondary text-text-secondary">
-                    <BookOpen className="size-5" aria-hidden="true" />
-                  </span>
-                  <p className="mt-5 text-xs font-medium uppercase tracking-widest text-text-muted">
-                    {subject.code || "Community subject"}
-                  </p>
-                  <h3 className="mt-2 font-display text-lg font-semibold text-text-primary">
-                    {titleCase(subject.name)}
-                  </h3>
-                  <span className="mt-auto inline-flex items-center gap-2 pt-5 text-sm font-medium">
-                    Open resources
-                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden="true" />
-                  </span>
+      <section className="mt-7" aria-labelledby="library-subjects-heading">
+        <div className="flex items-center justify-between gap-4">
+          <h2 id="library-subjects-heading" className="text-[17px] font-semibold text-[#1e293b]">2. Choose Subject</h2>
+          {selectedSubject ? <button type="button" onClick={() => { setSelectedSubject(null); setQuery(""); updateLibraryUrl({ semester: selectedTerm?.id, subject: null, document: null }); }} className={cn("inline-flex items-center gap-1.5 text-[13px] font-medium text-[#475569]", focusRing)}><Image src="/figma/library/arrow-left.svg" alt="" width={15} height={15} aria-hidden="true" />Change Subject</button> : null}
+        </div>
+        {selectedTerm && visibleSubjects.length ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {visibleSubjects.map((subject, index) => {
+              const active = selectedSubject?.id === subject.id;
+              const progress = insights[subject.id]?.readiness;
+              return (
+                <button key={subject.id} type="button" onClick={() => selectSubject(subject)} className={cn("group flex min-h-[124px] w-full flex-col rounded-2xl border bg-white p-4 text-left transition-colors sm:w-52", active ? "border-[1.5px] border-[#1d57fd]" : "border-[#e2e8f0] hover:border-[#a8b6cb]", focusRing)}>
+                  <div className="flex min-w-0 items-center gap-3"><SubjectIcon index={index} /><span className="line-clamp-2 text-sm font-semibold leading-5 text-[#334155]">{titleCase(subject.name)}</span></div>
+                  <div className="mt-auto flex items-end justify-between gap-2 pt-3"><span className="text-xs text-[#94a3b8]">{insights[subject.id]?.materialCount ?? 0} chapters</span><span className="text-xs font-semibold text-[#1d57fd]">{progress === null || progress === undefined ? "—" : `${Math.round(progress)}%`}</span></div>
                 </button>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-5 rounded-xl border border-dashed border-border bg-bg-secondary p-8 text-center">
-              <BookOpen className="mx-auto size-8 text-text-muted" aria-hidden="true" />
-              <h3 className="mt-4 font-display text-lg font-semibold">No subjects here yet</h3>
-              <p className="mt-2 text-sm text-text-secondary">
-                Your community creator has not attached a subject to this semester.
-              </p>
-            </div>
-          )}
-        </section>
-      ) : (
-        <section className="py-8" aria-labelledby="library-resources-heading">
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 id="library-resources-heading" className="font-display text-xl font-semibold">
-              Subject resources
-            </h2>
-            {loadState === "ready" ? (
-              <span className="text-sm text-text-muted">
-                {materials.length} {materials.length === 1 ? "file" : "files"}
-              </span>
-            ) : null}
+              );
+            })}
           </div>
+        ) : <div className="mt-3 rounded-2xl border border-dashed border-[#e2e8f0] bg-[#f8fafc] p-6 text-center text-sm text-[#64748b]">{selectedTerm ? "No matching subjects." : "No semesters are available yet."}</div>}
+      </section>
 
-          <div className="mt-5">
+      <section className="mt-7" aria-labelledby="library-resources-heading">
+        <h2 id="library-resources-heading" className="text-[17px] font-semibold text-[#1e293b]">3. Choose Chapter</h2>
+        <div className="mt-3">
+          {!selectedSubject ? <div className="rounded-2xl bg-[#f8fafc] px-5 py-6 text-center text-xs text-[#94a3b8]">Choose a subject to see its uploaded chapters and PDFs.</div> : null}
             {loadState === "loading" ? <ExplorerSkeleton /> : null}
             {loadState === "error" ? (
               <div className="rounded-xl border border-destructive/30 bg-bg-primary p-6">
@@ -403,59 +388,56 @@ export function LibraryNanoAiWorkspace({
                 </p>
               </div>
             ) : null}
-            {loadState === "ready" && materials.length > 0 ? (
-              <div className="space-y-5">
-                {groupedMaterials.map(([shelf, shelfMaterials]) => (
-                  <section key={shelf} className="overflow-hidden rounded-xl border border-border bg-bg-primary">
-                    <div className="border-b border-border bg-bg-secondary px-4 py-3">
-                      <h3 className="text-sm font-semibold">{shelf}</h3>
-                    </div>
-                    <ul>
-                      {shelfMaterials.map((material) => {
+            {loadState === "ready" && materials.length > 0 && visibleMaterials.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[#e2e8f0] bg-[#f8fafc] p-8 text-center">
+                <p className="text-sm font-semibold text-[#334155]">No matching chapters</p>
+                <p className="mt-1 text-xs text-[#94a3b8]">Clear the search or availability filter to see all resources.</p>
+              </div>
+            ) : null}
+            {loadState === "ready" && visibleMaterials.length > 0 ? (
+              <ol className="space-y-3">
+                {groupedMaterials.flatMap(([, shelfMaterials]) => shelfMaterials).filter((material) => visibleMaterials.includes(material)).map((material, index) => {
                         const canOpen = Boolean(material.documentId) && material.previewAvailable !== false;
                         return (
-                          <li key={`${material.documentId}:${material.path}`} className="border-b border-border last:border-b-0">
+                          <li key={`${material.documentId}:${material.path}`}>
                             <button
                               type="button"
                               disabled={!canOpen}
                               onClick={() => {
-                                onMaterialOpen(material, selectedSubject);
+                                onMaterialOpen(material, selectedSubject!);
                                 updateLibraryUrl({
-                                  semester: selectedTerm.id,
-                                  subject: selectedSubject.slug,
+                                  semester: selectedTerm!.id,
+                                  subject: selectedSubject!.slug,
                                   document: material.documentId,
                                 });
                               }}
                               className={cn(
-                                "group flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
+                                "group flex min-h-20 w-full items-center gap-4 rounded-2xl bg-[#f8fafc] px-5 py-4 text-left transition-colors hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
                                 focusRing,
                               )}
                             >
-                              <span className="flex h-11 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-bg-secondary text-[10px] font-semibold text-destructive">
-                                {material.mimeType?.includes("pdf") || material.name.toLowerCase().endsWith(".pdf") ? "PDF" : "FILE"}
-                              </span>
+                              <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold", SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length].tile, SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length].text)}>{String(index + 1).padStart(2, "0")}</span>
                               <span className="min-w-0 flex-1">
-                                <span className="block truncate text-sm font-medium">{material.name}</span>
-                                <span className="mt-1 block text-xs text-text-muted">
-                                  {formatSize(material.sizeBytes)}
-                                  {!canOpen ? " · Preview unavailable" : ""}
-                                </span>
+                                <span className="block truncate text-[15px] font-semibold text-[#334155]">{readableMaterialName(material.name)}</span>
+                                <span className="mt-1 block truncate text-[13px] text-[#94a3b8]">{material.shelf || formatSize(material.sizeBytes)}</span>
                               </span>
-                              {canOpen ? (
-                                <ArrowRight className="size-4 text-text-muted transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden="true" />
-                              ) : null}
+                              <span className={cn("rounded-md px-3 py-1.5 text-[11px] font-medium", canOpen ? "bg-[#eaf8ec] text-[#299244]" : "bg-[#eef2f6] text-[#94a3b8]")}>{canOpen ? "Available" : "Locked"}</span>
+                              {!canOpen ? <Image src="/figma/library/lock.svg" alt="" width={12} height={12} aria-hidden="true" /> : null}
+                              <Image src="/figma/library/chevron-right.svg" alt="" width={16} height={16} aria-hidden="true" />
                             </button>
                           </li>
                         );
-                      })}
-                    </ul>
-                  </section>
-                ))}
-              </div>
+                })}
+              </ol>
             ) : null}
           </div>
-        </section>
-      )}
+      </section>
+
+      <aside className="mt-7 flex items-center gap-4 rounded-[20px] border border-[#dce4ff] bg-[#eef2ff] px-6 py-[18px]">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white"><Image src="/figma/library/book.svg" alt="" width={22} height={22} aria-hidden="true" /></span>
+        <div className="min-w-0 flex-1"><p className="text-[15px] font-semibold text-[#334155]">{selectedSubject ? `${titleCase(selectedSubject.name)} progress` : "Your learning progress"}</p><p className="mt-0.5 text-[13px] text-[#64748b]">{selectedSubject?.progress?.practicedTopicCount ? `${selectedSubject.progress.practicedTopicCount} topics practised · ${Math.round(selectedSubject.progress.readiness ?? 0)}% ready` : "Open a chapter and complete challenges to build your subject progress."}</p></div>
+        <Image src="/figma/library/award.svg" alt="" width={24} height={24} aria-hidden="true" />
+      </aside>
     </main>
   );
 }
@@ -526,7 +508,25 @@ export function LibraryDocumentViewer({
         <div className="h-5 w-px bg-border" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{material.name}</p>
-          <p className="truncate text-xs text-text-muted">{titleCase(subject.name)} · NanoAI active</p>
+          <p className="truncate text-xs text-text-muted">
+            {titleCase(subject.name)} · NanoAI active
+          </p>
+        </div>
+        <div className="hidden min-w-32 rounded-lg bg-[#eef2ff] px-3 py-2 sm:block">
+          <div className="flex items-center justify-between gap-3 text-[10px] font-medium text-[#64748b]">
+            <span>Subject progress</span>
+            <span className="font-semibold text-[#1d57fd]">
+              {subject.progress?.readiness === null || subject.progress?.readiness === undefined
+                ? "—"
+                : `${Math.round(subject.progress.readiness)}%`}
+            </span>
+          </div>
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-white">
+            <div
+              className="h-full rounded-full bg-[#1d57fd]"
+              style={{ width: `${Math.max(0, Math.min(100, subject.progress?.readiness ?? 0))}%` }}
+            />
+          </div>
         </div>
         <a
           href={`/api/student/materials/${encodeURIComponent(material.documentId)}?download=1`}

@@ -209,7 +209,9 @@ export async function GET(request: Request) {
       );
 
     const admin = createSupabaseAdminClient();
-    const requested = new URL(request.url).searchParams.get("subject")?.trim();
+    const searchParams = new URL(request.url).searchParams;
+    const requested = searchParams.get("subject")?.trim();
+    const requestedCourseId = searchParams.get("courseId")?.trim();
 
     // With no subject selected, return the complete library for every enrolled
     // course subject. This keeps the library useful before the chat composer
@@ -276,7 +278,14 @@ export async function GET(request: Request) {
       );
     }
 
-    const access = await getStudentCourseSubjectAccess(user.id, requested, admin);
+    const access = requestedCourseId
+      ? await getStudentCourseSubjectAccessForCourse(
+          user.id,
+          requestedCourseId,
+          requested,
+          admin,
+        )
+      : await getStudentCourseSubjectAccess(user.id, requested, admin);
     if (!access) {
       return NextResponse.json(
         { error: "Join the subject's community or enroll in its course first." },

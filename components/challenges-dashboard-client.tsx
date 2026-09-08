@@ -1689,12 +1689,12 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
               <Link
                 href={
                   dashboard.community
-                    ? `/app/communities/${encodeURIComponent(dashboard.community.slug)}`
+                    ? `/app/chat?community=${encodeURIComponent(dashboard.community.slug)}`
                     : "/communities"
                 }
                 className="mt-5 inline-flex min-h-10 items-center rounded-lg bg-text-primary px-4 text-sm font-semibold text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               >
-                {dashboard.community ? "Open Subject Explorer" : "Browse communities"}
+                {dashboard.community ? "Open Library" : "Browse communities"}
               </Link>
             </div>
           )}

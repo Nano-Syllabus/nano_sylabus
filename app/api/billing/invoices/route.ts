@@ -22,7 +22,6 @@ function serializeInvoice(row: Record<string, any>) {
     status: row.status,
     amount: row.amount,
     subtotal: row.subtotal ?? row.amount,
-    discountAmount: row.discount_amount ?? 0,
     currency: row.currency,
     paymentMethod: row.payment_method,
     invoiceCode: row.invoice_code,

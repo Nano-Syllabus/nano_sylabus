@@ -686,7 +686,7 @@ function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
                     </p>
                   </div>
                   <Link
-                    href={`/app/communities/${community.slug}/subjects/${subject.slug}`}
+                    href={`/app/chat?community=${encodeURIComponent(community.slug)}&semester=${encodeURIComponent(semester.id)}&librarySubject=${encodeURIComponent(subject.slug)}`}
                     className={cn(
                       "inline-flex min-h-10 items-center gap-1.5 justify-self-start text-sm font-semibold md:justify-self-end",
                       focusRing,

@@ -51,30 +51,6 @@ const NAV = [
       ]
     : []),
   {
-    href: "/app/communities",
-    label: "Subject Explorer",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M3 21h18" />
-        <path d="M6 21V7l6-4 6 4v14" />
-        <path d="M9 10h1" />
-        <path d="M14 10h1" />
-        <path d="M9 14h1" />
-        <path d="M14 14h1" />
-        <path d="M10 21v-3h4v3" />
-      </svg>
-    ),
-  },
-  {
     href: "/app/notes",
     label: "My Notes",
     icon: (
@@ -93,6 +69,25 @@ const NAV = [
         <line x1="16" x2="8" y1="13" y2="13" />
         <line x1="16" x2="8" y1="17" y2="17" />
         <line x1="10" x2="8" y1="9" y2="9" />
+      </svg>
+    ),
+  },
+  {
+    href: "/app/billing",
+    label: "Pricing",
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 2v20" />
+        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" />
       </svg>
     ),
   },
@@ -349,26 +344,26 @@ export function AppSidebar({
   }
 
   return (
-    <div className="font-sidebar-ui flex h-full w-full flex-col bg-bg-primary text-text-primary">
+    <div className="font-figma-library flex h-full w-full flex-col bg-white text-[#475569]">
       {/* ── Brand ── */}
       <div
         className={cn(
-          "flex items-center pt-3.5 pb-2",
-          isCollapsed ? "justify-center px-0" : "justify-between px-3",
+          "flex items-center pb-2 pt-6",
+          isCollapsed ? "justify-center px-0" : "justify-between px-6",
         )}
       >
         <Link
           href="/"
           onClick={() => onCloseMobile?.()}
-          className="flex items-center gap-2 font-display text-lg font-semibold tracking-tight transition hover:text-text-secondary no-underline"
+          className="flex items-center gap-2.5 text-[18px] font-semibold tracking-tight text-[#1e293b] no-underline transition hover:text-[#475569]"
           aria-label="Go to Nano Syllabus site"
         >
           <Image
             src="/nano_logo.png"
             alt="Nano Syllabus"
-            width={24}
-            height={24}
-            className="h-6 w-6 rounded-md object-contain shrink-0"
+            width={28}
+            height={28}
+            className="h-7 w-7 rounded-md object-contain shrink-0"
           />
           {!isCollapsed && <span>Nano Syllabus</span>}
         </Link>
@@ -420,12 +415,12 @@ export function AppSidebar({
       </div>
 
       {/* ── Nav Links ── */}
-      <nav className={cn("mt-3 space-y-1", isCollapsed ? "px-2" : "px-3")}>
+      <nav className={cn("mt-4 space-y-1", isCollapsed ? "px-2" : "px-6")}>
         <Link
           href="/app/today"
           onClick={() => onCloseMobile?.()}
           className={cn(
-            "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
             isCollapsed
               ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
               : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
@@ -456,7 +451,7 @@ export function AppSidebar({
           href="/app/community"
           onClick={() => onCloseMobile?.()}
           className={cn(
-            "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
             isCollapsed
               ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
               : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
@@ -489,7 +484,7 @@ export function AppSidebar({
           href="/app/challenges"
           onClick={() => onCloseMobile?.()}
           className={cn(
-            "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
             isCollapsed
               ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
               : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
@@ -526,7 +521,7 @@ export function AppSidebar({
             }
           }}
           className={cn(
-            "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
             isCollapsed
               ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
               : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
@@ -534,7 +529,7 @@ export function AppSidebar({
               ? "bg-bg-secondary text-text-primary"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
-          title={isCollapsed ? "Library & NanoAI" : undefined}
+          title={isCollapsed ? "Library & Nano AI" : undefined}
         >
           {isCollapsed ? (
             <svg
@@ -567,7 +562,7 @@ export function AppSidebar({
                 <path d="M8 7h8" />
                 <path d="M8 11h6" />
               </svg>
-              Library &amp; NanoAI
+              Library &amp; Nano AI
             </>
           )}
         </Link>
@@ -609,7 +604,7 @@ export function AppSidebar({
               onPointerEnter={() => router.prefetch(item.href)}
               onFocus={() => router.prefetch(item.href)}
               className={cn(
-                "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+                "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
                 isCollapsed
                   ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
                   : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",

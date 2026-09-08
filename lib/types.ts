@@ -245,8 +245,6 @@ export interface Invoice {
   paymentMethod: PaymentMethod;
   invoiceCode: string;
   subtotal: number;
-  discountAmount: number;
-  couponId: string | null;
   expiresAt: string;
   billingPeriodStart: string | null;
   billingPeriodEnd: string | null;

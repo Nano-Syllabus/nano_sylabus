@@ -8,7 +8,6 @@ import {
   Check, 
   Copy, 
   CheckCircle2, 
-  X,
   Lock,
   Mail,
   User,
@@ -32,7 +31,6 @@ type CheckoutInvoice = {
   status: string;
   amount: number;
   subtotal: number;
-  discountAmount: number;
   currency: string;
   invoiceCode: string;
   expiresAt: string;
@@ -46,7 +44,6 @@ export type FlowStep =
   | "login" 
   | "pricing" 
   | "checkout1" 
-  | "checkout2" 
   | "groupCheckout" 
   | "paymentPending";
 
@@ -54,7 +51,6 @@ const PAYMENT_FLOW_ENABLED = false;
 const PAYMENT_FLOW_STEPS = new Set<FlowStep>([
   "pricing",
   "checkout1",
-  "checkout2",
   "groupCheckout",
   "paymentPending",
 ]);
@@ -233,15 +229,12 @@ export function SaaSFlowClient({
     }
   };
   
-  // Modal, coupon, and real checkout state
-  const [discountModalOpen, setDiscountModalOpen] = useState(false);
-  const [couponInput, setCouponInput] = useState("");
+  // Real checkout state
   const [copiedInvoice, setCopiedInvoice] = useState(false);
   const [checkoutInvoice, setCheckoutInvoice] = useState<CheckoutInvoice | null>(null);
   const [checkoutPlan, setCheckoutPlan] = useState<SubscriptionPlan | null>(null);
   const [paymentConfig, setPaymentConfig] = useState<PaymentMethodConfig | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [couponLoading, setCouponLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentPayerName, setPaymentPayerName] = useState(initialUser?.fullName ?? "");
@@ -424,55 +417,6 @@ export function SaaSFlowClient({
     });
   }
 
-  const handleApplyCoupon = async (codeToApply?: string) => {
-    const code = (codeToApply || couponInput).trim().toUpperCase();
-    if (!code) {
-      setCheckoutError("Enter a coupon code.");
-      return;
-    }
-
-    setCouponLoading(true);
-    setCheckoutError("");
-    try {
-      const invoice = checkoutInvoice && checkoutPlan?.slug === "individual-unlimited"
-        ? checkoutInvoice
-        : await createCheckoutInvoice("individual-unlimited");
-      const response = await fetch("/api/billing/coupons", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId: invoice.id, code }),
-      });
-      const payload = (await response.json()) as {
-        redemption?: {
-          amount: number;
-          subtotal: number;
-          discountAmount: number;
-          status: string;
-          couponCode: string;
-        };
-        error?: string;
-      };
-      if (!response.ok || !payload.redemption) {
-        throw new Error(payload.error || "Coupon could not be applied.");
-      }
-
-      setCheckoutInvoice((current) => current ? {
-        ...current,
-        amount: payload.redemption!.amount,
-        subtotal: payload.redemption!.subtotal,
-        discountAmount: payload.redemption!.discountAmount,
-        status: payload.redemption!.status,
-      } : current);
-      setDiscountModalOpen(false);
-      setCouponInput(code);
-      setCurrentStep("checkout2");
-    } catch (error) {
-      setCheckoutError(error instanceof Error ? error.message : "Coupon could not be applied.");
-    } finally {
-      setCouponLoading(false);
-    }
-  };
-
   async function submitManualPayment(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!checkoutInvoice || !paymentReceipt) return;
@@ -539,7 +483,6 @@ export function SaaSFlowClient({
         setCurrentStep("solutionSlide");
         break;
       case "checkout1":
-      case "checkout2":
       case "groupCheckout":
         setCurrentStep("pricing");
         break;
@@ -980,7 +923,7 @@ export function SaaSFlowClient({
                 </ul>
               </div>
 
-              <div className="mt-8 space-y-2.5">
+              <div className="mt-8">
                 <button
                   onClick={() => void beginCheckout("individual-unlimited")}
                   disabled={checkoutLoading}
@@ -988,13 +931,6 @@ export function SaaSFlowClient({
                   className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-3.5 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
                 >
                   {checkoutLoading ? "Creating invoice..." : "Get Individual →"}
-                </button>
-                <button
-                  onClick={() => setDiscountModalOpen(true)}
-                  disabled={couponLoading}
-                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[#f1f1f1] py-3 text-[14px] font-[700] text-[#111] transition hover:bg-[#e7e7e7] disabled:opacity-60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
-                >
-                  Check discount code
                 </button>
               </div>
             </div>
@@ -1130,36 +1066,9 @@ export function SaaSFlowClient({
                 </div>
               ) : (
                 <div className="rounded-[13px] border border-amber-200 bg-amber-50 p-4 text-[13px] leading-6 text-amber-900">
-                  <b>Official payment QR is not configured yet.</b> You can still use the free coupon below. Paid receipt submission will open after an admin adds the official QR.
+                  <b>Official payment QR is not configured yet.</b> Paid receipt submission will open after an admin adds the official QR.
                 </div>
               )}
-
-              <div className="mt-6 border-t border-[#eee] pt-5">
-                <label htmlFor="checkout-coupon" className="block text-[12px] font-[700] text-[#555] mb-2">
-                  Have a discount code?
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    id="checkout-coupon"
-                    type="text"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={couponInput}
-                    onChange={(event) => setCouponInput(event.target.value)}
-                    placeholder="WELCOME100"
-                    className="min-h-11 flex-1 rounded-[10px] border border-[#bbb] bg-white px-4 py-2.5 text-[14px] uppercase text-[#111] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleApplyCoupon()}
-                    disabled={couponLoading}
-                    aria-busy={couponLoading}
-                    className="min-h-11 rounded-[10px] bg-[#111] px-5 py-2.5 text-[13px] font-[700] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
-                  >
-                    {couponLoading ? "Applying..." : "Apply"}
-                  </button>
-                </div>
-              </div>
 
               <form onSubmit={submitManualPayment} className="mt-6 space-y-4 border-t border-[#eee] pt-5">
                 <div>
@@ -1231,10 +1140,6 @@ export function SaaSFlowClient({
                     <span>{checkoutPlan?.name ?? "Selected plan"}</span>
                     <span>{checkoutInvoice?.currency ?? "NPR"} {checkoutInvoice?.subtotal ?? checkoutPlan?.price ?? 0}</span>
                   </div>
-                  <div className="flex justify-between text-[#777]">
-                    <span>Discount</span>
-                    <span>{checkoutInvoice?.discountAmount ? `− ${checkoutInvoice.currency} ${checkoutInvoice.discountAmount}` : "—"}</span>
-                  </div>
                   <div className="flex justify-between border-t border-[#eee] pt-3 text-[18px] font-[800] text-[#111]">
                     <span>Total today</span>
                     <span>{checkoutInvoice?.currency ?? "NPR"} {checkoutInvoice?.amount ?? checkoutPlan?.price ?? 0}</span>
@@ -1243,99 +1148,6 @@ export function SaaSFlowClient({
                 <p className="mt-5 text-[12px] leading-5 text-[#666]">Invoice {invoiceNumber} expires in 24 hours. Payment is usually verified within one business day.</p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setDiscountModalOpen(true)}
-                className="mt-8 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[#eceef1] py-3 text-[13px] font-[700] text-[#111] transition hover:bg-[#dfe2e6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
-              >
-                Use a discount code
-              </button>
-            </div>
-          </div>
-        </main>
-      )}
-
-      {/* ═════════════════════════════════════════════════════════════════════
-          8. 100% DISCOUNT FREE TRIAL CHECKOUT (checkout2)
-          ═════════════════════════════════════════════ */}
-      {PAYMENT_FLOW_ENABLED && currentStep === "checkout2" && (
-        <main className="mx-auto max-w-[1050px] px-6 py-12 sm:py-16">
-          {renderFlowHeader()}
-
-          <div className="mb-6">
-            <div className="text-[11px] font-[800] uppercase tracking-[1.8px] text-[#26905a]">
-              100% DISCOUNT APPLIED
-            </div>
-            <h1 className="mt-1 text-[34px] sm:text-[40px] font-[760] tracking-[-2px] text-[#111111]">
-              Your first month is free.
-            </h1>
-            <p className="mt-1 text-[14px] text-[#777]">
-              You pay Rs. 0 today.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_.7fr]">
-            <div className="rounded-[20px] border border-[#e2e2e2] bg-white p-7 shadow-xs">
-              <h3 className="text-[17px] font-[750] text-[#111] mb-4">
-                Payment details
-              </h3>
-
-              <div className="space-y-3.5 text-[14px]">
-                <div>
-                  <label htmlFor="coupon-customer-name" className="block text-[12px] font-[700] text-[#555] mb-1">Name</label>
-                  <input 
-                    id="coupon-customer-name"
-                    type="text" 
-                    readOnly 
-                    value={user?.fullName || "Student"}
-                    className="w-full rounded-[10px] border border-[#ddd] bg-[#f9f9f9] p-3 text-[14px] text-[#111]"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="coupon-payment-method" className="block text-[12px] font-[700] text-[#555] mb-1">Payment method</label>
-                  <input 
-                    id="coupon-payment-method"
-                    type="text" 
-                    readOnly 
-                    value="No payment required for this invoice"
-                    className="w-full rounded-[10px] border border-[#ddd] bg-[#f9f9f9] p-3 text-[14px] text-[#111]"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-5 rounded-[13px] bg-[#f5f8ff] border border-[#dbe8ff] p-3.5 text-[13px] leading-[1.5] text-[#555]">
-                <b className="text-[#487fdc]">{couponInput || "WELCOME100"}</b> has been verified by the server and gives 100% off this invoice. We do not store a payment method; renewal requires a new payment.
-              </div>
-
-              <button
-                onClick={() => router.push("/app/today")}
-                className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[14px] font-[700] text-white shadow-sm transition hover:opacity-90 active:scale-[0.99] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
-              >
-                Start Unlimited for Rs. 0 →
-              </button>
-            </div>
-
-            {/* Order summary */}
-            <div className="rounded-[20px] border border-[#e2e2e2] bg-white p-7 shadow-xs flex flex-col justify-between">
-              <div>
-                <h3 className="text-[17px] font-[750] text-[#111] mb-4">
-                  Order summary
-                </h3>
-                <div className="space-y-2.5 text-[14px]">
-                  <div className="flex justify-between text-[#666]">
-                    <span>{checkoutPlan?.name ?? "Individual Unlimited"}</span>
-                    <span>{checkoutInvoice?.currency ?? "NPR"} {checkoutInvoice?.subtotal ?? 1500}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold text-[#26905a]">
-                    <span>{couponInput || "WELCOME100"} · 100% off</span>
-                    <span>− {checkoutInvoice?.currency ?? "NPR"} {checkoutInvoice?.discountAmount ?? 1500}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-[#eee] pt-3 text-[18px] font-[800] text-[#111]">
-                    <span>Total today</span>
-                    <span>{checkoutInvoice?.currency ?? "NPR"} {checkoutInvoice?.amount ?? 0}</span>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </main>
@@ -1477,50 +1289,6 @@ export function SaaSFlowClient({
         </main>
       )}
 
-      {/* ═════════════════════════════════════════════════════════════════════
-          DISCOUNT CODE MODAL (WELCOME100)
-          ═════════════════════════════════════════════════════════════════════ */}
-      {discountModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="relative w-full max-w-[430px] rounded-[22px] border border-[#ddd] bg-white p-7 sm:p-8 shadow-2xl">
-            <button
-              type="button"
-              onClick={() => setDiscountModalOpen(false)}
-              aria-label="Close discount dialog"
-              className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-[#f1f1f1] text-[#666] hover:text-[#111] transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
-            >
-              <X className="h-4 w-4" />
-            </button>
-
-            <div className="text-[11px] font-[800] uppercase tracking-[1.8px] text-[#d88916]">
-              LIMITED OFFER
-            </div>
-            <h2 className="mt-1 text-[24px] font-[750] text-[#111]">
-              Get your first month free.
-            </h2>
-            <p className="mt-2 text-[14px] text-[#777] leading-[1.5]">
-              Use this code to get <b>100% off</b> your Rs. 1,500/month Individual plan. Offer valid until <b>August 31, 2026</b>.
-            </p>
-
-            <div className="my-5 rounded-[12px] border border-dashed border-[#aaa] bg-[#f5f5f5] p-3.5 text-center">
-              <div className="font-mono text-[24px] font-[800] tracking-[2px] text-[#111]">
-                WELCOME100
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void handleApplyCoupon("WELCOME100")}
-              disabled={couponLoading}
-              aria-busy={couponLoading}
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-3.5 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
-            >
-              {couponLoading ? "Applying securely..." : "Use this code →"}
-            </button>
-            {checkoutError ? <p role="alert" className="mt-3 text-[13px] text-red-700">{checkoutError}</p> : null}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
