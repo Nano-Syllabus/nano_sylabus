@@ -119,8 +119,6 @@ function normalizeInvoice(row: any): Invoice {
     paymentMethod: row.payment_method,
     invoiceCode: row.invoice_code ?? `NS-${String(row.id).replaceAll("-", "").slice(0, 10).toUpperCase()}`,
     subtotal: row.subtotal ?? row.amount,
-    discountAmount: row.discount_amount ?? 0,
-    couponId: row.coupon_id ?? null,
     expiresAt: row.expires_at ?? row.created_at,
     billingPeriodStart: row.billing_period_start ?? null,
     billingPeriodEnd: row.billing_period_end ?? null,

@@ -6,6 +6,7 @@ import { normalizeSubjectLabel } from "@/lib/profile-normalization";
 import { getRevisionNoteDetail } from "@/lib/data/notes";
 import { getCommunity } from "@/lib/data/communities";
 import { getActiveCommunity } from "@/lib/data/active-community";
+import { getCommunitySubjectExplorerInsights } from "@/lib/data/community-subject-explorer";
 import { listCreatorPrivateSubjectAccess, listStudentCourseSubjects } from "@/lib/student-courses";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +57,9 @@ export default async function ChatPage({
   const libraryCommunity = activeStudentCommunity
     ? await getCommunity(activeStudentCommunity.slug, user.id)
     : null;
+  const libraryInsights = libraryCommunity
+    ? await getCommunitySubjectExplorerInsights(user.id, libraryCommunity)
+    : {};
 
   const noteSubjectOptions = [
     ...privateSubjects.map((subject) => ({
@@ -92,7 +96,7 @@ export default async function ChatPage({
    */
   return (
     <>
-      <SetAppShell title="Library & NanoAI" />
+      <SetAppShell title="Library" />
       <ChatPageClient
         user={user}
         defaultLanguage={profile!.languagePref}
@@ -109,6 +113,7 @@ export default async function ChatPage({
         initialReferenceNote={referenceNote}
         noteSubjectOptions={noteSubjectOptions}
         libraryCommunity={libraryCommunity}
+        libraryInsights={libraryInsights}
         initialLibrarySelection={{
           termId: params.semester?.trim() || null,
           subjectSlug: params.librarySubject?.trim() || null,

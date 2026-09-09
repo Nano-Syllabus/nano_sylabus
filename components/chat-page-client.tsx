@@ -51,6 +51,7 @@ import type {
 } from "@/lib/types";
 import { cn, deriveSessionTitle, formatDate, groupDateLabel } from "@/lib/utils";
 import type { CommunityDetail } from "@/lib/communities";
+import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
 
 /** Strip chapter enrichment from subject context for UI display.
  * e.g. "Instrumentation > Measurement Systems" → "Instrumentation" */
@@ -559,6 +560,7 @@ export function ChatPageClient({
   initialReferenceNote,
   noteSubjectOptions,
   libraryCommunity,
+  libraryInsights,
   initialLibrarySelection,
 }: {
   user: AppUser;
@@ -574,6 +576,7 @@ export function ChatPageClient({
   initialReferenceNote?: RevisionNoteDetail | null;
   noteSubjectOptions: NoteSubjectOption[];
   libraryCommunity: CommunityDetail | null;
+  libraryInsights: Record<string, CommunitySubjectExplorerInsight>;
   initialLibrarySelection: LibraryNanoAiSelection;
 }) {
   const [sessions, setSessions] = useState(initialSessions);
@@ -1164,10 +1167,12 @@ export function ChatPageClient({
   const activeSessionTitle =
     sessions.find((session) => session.id === currentSessionId)?.title ??
     sessionDetail?.title ??
-    (workspaceSubject ? `NanoAI · ${workspaceSubject.name}` : "Library & NanoAI");
+    (workspaceSubject ? `NanoAI · ${workspaceSubject.name}` : "Library");
 
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [hasMoreMessages, setHasMoreMessages] = useState(Boolean(initialSession?.hasMoreMessages));
+  const showLibraryLanding =
+    messages.length === 0 && !workspaceMaterial && !switchingSessionId;
 
   useEffect(() => {
     if (!currentSessionId && messages.length === 0) {
@@ -2323,6 +2328,11 @@ export function ChatPageClient({
   }, [initialPrompt, setInput]);
 
   useEffect(() => {
+    shell.setTopbarSuppressed(showLibraryLanding);
+    return () => shell.setTopbarSuppressed(false);
+  }, [shell, showLibraryLanding]);
+
+  useEffect(() => {
     shell.setTitle(
       <TopHeaderTitle 
         activeSessionTitle={activeSessionTitle}
@@ -2700,7 +2710,13 @@ export function ChatPageClient({
           onScroll={handleMessagesScroll}
           className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
         >
-          <div className="mx-auto flex min-h-full w-full max-w-5xl flex-1 flex-col px-3 pb-6 pt-4 sm:px-4 sm:pt-5 md:px-5 xl:px-6">
+          <div
+            className={cn(
+              "flex min-h-full w-full flex-1 flex-col",
+              !showLibraryLanding &&
+                "mx-auto max-w-5xl px-3 pb-6 pt-4 sm:px-4 sm:pt-5 md:px-5 xl:px-6",
+            )}
+          >
             {switchingSessionId ? (
               <ChatSessionLoadingSkeleton />
             ) : messages.length === 0 ? (
@@ -2732,6 +2748,7 @@ export function ChatPageClient({
               ) : (
                 <LibraryNanoAiWorkspace
                   community={libraryCommunity}
+                  insights={libraryInsights}
                   initialSelection={initialLibrarySelection}
                   onSubjectSelect={handleWorkspaceSubjectSelect}
                   onMaterialOpen={handleWorkspaceMaterialOpen}

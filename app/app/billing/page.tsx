@@ -1,16 +1,19 @@
 import { SetAppShell } from "@/components/set-app-shell";
 import { BillingPageClient } from "@/components/billing-page-client";
 import { requireOnboardedUser } from "@/lib/auth";
-import { getStudentBillingOverview } from "@/lib/data/billing";
+import { getActiveManualPaymentConfig, getStudentBillingOverview } from "@/lib/data/billing";
 
 export default async function BillingPage() {
   const { user } = await requireOnboardedUser();
-  const overview = await getStudentBillingOverview(user.id);
+  const [overview, paymentConfig] = await Promise.all([
+    getStudentBillingOverview(user.id),
+    getActiveManualPaymentConfig(),
+  ]);
 
   return (
     <>
-      <SetAppShell title="Billing" />
-      <BillingPageClient overview={overview} />
+      <SetAppShell title="Pricing" />
+      <BillingPageClient overview={overview} paymentConfig={paymentConfig} user={user} />
     </>
   );
 }

@@ -34,7 +34,6 @@ export function CourseCheckoutClient({ course, user }: CourseCheckoutClientProps
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"free" | "card" | "wallet">("free");
-  const promoApplied = course.accessModel === "paid" && course.priceNpr > 0;
   const stats = course.sourceStats;
   const hasSourceFiles = stats.sourceFileCount > 0;
   const hasQuestionBank = stats.questionBankFileCount > 0;
@@ -71,10 +70,8 @@ export function CourseCheckoutClient({ course, user }: CourseCheckoutClientProps
     }
   }
 
-  const isFree = course.accessModel === "free" || promoApplied;
-  const originalPrice = course.priceNpr;
+  const isFree = course.accessModel === "free";
   const totalDueNpr = isFree ? 0 : course.priceNpr;
-  const scholarshipDiscount = Math.max(0, originalPrice - totalDueNpr);
 
   return (
     <div className={`${examThemeClass} min-h-screen bg-background text-foreground antialiased`}>
@@ -272,14 +269,7 @@ export function CourseCheckoutClient({ course, user }: CourseCheckoutClientProps
                 <div className="mt-6 space-y-3">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Course Enrollment Plan</span>
-                    <span className="font-medium">NPR {originalPrice.toLocaleString("en-NP")}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm text-emerald-400">
-                    <span className="flex items-center gap-1.5">
-                      <Zap className="size-3.5" aria-hidden="true" />{" "}
-                      {isFree ? "Early Access Scholarship (100% Off)" : "Scholarship"}
-                    </span>
-                    <span>- NPR {scholarshipDiscount.toLocaleString("en-NP")}</span>
+                    <span className="font-medium">NPR {course.priceNpr.toLocaleString("en-NP")}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Platform & Processing Fee</span>
