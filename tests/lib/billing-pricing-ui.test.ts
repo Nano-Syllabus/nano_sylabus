@@ -74,9 +74,17 @@ describe("billing pricing UI", () => {
     expect(html).toContain("Handwritten Answer Feedback");
     expect(html).toContain("Shared Accountability");
     expect(html).not.toMatch(/discount|coupon/i);
-    expect(html).toContain("border-[#979797]");
+    // The visual hierarchy these assert is unchanged: standard plans get a
+    // plain border, the featured plan gets a blue border and a gradient lift.
+    // What moved is where the colours come from — the card surface and border
+    // used to be hardcoded light literals (`border-[#979797]`, and a
+    // `from-white` gradient), which rendered as a white card in the dark theme
+    // while the text followed the theme to near-white and became unreadable.
+    // They are theme tokens now, so the same hierarchy holds in both themes.
+    expect(html).toContain("border-border");
     expect(html).toContain("border-[#20a8ff]");
-    expect(html).toContain("from-white to-[#eef7ff]");
+    expect(html).toContain("bg-gradient-to-b");
+    expect(html).toContain("#20a8ff_16%");
   });
 
   it("keeps free access separate from paid checkout without promotional-code paths", () => {

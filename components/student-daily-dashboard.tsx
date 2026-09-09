@@ -263,6 +263,41 @@ function UpgradeModal({
 }
 
 /**
+ * True for a moment after `value` changes, false the rest of the time.
+ *
+ * This is what makes an update read as A NUMBER MOVING rather than a screen
+ * reloading. The dashboard is now patched in place when a student finishes a
+ * challenge — the streak and the "Today" count change without any request — and
+ * without a cue that is invisible: the figure simply differs from what the eye
+ * last registered, which reads as "was it always that?" rather than "I just did
+ * that."
+ *
+ * A shimmer would be exactly the wrong signal here. Shimmer means "this is
+ * absent and is being fetched"; nothing is absent, the value is already correct.
+ * What is wanted is the opposite gesture — draw the eye to a value that is
+ * newly right.
+ *
+ * Ref-compared rather than stored in state, so a re-render that does not change
+ * the value cannot retrigger the highlight. The timer is cleared on every
+ * change, so rapid successive updates extend the highlight instead of stacking
+ * timers.
+ */
+function useValueChanged(value: string) {
+  const previous = useRef(value);
+  const [changed, setChanged] = useState(false);
+
+  useEffect(() => {
+    if (previous.current === value) return;
+    previous.current = value;
+    setChanged(true);
+    const timer = window.setTimeout(() => setChanged(false), 1100);
+    return () => window.clearTimeout(timer);
+  }, [value]);
+
+  return changed;
+}
+
+/**
  * `pending` shimmers only the NUMBER, never the card.
  *
  * A tile's label and icon are known before its value is — they are constants in
@@ -290,6 +325,8 @@ function MetricCard({
   accent?: boolean;
   pending?: boolean;
 }) {
+  const justChanged = useValueChanged(value);
+
   if (pending) {
     return (
       <article className="min-w-0 rounded-2xl border border-border bg-card p-4">
@@ -331,7 +368,17 @@ function MetricCard({
           {icon}
         </span>
       </div>
-      <p className="mt-5 truncate font-display text-[clamp(1.65rem,2.2vw,2.15rem)] font-semibold leading-none tracking-[-0.04em] tabular-nums">
+      <p
+        className={cn(
+          "mt-5 truncate font-display text-[clamp(1.65rem,2.2vw,2.15rem)] font-semibold leading-none tracking-[-0.04em] tabular-nums",
+          // The settle is slower than the lift, so the number arrives with a
+          // small flourish and then calms down rather than snapping back.
+          "transition-[color,transform,text-shadow] duration-700 ease-out motion-reduce:transition-none",
+          justChanged &&
+            "scale-[1.06] text-[var(--community-accent,#1d57fd)] [text-shadow:0_0_18px_color-mix(in_srgb,var(--community-accent,#1d57fd)_45%,transparent)] duration-200",
+        )}
+        style={{ transformOrigin: "left center" }}
+      >
         {value}
       </p>
       <p className="mt-2 min-h-10 text-xs leading-5 text-text-muted">{detail}</p>

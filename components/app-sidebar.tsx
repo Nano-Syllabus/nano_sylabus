@@ -356,8 +356,24 @@ export function AppSidebar({
     router.refresh();
   }
 
+  /*
+   * THEME TOKENS, NOT LITERAL COLOURS.
+   *
+   * The root below was `bg-white text-[#475569]`, which pinned the whole
+   * sidebar to a light palette regardless of the theme. In dark mode that
+   * painted a white panel inside a black app — and, worse, made the navigation
+   * unreadable: the nav links DO use tokens (`text-sidebar-crisp` resolves to
+   * `--text-primary`, which is #f7f7f8 in dark), so near-white text was being
+   * drawn onto a hardcoded white background. The links were not faded; they
+   * were invisible.
+   *
+   * `--bg-primary` and `--text-secondary` follow `data-theme` on <html>, so the
+   * sidebar now matches the app in both themes and the contrast holds either
+   * way. Brand colours further down (Discord's #5865F2) stay literal on
+   * purpose — those are not theme colours.
+   */
   return (
-    <div className="font-figma-library flex h-full w-full flex-col bg-white text-[#475569]">
+    <div className="font-figma-library flex h-full w-full flex-col bg-bg-primary text-text-secondary">
       {/* ── Brand ── */}
       <div
         className={cn(
@@ -368,7 +384,7 @@ export function AppSidebar({
         <Link
           href="/"
           onClick={() => onCloseMobile?.()}
-          className="flex items-center gap-2.5 text-[18px] font-semibold tracking-tight text-[#1e293b] no-underline transition hover:text-[#475569]"
+          className="flex items-center gap-2.5 text-[18px] font-semibold tracking-tight text-text-primary no-underline transition hover:text-text-secondary"
           aria-label="Go to Nano Syllabus site"
         >
           <Image

@@ -1,6 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { queryFetcher, queryString } from "@/lib/query/api";
 import { keys } from "@/lib/query/keys";
@@ -24,17 +26,26 @@ export function dashboardQuery(community?: string) {
       `/api/student/dashboard${queryString({ community })}`,
     ),
     /**
-     * A minute. The dashboard is the app's home, so it is the screen a student
-     * returns to most — between a challenge, after chat, on every back
-     * gesture — and each of those returns used to be a fresh 1.5s server read
-     * behind a full-page skeleton.
+     * FETCHED ONCE PER PAGE LOAD, THEN NEVER AGAIN.
      *
-     * Sixty seconds rather than thirty because the correctness of this screen
-     * does not rest on the window: everything that changes it (submitting a
-     * challenge, switching community) invalidates the key directly. The window
-     * only decides how long a passive revisit is free.
+     * `Infinity` means no timer, no refetch on mount, no refetch on
+     * navigation — the dashboard a student sees is the one this tab fetched,
+     * for the life of the tab. A full reload is what refreshes it.
+     *
+     * That is only defensible because the writes that move these numbers patch
+     * the cache directly (see the LOCAL UPDATES section below): finishing a
+     * challenge increments the counter, fills today's calendar cell and bumps
+     * the streak in place, in the same tick, with no request. The alternative —
+     * a short window plus invalidation — meant the student watched a 2s reload
+     * of the whole screen every time they did the one thing the screen is for.
+     *
+     * The honest limit: something changed in ANOTHER tab, or by an admin, is
+     * not picked up until reload. For a personal study dashboard that is the
+     * right trade; `invalidateDashboard` exists for the cases where it is not.
      */
-    staleTime: 60_000,
+    staleTime: Infinity,
+    /** Nothing here is worth a background refetch either. */
+    refetchOnReconnect: false,
   } as const;
 }
 
@@ -70,4 +81,169 @@ export function useDashboard(community: string | undefined, initial?: StudentDai
  */
 export function prefetchDashboard(client: QueryClient, community?: string) {
   return client.prefetchQuery(dashboardQuery(community));
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   LOCAL UPDATES
+
+   The dashboard is fetched once per page load and then never again (see
+   `staleTime` above). That is only tenable if the things a student does while
+   looking at it are reflected WITHOUT a round trip — otherwise the numbers
+   quietly drift and the screen lies until the next reload.
+
+   So every write that moves a dashboard figure patches the cached object
+   directly. The rules these follow:
+
+   - PATCH, NEVER INVALIDATE. Invalidating would refetch, which is the 2s wait
+     this whole design exists to remove.
+   - Mirror what the server would have computed, not something close enough.
+     Where that is impossible (a leaderboard rank depends on everyone else's
+     activity, which this client cannot know), leave the value alone rather
+     than inventing one — a stale rank is honest, a guessed one is not.
+   - Be a pure function of the previous cache entry. `setQueryData` with an
+     updater is applied atomically, so two completions in quick succession
+     compose instead of racing.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/** Today's entry in the activity calendar, or -1. */
+function todayIndex(activity: StudentDailyDashboard["activity"]) {
+  return activity.findIndex((day) => day.isToday);
+}
+
+/**
+ * Reflect a challenge the student just passed, without refetching.
+ *
+ * Moves everything the server would have moved for a completion:
+ *   - `todayChallengeCompletions`, which drives the "Today" tile
+ *   - today's calendar cell (an attempt and a completion, and its status)
+ *   - the challenge's own row, so it stops appearing as available
+ *   - `currentStreak`, but ONLY on the day's first completion — a second
+ *     challenge today does not extend a streak, and incrementing per
+ *     completion is the obvious bug this guard exists to prevent
+ *   - `viewerXp`, when the caller knows what was awarded
+ *
+ * Deliberately NOT touched: `viewerRank` and the leaderboard. Those depend on
+ * what every other member did today, which this client has no way to know.
+ */
+export function applyChallengeCompletion(
+  client: QueryClient,
+  community: string | undefined,
+  input: { challengeId?: string; xpAwarded?: number } = {},
+) {
+  client.setQueryData<DashboardPayload>(keys.student.dashboard(community), (previous) => {
+    if (!previous) return previous;
+    const d = previous.dashboard;
+
+    const index = todayIndex(d.activity);
+    const today = index >= 0 ? d.activity[index] : null;
+    const firstToday = (today?.completions ?? d.todayChallengeCompletions) === 0;
+
+    const activity =
+      index < 0
+        ? d.activity
+        : d.activity.map((day, i) =>
+            i === index
+              ? {
+                  ...day,
+                  attempts: day.attempts + 1,
+                  completions: day.completions + 1,
+                  // The calendar's own vocabulary — see DailyActivityStatus.
+                  status: "completed" as const,
+                }
+              : day,
+          );
+
+    return {
+      dashboard: {
+        ...d,
+        todayChallengeCompletions: d.todayChallengeCompletions + 1,
+        activity,
+        challenge: {
+          ...d.challenge,
+          currentStreak: firstToday ? d.challenge.currentStreak + 1 : d.challenge.currentStreak,
+          challenges: input.challengeId
+            ? d.challenge.challenges.map((c) =>
+                c.id === input.challengeId ? { ...c, status: "completed" as const } : c,
+              )
+            : d.challenge.challenges,
+        },
+        community:
+          d.community && input.xpAwarded
+            ? { ...d.community, viewerXp: d.community.viewerXp + input.xpAwarded }
+            : d.community,
+      },
+    };
+  });
+}
+
+/**
+ * Reflect a practice attempt that did not pass.
+ *
+ * Same shape as above minus the completion: the calendar records that the day
+ * was worked on, the streak does not move, and nothing else changes.
+ */
+export function applyPracticeAttempt(client: QueryClient, community: string | undefined) {
+  client.setQueryData<DashboardPayload>(keys.student.dashboard(community), (previous) => {
+    if (!previous) return previous;
+    const d = previous.dashboard;
+    const index = todayIndex(d.activity);
+    if (index < 0) return previous;
+
+    return {
+      dashboard: {
+        ...d,
+        activity: d.activity.map((day, i) =>
+          i === index
+            ? {
+                ...day,
+                attempts: day.attempts + 1,
+                status: day.completions > 0 ? day.status : ("started" as const),
+              }
+            : day,
+        ),
+      },
+    };
+  });
+}
+
+/**
+ * The one deliberate escape hatch: throw the cached dashboard away.
+ *
+ * For the rare case where local reasoning cannot be trusted — a student
+ * rejoining a different community, or an admin action landing mid-session.
+ * Everything routine should use the patches above instead.
+ */
+export function invalidateDashboard(client: QueryClient) {
+  return client.invalidateQueries({ queryKey: ["student", "dashboard"] });
+}
+
+/**
+ * The patch helpers, bound to the community the dashboard is actually keyed by.
+ *
+ * WHY THIS HOOK EXISTS RATHER THAN CALLERS PASSING A SLUG. The dashboard's
+ * cache key is the community the URL ASKED for — `undefined` when there is no
+ * `?community=` — not the one it resolved to. A caller that reasonably passed
+ * the resolved slug would patch a different entry from the one on screen, and
+ * the write would silently do nothing. That exact mismatch already cost a
+ * round trip once, when the sidebar prefetched `["student","dashboard",""]`
+ * while the page read `["student","dashboard","bct"]`.
+ *
+ * Deriving it here, from the same `searchParams` the page uses, means there is
+ * one definition of the key and no call site can get it wrong.
+ */
+export function useDashboardPatch() {
+  const client = useQueryClient();
+  const searchParams = useSearchParams();
+  const community = searchParams.get("community") || undefined;
+
+  return useMemo(
+    () => ({
+      /** A challenge just passed. */
+      completed: (input?: { challengeId?: string; xpAwarded?: number }) =>
+        applyChallengeCompletion(client, community, input),
+      /** An attempt that did not pass. */
+      attempted: () => applyPracticeAttempt(client, community),
+    }),
+    [client, community],
+  );
 }

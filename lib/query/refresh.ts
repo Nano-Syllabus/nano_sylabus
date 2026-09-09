@@ -33,7 +33,24 @@ export function useAppRefresh() {
   const client = useQueryClient();
 
   return useCallback(() => {
-    void client.invalidateQueries({ queryKey: keys.student.all() });
+    /**
+     * EVERY STUDENT KEY EXCEPT THE DASHBOARD.
+     *
+     * The dashboard is fetched once per page load and held for the life of the
+     * tab (`staleTime: Infinity`), because the writes that move its numbers
+     * patch it in place instead — see `useDashboardPatch`. Invalidating it here
+     * would undo that: the student would finish a challenge, watch the tile
+     * tick up instantly, and then watch the whole screen reload two seconds
+     * later to show the same value.
+     *
+     * `predicate` rather than a narrower key because invalidation is
+     * prefix-based: there is no way to say "this subtree minus one branch" with
+     * a key alone.
+     */
+    void client.invalidateQueries({
+      predicate: (query) =>
+        query.queryKey[0] === "student" && query.queryKey[1] !== "dashboard",
+    });
     router.refresh();
   }, [client, router]);
 }

@@ -87,7 +87,7 @@ function ExplorerSkeleton() {
   return (
     <div className="space-y-3" aria-label="Loading chapters">
       {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="h-[72px] animate-pulse rounded-2xl bg-[#f8fafc] motion-reduce:animate-none" />
+        <div key={index} className="h-[72px] animate-pulse rounded-2xl bg-bg-secondary motion-reduce:animate-none" />
       ))}
     </div>
   );
@@ -298,36 +298,36 @@ export function LibraryNanoAiWorkspace({
   }
 
   return (
-    <main className="font-figma-library mx-auto min-h-full w-full max-w-[1240px] flex-1 bg-white px-5 pb-12 pt-9 text-[#1e293b] sm:px-8 lg:px-10">
+    <main className="font-figma-library mx-auto min-h-full w-full max-w-[1240px] flex-1 bg-bg-primary px-5 pb-12 pt-9 text-text-primary sm:px-8 lg:px-10">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-[32px] font-semibold leading-tight text-[#1e293b]">Library</h1>
+            <h1 className="text-[32px] font-semibold leading-tight text-text-primary">Library</h1>
             <Image src="/figma/library/book-open.svg" alt="" width={28} height={28} aria-hidden="true" />
           </div>
-          <p className="mt-2 text-sm text-[#475569]">
+          <p className="mt-2 text-sm text-text-secondary">
             Choose your semester, subject and chapter to explore resources and study with Nano AI.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex h-11 w-full min-w-0 items-center gap-2.5 rounded-full border border-[#e2e8f0] bg-white px-4 sm:w-[300px]">
+          <label className="flex h-11 w-full min-w-0 items-center gap-2.5 rounded-full border border-border bg-card px-4 sm:w-[300px]">
             <Image src="/figma/library/search.svg" alt="" width={18} height={18} aria-hidden="true" />
             <span className="sr-only">Search subjects and chapters</span>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search subjects, chapters..." className="min-w-0 flex-1 bg-transparent text-[13px] text-[#334155] outline-none placeholder:text-[#94a3b8]" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search subjects, chapters..." className="min-w-0 flex-1 bg-transparent text-[13px] text-text-primary outline-none placeholder:text-text-muted" />
           </label>
-          <button type="button" aria-label="Show only available chapters" aria-pressed={onlyAvailable} onClick={() => setOnlyAvailable((value) => !value)} className={cn("flex size-11 shrink-0 items-center justify-center rounded-full border bg-white", onlyAvailable ? "border-[#1d57fd]" : "border-[#e2e8f0]", focusRing)}>
+          <button type="button" aria-label="Show only available chapters" aria-pressed={onlyAvailable} onClick={() => setOnlyAvailable((value) => !value)} className={cn("flex size-11 shrink-0 items-center justify-center rounded-full border bg-card", onlyAvailable ? "border-[#1d57fd]" : "border-border", focusRing)}>
             <Image src="/figma/library/sliders.svg" alt="" width={20} height={20} aria-hidden="true" />
           </button>
         </div>
       </header>
 
       <section className="mt-7" aria-labelledby="library-semesters-heading">
-        <h2 id="library-semesters-heading" className="text-[17px] font-semibold text-[#1e293b]">1. Choose Semester</h2>
+        <h2 id="library-semesters-heading" className="text-[17px] font-semibold text-text-primary">1. Choose Semester</h2>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {orderedTerms.map((term) => {
             const active = selectedTerm?.id === term.id;
             return (
-              <button key={term.id} type="button" disabled={savingSemester && active} onClick={() => void selectTerm(term)} className={cn("h-10 shrink-0 rounded-full border px-[18px] text-[13px] font-medium transition-colors", active ? "border-[#1d57fd] bg-white text-[#1d57fd]" : "border-[#e2e8f0] bg-white text-[#475569] hover:border-[#a8b6cb]", focusRing)}>
+              <button key={term.id} type="button" disabled={savingSemester && active} onClick={() => void selectTerm(term)} className={cn("h-10 shrink-0 rounded-full border px-[18px] text-[13px] font-medium transition-colors", active ? "border-[#1d57fd] bg-card text-[#1d57fd]" : "border-border bg-card text-text-secondary hover:border-border-strong", focusRing)}>
                 {academicLabel(term.semesterNumber, "Semester")}
               </button>
             );
@@ -338,8 +338,8 @@ export function LibraryNanoAiWorkspace({
 
       <section className="mt-7" aria-labelledby="library-subjects-heading">
         <div className="flex items-center justify-between gap-4">
-          <h2 id="library-subjects-heading" className="text-[17px] font-semibold text-[#1e293b]">2. Choose Subject</h2>
-          {selectedSubject ? <button type="button" onClick={() => { setSelectedSubject(null); setQuery(""); updateLibraryUrl({ semester: selectedTerm?.id, subject: null, document: null }); }} className={cn("inline-flex items-center gap-1.5 text-[13px] font-medium text-[#475569]", focusRing)}><Image src="/figma/library/arrow-left.svg" alt="" width={15} height={15} aria-hidden="true" />Change Subject</button> : null}
+          <h2 id="library-subjects-heading" className="text-[17px] font-semibold text-text-primary">2. Choose Subject</h2>
+          {selectedSubject ? <button type="button" onClick={() => { setSelectedSubject(null); setQuery(""); updateLibraryUrl({ semester: selectedTerm?.id, subject: null, document: null }); }} className={cn("inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary", focusRing)}><Image src="/figma/library/arrow-left.svg" alt="" width={15} height={15} aria-hidden="true" />Change Subject</button> : null}
         </div>
         {selectedTerm && visibleSubjects.length ? (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -347,20 +347,20 @@ export function LibraryNanoAiWorkspace({
               const active = selectedSubject?.id === subject.id;
               const progress = insights[subject.id]?.readiness;
               return (
-                <button key={subject.id} type="button" onClick={() => selectSubject(subject)} className={cn("group flex min-h-[124px] w-full flex-col rounded-2xl border bg-white p-4 text-left transition-colors sm:w-52", active ? "border-[1.5px] border-[#1d57fd]" : "border-[#e2e8f0] hover:border-[#a8b6cb]", focusRing)}>
-                  <div className="flex min-w-0 items-center gap-3"><SubjectIcon index={index} /><span className="line-clamp-2 text-sm font-semibold leading-5 text-[#334155]">{titleCase(subject.name)}</span></div>
-                  <div className="mt-auto flex items-end justify-between gap-2 pt-3"><span className="text-xs text-[#94a3b8]">{insights[subject.id]?.materialCount ?? 0} chapters</span><span className="text-xs font-semibold text-[#1d57fd]">{progress === null || progress === undefined ? "—" : `${Math.round(progress)}%`}</span></div>
+                <button key={subject.id} type="button" onClick={() => selectSubject(subject)} className={cn("group flex min-h-[124px] w-full flex-col rounded-2xl border bg-card p-4 text-left transition-colors sm:w-52", active ? "border-[1.5px] border-[#1d57fd]" : "border-border hover:border-border-strong", focusRing)}>
+                  <div className="flex min-w-0 items-center gap-3"><SubjectIcon index={index} /><span className="line-clamp-2 text-sm font-semibold leading-5 text-text-primary">{titleCase(subject.name)}</span></div>
+                  <div className="mt-auto flex items-end justify-between gap-2 pt-3"><span className="text-xs text-text-muted">{insights[subject.id]?.materialCount ?? 0} chapters</span><span className="text-xs font-semibold text-[#1d57fd]">{progress === null || progress === undefined ? "—" : `${Math.round(progress)}%`}</span></div>
                 </button>
               );
             })}
           </div>
-        ) : <div className="mt-3 rounded-2xl border border-dashed border-[#e2e8f0] bg-[#f8fafc] p-6 text-center text-sm text-[#64748b]">{selectedTerm ? "No matching subjects." : "No semesters are available yet."}</div>}
+        ) : <div className="mt-3 rounded-2xl border border-dashed border-border bg-bg-secondary p-6 text-center text-sm text-text-muted">{selectedTerm ? "No matching subjects." : "No semesters are available yet."}</div>}
       </section>
 
       <section className="mt-7" aria-labelledby="library-resources-heading">
-        <h2 id="library-resources-heading" className="text-[17px] font-semibold text-[#1e293b]">3. Choose Chapter</h2>
+        <h2 id="library-resources-heading" className="text-[17px] font-semibold text-text-primary">3. Choose Chapter</h2>
         <div className="mt-3">
-          {!selectedSubject ? <div className="rounded-2xl bg-[#f8fafc] px-5 py-6 text-center text-xs text-[#94a3b8]">Choose a subject to see its uploaded chapters and PDFs.</div> : null}
+          {!selectedSubject ? <div className="rounded-2xl bg-bg-secondary px-5 py-6 text-center text-xs text-text-muted">Choose a subject to see its uploaded chapters and PDFs.</div> : null}
             {loadState === "loading" ? <ExplorerSkeleton /> : null}
             {loadState === "error" ? (
               <div className="rounded-xl border border-destructive/30 bg-bg-primary p-6">
@@ -389,9 +389,9 @@ export function LibraryNanoAiWorkspace({
               </div>
             ) : null}
             {loadState === "ready" && materials.length > 0 && visibleMaterials.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[#e2e8f0] bg-[#f8fafc] p-8 text-center">
-                <p className="text-sm font-semibold text-[#334155]">No matching chapters</p>
-                <p className="mt-1 text-xs text-[#94a3b8]">Clear the search or availability filter to see all resources.</p>
+              <div className="rounded-2xl border border-dashed border-border bg-bg-secondary p-8 text-center">
+                <p className="text-sm font-semibold text-text-primary">No matching chapters</p>
+                <p className="mt-1 text-xs text-text-muted">Clear the search or availability filter to see all resources.</p>
               </div>
             ) : null}
             {loadState === "ready" && visibleMaterials.length > 0 ? (
@@ -412,16 +412,16 @@ export function LibraryNanoAiWorkspace({
                                 });
                               }}
                               className={cn(
-                                "group flex min-h-20 w-full items-center gap-4 rounded-2xl bg-[#f8fafc] px-5 py-4 text-left transition-colors hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
+                                "group flex min-h-20 w-full items-center gap-4 rounded-2xl bg-bg-secondary px-5 py-4 text-left transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
                                 focusRing,
                               )}
                             >
                               <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold", SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length].tile, SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length].text)}>{String(index + 1).padStart(2, "0")}</span>
                               <span className="min-w-0 flex-1">
-                                <span className="block truncate text-[15px] font-semibold text-[#334155]">{readableMaterialName(material.name)}</span>
-                                <span className="mt-1 block truncate text-[13px] text-[#94a3b8]">{material.shelf || formatSize(material.sizeBytes)}</span>
+                                <span className="block truncate text-[15px] font-semibold text-text-primary">{readableMaterialName(material.name)}</span>
+                                <span className="mt-1 block truncate text-[13px] text-text-muted">{material.shelf || formatSize(material.sizeBytes)}</span>
                               </span>
-                              <span className={cn("rounded-md px-3 py-1.5 text-[11px] font-medium", canOpen ? "bg-[#eaf8ec] text-[#299244]" : "bg-[#eef2f6] text-[#94a3b8]")}>{canOpen ? "Available" : "Locked"}</span>
+                              <span className={cn("rounded-md px-3 py-1.5 text-[11px] font-medium", canOpen ? "bg-[#eaf8ec] text-[#299244]" : "bg-bg-secondary text-text-muted")}>{canOpen ? "Available" : "Locked"}</span>
                               {!canOpen ? <Image src="/figma/library/lock.svg" alt="" width={12} height={12} aria-hidden="true" /> : null}
                               <Image src="/figma/library/chevron-right.svg" alt="" width={16} height={16} aria-hidden="true" />
                             </button>
@@ -433,9 +433,9 @@ export function LibraryNanoAiWorkspace({
           </div>
       </section>
 
-      <aside className="mt-7 flex items-center gap-4 rounded-[20px] border border-[#dce4ff] bg-[#eef2ff] px-6 py-[18px]">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white"><Image src="/figma/library/book.svg" alt="" width={22} height={22} aria-hidden="true" /></span>
-        <div className="min-w-0 flex-1"><p className="text-[15px] font-semibold text-[#334155]">{selectedSubject ? `${titleCase(selectedSubject.name)} progress` : "Your learning progress"}</p><p className="mt-0.5 text-[13px] text-[#64748b]">{selectedSubject?.progress?.practicedTopicCount ? `${selectedSubject.progress.practicedTopicCount} topics practised · ${Math.round(selectedSubject.progress.readiness ?? 0)}% ready` : "Open a chapter and complete challenges to build your subject progress."}</p></div>
+      <aside className="mt-7 flex items-center gap-4 rounded-[20px] border border-[color-mix(in_srgb,#1d57fd_26%,var(--bg-primary))] bg-[color-mix(in_srgb,#1d57fd_9%,var(--bg-primary))] px-6 py-[18px]">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-card"><Image src="/figma/library/book.svg" alt="" width={22} height={22} aria-hidden="true" /></span>
+        <div className="min-w-0 flex-1"><p className="text-[15px] font-semibold text-text-primary">{selectedSubject ? `${titleCase(selectedSubject.name)} progress` : "Your learning progress"}</p><p className="mt-0.5 text-[13px] text-text-muted">{selectedSubject?.progress?.practicedTopicCount ? `${selectedSubject.progress.practicedTopicCount} topics practised · ${Math.round(selectedSubject.progress.readiness ?? 0)}% ready` : "Open a chapter and complete challenges to build your subject progress."}</p></div>
         <Image src="/figma/library/award.svg" alt="" width={24} height={24} aria-hidden="true" />
       </aside>
     </main>
@@ -512,8 +512,8 @@ export function LibraryDocumentViewer({
             {titleCase(subject.name)} · NanoAI active
           </p>
         </div>
-        <div className="hidden min-w-32 rounded-lg bg-[#eef2ff] px-3 py-2 sm:block">
-          <div className="flex items-center justify-between gap-3 text-[10px] font-medium text-[#64748b]">
+        <div className="hidden min-w-32 rounded-lg bg-[color-mix(in_srgb,#1d57fd_9%,var(--bg-primary))] px-3 py-2 sm:block">
+          <div className="flex items-center justify-between gap-3 text-[10px] font-medium text-text-muted">
             <span>Subject progress</span>
             <span className="font-semibold text-[#1d57fd]">
               {subject.progress?.readiness === null || subject.progress?.readiness === undefined
@@ -521,7 +521,7 @@ export function LibraryDocumentViewer({
                 : `${Math.round(subject.progress.readiness)}%`}
             </span>
           </div>
-          <div className="mt-1 h-1 overflow-hidden rounded-full bg-white">
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-card">
             <div
               className="h-full rounded-full bg-[#1d57fd]"
               style={{ width: `${Math.max(0, Math.min(100, subject.progress?.readiness ?? 0))}%` }}

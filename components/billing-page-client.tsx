@@ -50,7 +50,7 @@ function FeatureList({
   variant: "free" | "individual" | "group";
 }) {
   return (
-    <ul className="mt-[23px] m-0 list-none p-0 font-[family-name:var(--font-poppins)] text-[14px] font-medium tracking-[0.42px] text-[#494949]">
+    <ul className="mt-[23px] m-0 list-none p-0 font-[family-name:var(--font-poppins)] text-[14px] font-medium tracking-[0.42px] text-text-secondary">
       {features.map((feature, index) => {
         const unlimited =
           (variant === "individual" && index < 3) ||
@@ -151,19 +151,19 @@ export function BillingPageClient({ overview, paymentConfig, user }: {
 
   return (
     <>
-      <main className="min-h-full bg-white px-5 py-12 text-black sm:px-8 lg:py-16">
+      <main className="min-h-full bg-bg-primary px-5 py-12 text-text-primary sm:px-8 lg:py-16">
         {error ? <p role="alert" className="mx-auto mb-6 max-w-2xl rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
         <header className="mx-auto mb-[50px] flex max-w-[1002px] flex-col items-center text-center font-[family-name:var(--font-poppins)]">
-          <h1 className="text-[32px] font-bold leading-[1.3] tracking-[-0.64px] text-[#202228]">
+          <h1 className="text-[32px] font-bold leading-[1.3] tracking-[-0.64px] text-text-primary">
             Study without limits!
           </h1>
-          <p className="mt-[13px] text-[14px] font-medium leading-[1.5] tracking-[-0.14px] text-[#494949]">
+          <p className="mt-[13px] text-[14px] font-medium leading-[1.5] tracking-[-0.14px] text-text-secondary">
             {user.hasUnlimitedAccess
               ? `Your ${activePlanLabel} plan is active with unlimited NanoAI access.`
               : "Start learning for free. Upgrade when you’re ready for more."}
           </p>
-          <div className="mt-[24px] inline-flex h-[39px] items-center rounded-full border border-[#d5d5d5] bg-white p-[3px] shadow-[0_2px_5px_rgba(0,0,0,0.16)]" aria-label="Billing period">
+          <div className="mt-[24px] inline-flex h-[39px] items-center rounded-full border border-border bg-card p-[3px] shadow-[0_2px_5px_rgba(0,0,0,0.16)]" aria-label="Billing period">
             <button
               type="button"
               aria-pressed="true"
@@ -175,7 +175,7 @@ export function BillingPageClient({ overview, paymentConfig, user }: {
               type="button"
               disabled
               title="Yearly billing is not available yet"
-              className="h-[31px] rounded-full px-[24px] text-[10px] font-semibold uppercase tracking-[0.6px] text-[#35405e] disabled:cursor-not-allowed disabled:opacity-100"
+              className="h-[31px] rounded-full px-[24px] text-[10px] font-semibold uppercase tracking-[0.6px] text-text-primary disabled:cursor-not-allowed disabled:opacity-100"
             >
               Yearly
             </button>
@@ -222,10 +222,10 @@ export function BillingPageClient({ overview, paymentConfig, user }: {
           />
         </section>
 
-        <section className="mx-auto mt-16 max-w-[1002px] border-t border-[#dedede] pt-10">
+        <section className="mx-auto mt-16 max-w-[1002px] border-t border-border pt-10">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#7c7c7c]">Payment activity</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Payment activity</p>
               <h2 className="mt-2 font-[family-name:var(--font-poppins)] text-3xl font-semibold">Your invoices</h2>
             </div>
             <p className="text-sm text-text-secondary">{user.hasUnlimitedAccess ? "Unlimited plan active" : `${overview.balance} messages available`}</p>
@@ -277,26 +277,27 @@ function PricingCard({ title, description, price, features, featureVariant, acti
   title: string; description: string; price: string; features: string[]; featureVariant: "free" | "individual" | "group"; actionLabel: string; loading?: boolean; disabled?: boolean; current?: boolean; accessEndsAt?: string | null; onAction: () => void; featured?: boolean;
 }) {
   return (
-    <article className={cn("relative mx-auto h-[570px] w-full max-w-[330px] overflow-visible rounded-[28px] border border-[#979797] bg-white font-[family-name:var(--font-poppins)]", featured && "h-[580px] border-2 border-[#20a8ff] bg-gradient-to-b from-white to-[#eef7ff]")}>
+    <article className={cn("relative mx-auto h-[570px] w-full max-w-[330px] overflow-visible rounded-[28px] border border-border bg-card font-[family-name:var(--font-poppins)]", featured &&
+          "h-[580px] border-2 border-[#20a8ff] bg-gradient-to-b from-[color-mix(in_srgb,#20a8ff_6%,var(--card))] to-[color-mix(in_srgb,#20a8ff_16%,var(--card))]")}>
       {featured || current ? <span className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-[20px] bg-[linear-gradient(175deg,#4db3ff_13.6%,#1689f5_84.5%)] px-[23.5px] py-[6px] text-[12px] font-semibold tracking-[0.621px] text-white">{current ? "Current Plan" : "Most Popular"}</span> : null}
       <div className={cn("flex h-full flex-col px-8 pb-[52px] pt-[50px]", featured && "px-8 pb-[38px] pt-[52px]")}>
         <div>
-          <h2 className="text-[25px] font-medium leading-normal tracking-[0.48px] text-black">{title}</h2>
-          <p className="mt-[6px] text-[33px] font-semibold leading-normal tracking-[0.48px] text-black">{price}</p>
-          <p className="mt-[6px] min-h-[44px] max-w-[266px] text-[14px] font-medium leading-[22px] tracking-[0.42px] text-[#7c7c7c]">
+          <h2 className="text-[25px] font-medium leading-normal tracking-[0.48px] text-text-primary">{title}</h2>
+          <p className="mt-[6px] text-[33px] font-semibold leading-normal tracking-[0.48px] text-text-primary">{price}</p>
+          <p className="mt-[6px] min-h-[44px] max-w-[266px] text-[14px] font-medium leading-[22px] tracking-[0.42px] text-text-muted">
             {title === "Group" ? <>One package for <span className="font-semibold text-[#1d57fd]">five students</span> studying together.</> : description}
           </p>
-          <div className="mt-[16px] h-px w-full bg-[#dedede]" />
+          <div className="mt-[16px] h-px w-full bg-border" />
           <FeatureList features={features} variant={featureVariant} />
         </div>
         <div className="mt-[30px]">
-          <button type="button" className={cn("flex min-h-[40px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-black px-[19px] py-[9px] font-[family-name:var(--font-inter)] text-[14px] font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1689f5] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70", featured && "bg-[linear-gradient(180deg,#4db3ff,#1689f5)]", current && "bg-[#e8f6ee] text-[#187a42]")} onClick={onAction} disabled={loading || disabled} aria-busy={loading}>
+          <button type="button" className={cn("flex min-h-[40px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-text-primary px-[19px] py-[9px] font-[family-name:var(--font-inter)] text-[14px] font-semibold text-text-inverse transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1689f5] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70", featured && "bg-[linear-gradient(180deg,#4db3ff,#1689f5)]", current && "bg-[#e8f6ee] text-[#187a42]")} onClick={onAction} disabled={loading || disabled} aria-busy={loading}>
             {current ? <CheckCircle2 className="size-4" aria-hidden="true" /> : null}
             {loading ? "Preparing payment..." : actionLabel}
             {!loading && !disabled ? <Image src="/figma-pricing-arrow.svg" alt="" width={20} height={20} aria-hidden="true" className="size-5" /> : null}
           </button>
           {current ? (
-            <p className="mt-2 text-center text-[12px] font-medium text-[#5f6875]">
+            <p className="mt-2 text-center text-[12px] font-medium text-text-secondary">
               {accessEndsAt ? `Active until ${formatDate(accessEndsAt)}` : "Active with no expiry date"}
             </p>
           ) : null}
@@ -355,7 +356,7 @@ function PaymentSubmissionModal({ invoice, paymentConfig, onClose, onSaved }: {
     <ModalFrame title="Scan, pay and send your receipt" onClose={onClose} locked={saving} wide>
       <div className="grid gap-7 md:grid-cols-[220px_1fr]">
         <div>
-          {paymentConfig ? <Image src={paymentConfig.qrImageUrl} alt={`Official ${paymentConfig.displayName} payment QR`} width={220} height={220} unoptimized className="aspect-square w-full rounded-2xl border border-border bg-white object-contain p-2" /> : <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-border p-5 text-center text-sm text-text-secondary">Payment QR is not configured yet.</div>}
+          {paymentConfig ? <Image src={paymentConfig.qrImageUrl} alt={`Official ${paymentConfig.displayName} payment QR`} width={220} height={220} unoptimized className="aspect-square w-full rounded-2xl border border-border bg-card object-contain p-2" /> : <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-border p-5 text-center text-sm text-text-secondary">Payment QR is not configured yet.</div>}
           {paymentConfig ? <div className="mt-3 text-sm text-text-secondary"><p className="font-semibold text-text-primary">{paymentConfig.bankName || paymentConfig.displayName}</p><p>{paymentConfig.accountName}</p>{paymentConfig.accountNumber ? <p>A/C {paymentConfig.accountNumber}</p> : null}</div> : null}
         </div>
         <div>

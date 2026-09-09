@@ -27,6 +27,7 @@ import type {
 } from "@/lib/data/student-challenges";
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 import { useAppRefresh } from "@/lib/query/refresh";
+import { useDashboardPatch } from "@/lib/query/dashboard";
 
 const WEEKLY_CHALLENGE_TARGET = 15;
 
@@ -154,6 +155,8 @@ function ChallengeDetail({
   const router = useRouter();
   // Refreshes the RSC payload AND the student query cache — see lib/query/refresh.ts
   const refreshApp = useAppRefresh();
+  // Patches the cached dashboard in place, keyed the same way the page reads it.
+  const dashboardPatch = useDashboardPatch();
   const { setSidebarSuppressed } = useContext(AppShellContext);
   const enterFocusButtonRef = useRef<HTMLButtonElement>(null);
   const exitFocusButtonRef = useRef<HTMLButtonElement>(null);
@@ -341,6 +344,21 @@ function ChallengeDetail({
       setScanFile(null);
       onChange(payload.challenge);
       setActiveStep(6);
+      /**
+       * Move the dashboard's numbers here, in this tick, with no request.
+       *
+       * The student has just finished the thing the dashboard measures, so the
+       * streak, the "Today" count and today's calendar cell all change — and
+       * this is precisely the moment they will look at them. Refetching would
+       * mean a two-second reload of the whole screen to show a number this
+       * client already knows.
+       *
+       * `refreshApp()` still runs for the rest of the app: it refreshes the RSC
+       * payload and every other student query, and deliberately leaves the
+       * dashboard alone (see lib/query/refresh.ts).
+       */
+      if (payload.passed) dashboardPatch.completed({ challengeId: payload.challenge?.id });
+      else dashboardPatch.attempted();
       refreshApp();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not grade the handwritten answer.");
