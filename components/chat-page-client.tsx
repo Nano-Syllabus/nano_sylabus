@@ -35,6 +35,7 @@ import { ThinkingSteps } from "@/components/ui/thinking-steps";
 import { CompactSelect } from "@/components/ui/compact-select";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { dedupeCitationsForDisplay } from "@/lib/citations";
+import { useTenantSubjects } from "@/lib/query/catalog";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type {
   AppUser,
@@ -128,10 +129,6 @@ const MAX_IMAGE_ATTACHMENTS = 4;
 const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);
 
-type TenantCatalogPayload = {
-  subjects?: TenantChatSubject[];
-};
-
 type ChatSwitchSessionDetail = {
   sessionId: string;
   title?: string;
@@ -149,15 +146,6 @@ async function readJsonResponse<T>(response: Response): Promise<T | null> {
   } catch {
     return null;
   }
-}
-
-async function loadTenantSubjectMetadata(): Promise<TenantCatalogPayload> {
-  const response = await fetch("/api/tenant/subjects", { cache: "no-store" });
-  if (!response.ok) {
-    return {};
-  }
-
-  return (await response.json()) as TenantCatalogPayload;
 }
 
 type ThinkingTrace = {
@@ -655,7 +643,31 @@ export function ChatPageClient({
   const [pendingAttachments, setPendingAttachments] = useState<ChatImageAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
   const [selectionPopover, setSelectionPopover] = useState<{ top: number; left: number; text: string } | null>(null);
-  const [tenantSubjectsByName, setTenantSubjectsByName] = useState<Record<string, TenantChatSubject>>({});
+  /**
+   * Tenant subject metadata, from the shared query rather than a raw fetch.
+   *
+   * This used to be a `useEffect` with `[]` deps calling `fetch` directly, and
+   * it cost two round trips instead of one: React StrictMode runs effects twice
+   * in development, and nothing deduplicated them. The perf HUD showed it
+   * plainly — `/api/tenant/subjects` listed twice at 1.18s each.
+   *
+   * `useTenantSubjects` is the same endpoint through TanStack Query, which
+   * collapses concurrent requests for one key into a single in-flight fetch and
+   * then holds the answer for `STALE.SHORT`. So the double-invoke becomes one
+   * request, remounting the chat screen inside the window becomes none, and any
+   * other surface that wants this list shares the same entry.
+   */
+  const { data: tenantSubjectsPayload } = useTenantSubjects();
+  const tenantSubjectsByName = useMemo(() => {
+    const byName: Record<string, TenantChatSubject> = {};
+    for (const subject of tenantSubjectsPayload?.subjects ?? []) {
+      const normalizedName = normalizeSubjectLabel(subject.name);
+      if (!normalizedName) continue;
+      if (!subject.slug || !subject.folderPath || !subject.namespaceSlug) continue;
+      byName[normalizedName] = subject as TenantChatSubject;
+    }
+    return byName;
+  }, [tenantSubjectsPayload]);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryShowAllSubjects, setLibraryShowAllSubjects] = useState(false);
   const [libraryWidth, setLibraryWidth] = useState(520);
@@ -873,36 +885,6 @@ export function ChatPageClient({
     shell.setRightRailWidth(desktopRailWidth);
     return () => shell.setRightRailWidth(0);
   }, [libraryOpen, libraryWidth, shell, viewportWidth]);
-
-  useEffect(() => {
-    let active = true;
-
-    const hydrateTenantSubjectMetadata = async () => {
-      try {
-        const payload = await loadTenantSubjectMetadata();
-        if (!active) return;
-
-        const nextSubjectsByName: Record<string, TenantChatSubject> = {};
-
-        for (const subject of payload.subjects ?? []) {
-          const normalizedName = normalizeSubjectLabel(subject.name);
-          if (!normalizedName) continue;
-          if (!subject.slug || !subject.folderPath || !subject.namespaceSlug) continue;
-          nextSubjectsByName[normalizedName] = subject;
-        }
-
-        setTenantSubjectsByName(nextSubjectsByName);
-      } catch {
-        // Chat still works through the server-side subject lookup if metadata is not ready yet.
-      }
-    };
-
-    void hydrateTenantSubjectMetadata();
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;

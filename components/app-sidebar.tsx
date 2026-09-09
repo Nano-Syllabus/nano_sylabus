@@ -10,6 +10,8 @@ import { cn, compactSessionTitle, groupDateLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { isAdminRole } from "@/lib/admin-role";
+import { useQueryClient } from "@tanstack/react-query";
+import { prefetchDashboard } from "@/lib/query/dashboard";
 import {
   useChatSessionEvents,
   useChatSessions,
@@ -148,6 +150,17 @@ export function AppSidebar({
    * like.
    */
   const showChatHistory = pathname.startsWith("/app/chat");
+
+  const queryClient = useQueryClient();
+  /**
+   * Which community the dashboard is scoped to, read from the URL.
+   *
+   * The prefetch has to use the SAME key the page will read, or it warms an
+   * entry nobody looks at. `undefined` here matches the page's own default —
+   * the student's saved active community — because the query key treats a
+   * missing slug as its own scope rather than as "any".
+   */
+  const activeCommunitySlug = searchParams.get("community") || undefined;
   const [historyErrorOverride, setHistoryErrorOverride] = useState("");
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [contextMenuId, setContextMenuId] = useState<string | null>(null);
@@ -424,6 +437,26 @@ export function AppSidebar({
         <Link
           href="/app/today"
           onClick={() => onCloseMobile?.()}
+          /**
+           * Warm the dashboard on intent, not on arrival.
+           *
+           * `router.prefetch` fetches the ROUTE; `prefetchDashboard` fetches
+           * the DATA, which since the page became a shell is the part that
+           * actually takes time. Firing both on hover means the click usually
+           * lands on a dashboard that is already in the query cache and paints
+           * on the first frame.
+           *
+           * Both are no-ops once warm — `prefetchQuery` returns immediately
+           * for a fresh entry — so this costs nothing on repeat hovers.
+           */
+          onPointerEnter={() => {
+            router.prefetch("/app/today");
+            void prefetchDashboard(queryClient, activeCommunitySlug);
+          }}
+          onFocus={() => {
+            router.prefetch("/app/today");
+            void prefetchDashboard(queryClient, activeCommunitySlug);
+          }}
           className={cn(
             "flex items-center text-[14px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
             isCollapsed

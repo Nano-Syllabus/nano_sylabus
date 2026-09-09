@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
-import { getQueryClient } from "@/lib/query/client";
+import { getQueryClient, shouldPersistQuery } from "@/lib/query/client";
 import { QueryDevtools } from "@/components/query-devtools";
 
 /**
@@ -88,6 +88,10 @@ export function QueryProvider({ children }: { children: ReactNode }) {
       }),
       maxAge: PERSIST_MAX_AGE,
       buster: CACHE_BUSTER,
+      // The opt-in disk rule lives here, on the PERSISTER, and nowhere else.
+      // The client's own `dehydrate` default stays permissive so server-side
+      // prefetching can seed the cache — see lib/query/client.ts.
+      dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
     };
   }, [storage]);
 

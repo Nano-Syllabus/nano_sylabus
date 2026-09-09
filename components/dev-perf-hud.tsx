@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useReportWebVitals } from "next/web-vitals";
+import { useQueryClient } from "@tanstack/react-query";
 
 type Rating = "good" | "ok" | "poor" | "none";
 
@@ -262,12 +263,62 @@ function Metric({
   );
 }
 
+/**
+ * What the TanStack Query cache is holding, live.
+ *
+ * The point of this panel is to answer one question at a glance: IS THE
+ * CACHING ACTUALLY WORKING? A request that never happens leaves no trace in
+ * the network list, so the only way to see caching succeed is to watch the
+ * cache itself — a screen that paints with `fresh` entries and a `fetching` of
+ * zero is a screen that cost nothing.
+ *
+ * How to read it:
+ *   fresh    inside its `staleTime`. Reading these costs no request at all.
+ *   stale    still shown instantly, revalidating behind the content.
+ *   fetching in flight right now.
+ *   queries  everything held, including what is only in memory for a back
+ *            navigation.
+ *
+ * THROTTLED ON PURPOSE. The cache emits an event per query per state change,
+ * and this component already re-renders on every fetch; subscribing without a
+ * throttle would put it back into the render storm that leaked ~24 event
+ * listeners per render before `useReportWebVitals` was stabilised. One
+ * snapshot a second is plenty for something a human is reading.
+ */
+function useQueryCacheStats(enabled: boolean) {
+  const client = useQueryClient();
+  const [stats, setStats] = useState({ total: 0, fresh: 0, stale: 0, fetching: 0 });
+
+  useEffect(() => {
+    if (!enabled) return;
+    const cache = client.getQueryCache();
+
+    const read = () => {
+      const all = cache.getAll();
+      let fresh = 0;
+      let fetching = 0;
+      for (const query of all) {
+        if (query.state.fetchStatus === "fetching") fetching += 1;
+        if (query.state.data !== undefined && !query.isStale()) fresh += 1;
+      }
+      setStats({ total: all.length, fresh, stale: all.length - fresh, fetching });
+    };
+
+    read();
+    const timer = window.setInterval(read, 1000);
+    return () => window.clearInterval(timer);
+  }, [client, enabled]);
+
+  return stats;
+}
+
 export function DevPerfHud() {
   const [vitals, setVitals] = useState<Vitals>({});
   const [expanded, setExpanded] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [hydrateMs, setHydrateMs] = useState<number | undefined>();
   const calls = useServerCalls(!hidden);
+  const queryStats = useQueryCacheStats(!hidden);
   const { lastRoute, pending } = useRouteChangeTiming();
 
   useLiveVitals((patch) => setVitals((previous) => ({ ...previous, ...patch })));
@@ -447,6 +498,34 @@ export function DevPerfHud() {
           metric="route"
         />
         <Metric name={`api median (${summary.api.length})`} value={summary.apiMedian} metric="api" />
+      </div>
+
+      <div style={{ height: 1, background: "rgba(148,163,184,0.18)", margin: "8px 0" }} />
+      <div style={{ color: "#94a3b8", marginBottom: 4 }}>tanstack query cache</div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <span title="Entries inside their staleTime — read with no request at all">
+          <span style={{ color: COLORS.good, fontWeight: 600 }}>{queryStats.fresh}</span>
+          <span style={{ color: "#94a3b8" }}> fresh</span>
+        </span>
+        <span title="Shown instantly, revalidating behind the content">
+          <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{queryStats.stale}</span>
+          <span style={{ color: "#94a3b8" }}> stale</span>
+        </span>
+        <span title="Requests in flight right now">
+          <span
+            style={{
+              color: queryStats.fetching ? COLORS.ok : "#e2e8f0",
+              fontWeight: 600,
+            }}
+          >
+            {queryStats.fetching}
+          </span>
+          <span style={{ color: "#94a3b8" }}> fetching</span>
+        </span>
+        <span title="Every entry held, including ones kept for a back navigation">
+          <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{queryStats.total}</span>
+          <span style={{ color: "#94a3b8" }}> cached</span>
+        </span>
       </div>
 
       {summary.slowest ? (

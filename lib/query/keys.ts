@@ -64,6 +64,8 @@ export const keys = {
     material: (documentId: string) => ["student", "material", documentId] as const,
     profileSubjects: () => ["student", "profile", "subjects"] as const,
     activeCommunity: () => ["student", "active-community"] as const,
+    /** The Daily Dashboard, scoped to the selected community. */
+    dashboard: (community?: string) => ["student", "dashboard", community ?? ""] as const,
     teacherExams: () => ["student", "teacher-exams"] as const,
     practice: {
       all: () => ["student", "practice"] as const,

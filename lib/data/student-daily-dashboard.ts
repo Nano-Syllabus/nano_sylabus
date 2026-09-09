@@ -243,15 +243,50 @@ export async function getStudentDailyDashboard(
   const activityStart = calendarStart(today);
   const activityStartTimestamp = new Date(`${activityStart}T00:00:00+05:45`).toISOString();
   const activityEndTimestamp = new Date(`${shiftDateKey(today, 1)}T00:00:00+05:45`).toISOString();
+  /**
+   * THE TWO HALVES OF THIS PAGE NO LONGER QUEUE BEHIND EACH OTHER.
+   *
+   * `getStudentChallengeDashboard` (~800ms) and `getCommunityHubForUser`
+   * (~800ms) were awaited in sequence, which is most of what made this the
+   * slowest read in the product. The dependency between them was real but
+   * thin: the hub only needed to know WHICH community, and the challenge
+   * dashboard resolves that from the very `preferredCommunitySlug` this
+   * function was already handed.
+   *
+   * So the hub is started speculatively on that slug, in parallel, and the
+   * result is checked against what the challenge dashboard actually resolved.
+   * They agree in the ordinary case — both resolve from the same input — and
+   * the two 800ms reads overlap into one. When they disagree (a student whose
+   * challenge scope lands on a different community than the one selected), the
+   * speculative answer is discarded and the correct one fetched, costing one
+   * extra read on a path that is now no slower than it used to be.
+   *
+   * The result is compared, not the input. Comparing slugs would fail whenever
+   * `preferredCommunitySlug` is undefined — the common case, where both sides
+   * independently resolve to the student's default — and would refetch every
+   * time for no reason.
+   */
+  const speculativeHub = getCommunityHubForUser(userId, admin, preferredCommunitySlug);
+  // A speculative promise that ends up discarded must still be handled, or its
+  // rejection surfaces as an unhandled rejection and takes the process down.
+  // Attaching this does not swallow anything: `await speculativeHub` below
+  // still throws for the branch that uses it.
+  speculativeHub.catch(() => {});
+
   const challenge = await getStudentChallengeDashboard(
     userId,
     1,
     undefined,
     preferredCommunitySlug,
   );
+  const resolvedSlug = challenge.community?.slug ?? preferredCommunitySlug;
 
   const [community, activityResult] = await Promise.all([
-    getCommunityHubForUser(userId, admin, challenge.community?.slug ?? preferredCommunitySlug),
+    speculativeHub.then((hub) =>
+      !resolvedSlug || hub?.community.slug === resolvedSlug
+        ? hub
+        : getCommunityHubForUser(userId, admin, resolvedSlug),
+    ),
     challenge.community?.courseId
       ? admin
           .from("student_practice_attempts")

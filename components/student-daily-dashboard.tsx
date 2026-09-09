@@ -28,6 +28,7 @@ import type {
 } from "@/lib/data/student-daily-dashboard";
 import type { SubscriptionPlan } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useDashboard } from "@/lib/query/dashboard";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -172,7 +173,7 @@ function UpgradeModal({
             onClick={onClose}
             disabled={creatingInvoice}
             className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50",
+              "flex size-10 shrink-0 items-center justify-center rounded-full bg-border text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50",
               focusRing,
             )}
             aria-label="Close upgrade dialog"
@@ -185,7 +186,7 @@ function UpgradeModal({
           Choose the official paid plan or invite a peer. Both paths use your real billing account.
         </p>
 
-        <section className="mt-6 rounded-2xl border border-border bg-bg-secondary p-5">
+        <section className="mt-6 rounded-2xl border border-border bg-border p-5">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
@@ -240,7 +241,7 @@ function UpgradeModal({
             onClick={openReferral}
             disabled={creatingInvoice}
             className={cn(
-              "mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-border px-5 text-sm font-semibold hover:bg-bg-secondary disabled:opacity-50",
+              "mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-border px-5 text-sm font-semibold hover:bg-border disabled:opacity-50",
               focusRing,
             )}
           >
@@ -261,19 +262,58 @@ function UpgradeModal({
   );
 }
 
+/**
+ * `pending` shimmers only the NUMBER, never the card.
+ *
+ * A tile's label and icon are known before its value is — they are constants in
+ * this file, not data — so greying the whole card while waiting throws away
+ * information the reader could already have used. Keeping the frame, the label
+ * and the icon solid means the dashboard arrives as a real page with six
+ * recognisable tiles whose figures are still landing, rather than as six grey
+ * rectangles that could be anything.
+ *
+ * It also removes the layout shift: the card is exactly the size it will be, so
+ * nothing moves when the value arrives.
+ */
 function MetricCard({
   icon,
   label,
   value,
   detail,
   accent,
+  pending,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
   detail: string;
   accent?: boolean;
+  pending?: boolean;
 }) {
+  if (pending) {
+    return (
+      <article className="min-w-0 rounded-2xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
+            {label}
+          </span>
+          <span className="text-text-secondary" aria-hidden="true">
+            {icon}
+          </span>
+        </div>
+        <div
+          className="mt-5 h-8 w-20 animate-pulse rounded-lg bg-border motion-reduce:animate-none"
+          aria-hidden="true"
+        />
+        <div className="mt-2 min-h-10">
+          <div className="h-3 w-full animate-pulse rounded-full bg-border motion-reduce:animate-none" />
+          <div className="mt-1.5 h-3 w-2/3 animate-pulse rounded-full bg-border motion-reduce:animate-none" />
+        </div>
+        <span className="sr-only">{label} is still loading</span>
+      </article>
+    );
+  }
+
   return (
     <article
       className={cn(
@@ -353,7 +393,7 @@ function ActivityCalendar({ days }: { days: DailyActivityDay[] }) {
             <span className="size-2.5 rounded-sm bg-warning" /> Practised
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm bg-bg-secondary ring-1 ring-inset ring-border" />{" "}
+            <span className="size-2.5 rounded-sm bg-border ring-1 ring-inset ring-border" />{" "}
             No activity
           </span>
         </div>
@@ -381,7 +421,7 @@ function ActivityCalendar({ days }: { days: DailyActivityDay[] }) {
                   focusRing,
                   day.status === "completed" && "border-success/20 bg-success text-white",
                   day.status === "started" && "border-warning/25 bg-warning text-white",
-                  day.status === "idle" && "border-border bg-bg-secondary text-text-muted",
+                  day.status === "idle" && "border-border bg-border text-text-muted",
                   day.status === "future" && "border-transparent bg-transparent text-text-muted/40",
                   day.isToday &&
                     "ring-2 ring-[var(--community-accent)] ring-offset-2 ring-offset-bg-primary",
@@ -404,7 +444,7 @@ function ActivityCalendar({ days }: { days: DailyActivityDay[] }) {
 
       {selectedDay ? (
         <div
-          className="mt-5 grid gap-4 rounded-xl border border-border bg-bg-secondary p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+          className="mt-5 grid gap-4 rounded-xl border border-border bg-border p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
           aria-live="polite"
         >
           <div>
@@ -447,14 +487,14 @@ function LeaderboardRow({ member }: { member: DailyLeaderboardMember }) {
     <li
       className={cn(
         "grid grid-cols-[34px_minmax(0,1fr)_64px_62px] items-center gap-2 border-t border-border px-1 py-3 text-sm first:border-t-0 sm:grid-cols-[42px_minmax(0,1fr)_84px_70px]",
-        member.isViewer && "bg-bg-secondary",
+        member.isViewer && "bg-border",
       )}
     >
       <span className="text-xs font-semibold text-text-muted tabular-nums">
         #{member.dailyRank}
       </span>
       <span className="flex min-w-0 items-center gap-2.5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-xs font-semibold">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-border text-xs font-semibold">
           {member.initials}
         </span>
         <span className="min-w-0">
@@ -545,7 +585,7 @@ function DailyLeaderboard({ dashboard }: { dashboard: StudentDailyDashboard }) {
         ))}
       </ol>
       {!hasTodayActivity ? (
-        <p className="mt-3 rounded-xl bg-bg-secondary px-3 py-2 text-xs leading-5 text-text-secondary">
+        <p className="mt-3 rounded-xl bg-border px-3 py-2 text-xs leading-5 text-text-secondary">
           No community member has recorded practice today. Ordering currently uses streak and XP.
         </p>
       ) : null}
@@ -651,7 +691,7 @@ function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       {subject.code ? (
-                        <span className="rounded-md bg-bg-secondary px-2 py-1 text-[11px] font-semibold text-text-secondary">
+                        <span className="rounded-md bg-border px-2 py-1 text-[11px] font-semibold text-text-secondary">
                           {subject.code}
                         </span>
                       ) : null}
@@ -669,7 +709,7 @@ function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
                   </div>
                   <div>
                     <div
-                      className="h-2 overflow-hidden rounded-full bg-bg-secondary"
+                      className="h-2 overflow-hidden rounded-full bg-border"
                       aria-hidden="true"
                     >
                       {subject.readiness !== null ? (
@@ -711,7 +751,200 @@ function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
   );
 }
 
+/**
+ * The dashboard, driven by a cached query rather than by a server await.
+ *
+ * WHY THIS WRAPPER EXISTS
+ * -----------------------
+ * `/app/today` used to compute `dashboard` inside its server component, which
+ * meant the RSC payload could not start streaming until the slowest read in the
+ * product had finished — so `loading.tsx` covered the whole screen on every
+ * single visit, including a return five seconds after leaving. Client caching
+ * cannot help with that, because the thing being waited on is the server render
+ * itself.
+ *
+ * Now the page renders its shell immediately and this reads the data from
+ * TanStack Query. The consequences, in the order a student meets them:
+ *
+ *   - Returning to the dashboard inside the 60s window: no request at all, the
+ *     previous answer is still in memory and paints on the first frame.
+ *   - Returning later: the cached answer paints FIRST and is revalidated
+ *     underneath it. `data` survives while `isFetching` is true, so there is
+ *     never a flash back to a skeleton.
+ *   - Hovering the sidebar link: `prefetchDashboard` has already started the
+ *     request, so the click usually lands on data that has arrived.
+ *
+ * The skeleton below is reached only when there is genuinely nothing cached —
+ * a cold load, or a first-ever visit that was not prefetched.
+ */
 export function StudentDailyDashboardView({
+  communityOptions = [],
+  fullName,
+  creditBalance,
+  hasUnlimitedAccess,
+  unlimitedPlan,
+  communitySlug,
+  selectedCommunitySlug,
+  initialDashboard,
+}: {
+  communityOptions?: import("@/lib/community-switch").CommunitySwitchOption[];
+  fullName: string;
+  creditBalance: number;
+  hasUnlimitedAccess: boolean;
+  unlimitedPlan: SubscriptionPlan | null;
+  /** What the URL asked for — the query key. `undefined` means "the default". */
+  communitySlug?: string;
+  /** What that resolved to — for the switcher's selected value only. */
+  selectedCommunitySlug?: string;
+  initialDashboard?: StudentDailyDashboard;
+}) {
+  const { data } = useDashboard(communitySlug, initialDashboard);
+  const dashboard = data?.dashboard;
+
+  if (!dashboard)
+    return (
+      <DashboardDataSkeleton
+        communityOptions={communityOptions}
+        selectedCommunitySlug={selectedCommunitySlug}
+        fullName={fullName}
+        creditBalance={creditBalance}
+        hasUnlimitedAccess={hasUnlimitedAccess}
+      />
+    );
+
+  return (
+    <DashboardContent
+      communityOptions={communityOptions}
+      fullName={fullName}
+      creditBalance={creditBalance}
+      hasUnlimitedAccess={hasUnlimitedAccess}
+      unlimitedPlan={unlimitedPlan}
+      dashboard={dashboard}
+    />
+  );
+}
+
+/**
+ * The dashboard before its data lands — real everywhere it can be.
+ *
+ * THE RULE: shimmer a VALUE, never a container, and never something already
+ * known. Almost half of this screen does not depend on the slow query at all —
+ * the student's name comes from the session, the NanoAI access figure from
+ * their credit balance, and every tile's label and icon are constants in this
+ * file. Greying all of that out while waiting throws away information the
+ * reader could have been using, and makes a page that is half-ready look
+ * entirely broken.
+ *
+ * So the header is the real header, the access tile shows its real number, and
+ * the five tiles that need the query keep their labels and icons and shimmer
+ * only the figure. The two panels keep their titles and their exact final
+ * dimensions, which also means nothing jumps when the data arrives — the
+ * layout is already correct, only the ink is missing.
+ */
+function DashboardDataSkeleton({
+  communityOptions = [],
+  selectedCommunitySlug,
+  fullName,
+  creditBalance,
+  hasUnlimitedAccess,
+}: {
+  communityOptions?: import("@/lib/community-switch").CommunitySwitchOption[];
+  selectedCommunitySlug?: string;
+  fullName: string;
+  creditBalance: number;
+  hasUnlimitedAccess: boolean;
+}) {
+  const line = "animate-pulse rounded-full bg-border motion-reduce:animate-none";
+  return (
+    <main
+      className="mx-auto w-full max-w-[1440px] px-4 pb-20 pt-4 sm:px-6 lg:px-8"
+      aria-busy="true"
+    >
+      {/*
+        The real switcher, not a placeholder. Its options come from the page's
+        server render, so it is usable before the dashboard data exists — and
+        rendering it here is what stops the whole page jumping down by its
+        height the moment the query lands. A skeleton that changes the layout it
+        was standing in for has not saved the reader anything.
+      */}
+      {communityOptions.length ? (
+        <div className="mb-5 flex justify-end">
+          <CommunitySwitcher
+            options={communityOptions}
+            selectedSlug={selectedCommunitySlug ?? ""}
+          />
+        </div>
+      ) : null}
+      <header className="flex flex-col gap-5 border-b border-border pb-7 pt-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
+          Daily Dashboard
+        </p>
+        <h1 className="mt-2 font-display text-[clamp(2rem,3.4vw,2.9rem)] font-semibold leading-[1.05] tracking-[-0.045em]">
+          Welcome back, {fullName.trim().split(/\s+/)[0] || "there"}.
+        </h1>
+          {/* The subtitle counts challenges, so it is genuinely unknown yet. */}
+          <div className={`mt-3 h-4 w-64 ${line}`} aria-hidden="true" />
+        </div>
+        {/* Holds the "Start a challenge" button's footprint so the header does
+            not reflow when the real one appears. */}
+        <div className="h-11 w-44 shrink-0 self-start rounded-full bg-border animate-pulse motion-reduce:animate-none sm:self-auto" />
+      </header>
+
+      <section
+        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+        aria-label="Daily learning metrics"
+      >
+        <MetricCard pending icon={<Flame className="size-4" />} label="Current streak" value="" detail="" />
+        {/* Known from the session — no reason to hide it. */}
+        <MetricCard
+          icon={<LockKeyholeOpen className="size-4" />}
+          label="NanoAI access"
+          value={hasUnlimitedAccess ? "Unlimited" : formatNumber(creditBalance)}
+          detail={
+            hasUnlimitedAccess ? "Active unlimited subscription" : "Messages remaining this cycle"
+          }
+        />
+        <MetricCard pending icon={<Sparkles className="size-4" />} label="XP balance" value="" detail="" />
+        <MetricCard pending icon={<CircleGauge className="size-4" />} label="Challenges / day" value="" detail="" />
+        <MetricCard pending icon={<Clock3 className="size-4" />} label="Today" value="" detail="" />
+        <MetricCard pending icon={<BookOpenCheck className="size-4" />} label="Content completeness" value="" detail="" />
+      </section>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
+        <section className="rounded-2xl border border-border bg-card p-5">
+          <h2 className="font-display text-lg font-semibold tracking-tight">Practice calendar</h2>
+          <div className={`mt-2 h-3 w-52 ${line}`} aria-hidden="true" />
+          <div className="mt-5 grid grid-cols-7 gap-2" aria-hidden="true">
+            {Array.from({ length: 35 }).map((_, index) => (
+              <div key={index} className="h-12 rounded-lg bg-border animate-pulse motion-reduce:animate-none" />
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-border bg-card p-5">
+          <h2 className="font-display text-lg font-semibold tracking-tight">Community leaderboard</h2>
+          <div className={`mt-2 h-3 w-24 ${line}`} aria-hidden="true" />
+          <div className="mt-5 space-y-4" aria-hidden="true">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="flex items-center gap-3">
+                <div className="size-8 shrink-0 rounded-full bg-border animate-pulse motion-reduce:animate-none" />
+                <div className="min-w-0 flex-1">
+                  <div className={`h-3 w-32 ${line}`} />
+                  <div className={`mt-1.5 h-3 w-16 ${line}`} />
+                </div>
+                <div className={`h-3 w-8 ${line}`} />
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+      <span className="sr-only">Loading your daily dashboard</span>
+    </main>
+  );
+}
+
+function DashboardContent({
   communityOptions = [],
   fullName,
   creditBalance,
@@ -770,7 +1003,7 @@ export function StudentDailyDashboardView({
               onClick={() => setUpgradeOpen(true)}
               disabled={!unlimitedPlan}
               className={cn(
-                "inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-50",
+                "inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold hover:bg-border disabled:cursor-not-allowed disabled:opacity-50",
                 focusRing,
               )}
               title={unlimitedPlan ? undefined : "Unlimited plan is currently unavailable"}

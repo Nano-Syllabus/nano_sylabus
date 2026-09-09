@@ -72,17 +72,25 @@ export function useChatSessions(search: string, enabled = true) {
      */
     enabled,
     /**
-     * SHORT, not LIVE.
+     * SESSION, not LIVE, and not SHORT either.
      *
      * LIVE meant "refetch on every mount", which for a component mounted on
-     * every page is a request per navigation, forever. It was over-cautious:
-     * every write path here already invalidates this key explicitly — pin,
-     * rename and delete through their mutations, and the chat page's
-     * `chat-session-updated` event through `useChatSessionEvents` — so
-     * correctness never depended on the zero. Thirty seconds of trust costs
-     * nothing and removes the churn.
+     * every page was a request per navigation, forever.
+     *
+     * The window is safe to make generous because correctness here does not
+     * rest on it. EVERY path that changes this list invalidates the key
+     * directly: pin, rename and delete through their mutations below, and the
+     * chat page's `chat-session-updated` event through `useChatSessionEvents`
+     * (which covers a session being created or auto-titled). The window only
+     * decides how long a passive revisit is free — and on the chat screen it is
+     * free regardless, because `app/app/chat/page.tsx` now seeds this exact
+     * entry from its own server read.
+     *
+     * What a five-minute window cannot catch is a session created in ANOTHER
+     * tab. That corrects itself on the next invalidation, on reconnect, or on
+     * the next mount past the window — an acceptable lag for a list of titles.
      */
-    staleTime: STALE.SHORT,
+    staleTime: STALE.SESSION,
     /**
      * Keeps the previous term's results on screen while a new search runs, so
      * typing does not blank the list between keystrokes. With the 250ms

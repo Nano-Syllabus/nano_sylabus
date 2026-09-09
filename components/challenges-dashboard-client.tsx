@@ -26,6 +26,7 @@ import type {
   StudentChallengeSummary,
 } from "@/lib/data/student-challenges";
 import type { PracticeEvaluation } from "@/lib/tenant/client";
+import { useAppRefresh } from "@/lib/query/refresh";
 
 const WEEKLY_CHALLENGE_TARGET = 15;
 
@@ -151,6 +152,8 @@ function ChallengeDetail({
   onNext: () => Promise<boolean>;
 }) {
   const router = useRouter();
+  // Refreshes the RSC payload AND the student query cache — see lib/query/refresh.ts
+  const refreshApp = useAppRefresh();
   const { setSidebarSuppressed } = useContext(AppShellContext);
   const enterFocusButtonRef = useRef<HTMLButtonElement>(null);
   const exitFocusButtonRef = useRef<HTMLButtonElement>(null);
@@ -338,7 +341,7 @@ function ChallengeDetail({
       setScanFile(null);
       onChange(payload.challenge);
       setActiveStep(6);
-      router.refresh();
+      refreshApp();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not grade the handwritten answer.");
     } finally {
@@ -389,7 +392,7 @@ function ChallengeDetail({
       setClock(Date.now());
       setActiveStep(initialChallengeStep(payload.challenge));
       onChange(payload.challenge);
-      router.refresh();
+      refreshApp();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not restart this challenge.");
     } finally {
@@ -1340,6 +1343,8 @@ function ChallengeDetail({
 
 export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentChallengeDashboard }) {
   const router = useRouter();
+  // Refreshes the RSC payload AND the student query cache — see lib/query/refresh.ts
+  const refreshApp = useAppRefresh();
   const [refreshing, startRefresh] = useTransition();
   const [retryCount, setRetryCount] = useState(0);
   const retryScope = `${dashboard.community?.id ?? "none"}:${dashboard.scope?.subjectSlug ?? "all"}`;
@@ -1357,10 +1362,13 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
     if (!needsRecovery || refreshing || retryCount >= 2) return;
     const timer = window.setTimeout(() => {
       setRetryCount((count) => count + 1);
-      startRefresh(() => router.refresh());
+      startRefresh(() => refreshApp());
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [needsRecovery, refreshing, retryCount, router]);
+    // `refreshApp` replaces the bare `router` that used to be listed here: it is
+    // what the effect actually calls, and `useAppRefresh` returns a stable
+    // callback, so naming it satisfies the rule without re-running the effect.
+  }, [needsRecovery, refreshing, retryCount, refreshApp]);
 
   const [selected, setSelected] = useState<StudentChallengeDetail | null>(null);
   const [openingId, setOpeningId] = useState("");
@@ -1441,7 +1449,7 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
             await fetch(`/api/student/challenges/${selected.id}/next${suffix}`, { method: "POST" }),
           );
           setSelected(payload.challenge);
-          router.refresh();
+          refreshApp();
           return true;
         }}
       />
@@ -1665,7 +1673,7 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
                 type="button"
                 onClick={() => {
                   setRetryCount(0);
-                  startRefresh(() => router.refresh());
+                  startRefresh(() => refreshApp());
                 }}
                 className="mt-5 inline-flex min-h-10 items-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white"
               >

@@ -72,6 +72,24 @@ export default async function ChatPage({
     })),
   ];
 
+  /**
+   * NOTE FOR ANYONE TEMPTED TO HYDRATE THE SIDEBAR'S LIST FROM HERE.
+   *
+   * It does not work, and it fails silently. `listChatSessions` above reads the
+   * same first page the sidebar's `useChatSessions` asks the API for, so
+   * seeding the query cache from this page looks like an obvious way to drop
+   * that duplicate request — but the sidebar lives in `app/app/layout.tsx`,
+   * which React renders BEFORE this page. Its query has already started
+   * fetching by the time a `HydrationBoundary` down here could seed anything.
+   * Measured: the `/api/chat/sessions` request still fires, exactly as before.
+   *
+   * Making it work means one of two real changes, not a wrapper:
+   *   - hydrate in the LAYOUT, which would put this read on every /app page to
+   *     save it on one — a net loss; or
+   *   - give `ChatPageClient` and the sidebar a single shared source, instead
+   *     of the two independent copies they keep today (this page's
+   *     `initialSessions` state, and the sidebar's query).
+   */
   return (
     <>
       <SetAppShell title="Library & NanoAI" />

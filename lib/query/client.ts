@@ -61,7 +61,7 @@ function shouldRetry(failureCount: number, error: unknown) {
 }
 
 /**
- * Queries worth writing to disk, and no others.
+ * Queries worth writing TO DISK, and no others.
  *
  * OPT-IN, NOT OPT-OUT, AND THAT IS A SECURITY DECISION. The persister writes
  * to `localStorage`, which survives sign-out and is readable by anything
@@ -74,8 +74,13 @@ function shouldRetry(failureCount: number, error: unknown) {
  * and `meta.persist` belongs on catalog-shaped data — the published subject
  * list, plan prices, public courses. Things that are the same for everyone and
  * cost a slow tenant-API round trip to rebuild.
+ *
+ * THIS IS THE PERSISTER'S RULE ONLY. It is passed to `persistOptions` in
+ * components/query-provider.tsx and is deliberately NOT the client's default
+ * `dehydrate` behaviour — see the note on `dehydrate` below, which this used to
+ * be wired into by mistake.
  */
-function shouldDehydrate(query: Query) {
+export function shouldPersistQuery(query: Query) {
   return defaultShouldDehydrateQuery(query) && query.meta?.persist === true;
 }
 
@@ -123,7 +128,25 @@ export function makeQueryClient() {
         retry: false,
       },
       dehydrate: {
-        shouldDehydrateQuery: shouldDehydrate,
+        /**
+         * SSR HYDRATION DEHYDRATES EVERYTHING THAT SUCCEEDED.
+         *
+         * This used to point at the persister's `meta.persist` rule, which was
+         * a real bug with no symptom: `dehydrate()` on the server silently
+         * produced an empty state for any query that had not opted into
+         * localStorage, so seeding the client cache from a server component
+         * appeared to work and delivered nothing. The only reason the settings
+         * page's catalog prefetch survived is that it happens to be marked
+         * persistable for unrelated reasons.
+         *
+         * The two rules are answering different questions. Dehydration for SSR
+         * asks "did the server already compute this for the render it is about
+         * to send?" — and the answer should be yes for everything, because that
+         * payload is generated per-request, travels inline in the HTML, and is
+         * discarded when the tab closes. Persistence asks "is this safe to
+         * leave on a shared machine's disk?", which is a far narrower set.
+         */
+        shouldDehydrateQuery: defaultShouldDehydrateQuery,
         /** Server-rendered prefetches are streamed to the client while still
          *  in flight, so the first paint does not wait on the slowest query. */
         shouldRedactErrors: () => false,
