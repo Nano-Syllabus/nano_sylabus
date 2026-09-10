@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useContext, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, useTransition } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
 import { Markdown } from "@/components/markdown";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
@@ -28,6 +28,7 @@ import type {
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 import { useAppRefresh } from "@/lib/query/refresh";
 import { useDashboardPatch } from "@/lib/query/dashboard";
+import { applyChallengePassed, applyChallengeState } from "@/lib/challenges/local-updates";
 
 const WEEKLY_CHALLENGE_TARGET = 15;
 
@@ -143,18 +144,23 @@ function ChallengeDetail({
   challenge,
   onBack,
   onChange,
+  onHubPatch,
   nextChallenge,
   onNext,
 }: {
   challenge: StudentChallengeDetail;
   onBack: () => void;
   onChange: (challenge: StudentChallengeDetail) => void;
+  /**
+   * Moves the hub's own counters in place. This replaces `refreshApp()` on
+   * every write path here — see lib/challenges/local-updates.ts for why a
+   * refresh was too blunt an instrument.
+   */
+  onHubPatch: (patch: (d: StudentChallengeDashboard) => StudentChallengeDashboard) => void;
   nextChallenge: StudentChallengeSummary | null;
   onNext: () => Promise<boolean>;
 }) {
   const router = useRouter();
-  // Re-renders the RSC payload only; the query cache is never invalidated.
-  const refreshApp = useAppRefresh();
   // Patches the cached dashboard in place, keyed the same way the page reads it.
   const dashboardPatch = useDashboardPatch();
   const { setSidebarSuppressed } = useContext(AppShellContext);
@@ -353,12 +359,17 @@ function ChallengeDetail({
        * mean a two-second reload of the whole screen to show a number this
        * client already knows.
        *
-       * `refreshApp()` still runs, but only to re-render this page's server
-       * payload — it no longer invalidates any query (see lib/query/refresh.ts).
+       * The hub's own copy of those numbers moves here too. Both screens show
+       * the streak and today's count, so patching one and refreshing the other
+       * would have them disagree for as long as the refresh took.
        */
-      if (payload.passed) dashboardPatch.completed({ challengeId: payload.challenge?.id });
-      else dashboardPatch.attempted();
-      refreshApp();
+      if (payload.passed) {
+        dashboardPatch.completed({ challengeId: payload.challenge?.id });
+        onHubPatch((d) => applyChallengePassed(d, payload.challenge?.id));
+      } else {
+        dashboardPatch.attempted();
+        onHubPatch((d) => applyChallengeState(d, payload.challenge));
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not grade the handwritten answer.");
     } finally {
@@ -409,7 +420,7 @@ function ChallengeDetail({
       setClock(Date.now());
       setActiveStep(initialChallengeStep(payload.challenge));
       onChange(payload.challenge);
-      refreshApp();
+      onHubPatch((d) => applyChallengeState(d, payload.challenge));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not restart this challenge.");
     } finally {
@@ -1358,10 +1369,34 @@ function ChallengeDetail({
   );
 }
 
-export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentChallengeDashboard }) {
+export function ChallengesDashboardClient({
+  dashboard: serverDashboard,
+}: {
+  dashboard: StudentChallengeDashboard;
+}) {
   const router = useRouter();
-  // Re-renders the RSC payload only; the query cache is never invalidated.
+  // Re-renders the RSC payload. Only the recovery paths below use it now.
   const refreshApp = useAppRefresh();
+
+  /**
+   * THE SERVER'S COPY SEEDS IT; WRITES MOVE IT FROM HERE ON.
+   *
+   * Holding this in state is what lets a write patch the screen instead of
+   * calling `router.refresh()`. The prop still wins whenever the server sends a
+   * genuinely new one — a community switch, a recovery retry — which is the
+   * documented way to reset state on a prop change: compare against the last
+   * prop seen and assign during render, no effect and no extra paint.
+   */
+  const [dashboard, setDashboard] = useState(serverDashboard);
+  const [lastServerDashboard, setLastServerDashboard] = useState(serverDashboard);
+  if (serverDashboard !== lastServerDashboard) {
+    setLastServerDashboard(serverDashboard);
+    setDashboard(serverDashboard);
+  }
+  const patchHub = useCallback(
+    (patch: (d: StudentChallengeDashboard) => StudentChallengeDashboard) => setDashboard(patch),
+    [],
+  );
   const [refreshing, startRefresh] = useTransition();
   const [retryCount, setRetryCount] = useState(0);
   const retryScope = `${dashboard.community?.id ?? "none"}:${dashboard.scope?.subjectSlug ?? "all"}`;
@@ -1452,6 +1487,7 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
         challenge={selected}
         onBack={() => setSelected(null)}
         onChange={setSelected}
+        onHubPatch={patchHub}
         nextChallenge={nextChallenge}
         onNext={async () => {
           if (nextChallenge) return openChallenge(nextChallenge);
@@ -1466,7 +1502,7 @@ export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentCha
             await fetch(`/api/student/challenges/${selected.id}/next${suffix}`, { method: "POST" }),
           );
           setSelected(payload.challenge);
-          refreshApp();
+          patchHub((d) => applyChallengeState(d, payload.challenge));
           return true;
         }}
       />

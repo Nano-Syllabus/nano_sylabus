@@ -509,9 +509,14 @@ export function AppSidebar({
           {!isCollapsed && "Daily Dashboard"}
         </Link>
 
+        {/* Intent-based prefetch, kept even though TabWarmer already warms this
+            route: warming is skipped on a metered or 2g connection, and a hover
+            means the student is about to pay for the page anyway. */}
         <Link
           href="/app/community"
           onClick={() => onCloseMobile?.()}
+          onPointerEnter={() => router.prefetch("/app/community")}
+          onFocus={() => router.prefetch("/app/community")}
           className={cn(
             "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
             isCollapsed
@@ -542,9 +547,14 @@ export function AppSidebar({
           {!isCollapsed && "Community Hub"}
         </Link>
 
+        {/* Intent-based prefetch, kept even though TabWarmer already warms this
+            route: warming is skipped on a metered or 2g connection, and a hover
+            means the student is about to pay for the page anyway. */}
         <Link
           href="/app/challenges"
           onClick={() => onCloseMobile?.()}
+          onPointerEnter={() => router.prefetch("/app/challenges")}
+          onFocus={() => router.prefetch("/app/challenges")}
           className={cn(
             "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
             isCollapsed

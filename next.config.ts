@@ -157,21 +157,28 @@ const nextConfig: NextConfig = {
      * moving Today -> Chat -> Today refetched Today from the server both times.
      * On a phone on Nepali mobile data that is the whole feel of the app.
      *
-     * `dynamic: 30` means a tab you return to within 30s paints instantly from
-     * memory. Paired with `<Link>` prefetching (app-nav.tsx already uses Link),
-     * the first visit is usually warm too.
+     * WHY THIS IS A SESSION, NOT A TIMER.
      *
-     * WHY 30 AND NOT MORE. This is a per-user study surface — credits spent, a
-     * challenge just submitted, a note just saved. Thirty seconds is long enough
-     * to cover tab-flipping, short enough that nobody stares at a stale credit
-     * balance. Anything that MUST be fresh after a write should call
-     * `router.refresh()`, which busts this cache regardless of the window.
+     * This was 30s, on the reasoning that a per-user study surface should not
+     * show a stale credit balance for longer than that. That reasoning is
+     * obsolete: a stale value is now prevented by the write that changed it,
+     * not by a countdown. Every write patches the client cache in place, and
+     * anything RSC-rendered calls `router.refresh()`, which busts this cache
+     * regardless of the window. A timer only ever expired on a student who had
+     * changed nothing — so all 30s bought was a shimmer on the way back to a
+     * tab whose contents were already correct.
+     *
+     * At an hour, the Router Cache holds the full RSC payload of every tab
+     * visited this page load. First visit renders and shows `loading.tsx`;
+     * every return is an in-memory read with no request and no shimmer. The
+     * cache is per-page-load and dies on reload, which is exactly where fresh
+     * data is supposed to come from.
      *
      * `static: 180` covers the marketing and public-catalog routes, where the
      * content genuinely does not change minute to minute.
      */
     staleTimes: {
-      dynamic: 30,
+      dynamic: 3600,
       static: 180,
     },
   },
