@@ -57,7 +57,7 @@ export function BillingReferralClaim({ code }: { code: string }) {
       </button>
       {claimed ? (
         <p className="mt-3 text-center text-sm leading-6 text-text-secondary">
-          Your reward is issued automatically after your first paid Pro subscription is approved.
+          Referral saved. Buy one month of Individual Pro; after approval, your subscription will be extended to 60 days total.
         </p>
       ) : null}
     </div>

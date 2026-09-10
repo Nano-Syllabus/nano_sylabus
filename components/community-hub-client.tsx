@@ -78,7 +78,7 @@ function relativeTime(value: string) {
 }
 
 function referralShareMessage(link: string) {
-  return `Join me on NanoSyllabus Pro. Use my referral link and, after your first paid Pro subscription is approved, we both get one free month: ${link}`;
+  return `Get 2 months of NanoSyllabus Pro for the price of 1. Save my referral, buy one month of Pro, and after payment approval your paid month gets a bonus month: ${link}`;
 }
 
 async function writeClipboardText(value: string) {
@@ -666,9 +666,10 @@ export function CommunityHubClient({
         {inviteMode === "referral" ? (
           <>
             <p className="mt-5 text-base leading-7 text-text-secondary">
-              Refer a friend to <strong className="text-text-primary">NanoSyllabus Pro</strong> and
-              you both earn <strong className="text-success">1 free month</strong> after their first
-              paid Pro subscription is approved.
+              Active paid Pro members can refer a friend. When your friend buys
+              <strong className="text-text-primary"> NanoSyllabus Pro</strong>, they receive
+              <strong className="text-success"> 2 months for the price of 1</strong> and you receive
+              one free month after payment approval.
             </p>
 
             <section
@@ -682,9 +683,9 @@ export function CommunityHubClient({
                 </h3>
               </div>
               <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-text-primary">
-                <li>Share your unique referral link below.</li>
-                <li>Your friend creates an account and subscribes to NanoSyllabus Pro.</li>
-                <li>After payment approval, both accounts get 30 days automatically.</li>
+                <li>You must have an active paid Pro subscription to create and use your referral link.</li>
+                <li>Your friend saves the referral and buys one month of Individual Pro.</li>
+                <li>After payment approval, your friend gets 60 days total and your Pro plan gets 30 extra days.</li>
               </ol>
             </section>
             {referralError ? (

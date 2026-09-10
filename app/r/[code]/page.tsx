@@ -43,15 +43,15 @@ export default async function BillingReferralPage({ params }: PageProps) {
           <div className="p-6 sm:p-10">
             {!referral.active ? (
               <div className="rounded-xl border border-border bg-bg-secondary p-4 text-sm leading-6 text-text-secondary">
-                This referral link is no longer active. Ask the sender for a new one.
+                This referral is currently unavailable. Its owner needs an active paid Pro subscription before it can be claimed.
               </div>
             ) : (
               <>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl border border-border bg-bg-secondary p-4">
                     <Gift className="size-5 text-text-secondary" aria-hidden="true" />
-                    <p className="mt-3 text-sm font-semibold">1 free month</p>
-                    <p className="mt-1 text-xs leading-5 text-text-muted">For both people after a paid Pro signup is approved.</p>
+                    <p className="mt-3 text-sm font-semibold">2 months for the price of 1</p>
+                    <p className="mt-1 text-xs leading-5 text-text-muted">Buy one month of Individual Pro and receive one bonus month after approval.</p>
                   </div>
                   <div className="rounded-2xl border border-border bg-bg-secondary p-4">
                     <ShieldCheck className="size-5 text-text-secondary" aria-hidden="true" />
@@ -69,14 +69,14 @@ export default async function BillingReferralPage({ params }: PageProps) {
                   {auth.user ? (
                     <>
                       <p className="mb-4 text-sm leading-6 text-text-secondary">
-                        You are signed in as <strong className="text-text-primary">{auth.user.email}</strong>. Save this referral before purchasing Pro.
+                        You are signed in as <strong className="text-text-primary">{auth.user.email}</strong>. Save this referral, then buy one month of Individual Pro. Your approved plan will run for 60 days total.
                       </p>
                       <BillingReferralClaim code={normalizedCode} />
                     </>
                   ) : (
                     <>
                       <p className="mb-4 text-sm leading-6 text-text-secondary">
-                        Create or sign in to your account, then save the referral before your first paid Pro subscription.
+                        Create or sign in, save the referral, then buy one month of Individual Pro to receive one bonus month.
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Link href={`/signup?next=${encodeURIComponent(nextPath)}`} className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-text-primary px-5 text-sm font-semibold text-text-inverse hover:opacity-90 ${focusRing}`}>

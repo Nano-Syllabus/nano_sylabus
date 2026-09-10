@@ -22,6 +22,7 @@ export async function POST(request: Request) {
     });
     if (error) {
       if (error.code === "42501") return NextResponse.json({ error: error.message }, { status: 403 });
+      if (error.code === "P0001") return NextResponse.json({ error: error.message }, { status: 403 });
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

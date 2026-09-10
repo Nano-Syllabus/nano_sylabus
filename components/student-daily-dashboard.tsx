@@ -233,8 +233,8 @@ function UpgradeModal({
             Free via peer referral
           </p>
           <p className="mt-2 text-sm leading-6 text-text-secondary">
-            Share your tracked link. After your peer joins through it and their first Pro payment is
-            approved, both of you receive one free month automatically.
+            Active paid Pro members can share a tracked link. When your friend buys one month of
+            Individual Pro, they get 60 days total and you get 30 extra days after payment approval.
           </p>
           <button
             type="button"

@@ -3,10 +3,10 @@ import { PGlite } from "@electric-sql/pglite";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-const migrationPath = path.join(
-  process.cwd(),
+const migrationPaths = [
   "supabase/migrations/20260902143000_billing_referrals.sql",
-);
+  "supabase/migrations/20260910124500_enforce_paid_pro_referrals.sql",
+].map((migration) => path.join(process.cwd(), migration));
 
 describe("billing referral migration", () => {
   let db: PGlite;
@@ -40,7 +40,8 @@ describe("billing referral migration", () => {
       );
       create table public.invoices (
         id uuid primary key default gen_random_uuid(),
-        user_id uuid not null references auth.users(id)
+        user_id uuid not null references auth.users(id),
+        status text not null default 'pending'
       );
       create table public.user_subscriptions (
         id uuid primary key default gen_random_uuid(),
@@ -53,7 +54,9 @@ describe("billing referral migration", () => {
         created_at timestamptz not null default now()
       );
     `);
-    await db.exec(await readFile(migrationPath, "utf8"));
+    for (const migrationPath of migrationPaths) {
+      await db.exec(await readFile(migrationPath, "utf8"));
+    }
   });
 
   afterEach(async () => db.close());
@@ -68,11 +71,15 @@ describe("billing referral migration", () => {
         ('22222222-2222-4222-8222-222222222222', 'Friend');
       insert into public.subscription_plans(id,name,slug,billing_type,product_type,is_unlimited)
       values ('33333333-3333-4333-8333-333333333333','Individual Unlimited','individual-unlimited','monthly','individual',true);
+      insert into public.invoices(id,user_id,status)
+      values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111111','paid');
+      insert into public.user_subscriptions(user_id,plan_id,invoice_id,status,ends_at)
+      values ('11111111-1111-4111-8111-111111111111','33333333-3333-4333-8333-333333333333','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','active',now() + interval '10 days');
       insert into public.billing_referral_links(id,referrer_id,code)
       values ('44444444-4444-4444-8444-444444444444','11111111-1111-4111-8111-111111111111','REF123456');
       insert into public.billing_referral_claims(link_id,referred_user_id)
       values ('44444444-4444-4444-8444-444444444444','22222222-2222-4222-8222-222222222222');
-      insert into public.invoices(id,user_id) values ('55555555-5555-4555-8555-555555555555','22222222-2222-4222-8222-222222222222');
+      insert into public.invoices(id,user_id,status) values ('55555555-5555-4555-8555-555555555555','22222222-2222-4222-8222-222222222222','paid');
       insert into public.user_subscriptions(user_id,plan_id,invoice_id,status,ends_at)
       values ('22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333','55555555-5555-4555-8555-555555555555','active',now() + interval '10 days');
     `);
@@ -83,18 +90,21 @@ describe("billing referral migration", () => {
     const rewards = await db.query<{ total: number }>(
       "select count(*)::integer total from public.billing_referral_rewards",
     );
-    const subscriptions = await db.query<{ total: number }>(
-      "select count(*)::integer total from public.user_subscriptions",
-    );
     expect(claim.rows[0]?.status).toBe("rewarded");
     expect(rewards.rows[0]?.total).toBe(2);
-    expect(subscriptions.rows[0]?.total).toBe(2);
+
+    const rewardedEnds = await db.query<{ user_id: string; remaining_days: number }>(`
+      select user_id::text, round(extract(epoch from ends_at - now()) / 86400)::integer remaining_days
+      from public.user_subscriptions
+      order by user_id
+    `);
+    expect(rewardedEnds.rows.map((row) => row.remaining_days)).toEqual([40, 40]);
 
     const before = await db.query<{ ends_at: string }>(
       "select ends_at from public.user_subscriptions where user_id = '22222222-2222-4222-8222-222222222222' and invoice_id is not null",
     );
     await db.exec(`
-      insert into public.invoices(id,user_id) values ('66666666-6666-4666-8666-666666666666','22222222-2222-4222-8222-222222222222');
+      insert into public.invoices(id,user_id,status) values ('66666666-6666-4666-8666-666666666666','22222222-2222-4222-8222-222222222222','paid');
       insert into public.user_subscriptions(user_id,plan_id,invoice_id,status)
       values ('22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333','66666666-6666-4666-8666-666666666666','active');
     `);
@@ -107,5 +117,56 @@ describe("billing referral migration", () => {
     );
     expect(after.rows[0]?.total).toBe(2);
     expect(new Date(current.rows[0]!.ends_at).getTime()).toBe(original);
+  });
+
+  it("voids the claim when the referrer does not have an active paid Pro subscription", async () => {
+    await db.exec(`
+      insert into auth.users(id) values
+        ('11111111-1111-4111-8111-111111111111'),
+        ('22222222-2222-4222-8222-222222222222');
+      insert into public.subscription_plans(id,name,slug,billing_type,product_type,is_unlimited)
+      values ('33333333-3333-4333-8333-333333333333','Individual Unlimited','individual-unlimited','monthly','individual',true);
+      insert into public.billing_referral_links(id,referrer_id,code)
+      values ('44444444-4444-4444-8444-444444444444','11111111-1111-4111-8111-111111111111','REF123456');
+      insert into public.billing_referral_claims(link_id,referred_user_id)
+      values ('44444444-4444-4444-8444-444444444444','22222222-2222-4222-8222-222222222222');
+      insert into public.invoices(id,user_id,status)
+      values ('55555555-5555-4555-8555-555555555555','22222222-2222-4222-8222-222222222222','paid');
+      insert into public.user_subscriptions(user_id,plan_id,invoice_id,status,ends_at)
+      values ('22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333','55555555-5555-4555-8555-555555555555','active',now() + interval '30 days');
+    `);
+
+    const claim = await db.query<{ status: string }>("select status from public.billing_referral_claims");
+    const rewards = await db.query<{ total: number }>("select count(*)::integer total from public.billing_referral_rewards");
+    expect(claim.rows[0]?.status).toBe("void");
+    expect(rewards.rows[0]?.total).toBe(0);
+  });
+
+  it("does not qualify a Group purchase as a Pro referral", async () => {
+    await db.exec(`
+      insert into auth.users(id) values
+        ('11111111-1111-4111-8111-111111111111'),
+        ('22222222-2222-4222-8222-222222222222');
+      insert into public.subscription_plans(id,name,slug,billing_type,product_type,is_unlimited)
+      values
+        ('33333333-3333-4333-8333-333333333333','Individual Unlimited','individual-unlimited','monthly','individual',true),
+        ('77777777-7777-4777-8777-777777777777','Group Unlimited','group-unlimited','monthly','group',true);
+      insert into public.invoices(id,user_id,status) values
+        ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111111','paid'),
+        ('55555555-5555-4555-8555-555555555555','22222222-2222-4222-8222-222222222222','paid');
+      insert into public.user_subscriptions(user_id,plan_id,invoice_id,status,ends_at)
+      values ('11111111-1111-4111-8111-111111111111','33333333-3333-4333-8333-333333333333','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','active',now() + interval '30 days');
+      insert into public.billing_referral_links(id,referrer_id,code)
+      values ('44444444-4444-4444-8444-444444444444','11111111-1111-4111-8111-111111111111','REF123456');
+      insert into public.billing_referral_claims(link_id,referred_user_id)
+      values ('44444444-4444-4444-8444-444444444444','22222222-2222-4222-8222-222222222222');
+      insert into public.user_subscriptions(user_id,plan_id,invoice_id,status,ends_at)
+      values ('22222222-2222-4222-8222-222222222222','77777777-7777-4777-8777-777777777777','55555555-5555-4555-8555-555555555555','active',now() + interval '30 days');
+    `);
+
+    const claim = await db.query<{ status: string }>("select status from public.billing_referral_claims");
+    const rewards = await db.query<{ total: number }>("select count(*)::integer total from public.billing_referral_rewards");
+    expect(claim.rows[0]?.status).toBe("claimed");
+    expect(rewards.rows[0]?.total).toBe(0);
   });
 });
