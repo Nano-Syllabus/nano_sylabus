@@ -94,15 +94,27 @@ export async function GET() {
     });
   } catch (error) {
     const invalidKey = error instanceof TeacherApiError && error.status === 401;
+    const upstreamUnavailable =
+      error instanceof TeacherApiError && [408, 429, 500, 502, 503, 504].includes(error.status);
     return NextResponse.json(
       {
         error: invalidKey
           ? "This teacher workspace key is no longer valid. Ask an administrator to rotate it."
-          : error instanceof Error
-            ? error.message
-            : "Could not load the teacher workspace.",
+          : upstreamUnavailable
+            ? "The creator service is taking longer than expected. Please try again in a moment."
+            : error instanceof Error
+              ? error.message
+              : "Could not load the teacher workspace.",
+        code: invalidKey
+          ? "invalid_workspace_key"
+          : upstreamUnavailable
+            ? "teacher_service_unavailable"
+            : "workspace_load_failed",
       },
-      { status: invalidKey ? 409 : 502 },
+      {
+        status: invalidKey ? 409 : upstreamUnavailable ? 503 : 502,
+        headers: upstreamUnavailable ? { "Retry-After": "3" } : undefined,
+      },
     );
   }
 }

@@ -222,10 +222,17 @@ export function formatTeacherApiError(payload: unknown, status: number): string 
   return formatApiErrorValue(payload) || `Teacher API request failed (${status})`;
 }
 
-async function teacherRequest<T>(
+type TeacherRequestOptions = {
+  method?: "GET" | "POST" | "DELETE";
+  body?: unknown;
+  timeoutMs?: number;
+  retries?: number;
+};
+
+async function teacherRequestOnce<T>(
   path: string,
   collectionSk: string,
-  options: { method?: "GET" | "POST" | "DELETE"; body?: unknown; timeoutMs?: number } = {},
+  options: TeacherRequestOptions = {},
 ): Promise<T> {
   const { baseUrl, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
   const requestTimeoutMs = options.timeoutMs ?? timeoutMs;
@@ -289,13 +296,43 @@ async function teacherRequest<T>(
         );
 
         request.setTimeout(requestTimeoutMs, () => {
-          request.destroy(new Error(`Teacher API timed out after ${requestTimeoutMs}ms`));
+          request.destroy(
+            new TeacherApiError(`Teacher API timed out after ${requestTimeoutMs}ms`, 504),
+          );
         });
         request.on("error", reject);
         if (serializedBody) request.write(serializedBody);
         request.end();
       }),
   );
+}
+
+async function teacherRequest<T>(
+  path: string,
+  collectionSk: string,
+  options: TeacherRequestOptions = {},
+): Promise<T> {
+  const retries = options.method && options.method !== "GET" ? 0 : Math.max(0, options.retries ?? 0);
+
+  let lastError: unknown;
+  for (let attemptIndex = 0; attemptIndex <= retries; attemptIndex += 1) {
+    try {
+      return await teacherRequestOnce<T>(path, collectionSk, options);
+    } catch (error) {
+      lastError = error;
+      const status = error instanceof TeacherApiError ? error.status : 0;
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String((error as { code?: unknown }).code || "")
+          : "";
+      const transient =
+        [408, 429, 500, 502, 503, 504].includes(status) ||
+        ["ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT"].includes(code);
+      if (!transient || attemptIndex >= retries) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attemptIndex + 1)));
+    }
+  }
+  throw lastError;
 }
 
 function parseTeacherSseEvent(rawEvent: string): TeacherSubjectStreamEvent | null {
@@ -505,16 +542,21 @@ async function teacherStreamRequest(
   );
 }
 
-export const getTeacherMe = (key: string) => teacherRequest<ApiRecord>("/v1/collection/me", key);
+// Workspace metadata should be fast. Two short attempts keep a transient
+// upstream hiccup from blocking the whole creator screen for half a minute.
+const workspaceReadOptions = { timeoutMs: 6_000, retries: 1 } as const;
+
+export const getTeacherMe = (key: string) =>
+  teacherRequest<ApiRecord>("/v1/collection/me", key, workspaceReadOptions);
 
 export const getTeacherSubjects = (key: string) =>
-  teacherRequest<{ subjects: ApiRecord[] }>("/v1/collection/subjects", key);
+  teacherRequest<{ subjects: ApiRecord[] }>("/v1/collection/subjects", key, workspaceReadOptions);
 
 export const getTeacherSourceTree = (key: string) =>
-  teacherRequest<ApiRecord>("/v1/collection/source-tree", key);
+  teacherRequest<ApiRecord>("/v1/collection/source-tree", key, workspaceReadOptions);
 
 export const getTeacherDocuments = (key: string) =>
-  teacherRequest<ApiRecord | ApiRecord[]>("/v1/collection/documents", key);
+  teacherRequest<ApiRecord | ApiRecord[]>("/v1/collection/documents", key, workspaceReadOptions);
 
 export const getTeacherDocument = (key: string, documentId: string) =>
   teacherRequest<ApiRecord>(`/v1/collection/documents/${encodeURIComponent(documentId)}`, key);

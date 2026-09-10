@@ -166,6 +166,7 @@ describe("GET /api/teacher/workspace", () => {
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toEqual({
       error: "Could not load subject community access. Please try again.",
+      code: "workspace_load_failed",
     });
   });
 
@@ -177,6 +178,22 @@ describe("GET /api/teacher/workspace", () => {
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
       error: "This teacher workspace key is no longer valid. Ask an administrator to rotate it.",
+      code: "invalid_workspace_key",
+    });
+  });
+
+  it("classifies an upstream timeout as retryable without suggesting key recovery", async () => {
+    mocks.getTeacherSourceTree.mockRejectedValue(
+      new mocks.MockTeacherApiError("Teacher API timed out after 6000ms", 504),
+    );
+
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("3");
+    await expect(response.json()).resolves.toEqual({
+      error: "The creator service is taking longer than expected. Please try again in a moment.",
+      code: "teacher_service_unavailable",
     });
   });
 });

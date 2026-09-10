@@ -1005,6 +1005,17 @@ function normalizeSubmission(value: unknown): ExamSubmission | null {
   };
 }
 
+class ResponseError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string,
+  ) {
+    super(message);
+    this.name = "ResponseError";
+  }
+}
+
 async function responsePayload(response: Response) {
   const raw = await response.text();
   let payload: ApiRecord = {};
@@ -1026,7 +1037,7 @@ async function responsePayload(response: Response) {
         : isHtmlError
           ? `The request could not be completed (${response.status}).`
           : plainError || `The request could not be completed (${response.status}).`;
-    throw new Error(text(payload.error) || fallback);
+    throw new ResponseError(text(payload.error) || fallback, response.status, text(payload.code));
   }
   return payload;
 }
@@ -1249,6 +1260,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   const [loadedDashboardKey, setLoadedDashboardKey] = useState("");
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState>("loading");
   const [workspaceError, setWorkspaceError] = useState("");
+  const [workspaceErrorCode, setWorkspaceErrorCode] = useState("");
   const [recoveryState, setRecoveryState] = useState<RecoveryState>("idle");
   const [recoveryError, setRecoveryError] = useState("");
   const [recreateConfirmation, setRecreateConfirmation] = useState("");
@@ -1272,6 +1284,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   const loadWorkspace = useCallback(async () => {
     setWorkspaceState("loading");
     setWorkspaceError("");
+    setWorkspaceErrorCode("");
     try {
       const response = await fetch("/api/teacher/workspace", {
         headers: { Accept: "application/json" },
@@ -1289,6 +1302,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       setWorkspaceError(
         error instanceof Error ? error.message : "Could not load the creator workspace.",
       );
+      setWorkspaceErrorCode(error instanceof ResponseError ? error.code : "workspace_load_failed");
       setWorkspaceState("error");
       return null;
     }
@@ -1618,6 +1632,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   if (workspaceState === "error" && !workspace) {
     const isRecreating = recoveryState === "recreating";
     const isBusy = recoveryState === "recovering" || isRecreating;
+    const canReconnect = workspaceErrorCode === "invalid_workspace_key";
     return (
       <main className="mx-auto flex min-h-[70vh] max-w-xl flex-col justify-center px-5">
         <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
@@ -1636,7 +1651,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           </p>
         ) : null}
 
-        {recoveryState === "missing" ? (
+        {canReconnect && recoveryState === "missing" ? (
           <div className="mt-6 rounded-lg border border-border-strong bg-bg-secondary p-5">
             <h2 className="font-display text-lg font-semibold">
               The old collection is not in this operator tenant
@@ -1678,12 +1693,18 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               </Button>
             </div>
           </div>
-        ) : (
+        ) : canReconnect ? (
           <div className="mt-6 flex flex-wrap gap-2">
             <Button disabled={isBusy} aria-busy={isBusy} onClick={() => void recoverWorkspace()}>
               {recoveryState === "recovering" ? "Reconnecting…" : "Reconnect workspace"}
             </Button>
             <Button variant="outline" disabled={isBusy} onClick={() => void loadWorkspace()}>
+              Try again
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Button disabled={isBusy} onClick={() => void loadWorkspace()}>
               Try again
             </Button>
           </div>

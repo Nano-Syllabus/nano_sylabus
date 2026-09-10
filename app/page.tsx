@@ -3,6 +3,7 @@ import { ArrowRight, BookOpen, FileUp, Sparkles, Users } from "lucide-react";
 import { listPublicCommunities } from "@/lib/data/communities";
 import type { CommunitySummary } from "@/lib/communities";
 import { LandingHeader } from "@/components/landing-header";
+import { LandingFaq } from "@/components/landing-faq";
 import { titleCase } from "@/lib/utils";
 
 export const metadata = {
@@ -861,6 +862,9 @@ export default async function LandingPage() {
             </div>
           </div>
         </section>
+
+        {/* FAQ Section — matched to Figma frame 46:3434 */}
+        <LandingFaq />
 
         {/* Final CTA Section */}
         <section className="cta-section" id="start">

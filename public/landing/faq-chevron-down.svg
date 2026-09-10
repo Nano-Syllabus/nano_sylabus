@@ -1,0 +1,13 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Group 1000006789">
+<circle id="Ellipse 1" cx="12" cy="12" r="12" fill="#1D57FD"/>
+<g id="weui:arrow-filled" clip-path="url(#clip0_0_79)">
+<path id="Vector" fill-rule="evenodd" clip-rule="evenodd" d="M11.3483 15.3106L6.16267 10.125L7.45883 8.82883L11.9963 13.3663L16.5338 8.82883L17.83 10.125L12.6444 15.3106C12.4725 15.4824 12.2394 15.579 11.9963 15.579C11.7533 15.579 11.5202 15.4824 11.3483 15.3106Z" fill="white"/>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_0_79">
+<rect width="11" height="22" fill="white" transform="translate(23 6) rotate(90)"/>
+</clipPath>
+</defs>
+</svg>
