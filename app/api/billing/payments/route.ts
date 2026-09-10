@@ -1,36 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import {
+  receiptFileError,
+  receiptFileExtension,
+} from "@/lib/billing-receipt-upload";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export const runtime = "nodejs";
 
-const MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
-const ALLOWED_RECEIPT_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "application/pdf",
-]);
-
 const paymentFieldsSchema = z.object({
   invoiceId: z.string().uuid(),
   reference: z.string().trim().min(3).max(120),
   payerName: z.string().trim().min(2).max(120),
   note: z.string().trim().max(500).optional().default(""),
+  mobileUploadSessionId: z.string().uuid().optional(),
 });
-
-function fileExtension(file: File) {
-  const extensions: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "application/pdf": "pdf",
-  };
-  return extensions[file.type] ?? "bin";
-}
 
 export async function POST(request: Request) {
   let uploadedPath: string | null = null;
@@ -51,6 +38,7 @@ export async function POST(request: Request) {
       reference: formData.get("reference"),
       payerName: formData.get("payerName"),
       note: formData.get("note") ?? "",
+      mobileUploadSessionId: formData.get("mobileUploadSessionId") || undefined,
     });
 
     if (!parsed.success) {
@@ -118,22 +106,42 @@ export async function POST(request: Request) {
     }
 
     const receipt = formData.get("receipt");
-    if (!(receipt instanceof File) && !existingSubmission?.proof_storage_path) {
+    let mobileUploadSession: {
+      id: string;
+      proof_storage_path: string;
+    } | null = null;
+
+    if (!(receipt instanceof File) && parsed.data.mobileUploadSessionId) {
+      const { data: mobileSession, error: mobileSessionError } = await admin
+        .from("billing_receipt_upload_sessions")
+        .select("id, proof_storage_path")
+        .eq("id", parsed.data.mobileUploadSessionId)
+        .eq("invoice_id", invoice.id)
+        .eq("user_id", user.id)
+        .eq("status", "uploaded")
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle();
+      if (mobileSessionError) {
+        return NextResponse.json({ error: mobileSessionError.message }, { status: 500 });
+      }
+      if (!mobileSession?.proof_storage_path) {
+        return NextResponse.json(
+          { error: "The phone upload is unavailable or expired. Scan a new QR." },
+          { status: 410 },
+        );
+      }
+      mobileUploadSession = mobileSession as { id: string; proof_storage_path: string };
+    }
+
+    if (!(receipt instanceof File) && !mobileUploadSession && !existingSubmission?.proof_storage_path) {
       return NextResponse.json({ error: "Upload the payment receipt." }, { status: 400 });
     }
 
     if (receipt instanceof File) {
-      if (receipt.size <= 0 || receipt.size > MAX_RECEIPT_BYTES) {
-        return NextResponse.json({ error: "Receipt must be smaller than 5 MB." }, { status: 400 });
-      }
-      if (!ALLOWED_RECEIPT_TYPES.has(receipt.type)) {
-        return NextResponse.json(
-          { error: "Upload a JPG, PNG, WebP, or PDF receipt." },
-          { status: 400 },
-        );
-      }
+      const fileError = receiptFileError(receipt);
+      if (fileError) return NextResponse.json({ error: fileError }, { status: 400 });
 
-      uploadedPath = `${user.id}/${invoice.id}/${randomUUID()}.${fileExtension(receipt)}`;
+      uploadedPath = `${user.id}/${invoice.id}/${randomUUID()}.${receiptFileExtension(receipt)}`;
       const { error: uploadError } = await admin.storage
         .from("payment-receipts")
         .upload(uploadedPath, Buffer.from(await receipt.arrayBuffer()), {
@@ -146,7 +154,10 @@ export async function POST(request: Request) {
       }
     }
 
-    const proofPath = uploadedPath ?? existingSubmission?.proof_storage_path ?? null;
+    const proofPath = uploadedPath
+      ?? mobileUploadSession?.proof_storage_path
+      ?? existingSubmission?.proof_storage_path
+      ?? null;
     const values = {
       reference: normalizedReference,
       payer_name: parsed.data.payerName,
@@ -183,7 +194,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: invoiceUpdateError.message }, { status: 500 });
     }
 
-    if (uploadedPath && existingSubmission?.proof_storage_path) {
+    if (mobileUploadSession) {
+      await admin
+        .from("billing_receipt_upload_sessions")
+        .update({ status: "consumed", consumed_at: new Date().toISOString() })
+        .eq("id", mobileUploadSession.id)
+        .eq("status", "uploaded");
+    }
+
+    if (proofPath && existingSubmission?.proof_storage_path && proofPath !== existingSubmission.proof_storage_path) {
       await admin.storage.from("payment-receipts").remove([existingSubmission.proof_storage_path]);
     }
 

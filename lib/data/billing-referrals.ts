@@ -14,6 +14,24 @@ function normalizeCode(value: string) {
   return value.trim().toUpperCase();
 }
 
+async function hasActivePaidProSubscription(admin: SupabaseClient, userId: string) {
+  const { data, error } = await admin
+    .from("user_subscriptions")
+    .select("id,subscription_plans!inner(product_type,is_unlimited,billing_type),invoices!inner(status)")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .not("invoice_id", "is", null)
+    .gt("ends_at", new Date().toISOString())
+    .eq("subscription_plans.product_type", "individual")
+    .eq("subscription_plans.is_unlimited", true)
+    .eq("subscription_plans.billing_type", "monthly")
+    .eq("invoices.status", "paid")
+    .limit(1);
+
+  if (error) throw error;
+  return Boolean(data?.length);
+}
+
 export async function getBillingReferralByCode(
   code: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
@@ -29,7 +47,7 @@ export async function getBillingReferralByCode(
   if (error) throw error;
   if (!link) return null;
 
-  const [profileResult, countResult] = await Promise.all([
+  const [profileResult, countResult, referrerEligible] = await Promise.all([
     admin
       .from("student_profiles")
       .select("full_name")
@@ -39,6 +57,7 @@ export async function getBillingReferralByCode(
       .from("billing_referral_claims")
       .select("id", { count: "exact", head: true })
       .eq("link_id", link.id),
+    hasActivePaidProSubscription(admin, String(link.referrer_id)),
   ]);
   if (profileResult.error) throw profileResult.error;
   if (countResult.error) throw countResult.error;
@@ -46,7 +65,7 @@ export async function getBillingReferralByCode(
   return {
     id: String(link.id),
     code: String(link.code),
-    active: Boolean(link.active),
+    active: Boolean(link.active) && referrerEligible,
     referrerName: String(profileResult.data?.full_name || "A NanoSyllabus student"),
     claimCount: countResult.count ?? 0,
     createdAt: String(link.created_at),

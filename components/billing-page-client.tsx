@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Check, CheckCircle2, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
+import { ReceiptUploadFromPhone } from "@/components/receipt-upload-from-phone";
 import type {
   AppUser,
   BillingInvoiceSummary,
@@ -337,15 +338,20 @@ function PaymentSubmissionModal({ invoice, paymentConfig, onClose, onSaved }: {
   const [reference, setReference] = useState(invoice.paymentSubmission?.reference ?? "");
   const [payerName, setPayerName] = useState(invoice.paymentSubmission?.proofMeta?.payerName ?? "");
   const [receipt, setReceipt] = useState<File | null>(null);
+  const [mobileUploadSessionId, setMobileUploadSessionId] = useState<string | null>(null);
+  const [mobileReceiptName, setMobileReceiptName] = useState("");
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [note, setNote] = useState(invoice.paymentSubmission?.proofMeta?.note ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  async function submitPayment() {
+  async function submitPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setSaving(true); setError("");
     const formData = new FormData();
     formData.set("invoiceId", invoice.id); formData.set("reference", reference); formData.set("payerName", payerName); formData.set("note", note);
     if (receipt) formData.set("receipt", receipt);
+    else if (mobileUploadSessionId) formData.set("mobileUploadSessionId", mobileUploadSessionId);
     const response = await fetch("/api/billing/payments", { method: "POST", body: formData });
     setSaving(false);
     if (!response.ok) { const payload = (await response.json().catch(() => ({}))) as { error?: string }; setError(payload.error || "Failed to submit payment."); return; }
@@ -354,7 +360,7 @@ function PaymentSubmissionModal({ invoice, paymentConfig, onClose, onSaved }: {
 
   return (
     <ModalFrame title="Scan, pay and send your receipt" onClose={onClose} locked={saving} wide>
-      <div className="grid gap-7 md:grid-cols-[220px_1fr]">
+      <form onSubmit={submitPayment} className="grid gap-7 md:grid-cols-[220px_1fr]">
         <div>
           {paymentConfig ? <Image src={paymentConfig.qrImageUrl} alt={`Official ${paymentConfig.displayName} payment QR`} width={220} height={220} unoptimized className="aspect-square w-full rounded-2xl border border-border bg-card object-contain p-2" /> : <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-border p-5 text-center text-sm text-text-secondary">Payment QR is not configured yet.</div>}
           {paymentConfig ? <div className="mt-3 text-sm text-text-secondary"><p className="font-semibold text-text-primary">{paymentConfig.bankName || paymentConfig.displayName}</p><p>{paymentConfig.accountName}</p>{paymentConfig.accountNumber ? <p>A/C {paymentConfig.accountNumber}</p> : null}</div> : null}
@@ -367,13 +373,45 @@ function PaymentSubmissionModal({ invoice, paymentConfig, onClose, onSaved }: {
           <div className="mt-5 space-y-4">
             <Field label="Transaction reference"><Input value={reference} onChange={(event) => setReference(event.target.value)} /></Field>
             <Field label="Payer name"><Input value={payerName} onChange={(event) => setPayerName(event.target.value)} /></Field>
-            <Field label="Payment receipt" hint="JPG, PNG, WebP, or PDF · maximum 5 MB"><Input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setReceipt(event.target.files?.[0] ?? null)} /></Field>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-text-secondary">Payment receipt *</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_280px] sm:items-stretch">
+                <div className="rounded-xl border border-border bg-bg-primary p-3">
+                  <label htmlFor="payment-receipt" className="text-sm font-semibold text-text-primary">Choose on this computer</label>
+                  <Input
+                    key={fileInputKey}
+                    id="payment-receipt"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={(event) => {
+                      setReceipt(event.target.files?.[0] ?? null);
+                      if (event.target.files?.[0]) {
+                        setMobileUploadSessionId(null);
+                        setMobileReceiptName("");
+                      }
+                    }}
+                    className="mt-2 h-auto min-h-11 py-2 file:mr-2 file:rounded-md file:border-0 file:bg-bg-tertiary file:px-2 file:py-1 file:text-xs file:font-semibold"
+                  />
+                  <p className="mt-2 text-xs leading-5 text-text-muted">JPG, PNG, WebP, or PDF · max 5 MB</p>
+                </div>
+                <ReceiptUploadFromPhone
+                  invoiceId={invoice.id}
+                  onReady={(sessionId, fileName) => {
+                    setMobileUploadSessionId(sessionId);
+                    setMobileReceiptName(fileName);
+                    setReceipt(null);
+                    setFileInputKey((current) => current + 1);
+                  }}
+                />
+              </div>
+              {mobileReceiptName ? <p className="sr-only" role="status">Receipt {mobileReceiptName} received from phone.</p> : null}
+            </div>
             <Field label="Note (optional)"><Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} /></Field>
           </div>
           {error ? <p role="alert" className="mt-4 text-sm text-destructive">{error}</p> : null}
-          <Button size="lg" className="mt-6 w-full rounded-2xl" onClick={() => void submitPayment()} disabled={!paymentConfig || saving || !reference.trim() || !payerName.trim() || (!receipt && !invoice.paymentSubmission?.proofStoragePath)}>{saving ? "Uploading receipt..." : "Submit payment for verification"}</Button>
+          <Button type="submit" size="lg" className="mt-6 w-full rounded-2xl" disabled={!paymentConfig || saving || !reference.trim() || !payerName.trim() || (!receipt && !mobileUploadSessionId && !invoice.paymentSubmission?.proofStoragePath)}>{saving ? "Uploading receipt..." : "Submit payment for verification"}</Button>
         </div>
-      </div>
+      </form>
     </ModalFrame>
   );
 }
