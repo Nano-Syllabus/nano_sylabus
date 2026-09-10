@@ -2,55 +2,35 @@
 
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
-import { keys } from "@/lib/query/keys";
 
 /**
- * `router.refresh()` for an app that now has two caches.
+ * Re-renders the server payload. Does **not** touch the query cache.
  *
- * WHY THIS EXISTS
- * ---------------
- * `router.refresh()` re-fetches the React Server Component payload. That used
- * to be the whole story, because every screen's data was computed inside its
- * server component. It no longer is: the Daily Dashboard reads through TanStack
- * Query so that returning to it does not cost a server round trip, and a query
- * cache does not know or care that the router just refreshed.
+ * WHY THE QUERY CACHE IS LEFT ALONE
+ * ---------------------------------
+ * This used to invalidate the whole `["student", …]` subtree on the theory that
+ * over-invalidating was the safe direction — a background refetch nobody sees,
+ * versus a number that is quietly wrong.
  *
- * So a challenge submitted through `router.refresh()` alone would update the
- * page it was submitted on and leave the dashboard showing yesterday's streak
- * until its own 60s window expired. Both caches have to be told.
+ * That theory is wrong for this app. The rule here is that cached data lives
+ * for the life of the page load and writes patch it in place; a student's data
+ * only moves when the student acts, and when they act *in this app* the write
+ * already updated the cache. So an invalidation after a write does not correct
+ * anything — it spends a request to be told what the client just wrote, and the
+ * student pays for it in latency on the screen they are looking at.
  *
- * The invalidation is deliberately broad — the whole `["student", …]` subtree
- * rather than one key. A student action that is worth a refresh (finishing a
- * challenge, joining a course, switching community) moves several of these at
- * once, and the failure mode of invalidating one key too many is a background
- * refetch nobody sees, while the failure mode of missing one is a number that
- * is quietly wrong. Invalidation marks entries stale; it does not blank them,
- * so nothing on screen flashes.
+ * Screens that still read through server components need their RSC payload
+ * re-rendered, and that is all this does now. The challenges recovery retry
+ * (`needsRecovery` in `challenges-dashboard-client.tsx`) depends on it: when the
+ * list comes back empty because topic data was not ready yet, re-rendering the
+ * server tree is the only way to try again.
+ *
+ * If a screen's number goes stale after a write, patch it the way
+ * `useDashboardPatch()` does. Do not reintroduce an invalidation here.
  */
 export function useAppRefresh() {
   const router = useRouter();
-  const client = useQueryClient();
-
   return useCallback(() => {
-    /**
-     * EVERY STUDENT KEY EXCEPT THE DASHBOARD.
-     *
-     * The dashboard is fetched once per page load and held for the life of the
-     * tab (`staleTime: Infinity`), because the writes that move its numbers
-     * patch it in place instead — see `useDashboardPatch`. Invalidating it here
-     * would undo that: the student would finish a challenge, watch the tile
-     * tick up instantly, and then watch the whole screen reload two seconds
-     * later to show the same value.
-     *
-     * `predicate` rather than a narrower key because invalidation is
-     * prefix-based: there is no way to say "this subtree minus one branch" with
-     * a key alone.
-     */
-    void client.invalidateQueries({
-      predicate: (query) =>
-        query.queryKey[0] === "student" && query.queryKey[1] !== "dashboard",
-    });
     router.refresh();
-  }, [client, router]);
+  }, [router]);
 }

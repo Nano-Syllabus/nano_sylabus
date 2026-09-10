@@ -61,27 +61,30 @@ function shouldRetry(failureCount: number, error: unknown) {
 }
 
 /**
- * Queries worth writing TO DISK, and no others.
+ * What gets written to the browser's own cache. OPT-OUT, not opt-in.
  *
- * OPT-IN, NOT OPT-OUT, AND THAT IS A SECURITY DECISION. The persister writes
- * to `localStorage`, which survives sign-out and is readable by anything
- * running on the origin. Persisting everything would leave one student's chat
- * titles, invoices and grades on a shared lab machine for the next person. So
- * a query is only written if it says so:
+ * THE MODEL THIS SERVES. Every screen in this app shows one student their own
+ * data, and that data only changes when they act. So the browser copy is,
+ * overwhelmingly, already correct — and painting from it on load is not a
+ * gamble, it is the fast path being taken for the common case. The reconcile
+ * that follows fixes the rare drift, silently, under content already on screen.
+ * Nothing here is time-sensitive enough for that gap to matter.
  *
- *     useQuery({ ..., meta: { persist: true } })
+ * This used to be opt-in and catalog-only, on the grounds that `localStorage`
+ * survives sign-out and is readable on a shared machine. That risk is real and
+ * is now handled where it belongs — at the boundary, not by refusing to cache:
  *
- * and `meta.persist` belongs on catalog-shaped data — the published subject
- * list, plan prices, public courses. Things that are the same for everyone and
- * cost a slow tenant-API round trip to rebuild.
+ *   - the persisted cache is keyed by user id, so two accounts on one browser
+ *     never read each other's entry (components/query-provider.tsx);
+ *   - signing out erases it (`clearPersistedCache`), which is the moment that
+ *     actually matters on a shared machine;
+ *   - it expires on its own after PERSIST_MAX_AGE.
  *
- * THIS IS THE PERSISTER'S RULE ONLY. It is passed to `persistOptions` in
- * components/query-provider.tsx and is deliberately NOT the client's default
- * `dehydrate` behaviour — see the note on `dehydrate` below, which this used to
- * be wired into by mistake.
+ * `meta: { persist: false }` opts a query out — for anything that should never
+ * touch disk regardless (a one-time token, a signed URL).
  */
 export function shouldPersistQuery(query: Query) {
-  return defaultShouldDehydrateQuery(query) && query.meta?.persist === true;
+  return defaultShouldDehydrateQuery(query) && query.meta?.persist !== false;
 }
 
 export function makeQueryClient() {

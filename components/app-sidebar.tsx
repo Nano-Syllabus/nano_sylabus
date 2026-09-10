@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { isAdminRole } from "@/lib/admin-role";
 import { useQueryClient } from "@tanstack/react-query";
+import { clearPersistedCache } from "@/components/query-provider";
+import { resetQueryClient } from "@/lib/query/client";
 import { prefetchDashboard } from "@/lib/query/dashboard";
 import {
   useChatSessionEvents,
@@ -352,6 +354,17 @@ export function AppSidebar({
   async function handleLogout() {
     const supabase = await loadSupabaseBrowserClient();
     await supabase.auth.signOut();
+    /**
+     * Erase this browser's cached data on the way out.
+     *
+     * Everything the student's screens showed is written to `localStorage` so
+     * the next load can paint instantly. Signing out is the one moment that
+     * must not survive — a shared campus machine is the whole reason this call
+     * exists, and it is the boundary that makes browser-side caching of
+     * personal data defensible in the first place.
+     */
+    clearPersistedCache();
+    resetQueryClient();
     router.replace("/login");
     router.refresh();
   }

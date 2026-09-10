@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { resetQueryClient } from "@/lib/query/client";
+import { ACTIVE_USER_KEY, clearPersistedCache } from "@/components/query-provider";
 
 /** Which account the in-memory cache currently holds data for. */
 let cachedUserId: string | null = null;
@@ -28,8 +29,32 @@ let cachedUserId: string | null = null;
  */
 export function QueryIdentity({ userId }: { userId: string }) {
   useEffect(() => {
+    /**
+     * Record who this browser is serving.
+     *
+     * The persisted cache is keyed by account, but `QueryProvider` lives at the
+     * root layout and cannot know that — it restores from disk on the first
+     * paint, before any authenticated layout has rendered. Writing the id here
+     * is what lets the NEXT page load restore the right cache immediately.
+     */
+    try {
+      window.localStorage.setItem(ACTIVE_USER_KEY, userId);
+    } catch {
+      /* no storage: the cache simply is not persisted */
+    }
+
     if (cachedUserId === userId) return;
-    if (cachedUserId !== null) resetQueryClient();
+    if (cachedUserId !== null) {
+      // A different account on the same browser. Drop the in-memory cache AND
+      // the previous account's disk copy before anything can read either.
+      resetQueryClient();
+      clearPersistedCache();
+      try {
+        window.localStorage.setItem(ACTIVE_USER_KEY, userId);
+      } catch {
+        /* as above */
+      }
+    }
     cachedUserId = userId;
   }, [userId]);
 

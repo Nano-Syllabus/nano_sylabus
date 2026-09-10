@@ -197,10 +197,10 @@ export function useToggleSessionPin() {
       for (const [key, data] of context?.previous ?? []) client.setQueryData(key, data);
     },
     onSuccess: (updated) => {
+      // The server's row replaces the optimistic one. No invalidation follows:
+      // this IS the fresh value, so refetching it would spend a round trip to
+      // be told what the client just wrote.
       patchSessionEverywhere(client, updated.id, () => updated);
-    },
-    onSettled: () => {
-      void client.invalidateQueries({ queryKey: keys.chat.sessions.all() });
     },
   });
 }
@@ -216,9 +216,6 @@ export function useRenameSession() {
       }),
     onSuccess: (updated) => {
       patchSessionEverywhere(client, updated.id, () => updated);
-    },
-    onSettled: () => {
-      void client.invalidateQueries({ queryKey: keys.chat.sessions.all() });
     },
   });
 }
@@ -238,9 +235,8 @@ export function useDeleteSession() {
     onError: (_error, _variables, context) => {
       for (const [key, data] of context?.previous ?? []) client.setQueryData(key, data);
     },
-    onSettled: () => {
-      void client.invalidateQueries({ queryKey: keys.chat.sessions.all() });
-    },
+    // No `onSettled` invalidation: the row is gone from the cache and gone from
+    // the database. There is nothing a refetch could correct.
   });
 }
 
@@ -259,10 +255,64 @@ export function useChatSessionEvents() {
   const client = useQueryClient();
 
   useEffect(() => {
-    const invalidate = () => {
-      void client.invalidateQueries({ queryKey: keys.chat.sessions.all() });
+    const onUpdated = (event: Event) => {
+      const session = (event as CustomEvent<ChatSessionSummary | undefined>).detail;
+      // The chat page builds the full row before dispatching, so the sidebar
+      // can write it straight in. It used to invalidate here instead, which
+      // refetched a whole page of titles to learn one the sender already had.
+      if (session?.id) upsertSession(client, session);
     };
-    window.addEventListener("chat-session-updated", invalidate);
-    return () => window.removeEventListener("chat-session-updated", invalidate);
+    window.addEventListener("chat-session-updated", onUpdated);
+    return () => window.removeEventListener("chat-session-updated", onUpdated);
   }, [client]);
+}
+
+/**
+ * Write one session into the sidebar's cached lists.
+ *
+ * A row that is already cached is replaced in place, everywhere it appears —
+ * that covers renames and pins, and it deliberately does not reorder anything
+ * under a reader who is looking at the list.
+ *
+ * A row that is *new* is prepended, but only to the unfiltered list. The search
+ * term lives in the query key, so the caches keyed by `q` hold "sessions
+ * matching that word"; pushing a brand-new "New chat" into one of them would
+ * put a row on screen that does not match the filter the student typed. Those
+ * lists simply do not learn about the new session until they are next fetched,
+ * which is correct — an unmatched row is worse than a missing one.
+ *
+ * Front of the first page is where the server would put it too: the list is
+ * ordered pinned-first then by `updated_at`, and a session created a moment ago
+ * is the most recently updated one.
+ */
+export function upsertSession(client: QueryClient, session: ChatSessionSummary) {
+  const entries = client.getQueriesData<SessionsData>({ queryKey: keys.chat.sessions.all() });
+
+  for (const [key, data] of entries) {
+    if (!data?.pages) continue;
+
+    const exists = data.pages.some((page) => page.sessions.some((s) => s.id === session.id));
+    if (exists) {
+      client.setQueryData<SessionsData>(key, {
+        ...data,
+        pages: data.pages.map((page) => ({
+          ...page,
+          sessions: page.sessions.map((s) => (s.id === session.id ? { ...s, ...session } : s)),
+        })),
+      });
+      continue;
+    }
+
+    // `["chat","sessions","list",{ q, limit }]` — anything with a search term is
+    // a filtered view and must not gain an unmatched row.
+    const params = key[3] as { q?: string } | undefined;
+    if (params?.q) continue;
+
+    client.setQueryData<SessionsData>(key, {
+      ...data,
+      pages: data.pages.map((page, index) =>
+        index === 0 ? { ...page, sessions: [session, ...page.sessions] } : page,
+      ),
+    });
+  }
 }

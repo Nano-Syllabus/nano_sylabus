@@ -153,7 +153,7 @@ function ChallengeDetail({
   onNext: () => Promise<boolean>;
 }) {
   const router = useRouter();
-  // Refreshes the RSC payload AND the student query cache — see lib/query/refresh.ts
+  // Re-renders the RSC payload only; the query cache is never invalidated.
   const refreshApp = useAppRefresh();
   // Patches the cached dashboard in place, keyed the same way the page reads it.
   const dashboardPatch = useDashboardPatch();
@@ -353,9 +353,8 @@ function ChallengeDetail({
        * mean a two-second reload of the whole screen to show a number this
        * client already knows.
        *
-       * `refreshApp()` still runs for the rest of the app: it refreshes the RSC
-       * payload and every other student query, and deliberately leaves the
-       * dashboard alone (see lib/query/refresh.ts).
+       * `refreshApp()` still runs, but only to re-render this page's server
+       * payload — it no longer invalidates any query (see lib/query/refresh.ts).
        */
       if (payload.passed) dashboardPatch.completed({ challengeId: payload.challenge?.id });
       else dashboardPatch.attempted();
@@ -1361,7 +1360,7 @@ function ChallengeDetail({
 
 export function ChallengesDashboardClient({ dashboard }: { dashboard: StudentChallengeDashboard }) {
   const router = useRouter();
-  // Refreshes the RSC payload AND the student query cache — see lib/query/refresh.ts
+  // Re-renders the RSC payload only; the query cache is never invalidated.
   const refreshApp = useAppRefresh();
   const [refreshing, startRefresh] = useTransition();
   const [retryCount, setRetryCount] = useState(0);

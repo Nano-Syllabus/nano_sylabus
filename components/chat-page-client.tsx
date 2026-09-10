@@ -1496,20 +1496,23 @@ export function ChatPageClient({
     setCurrentSessionId(returnedSessionId);
     currentSessionIdRef.current = returnedSessionId;
     window.history.replaceState(null, "", `/app/chat?session=${returnedSessionId}`);
-    setSessions((prev) => [
-      {
-        id: returnedSessionId,
-        userId: user.id,
-        title,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        subjectTags: subjectContext ? [subjectContext] : [],
-        subjectContext,
-        isPinned: false,
-      },
-      ...prev,
-    ]);
-    window.dispatchEvent(new CustomEvent("chat-session-updated"));
+    const now = new Date().toISOString();
+    const created: ChatSessionSummary = {
+      id: returnedSessionId,
+      userId: user.id,
+      title,
+      createdAt: now,
+      updatedAt: now,
+      subjectTags: subjectContext ? [subjectContext] : [],
+      subjectContext,
+      isPinned: false,
+    };
+    setSessions((prev) => [created, ...prev]);
+    // Carry the row itself: the sidebar's cached list is patched from this
+    // detail rather than refetched.
+    window.dispatchEvent(
+      new CustomEvent<ChatSessionSummary>("chat-session-updated", { detail: created }),
+    );
   }
 
   async function finishChatResponse(options: { syncMessages?: boolean } = {}) {
@@ -2045,7 +2048,9 @@ export function ChatPageClient({
           : s,
       ),
     );
-    window.dispatchEvent(new CustomEvent("chat-session-updated"));
+    window.dispatchEvent(
+      new CustomEvent<ChatSessionSummary>("chat-session-updated", { detail: updated }),
+    );
     setSessionDetail((prev) =>
       prev && prev.id === targetSessionId
         ? { ...prev, title: updated.title, updatedAt: updated.updatedAt }
