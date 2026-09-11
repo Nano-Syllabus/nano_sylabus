@@ -38,7 +38,7 @@ const themeBootScript = `
   var k='ns-theme-v2';
   var v=localStorage.getItem(k);
   if(v!=='light'&&v!=='dark'){
-    v='dark';
+    v='light';
   }
   document.documentElement.setAttribute('data-theme',v);
   document.documentElement.style.colorScheme=v;

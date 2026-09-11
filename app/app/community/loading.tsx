@@ -7,8 +7,8 @@ const skeleton = "animate-pulse rounded bg-border motion-reduce:animate-none";
 /**
  * The Community Hub's frame, drawn for real.
  *
- * The four section tabs are fixed strings the page always renders, so they show
- * as themselves rather than as four grey bars — the reader can see where they
+ * The two section tabs are fixed strings the page always renders, so they show
+ * as themselves rather than as grey bars — the reader can see where they
  * have landed while the data is still in flight. What genuinely is not known
  * yet is the community's name, description and counts, and only those are
  * placeheld.
@@ -19,7 +19,7 @@ const skeleton = "animate-pulse rounded bg-border motion-reduce:animate-none";
  * Placeholder fill is `bg-border`, never `bg-bg-secondary`: in the dark theme
  * `--bg-secondary` and `--card` are the same colour, so a `bg-bg-secondary`
  * block inside a card is invisible. The previous version of this file used it
- * for every block, including the six cards.
+ * for every block, including the six metric cards.
  */
 export default function CommunityHubLoading() {
   return (
@@ -40,7 +40,7 @@ export default function CommunityHubLoading() {
         className="mt-7 flex gap-6 overflow-x-auto border-b border-border"
         aria-label="Community sections"
       >
-        {["overview", "subjects", "forum", "members"].map((item, index) => (
+        {["overview", "members"].map((item, index) => (
           <span
             key={item}
             className={
@@ -55,11 +55,23 @@ export default function CommunityHubLoading() {
         ))}
       </nav>
 
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, index) => (
+      <div className="mt-8 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
           <div key={index} className="h-44 rounded-2xl border border-border bg-card p-5">
             <div className={`h-4 w-28 ${skeleton}`} />
             <div className={`mt-4 h-7 w-20 ${skeleton}`} />
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-10 grid gap-3 sm:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, index) => (
+          <div key={index} className="h-52 rounded-2xl border border-border bg-card p-5">
+            <div className={`h-10 w-10 rounded-xl ${skeleton}`} />
+            <div className={`mt-5 h-3 w-28 ${skeleton}`} />
+            <div className={`mt-3 h-6 w-48 max-w-full ${skeleton}`} />
+            <div className={`mt-3 h-4 w-full ${skeleton}`} />
+            <div className={`mt-2 h-4 w-4/5 ${skeleton}`} />
           </div>
         ))}
       </div>

@@ -36,18 +36,17 @@ export async function GET(request: Request) {
     } = await getVerifiedUser(supabase);
     if (!user) return errorJson("Unauthorized", 401);
 
-    const community = new URL(request.url).searchParams.get("community") || undefined;
-    const dashboard = await getStudentDailyDashboard(user.id, undefined, community);
+    const params = new URL(request.url).searchParams;
+    const community = params.get("community") || undefined;
+    const month = params.get("month") || undefined;
+    const dashboard = await getStudentDailyDashboard(user.id, undefined, community, month);
 
     // 60s, matching `dashboardQuery`'s staleTime in lib/query/dashboard.ts.
     // The two windows are deliberately the same number: the query decides
     // whether to ask at all, this decides whether asking costs a body, and a
     // client told to hold something longer than the server considers it valid
     // is the mismatch that makes one cache serve what the other has discarded.
-    return privateJson(
-      { dashboard },
-      { request, profile: { maxAge: 60, swr: 300 } },
-    );
+    return privateJson({ dashboard }, { request, profile: { maxAge: 60, swr: 300 } });
   } catch (error) {
     return errorJson(
       error instanceof Error ? error.message : "Could not load your dashboard.",

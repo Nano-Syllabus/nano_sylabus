@@ -20,9 +20,15 @@ export type DailyActivityDay = {
   isToday: boolean;
 };
 
+export type DailyExamDate = {
+  id: string;
+  date: string;
+  title: string;
+};
+
 export type DailyLeaderboardMember = Pick<
   CommunityHubMember,
-  "id" | "name" | "initials" | "todayAttempts" | "streak" | "xp" | "isViewer"
+  "id" | "name" | "initials" | "todayAttempts" | "streak" | "isViewer"
 > & {
   dailyRank: number;
 };
@@ -51,6 +57,7 @@ export type StudentDailyDashboard = {
   challenge: StudentChallengeDashboard;
   todayChallengeCompletions: number;
   activity: DailyActivityDay[];
+  examDates: DailyExamDate[];
   community: null | {
     name: string;
     slug: string;
@@ -58,8 +65,6 @@ export type StudentDailyDashboard = {
     contentReadiness: number | null;
     materialCount: number;
     topicCount: number;
-    viewerXp: number;
-    viewerRank: number | null;
     leaderboard: DailyLeaderboardMember[];
     currentSemesterId: string;
     semesters: DailySemester[];
@@ -96,21 +101,34 @@ export function shiftDateKey(key: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function calendarStart(today: string) {
-  const weekday = dateFromKey(today).getUTCDay();
-  const daysSinceMonday = (weekday + 6) % 7;
-  return shiftDateKey(today, -(daysSinceMonday + 28));
+function monthStartKey(dateKey: string) {
+  return `${dateKey.slice(0, 7)}-01`;
+}
+
+function nextMonthStartKey(monthStart: string) {
+  const date = dateFromKey(monthStart);
+  date.setUTCMonth(date.getUTCMonth() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizeCalendarMonth(value: string | undefined, today: string) {
+  return value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : today.slice(0, 7);
 }
 
 export function buildDailyActivityCalendar(
   rows: DailyActivityRow[],
   now = new Date(),
+  calendarMonth?: string,
 ): DailyActivityDay[] {
   const today = communityDateKey(now);
-  const start = calendarStart(today);
+  const start = monthStartKey(`${normalizeCalendarMonth(calendarMonth, today)}-01`);
+  const nextMonthStart = nextMonthStartKey(start);
+  const daysInMonth = Math.round(
+    (dateFromKey(nextMonthStart).getTime() - dateFromKey(start).getTime()) / (24 * 60 * 60 * 1000),
+  );
   const rowsByDate = new Map(rows.map((row) => [row.activity_date, row]));
 
-  return Array.from({ length: 35 }, (_, index) => {
+  return Array.from({ length: daysInMonth }, (_, index) => {
     const date = shiftDateKey(start, index);
     const row = rowsByDate.get(date);
     const attempts = asNumber(row?.attempt_count);
@@ -150,7 +168,6 @@ export function rankDailyCommunityMembers(members: CommunityHubMember[]): DailyL
       (left, right) =>
         right.todayAttempts - left.todayAttempts ||
         right.streak - left.streak ||
-        right.xp - left.xp ||
         left.joinedAt.localeCompare(right.joinedAt),
     )
     .map((member, index) => ({
@@ -159,7 +176,6 @@ export function rankDailyCommunityMembers(members: CommunityHubMember[]): DailyL
       initials: member.initials,
       todayAttempts: member.todayAttempts,
       streak: member.streak,
-      xp: member.xp,
       isViewer: member.isViewer,
       dailyRank: index + 1,
     }));
@@ -238,11 +254,13 @@ export async function getStudentDailyDashboard(
   userId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
   preferredCommunitySlug?: string,
+  calendarMonth?: string,
 ): Promise<StudentDailyDashboard> {
   const today = communityDateKey(new Date());
-  const activityStart = calendarStart(today);
+  const activityStart = monthStartKey(`${normalizeCalendarMonth(calendarMonth, today)}-01`);
+  const activityEnd = nextMonthStartKey(activityStart);
   const activityStartTimestamp = new Date(`${activityStart}T00:00:00+05:45`).toISOString();
-  const activityEndTimestamp = new Date(`${shiftDateKey(today, 1)}T00:00:00+05:45`).toISOString();
+  const activityEndTimestamp = new Date(`${activityEnd}T00:00:00+05:45`).toISOString();
   /**
    * THE TWO HALVES OF THIS PAGE NO LONGER QUEUE BEHIND EACH OTHER.
    *
@@ -281,7 +299,7 @@ export async function getStudentDailyDashboard(
   );
   const resolvedSlug = challenge.community?.slug ?? preferredCommunitySlug;
 
-  const [community, activityResult] = await Promise.all([
+  const [community, activityResult, examDatesResult] = await Promise.all([
     speculativeHub.then((hub) =>
       !resolvedSlug || hub?.community.slug === resolvedSlug
         ? hub
@@ -297,9 +315,17 @@ export async function getStudentDailyDashboard(
           .lt("created_at", activityEndTimestamp)
           .order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
+    admin
+      .from("student_exam_dates")
+      .select("id,exam_date,title")
+      .eq("user_id", userId)
+      .order("exam_date", { ascending: true }),
   ]);
 
   if (activityResult.error) throw activityResult.error;
+  if (examDatesResult.error && !["42P01", "PGRST205"].includes(examDatesResult.error.code ?? "")) {
+    throw examDatesResult.error;
+  }
   const scopedActivity = aggregateScopedPracticeActivity(
     (activityResult.data ?? []) as ScopedPracticeAttemptRow[],
   );
@@ -307,7 +333,18 @@ export async function getStudentDailyDashboard(
   return {
     challenge,
     todayChallengeCompletions: challenge.todayCompletedCount,
-    activity: buildDailyActivityCalendar(scopedActivity),
+    activity: buildDailyActivityCalendar(scopedActivity, new Date(), calendarMonth),
+    examDates: (
+      (examDatesResult.error ? [] : (examDatesResult.data ?? [])) as Array<{
+        id: string;
+        exam_date: string;
+        title: string;
+      }>
+    ).map((exam) => ({
+      id: exam.id,
+      date: exam.exam_date,
+      title: exam.title,
+    })),
     community: community
       ? {
           name: community.community.name,
@@ -316,8 +353,6 @@ export async function getStudentDailyDashboard(
           contentReadiness: community.contentReadiness,
           materialCount: community.materialCount,
           topicCount: community.topicCount,
-          viewerXp: community.viewer.xp,
-          viewerRank: community.viewer.rank,
           leaderboard: rankDailyCommunityMembers(community.members),
           currentSemesterId: community.currentTermId,
           semesters: buildDailySemesters(community),

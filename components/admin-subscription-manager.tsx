@@ -4,7 +4,12 @@ import { useMemo, useState } from "react";
 import { PLAN_COLLECTION } from "@/lib/admin-resource-definitions";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
-import type { AdminSubscriptionSummary, AdminUserSummary, BillingType, SubscriptionPlan } from "@/lib/types";
+import type {
+  AdminSubscriptionSummary,
+  AdminUserSummary,
+  BillingType,
+  SubscriptionPlan,
+} from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
 type PlanFormState = {
@@ -51,9 +56,13 @@ export function AdminSubscriptionManager({
   const [plans, setPlans] = useState(initialPlans);
   const [subscriptions, setSubscriptions] = useState(initialSubscriptions);
   const [selectedPlanId, setSelectedPlanId] = useState<string>(initialPlans[0]?.id ?? "new");
-  const [planForm, setPlanForm] = useState<PlanFormState>(initialPlans[0] ? toPlanForm(initialPlans[0]) : EMPTY_PLAN);
+  const [planForm, setPlanForm] = useState<PlanFormState>(
+    initialPlans[0] ? toPlanForm(initialPlans[0]) : EMPTY_PLAN,
+  );
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"idle" | "saving-plan" | "granting" | "subscription-action">("idle");
+  const [busy, setBusy] = useState<"idle" | "saving-plan" | "granting" | "subscription-action">(
+    "idle",
+  );
   const [grantUserId, setGrantUserId] = useState<string>(users[0]?.userId ?? "");
   const [grantPlanId, setGrantPlanId] = useState<string>(initialPlans[0]?.id ?? "");
   const [grantEndsAt, setGrantEndsAt] = useState("");
@@ -91,7 +100,8 @@ export function AdminSubscriptionManager({
     const subscriptionPayload = await subscriptionResponse.json();
 
     if (!planResponse.ok) throw new Error(planPayload.error || "Failed to refresh plans.");
-    if (!subscriptionResponse.ok) throw new Error(subscriptionPayload.error || "Failed to refresh subscriptions.");
+    if (!subscriptionResponse.ok)
+      throw new Error(subscriptionPayload.error || "Failed to refresh subscriptions.");
 
     setPlans(planPayload.plans);
     setSubscriptions(subscriptionPayload.subscriptions);
@@ -177,10 +187,7 @@ export function AdminSubscriptionManager({
     }
   }
 
-  async function handleSubscriptionAction(
-    subscriptionId: string,
-    action: "cancel" | "extend",
-  ) {
+  async function handleSubscriptionAction(subscriptionId: string, action: "cancel" | "extend") {
     setBusy("subscription-action");
     setFeedback(null);
     try {
@@ -192,18 +199,21 @@ export function AdminSubscriptionManager({
             }
           : { action };
 
-      const response = await fetch(`/api/admin/subscriptions/user-subscriptions/${subscriptionId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const response = await fetch(
+        `/api/admin/subscriptions/user-subscriptions/${subscriptionId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload.error || `Failed to ${action} subscription.`);
       }
 
       await refreshAll();
-      setFeedback(action === "cancel" ? "Subscription cancelled." : "Subscription extended.");
+      setFeedback(action === "cancel" ? "Access revoked." : "Subscription extended.");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : `Failed to ${action} subscription.`);
     } finally {
@@ -244,10 +254,14 @@ export function AdminSubscriptionManager({
                 }`}
               >
                 <p className="text-sm font-medium">{plan.name}</p>
-                <p className={`mt-1 text-xs ${selectedPlanId === plan.id ? "text-slate-700" : "text-text-secondary"}`}>
+                <p
+                  className={`mt-1 text-xs ${selectedPlanId === plan.id ? "text-slate-700" : "text-text-secondary"}`}
+                >
                   {plan.credits} credits · {plan.currency} {plan.price}
                 </p>
-                <p className={`mt-1 text-[11px] ${selectedPlanId === plan.id ? "text-slate-600" : "text-text-muted"}`}>
+                <p
+                  className={`mt-1 text-[11px] ${selectedPlanId === plan.id ? "text-slate-600" : "text-text-muted"}`}
+                >
                   {plan.billingType} · {plan.isActive ? "active" : "inactive"}
                 </p>
               </button>
@@ -259,37 +273,60 @@ export function AdminSubscriptionManager({
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div>
               <p className="font-display text-3xl">
-                {selectedPlanId === "new" ? "Create subscription plan" : selectedPlan?.name ?? "Plan detail"}
+                {selectedPlanId === "new"
+                  ? "Create subscription plan"
+                  : (selectedPlan?.name ?? "Plan detail")}
               </p>
               <p className="mt-2 text-sm text-text-secondary">
                 Maintain pricing, credits, billing cycle, and active state for student billing.
               </p>
             </div>
             <Button onClick={handlePlanSave} disabled={busy !== "idle"}>
-              {busy === "saving-plan" ? "Saving..." : selectedPlanId === "new" ? "Create plan" : "Save plan"}
+              {busy === "saving-plan"
+                ? "Saving..."
+                : selectedPlanId === "new"
+                  ? "Create plan"
+                  : "Save plan"}
             </Button>
           </div>
 
           <div className="grid gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-3">
             <Field label="Name">
-              <Input value={planForm.name} onChange={(event) => updatePlanForm("name", event.target.value)} />
+              <Input
+                value={planForm.name}
+                onChange={(event) => updatePlanForm("name", event.target.value)}
+              />
             </Field>
             <Field label="Slug">
-              <Input value={planForm.slug} onChange={(event) => updatePlanForm("slug", event.target.value)} />
+              <Input
+                value={planForm.slug}
+                onChange={(event) => updatePlanForm("slug", event.target.value)}
+              />
             </Field>
             <Field label="Credits">
-              <Input value={planForm.credits} onChange={(event) => updatePlanForm("credits", event.target.value)} />
+              <Input
+                value={planForm.credits}
+                onChange={(event) => updatePlanForm("credits", event.target.value)}
+              />
             </Field>
             <Field label="Price">
-              <Input value={planForm.price} onChange={(event) => updatePlanForm("price", event.target.value)} />
+              <Input
+                value={planForm.price}
+                onChange={(event) => updatePlanForm("price", event.target.value)}
+              />
             </Field>
             <Field label="Currency">
-              <Input value={planForm.currency} onChange={(event) => updatePlanForm("currency", event.target.value)} />
+              <Input
+                value={planForm.currency}
+                onChange={(event) => updatePlanForm("currency", event.target.value)}
+              />
             </Field>
             <Field label="Billing type">
               <select
                 value={planForm.billingType}
-                onChange={(event) => updatePlanForm("billingType", event.target.value as BillingType)}
+                onChange={(event) =>
+                  updatePlanForm("billingType", event.target.value as BillingType)
+                }
                 className="block h-11 w-full rounded-md border border-border bg-bg-primary px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-border-strong/40"
               >
                 <option value="one_time">one_time</option>
@@ -311,10 +348,10 @@ export function AdminSubscriptionManager({
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
         <section className="overflow-hidden rounded-none border border-border bg-bg-primary">
           <div className="border-b border-border px-5 py-4">
-          <p className="font-display text-3xl">Grant subscription</p>
-          <p className="mt-2 text-sm text-text-secondary">
-            Give a student direct access without waiting for an invoice flow.
-          </p>
+            <p className="font-display text-3xl">Grant subscription</p>
+            <p className="mt-2 text-sm text-text-secondary">
+              Give a student direct access without waiting for an invoice flow.
+            </p>
           </div>
           <div className="space-y-4 px-5 py-5">
             <Field label="Student">
@@ -363,7 +400,7 @@ export function AdminSubscriptionManager({
             <div>
               <p className="font-display text-3xl">Active subscriptions</p>
               <p className="mt-2 text-sm text-text-secondary">
-                Extend or cancel live access windows.
+                Extend or revoke live access windows.
               </p>
             </div>
             <div className="border border-border px-4 py-2 text-sm text-text-secondary">
@@ -379,10 +416,14 @@ export function AdminSubscriptionManager({
                       <p className="text-sm font-medium">
                         {subscription.studentName} · {subscription.planName}
                       </p>
-                      <p className="mt-1 text-xs text-text-secondary">{subscription.studentEmail}</p>
+                      <p className="mt-1 text-xs text-text-secondary">
+                        {subscription.studentEmail}
+                      </p>
                       <p className="mt-1 text-[11px] text-text-muted">
                         {subscription.status} · starts {formatDate(subscription.startsAt)}
-                        {subscription.endsAt ? ` · ends ${formatDate(subscription.endsAt)}` : " · no end date"}
+                        {subscription.endsAt
+                          ? ` · ends ${formatDate(subscription.endsAt)}`
+                          : " · no end date"}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -409,7 +450,7 @@ export function AdminSubscriptionManager({
                           onClick={() => void handleSubscriptionAction(subscription.id, "cancel")}
                           disabled={busy !== "idle"}
                         >
-                          Cancel
+                          Revoke access
                         </Button>
                       ) : null}
                     </div>

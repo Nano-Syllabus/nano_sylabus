@@ -56,7 +56,7 @@ const NAV = [
     : []),
   {
     href: "/app/notes",
-    label: "My Notes",
+    label: "Revision",
     icon: (
       <svg
         width="16"
@@ -96,7 +96,6 @@ const NAV = [
     ),
   },
 ] as const;
-
 
 async function readActionError(response: Response, fallback: string) {
   try {
@@ -490,7 +489,7 @@ export function AppSidebar({
               ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
-          title={isCollapsed ? "Daily Dashboard" : undefined}
+          title={isCollapsed ? "Today" : undefined}
         >
           <svg
             width="20"
@@ -506,7 +505,7 @@ export function AppSidebar({
             <path d="M8.5 14.5c0 2 1.5 3.5 3.5 3.5s3.5-1.5 3.5-3.5c0-1.5-.8-2.5-2-3.5.1 1.3-.5 2.1-1.4 2.6.1-2.7-1.4-4.7-3.1-6.1.2 2.2-.7 3.7-1.9 5-.4.5-.6 1.2-.6 2Z" />
             <circle cx="12" cy="12" r="9" />
           </svg>
-          {!isCollapsed && "Daily Dashboard"}
+          {!isCollapsed && "Today"}
         </Link>
 
         {/* Intent-based prefetch, kept even though TabWarmer already warms this
@@ -526,7 +525,7 @@ export function AppSidebar({
               ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
-          title={isCollapsed ? "Community Hub" : undefined}
+          title={isCollapsed ? "Community" : undefined}
         >
           <svg
             width="20"
@@ -544,7 +543,7 @@ export function AppSidebar({
             <path d="M9 10h1M14 10h1M9 14h1M14 14h1" />
             <path d="M10 21v-3h4v3" />
           </svg>
-          {!isCollapsed && "Community Hub"}
+          {!isCollapsed && "Community"}
         </Link>
 
         {/* Intent-based prefetch, kept even though TabWarmer already warms this
@@ -564,7 +563,7 @@ export function AppSidebar({
               ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
-          title={isCollapsed ? "Challenge Hub" : undefined}
+          title={isCollapsed ? "Challenges" : undefined}
         >
           <svg
             width="20"
@@ -581,7 +580,7 @@ export function AppSidebar({
             <circle cx="12" cy="12" r="3" />
             <path d="M12 2V5M12 19v3M2 12h3M19 12h3" />
           </svg>
-          {!isCollapsed && "Challenge Hub"}
+          {!isCollapsed && "Challenges"}
         </Link>
 
         <Link
@@ -601,7 +600,7 @@ export function AppSidebar({
               ? "bg-bg-secondary text-text-primary"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
-          title={isCollapsed ? "Library & Nano AI" : undefined}
+          title={isCollapsed ? "Library" : undefined}
         >
           {isCollapsed ? (
             <svg
@@ -634,7 +633,7 @@ export function AppSidebar({
                 <path d="M8 7h8" />
                 <path d="M8 11h6" />
               </svg>
-              Library &amp; Nano AI
+              Library
             </>
           )}
         </Link>

@@ -35,7 +35,7 @@ describe("student Daily Dashboard calculations", () => {
     ]);
   });
 
-  it("builds a Monday-aligned five-week calendar in Kathmandu", () => {
+  it("builds the current month calendar in Kathmandu", () => {
     const days = buildDailyActivityCalendar(
       [
         {
@@ -56,9 +56,9 @@ describe("student Daily Dashboard calculations", () => {
       new Date("2026-09-02T05:00:00.000Z"),
     );
 
-    expect(days).toHaveLength(35);
-    expect(days[0].date).toBe("2026-08-03");
-    expect(days[0].label).toBe("Aug 3, 2026");
+    expect(days).toHaveLength(30);
+    expect(days[0].date).toBe("2026-09-01");
+    expect(days[0].label).toBe("Sep 1, 2026");
     expect(days.find((day) => day.date === "2026-09-02")).toMatchObject({
       status: "completed",
       attempts: 2,
@@ -67,10 +67,30 @@ describe("student Daily Dashboard calculations", () => {
       isToday: true,
     });
     expect(days.find((day) => day.date === "2026-09-01")?.status).toBe("started");
-    expect(days.at(-1)?.status).toBe("future");
+    expect(days.at(-1)).toMatchObject({ date: "2026-09-30", status: "future" });
   });
 
-  it("ranks daily members from real activity, then streak and XP", () => {
+  it("builds any requested month for long-range calendar navigation", () => {
+    const days = buildDailyActivityCalendar(
+      [
+        {
+          activity_date: "2038-02-28",
+          attempt_count: 1,
+          completed_count: 1,
+          graded_attempt_count: 1,
+          score_percentage_sum: 100,
+        },
+      ],
+      new Date("2038-03-02T05:00:00.000Z"),
+      "2038-02",
+    );
+
+    expect(days).toHaveLength(28);
+    expect(days[0].date).toBe("2038-02-01");
+    expect(days.at(-1)).toMatchObject({ date: "2038-02-28", status: "completed" });
+  });
+
+  it("ranks daily members from real activity, then streak", () => {
     const members = [
       {
         id: "viewer",

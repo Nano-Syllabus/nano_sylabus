@@ -17,17 +17,46 @@ const COMMUNITY = undefined; // the default scope — key ["student","dashboard"
 function dashboard(overrides: Partial<StudentDailyDashboard> = {}): StudentDailyDashboard {
   return {
     todayChallengeCompletions: 0,
+    examDates: [],
     activity: [
-      { date: "2026-09-08", dayOfMonth: 8, label: "Sep 8", attempts: 2, completions: 1, averageScore: 80, status: "completed", isToday: false },
-      { date: "2026-09-09", dayOfMonth: 9, label: "Sep 9", attempts: 0, completions: 0, averageScore: null, status: "idle", isToday: true },
+      {
+        date: "2026-09-08",
+        dayOfMonth: 8,
+        label: "Sep 8",
+        attempts: 2,
+        completions: 1,
+        averageScore: 80,
+        status: "completed",
+        isToday: false,
+      },
+      {
+        date: "2026-09-09",
+        dayOfMonth: 9,
+        label: "Sep 9",
+        attempts: 0,
+        completions: 0,
+        averageScore: null,
+        status: "idle",
+        isToday: true,
+      },
     ],
     challenge: {
       currentStreak: 3,
-      challenges: [{ id: "c1", status: "available" }, { id: "c2", status: "available" }],
+      challenges: [
+        { id: "c1", status: "available" },
+        { id: "c2", status: "available" },
+      ],
     } as StudentDailyDashboard["challenge"],
     community: {
-      name: "BCT", slug: "bct", memberCount: 5, contentReadiness: 100, materialCount: 21,
-      topicCount: 65, viewerXp: 100, viewerRank: 4, leaderboard: [], currentSemesterId: "t1", semesters: [],
+      name: "BCT",
+      slug: "bct",
+      memberCount: 5,
+      contentReadiness: 100,
+      materialCount: 21,
+      topicCount: 65,
+      leaderboard: [],
+      currentSemesterId: "t1",
+      semesters: [],
     },
     ...overrides,
   };
@@ -46,7 +75,7 @@ const read = (client: QueryClient) =>
 describe("dashboard local updates", () => {
   it("moves every figure a completion moves, without a refetch", () => {
     const client = seed();
-    applyChallengeCompletion(client, COMMUNITY, { challengeId: "c1", xpAwarded: 25 });
+    applyChallengeCompletion(client, COMMUNITY, { challengeId: "c1" });
     const d = read(client);
 
     expect(d.todayChallengeCompletions).toBe(1);
@@ -57,7 +86,6 @@ describe("dashboard local updates", () => {
     expect(d.challenge.currentStreak).toBe(4);
     expect(d.challenge.challenges.find((c) => c.id === "c1")?.status).toBe("completed");
     expect(d.challenge.challenges.find((c) => c.id === "c2")?.status).toBe("available");
-    expect(d.community?.viewerXp).toBe(125);
   });
 
   it("extends the streak only on the day's FIRST completion", () => {
@@ -70,14 +98,6 @@ describe("dashboard local updates", () => {
     applyChallengeCompletion(client, COMMUNITY, { challengeId: "c2" });
     expect(read(client).challenge.currentStreak).toBe(4);
     expect(read(client).todayChallengeCompletions).toBe(2);
-  });
-
-  it("leaves the leaderboard rank alone", () => {
-    // Rank depends on what every other member did today, which this client
-    // cannot know. A stale rank is honest; a guessed one is not.
-    const client = seed();
-    applyChallengeCompletion(client, COMMUNITY, { challengeId: "c1", xpAwarded: 25 });
-    expect(read(client).community?.viewerRank).toBe(4);
   });
 
   it("records a failed attempt without crediting a completion", () => {

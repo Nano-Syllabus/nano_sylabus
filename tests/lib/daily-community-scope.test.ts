@@ -28,12 +28,20 @@ describe("Daily Dashboard community isolation", () => {
       lt: vi.fn().mockReturnThis(),
       order: vi.fn().mockResolvedValue({ data: [], error: null }),
     };
-    const admin = { from: vi.fn().mockReturnValue(query) };
+    const examDatesQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const admin = {
+      from: vi.fn((table: string) => (table === "student_exam_dates" ? examDatesQuery : query)),
+    };
     const result = await getStudentDailyDashboard("owner", admin as never, "owned");
     expect(mocks.challenge).toHaveBeenCalledWith("owner", 1, undefined, "owned");
     expect(mocks.hub).toHaveBeenCalledWith("owner", admin, "owned");
     expect(query.eq).toHaveBeenCalledWith("user_id", "owner");
     expect(query.eq).toHaveBeenCalledWith("course_id", "owned-course");
+    expect(examDatesQuery.eq).toHaveBeenCalledWith("user_id", "owner");
     expect(result.todayChallengeCompletions).toBe(2);
   });
 
@@ -42,9 +50,19 @@ describe("Daily Dashboard community isolation", () => {
       community: { slug: "new-owned", courseId: null },
       todayCompletedCount: 0,
     });
-    const admin = { from: vi.fn() };
+    const examDatesQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const admin = {
+      from: vi.fn((table: string) => {
+        if (table === "student_exam_dates") return examDatesQuery;
+        throw new Error(`Unexpected table: ${table}`);
+      }),
+    };
     const result = await getStudentDailyDashboard("owner", admin as never, "new-owned");
-    expect(admin.from).not.toHaveBeenCalled();
+    expect(admin.from).toHaveBeenCalledWith("student_exam_dates");
     expect(mocks.hub).toHaveBeenCalledWith("owner", admin, "new-owned");
     expect(result.activity.every((day) => day.attempts === 0)).toBe(true);
   });

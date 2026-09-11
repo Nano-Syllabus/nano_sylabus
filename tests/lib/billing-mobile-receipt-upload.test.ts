@@ -45,10 +45,42 @@ describe("mobile receipt upload handoff", () => {
     expect(desktop).toContain("QRCodeSVG");
     expect(desktop).toContain("Upload using phone");
     expect(desktop).toContain("Received from phone");
+    expect(desktop).toContain("previewUrl");
+    expect(desktop).toContain("object-contain");
     expect(desktop).toContain("window.setInterval");
+    expect(desktop).toContain("Remove & upload again");
+    expect(desktop).toContain('method: "DELETE"');
+    expect(
+      readFileSync("app/api/billing/receipt-upload-sessions/[sessionId]/route.ts", "utf8"),
+    ).toContain("createSignedUrl");
+    expect(
+      readFileSync("app/api/billing/receipt-upload-sessions/[sessionId]/route.ts", "utf8"),
+    ).toContain("export async function DELETE");
     expect(mobile).toContain("Send receipt to desktop");
     expect(mobile).toContain("Your desktop will show the receipt automatically");
+    expect(mobile).toContain("Upload another photo");
     expect(billing).toContain("mobileUploadSessionId");
     expect(billing).toContain("Choose on this computer");
+  });
+
+  it("auto-activates submitted payments and keeps an admin revoke path", () => {
+    const migration = readFileSync(
+      "supabase/migrations/20260911193000_auto_activate_submitted_payments.sql",
+      "utf8",
+    );
+    const paymentRoute = readFileSync("app/api/billing/payments/route.ts", "utf8");
+    const billing = readFileSync("components/billing-page-client.tsx", "utf8");
+    const adminDetail = readFileSync("components/admin-payment-detail-client.tsx", "utf8");
+
+    expect(migration).toContain("auto_approve_payment_submission");
+    expect(migration).toContain("to service_role");
+    expect(migration).toContain("payment_auto_approved");
+    expect(paymentRoute).toContain('"auto_approve_payment_submission"');
+    expect(paymentRoute).toContain('status: "paid"');
+    expect(billing).toContain("Activating your access");
+    expect(billing).toContain("Access will be ready in about five seconds.");
+    expect(billing).toContain("Your paid access is active");
+    expect(adminDetail).toContain("Revoke access");
+    expect(adminDetail).toContain('action: "cancel"');
   });
 });

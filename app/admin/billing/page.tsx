@@ -38,9 +38,10 @@ export default async function AdminBillingPage({
     ? (requestedStatus as "all" | PaymentSubmissionStatus)
     : "all";
   const submissions = await listAdminPaymentSubmissions();
-  const visible = activeStatus === "all"
-    ? submissions
-    : submissions.filter((submission) => submission.status === activeStatus);
+  const visible =
+    activeStatus === "all"
+      ? submissions
+      : submissions.filter((submission) => submission.status === activeStatus);
   const pending = submissions.filter((submission) => submission.status === "submitted").length;
   const approved = submissions.filter((submission) => submission.status === "approved").length;
   const rejected = submissions.filter((submission) => submission.status === "rejected").length;
@@ -49,10 +50,15 @@ export default async function AdminBillingPage({
     <AdminBillingFrame>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">Billing operations</p>
-          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">Payment reviews</h1>
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+            Billing operations
+          </p>
+          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">
+            Payment reviews
+          </h1>
           <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Review real receipt submissions. Approval marks the invoice paid and activates the purchased plan.
+            Receipt submissions activate access automatically. Review the proof here and revoke
+            access if a submission is invalid.
           </p>
         </div>
         <Link
@@ -63,8 +69,15 @@ export default async function AdminBillingPage({
         </Link>
       </div>
 
-      <section aria-label="Payment totals" className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Total submissions" value={submissions.length} icon={<CreditCard size={18} />} />
+      <section
+        aria-label="Payment totals"
+        className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      >
+        <Metric
+          label="Total submissions"
+          value={submissions.length}
+          icon={<CreditCard size={18} />}
+        />
         <Metric label="Needs review" value={pending} icon={<Clock3 size={18} />} />
         <Metric label="Approved" value={approved} icon={<CheckCircle2 size={18} />} />
         <Metric label="Rejected" value={rejected} icon={<XCircle size={18} />} />
@@ -76,11 +89,18 @@ export default async function AdminBillingPage({
             <h2 className="font-display text-lg font-semibold">Submission queue</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">Newest submissions appear first.</p>
           </div>
-          <nav aria-label="Filter payment submissions" className="flex flex-wrap gap-1 rounded-md bg-muted p-1">
+          <nav
+            aria-label="Filter payment submissions"
+            className="flex flex-wrap gap-1 rounded-md bg-muted p-1"
+          >
             {filters.map((filter) => (
               <Link
                 key={filter.value}
-                href={filter.value === "all" ? "/admin/billing" : `/admin/billing?status=${filter.value}`}
+                href={
+                  filter.value === "all"
+                    ? "/admin/billing"
+                    : `/admin/billing?status=${filter.value}`
+                }
                 aria-current={activeStatus === filter.value ? "page" : undefined}
                 className={`inline-flex min-h-9 items-center rounded px-3 text-xs font-medium focus-visible:outline-2 focus-visible:outline-ring ${activeStatus === filter.value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
@@ -111,7 +131,9 @@ export default async function AdminBillingPage({
                   <th className="px-5 py-3 font-medium">Amount</th>
                   <th className="px-5 py-3 font-medium">Submitted</th>
                   <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 text-right font-medium"><span className="sr-only">Actions</span></th>
+                  <th className="px-5 py-3 text-right font-medium">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -120,15 +142,22 @@ export default async function AdminBillingPage({
                     <td className="px-5 py-4 font-medium">{submission.studentName}</td>
                     <td className="px-5 py-4 text-muted-foreground">{submission.planName}</td>
                     <td className="px-5 py-4 font-mono text-xs">{submission.reference}</td>
-                    <td className="px-5 py-4">{formatMoney(submission.amount, submission.currency)}</td>
-                    <td className="px-5 py-4 text-muted-foreground">{formatDate(submission.submittedAt)}</td>
-                    <td className="px-5 py-4"><StatusBadge status={submission.status} /></td>
+                    <td className="px-5 py-4">
+                      {formatMoney(submission.amount, submission.currency)}
+                    </td>
+                    <td className="px-5 py-4 text-muted-foreground">
+                      {formatDate(submission.submittedAt)}
+                    </td>
+                    <td className="px-5 py-4">
+                      <StatusBadge status={submission.status} />
+                    </td>
                     <td className="px-5 py-4 text-right">
                       <Link
                         href={`/admin/billing/${submission.id}`}
                         className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
                       >
-                        Review <ExternalLink size={13} />
+                        {submission.status === "approved" ? "View" : "Review"}{" "}
+                        <ExternalLink size={13} />
                       </Link>
                     </td>
                   </tr>
@@ -155,12 +184,19 @@ function Metric({ label, value, icon }: { label: string; value: number; icon: Re
 }
 
 function StatusBadge({ status }: { status: PaymentSubmissionStatus }) {
-  const classes = status === "approved"
-    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-    : status === "rejected"
-      ? "bg-destructive/10 text-destructive"
-      : "bg-amber-500/10 text-amber-700 dark:text-amber-300";
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${classes}`}>{status}</span>;
+  const classes =
+    status === "approved"
+      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      : status === "rejected"
+        ? "bg-destructive/10 text-destructive"
+        : "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${classes}`}
+    >
+      {status}
+    </span>
+  );
 }
 
 function formatMoney(amount: number, currency: string) {

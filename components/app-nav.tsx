@@ -13,7 +13,7 @@ const SHOW_MOCK_EXAM_NAV = false;
 const NAV = [
   {
     href: "/app/today",
-    label: "Daily Dashboard",
+    label: "Today",
     icon: (
       <svg
         width="18"
@@ -32,7 +32,7 @@ const NAV = [
   },
   {
     href: "/app/community",
-    label: "Community Hub",
+    label: "Community",
     icon: (
       <svg
         width="18"
@@ -53,7 +53,7 @@ const NAV = [
   },
   {
     href: "/app/challenges",
-    label: "Challenge Hub",
+    label: "Challenges",
     icon: (
       <svg
         width="18"
@@ -117,7 +117,7 @@ const NAV = [
     : []),
   {
     href: "/app/notes",
-    label: "My Notes",
+    label: "Revision",
     icon: (
       <svg
         width="18"

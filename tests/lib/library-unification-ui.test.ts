@@ -2,7 +2,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { generateCommunityTerms, mapCommunitySummary, type CommunityDetail } from "@/lib/communities";
+import {
+  generateCommunityTerms,
+  mapCommunitySummary,
+  type CommunityDetail,
+} from "@/lib/communities";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
@@ -83,10 +87,16 @@ describe("unified Figma library", () => {
     expect(html).toContain("3. Choose Chapter");
     expect(html).toContain("1st Semester");
     expect(html).toContain("Applied Mechanics");
-    expect(html).toContain("3 chapters");
-    expect(html).toContain("64%");
+    const appliedMechanicsCard =
+      html.match(/<button[^>]*>.*?Applied Mechanics.*?<\/button>/)?.[0] ?? "";
+    expect(appliedMechanicsCard).not.toContain("3 chapters");
+    expect(appliedMechanicsCard).not.toContain("64%");
     expect(html).toContain("font-figma-library");
     expect(html).toContain("/figma/library/book-open.svg");
+    expect(html).toContain("Choose current semester");
+    expect(html).not.toContain("Your learning progress");
+    expect(html).toContain('<option value="term-1" selected="">1st Semester</option>');
+    expect(html).not.toContain("Search subjects and chapters");
   });
 
   it("uses the real materials and membership APIs and removes Subject Explorer from navigation", () => {
@@ -99,8 +109,17 @@ describe("unified Figma library", () => {
     expect(library).toContain("courseId=");
     expect(library).toContain("/membership");
     expect(desktopNav).not.toContain('label: "Subject Explorer"');
-    expect(desktopNav).toContain("Library &amp; Nano AI");
+    expect(desktopNav).toContain('!isCollapsed && "Today"');
+    expect(desktopNav).toContain('!isCollapsed && "Community"');
+    expect(desktopNav).toContain('!isCollapsed && "Challenges"');
+    expect(desktopNav).toContain('title={isCollapsed ? "Library" : undefined}');
+    expect(desktopNav).toContain('label: "Revision"');
     expect(mobileNav).not.toContain('label: "Subject Explorer"');
+    expect(mobileNav).toContain('label: "Today"');
+    expect(mobileNav).toContain('label: "Community"');
+    expect(mobileNav).toContain('label: "Challenges"');
+    expect(mobileNav).toContain('label: "Library"');
+    expect(mobileNav).toContain('label: "Revision"');
     expect(oldRoute).toContain("redirect(`/app/chat");
   });
 });

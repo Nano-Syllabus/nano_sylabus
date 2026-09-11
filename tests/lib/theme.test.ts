@@ -1,10 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  getInitialTheme,
-  setTheme,
-  subscribeToTheme,
-  THEME_STORAGE_KEY,
-} from "@/lib/theme";
+import { getInitialTheme, setTheme, subscribeToTheme, THEME_STORAGE_KEY } from "@/lib/theme";
 
 describe("shared portal theme", () => {
   let browserWindow: EventTarget & { localStorage: Storage };
@@ -46,6 +41,10 @@ describe("shared portal theme", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("defaults to light mode when no preference has been saved", () => {
+    expect(getInitialTheme()).toBe("light");
   });
 
   it("stores one preference and notifies every mounted portal toggle", () => {

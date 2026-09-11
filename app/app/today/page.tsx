@@ -34,7 +34,7 @@ export const dynamic = "force-dynamic";
 export default async function TodayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ community?: string }>;
+  searchParams: Promise<{ community?: string; month?: string }>;
 }) {
   const { user } = await requireOnboardedUser();
   const params = await searchParams;
@@ -50,9 +50,10 @@ export default async function TodayPage({
 
   return (
     <>
-      <SetAppShell title="Daily Dashboard" />
+      <SetAppShell title={null} />
       <StudentDailyDashboardView
         key={active.selected?.id ?? "none"}
+        userId={user.id}
         communityOptions={active.options}
         fullName={user.fullName}
         creditBalance={user.creditBalance}
@@ -76,6 +77,7 @@ export default async function TodayPage({
          */
         communitySlug={typeof params.community === "string" ? params.community : undefined}
         selectedCommunitySlug={active.selected?.slug}
+        calendarMonth={typeof params.month === "string" ? params.month : undefined}
       />
     </>
   );

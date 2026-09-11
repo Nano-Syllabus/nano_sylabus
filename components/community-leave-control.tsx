@@ -98,7 +98,7 @@ export function CommunityLeaveControl({
         onClick={() => setConfirming(true)}
         aria-haspopup="dialog"
         aria-label={`Leave ${titleCase(community.name)} community`}
-        className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-border bg-bg-primary px-4 text-sm font-medium text-text-primary hover:border-destructive hover:text-destructive ${focusRing}`}
+        className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-destructive bg-destructive/10 px-4 text-sm font-semibold text-destructive hover:bg-destructive/15 ${focusRing}`}
       >
         <LogOut className="size-4" aria-hidden="true" /> Leave community
       </button>

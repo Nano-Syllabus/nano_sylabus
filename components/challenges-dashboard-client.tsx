@@ -1628,9 +1628,6 @@ export function ChallengesDashboardClient({
                       Est. Time
                     </th>
                     <th scope="col" className="px-5 py-4 font-semibold">
-                      XP Reward
-                    </th>
-                    <th scope="col" className="px-5 py-4 font-semibold">
                       Status
                     </th>
                     <th scope="col" className="px-5 py-4 font-semibold md:px-6">
@@ -1648,14 +1645,10 @@ export function ChallengesDashboardClient({
                         <td className="px-5 py-4 font-medium md:px-6">{challenge.subjectName}</td>
                         <td className="max-w-xs px-5 py-4">
                           <span className="block font-medium">{challenge.topicTitle}</span>
-                          <span className="mt-1 line-clamp-1 block text-xs text-text-muted">
-                            {challenge.recommendationReason}
-                          </span>
                         </td>
                         <td className="whitespace-nowrap px-5 py-4">
                           {challenge.durationMinutes} mins
                         </td>
-                        <td className="whitespace-nowrap px-5 py-4 font-semibold">+50 XP</td>
                         <td className="px-5 py-4">
                           <span
                             className={`inline-flex min-h-7 items-center whitespace-nowrap rounded-full px-3 text-xs font-semibold ${

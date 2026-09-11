@@ -38,10 +38,14 @@ export default async function AdminPaymentReviewPage({
         <ArrowLeft size={16} /> Back to payment queue
       </Link>
       <div className="mt-4">
-        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">Receipt verification</p>
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">{submission.studentName}</h1>
+        <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+          Receipt record
+        </p>
+        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">
+          {submission.studentName}
+        </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Compare the private receipt with the transaction reference before making a final decision.
+          Review the private receipt and revoke the activated access if the submission is invalid.
         </p>
       </div>
       <AdminPaymentDetailClient submission={submission} />

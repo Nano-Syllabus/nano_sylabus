@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CheckCircle2, ExternalLink, XCircle } from "lucide-react";
+import { CheckCircle2, ExternalLink, ShieldOff, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AdminPaymentSubmissionDetail } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -13,30 +13,46 @@ export function AdminPaymentDetailClient({
   submission: AdminPaymentSubmissionDetail;
 }) {
   const router = useRouter();
-  const [loadingAction, setLoadingAction] = useState<"approve" | "reject" | null>(null);
+  const [loadingAction, setLoadingAction] = useState<"approve" | "reject" | "revoke" | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  async function runAction(action: "approve" | "reject") {
+  async function runAction(action: "approve" | "reject" | "revoke") {
     setLoadingAction(action);
     setError("");
     setSuccess("");
 
-    const response = await fetch(`/api/admin/payments/${submission.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
+    const response =
+      action === "revoke" && submission.subscriptionId
+        ? await fetch(`/api/admin/subscriptions/user-subscriptions/${submission.subscriptionId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "cancel" }),
+          })
+        : await fetch(`/api/admin/payments/${submission.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action }),
+          });
 
     setLoadingAction(null);
 
     if (!response.ok) {
       const payload = (await response.json()) as { error?: string };
-      setError(payload.error || `Failed to ${action} payment.`);
+      setError(
+        payload.error ||
+          (action === "revoke" ? "Failed to revoke access." : `Failed to ${action} payment.`),
+      );
       return;
     }
 
-    setSuccess(action === "approve" ? "Payment approved and the purchased plan is active." : "Payment rejected. The invoice was closed without granting access.");
+    setSuccess(
+      action === "approve"
+        ? "Payment approved and the purchased plan is active."
+        : action === "reject"
+          ? "Payment rejected. The invoice was closed without granting access."
+          : "Access revoked. The receipt and audit history are still available.",
+    );
     router.refresh();
   }
 
@@ -47,7 +63,9 @@ export function AdminPaymentDetailClient({
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <section className="overflow-hidden rounded-lg border border-border bg-card">
           <div className="border-b border-border px-5 py-4">
-            <p className="text-[11px] font-medium tracking-widest text-muted-foreground uppercase">Payment proof</p>
+            <p className="text-[11px] font-medium tracking-widest text-muted-foreground uppercase">
+              Payment proof
+            </p>
           </div>
           <div className="space-y-4 px-5 py-5">
             <DetailRow label="Student" value={submission.studentName} />
@@ -55,20 +73,30 @@ export function AdminPaymentDetailClient({
             <DetailRow label="Payer name" value={submission.payerName || "Not provided"} />
             {submission.screenshotUrl ? (
               <div className="space-y-2 border-b border-border pb-4">
-                <p className="text-[10px] font-mono-ui uppercase text-text-muted">Private receipt</p>
+                <p className="text-[10px] font-mono-ui uppercase text-text-muted">
+                  Private receipt
+                </p>
                 <a
                   href={submission.screenshotUrl}
                   target="_blank"
                   rel="noreferrer"
-                className="inline-flex min-h-10 items-center gap-2 text-sm font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
-              >
+                  className="inline-flex min-h-10 items-center gap-2 text-sm font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                >
                   Open receipt in a new tab <ExternalLink size={14} />
                 </a>
                 {submission.screenshotUrl.split("?")[0]?.toLowerCase().endsWith(".pdf") ? (
-                  <iframe title="Submitted payment receipt preview" src={submission.screenshotUrl} className="h-[560px] w-full rounded-md border border-border bg-muted" />
+                  <iframe
+                    title="Submitted payment receipt preview"
+                    src={submission.screenshotUrl}
+                    className="h-[560px] w-full rounded-md border border-border bg-muted"
+                  />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={submission.screenshotUrl} alt="Submitted payment receipt preview" className="max-h-[560px] w-full rounded-md bg-muted object-contain" />
+                  <img
+                    src={submission.screenshotUrl}
+                    alt="Submitted payment receipt preview"
+                    className="max-h-[560px] w-full rounded-md bg-muted object-contain"
+                  />
                 )}
               </div>
             ) : (
@@ -84,7 +112,9 @@ export function AdminPaymentDetailClient({
 
         <section className="h-fit overflow-hidden rounded-lg border border-border bg-card">
           <div className="border-b border-border px-5 py-4">
-            <p className="text-[11px] font-medium tracking-widest text-muted-foreground uppercase">Invoice summary</p>
+            <p className="text-[11px] font-medium tracking-widest text-muted-foreground uppercase">
+              Invoice summary
+            </p>
           </div>
           <div className="space-y-4 px-5 py-5">
             <DetailRow label="Plan" value={submission.planName} />
@@ -92,30 +122,83 @@ export function AdminPaymentDetailClient({
             <DetailRow label="Amount" value={`${submission.currency} ${submission.amount}`} />
             <DetailRow label="Invoice status" value={submission.invoiceStatus} />
             <DetailRow label="Submission status" value={submission.status} />
+            <DetailRow
+              label="Activation"
+              value={
+                submission.status === "approved" && !submission.reviewedBy
+                  ? "Automatically activated"
+                  : submission.reviewedBy
+                    ? "Activated by admin"
+                    : "Not active"
+              }
+            />
+            <DetailRow
+              label="Access status"
+              value={submission.subscriptionStatus || "No subscription"}
+            />
+            {submission.subscriptionEndsAt ? (
+              <DetailRow label="Access ends" value={formatDate(submission.subscriptionEndsAt)} />
+            ) : null}
           </div>
 
-          {error ? <p role="alert" className="mx-5 mb-4 rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <p
+              role="alert"
+              className="mx-5 mb-4 rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          ) : null}
           {success ? (
-            <p role="status" className="mx-5 mb-4 flex gap-2 rounded-md bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
-              {submission.status === "rejected" ? <XCircle size={17} className="shrink-0" /> : <CheckCircle2 size={17} className="shrink-0" />}
+            <p
+              role="status"
+              className="mx-5 mb-4 flex gap-2 rounded-md bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300"
+            >
+              {submission.status === "rejected" ? (
+                <XCircle size={17} className="shrink-0" />
+              ) : (
+                <CheckCircle2 size={17} className="shrink-0" />
+              )}
               {success}
             </p>
           ) : null}
 
           <div className="flex flex-col gap-2 px-5 pb-5">
-            <Button
-              onClick={() => void runAction("approve")}
-              disabled={isFinalized || loadingAction !== null}
-            >
-              {loadingAction === "approve" ? "Approving..." : "Approve & activate plan"}
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => void runAction("reject")}
-              disabled={isFinalized || loadingAction !== null}
-            >
-              {loadingAction === "reject" ? "Rejecting..." : "Reject payment"}
-            </Button>
+            {!isFinalized ? (
+              <>
+                <Button
+                  onClick={() => void runAction("approve")}
+                  disabled={loadingAction !== null}
+                  aria-busy={loadingAction === "approve"}
+                >
+                  {loadingAction === "approve" ? "Approving..." : "Approve & activate plan"}
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => void runAction("reject")}
+                  disabled={loadingAction !== null}
+                  aria-busy={loadingAction === "reject"}
+                >
+                  {loadingAction === "reject" ? "Rejecting..." : "Reject payment"}
+                </Button>
+              </>
+            ) : submission.subscriptionId && submission.subscriptionStatus === "active" ? (
+              <Button
+                variant="danger"
+                onClick={() => void runAction("revoke")}
+                disabled={loadingAction !== null}
+                aria-busy={loadingAction === "revoke"}
+              >
+                <ShieldOff size={16} aria-hidden="true" />
+                {loadingAction === "revoke" ? "Revoking access..." : "Revoke access"}
+              </Button>
+            ) : (
+              <p className="rounded-md bg-muted px-4 py-3 text-sm text-muted-foreground">
+                {submission.subscriptionStatus === "cancelled"
+                  ? "Access has been revoked."
+                  : "This payment has no active access to revoke."}
+              </p>
+            )}
           </div>
         </section>
       </div>
@@ -126,7 +209,9 @@ export function AdminPaymentDetailClient({
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="border-b border-border pb-3 last:border-b-0 last:pb-0">
-      <p className="text-[10px] font-medium tracking-widest text-muted-foreground uppercase">{label}</p>
+      <p className="text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
+        {label}
+      </p>
       <p className="mt-1 break-all text-sm text-foreground">{value}</p>
     </div>
   );

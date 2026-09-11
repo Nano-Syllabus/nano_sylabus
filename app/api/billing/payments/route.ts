@@ -1,10 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  receiptFileError,
-  receiptFileExtension,
-} from "@/lib/billing-receipt-upload";
+import { receiptFileError, receiptFileExtension } from "@/lib/billing-receipt-upload";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
@@ -63,13 +60,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
     }
     if (invoice.status !== "pending_payment" && invoice.status !== "payment_submitted") {
-      return NextResponse.json({ error: "This invoice is no longer open for payment." }, { status: 409 });
+      return NextResponse.json(
+        { error: "This invoice is no longer open for payment." },
+        { status: 409 },
+      );
     }
     if (invoice.amount <= 0) {
-      return NextResponse.json({ error: "This invoice does not require payment." }, { status: 409 });
+      return NextResponse.json(
+        { error: "This invoice does not require payment." },
+        { status: 409 },
+      );
     }
     if (new Date(invoice.expires_at).getTime() <= Date.now()) {
-      return NextResponse.json({ error: "This invoice has expired. Generate a new one." }, { status: 410 });
+      return NextResponse.json(
+        { error: "This invoice has expired. Generate a new one." },
+        { status: 410 },
+      );
     }
 
     const { data: existingSubmission, error: existingError } = await admin
@@ -82,7 +88,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: existingError.message }, { status: 500 });
     }
     if (existingSubmission && existingSubmission.status !== "submitted") {
-      return NextResponse.json({ error: "This payment submission is already finalized." }, { status: 409 });
+      return NextResponse.json(
+        { error: "This payment submission is already finalized." },
+        { status: 409 },
+      );
     }
 
     const normalizedReference = parsed.data.reference.toUpperCase();
@@ -133,7 +142,11 @@ export async function POST(request: Request) {
       mobileUploadSession = mobileSession as { id: string; proof_storage_path: string };
     }
 
-    if (!(receipt instanceof File) && !mobileUploadSession && !existingSubmission?.proof_storage_path) {
+    if (
+      !(receipt instanceof File) &&
+      !mobileUploadSession &&
+      !existingSubmission?.proof_storage_path
+    ) {
       return NextResponse.json({ error: "Upload the payment receipt." }, { status: 400 });
     }
 
@@ -154,10 +167,11 @@ export async function POST(request: Request) {
       }
     }
 
-    const proofPath = uploadedPath
-      ?? mobileUploadSession?.proof_storage_path
-      ?? existingSubmission?.proof_storage_path
-      ?? null;
+    const proofPath =
+      uploadedPath ??
+      mobileUploadSession?.proof_storage_path ??
+      existingSubmission?.proof_storage_path ??
+      null;
     const values = {
       reference: normalizedReference,
       payer_name: parsed.data.payerName,
@@ -172,17 +186,31 @@ export async function POST(request: Request) {
     };
 
     const submissionResult = existingSubmission
-      ? await admin.from("payment_submissions").update(values).eq("id", existingSubmission.id)
-      : await admin.from("payment_submissions").insert({
-          ...values,
-          invoice_id: invoice.id,
-          user_id: user.id,
-        });
+      ? await admin
+          .from("payment_submissions")
+          .update(values)
+          .eq("id", existingSubmission.id)
+          .select("id")
+          .single()
+      : await admin
+          .from("payment_submissions")
+          .insert({
+            ...values,
+            invoice_id: invoice.id,
+            user_id: user.id,
+          })
+          .select("id")
+          .single();
 
-    if (submissionResult.error) {
+    if (submissionResult.error || !submissionResult.data) {
       if (uploadedPath) await admin.storage.from("payment-receipts").remove([uploadedPath]);
-      return NextResponse.json({ error: submissionResult.error.message }, { status: 500 });
+      return NextResponse.json(
+        { error: submissionResult.error?.message || "Could not save the payment submission." },
+        { status: 500 },
+      );
     }
+
+    const submissionId = submissionResult.data.id as string;
 
     const { error: invoiceUpdateError } = await admin
       .from("invoices")
@@ -194,6 +222,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: invoiceUpdateError.message }, { status: 500 });
     }
 
+    await admin.from("billing_audit_logs").insert({
+      invoice_id: invoice.id,
+      submission_id: submissionId,
+      actor_id: user.id,
+      action: existingSubmission ? "payment_resubmitted" : "payment_submitted",
+      metadata: { reference: normalizedReference },
+    });
+
+    const { data: activation, error: activationError } = await admin.rpc(
+      "auto_approve_payment_submission",
+      { target_submission_id: submissionId },
+    );
+
+    if (activationError) {
+      return NextResponse.json(
+        {
+          error:
+            "Your receipt was saved, but access could not be activated. Submit again to retry.",
+        },
+        { status: 500 },
+      );
+    }
+
     if (mobileUploadSession) {
       await admin
         .from("billing_receipt_upload_sessions")
@@ -202,19 +253,27 @@ export async function POST(request: Request) {
         .eq("status", "uploaded");
     }
 
-    if (proofPath && existingSubmission?.proof_storage_path && proofPath !== existingSubmission.proof_storage_path) {
+    if (
+      proofPath &&
+      existingSubmission?.proof_storage_path &&
+      proofPath !== existingSubmission.proof_storage_path
+    ) {
       await admin.storage.from("payment-receipts").remove([existingSubmission.proof_storage_path]);
     }
 
-    await admin.from("billing_audit_logs").insert({
-      invoice_id: invoice.id,
-      submission_id: existingSubmission?.id ?? null,
-      actor_id: user.id,
-      action: existingSubmission ? "payment_resubmitted" : "payment_submitted",
-      metadata: { reference: normalizedReference },
-    });
+    const activationResult = activation as {
+      subscriptionId?: string;
+      subscriptionStatus?: string;
+      accessEndsAt?: string | null;
+    } | null;
 
-    return NextResponse.json({ ok: true, status: "payment_submitted" });
+    return NextResponse.json({
+      ok: true,
+      status: "paid",
+      access: activationResult?.subscriptionStatus ?? "active",
+      subscriptionId: activationResult?.subscriptionId ?? null,
+      accessEndsAt: activationResult?.accessEndsAt ?? null,
+    });
   } catch (error) {
     if (uploadedPath) {
       try {

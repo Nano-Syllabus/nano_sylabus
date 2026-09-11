@@ -98,13 +98,13 @@ describe("billing pricing UI", () => {
     expect(source).toContain('className="mt-[30px]"');
   });
 
-  it("shows a clear review confirmation after receipt submission", () => {
+  it("shows processing and active-access confirmation after receipt submission", () => {
     const source = readFileSync("components/billing-page-client.tsx", "utf8");
 
-    expect(source).toContain("We’re reviewing your payment");
-    expect(source).toContain("Verification usually takes 2–5 minutes");
-    expect(source).toContain("We’ll email you as soon as your paid access is activated.");
-    expect(source).toContain("Activation update will be sent to {email}");
+    expect(source).toContain("Activating your access");
+    expect(source).toContain("Access will be ready in about five seconds.");
+    expect(source).toContain("Your paid access is active");
+    expect(source).toContain("Plan access activated by Nano Syllabus");
   });
 
   it("shows the approved plan as current and prevents duplicate checkout", () => {

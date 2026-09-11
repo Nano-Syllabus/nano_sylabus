@@ -19,11 +19,11 @@ type DashboardPayload = { dashboard: StudentDailyDashboard };
  * exactly like the prefetch never happened, and is the classic way to make
  * warming a cache appear useless.
  */
-export function dashboardQuery(community?: string) {
+export function dashboardQuery(community?: string, month?: string) {
   return {
-    queryKey: keys.student.dashboard(community),
+    queryKey: keys.student.dashboard(community, month),
     queryFn: queryFetcher<DashboardPayload>(
-      `/api/student/dashboard${queryString({ community })}`,
+      `/api/student/dashboard${queryString({ community, month })}`,
     ),
     /**
      * FETCHED ONCE PER PAGE LOAD, THEN NEVER AGAIN.
@@ -59,9 +59,13 @@ export function dashboardQuery(community?: string) {
  * fetched at time zero, so it is instantly stale and refetches on mount,
  * throwing away the very work that was just handed over.
  */
-export function useDashboard(community: string | undefined, initial?: StudentDailyDashboard) {
+export function useDashboard(
+  community: string | undefined,
+  initial?: StudentDailyDashboard,
+  month?: string,
+) {
   return useQuery({
-    ...dashboardQuery(community),
+    ...dashboardQuery(community, month),
     initialData: initial ? { dashboard: initial } : undefined,
     initialDataUpdatedAt: initial ? Date.now() : undefined,
     /**
@@ -79,8 +83,8 @@ export function useDashboard(community: string | undefined, initial?: StudentDai
  * sidebar link. `prefetchQuery` is a no-op when the entry is present and
  * fresh, so firing it on every pointer-enter costs nothing after the first.
  */
-export function prefetchDashboard(client: QueryClient, community?: string) {
-  return client.prefetchQuery(dashboardQuery(community));
+export function prefetchDashboard(client: QueryClient, community?: string, month?: string) {
+  return client.prefetchQuery(dashboardQuery(community, month));
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -120,17 +124,14 @@ function todayIndex(activity: StudentDailyDashboard["activity"]) {
  *   - `currentStreak`, but ONLY on the day's first completion — a second
  *     challenge today does not extend a streak, and incrementing per
  *     completion is the obvious bug this guard exists to prevent
- *   - `viewerXp`, when the caller knows what was awarded
- *
- * Deliberately NOT touched: `viewerRank` and the leaderboard. Those depend on
- * what every other member did today, which this client has no way to know.
  */
 export function applyChallengeCompletion(
   client: QueryClient,
   community: string | undefined,
-  input: { challengeId?: string; xpAwarded?: number } = {},
+  input: { challengeId?: string } = {},
+  month?: string,
 ) {
-  client.setQueryData<DashboardPayload>(keys.student.dashboard(community), (previous) => {
+  client.setQueryData<DashboardPayload>(keys.student.dashboard(community, month), (previous) => {
     if (!previous) return previous;
     const d = previous.dashboard;
 
@@ -167,10 +168,6 @@ export function applyChallengeCompletion(
               )
             : d.challenge.challenges,
         },
-        community:
-          d.community && input.xpAwarded
-            ? { ...d.community, viewerXp: d.community.viewerXp + input.xpAwarded }
-            : d.community,
       },
     };
   });
@@ -182,8 +179,12 @@ export function applyChallengeCompletion(
  * Same shape as above minus the completion: the calendar records that the day
  * was worked on, the streak does not move, and nothing else changes.
  */
-export function applyPracticeAttempt(client: QueryClient, community: string | undefined) {
-  client.setQueryData<DashboardPayload>(keys.student.dashboard(community), (previous) => {
+export function applyPracticeAttempt(
+  client: QueryClient,
+  community: string | undefined,
+  month?: string,
+) {
+  client.setQueryData<DashboardPayload>(keys.student.dashboard(community, month), (previous) => {
     if (!previous) return previous;
     const d = previous.dashboard;
     const index = todayIndex(d.activity);
@@ -235,15 +236,16 @@ export function useDashboardPatch() {
   const client = useQueryClient();
   const searchParams = useSearchParams();
   const community = searchParams.get("community") || undefined;
+  const month = searchParams.get("month") || undefined;
 
   return useMemo(
     () => ({
       /** A challenge just passed. */
-      completed: (input?: { challengeId?: string; xpAwarded?: number }) =>
-        applyChallengeCompletion(client, community, input),
+      completed: (input?: { challengeId?: string }) =>
+        applyChallengeCompletion(client, community, input, month),
       /** An attempt that did not pass. */
       attempted: () => applyPracticeAttempt(client, community),
     }),
-    [client, community],
+    [client, community, month],
   );
 }

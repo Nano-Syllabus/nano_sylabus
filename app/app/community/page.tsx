@@ -22,8 +22,8 @@ export default async function CommunityPage({
     ? await getCommunityHubForUser(user.id, undefined, active.selected.slug)
     : null;
   const tab = typeof params.tab === "string" ? params.tab : "overview";
-  const initialSection = ["overview", "subjects", "forum", "members"].includes(tab)
-    ? (tab as "overview" | "subjects" | "forum" | "members")
+  const initialSection = ["overview", "members"].includes(tab)
+    ? (tab as "overview" | "members")
     : "overview";
   const memberRanking = params.sort === "today" ? "today" : "xp";
   const initialInviteOpen = params.invite === "referral";

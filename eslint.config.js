@@ -10,8 +10,7 @@ const compat = new FlatCompat({
 module.exports = [
   {
     ignores: [
-      ".next/**",
-      ".next-dev/**",
+      ".next*/**",
       "node_modules/**",
       "src/**",
       "dist/**",

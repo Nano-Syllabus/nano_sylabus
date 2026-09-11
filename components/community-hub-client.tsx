@@ -28,8 +28,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Share2,
-  Sparkles,
-  Trophy,
   UserRoundPlus,
   Users,
   X,
@@ -43,7 +41,7 @@ import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 import { cn, titleCase } from "@/lib/utils";
 import { CommunityLeaveControl } from "@/components/community-leave-control";
 
-type CommunitySection = "overview" | "subjects" | "forum" | "members";
+type CommunitySection = "overview" | "members";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -525,7 +523,7 @@ export function CommunityHubClient({
         className="mt-7 flex gap-6 overflow-x-auto border-b border-border"
         aria-label="Community sections"
       >
-        {(["overview", "subjects", "forum", "members"] as const).map((item) => (
+        {(["overview", "members"] as const).map((item) => (
           <button
             key={item}
             type="button"
@@ -562,63 +560,12 @@ export function CommunityHubClient({
         <CommunityOverview
           data={initialData}
           voteCounts={voteCounts}
-          onOpenForum={() => setSection("forum")}
           onOpenReferral={openPeerInvite}
-        />
-      ) : null}
-      {section === "subjects" ? (
-        <CommunitySubjects
-          data={initialData}
-          groupedYears={groupedYears}
-          selectedTermId={selectedTermId}
-          currentTermId={currentTermId}
-          selectedSubjects={selectedSubjects}
-          termSaving={termSaving}
-          onSelectTerm={setSelectedTermId}
-          onSaveCurrentTerm={saveCurrentTerm}
-        />
-      ) : null}
-      {section === "forum" ? (
-        <CommunityForum
-          data={initialData}
-          posts={initialData.posts}
-          voteCounts={voteCounts}
-          votedPosts={votedPosts}
-          votingPostId={votingPostId}
-          onVote={vote}
         />
       ) : null}
       {section === "members" ? (
         <CommunityMembers data={initialData} ranking={memberRanking} />
       ) : null}
-
-      <section
-        className="mt-12 grid gap-4 border-t border-border pt-8 md:grid-cols-2"
-        aria-label="Community membership actions"
-      >
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
-            Active membership
-          </p>
-          <h2 className="mt-2 font-display text-xl font-semibold">{titleCase(community.name)}</h2>
-          <p className="mt-2 text-sm text-text-secondary">
-            Joined as {initialData.canManage ? "community creator" : "member"} ·{" "}
-            {formatNumber(initialData.memberCount)} active members
-          </p>
-        </div>
-        <div className="flex flex-wrap items-start justify-start gap-2 md:justify-end">
-          {initialData.canManage ? (
-            <Link
-              href={`/teachers?view=communities&community=${encodeURIComponent(community.slug)}`}
-              className={`inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-5 text-sm font-semibold hover:bg-bg-secondary ${focusRing}`}
-            >
-              <ShieldCheck className="size-4" aria-hidden="true" /> Manage community
-            </Link>
-          ) : (
-            <CommunityLeaveControl key={community.id} community={community} />
-          )}
-        </div>
-      </section>
 
       <Modal
         open={announcementsOpen}
@@ -683,9 +630,15 @@ export function CommunityHubClient({
                 </h3>
               </div>
               <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-text-primary">
-                <li>You must have an active paid Pro subscription to create and use your referral link.</li>
+                <li>
+                  You must have an active paid Pro subscription to create and use your referral
+                  link.
+                </li>
                 <li>Your friend saves the referral and buys one month of Individual Pro.</li>
-                <li>After payment approval, your friend gets 60 days total and your Pro plan gets 30 extra days.</li>
+                <li>
+                  After payment approval, your friend gets 60 days total and your Pro plan gets 30
+                  extra days.
+                </li>
               </ol>
             </section>
             {referralError ? (
@@ -894,28 +847,20 @@ export function CommunityHubClient({
 function CommunityOverview({
   data,
   voteCounts,
-  onOpenForum,
   onOpenReferral,
 }: {
   data: CommunityHubData;
   voteCounts: Record<string, number>;
-  onOpenForum: () => void;
   onOpenReferral: () => void;
 }) {
   return (
     <div className="pt-8">
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Community metrics">
+      <section className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4" aria-label="Community metrics">
         <MetricCard
           icon={<Users className="size-5" aria-hidden="true" />}
           label="Total members"
           value={formatNumber(data.memberCount)}
           detail="Active community memberships"
-        />
-        <MetricCard
-          icon={<Check className="size-5" aria-hidden="true" />}
-          label="Active today"
-          value={formatNumber(data.activeToday)}
-          detail={`Members with recorded practice today, out of ${formatNumber(data.memberCount)}`}
         />
         <MetricCard
           icon={<BookOpen className="size-5" aria-hidden="true" />}
@@ -935,181 +880,58 @@ function CommunityOverview({
           value={data.contentReadiness === null ? "—" : `${data.contentReadiness}%`}
           detail="Subjects containing both a syllabus and Question Bank"
         />
-        <MetricCard
-          icon={<Trophy className="size-5" aria-hidden="true" />}
-          label="Your rank"
-          value={data.viewer.rank ? `#${data.viewer.rank}` : "—"}
-          detail="Community-scoped challenge and contribution XP"
-        />
       </section>
 
       <div className="mt-10 grid gap-10 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
-        <section aria-labelledby="community-pulse-heading">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
-                Community pulse
-              </p>
-              <h2 id="community-pulse-heading" className="mt-2 font-display text-2xl font-semibold">
-                Recent verified activity
-              </h2>
-            </div>
+        <section
+          className="grid gap-3 sm:grid-cols-2"
+          aria-label="Community invitations and study room"
+        >
+          <article className="flex min-h-52 flex-col rounded-2xl border border-border bg-bg-secondary p-5">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-bg-primary text-[var(--community-accent)] shadow-sm">
+              <UserRoundPlus className="size-5" aria-hidden="true" />
+            </span>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-text-muted">
+              Peer referral
+            </p>
+            <h3 className="mt-2 font-display text-xl font-semibold">Give 1 month. Get 1 month.</h3>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              After your friend&apos;s first paid Pro subscription is approved, both accounts get 30
+              days automatically.
+            </p>
             <button
               type="button"
-              onClick={onOpenForum}
-              className={`min-h-10 text-sm font-medium text-text-secondary hover:text-text-primary ${focusRing}`}
+              onClick={onOpenReferral}
+              className={`mt-auto inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-text-primary px-4 text-sm font-semibold text-text-inverse hover:opacity-90 ${focusRing}`}
             >
-              Open forum
+              Create referral link <ArrowRight className="size-4" aria-hidden="true" />
             </button>
-          </div>
-          {data.activity.length ? (
-            <div className="mt-4 divide-y divide-border border-y border-border">
-              {data.activity.map((item) => (
-                <article
-                  key={item.id}
-                  className="grid gap-2 py-4 sm:grid-cols-[100px_minmax(0,1fr)_100px] sm:items-start"
-                >
-                  <time dateTime={item.occurredAt} className="text-xs text-text-muted">
-                    {relativeTime(item.occurredAt)}
-                  </time>
-                  <div>
-                    <h3 className="text-sm font-semibold">{item.title}</h3>
-                    <p className="mt-1 text-sm leading-5 text-text-secondary">{item.detail}</p>
-                  </div>
-                  <span className="text-sm font-medium tabular-nums sm:text-right">
-                    {item.value}
-                  </span>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-4 rounded-2xl border border-dashed border-border p-8 text-center">
-              <Sparkles className="mx-auto size-7 text-text-muted" aria-hidden="true" />
-              <h3 className="mt-3 font-semibold">No community activity yet</h3>
-              <p className="mt-1 text-sm text-text-secondary">
-                Completed challenges, posts, and announcements will appear here.
-              </p>
-            </div>
-          )}
+          </article>
 
-          <section
-            className="mt-6 grid gap-3 sm:grid-cols-2"
-            aria-label="Community invitations and study room"
-          >
-            <article className="flex min-h-52 flex-col rounded-2xl border border-border bg-bg-secondary p-5">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-bg-primary text-[var(--community-accent)] shadow-sm">
-                <UserRoundPlus className="size-5" aria-hidden="true" />
-              </span>
-              <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-text-muted">
-                Peer referral
-              </p>
-              <h3 className="mt-2 font-display text-xl font-semibold">
-                Give 1 month. Get 1 month.
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-text-secondary">
-                After your friend&apos;s first paid Pro subscription is approved, both accounts get
-                30 days automatically.
-              </p>
-              <button
-                type="button"
-                onClick={onOpenReferral}
-                className={`mt-auto inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-text-primary px-4 text-sm font-semibold text-text-inverse hover:opacity-90 ${focusRing}`}
-              >
-                Create referral link <ArrowRight className="size-4" aria-hidden="true" />
-              </button>
-            </article>
-
-            <article className="flex min-h-52 flex-col rounded-2xl border border-border bg-bg-primary p-5">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-bg-secondary text-[var(--community-accent)]">
-                <MessageCircle className="size-5" aria-hidden="true" />
-              </span>
-              <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-text-muted">
-                Discord co-study server
-              </p>
-              <h3 className="mt-2 font-display text-xl font-semibold">Discord Study Room</h3>
-              <p className="mt-2 text-sm leading-6 text-text-secondary">
-                Join the NanoSyllabus Discord room for voice study, questions, and peer help.
-              </p>
-              <a
-                href={DISCORD_STUDY_ROOM_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`mt-auto inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl border border-border px-4 text-sm font-semibold hover:bg-bg-secondary ${focusRing}`}
-              >
-                Join Discord <ArrowRight className="size-4" aria-hidden="true" />
-              </a>
-            </article>
-          </section>
+          <article className="flex min-h-52 flex-col rounded-2xl border border-border bg-bg-primary p-5">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-bg-secondary text-[var(--community-accent)]">
+              <MessageCircle className="size-5" aria-hidden="true" />
+            </span>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-text-muted">
+              Discord co-study server
+            </p>
+            <h3 className="mt-2 font-display text-xl font-semibold">Discord Study Room</h3>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">
+              Join the NanoSyllabus Discord room for voice study, questions, and peer help.
+            </p>
+            <a
+              href={DISCORD_STUDY_ROOM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`mt-auto inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl border border-border px-4 text-sm font-semibold hover:bg-bg-secondary ${focusRing}`}
+            >
+              Join Discord <ArrowRight className="size-4" aria-hidden="true" />
+            </a>
+          </article>
         </section>
 
-        <aside className="space-y-8">
-          <section
-            className="border-l-2 border-[var(--community-accent)] pl-5"
-            aria-labelledby="rhythm-heading"
-          >
-            <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
-              This week
-            </p>
-            <h2 id="rhythm-heading" className="mt-2 font-display text-xl font-semibold">
-              Your community rhythm
-            </h2>
-            <div className="mt-5 grid grid-cols-2 gap-5">
-              <SmallMetric
-                value={formatNumber(data.viewer.completedThisWeek)}
-                label="Challenges passed"
-              />
-              <SmallMetric value={`+${formatNumber(data.viewer.weeklyXp)}`} label="XP earned" />
-              <SmallMetric value={formatNumber(data.viewer.streak)} label="Day streak" />
-              <SmallMetric
-                value={data.viewer.bestScore === null ? "—" : `${data.viewer.bestScore}%`}
-                label="Best challenge"
-              />
-            </div>
-            <Link
-              href={`/app/challenges?community=${encodeURIComponent(data.community.slug)}`}
-              className={`mt-6 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-text-primary px-4 text-sm font-semibold text-text-inverse hover:opacity-90 ${focusRing}`}
-            >
-              Start a challenge <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
-          </section>
-
-          <section
-            className="border-t border-border pt-6"
-            aria-labelledby="top-contributors-heading"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h2 id="top-contributors-heading" className="font-display text-lg font-semibold">
-                Top members
-              </h2>
-              <span className="text-xs text-text-muted">All time</span>
-            </div>
-            {data.members.length ? (
-              <ol className="mt-4 space-y-4">
-                {data.members.slice(0, 5).map((member) => (
-                  <li key={member.id} className="flex items-center gap-3">
-                    <span className="w-5 text-xs tabular-nums text-text-muted">#{member.rank}</span>
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-xs font-semibold">
-                      {member.initials}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {member.name}
-                        {member.isViewer ? " (you)" : ""}
-                      </span>
-                      <span className="block text-xs text-text-muted">
-                        {member.completedChallenges} challenges
-                      </span>
-                    </span>
-                    <span className="text-xs font-medium tabular-nums text-text-secondary">
-                      {formatNumber(member.xp)} XP
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            ) : null}
-          </section>
-
-          {data.posts[0] ? (
+        {data.posts[0] ? (
+          <aside className="space-y-8" aria-label="Community highlights">
             <section className="border-t border-border pt-6">
               <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
                 Latest contribution
@@ -1120,8 +942,8 @@ function CommunityOverview({
                 community votes
               </p>
             </section>
-          ) : null}
-        </aside>
+          </aside>
+        ) : null}
       </div>
     </div>
   );
@@ -1679,15 +1501,6 @@ function AnnouncementsPanel({
           </p>
         </div>
       )}
-    </div>
-  );
-}
-
-function SmallMetric({ value, label }: { value: string; label: string }) {
-  return (
-    <div>
-      <p className="font-display text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
-      <p className="mt-1 text-xs text-text-muted">{label}</p>
     </div>
   );
 }

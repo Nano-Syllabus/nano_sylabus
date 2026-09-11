@@ -26,7 +26,9 @@ function normalizePlan(row: any): SubscriptionPlan {
     productType: row.product_type ?? "credit_pack",
     seatLimit: row.seat_limit ?? 1,
     isUnlimited: row.is_unlimited ?? false,
-    features: Array.isArray(row.features) ? row.features.filter((item: unknown): item is string => typeof item === "string") : [],
+    features: Array.isArray(row.features)
+      ? row.features.filter((item: unknown): item is string => typeof item === "string")
+      : [],
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -42,7 +44,8 @@ function normalizeInvoice(row: any): Invoice {
     amount: row.amount,
     currency: row.currency,
     paymentMethod: row.payment_method,
-    invoiceCode: row.invoice_code ?? `NS-${String(row.id).replaceAll("-", "").slice(0, 10).toUpperCase()}`,
+    invoiceCode:
+      row.invoice_code ?? `NS-${String(row.id).replaceAll("-", "").slice(0, 10).toUpperCase()}`,
     subtotal: row.subtotal ?? row.amount,
     expiresAt: row.expires_at ?? row.created_at,
     billingPeriodStart: row.billing_period_start ?? null,
@@ -263,7 +266,10 @@ export async function listInvoicesForUser(userId: string) {
 
   const plansById = new Map((planRows ?? []).map((plan) => [plan.id, normalizePlan(plan)]));
   const paymentByInvoiceId = new Map(
-    (paymentRows ?? []).map((submission) => [submission.invoice_id, normalizePaymentSubmission(submission)]),
+    (paymentRows ?? []).map((submission) => [
+      submission.invoice_id,
+      normalizePaymentSubmission(submission),
+    ]),
   );
 
   return invoiceRows.map((invoice) => ({
@@ -324,9 +330,13 @@ export async function listAdminPaymentSubmissions() {
 
   if (profileError) throw profileError;
 
-  const invoicesById = new Map((invoiceRows ?? []).map((invoice) => [invoice.id, normalizeInvoice(invoice)]));
+  const invoicesById = new Map(
+    (invoiceRows ?? []).map((invoice) => [invoice.id, normalizeInvoice(invoice)]),
+  );
   const plansById = new Map((planRows ?? []).map((plan) => [plan.id, normalizePlan(plan)]));
-  const namesByUserId = new Map((profileRows ?? []).map((profile) => [profile.user_id, profile.full_name]));
+  const namesByUserId = new Map(
+    (profileRows ?? []).map((profile) => [profile.user_id, profile.full_name]),
+  );
 
   return submissionRows.map((submission) => {
     const invoice = invoicesById.get(submission.invoice_id)!;
@@ -387,6 +397,14 @@ export async function getAdminPaymentSubmissionDetail(submissionId: string) {
 
   if (profileError) throw profileError;
 
+  const { data: subscriptionRow, error: subscriptionError } = await supabase
+    .from("user_subscriptions")
+    .select("id, status, ends_at")
+    .eq("invoice_id", invoiceRow.id)
+    .maybeSingle();
+
+  if (subscriptionError) throw subscriptionError;
+
   const invoice = normalizeInvoice(invoiceRow);
   const plan = normalizePlan(planRow);
   const proofMeta = submissionRow.proof_meta ?? {};
@@ -413,10 +431,16 @@ export async function getAdminPaymentSubmissionDetail(submissionId: string) {
     status: submissionRow.status,
     invoiceStatus: invoice.status,
     submittedAt: submissionRow.submitted_at,
-    screenshotUrl: receiptUrl ?? (typeof proofMeta.screenshotUrl === "string" ? proofMeta.screenshotUrl : null),
-    payerName: submissionRow.payer_name ?? (typeof proofMeta.payerName === "string" ? proofMeta.payerName : null),
+    screenshotUrl:
+      receiptUrl ?? (typeof proofMeta.screenshotUrl === "string" ? proofMeta.screenshotUrl : null),
+    payerName:
+      submissionRow.payer_name ??
+      (typeof proofMeta.payerName === "string" ? proofMeta.payerName : null),
     note: submissionRow.note ?? (typeof proofMeta.note === "string" ? proofMeta.note : null),
     reviewedAt: submissionRow.reviewed_at,
     reviewedBy: submissionRow.reviewed_by,
+    subscriptionId: subscriptionRow?.id ?? null,
+    subscriptionStatus: subscriptionRow?.status ?? null,
+    subscriptionEndsAt: subscriptionRow?.ends_at ?? null,
   } satisfies AdminPaymentSubmissionDetail;
 }

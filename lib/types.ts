@@ -8,11 +8,7 @@ export type AdminAnswerState = "flagged" | "reviewed" | "liked" | "neutral";
 export type AdminAnswerFilter = AdminAnswerState | "all";
 export type CitationSourceType = "syllabus" | "textbook" | "general";
 export type CreditLedgerType = "grant" | "usage" | "refund" | "adjustment";
-export type ReferenceType =
-  | "starter_grant"
-  | "chat_message"
-  | "invoice"
-  | "manual_adjustment";
+export type ReferenceType = "starter_grant" | "chat_message" | "invoice" | "manual_adjustment";
 export type BillingType = "one_time" | "monthly";
 export type PaymentMethod = "esewa" | "khalti" | "bank_transfer";
 export type InvoiceStatus =
@@ -306,6 +302,9 @@ export interface AdminPaymentSubmissionDetail extends AdminPaymentSubmissionSumm
   note: string | null;
   reviewedAt: string | null;
   reviewedBy: string | null;
+  subscriptionId: string | null;
+  subscriptionStatus: UserSubscriptionStatus | null;
+  subscriptionEndsAt: string | null;
 }
 
 export interface PaymentMethodConfig {

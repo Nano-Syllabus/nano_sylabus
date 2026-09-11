@@ -2,20 +2,23 @@
 import { CommunitySwitcher } from "@/components/community-switcher";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
-  BookOpenCheck,
-  CalendarDays,
   Check,
+  ChevronLeft,
+  ChevronRight,
   CircleGauge,
   Clock3,
   Flame,
   LibraryBig,
   LoaderCircle,
   LockKeyholeOpen,
-  Sparkles,
+  Pencil,
+  Plus,
+  Trash2,
   Trophy,
   Users,
   X,
@@ -23,11 +26,13 @@ import {
 } from "lucide-react";
 import type {
   DailyActivityDay,
+  DailyExamDate,
   DailyLeaderboardMember,
   StudentDailyDashboard,
 } from "@/lib/data/student-daily-dashboard";
 import type { SubscriptionPlan } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ApiError, apiFetch } from "@/lib/query/api";
 import { useDashboard } from "@/lib/query/dashboard";
 
 const focusRing =
@@ -303,7 +308,7 @@ function useValueChanged(value: string) {
  * A tile's label and icon are known before its value is — they are constants in
  * this file, not data — so greying the whole card while waiting throws away
  * information the reader could already have used. Keeping the frame, the label
- * and the icon solid means the dashboard arrives as a real page with six
+ * and the icon solid means the dashboard arrives as a real page with five
  * recognisable tiles whose figures are still landing, rather than as six grey
  * rectangles that could be anything.
  *
@@ -314,14 +319,12 @@ function MetricCard({
   icon,
   label,
   value,
-  detail,
   accent,
   pending,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
-  detail: string;
   accent?: boolean;
   pending?: boolean;
 }) {
@@ -342,10 +345,6 @@ function MetricCard({
           className="mt-5 h-8 w-20 animate-pulse rounded-lg bg-border motion-reduce:animate-none"
           aria-hidden="true"
         />
-        <div className="mt-2 min-h-10">
-          <div className="h-3 w-full animate-pulse rounded-full bg-border motion-reduce:animate-none" />
-          <div className="mt-1.5 h-3 w-2/3 animate-pulse rounded-full bg-border motion-reduce:animate-none" />
-        </div>
         <span className="sr-only">{label} is still loading</span>
       </article>
     );
@@ -381,7 +380,6 @@ function MetricCard({
       >
         {value}
       </p>
-      <p className="mt-2 min-h-10 text-xs leading-5 text-text-muted">{detail}</p>
     </article>
   );
 }
@@ -393,21 +391,243 @@ function activityLabel(day: DailyActivityDay) {
   return `${day.label}: ${day.attempts} attempt${day.attempts === 1 ? "" : "s"}, ${day.completions} passed${score}`;
 }
 
-function ActivityCalendar({ days }: { days: DailyActivityDay[] }) {
+function currentKathmanduDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kathmandu",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return `${year}-${month}-${day}`;
+}
+
+function ActivityCalendar({
+  days,
+  examDates,
+  userId,
+  calendarMonth,
+  onExamDatesChange,
+}: {
+  days: DailyActivityDay[];
+  examDates: DailyExamDate[];
+  userId: string;
+  calendarMonth?: string;
+  onExamDatesChange: (examDates: DailyExamDate[]) => void;
+}) {
   const initialSelectedDate =
     days.find((day) => day.isToday)?.date ??
     [...days].reverse().find((day) => day.status !== "future")?.date ??
     days[0]?.date ??
     "";
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
+  const [examFormOpen, setExamFormOpen] = useState(false);
+  const [editingExamId, setEditingExamId] = useState<string | null>(null);
+  const [examDate, setExamDate] = useState("");
+  const [examTitle, setExamTitle] = useState("");
+  const [examSaving, setExamSaving] = useState(false);
+  const [examError, setExamError] = useState("");
+  const [storageNotice, setStorageNotice] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const currentMonth = days[0]?.date.slice(0, 7) ?? calendarMonth ?? "";
+  const fallbackStorageKey = `nano-syllabus:exam-dates-fallback:${userId}`;
+
+  const [fallbackExamDates, setFallbackExamDates] = useState<DailyExamDate[]>([]);
+  useEffect(() => {
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem(fallbackStorageKey) ?? "[]");
+      setFallbackExamDates(
+        Array.isArray(parsed)
+          ? parsed.filter(
+              (entry): entry is DailyExamDate =>
+                Boolean(entry) &&
+                typeof entry === "object" &&
+                typeof (entry as DailyExamDate).id === "string" &&
+                typeof (entry as DailyExamDate).date === "string" &&
+                typeof (entry as DailyExamDate).title === "string",
+            )
+          : [],
+      );
+    } catch {
+      setFallbackExamDates([]);
+    }
+  }, [fallbackStorageKey]);
+
   const selectedDay = days.find((day) => day.date === selectedDate) ?? null;
-  const completedDays = days.filter((day) => day.status === "completed").length;
-  const practiceDays = days.filter(
-    (day) => day.status === "completed" || day.status === "started",
-  ).length;
-  const rangeLabel = days.length
-    ? `${days[0].label.replace(/, \d{4}$/, "")} – ${days.at(-1)?.label}`
-    : "Recent activity";
+  const displayedExamDates = useMemo(() => {
+    const byDate = new Map(fallbackExamDates.map((exam) => [exam.date, exam]));
+    examDates.forEach((exam) => byDate.set(exam.date, exam));
+    return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date));
+  }, [examDates, fallbackExamDates]);
+  const examByDate = useMemo(
+    () => new Map(displayedExamDates.map((exam) => [exam.date, exam])),
+    [displayedExamDates],
+  );
+  const selectedExam = examByDate.get(selectedDate) ?? null;
+  const urlDate = searchParams.get("date");
+  const todayDate = currentKathmanduDate();
+  const todayMonth = todayDate.slice(0, 7);
+  const firstDayOffset = days.length
+    ? (new Date(`${days[0].date}T12:00:00.000Z`).getUTCDay() + 6) % 7
+    : 0;
+
+  useEffect(() => {
+    const nextSelectedDate = days.some((day) => day.date === urlDate)
+      ? urlDate!
+      : initialSelectedDate;
+    setSelectedDate(nextSelectedDate);
+  }, [days, initialSelectedDate, urlDate]);
+
+  function updateCalendarUrl(month: string | undefined, date: string | undefined) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (month && month !== todayMonth) params.set("month", month);
+    else params.delete("month");
+    if (date) params.set("date", date);
+    else params.delete("date");
+    const query = params.toString();
+    router.replace(`${pathname}${query ? `?${query}` : ""}`, { scroll: false });
+  }
+
+  function selectDate(date: string) {
+    setSelectedDate(date);
+    updateCalendarUrl(currentMonth, date);
+  }
+
+  function navigateToMonth(month: string, date = `${month}-01`) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return;
+    setSelectedDate(date);
+    updateCalendarUrl(month, date);
+  }
+
+  function shiftMonth(offset: number) {
+    if (!currentMonth) return;
+    const date = new Date(`${currentMonth}-01T12:00:00.000Z`);
+    date.setUTCMonth(date.getUTCMonth() + offset);
+    navigateToMonth(date.toISOString().slice(0, 7));
+  }
+
+  function openNewExamForm() {
+    setEditingExamId(null);
+    setExamDate(selectedDate || `${currentMonth}-01`);
+    setExamTitle("");
+    setExamError("");
+    setDeleteConfirmOpen(false);
+    setExamFormOpen(true);
+  }
+
+  function openEditExamForm() {
+    if (!selectedExam) return;
+    setEditingExamId(selectedExam.id);
+    setExamDate(selectedExam.date);
+    setExamTitle(selectedExam.title);
+    setExamError("");
+    setDeleteConfirmOpen(false);
+    setExamFormOpen(true);
+  }
+
+  function patchCachedExamDates(nextExamDates: DailyExamDate[]) {
+    onExamDatesChange(nextExamDates);
+    queryClient.setQueriesData<{ dashboard: StudentDailyDashboard }>(
+      { queryKey: ["student", "dashboard"] },
+      (previous) =>
+        previous ? { dashboard: { ...previous.dashboard, examDates: nextExamDates } } : previous,
+    );
+  }
+
+  function persistFallbackExamDates(nextExamDates: DailyExamDate[]) {
+    setFallbackExamDates(nextExamDates);
+    localStorage.setItem(fallbackStorageKey, JSON.stringify(nextExamDates));
+  }
+
+  function localExamId() {
+    return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  async function submitExamDate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!examDate || examSaving) return;
+    setExamSaving(true);
+    setExamError("");
+    try {
+      const payload = { date: examDate, title: examTitle.trim() || "Exam" };
+      let result: DailyExamDate;
+      if (editingExamId?.startsWith("local-")) {
+        result = { id: editingExamId, ...payload };
+      } else {
+        try {
+          const response = editingExamId
+            ? await apiFetch<{ examDate: DailyExamDate }>(
+                `/api/student/exam-dates/${encodeURIComponent(editingExamId)}`,
+                { method: "PATCH", body: payload },
+              )
+            : await apiFetch<{ examDate: DailyExamDate }>("/api/student/exam-dates", {
+                method: "POST",
+                body: payload,
+              });
+          result = response.examDate;
+          setStorageNotice("");
+          persistFallbackExamDates(
+            fallbackExamDates.filter(
+              (exam) => exam.id !== editingExamId && exam.date !== response.examDate.date,
+            ),
+          );
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status < 500) throw error;
+          result = { id: editingExamId ?? localExamId(), ...payload };
+          persistFallbackExamDates([
+            ...fallbackExamDates.filter(
+              (exam) => exam.id !== editingExamId && exam.date !== result.date,
+            ),
+            result,
+          ]);
+          setStorageNotice("Saved on this browser while calendar sync is unavailable.");
+        }
+      }
+      const nextExamDates = [
+        ...displayedExamDates.filter((exam) => exam.id !== result.id && exam.date !== result.date),
+        result,
+      ].sort((left, right) => left.date.localeCompare(right.date));
+      patchCachedExamDates(nextExamDates);
+      setExamFormOpen(false);
+      setEditingExamId(null);
+      setExamDate("");
+      setExamTitle("");
+      setDeleteConfirmOpen(false);
+      setSelectedDate(result.date);
+      navigateToMonth(result.date.slice(0, 7), result.date);
+    } catch (error) {
+      setExamError(error instanceof Error ? error.message : "Could not save the exam date.");
+    } finally {
+      setExamSaving(false);
+    }
+  }
+
+  async function deleteSelectedExam() {
+    if (!selectedExam || examSaving) return;
+    setExamSaving(true);
+    setExamError("");
+    try {
+      if (selectedExam.id.startsWith("local-")) {
+        persistFallbackExamDates(fallbackExamDates.filter((exam) => exam.id !== selectedExam.id));
+      } else {
+        await apiFetch<void>(`/api/student/exam-dates/${encodeURIComponent(selectedExam.id)}`, {
+          method: "DELETE",
+        });
+      }
+      patchCachedExamDates(displayedExamDates.filter((exam) => exam.id !== selectedExam.id));
+      setDeleteConfirmOpen(false);
+    } catch (error) {
+      setExamError(error instanceof Error ? error.message : "Could not delete the exam date.");
+    } finally {
+      setExamSaving(false);
+    }
+  }
 
   return (
     <section
@@ -416,60 +636,200 @@ function ActivityCalendar({ days }: { days: DailyActivityDay[] }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-text-secondary">
-            <CalendarDays className="size-4" aria-hidden="true" />
-            <p className="text-xs font-semibold uppercase tracking-[0.14em]">{rangeLabel}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => shiftMonth(-1)}
+              aria-label="Previous month"
+              className={cn(
+                "inline-flex size-10 items-center justify-center rounded-full border border-border hover:bg-border",
+                focusRing,
+              )}
+            >
+              <ChevronLeft className="size-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => shiftMonth(1)}
+              aria-label="Next month"
+              className={cn(
+                "inline-flex size-10 items-center justify-center rounded-full border border-border hover:bg-border",
+                focusRing,
+              )}
+            >
+              <ChevronRight className="size-4" aria-hidden="true" />
+            </button>
+            <label className="sr-only" htmlFor="calendar-month-picker">
+              Jump to month
+            </label>
+            <input
+              id="calendar-month-picker"
+              type="month"
+              value={currentMonth}
+              onChange={(event) => navigateToMonth(event.target.value)}
+              className={cn(
+                "min-h-10 rounded-lg border border-border bg-card px-3 text-xs font-semibold uppercase tracking-[0.12em] text-text-secondary",
+                focusRing,
+              )}
+            />
+            <button
+              type="button"
+              onClick={() => navigateToMonth(todayMonth, todayDate)}
+              className={cn(
+                "inline-flex min-h-10 items-center rounded-full border border-border px-3 text-xs font-semibold hover:bg-border",
+                focusRing,
+              )}
+            >
+              Today
+            </button>
           </div>
           <h2 id="activity-calendar-heading" className="mt-2 font-display text-xl font-semibold">
             Practice calendar
           </h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            {practiceDays
-              ? `${practiceDays} active days · ${completedDays} with a passing result`
-              : "No recorded practice in this window yet."}
-          </p>
         </div>
-        <div
-          className="flex flex-wrap items-center gap-3 text-xs text-text-muted"
-          aria-label="Calendar legend"
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm bg-success" /> Passed
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm bg-warning" /> Practised
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="size-2.5 rounded-sm bg-border ring-1 ring-inset ring-border" />{" "}
-            No activity
-          </span>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <div
+            className="flex flex-wrap items-center gap-3 text-xs text-text-muted"
+            aria-label="Calendar legend"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 rounded-sm bg-success" /> Passed
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 rounded-sm bg-warning" /> Practised
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2.5 rounded-sm bg-border ring-1 ring-inset ring-border" /> No
+              activity
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => (examFormOpen ? setExamFormOpen(false) : openNewExamForm())}
+            aria-expanded={examFormOpen}
+            className={cn(
+              "inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-3.5 text-xs font-semibold hover:bg-border",
+              focusRing,
+            )}
+          >
+            <Plus className="size-4" aria-hidden="true" />
+            {examFormOpen ? "Close form" : "Add exam date"}
+          </button>
         </div>
       </div>
 
-      <div className="mt-7 overflow-x-auto pb-1">
-        <div className="min-w-[500px]">
-          <div className="mb-2 grid grid-cols-7 gap-2 text-center text-[11px] font-medium text-text-muted">
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-              <span key={day}>{day}</span>
-            ))}
+      {examFormOpen ? (
+        <form
+          onSubmit={submitExamDate}
+          className="mt-5 grid gap-4 rounded-xl border border-border bg-border p-4 sm:grid-cols-2"
+          aria-busy={examSaving}
+        >
+          <label
+            htmlFor="exam-date-input"
+            className="grid gap-1.5 text-xs font-semibold text-text-secondary"
+          >
+            Exam date
+            <input
+              id="exam-date-input"
+              type="date"
+              value={examDate}
+              onChange={(event) => setExamDate(event.target.value)}
+              autoComplete="off"
+              required
+              className={cn(
+                "min-h-10 rounded-lg border border-border bg-card px-3 text-sm font-normal text-text-primary",
+                focusRing,
+              )}
+            />
+          </label>
+          <label
+            htmlFor="exam-title-input"
+            className="grid gap-1.5 text-xs font-semibold text-text-secondary"
+          >
+            Exam name <span className="font-normal text-text-muted">(optional)</span>
+            <input
+              id="exam-title-input"
+              type="text"
+              value={examTitle}
+              onChange={(event) => setExamTitle(event.target.value)}
+              placeholder="e.g. Mathematics final"
+              autoComplete="off"
+              className={cn(
+                "min-h-10 rounded-lg border border-border bg-card px-3 text-sm font-normal text-text-primary placeholder:text-text-muted",
+                focusRing,
+              )}
+            />
+          </label>
+          <div className="flex flex-wrap gap-2 sm:col-span-2 sm:justify-end">
+            <button
+              type="submit"
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center rounded-full bg-text-primary px-4 text-xs font-semibold text-text-inverse hover:opacity-90",
+                focusRing,
+              )}
+              disabled={examSaving || !examDate}
+              aria-busy={examSaving}
+            >
+              {examSaving ? "Saving…" : editingExamId ? "Update date" : "Save date"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setExamFormOpen(false)}
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center rounded-full border border-border px-4 text-xs font-semibold hover:bg-card",
+                focusRing,
+              )}
+            >
+              Cancel
+            </button>
           </div>
-          <div className="grid grid-cols-7 gap-2">
-            {days.map((day) => (
+        </form>
+      ) : null}
+
+      {examError ? (
+        <p className="mt-3 text-sm text-destructive" role="alert">
+          {examError}
+        </p>
+      ) : null}
+      {storageNotice ? (
+        <p className="mt-3 text-sm text-text-secondary" role="status">
+          {storageNotice}
+        </p>
+      ) : null}
+
+      <div className="mt-7">
+        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-text-muted sm:gap-2 sm:text-[11px]">
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+            <span key={day}>{day}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
+          {Array.from({ length: firstDayOffset }, (_, index) => (
+            <span key={`blank-${index}`} aria-hidden="true" />
+          ))}
+          {days.map((day) => {
+            const exam = examByDate.get(day.date);
+            const label = exam
+              ? `${activityLabel(day)} Exam date: ${exam.title}`
+              : activityLabel(day);
+            return (
               <button
                 type="button"
                 key={day.date}
-                onClick={() => setSelectedDate(day.date)}
-                disabled={day.status === "future"}
-                title={activityLabel(day)}
-                aria-label={activityLabel(day)}
+                onClick={() => selectDate(day.date)}
+                disabled={day.status === "future" && !exam}
+                title={label}
+                aria-label={label}
                 aria-pressed={day.date === selectedDate}
                 className={cn(
-                  "flex aspect-[1.3] min-h-10 flex-col items-center justify-center rounded-lg border text-xs font-medium tabular-nums disabled:cursor-default",
+                  "flex min-h-10 min-w-0 flex-col items-center justify-center rounded-lg border text-xs font-medium tabular-nums disabled:cursor-default sm:aspect-[1.3] sm:min-h-12",
                   focusRing,
                   day.status === "completed" && "border-success/20 bg-success text-white",
                   day.status === "started" && "border-warning/25 bg-warning text-white",
                   day.status === "idle" && "border-border bg-border text-text-muted",
                   day.status === "future" && "border-transparent bg-transparent text-text-muted/40",
+                  exam &&
+                    "border-[var(--community-accent)]/60 bg-[var(--community-accent)]/10 text-text-primary",
                   day.isToday &&
                     "ring-2 ring-[var(--community-accent)] ring-offset-2 ring-offset-bg-primary",
                   day.date === selectedDate &&
@@ -478,14 +838,19 @@ function ActivityCalendar({ days }: { days: DailyActivityDay[] }) {
                 )}
               >
                 {day.dayOfMonth}
-                {day.attempts > 0 ? (
+                {exam ? (
+                  <span
+                    className="mt-1 size-1.5 rounded-full bg-[var(--community-accent)]"
+                    aria-hidden="true"
+                  />
+                ) : day.attempts > 0 ? (
                   <span className="mt-0.5 text-[9px] leading-none opacity-80">
                     {day.attempts} attempt{day.attempts === 1 ? "" : "s"}
                   </span>
                 ) : null}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </div>
 
@@ -504,6 +869,61 @@ function ActivityCalendar({ days }: { days: DailyActivityDay[] }) {
                 ? `${selectedDay.attempts} graded practice attempt${selectedDay.attempts === 1 ? "" : "s"} recorded from your account.`
                 : "No graded practice was recorded for this date."}
             </p>
+            {selectedExam ? (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <p className="text-xs font-semibold text-[var(--community-accent)]">
+                  Exam: {selectedExam.title}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={openEditExamForm}
+                    className={cn(
+                      "inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-semibold hover:bg-card",
+                      focusRing,
+                    )}
+                  >
+                    <Pencil className="size-3.5" aria-hidden="true" /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    className={cn(
+                      "inline-flex min-h-10 items-center gap-1.5 rounded-full border border-destructive/30 px-3 text-xs font-semibold text-destructive hover:bg-destructive/10",
+                      focusRing,
+                    )}
+                  >
+                    <Trash2 className="size-3.5" aria-hidden="true" /> Delete
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {selectedExam && deleteConfirmOpen ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-text-secondary">Delete this exam date?</span>
+                <button
+                  type="button"
+                  onClick={deleteSelectedExam}
+                  disabled={examSaving}
+                  className={cn(
+                    "inline-flex min-h-10 items-center rounded-full bg-destructive px-3 font-semibold text-white hover:opacity-90 disabled:opacity-60",
+                    focusRing,
+                  )}
+                >
+                  {examSaving ? "Deleting…" : "Yes, delete"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  className={cn(
+                    "inline-flex min-h-10 items-center rounded-full border border-border px-3 font-semibold hover:bg-card",
+                    focusRing,
+                  )}
+                >
+                  Keep it
+                </button>
+              </div>
+            ) : null}
           </div>
           {selectedDay.attempts ? (
             <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm sm:justify-end">
@@ -534,24 +954,28 @@ function LeaderboardRow({ member }: { member: DailyLeaderboardMember }) {
     <li
       className={cn(
         "grid grid-cols-[34px_minmax(0,1fr)_64px_62px] items-center gap-2 border-t border-border px-1 py-3 text-sm first:border-t-0 sm:grid-cols-[42px_minmax(0,1fr)_84px_70px]",
-        member.isViewer && "bg-border",
       )}
     >
       <span className="text-xs font-semibold text-text-muted tabular-nums">
         #{member.dailyRank}
       </span>
       <span className="flex min-w-0 items-center gap-2.5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-border text-xs font-semibold">
+        <span
+          className={cn(
+            "flex size-8 shrink-0 items-center justify-center rounded-full bg-border text-xs font-semibold",
+            member.isViewer &&
+              "bg-[var(--community-accent)]/15 text-[var(--community-accent)] ring-1 ring-[var(--community-accent)]/30",
+          )}
+        >
           {member.initials}
         </span>
-        <span className="min-w-0">
-          <span className="block truncate font-medium">
-            {member.name}
-            {member.isViewer ? " (you)" : ""}
-          </span>
-          <span className="block truncate text-xs text-text-muted">
-            {formatNumber(member.xp)} XP
-          </span>
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="truncate font-medium">{member.name}</span>
+          {member.isViewer ? (
+            <span className="shrink-0 rounded-full bg-[var(--community-accent)]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--community-accent)]">
+              You
+            </span>
+          ) : null}
         </span>
       </span>
       <span className="text-right font-semibold tabular-nums">{member.todayAttempts}</span>
@@ -633,7 +1057,8 @@ function DailyLeaderboard({ dashboard }: { dashboard: StudentDailyDashboard }) {
       </ol>
       {!hasTodayActivity ? (
         <p className="mt-3 rounded-xl bg-border px-3 py-2 text-xs leading-5 text-text-secondary">
-          No community member has recorded practice today. Ordering currently uses streak and XP.
+          No community member has recorded practice today. Ordering uses today&apos;s practice and
+          streak.
         </p>
       ) : null}
       <div className="mt-3 border-t border-border pt-3 text-center">
@@ -755,10 +1180,7 @@ function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
                     </p>
                   </div>
                   <div>
-                    <div
-                      className="h-2 overflow-hidden rounded-full bg-border"
-                      aria-hidden="true"
-                    >
+                    <div className="h-2 overflow-hidden rounded-full bg-border" aria-hidden="true">
                       {subject.readiness !== null ? (
                         <div
                           className="h-full rounded-full bg-[var(--community-accent)]"
@@ -825,6 +1247,7 @@ function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
  * a cold load, or a first-ever visit that was not prefetched.
  */
 export function StudentDailyDashboardView({
+  userId,
   communityOptions = [],
   fullName,
   creditBalance,
@@ -833,7 +1256,9 @@ export function StudentDailyDashboardView({
   communitySlug,
   selectedCommunitySlug,
   initialDashboard,
+  calendarMonth,
 }: {
+  userId: string;
   communityOptions?: import("@/lib/community-switch").CommunitySwitchOption[];
   fullName: string;
   creditBalance: number;
@@ -844,8 +1269,9 @@ export function StudentDailyDashboardView({
   /** What that resolved to — for the switcher's selected value only. */
   selectedCommunitySlug?: string;
   initialDashboard?: StudentDailyDashboard;
+  calendarMonth?: string;
 }) {
-  const { data } = useDashboard(communitySlug, initialDashboard);
+  const { data } = useDashboard(communitySlug, initialDashboard, calendarMonth);
   const dashboard = data?.dashboard;
 
   if (!dashboard)
@@ -861,12 +1287,14 @@ export function StudentDailyDashboardView({
 
   return (
     <DashboardContent
+      userId={userId}
       communityOptions={communityOptions}
       fullName={fullName}
       creditBalance={creditBalance}
       hasUnlimitedAccess={hasUnlimitedAccess}
       unlimitedPlan={unlimitedPlan}
       dashboard={dashboard}
+      calendarMonth={calendarMonth}
     />
   );
 }
@@ -876,7 +1304,7 @@ export function StudentDailyDashboardView({
  *
  * THE RULE: shimmer a VALUE, never a container, and never something already
  * known. Almost half of this screen does not depend on the slow query at all —
- * the student's name comes from the session, the NanoAI access figure from
+ * the student's name comes from the session, the NanoAI Credits figure from
  * their credit balance, and every tile's label and icon are constants in this
  * file. Greying all of that out while waiting throws away information the
  * reader could have been using, and makes a page that is half-ready look
@@ -924,53 +1352,52 @@ function DashboardDataSkeleton({
       ) : null}
       <header className="flex flex-col gap-5 border-b border-border pb-7 pt-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
-          Daily Dashboard
-        </p>
-        <h1 className="mt-2 font-display text-[clamp(2rem,3.4vw,2.9rem)] font-semibold leading-[1.05] tracking-[-0.045em]">
-          Welcome back, {fullName.trim().split(/\s+/)[0] || "there"}.
-        </h1>
-          {/* The subtitle counts challenges, so it is genuinely unknown yet. */}
+          <h1 className="font-display text-[clamp(2rem,3.4vw,2.9rem)] font-semibold leading-[1.05] tracking-[-0.045em]">
+            Welcome back, {fullName.trim().split(/\s+/)[0] || "there"}.
+          </h1>
+          {/* Keep the heading footprint stable while the dashboard data loads. */}
           <div className={`mt-3 h-4 w-64 ${line}`} aria-hidden="true" />
         </div>
-        {/* Holds the "Start a challenge" button's footprint so the header does
-            not reflow when the real one appears. */}
-        <div className="h-11 w-44 shrink-0 self-start rounded-full bg-border animate-pulse motion-reduce:animate-none sm:self-auto" />
       </header>
 
       <section
-        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
         aria-label="Daily learning metrics"
       >
-        <MetricCard pending icon={<Flame className="size-4" />} label="Current streak" value="" detail="" />
+        <MetricCard pending icon={<Flame className="size-4" />} label="Current streak" value="" />
         {/* Known from the session — no reason to hide it. */}
         <MetricCard
           icon={<LockKeyholeOpen className="size-4" />}
-          label="NanoAI access"
+          label="NanoAI Credits"
           value={hasUnlimitedAccess ? "Unlimited" : formatNumber(creditBalance)}
-          detail={
-            hasUnlimitedAccess ? "Active unlimited subscription" : "Messages remaining this cycle"
-          }
         />
-        <MetricCard pending icon={<Sparkles className="size-4" />} label="XP balance" value="" detail="" />
-        <MetricCard pending icon={<CircleGauge className="size-4" />} label="Challenges / day" value="" detail="" />
-        <MetricCard pending icon={<Clock3 className="size-4" />} label="Today" value="" detail="" />
-        <MetricCard pending icon={<BookOpenCheck className="size-4" />} label="Content completeness" value="" detail="" />
+        <MetricCard
+          pending
+          icon={<CircleGauge className="size-4" />}
+          label="Challenges / day"
+          value=""
+        />
+        <MetricCard pending icon={<Clock3 className="size-4" />} label="Today" value="" />
       </section>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
+      <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <section className="rounded-2xl border border-border bg-card p-5">
           <h2 className="font-display text-lg font-semibold tracking-tight">Practice calendar</h2>
           <div className={`mt-2 h-3 w-52 ${line}`} aria-hidden="true" />
           <div className="mt-5 grid grid-cols-7 gap-2" aria-hidden="true">
             {Array.from({ length: 35 }).map((_, index) => (
-              <div key={index} className="h-12 rounded-lg bg-border animate-pulse motion-reduce:animate-none" />
+              <div
+                key={index}
+                className="h-12 rounded-lg bg-border animate-pulse motion-reduce:animate-none"
+              />
             ))}
           </div>
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-display text-lg font-semibold tracking-tight">Community leaderboard</h2>
+          <h2 className="font-display text-lg font-semibold tracking-tight">
+            Community leaderboard
+          </h2>
           <div className={`mt-2 h-3 w-24 ${line}`} aria-hidden="true" />
           <div className="mt-5 space-y-4" aria-hidden="true">
             {Array.from({ length: 5 }).map((_, index) => (
@@ -986,41 +1413,42 @@ function DashboardDataSkeleton({
           </div>
         </section>
       </div>
-      <span className="sr-only">Loading your daily dashboard</span>
+      <span className="sr-only">Loading your dashboard</span>
     </main>
   );
 }
 
 function DashboardContent({
+  userId,
   communityOptions = [],
   fullName,
   creditBalance,
   hasUnlimitedAccess,
   unlimitedPlan,
   dashboard,
+  calendarMonth,
 }: {
+  userId: string;
   communityOptions?: import("@/lib/community-switch").CommunitySwitchOption[];
   fullName: string;
   creditBalance: number;
   hasUnlimitedAccess: boolean;
   unlimitedPlan: SubscriptionPlan | null;
   dashboard: StudentDailyDashboard;
+  calendarMonth?: string;
 }) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const queryClient = useQueryClient();
   const community = dashboard.community;
   const challenge = dashboard.challenge;
-  const readyChallenges = challenge.challenges.filter((item) => item.status !== "completed").length;
-  const todayActivity = dashboard.activity.find((day) => day.isToday);
   const accessValue = hasUnlimitedAccess ? "Unlimited" : formatNumber(creditBalance);
-  const accessDetail = hasUnlimitedAccess
-    ? "Active unlimited subscription"
-    : `NanoAI message${creditBalance === 1 ? "" : "s"} remaining`;
-  const todayMessage = dashboard.todayChallengeCompletions
-    ? `${dashboard.todayChallengeCompletions} challenge${dashboard.todayChallengeCompletions === 1 ? "" : "s"} completed today.`
-    : readyChallenges
-      ? `${readyChallenges} challenge${readyChallenges === 1 ? " is" : "s are"} ready for today.`
-      : "Your daily challenge queue is up to date.";
 
+  function handleExamDatesChange(examDates: DailyExamDate[]) {
+    queryClient.setQueriesData<{ dashboard: StudentDailyDashboard }>(
+      { queryKey: ["student", "dashboard"] },
+      (previous) => (previous ? { dashboard: { ...previous.dashboard, examDates } } : previous),
+    );
+  }
   return (
     <main className="mx-auto w-full max-w-[1440px] px-4 pb-20 pt-4 sm:px-6 lg:px-8">
       {communityOptions.length ? (
@@ -1033,85 +1461,44 @@ function DashboardContent({
       ) : null}
       <header className="flex flex-col gap-5 border-b border-border pb-7 pt-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">
-            Daily dashboard
-          </p>
-          <h1 className="mt-2 font-display text-[clamp(2rem,4vw,3.35rem)] font-semibold leading-[1.02] tracking-[-0.045em]">
+          <h1 className="font-display text-[clamp(2rem,4vw,3.35rem)] font-semibold leading-[1.02] tracking-[-0.045em]">
             Welcome back, {firstName(fullName)}.
           </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary sm:text-base">
-            {todayMessage}
-          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {!hasUnlimitedAccess ? (
-            <button
-              type="button"
-              onClick={() => setUpgradeOpen(true)}
-              disabled={!unlimitedPlan}
-              className={cn(
-                "inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold hover:bg-border disabled:cursor-not-allowed disabled:opacity-50",
-                focusRing,
-              )}
-              title={unlimitedPlan ? undefined : "Unlimited plan is currently unavailable"}
-            >
-              <Zap className="size-4" aria-hidden="true" /> Unlock Unlimited
-            </button>
-          ) : null}
-          <Link
-            href={
-              challenge.community
-                ? `/app/challenges?community=${encodeURIComponent(challenge.community.slug)}`
-                : "/app/challenges"
-            }
+        {!hasUnlimitedAccess ? (
+          <button
+            type="button"
+            onClick={() => setUpgradeOpen(true)}
+            disabled={!unlimitedPlan}
             className={cn(
-              "inline-flex min-h-11 items-center gap-2 rounded-full bg-text-primary px-5 text-sm font-semibold text-text-inverse hover:opacity-90",
+              "inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold hover:bg-border disabled:cursor-not-allowed disabled:opacity-50",
               focusRing,
             )}
+            title={unlimitedPlan ? undefined : "Unlimited plan is currently unavailable"}
           >
-            {dashboard.todayChallengeCompletions ? "Keep practising" : "Start a challenge"}
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
-        </div>
+            <Zap className="size-4" aria-hidden="true" /> Unlock Unlimited
+          </button>
+        ) : null}
       </header>
 
       <section
-        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
         aria-label="Daily learning metrics"
       >
         <MetricCard
           icon={<Flame className="size-4" />}
           label="Current streak"
           value={`${challenge.currentStreak}d`}
-          detail={
-            challenge.currentStreak
-              ? `Personal best ${challenge.leaderboard?.bestStreak ?? challenge.currentStreak} days`
-              : "Pass a challenge to begin"
-          }
         />
         <MetricCard
           icon={<LockKeyholeOpen className="size-4" />}
-          label="NanoAI access"
+          label="NanoAI Credits"
           value={accessValue}
-          detail={accessDetail}
-        />
-        <MetricCard
-          icon={<Sparkles className="size-4" />}
-          label="XP balance"
-          value={community ? formatNumber(community.viewerXp) : "—"}
-          detail={
-            community
-              ? community.viewerRank
-                ? `Rank #${community.viewerRank} in ${community.name}`
-                : community.name
-              : "Join a community to earn scoped XP"
-          }
         />
         <MetricCard
           icon={<CircleGauge className="size-4" />}
           label="Challenges / day"
           value={formatNumber(challenge.practicePerDay, 1)}
-          detail="Passing challenges · last 7 days"
         />
         <MetricCard
           icon={
@@ -1123,27 +1510,18 @@ function DashboardContent({
           }
           label="Today"
           value={formatNumber(dashboard.todayChallengeCompletions)}
-          detail={`${readyChallenges} still available · ${todayActivity?.attempts ?? 0} practice attempts`}
           accent={dashboard.todayChallengeCompletions > 0}
-        />
-        <MetricCard
-          icon={<BookOpenCheck className="size-4" />}
-          label="Content completeness"
-          value={
-            community?.contentReadiness === null || !community
-              ? "—"
-              : `${community.contentReadiness}%`
-          }
-          detail={
-            community
-              ? `${community.materialCount} materials · ${community.topicCount} synced topics`
-              : "Available after joining a community"
-          }
         />
       </section>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
-        <ActivityCalendar days={dashboard.activity} />
+      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+        <ActivityCalendar
+          days={dashboard.activity}
+          examDates={dashboard.examDates ?? []}
+          userId={userId}
+          calendarMonth={calendarMonth}
+          onExamDatesChange={handleExamDatesChange}
+        />
         <DailyLeaderboard dashboard={dashboard} />
       </div>
 

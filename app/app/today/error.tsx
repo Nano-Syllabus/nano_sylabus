@@ -9,7 +9,7 @@ export default function TodayError({
   return (
     <main className="min-h-screen w-full bg-bg-primary px-4 py-12 text-text-primary sm:px-8">
       <section className="mx-auto max-w-xl rounded-[18px] border border-border bg-card p-6">
-        <h1 className="font-display text-2xl font-semibold">Daily Dashboard could not load</h1>
+        <h1 className="font-display text-2xl font-semibold">Dashboard could not load</h1>
         <p className="mt-2 text-sm leading-6 text-text-secondary">
           Your learning records are safe. Retry the real database snapshot; no placeholder metrics
           are shown when a source is unavailable.

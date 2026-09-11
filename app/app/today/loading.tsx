@@ -7,7 +7,7 @@
  * one, a student would watch the layout rearrange itself twice before any real
  * content appeared, which reads as the page loading three separate times.
  *
- * So this draws the same frame — the same header, the same six tiles with their
+ * So this draws the same frame — the same header, the same five tiles with their
  * real labels, the same two panels with their real titles. What it cannot show
  * is anything derived from the session (the student's name, their access
  * figure), because a `loading.tsx` renders before the page's own data exists.
@@ -15,11 +15,9 @@
  */
 const LABELS = [
   "Current streak",
-  "NanoAI access",
-  "XP balance",
+  "NanoAI Credits",
   "Challenges / day",
   "Today",
-  "Content completeness",
 ] as const;
 
 /**
@@ -41,18 +39,15 @@ export default function TodayLoading() {
     <main
       className="mx-auto w-full max-w-[1440px] px-4 pb-20 pt-4 sm:px-6 lg:px-8"
       aria-busy="true"
-      aria-label="Loading Daily Dashboard"
+      aria-label="Loading dashboard"
     >
       <header className="border-b border-border pb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
-          Daily Dashboard
-        </p>
-        <div className={`mt-3 h-10 w-80 max-w-full ${shimmer}`} />
+        <div className={`h-10 w-80 max-w-full ${shimmer}`} />
         <div className={`mt-3 h-4 w-64 max-w-full ${shimmer}`} />
       </header>
 
       <section
-        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
         aria-label="Daily learning metrics"
       >
         {LABELS.map((label) => (
