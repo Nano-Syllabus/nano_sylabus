@@ -61,7 +61,7 @@ function activeSubscription(planId: string): UserSubscription {
 }
 
 describe("billing pricing UI", () => {
-  it("renders the Figma plan hierarchy while keeping paid values API-driven", () => {
+  it("renders the compact Figma pricing story while keeping paid values API-driven", () => {
     const overview: StudentBillingOverview = {
       balance: 15,
       plans: [plan("individual", 1600), plan("group", 5200)],
@@ -72,40 +72,34 @@ describe("billing pricing UI", () => {
       createElement(BillingPageClient, { overview, paymentConfig: null, user }),
     );
 
-    expect(html).toContain("Study without limits!");
-    expect(html).toContain("Start learning for free. Upgrade when you’re ready for more.");
-    expect(html).toContain("Monthly");
-    expect(html).toContain("Yearly");
+    expect(html).toContain("Simple plans. Bigger dreams.");
+    expect(html).toContain("Pick the support that fits your pace.");
+    expect(html).toContain("1 month");
+    expect(html).toContain("3 months");
     expect(html).toContain("font-[family-name:var(--font-poppins)]");
-    expect(html).toContain("Get Started");
-    expect(html).toContain("Most Popular");
+    expect(html).toContain("Current plan");
+    expect(html).toContain("Choose Plus");
+    expect(html).toContain("Choose Pro");
     expect(html).toContain("Rs. 1,600");
     expect(html).toContain("Rs. 5,200");
-    expect(html).toContain("Handwritten Answer Feedback");
-    expect(html).toContain("Shared Accountability");
+    expect(html).toContain("You don’t have to prepare alone.");
+    expect(html).toContain("Real Stories, Real Growth");
+    expect(html).toContain("Ready for more than 3 challenges a day?");
     expect(html).not.toMatch(/discount|coupon/i);
-    // The visual hierarchy these assert is unchanged: standard plans get a
-    // plain border, the featured plan gets a blue border and a gradient lift.
-    // What moved is where the colours come from — the card surface and border
-    // used to be hardcoded light literals (`border-[#979797]`, and a
-    // `from-white` gradient), which rendered as a white card in the dark theme
-    // while the text followed the theme to near-white and became unreadable.
-    // They are theme tokens now, so the same hierarchy holds in both themes.
-    expect(html).toContain("border-border");
-    expect(html).toContain("border-[#20a8ff]");
-    expect(html).toContain("bg-gradient-to-b");
-    expect(html).toContain("#20a8ff_16%");
+    expect(html).toContain("bg-[#d9ff69]");
+    expect(html).toContain("bg-[#3548f5]");
+    expect(html).toContain("max-w-[1000px]");
   });
 
   it("keeps free access separate from paid checkout without promotional-code paths", () => {
     const source = readFileSync("components/billing-page-client.tsx", "utf8");
 
     expect(source).not.toMatch(/discount|coupon/i);
-    expect(source).toContain('"Included with your plan" : "Get Started"');
+    expect(source).toContain('"Included in your plan" : "Current plan"');
     expect(source).toContain('onAction={() => router.push("/app/today")}');
-    expect(source).toContain('"Current plan" : "Get Individual"');
+    expect(source).toContain('"Current plan" : "Choose Plus"');
     expect(source).toContain("onAction={() => startPlan(plans.individual)}");
-    expect(source).toContain('className="mt-[30px]"');
+    expect(source).toContain('className="mt-auto pt-7"');
   });
 
   it("shows processing and active-access confirmation after receipt submission", () => {
@@ -137,7 +131,7 @@ describe("billing pricing UI", () => {
     expect(html).toContain("Current Plan");
     expect(html).toContain("Current plan");
     expect(html).toContain("Active until");
-    expect(html).toContain("Upgrade to Group");
+    expect(html).toContain("Upgrade to Pro");
     expect(html).toContain("Unlimited plan active");
     expect(html).toContain("Cancel subscription");
     expect(html).toContain(

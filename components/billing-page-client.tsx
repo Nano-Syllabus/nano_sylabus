@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Check, CheckCircle2, LoaderCircle, ShieldCheck, X } from "lucide-react";
+import { BookOpen, Check, CheckCircle2, LoaderCircle, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { ReceiptUploadFromPhone } from "@/components/receipt-upload-from-phone";
@@ -22,79 +22,74 @@ type CheckoutInvoice = Pick<
 > & { plan: SubscriptionPlan };
 
 const FREE_FEATURES = [
-  "Limited AI Tutor",
-  "Document Chat",
-  "Limited Mock Exams",
-  "Exam Readiness",
-  "Daily Challenges",
-  "Progress Tracking",
+  "3 challenges / day",
+  "AI answer grading",
+  "All semesters & subjects",
+  "Community PDFs & materials",
+  "Learning analytics",
+  "Group study sessions",
 ];
 
 const PLAN_COPY = {
   individual: {
-    title: "Individual",
-    description: "A complete exam-preparation system for one student.",
-    fallbackFeatures: [
-      "AI Tutor",
-      "Document Chat",
-      "Mock Exams",
-      "Exam Readiness",
-      "Daily Challenges",
-      "Handwritten Answer Feedback",
-    ],
+    title: "Plus",
+    description: "Everything in Free",
+    fallbackFeatures: ["Unlimited challenges", "Exam calendar & study plan", "Romanized Nepali"],
   },
   group: {
-    title: "Group",
-    description: "One package for five students studying together.",
+    title: "Pro",
+    description: "Everything in Plus",
     fallbackFeatures: [
-      "5 Student Accounts",
-      "AI Tutor For Everyone",
-      "Mock Exams",
-      "Handwritten Answer Feedback",
-      "Individual Readiness & Progress",
-      "Shared Accountability",
+      "AI tutor for everyone",
+      "AI concept videos & animations",
+      "English & Nepali",
     ],
   },
 } as const;
+
+const TESTIMONIALS = [
+  {
+    name: "Aayush K.",
+    course: "Computer Engineering · TU",
+    badge: "Top Performer",
+    image: "/landing-new/avatar-1.png",
+    quote:
+      "I stopped waiting to finish every chapter before practising. One topic at a time finally felt manageable.",
+  },
+  {
+    name: "Sneha P.",
+    course: "Civil Engineering · PU",
+    badge: "Rising Achiever",
+    image: "/landing-new/avatar-2.png",
+    quote: "The handwritten feedback showed me the exact reason my solution lost its way.",
+  },
+  {
+    name: "Resha D.",
+    course: "Computer Engineering · PU",
+    badge: "Consistent Learner",
+    image: "/landing-new/avatar-3.png",
+    quote:
+      "Breaking my study into smaller topics helped me stay focused and finally make real progress.",
+  },
+] as const;
 
 function formatMoney(plan: SubscriptionPlan) {
   return `${plan.currency === "NPR" ? "Rs." : plan.currency} ${plan.price.toLocaleString("en-NP")}`;
 }
 
-function FeatureList({
-  features,
-  variant,
-}: {
-  features: string[];
-  variant: "free" | "individual" | "group";
-}) {
+function FeatureList({ features }: { features: string[] }) {
   return (
-    <ul className="mt-[23px] m-0 list-none p-0 font-[family-name:var(--font-poppins)] text-[14px] font-medium tracking-[0.42px] text-text-secondary">
-      {features.map((feature, index) => {
-        const unlimited =
-          (variant === "individual" && index < 3) ||
-          (variant === "group" && (index === 1 || index === 2));
-        return (
-          <li
-            key={feature}
-            className="flex h-[30px] items-center gap-[10px] whitespace-nowrap leading-[20px]"
-          >
-            <span
-              className="flex h-[30px] w-[22px] shrink-0 items-center justify-center"
-              aria-hidden="true"
-            >
-              {unlimited ? (
-                <span className="relative -top-px text-[25px] font-semibold leading-none text-[#219653]">
-                  ∞
-                </span>
-              ) : (
-                <Check className="size-[19px] text-[#1d57fd]" strokeWidth={2.4} />
-              )}
-            </span>
-            <span>{feature}</span>
-          </li>
-        );
-      })}
+    <ul className="m-0 mt-4 list-none space-y-2.5 p-0 text-[12.5px] font-medium leading-[1.4] text-[#293044]">
+      {features.map((feature) => (
+        <li key={feature} className="flex items-start gap-2.5">
+          <Check
+            className="mt-px size-3.5 shrink-0 text-[#3353f4]"
+            strokeWidth={2.2}
+            aria-hidden="true"
+          />
+          <span>{feature}</span>
+        </li>
+      ))}
     </ul>
   );
 }
@@ -102,10 +97,20 @@ function FeatureList({
 export function BillingPageClient({
   overview,
   paymentConfig,
+  socialProof = {
+    challengesCompletedThisWeek: 0,
+    handwrittenAnswersReviewed: 0,
+    activeStudyMemberships: 0,
+  },
   user,
 }: {
   overview: StudentBillingOverview;
   paymentConfig: PaymentMethodConfig | null;
+  socialProof?: {
+    challengesCompletedThisWeek: number;
+    handwrittenAnswersReviewed: number;
+    activeStudyMemberships: number;
+  };
   user: AppUser;
 }) {
   const router = useRouter();
@@ -242,70 +247,76 @@ export function BillingPageClient({
 
   return (
     <>
-      <main className="min-h-full bg-bg-primary px-5 py-12 text-text-primary sm:px-8 lg:py-16">
+      {/* This route intentionally keeps the Figma light-artboard palette in both app themes. */}
+      <main className="min-h-full bg-[#fbfcfe] px-4 pb-16 pt-7 text-[#111827] sm:px-6 lg:px-8 lg:pb-20 lg:pt-9">
         {error ? (
-          <p
+          <div
             role="alert"
-            className="mx-auto mb-6 max-w-2xl rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            className="mx-auto mb-5 flex max-w-[1000px] items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 py-2 pl-4 pr-2 text-sm text-red-700"
           >
-            {error}
-          </p>
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError("")}
+              aria-label="Dismiss billing error"
+              className="flex size-10 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          </div>
         ) : null}
 
-        <header className="mx-auto mb-[50px] flex max-w-[1002px] flex-col items-center text-center font-[family-name:var(--font-poppins)]">
-          <h1 className="text-[32px] font-bold leading-[1.3] tracking-[-0.64px] text-text-primary">
-            Study without limits!
+        <header className="mx-auto flex max-w-[1000px] flex-col items-center text-center font-[family-name:var(--font-poppins)]">
+          <h1 className="text-[28px] font-bold leading-tight tracking-[-0.04em] text-[#111827] sm:text-[34px]">
+            Simple plans. Bigger dreams.
           </h1>
-          <p className="mt-[13px] text-[14px] font-medium leading-[1.5] tracking-[-0.14px] text-text-secondary">
+          <p className="mt-2.5 text-[12px] font-medium leading-5 text-[#7b8498]">
             {user.hasUnlimitedAccess
               ? `Your ${activePlanLabel} plan is active with unlimited NanoAI access.`
-              : "Start learning for free. Upgrade when you’re ready for more."}
+              : "Pick the support that fits your pace. Change your plan whenever you need."}
           </p>
           <div
-            className="mt-[24px] inline-flex h-[39px] items-center rounded-full border border-border bg-card p-[3px] shadow-[0_2px_5px_rgba(0,0,0,0.16)]"
+            className="mt-5 inline-flex h-11 items-center rounded-full border border-[#dfe4ed] bg-white p-[2px]"
             aria-label="Billing period"
           >
             <button
               type="button"
               aria-pressed="true"
-              className="h-[31px] rounded-full bg-[#0f2b7f] px-[24px] text-[10px] font-semibold uppercase tracking-[0.6px] text-white"
+              className="h-10 rounded-full bg-[#111827] px-6 text-[10px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2"
             >
-              Monthly
+              1 month
             </button>
             <button
               type="button"
               disabled
-              title="Yearly billing is not available yet"
-              className="h-[31px] rounded-full px-[24px] text-[10px] font-semibold uppercase tracking-[0.6px] text-text-primary disabled:cursor-not-allowed disabled:opacity-100"
+              title="Three-month checkout is coming soon"
+              className="h-10 rounded-full px-6 text-[10px] font-medium text-[#7b8498] disabled:cursor-not-allowed disabled:opacity-100"
             >
-              Yearly
+              3 months
             </button>
           </div>
         </header>
 
         <section
           aria-label="Subscription plans"
-          className="mx-auto grid max-w-[1100px] items-end justify-center gap-8 xl:grid-cols-[repeat(3,minmax(0,330px))] xl:gap-[55px]"
+          className="mx-auto mt-8 grid max-w-[1000px] grid-cols-[minmax(0,320px)] items-stretch justify-center gap-4 lg:grid-cols-3 lg:gap-5"
         >
           <PricingCard
             title="Free"
-            description="Start learning with the essentials"
+            eyebrow="Current Plan"
             price="Rs. 0"
             features={FREE_FEATURES}
-            featureVariant="free"
-            actionLabel={user.hasUnlimitedAccess ? "Included with your plan" : "Get Started"}
+            actionLabel={user.hasUnlimitedAccess ? "Included in your plan" : "Current plan"}
             onAction={() => router.push("/app/today")}
-            disabled={user.hasUnlimitedAccess}
+            disabled
           />
           <PricingCard
             title={PLAN_COPY.individual.title}
-            description={PLAN_COPY.individual.description}
+            eyebrow={plans.individual ? `1 month · ${formatMoney(plans.individual)}` : "1 month"}
             price={plans.individual ? formatMoney(plans.individual) : "Rs. 1,500"}
+            includes={PLAN_COPY.individual.description}
             features={[...PLAN_COPY.individual.fallbackFeatures]}
-            featureVariant="individual"
-            actionLabel={
-              activePlan?.productType === "individual" ? "Current plan" : "Get Individual"
-            }
+            actionLabel={activePlan?.productType === "individual" ? "Current plan" : "Choose Plus"}
             loading={creatingPlanId === plans.individual?.id}
             onAction={() => startPlan(plans.individual)}
             disabled={activePlan?.productType === "individual"}
@@ -320,16 +331,16 @@ export function BillingPageClient({
           />
           <PricingCard
             title={PLAN_COPY.group.title}
-            description={PLAN_COPY.group.description}
+            eyebrow={plans.group ? `1 month · ${formatMoney(plans.group)}` : "1 month"}
             price={plans.group ? formatMoney(plans.group) : "Rs. 5,000"}
+            includes={PLAN_COPY.group.description}
             features={[...PLAN_COPY.group.fallbackFeatures]}
-            featureVariant="group"
             actionLabel={
               activePlan?.productType === "group"
                 ? "Current plan"
                 : user.hasUnlimitedAccess
-                  ? "Upgrade to Group"
-                  : "Get Group"
+                  ? "Upgrade to Pro"
+                  : "Choose Pro"
             }
             loading={creatingPlanId === plans.group?.id}
             onAction={() => startPlan(plans.group)}
@@ -342,10 +353,119 @@ export function BillingPageClient({
           />
         </section>
 
+        <section className="mx-auto mt-10 max-w-[1000px] font-[family-name:var(--font-poppins)]">
+          <div className="text-center">
+            <h2 className="text-[24px] font-bold tracking-[-0.035em] text-[#111827] sm:text-[28px]">
+              You don’t have to prepare alone.
+            </h2>
+            <p className="mt-1.5 text-[11px] font-medium text-[#8a93a5]">
+              See the work happening across NanoSyllabus.
+            </p>
+          </div>
+
+          <div className="mt-5 grid overflow-hidden rounded-xl border border-[#e1e6ee] bg-white sm:grid-cols-3">
+            {[
+              [socialProof.challengesCompletedThisWeek, "Challenges completed this week"],
+              [socialProof.handwrittenAnswersReviewed, "Handwritten answers reviewed"],
+              [socialProof.activeStudyMemberships, "Active study memberships"],
+            ].map(([value, label], index) => (
+              <div
+                key={label}
+                className={cn(
+                  "px-5 py-4",
+                  index > 0 && "border-t border-[#e1e6ee] sm:border-l sm:border-t-0",
+                )}
+              >
+                <p className="text-[24px] font-bold leading-none tracking-[-0.04em] text-[#111827]">
+                  {Number(value).toLocaleString("en-NP")}
+                </p>
+                <p className="mt-1.5 text-[10px] font-medium text-[#7b8498]">{label}</p>
+              </div>
+            ))}
+          </div>
+
+          <h2 className="mt-7 text-center text-[22px] font-bold tracking-[-0.03em] text-[#111827] sm:text-[25px]">
+            Real Stories, Real Growth
+          </h2>
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            {TESTIMONIALS.map((testimonial) => (
+              <article
+                key={testimonial.name}
+                className="min-h-[130px] rounded-xl border border-[#e1e6ee] bg-white px-5 py-4"
+              >
+                <div className="flex items-center gap-3">
+                  <Image
+                    src={testimonial.image}
+                    alt=""
+                    width={34}
+                    height={34}
+                    className="size-[34px] rounded-full object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[11px] font-semibold text-[#111827]">
+                      {testimonial.name}
+                    </p>
+                    <p className="truncate text-[8px] font-medium text-[#929bad]">
+                      {testimonial.course}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-[#d9ff69] px-2 py-1 text-[7px] font-semibold text-[#28320e]">
+                    {testimonial.badge}
+                  </span>
+                </div>
+                <p className="mt-4 text-[10px] font-medium leading-[1.55] text-[#697387]">
+                  <span className="mr-2 text-base font-bold leading-none text-[#c9ee47]">“</span>
+                  {testimonial.quote}
+                </p>
+              </article>
+            ))}
+          </div>
+          <div className="mt-3 flex justify-center gap-1.5" aria-hidden="true">
+            <span className="size-1.5 rounded-full bg-[#3353f4]" />
+            <span className="size-1.5 rounded-full bg-[#dce1ea]" />
+            <span className="size-1.5 rounded-full bg-[#dce1ea]" />
+          </div>
+
+          <div className="mt-6 grid items-center gap-5 rounded-xl bg-[linear-gradient(105deg,#3047ef_0%,#3b58f7_55%,#397be8_100%)] px-6 py-5 text-white lg:grid-cols-[72px_1fr_auto] lg:px-8">
+            <BookOpen className="size-12 stroke-[1.4]" aria-hidden="true" />
+            <div>
+              <h2 className="text-[16px] font-semibold">Ready for more than 3 challenges a day?</h2>
+              <p className="mt-1 text-[10px] text-white/80">
+                Get unlimited practice and a study plan built around your exam dates.
+              </p>
+            </div>
+            <div className="flex flex-col items-center gap-2 sm:items-end">
+              <button
+                type="button"
+                onClick={() => startPlan(plans.individual)}
+                disabled={
+                  creatingPlanId === plans.individual?.id ||
+                  activePlan?.productType === "individual"
+                }
+                className="min-h-9 rounded-md bg-white px-4 text-[10px] font-semibold text-[#111827] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {activePlan?.productType === "individual"
+                  ? "Plus is active"
+                  : `Choose Plus · ${plans.individual ? formatMoney(plans.individual) : "Rs. 1,500"}/month ↗`}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/app/today")}
+                className="min-h-10 rounded-md px-2 text-[9px] font-medium text-white underline decoration-white/60 underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+              >
+                Keep using Free
+              </button>
+            </div>
+          </div>
+          <p className="mt-5 text-center text-[9px] font-medium text-[#a0a8b7]">
+            NanoSyllabus · Learn. Practise. Get feedback. Study together.
+          </p>
+        </section>
+
         {activeSubscription && activePlan ? (
           <section
             aria-label="Manage subscription"
-            className="mx-auto mt-10 flex max-w-[760px] flex-col gap-5 rounded-2xl border border-border bg-card p-6 sm:flex-row sm:items-center sm:justify-between"
+            className="mx-auto mt-10 flex max-w-[1000px] flex-col gap-5 rounded-xl border border-[#e1e6ee] bg-white p-5 sm:flex-row sm:items-center sm:justify-between"
           >
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
@@ -384,7 +504,7 @@ export function BillingPageClient({
           </section>
         ) : null}
 
-        <section className="mx-auto mt-16 max-w-[1002px] border-t border-border pt-10">
+        <section className="mx-auto mt-12 max-w-[1000px] border-t border-[#e1e6ee] pt-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
@@ -477,10 +597,10 @@ export function BillingPageClient({
 
 function PricingCard({
   title,
-  description,
+  eyebrow,
   price,
+  includes,
   features,
-  featureVariant,
   actionLabel,
   loading = false,
   disabled = false,
@@ -491,10 +611,10 @@ function PricingCard({
   featured = false,
 }: {
   title: string;
-  description: string;
+  eyebrow: string;
   price: string;
+  includes?: string;
   features: string[];
-  featureVariant: "free" | "individual" | "group";
   actionLabel: string;
   loading?: boolean;
   disabled?: boolean;
@@ -507,77 +627,52 @@ function PricingCard({
   return (
     <article
       className={cn(
-        "relative mx-auto h-[570px] w-full max-w-[330px] overflow-visible rounded-[28px] border border-border bg-card font-[family-name:var(--font-poppins)]",
-        featured &&
-          "h-[580px] border-2 border-[#20a8ff] bg-gradient-to-b from-[color-mix(in_srgb,#20a8ff_6%,var(--card))] to-[color-mix(in_srgb,#20a8ff_16%,var(--card))]",
+        "relative mx-auto flex min-h-[400px] w-full max-w-[320px] flex-col rounded-xl border border-[#dfe4ed] bg-white p-5 font-[family-name:var(--font-poppins)] shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
+        featured && "border-[#aab7e7] shadow-[0_4px_14px_rgba(39,64,190,0.08)]",
       )}
     >
-      {featured || current ? (
-        <span className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-[20px] bg-[linear-gradient(175deg,#4db3ff_13.6%,#1689f5_84.5%)] px-[23.5px] py-[6px] text-[12px] font-semibold tracking-[0.621px] text-white">
-          {current ? "Current Plan" : "Most Popular"}
-        </span>
+      {featured ? (
+        <h2 className="mb-2.5 w-fit rounded-md bg-[#d9ff69] px-2 py-1 text-[9px] font-semibold leading-none text-[#24300e]">
+          {title}
+        </h2>
       ) : null}
-      <div
-        className={cn(
-          "flex h-full flex-col px-8 pb-[52px] pt-[50px]",
-          featured && "px-8 pb-[38px] pt-[52px]",
-        )}
-      >
-        <div>
-          <h2 className="text-[25px] font-medium leading-normal tracking-[0.48px] text-text-primary">
-            {title}
-          </h2>
-          <p className="mt-[6px] text-[33px] font-semibold leading-normal tracking-[0.48px] text-text-primary">
-            {price}
+      {!featured ? (
+        <h2 className="text-[22px] font-semibold leading-tight tracking-[-0.025em] text-[#111827]">
+          {title}
+        </h2>
+      ) : null}
+      <p className="mt-1 text-[28px] font-bold leading-tight tracking-[-0.025em] text-[#111827]">
+        {price}
+      </p>
+      <p className="mt-1 min-h-4 text-[9px] font-medium text-[#8992a3]">{eyebrow}</p>
+      <div className="mt-4 h-px w-full bg-[#d8dee8]" />
+      {includes ? <p className="mt-4 text-[9px] font-semibold text-[#222a3a]">{includes}</p> : null}
+      <FeatureList features={features} />
+      <div className="mt-auto pt-7">
+        <button
+          type="button"
+          className={cn(
+            "flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[#111827] px-4 py-2 text-[10px] font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-[#e4e6e9] disabled:text-[#747c8d] disabled:opacity-100",
+            featured && !current && "bg-[#3548f5]",
+            current && "bg-[#e8f6ee] text-[#187a42]",
+          )}
+          onClick={onAction}
+          disabled={loading || disabled}
+          aria-busy={loading}
+        >
+          {current ? <CheckCircle2 className="size-4" aria-hidden="true" /> : null}
+          {loading ? "Preparing payment..." : actionLabel}
+          {!loading && !disabled ? <span aria-hidden="true">→</span> : null}
+        </button>
+        {current ? (
+          <p className="mt-2 text-center text-[10px] font-medium text-[#697387]">
+            {accessEndsAt
+              ? cancellationScheduled
+                ? `Ends ${formatDate(accessEndsAt)}`
+                : `Active until ${formatDate(accessEndsAt)}`
+              : "Active with no expiry date"}
           </p>
-          <p className="mt-[6px] min-h-[44px] max-w-[266px] text-[14px] font-medium leading-[22px] tracking-[0.42px] text-text-muted">
-            {title === "Group" ? (
-              <>
-                One package for <span className="font-semibold text-[#1d57fd]">five students</span>{" "}
-                studying together.
-              </>
-            ) : (
-              description
-            )}
-          </p>
-          <div className="mt-[16px] h-px w-full bg-border" />
-          <FeatureList features={features} variant={featureVariant} />
-        </div>
-        <div className="mt-[30px]">
-          <button
-            type="button"
-            className={cn(
-              "flex min-h-[40px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-text-primary px-[19px] py-[9px] font-[family-name:var(--font-inter)] text-[14px] font-semibold text-text-inverse transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1689f5] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70",
-              featured && "bg-[linear-gradient(180deg,#4db3ff,#1689f5)]",
-              current && "bg-[#e8f6ee] text-[#187a42]",
-            )}
-            onClick={onAction}
-            disabled={loading || disabled}
-            aria-busy={loading}
-          >
-            {current ? <CheckCircle2 className="size-4" aria-hidden="true" /> : null}
-            {loading ? "Preparing payment..." : actionLabel}
-            {!loading && !disabled ? (
-              <Image
-                src="/figma-pricing-arrow.svg"
-                alt=""
-                width={20}
-                height={20}
-                aria-hidden="true"
-                className="size-5"
-              />
-            ) : null}
-          </button>
-          {current ? (
-            <p className="mt-2 text-center text-[12px] font-medium text-text-secondary">
-              {accessEndsAt
-                ? cancellationScheduled
-                  ? `Ends ${formatDate(accessEndsAt)}`
-                  : `Active until ${formatDate(accessEndsAt)}`
-                : "Active with no expiry date"}
-            </p>
-          ) : null}
-        </div>
+        ) : null}
       </div>
     </article>
   );

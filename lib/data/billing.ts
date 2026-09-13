@@ -197,6 +197,31 @@ export async function listSubscriptionPlans() {
   return (data ?? []).map(normalizePlan);
 }
 
+export async function getBillingSocialProof() {
+  const admin = createSupabaseAdminClient();
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const [challenges, handwrittenAnswers, memberships] = await Promise.all([
+    admin
+      .from("student_challenges")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "completed")
+      .gte("completed_at", sevenDaysAgo),
+    admin
+      .from("student_practice_answer_sheets")
+      .select("attempt_id", { count: "exact", head: true }),
+    admin
+      .from("community_memberships")
+      .select("community_id", { count: "exact", head: true })
+      .eq("status", "active"),
+  ]);
+
+  return {
+    challengesCompletedThisWeek: challenges.error ? 0 : (challenges.count ?? 0),
+    handwrittenAnswersReviewed: handwrittenAnswers.error ? 0 : (handwrittenAnswers.count ?? 0),
+    activeStudyMemberships: memberships.error ? 0 : (memberships.count ?? 0),
+  };
+}
+
 export async function getActiveManualPaymentConfig() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
