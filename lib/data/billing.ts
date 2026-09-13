@@ -95,6 +95,9 @@ function normalizeSubscription(row: any): UserSubscription {
     status: row.status,
     startsAt: row.starts_at,
     endsAt: row.ends_at,
+    cancelAtPeriodEnd: row.cancel_at_period_end ?? false,
+    cancelledAt: row.cancelled_at ?? null,
+    cancellationReason: row.cancellation_reason ?? null,
     createdAt: row.created_at,
   };
 }

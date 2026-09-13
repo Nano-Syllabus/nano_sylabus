@@ -228,6 +228,14 @@ export interface UserSubscription {
   status: UserSubscriptionStatus;
   startsAt: string;
   endsAt: string | null;
+  /**
+   * The user has asked not to renew after the current paid period. Access is
+   * deliberately retained until `endsAt` so cancelling never removes time
+   * they have already paid for.
+   */
+  cancelAtPeriodEnd: boolean;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
   createdAt: string;
 }
 

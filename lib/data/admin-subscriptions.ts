@@ -31,6 +31,9 @@ interface UserSubscriptionRow {
   status: UserSubscriptionStatus;
   starts_at: string;
   ends_at: string | null;
+  cancel_at_period_end?: boolean | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
   created_at: string;
 }
 
@@ -176,6 +179,9 @@ export async function listAdminSubscriptions() {
       status: row.status,
       startsAt: row.starts_at,
       endsAt: row.ends_at,
+      cancelAtPeriodEnd: row.cancel_at_period_end ?? false,
+      cancelledAt: row.cancelled_at ?? null,
+      cancellationReason: row.cancellation_reason ?? null,
       createdAt: row.created_at,
       studentName: namesByUserId.get(row.user_id) ?? "Student",
       studentEmail: emailsByUserId.get(row.user_id) ?? "",

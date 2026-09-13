@@ -2,7 +2,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import type { AppUser, StudentBillingOverview, SubscriptionPlan, UserSubscription } from "@/lib/types";
+import type {
+  AppUser,
+  StudentBillingOverview,
+  SubscriptionPlan,
+  UserSubscription,
+} from "@/lib/types";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -48,6 +53,9 @@ function activeSubscription(planId: string): UserSubscription {
     status: "active",
     startsAt: "2026-09-09T00:00:00.000Z",
     endsAt: "2026-10-09T00:00:00.000Z",
+    cancelAtPeriodEnd: false,
+    cancelledAt: null,
+    cancellationReason: null,
     createdAt: "2026-09-09T00:00:00.000Z",
   };
 }
@@ -60,7 +68,9 @@ describe("billing pricing UI", () => {
       invoices: [],
       subscriptions: [],
     };
-    const html = renderToStaticMarkup(createElement(BillingPageClient, { overview, paymentConfig: null, user }));
+    const html = renderToStaticMarkup(
+      createElement(BillingPageClient, { overview, paymentConfig: null, user }),
+    );
 
     expect(html).toContain("Study without limits!");
     expect(html).toContain("Start learning for free. Upgrade when you’re ready for more.");
@@ -117,13 +127,52 @@ describe("billing pricing UI", () => {
       subscriptions: [activeSubscription(individual.id)],
     };
 
-    const html = renderToStaticMarkup(createElement(BillingPageClient, { overview, paymentConfig: null, user: paidUser }));
+    const html = renderToStaticMarkup(
+      createElement(BillingPageClient, { overview, paymentConfig: null, user: paidUser }),
+    );
 
-    expect(html).toContain("Your Individual Unlimited plan is active with unlimited NanoAI access.");
+    expect(html).toContain(
+      "Your Individual Unlimited plan is active with unlimited NanoAI access.",
+    );
     expect(html).toContain("Current Plan");
     expect(html).toContain("Current plan");
     expect(html).toContain("Active until");
     expect(html).toContain("Upgrade to Group");
     expect(html).toContain("Unlimited plan active");
+    expect(html).toContain("Cancel subscription");
+    expect(html).toContain(
+      "You can cancel anytime without losing the time you have already paid for.",
+    );
+  });
+
+  it("uses a scheduled end-of-period cancellation flow instead of removing paid access immediately", () => {
+    const source = readFileSync("components/billing-page-client.tsx", "utf8");
+    const route = readFileSync("app/api/billing/subscriptions/cancel/route.ts", "utf8");
+
+    expect(source).toContain("/api/billing/subscriptions/cancel");
+    expect(source).toContain("Cancel at period end");
+    expect(source).toContain("Keep subscription");
+    expect(route).toContain("cancel_at_period_end: true");
+    expect(route).toContain('status !== "active"');
+    expect(route).toContain("subscription_cancellation_scheduled");
+  });
+
+  it("labels a scheduled cancellation by its final access date", () => {
+    const individual = plan("individual", 1500);
+    const paidUser = { ...user, hasUnlimitedAccess: true };
+    const overview: StudentBillingOverview = {
+      balance: 1,
+      plans: [individual],
+      invoices: [],
+      subscriptions: [{ ...activeSubscription(individual.id), cancelAtPeriodEnd: true }],
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(BillingPageClient, { overview, paymentConfig: null, user: paidUser }),
+    );
+
+    expect(html).toContain("Cancellation is scheduled.");
+    expect(html).toContain("Plan ends Oct 9, 2026");
+    expect(html).toContain("Keep subscription");
   });
 });

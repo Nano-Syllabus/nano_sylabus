@@ -116,6 +116,8 @@ export function BillingPageClient({
   const [activationConfirmation, setActivationConfirmation] = useState<{
     invoiceCode: string;
   } | null>(null);
+  const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false);
+  const [updatingSubscription, setUpdatingSubscription] = useState(false);
 
   const plans = useMemo(() => {
     const active = overview.plans.filter((plan) => plan.isActive);
@@ -211,6 +213,33 @@ export function BillingPageClient({
     else void createInvoice(plan);
   }
 
+  async function updateSubscriptionCancellation(action: "cancel" | "resume") {
+    if (!activeSubscription) return;
+    setUpdatingSubscription(true);
+    setError("");
+    try {
+      const response = await fetch("/api/billing/subscriptions/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ subscriptionId: activeSubscription.id, action }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "Could not update your subscription.");
+      }
+      setCancelConfirmationOpen(false);
+      router.refresh();
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Could not update your subscription. Please try again.",
+      );
+    } finally {
+      setUpdatingSubscription(false);
+    }
+  }
+
   return (
     <>
       <main className="min-h-full bg-bg-primary px-5 py-12 text-text-primary sm:px-8 lg:py-16">
@@ -284,6 +313,9 @@ export function BillingPageClient({
             accessEndsAt={
               activePlan?.productType === "individual" ? activeSubscription?.endsAt : null
             }
+            cancellationScheduled={
+              activePlan?.productType === "individual" && activeSubscription?.cancelAtPeriodEnd
+            }
             featured
           />
           <PricingCard
@@ -304,8 +336,53 @@ export function BillingPageClient({
             disabled={activePlan?.productType === "group"}
             current={activePlan?.productType === "group"}
             accessEndsAt={activePlan?.productType === "group" ? activeSubscription?.endsAt : null}
+            cancellationScheduled={
+              activePlan?.productType === "group" && activeSubscription?.cancelAtPeriodEnd
+            }
           />
         </section>
+
+        {activeSubscription && activePlan ? (
+          <section
+            aria-label="Manage subscription"
+            className="mx-auto mt-10 flex max-w-[760px] flex-col gap-5 rounded-2xl border border-border bg-card p-6 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
+                Your subscription
+              </p>
+              <h2 className="mt-2 font-[family-name:var(--font-poppins)] text-xl font-semibold text-text-primary">
+                {activePlanLabel}
+              </h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
+                {activeSubscription.cancelAtPeriodEnd
+                  ? `Cancellation is scheduled. You will keep unlimited access until ${formatDate(activeSubscription.endsAt!)} and then move to the Free plan.`
+                  : `Your paid access is active until ${formatDate(activeSubscription.endsAt!)}. You can cancel anytime without losing the time you have already paid for.`}
+              </p>
+            </div>
+            {activeSubscription.cancelAtPeriodEnd ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                disabled={updatingSubscription}
+                onClick={() => void updateSubscriptionCancellation("resume")}
+              >
+                {updatingSubscription ? "Updating..." : "Keep subscription"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="danger"
+                className="shrink-0"
+                disabled={updatingSubscription}
+                onClick={() => setCancelConfirmationOpen(true)}
+              >
+                Cancel subscription
+              </Button>
+            )}
+          </section>
+        ) : null}
 
         <section className="mx-auto mt-16 max-w-[1002px] border-t border-border pt-10">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -319,7 +396,9 @@ export function BillingPageClient({
             </div>
             <p className="text-sm text-text-secondary">
               {user.hasUnlimitedAccess
-                ? "Unlimited plan active"
+                ? activeSubscription?.cancelAtPeriodEnd && activeSubscription.endsAt
+                  ? `Plan ends ${formatDate(activeSubscription.endsAt)}`
+                  : "Unlimited plan active"
                 : `${overview.balance} messages available`}
             </p>
           </div>
@@ -383,6 +462,15 @@ export function BillingPageClient({
           onClose={() => setActivationConfirmation(null)}
         />
       ) : null}
+      {cancelConfirmationOpen && activeSubscription && activePlan ? (
+        <CancelSubscriptionConfirmation
+          planName={activePlanLabel}
+          endsAt={activeSubscription.endsAt}
+          loading={updatingSubscription}
+          onClose={() => setCancelConfirmationOpen(false)}
+          onConfirm={() => void updateSubscriptionCancellation("cancel")}
+        />
+      ) : null}
     </>
   );
 }
@@ -398,6 +486,7 @@ function PricingCard({
   disabled = false,
   current = false,
   accessEndsAt = null,
+  cancellationScheduled = false,
   onAction,
   featured = false,
 }: {
@@ -411,6 +500,7 @@ function PricingCard({
   disabled?: boolean;
   current?: boolean;
   accessEndsAt?: string | null;
+  cancellationScheduled?: boolean;
   onAction: () => void;
   featured?: boolean;
 }) {
@@ -481,7 +571,9 @@ function PricingCard({
           {current ? (
             <p className="mt-2 text-center text-[12px] font-medium text-text-secondary">
               {accessEndsAt
-                ? `Active until ${formatDate(accessEndsAt)}`
+                ? cancellationScheduled
+                  ? `Ends ${formatDate(accessEndsAt)}`
+                  : `Active until ${formatDate(accessEndsAt)}`
                 : "Active with no expiry date"}
             </p>
           ) : null}
@@ -786,6 +878,44 @@ function PaymentActivationConfirmation({
         </div>
         <Button type="button" size="lg" className="mt-6 w-full rounded-2xl" onClick={onClose}>
           Done
+        </Button>
+      </div>
+    </ModalFrame>
+  );
+}
+
+function CancelSubscriptionConfirmation({
+  planName,
+  endsAt,
+  loading,
+  onClose,
+  onConfirm,
+}: {
+  planName: string;
+  endsAt: string | null;
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <ModalFrame title={`Cancel ${planName}?`} onClose={onClose} locked={loading}>
+      <p className="text-sm leading-6 text-text-secondary">
+        Your plan will not continue after the current paid period. You will keep every paid feature
+        until{" "}
+        <strong className="font-semibold text-text-primary">
+          {endsAt ? formatDate(endsAt) : "your plan ends"}
+        </strong>
+        , then your account will move to the Free plan.
+      </p>
+      <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+        This does not issue a refund or remove access early.
+      </div>
+      <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <Button type="button" variant="outline" disabled={loading} onClick={onClose}>
+          Keep plan
+        </Button>
+        <Button type="button" variant="danger" disabled={loading} onClick={onConfirm}>
+          {loading ? "Cancelling..." : "Cancel at period end"}
         </Button>
       </div>
     </ModalFrame>
