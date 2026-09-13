@@ -197,10 +197,35 @@ export async function GET(request: Request) {
     const searchParams = new URL(request.url).searchParams;
     const requestedCommunitySlug = searchParams.get("community")?.trim() || "";
     const requestedCommunitySubjectSlug = searchParams.get("communitySubject")?.trim() || "";
-    // Repair placements left by older delete flows before counts and semester
-    // cards are loaded. Community subjects are references to a required
-    // teacher_subject_profiles row, so an orphan cannot be opened or studied.
-    await removeOrphanedCommunitySubjects(admin, teacher.id);
+    // TWO INDEPENDENT CHAINS, STARTED TOGETHER.
+    //
+    // This handler is all Supabase and no model, so what it costs is round trips
+    // times their latency — measured at ~165ms each against the hosted project.
+    // Run end to end the chain was ~12 deep, which is ~2s of waiting before a
+    // teacher sees anything, none of it compute.
+    //
+    // The community half and the classroom half share nothing: one reads
+    // communities/community_subjects/community_posts, the other reads
+    // teacher_classrooms and what hangs off it. Only the community half has to
+    // wait for the orphan repair, and that ordering is deliberate — see below —
+    // so the classroom half is started here and awaited after, rather than
+    // queued behind a cleanup it does not care about.
+    const communityChain = (async () => {
+      // Repair placements left by older delete flows BEFORE counts and semester
+      // cards are loaded. Community subjects are references to a required
+      // teacher_subject_profiles row, so an orphan cannot be opened or studied.
+      // This stays sequential with the read that follows it on purpose: run
+      // concurrently, the counts can include a row this is deleting.
+      await removeOrphanedCommunitySubjects(admin, teacher.id);
+      return getCommunityAdminOverview(admin, teacher.user_id, requestedCommunitySlug);
+    })();
+    // A promise in flight that nobody has awaited yet is an UNHANDLED rejection
+    // if it fails, and the classroom chain below can throw first and send this
+    // handler straight to its catch — leaving this one rejected with no listener,
+    // which Node treats as fatal. Marking it handled here changes nothing about
+    // the error itself: the `await` below still rejects and still returns 502.
+    communityChain.catch(() => {});
+
     const linksResult = await admin
       .from("teacher_classroom_teachers")
       .select("classroom_id")
@@ -254,27 +279,29 @@ export async function GET(request: Request) {
     if (assignmentsResult.error) throw assignmentsResult.error;
     const assignments = assignmentsResult.data || [];
     const assignmentIds = assignments.map((assignment) => assignment.id);
-    const submissionsResult = assignmentIds.length
-      ? await admin
-          .from("teacher_exam_submissions")
-          .select("id,assignment_id,student_id,student_name,grade,created_at")
-          .in("assignment_id", assignmentIds)
-          .order("created_at", { ascending: false })
-          .limit(500)
-      : { data: [], error: null };
-    if (submissionsResult.error) throw submissionsResult.error;
     const studentIds = Array.from(
       new Set((membersResult.data || []).map((member) => member.student_id)),
     );
-    const profilesResult = studentIds.length
-      ? await admin.from("student_profiles").select("user_id,full_name").in("user_id", studentIds)
-      : { data: [], error: null };
+    // Submissions hang off assignments, names off members — neither reads the
+    // other, and both are known by this point. Sequentially they were two round
+    // trips spent on one wait.
+    const [submissionsResult, profilesResult] = await Promise.all([
+      assignmentIds.length
+        ? admin
+            .from("teacher_exam_submissions")
+            .select("id,assignment_id,student_id,student_name,grade,created_at")
+            .in("assignment_id", assignmentIds)
+            .order("created_at", { ascending: false })
+            .limit(500)
+        : Promise.resolve({ data: [], error: null }),
+      studentIds.length
+        ? admin.from("student_profiles").select("user_id,full_name").in("user_id", studentIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (submissionsResult.error) throw submissionsResult.error;
     if (profilesResult.error) throw profilesResult.error;
-    const communityData = await getCommunityAdminOverview(
-      admin,
-      teacher.user_id,
-      requestedCommunitySlug,
-    );
+    // Started before the classroom chain; by here it has usually already landed.
+    const communityData = await communityChain;
     const selectedCommunityIsManaged = communityData.managedCommunities.some(
       (community) => community.slug === requestedCommunitySlug,
     );

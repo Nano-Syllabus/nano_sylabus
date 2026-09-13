@@ -28,14 +28,24 @@ export async function GET() {
       return NextResponse.json({ error: "Teacher workspace not found." }, { status: 404 });
     }
 
-    const [collection, subjects, sourceTree, documents] = await Promise.all([
+    // ONE round of fan-out, not four rounds of one.
+    //
+    // Everything below needs only `teacher` and `user`, both of which are already
+    // in hand — nothing here reads another's result. Written as four sequential
+    // stages it cost four round trips end to end: the tenant API, then the admin
+    // queries, then the profile, then the avatar. Against Supabase measured at
+    // ~165ms a hop (and the tenant API slower still), that was most of the wait on
+    // a screen that computes nothing.
+    const admin = createSupabaseAdminClient();
+    const [
+      collection, subjects, sourceTree, documents,
+      documentFilesResult, subjectProfilesResult, communityLinks,
+      profileResult, publicProfile,
+    ] = await Promise.all([
       getTeacherMe(teacher.collection_sk),
       getTeacherSubjects(teacher.collection_sk),
       getTeacherSourceTree(teacher.collection_sk),
       getTeacherDocuments(teacher.collection_sk),
-    ]);
-    const admin = createSupabaseAdminClient();
-    const [{ data: documentFiles }, { data: subjectProfiles }, communityLinks] = await Promise.all([
       admin
         .from("teacher_document_files")
         .select("id,collection_path,external_document_id")
@@ -52,17 +62,20 @@ export async function GET() {
         .eq("teacher_id", teacher.id)
         .eq("status", "active")
         .eq("communities.status", "active"),
+      admin
+        .from("student_profiles")
+        .select("full_name,language_pref")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      withTeacherAvatar(admin, profileFromUser(user, teacher.handle)),
     ]);
+    const { data: documentFiles } = documentFilesResult;
+    const { data: subjectProfiles } = subjectProfilesResult;
+    const { data: profile } = profileResult;
     // Never mislabel shared material if its access metadata could not be read.
     if (communityLinks.error)
       throw new Error("Could not load subject community access. Please try again.");
     const communitiesBySubject = groupSubjectCommunities(communityLinks.data || []);
-    const { data: profile } = await admin
-      .from("student_profiles")
-      .select("full_name,language_pref")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    const publicProfile = await withTeacherAvatar(admin, profileFromUser(user, teacher.handle));
 
     return NextResponse.json({
       teacher: {

@@ -1268,7 +1268,20 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   const [dashboardState, setDashboardState] = useState<DashboardState>("loading");
   const [dashboardError, setDashboardError] = useState("");
   const [dashboardData, setDashboard] = useState<TeacherDashboard | null>(null);
-  const dashboard = loadedDashboardKey === dashboardKey ? dashboardData : null;
+  // What has already been loaded this session, per community.
+  //
+  // `dashboard` used to go hard null the moment `communitySlug` changed, so every
+  // switch — including switching straight back to one just looked at — emptied
+  // the page and waited on a cold request. Deliberately NOT keyed loosely: a
+  // community shows only its OWN cached numbers, because the one thing worse
+  // than waiting is reading another community's counts under this one's name.
+  // A community not seen this session still gets a spinner, which is honest —
+  // nothing is known about it yet.
+  const dashboardCache = useRef(new Map<string, TeacherDashboard>());
+  const dashboard =
+    loadedDashboardKey === dashboardKey
+      ? dashboardData
+      : (dashboardCache.current.get(dashboardKey) ?? null);
   const [view, setView] = useState<MainView>("communities");
   const [selectedSlug, setSelectedSlug] = useState("");
   const [selectedClassroomId, setSelectedClassroomId] = useState("");
@@ -1310,7 +1323,11 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
 
   const loadDashboard = useCallback(async () => {
     const request = ++dashboardRequest.current;
-    setDashboardState("loading");
+    // Only spin if there is genuinely nothing to show for THIS community. With a
+    // cached copy the page stays up and reconciles behind it, which is the same
+    // rule the student dashboard already follows: paint what is known, refresh
+    // once, never blank a screen that had content a moment ago.
+    setDashboardState(dashboardCache.current.has(dashboardKey) ? "ready" : "loading");
     setDashboardError("");
     try {
       const communityParams = new URLSearchParams();
@@ -1322,7 +1339,9 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       });
       const payload = await responsePayload(response);
       if (request !== dashboardRequest.current) return;
-      setDashboard(normalizeDashboard(payload));
+      const next = normalizeDashboard(payload);
+      dashboardCache.current.set(dashboardKey, next);
+      setDashboard(next);
       setLoadedDashboardKey(dashboardKey);
       setDashboardState("ready");
     } catch (error) {

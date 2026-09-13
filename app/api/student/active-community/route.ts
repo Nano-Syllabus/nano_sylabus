@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { listJoinedCommunities, communityStorageError } from "@/lib/data/communities";
 import { ACTIVE_COMMUNITY_COOKIE, communitySwitchState } from "@/lib/community-switch";
 
@@ -10,9 +11,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
     }
     const supabase = await createSupabaseServerClient();
+    // Verified locally against the cached JWKS rather than by asking the auth
+    // server, which measured ~143ms a call and is on the path of every open of
+    // the community switcher. Same token, same cryptographic check — and
+    // nothing here reads `user_metadata`, which is the one case getClaims() can
+    // lag on (see lib/supabase/verified-user.ts).
     const {
       data: { user },
-    } = await supabase.auth.getUser();
+    } = await getVerifiedUser(supabase);
     if (!user)
       return NextResponse.json({ error: "Sign in to switch communities." }, { status: 401 });
     const body = await request.json().catch(() => null);
