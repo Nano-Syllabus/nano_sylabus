@@ -1,0 +1,11 @@
+# Local dependencies and generated Next.js output are rebuilt by Vercel.
+node_modules/
+.next/
+.next-*/
+
+# Local-only caches and preview artifacts.
+supabase/.temp/
+test-results/
+playwright-report/
+perf-results/
+final_ui_nano (1).html
