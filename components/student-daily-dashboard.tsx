@@ -801,7 +801,7 @@ function DashboardDataSkeleton({
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-display text-lg font-semibold tracking-tight">Practice calendar</h2>
+          <h2 className="font-display text-xl font-semibold">Practice calendar</h2>
           <div className={`mt-2 h-3 w-52 ${line}`} aria-hidden="true" />
           <div className="mt-5 grid grid-cols-7 gap-2" aria-hidden="true">
             {Array.from({ length: 35 }).map((_, index) => (
@@ -814,9 +814,7 @@ function DashboardDataSkeleton({
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-display text-lg font-semibold tracking-tight">
-            Community leaderboard
-          </h2>
+          <h2 className="font-display text-xl font-semibold">Community leaderboard</h2>
           <div className={`mt-2 h-3 w-24 ${line}`} aria-hidden="true" />
           <div className="mt-5 space-y-4" aria-hidden="true">
             {Array.from({ length: 5 }).map((_, index) => (

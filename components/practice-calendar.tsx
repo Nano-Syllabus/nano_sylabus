@@ -574,10 +574,7 @@ export function PracticeCalendar({
     >
       {/* ── Top Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-3">
-        <h2
-          id="activity-calendar-heading"
-          className="text-[26px] sm:text-[28px] font-[900] tracking-[-0.03em] text-[#0f172a]"
-        >
+        <h2 id="activity-calendar-heading" className="font-display text-xl font-semibold">
           Practice calendar
         </h2>
 
@@ -1006,7 +1003,7 @@ export function PracticeCalendar({
         aria-labelledby="upcoming-exams-heading"
       >
         <div className="mb-4 flex items-center justify-between">
-          <h3 id="upcoming-exams-heading" className="font-display text-lg font-semibold tracking-tight text-[#0f172a]">
+          <h3 id="upcoming-exams-heading" className="font-display text-xl font-semibold">
             Upcoming exams
           </h3>
         </div>
@@ -1021,7 +1018,7 @@ export function PracticeCalendar({
 
               return (
                 <div key={exam.id} className="py-4 first:pt-0 last:pb-0">
-                    <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[130px_minmax(0,1fr)_auto_auto] sm:items-center sm:gap-6">
+                  <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[130px_minmax(0,1fr)_auto_auto] sm:items-center sm:gap-6">
                     {/* 1. Nepali Date */}
                     <div className="whitespace-nowrap sm:w-[130px] self-start sm:pt-0.5">
                       <span className="font-display text-[14px] sm:text-[15px] font-semibold text-[#0f172a]">
@@ -1039,7 +1036,9 @@ export function PracticeCalendar({
                           {readiness !== null && (
                             <div
                               className="h-full rounded-full bg-[#0066ff] transition-[width] duration-300 motion-reduce:transition-none"
-                              style={{ width: `${readiness > 0 ? Math.max(5, Math.min(100, readiness)) : 0}%` }}
+                              style={{
+                                width: `${readiness > 0 ? Math.max(5, Math.min(100, readiness)) : 0}%`,
+                              }}
                             />
                           )}
                         </div>

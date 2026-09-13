@@ -68,4 +68,12 @@ describe("practice calendar exam planning", () => {
     expect(source).not.toContain("h-1.5 w-24 sm:w-32");
     expect(source).not.toContain("text-[#0066ff] truncate");
   });
+
+  it("keeps calendar section headings consistent with the leaderboard", () => {
+    const calendarSource = readFileSync("components/practice-calendar.tsx", "utf8");
+    const dashboardSource = readFileSync("components/student-daily-dashboard.tsx", "utf8");
+
+    expect(calendarSource).toContain('className="font-display text-xl font-semibold"');
+    expect(dashboardSource).toContain('className="font-display text-xl font-semibold"');
+  });
 });
