@@ -59,6 +59,26 @@ const community: CommunityDetail = {
 };
 
 describe("unified Figma library", () => {
+  it("shows the saved current semester even when a deep link views an older one", () => {
+    const secondTerm = { ...generateCommunityTerms(1, 2)[1], id: "term-2", subjects: [] };
+    const html = renderToStaticMarkup(
+      createElement(LibraryNanoAiWorkspace, {
+        community: {
+          ...community,
+          membership: { ...community.membership!, currentTermId: "term-2" },
+          terms: [...community.terms, secondTerm],
+        },
+        insights: {},
+        initialSelection: { termId: "term-1", subjectSlug: "applied-mechanics", documentId: null },
+        onSubjectSelect: vi.fn(),
+        onMaterialOpen: vi.fn(),
+      }),
+    );
+
+    expect(html).toContain('<option value="term-2" selected="">2nd Semester</option>');
+    expect(html).not.toContain('<option value="term-1" selected="">');
+  });
+
   it("renders real community semesters, subjects, and progress in the three-step design", () => {
     const html = renderToStaticMarkup(
       createElement(LibraryNanoAiWorkspace, {
@@ -68,12 +88,22 @@ describe("unified Figma library", () => {
             subjectId: "subject-1",
             readiness: 64,
             materialCount: 3,
-            topicCount: 5,
-            practicedTopicCount: 2,
-            masteredTopicCount: 1,
+            topicCount: 1,
+            practicedTopicCount: 1,
+            masteredTopicCount: 0,
             examsTaken: 1,
             averageScore: 64,
-            topics: [],
+            topics: [
+              {
+                key: "forces",
+                title: "Forces and equilibrium",
+                blurb: "",
+                unitNumber: "1",
+                percentage: 64,
+                attempts: 2,
+                status: "developing",
+              },
+            ],
           },
         },
         initialSelection: { termId: null, subjectSlug: null, documentId: null },
@@ -93,7 +123,11 @@ describe("unified Figma library", () => {
     expect(appliedMechanicsCard).not.toContain("64%");
     expect(html).toContain("font-figma-library");
     expect(html).toContain("/figma/library/book-open.svg");
-    expect(html).toContain("Choose current semester");
+    expect(html).toContain("Choose running semester");
+    expect(html).toContain("lg:grid-cols-2");
+    expect(html).toContain("Forces and equilibrium");
+    expect(html).toContain("2 attempts");
+    expect(html).toContain("In progress");
     expect(html).not.toContain("Your learning progress");
     expect(html).toContain('<option value="term-1" selected="">1st Semester</option>');
     expect(html).not.toContain("Search subjects and chapters");

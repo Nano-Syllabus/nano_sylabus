@@ -3,9 +3,11 @@
 import { ArrowLeft, BookOpen, Download, FileText, LibraryBig, RefreshCw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
+import { SubjectTopicProgress } from "@/components/subject-topic-progress";
 import { cn, titleCase } from "@/lib/utils";
 
 export type LibraryNanoAiMaterial = {
@@ -134,6 +136,7 @@ export function LibraryNanoAiWorkspace({
   onSubjectSelect: (subject: LibraryNanoAiSubject) => void;
   onMaterialOpen: (material: LibraryNanoAiMaterial, subject: LibraryNanoAiSubject) => void;
 }) {
+  const router = useRouter();
   const orderedTerms = useMemo(
     () => [...(community?.terms ?? [])].sort((a, b) => a.position - b.position),
     [community?.terms],
@@ -159,7 +162,8 @@ export function LibraryNanoAiWorkspace({
   const [restoredDocument, setRestoredDocument] = useState(false);
   const [savingSemester, setSavingSemester] = useState(false);
   const [semesterError, setSemesterError] = useState("");
-  const semesterRequestRef = useRef(0);
+  const [savedTermId, setSavedTermId] = useState(currentTerm?.id ?? "");
+  const semesterSaveInFlight = useRef(false);
 
   useEffect(() => {
     if (!selectedSubject) {
@@ -238,16 +242,14 @@ export function LibraryNanoAiWorkspace({
   const visibleMaterials = materials;
 
   async function selectTerm(term: CommunityTerm) {
+    if (semesterSaveInFlight.current) return;
     setSelectedTerm(term);
     setSelectedSubject(null);
     updateLibraryUrl({ semester: term.id, subject: null, document: null });
-    if (
-      community?.membership?.status !== "active" ||
-      term.id === community.membership.currentTermId
-    ) {
+    if (community?.membership?.status !== "active" || term.id === savedTermId) {
       return;
     }
-    const requestId = ++semesterRequestRef.current;
+    semesterSaveInFlight.current = true;
     setSavingSemester(true);
     setSemesterError("");
     try {
@@ -263,14 +265,18 @@ export function LibraryNanoAiWorkspace({
       if (!response.ok || payload.currentTermId !== term.id) {
         throw new Error(payload.error || "Could not save your current semester.");
       }
+      setSavedTermId(term.id);
+      router.refresh();
     } catch (error) {
-      if (requestId === semesterRequestRef.current) {
-        setSemesterError(
-          error instanceof Error ? error.message : "Could not save your current semester.",
-        );
-      }
+      const savedTerm = orderedTerms.find((item) => item.id === savedTermId) ?? null;
+      setSelectedTerm(savedTerm);
+      updateLibraryUrl({ semester: savedTerm?.id, subject: null, document: null });
+      setSemesterError(
+        error instanceof Error ? error.message : "Could not save your current semester.",
+      );
     } finally {
-      if (requestId === semesterRequestRef.current) setSavingSemester(false);
+      semesterSaveInFlight.current = false;
+      setSavingSemester(false);
     }
   }
 
@@ -330,19 +336,19 @@ export function LibraryNanoAiWorkspace({
             htmlFor="current-semester-selector"
             className="text-xs font-semibold uppercase tracking-[0.14em] text-text-secondary"
           >
-            Choose current semester
+            Choose running semester
           </label>
           <div className="flex h-11 w-full items-center rounded-full border border-border bg-card px-4 sm:w-[220px]">
             <select
               id="current-semester-selector"
-              value={selectedTerm?.id ?? ""}
+              value={savedTermId}
               onChange={(event) => {
                 const term = orderedTerms.find((item) => item.id === event.target.value);
                 if (term) void selectTerm(term);
               }}
               disabled={savingSemester || orderedTerms.length === 0}
               className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-text-primary outline-none disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label="Choose current semester"
+              aria-label="Choose running semester"
             >
               {orderedTerms.map((term) => (
                 <option key={term.id} value={term.id}>
@@ -365,7 +371,7 @@ export function LibraryNanoAiWorkspace({
               <button
                 key={term.id}
                 type="button"
-                disabled={savingSemester && active}
+                disabled={savingSemester}
                 onClick={() => void selectTerm(term)}
                 className={cn(
                   "h-10 shrink-0 rounded-full border px-[18px] text-[13px] font-medium transition-colors",
@@ -427,122 +433,149 @@ export function LibraryNanoAiWorkspace({
         )}
       </section>
 
-      <section className="mt-7" aria-labelledby="library-resources-heading">
-        <h2 id="library-resources-heading" className="text-[17px] font-semibold text-text-primary">
-          3. Choose Chapter
-        </h2>
-        <div className="mt-3">
-          {!selectedSubject ? (
-            <div className="rounded-2xl bg-bg-secondary px-5 py-6 text-center text-xs text-text-muted">
-              Choose a subject to see its uploaded chapters and PDFs.
-            </div>
-          ) : null}
-          {loadState === "loading" ? <ExplorerSkeleton /> : null}
-          {loadState === "error" ? (
-            <div className="rounded-xl border border-destructive/30 bg-bg-primary p-6">
-              <h3 className="font-display text-lg font-semibold">
-                Couldn&apos;t load these resources
-              </h3>
-              <p className="mt-2 text-sm text-text-secondary">{loadError}</p>
-              <button
-                type="button"
-                onClick={() => setReloadKey((current) => current + 1)}
-                className={cn(
-                  "mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse",
-                  focusRing,
-                )}
-              >
-                <RefreshCw className="size-4" aria-hidden="true" />
-                Try again
-              </button>
-            </div>
-          ) : null}
-          {loadState === "ready" && materials.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border bg-bg-secondary p-8 text-center">
-              <FileText className="mx-auto size-8 text-text-muted" aria-hidden="true" />
-              <h3 className="mt-4 font-display text-lg font-semibold">No resources yet</h3>
-              <p className="mt-2 text-sm text-text-secondary">
-                The community creator has not uploaded material for this subject yet.
-              </p>
-            </div>
-          ) : null}
-          {loadState === "ready" && visibleMaterials.length > 0 ? (
-            <ol className="space-y-3">
-              {groupedMaterials
-                .flatMap(([, shelfMaterials]) => shelfMaterials)
-                .filter((material) => visibleMaterials.includes(material))
-                .map((material, index) => {
-                  const canOpen =
-                    Boolean(material.documentId) && material.previewAvailable !== false;
-                  return (
-                    <li key={`${material.documentId}:${material.path}`}>
-                      <button
-                        type="button"
-                        disabled={!canOpen}
-                        onClick={() => {
-                          onMaterialOpen(material, selectedSubject!);
-                          updateLibraryUrl({
-                            semester: selectedTerm!.id,
-                            subject: selectedSubject!.slug,
-                            document: material.documentId,
-                          });
-                        }}
-                        className={cn(
-                          "group flex min-h-20 w-full items-center gap-4 rounded-2xl bg-bg-secondary px-5 py-4 text-left transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
-                          focusRing,
-                        )}
-                      >
-                        <span
+      <div className="mt-7 grid gap-4 lg:grid-cols-2">
+        <section
+          className="min-w-0 rounded-2xl border border-border bg-card p-5"
+          aria-labelledby="library-resources-heading"
+        >
+          <h2
+            id="library-resources-heading"
+            className="text-[17px] font-semibold text-text-primary"
+          >
+            3. Choose Chapter
+          </h2>
+          <div className="mt-4">
+            {!selectedSubject ? (
+              <div className="rounded-2xl bg-bg-secondary px-5 py-6 text-center text-xs text-text-muted">
+                Choose a subject to see its uploaded chapters and PDFs.
+              </div>
+            ) : null}
+            {loadState === "loading" ? <ExplorerSkeleton /> : null}
+            {loadState === "error" ? (
+              <div className="rounded-xl border border-destructive/30 bg-bg-primary p-6">
+                <h3 className="font-display text-lg font-semibold">
+                  Couldn&apos;t load these resources
+                </h3>
+                <p className="mt-2 text-sm text-text-secondary">{loadError}</p>
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((current) => current + 1)}
+                  className={cn(
+                    "mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse",
+                    focusRing,
+                  )}
+                >
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                  Try again
+                </button>
+              </div>
+            ) : null}
+            {loadState === "ready" && materials.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-bg-secondary p-8 text-center">
+                <FileText className="mx-auto size-8 text-text-muted" aria-hidden="true" />
+                <h3 className="mt-4 font-display text-lg font-semibold">No resources yet</h3>
+                <p className="mt-2 text-sm text-text-secondary">
+                  The community creator has not uploaded material for this subject yet.
+                </p>
+              </div>
+            ) : null}
+            {loadState === "ready" && visibleMaterials.length > 0 ? (
+              <ol className="space-y-3">
+                {groupedMaterials
+                  .flatMap(([, shelfMaterials]) => shelfMaterials)
+                  .filter((material) => visibleMaterials.includes(material))
+                  .map((material, index) => {
+                    const canOpen =
+                      Boolean(material.documentId) && material.previewAvailable !== false;
+                    return (
+                      <li key={`${material.documentId}:${material.path}`}>
+                        <button
+                          type="button"
+                          disabled={!canOpen}
+                          onClick={() => {
+                            onMaterialOpen(material, selectedSubject!);
+                            updateLibraryUrl({
+                              semester: selectedTerm!.id,
+                              subject: selectedSubject!.slug,
+                              document: material.documentId,
+                            });
+                          }}
                           className={cn(
-                            "flex size-10 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold",
-                            SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length].tile,
-                            SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length].text,
+                            "group flex min-h-20 w-full items-center gap-3 rounded-2xl bg-bg-secondary px-4 py-4 text-left transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
+                            focusRing,
                           )}
                         >
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[15px] font-semibold text-text-primary">
-                            {readableMaterialName(material.name)}
+                          <span
+                            className={cn(
+                              "flex size-10 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold",
+                              SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length].tile,
+                              SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length].text,
+                            )}
+                          >
+                            {String(index + 1).padStart(2, "0")}
                           </span>
-                          <span className="mt-1 block truncate text-[13px] text-text-muted">
-                            {material.shelf || formatSize(material.sizeBytes)}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[15px] font-semibold text-text-primary">
+                              {readableMaterialName(material.name)}
+                            </span>
+                            <span className="mt-1 block truncate text-[13px] text-text-muted">
+                              {material.shelf || formatSize(material.sizeBytes)}
+                            </span>
                           </span>
-                        </span>
-                        <span
-                          className={cn(
-                            "rounded-md px-3 py-1.5 text-[11px] font-medium",
-                            canOpen
-                              ? "bg-[#eaf8ec] text-[#299244]"
-                              : "bg-bg-secondary text-text-muted",
-                          )}
-                        >
-                          {canOpen ? "Available" : "Locked"}
-                        </span>
-                        {!canOpen ? (
+                          <span
+                            className={cn(
+                              "hidden rounded-md px-2 py-1.5 text-[11px] font-medium sm:inline-flex",
+                              canOpen
+                                ? "bg-[#eaf8ec] text-[#299244]"
+                                : "bg-bg-secondary text-text-muted",
+                            )}
+                          >
+                            {canOpen ? "Available" : "Locked"}
+                          </span>
+                          {!canOpen ? (
+                            <Image
+                              src="/figma/library/lock.svg"
+                              alt=""
+                              width={12}
+                              height={12}
+                              aria-hidden="true"
+                            />
+                          ) : null}
                           <Image
-                            src="/figma/library/lock.svg"
+                            src="/figma/library/chevron-right.svg"
                             alt=""
-                            width={12}
-                            height={12}
+                            width={16}
+                            height={16}
                             aria-hidden="true"
                           />
-                        ) : null}
-                        <Image
-                          src="/figma/library/chevron-right.svg"
-                          alt=""
-                          width={16}
-                          height={16}
-                          aria-hidden="true"
-                        />
-                      </button>
-                    </li>
-                  );
-                })}
-            </ol>
-          ) : null}
-        </div>
-      </section>
+                        </button>
+                      </li>
+                    );
+                  })}
+              </ol>
+            ) : null}
+          </div>
+        </section>
+        <section
+          className="min-w-0 rounded-2xl border border-border bg-card p-5"
+          aria-label="Topic progress for selected subject"
+        >
+          {selectedSubject ? (
+            <SubjectTopicProgress
+              insight={insights[selectedSubject.id] ?? selectedSubject.progress}
+            />
+          ) : (
+            <>
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                Topic progress
+              </h3>
+              <p className="mt-4 rounded-2xl bg-bg-secondary px-5 py-6 text-center text-sm text-text-secondary">
+                Choose a subject to see your topic-wise progress.
+              </p>
+            </>
+          )}
+        </section>
+      </div>
     </main>
   );
 }

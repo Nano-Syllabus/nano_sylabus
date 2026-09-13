@@ -70,4 +70,15 @@ describe("current semester versus browsing", () => {
     expect(db.tables.community_memberships[1].current_term_id).toBe("term-3");
     expect((await getCommunity("henglish", null, admin))?.membership).toBeNull();
   });
+
+  it("does not report success when the database still has the previous semester", async () => {
+    const db = communityLearningFixture();
+    db.tables.community_memberships[0].current_term_id = "term-1";
+    const admin = Object.assign(db.admin, {
+      rpc: async () => ({ data: null, error: null }),
+    });
+    await expect(setCommunityCurrentTerm("member", "henglish", "term-2", admin)).rejects.toThrow(
+      "Semester was not saved",
+    );
+  });
 });

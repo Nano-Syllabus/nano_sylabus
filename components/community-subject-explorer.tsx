@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, BarChart3, BookOpen, CalendarRange, Target, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, BookOpen, CalendarRange, X } from "lucide-react";
 import { academicOrdinalLabel } from "@/lib/academic";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
 import { titleCase } from "@/lib/utils";
 import { CommunityLeaveControl } from "@/components/community-leave-control";
+import { SubjectTopicProgress } from "@/components/subject-topic-progress";
 import {
   initialSemesterSelection,
   semesterSelectionReducer,
@@ -68,58 +69,6 @@ function ReadinessRing({ readiness }: { readiness: number | null }) {
 function metric(value: number | null, singular: string, plural = `${singular}s`) {
   if (value === null) return `— ${plural}`;
   return `${value} ${value === 1 ? singular : plural}`;
-}
-
-function TopicProgressRing({ percentage }: { percentage: number | null }) {
-  const value = percentage === null ? 0 : Math.max(0, Math.min(100, percentage));
-  const circumference = 2 * Math.PI * 15;
-  return (
-    <div className={`relative size-10 shrink-0 ${readinessColor(percentage)}`}>
-      <svg viewBox="0 0 40 40" className="size-10 -rotate-90" aria-hidden="true">
-        <circle
-          cx="20"
-          cy="20"
-          r="15"
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity="0.12"
-          strokeWidth="3"
-        />
-        {percentage !== null ? (
-          <circle
-            cx="20"
-            cy="20"
-            r="15"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={circumference - (circumference * value) / 100}
-          />
-        ) : null}
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold tabular-nums">
-        {percentage === null ? "—" : `${Math.round(value)}%`}
-      </span>
-    </div>
-  );
-}
-
-function topicStatus(status: CommunitySubjectExplorerInsight["topics"][number]["status"]) {
-  if (status === "strong") {
-    return { label: "Mastered", className: "bg-success/10 text-success" };
-  }
-  if (status === "developing") {
-    return { label: "In progress", className: "bg-warning/10 text-warning" };
-  }
-  if (status === "weak") {
-    return { label: "Needs work", className: "bg-destructive/10 text-destructive" };
-  }
-  if (status === "unavailable") {
-    return { label: "Unavailable", className: "bg-bg-tertiary text-text-muted" };
-  }
-  return { label: "Not started", className: "bg-bg-tertiary text-text-secondary" };
 }
 
 function SubjectProgressModal({
@@ -250,56 +199,7 @@ function SubjectProgressModal({
             </dl>
 
             <div className="mt-7">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xs font-semibold uppercase tracking-widest text-text-muted">
-                  Topic progress
-                </h3>
-                <span className="text-xs text-text-muted">
-                  {insight?.practicedTopicCount === null ||
-                  insight?.practicedTopicCount === undefined
-                    ? "— practiced"
-                    : `${insight.practicedTopicCount} practiced`}
-                </span>
-              </div>
-
-              {insight?.topics.length ? (
-                <div className="mt-3 divide-y divide-border border-y border-border">
-                  {insight.topics.map((topic, index) => {
-                    const status = topicStatus(topic.status);
-                    return (
-                      <div key={topic.key} className="flex min-h-20 items-center gap-3 py-3">
-                        <TopicProgressRing percentage={topic.percentage} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-text-primary">
-                            {index + 1}. {topic.title}
-                          </p>
-                          <p className="mt-1 text-xs text-text-muted">
-                            {topic.unitNumber ? `Unit ${topic.unitNumber} · ` : ""}
-                            {topic.attempts === null
-                              ? "Attempts unavailable"
-                              : `${topic.attempts} ${topic.attempts === 1 ? "attempt" : "attempts"}`}
-                          </p>
-                        </div>
-                        <span
-                          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${status.className}`}
-                        >
-                          {status.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="mt-3 rounded-xl border border-dashed border-border bg-bg-secondary p-8 text-center">
-                  <Target className="mx-auto size-7 text-text-muted" aria-hidden="true" />
-                  <p className="mt-3 text-sm font-medium text-text-primary">
-                    No extracted topics yet
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-text-muted">
-                    Ask the community creator to refresh this subject&apos;s learning map.
-                  </p>
-                </div>
-              )}
+              <SubjectTopicProgress insight={insight} />
             </div>
           </div>
         </div>

@@ -10,6 +10,7 @@ import { STALE } from "@/lib/query/client";
 import type { StudentDailyDashboard } from "@/lib/data/student-daily-dashboard";
 
 type DashboardPayload = { dashboard: StudentDailyDashboard };
+type CalendarMonthPayload = { activity: StudentDailyDashboard["activity"] };
 
 /**
  * The query definition, shared by the hook and the prefetch.
@@ -19,12 +20,10 @@ type DashboardPayload = { dashboard: StudentDailyDashboard };
  * exactly like the prefetch never happened, and is the classic way to make
  * warming a cache appear useless.
  */
-export function dashboardQuery(community?: string, month?: string) {
+export function dashboardQuery(community?: string) {
   return {
-    queryKey: keys.student.dashboard(community, month),
-    queryFn: queryFetcher<DashboardPayload>(
-      `/api/student/dashboard${queryString({ community, month })}`,
-    ),
+    queryKey: keys.student.dashboard(community),
+    queryFn: queryFetcher<DashboardPayload>(`/api/student/dashboard${queryString({ community })}`),
     /**
      * FETCHED ONCE PER PAGE LOAD, THEN NEVER AGAIN.
      *
@@ -59,13 +58,9 @@ export function dashboardQuery(community?: string, month?: string) {
  * fetched at time zero, so it is instantly stale and refetches on mount,
  * throwing away the very work that was just handed over.
  */
-export function useDashboard(
-  community: string | undefined,
-  initial?: StudentDailyDashboard,
-  month?: string,
-) {
+export function useDashboard(community: string | undefined, initial?: StudentDailyDashboard) {
   return useQuery({
-    ...dashboardQuery(community, month),
+    ...dashboardQuery(community),
     initialData: initial ? { dashboard: initial } : undefined,
     initialDataUpdatedAt: initial ? Date.now() : undefined,
     /**
@@ -78,13 +73,32 @@ export function useDashboard(
   });
 }
 
+export function calendarMonthQuery(community: string | undefined, month: string) {
+  return {
+    queryKey: keys.student.calendarMonth(community, month),
+    queryFn: queryFetcher<CalendarMonthPayload>(
+      `/api/student/calendar${queryString({ community, month })}`,
+    ),
+    staleTime: Infinity,
+    refetchOnReconnect: false,
+  } as const;
+}
+
+/** Fetches only one calendar month, leaving the rest of the dashboard mounted. */
+export function useCalendarMonth(community: string | undefined, month: string, enabled: boolean) {
+  return useQuery({
+    ...calendarMonthQuery(community, month),
+    enabled,
+  });
+}
+
 /**
  * Warm the dashboard before it is asked for — called on hover/focus of the
  * sidebar link. `prefetchQuery` is a no-op when the entry is present and
  * fresh, so firing it on every pointer-enter costs nothing after the first.
  */
-export function prefetchDashboard(client: QueryClient, community?: string, month?: string) {
-  return client.prefetchQuery(dashboardQuery(community, month));
+export function prefetchDashboard(client: QueryClient, community?: string) {
+  return client.prefetchQuery(dashboardQuery(community));
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -129,9 +143,8 @@ export function applyChallengeCompletion(
   client: QueryClient,
   community: string | undefined,
   input: { challengeId?: string } = {},
-  month?: string,
 ) {
-  client.setQueryData<DashboardPayload>(keys.student.dashboard(community, month), (previous) => {
+  client.setQueryData<DashboardPayload>(keys.student.dashboard(community), (previous) => {
     if (!previous) return previous;
     const d = previous.dashboard;
 
@@ -179,12 +192,8 @@ export function applyChallengeCompletion(
  * Same shape as above minus the completion: the calendar records that the day
  * was worked on, the streak does not move, and nothing else changes.
  */
-export function applyPracticeAttempt(
-  client: QueryClient,
-  community: string | undefined,
-  month?: string,
-) {
-  client.setQueryData<DashboardPayload>(keys.student.dashboard(community, month), (previous) => {
+export function applyPracticeAttempt(client: QueryClient, community: string | undefined) {
+  client.setQueryData<DashboardPayload>(keys.student.dashboard(community), (previous) => {
     if (!previous) return previous;
     const d = previous.dashboard;
     const index = todayIndex(d.activity);
@@ -236,16 +245,15 @@ export function useDashboardPatch() {
   const client = useQueryClient();
   const searchParams = useSearchParams();
   const community = searchParams.get("community") || undefined;
-  const month = searchParams.get("month") || undefined;
 
   return useMemo(
     () => ({
       /** A challenge just passed. */
       completed: (input?: { challengeId?: string }) =>
-        applyChallengeCompletion(client, community, input, month),
+        applyChallengeCompletion(client, community, input),
       /** An attempt that did not pass. */
       attempted: () => applyPracticeAttempt(client, community),
     }),
-    [client, community, month],
+    [client, community],
   );
 }

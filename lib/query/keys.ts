@@ -64,11 +64,10 @@ export const keys = {
     material: (documentId: string) => ["student", "material", documentId] as const,
     profileSubjects: () => ["student", "profile", "subjects"] as const,
     activeCommunity: () => ["student", "active-community"] as const,
-    /** The Daily Dashboard, scoped to the selected community and calendar month. */
-    dashboard: (community?: string, month?: string) =>
-      month
-        ? (["student", "dashboard", "v2", community ?? "", month] as const)
-        : (["student", "dashboard", "v2", community ?? ""] as const),
+    /** The Daily Dashboard, scoped only to the selected community. */
+    dashboard: (community?: string) => ["student", "dashboard", "v2", community ?? ""] as const,
+    calendarMonth: (community: string | undefined, month: string) =>
+      ["student", "calendar", community ?? "", month] as const,
     teacherExams: () => ["student", "teacher-exams"] as const,
     practice: {
       all: () => ["student", "practice"] as const,

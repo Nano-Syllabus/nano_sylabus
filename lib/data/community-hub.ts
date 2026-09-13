@@ -739,6 +739,17 @@ export async function setCommunityCurrentTerm(
     if (result.error.code === "42501") throw new CommunityError("Join the community first.", 403);
     throw result.error;
   }
+  const savedMembership = await admin
+    .from("community_memberships")
+    .select("current_term_id")
+    .eq("community_id", community.id)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (savedMembership.error) throw savedMembership.error;
+  if (savedMembership.data?.current_term_id !== termId) {
+    throw new CommunityError("Semester was not saved. Please try again.", 502);
+  }
   return { currentTermId: termId };
 }
 

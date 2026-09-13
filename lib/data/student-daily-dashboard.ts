@@ -6,6 +6,7 @@ import {
   type StudentChallengeDashboard,
 } from "@/lib/data/student-challenge-dashboard";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getStudentCommunityLearningScope } from "@/lib/student-courses";
 
 export type DailyActivityStatus = "completed" | "started" | "idle" | "future";
 
@@ -359,4 +360,47 @@ export async function getStudentDailyDashboard(
         }
       : null,
   };
+}
+
+/**
+ * Fetch only the activity needed to paint one calendar month.
+ *
+ * Month navigation used to call `getStudentDailyDashboard`, rebuilding the
+ * challenge feed, leaderboard and semester insights even though none of them
+ * change when the calendar moves. Keeping this read narrow makes changing a
+ * month a small in-card update instead of a dashboard navigation.
+ */
+export async function getStudentCalendarMonth(
+  userId: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+  preferredCommunitySlug?: string,
+  calendarMonth?: string,
+): Promise<DailyActivityDay[]> {
+  const today = communityDateKey(new Date());
+  const normalizedMonth = normalizeCalendarMonth(calendarMonth, today);
+  const activityStart = monthStartKey(`${normalizedMonth}-01`);
+  const activityEnd = nextMonthStartKey(activityStart);
+  const activityStartTimestamp = new Date(`${activityStart}T00:00:00+05:45`).toISOString();
+  const activityEndTimestamp = new Date(`${activityEnd}T00:00:00+05:45`).toISOString();
+  const scope = await getStudentCommunityLearningScope(userId, admin, {
+    communitySlug: preferredCommunitySlug,
+  });
+
+  if (!scope?.courseId) return buildDailyActivityCalendar([], new Date(), normalizedMonth);
+
+  const result = await admin
+    .from("student_practice_attempts")
+    .select("created_at,total_score,total_marks,passed")
+    .eq("user_id", userId)
+    .eq("course_id", scope.courseId)
+    .gte("created_at", activityStartTimestamp)
+    .lt("created_at", activityEndTimestamp)
+    .order("created_at", { ascending: true });
+  if (result.error) throw result.error;
+
+  return buildDailyActivityCalendar(
+    aggregateScopedPracticeActivity((result.data ?? []) as ScopedPracticeAttemptRow[]),
+    new Date(),
+    normalizedMonth,
+  );
 }

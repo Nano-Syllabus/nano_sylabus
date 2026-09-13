@@ -2,38 +2,32 @@
 import { CommunitySwitcher } from "@/components/community-switcher";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   Check,
-  ChevronLeft,
-  ChevronRight,
   CircleGauge,
   Clock3,
   Flame,
   LibraryBig,
   LoaderCircle,
   LockKeyholeOpen,
-  Pencil,
-  Plus,
-  Trash2,
   Trophy,
   Users,
   X,
   Zap,
 } from "lucide-react";
 import type {
-  DailyActivityDay,
   DailyExamDate,
   DailyLeaderboardMember,
   StudentDailyDashboard,
 } from "@/lib/data/student-daily-dashboard";
 import type { SubscriptionPlan } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ApiError, apiFetch } from "@/lib/query/api";
 import { useDashboard } from "@/lib/query/dashboard";
+import { PracticeCalendar } from "@/components/practice-calendar";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -384,571 +378,6 @@ function MetricCard({
   );
 }
 
-function activityLabel(day: DailyActivityDay) {
-  if (day.status === "future") return `${day.label}: upcoming`;
-  if (day.status === "idle") return `${day.label}: no recorded practice`;
-  const score = day.averageScore === null ? "" : `, ${Math.round(day.averageScore)}% average`;
-  return `${day.label}: ${day.attempts} attempt${day.attempts === 1 ? "" : "s"}, ${day.completions} passed${score}`;
-}
-
-function currentKathmanduDate() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kathmandu",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-  return `${year}-${month}-${day}`;
-}
-
-function ActivityCalendar({
-  days,
-  examDates,
-  userId,
-  calendarMonth,
-  onExamDatesChange,
-}: {
-  days: DailyActivityDay[];
-  examDates: DailyExamDate[];
-  userId: string;
-  calendarMonth?: string;
-  onExamDatesChange: (examDates: DailyExamDate[]) => void;
-}) {
-  const initialSelectedDate =
-    days.find((day) => day.isToday)?.date ??
-    [...days].reverse().find((day) => day.status !== "future")?.date ??
-    days[0]?.date ??
-    "";
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
-  const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
-  const [examFormOpen, setExamFormOpen] = useState(false);
-  const [editingExamId, setEditingExamId] = useState<string | null>(null);
-  const [examDate, setExamDate] = useState("");
-  const [examTitle, setExamTitle] = useState("");
-  const [examSaving, setExamSaving] = useState(false);
-  const [examError, setExamError] = useState("");
-  const [storageNotice, setStorageNotice] = useState("");
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const currentMonth = days[0]?.date.slice(0, 7) ?? calendarMonth ?? "";
-  const fallbackStorageKey = `nano-syllabus:exam-dates-fallback:${userId}`;
-
-  const [fallbackExamDates, setFallbackExamDates] = useState<DailyExamDate[]>([]);
-  useEffect(() => {
-    try {
-      const parsed: unknown = JSON.parse(localStorage.getItem(fallbackStorageKey) ?? "[]");
-      setFallbackExamDates(
-        Array.isArray(parsed)
-          ? parsed.filter(
-              (entry): entry is DailyExamDate =>
-                Boolean(entry) &&
-                typeof entry === "object" &&
-                typeof (entry as DailyExamDate).id === "string" &&
-                typeof (entry as DailyExamDate).date === "string" &&
-                typeof (entry as DailyExamDate).title === "string",
-            )
-          : [],
-      );
-    } catch {
-      setFallbackExamDates([]);
-    }
-  }, [fallbackStorageKey]);
-
-  const selectedDay = days.find((day) => day.date === selectedDate) ?? null;
-  const displayedExamDates = useMemo(() => {
-    const byDate = new Map(fallbackExamDates.map((exam) => [exam.date, exam]));
-    examDates.forEach((exam) => byDate.set(exam.date, exam));
-    return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date));
-  }, [examDates, fallbackExamDates]);
-  const examByDate = useMemo(
-    () => new Map(displayedExamDates.map((exam) => [exam.date, exam])),
-    [displayedExamDates],
-  );
-  const selectedExam = examByDate.get(selectedDate) ?? null;
-  const urlDate = searchParams.get("date");
-  const todayDate = currentKathmanduDate();
-  const todayMonth = todayDate.slice(0, 7);
-  const firstDayOffset = days.length
-    ? (new Date(`${days[0].date}T12:00:00.000Z`).getUTCDay() + 6) % 7
-    : 0;
-
-  useEffect(() => {
-    const nextSelectedDate = days.some((day) => day.date === urlDate)
-      ? urlDate!
-      : initialSelectedDate;
-    setSelectedDate(nextSelectedDate);
-  }, [days, initialSelectedDate, urlDate]);
-
-  function updateCalendarUrl(month: string | undefined, date: string | undefined) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (month && month !== todayMonth) params.set("month", month);
-    else params.delete("month");
-    if (date) params.set("date", date);
-    else params.delete("date");
-    const query = params.toString();
-    router.replace(`${pathname}${query ? `?${query}` : ""}`, { scroll: false });
-  }
-
-  function selectDate(date: string) {
-    setSelectedDate(date);
-    updateCalendarUrl(currentMonth, date);
-  }
-
-  function navigateToMonth(month: string, date = `${month}-01`) {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return;
-    setSelectedDate(date);
-    updateCalendarUrl(month, date);
-  }
-
-  function shiftMonth(offset: number) {
-    if (!currentMonth) return;
-    const date = new Date(`${currentMonth}-01T12:00:00.000Z`);
-    date.setUTCMonth(date.getUTCMonth() + offset);
-    navigateToMonth(date.toISOString().slice(0, 7));
-  }
-
-  function openNewExamForm() {
-    setEditingExamId(null);
-    setExamDate(selectedDate || `${currentMonth}-01`);
-    setExamTitle("");
-    setExamError("");
-    setDeleteConfirmOpen(false);
-    setExamFormOpen(true);
-  }
-
-  function openEditExamForm() {
-    if (!selectedExam) return;
-    setEditingExamId(selectedExam.id);
-    setExamDate(selectedExam.date);
-    setExamTitle(selectedExam.title);
-    setExamError("");
-    setDeleteConfirmOpen(false);
-    setExamFormOpen(true);
-  }
-
-  function patchCachedExamDates(nextExamDates: DailyExamDate[]) {
-    onExamDatesChange(nextExamDates);
-    queryClient.setQueriesData<{ dashboard: StudentDailyDashboard }>(
-      { queryKey: ["student", "dashboard"] },
-      (previous) =>
-        previous ? { dashboard: { ...previous.dashboard, examDates: nextExamDates } } : previous,
-    );
-  }
-
-  function persistFallbackExamDates(nextExamDates: DailyExamDate[]) {
-    setFallbackExamDates(nextExamDates);
-    localStorage.setItem(fallbackStorageKey, JSON.stringify(nextExamDates));
-  }
-
-  function localExamId() {
-    return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  async function submitExamDate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!examDate || examSaving) return;
-    setExamSaving(true);
-    setExamError("");
-    try {
-      const payload = { date: examDate, title: examTitle.trim() || "Exam" };
-      let result: DailyExamDate;
-      if (editingExamId?.startsWith("local-")) {
-        result = { id: editingExamId, ...payload };
-      } else {
-        try {
-          const response = editingExamId
-            ? await apiFetch<{ examDate: DailyExamDate }>(
-                `/api/student/exam-dates/${encodeURIComponent(editingExamId)}`,
-                { method: "PATCH", body: payload },
-              )
-            : await apiFetch<{ examDate: DailyExamDate }>("/api/student/exam-dates", {
-                method: "POST",
-                body: payload,
-              });
-          result = response.examDate;
-          setStorageNotice("");
-          persistFallbackExamDates(
-            fallbackExamDates.filter(
-              (exam) => exam.id !== editingExamId && exam.date !== response.examDate.date,
-            ),
-          );
-        } catch (error) {
-          if (!(error instanceof ApiError) || error.status < 500) throw error;
-          result = { id: editingExamId ?? localExamId(), ...payload };
-          persistFallbackExamDates([
-            ...fallbackExamDates.filter(
-              (exam) => exam.id !== editingExamId && exam.date !== result.date,
-            ),
-            result,
-          ]);
-          setStorageNotice("Saved on this browser while calendar sync is unavailable.");
-        }
-      }
-      const nextExamDates = [
-        ...displayedExamDates.filter((exam) => exam.id !== result.id && exam.date !== result.date),
-        result,
-      ].sort((left, right) => left.date.localeCompare(right.date));
-      patchCachedExamDates(nextExamDates);
-      setExamFormOpen(false);
-      setEditingExamId(null);
-      setExamDate("");
-      setExamTitle("");
-      setDeleteConfirmOpen(false);
-      setSelectedDate(result.date);
-      navigateToMonth(result.date.slice(0, 7), result.date);
-    } catch (error) {
-      setExamError(error instanceof Error ? error.message : "Could not save the exam date.");
-    } finally {
-      setExamSaving(false);
-    }
-  }
-
-  async function deleteSelectedExam() {
-    if (!selectedExam || examSaving) return;
-    setExamSaving(true);
-    setExamError("");
-    try {
-      if (selectedExam.id.startsWith("local-")) {
-        persistFallbackExamDates(fallbackExamDates.filter((exam) => exam.id !== selectedExam.id));
-      } else {
-        await apiFetch<void>(`/api/student/exam-dates/${encodeURIComponent(selectedExam.id)}`, {
-          method: "DELETE",
-        });
-      }
-      patchCachedExamDates(displayedExamDates.filter((exam) => exam.id !== selectedExam.id));
-      setDeleteConfirmOpen(false);
-    } catch (error) {
-      setExamError(error instanceof Error ? error.message : "Could not delete the exam date.");
-    } finally {
-      setExamSaving(false);
-    }
-  }
-
-  return (
-    <section
-      className="rounded-2xl border border-border bg-card p-5 sm:p-6"
-      aria-labelledby="activity-calendar-heading"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => shiftMonth(-1)}
-              aria-label="Previous month"
-              className={cn(
-                "inline-flex size-10 items-center justify-center rounded-full border border-border hover:bg-border",
-                focusRing,
-              )}
-            >
-              <ChevronLeft className="size-4" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => shiftMonth(1)}
-              aria-label="Next month"
-              className={cn(
-                "inline-flex size-10 items-center justify-center rounded-full border border-border hover:bg-border",
-                focusRing,
-              )}
-            >
-              <ChevronRight className="size-4" aria-hidden="true" />
-            </button>
-            <label className="sr-only" htmlFor="calendar-month-picker">
-              Jump to month
-            </label>
-            <input
-              id="calendar-month-picker"
-              type="month"
-              value={currentMonth}
-              onChange={(event) => navigateToMonth(event.target.value)}
-              className={cn(
-                "min-h-10 rounded-lg border border-border bg-card px-3 text-xs font-semibold uppercase tracking-[0.12em] text-text-secondary",
-                focusRing,
-              )}
-            />
-            <button
-              type="button"
-              onClick={() => navigateToMonth(todayMonth, todayDate)}
-              className={cn(
-                "inline-flex min-h-10 items-center rounded-full border border-border px-3 text-xs font-semibold hover:bg-border",
-                focusRing,
-              )}
-            >
-              Today
-            </button>
-          </div>
-          <h2 id="activity-calendar-heading" className="mt-2 font-display text-xl font-semibold">
-            Practice calendar
-          </h2>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <div
-            className="flex flex-wrap items-center gap-3 text-xs text-text-muted"
-            aria-label="Calendar legend"
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-success" /> Passed
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-warning" /> Practised
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-border ring-1 ring-inset ring-border" /> No
-              activity
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => (examFormOpen ? setExamFormOpen(false) : openNewExamForm())}
-            aria-expanded={examFormOpen}
-            className={cn(
-              "inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-3.5 text-xs font-semibold hover:bg-border",
-              focusRing,
-            )}
-          >
-            <Plus className="size-4" aria-hidden="true" />
-            {examFormOpen ? "Close form" : "Add exam date"}
-          </button>
-        </div>
-      </div>
-
-      {examFormOpen ? (
-        <form
-          onSubmit={submitExamDate}
-          className="mt-5 grid gap-4 rounded-xl border border-border bg-border p-4 sm:grid-cols-2"
-          aria-busy={examSaving}
-        >
-          <label
-            htmlFor="exam-date-input"
-            className="grid gap-1.5 text-xs font-semibold text-text-secondary"
-          >
-            Exam date
-            <input
-              id="exam-date-input"
-              type="date"
-              value={examDate}
-              onChange={(event) => setExamDate(event.target.value)}
-              autoComplete="off"
-              required
-              className={cn(
-                "min-h-10 rounded-lg border border-border bg-card px-3 text-sm font-normal text-text-primary",
-                focusRing,
-              )}
-            />
-          </label>
-          <label
-            htmlFor="exam-title-input"
-            className="grid gap-1.5 text-xs font-semibold text-text-secondary"
-          >
-            Exam name <span className="font-normal text-text-muted">(optional)</span>
-            <input
-              id="exam-title-input"
-              type="text"
-              value={examTitle}
-              onChange={(event) => setExamTitle(event.target.value)}
-              placeholder="e.g. Mathematics final"
-              autoComplete="off"
-              className={cn(
-                "min-h-10 rounded-lg border border-border bg-card px-3 text-sm font-normal text-text-primary placeholder:text-text-muted",
-                focusRing,
-              )}
-            />
-          </label>
-          <div className="flex flex-wrap gap-2 sm:col-span-2 sm:justify-end">
-            <button
-              type="submit"
-              className={cn(
-                "inline-flex min-h-10 items-center justify-center rounded-full bg-text-primary px-4 text-xs font-semibold text-text-inverse hover:opacity-90",
-                focusRing,
-              )}
-              disabled={examSaving || !examDate}
-              aria-busy={examSaving}
-            >
-              {examSaving ? "Saving…" : editingExamId ? "Update date" : "Save date"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setExamFormOpen(false)}
-              className={cn(
-                "inline-flex min-h-10 items-center justify-center rounded-full border border-border px-4 text-xs font-semibold hover:bg-card",
-                focusRing,
-              )}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : null}
-
-      {examError ? (
-        <p className="mt-3 text-sm text-destructive" role="alert">
-          {examError}
-        </p>
-      ) : null}
-      {storageNotice ? (
-        <p className="mt-3 text-sm text-text-secondary" role="status">
-          {storageNotice}
-        </p>
-      ) : null}
-
-      <div className="mt-7">
-        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-text-muted sm:gap-2 sm:text-[11px]">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
-            <span key={day}>{day}</span>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1 sm:gap-2">
-          {Array.from({ length: firstDayOffset }, (_, index) => (
-            <span key={`blank-${index}`} aria-hidden="true" />
-          ))}
-          {days.map((day) => {
-            const exam = examByDate.get(day.date);
-            const label = exam
-              ? `${activityLabel(day)} Exam date: ${exam.title}`
-              : activityLabel(day);
-            return (
-              <button
-                type="button"
-                key={day.date}
-                onClick={() => selectDate(day.date)}
-                disabled={day.status === "future" && !exam}
-                title={label}
-                aria-label={label}
-                aria-pressed={day.date === selectedDate}
-                className={cn(
-                  "flex min-h-10 min-w-0 flex-col items-center justify-center rounded-lg border text-xs font-medium tabular-nums disabled:cursor-default sm:aspect-[1.3] sm:min-h-12",
-                  focusRing,
-                  day.status === "completed" && "border-success/20 bg-success text-white",
-                  day.status === "started" && "border-warning/25 bg-warning text-white",
-                  day.status === "idle" && "border-border bg-border text-text-muted",
-                  day.status === "future" && "border-transparent bg-transparent text-text-muted/40",
-                  exam &&
-                    "border-[var(--community-accent)]/60 bg-[var(--community-accent)]/10 text-text-primary",
-                  day.isToday &&
-                    "ring-2 ring-[var(--community-accent)] ring-offset-2 ring-offset-bg-primary",
-                  day.date === selectedDate &&
-                    !day.isToday &&
-                    "ring-2 ring-border-strong ring-offset-2 ring-offset-bg-primary",
-                )}
-              >
-                {day.dayOfMonth}
-                {exam ? (
-                  <span
-                    className="mt-1 size-1.5 rounded-full bg-[var(--community-accent)]"
-                    aria-hidden="true"
-                  />
-                ) : day.attempts > 0 ? (
-                  <span className="mt-0.5 text-[9px] leading-none opacity-80">
-                    {day.attempts} attempt{day.attempts === 1 ? "" : "s"}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {selectedDay ? (
-        <div
-          className="mt-5 grid gap-4 rounded-xl border border-border bg-border p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-          aria-live="polite"
-        >
-          <div>
-            <p className="text-sm font-semibold">
-              {selectedDay.label}
-              {selectedDay.isToday ? " · Today" : ""}
-            </p>
-            <p className="mt-1 text-xs leading-5 text-text-secondary">
-              {selectedDay.attempts
-                ? `${selectedDay.attempts} graded practice attempt${selectedDay.attempts === 1 ? "" : "s"} recorded from your account.`
-                : "No graded practice was recorded for this date."}
-            </p>
-            {selectedExam ? (
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <p className="text-xs font-semibold text-[var(--community-accent)]">
-                  Exam: {selectedExam.title}
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={openEditExamForm}
-                    className={cn(
-                      "inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-semibold hover:bg-card",
-                      focusRing,
-                    )}
-                  >
-                    <Pencil className="size-3.5" aria-hidden="true" /> Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteConfirmOpen(true)}
-                    className={cn(
-                      "inline-flex min-h-10 items-center gap-1.5 rounded-full border border-destructive/30 px-3 text-xs font-semibold text-destructive hover:bg-destructive/10",
-                      focusRing,
-                    )}
-                  >
-                    <Trash2 className="size-3.5" aria-hidden="true" /> Delete
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            {selectedExam && deleteConfirmOpen ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-text-secondary">Delete this exam date?</span>
-                <button
-                  type="button"
-                  onClick={deleteSelectedExam}
-                  disabled={examSaving}
-                  className={cn(
-                    "inline-flex min-h-10 items-center rounded-full bg-destructive px-3 font-semibold text-white hover:opacity-90 disabled:opacity-60",
-                    focusRing,
-                  )}
-                >
-                  {examSaving ? "Deleting…" : "Yes, delete"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirmOpen(false)}
-                  className={cn(
-                    "inline-flex min-h-10 items-center rounded-full border border-border px-3 font-semibold hover:bg-card",
-                    focusRing,
-                  )}
-                >
-                  Keep it
-                </button>
-              </div>
-            ) : null}
-          </div>
-          {selectedDay.attempts ? (
-            <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm sm:justify-end">
-              <div>
-                <dt className="text-xs text-text-muted">Passed</dt>
-                <dd className="mt-0.5 font-semibold tabular-nums">
-                  {selectedDay.completions}/{selectedDay.attempts}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-text-muted">Average</dt>
-                <dd className="mt-0.5 font-semibold tabular-nums">
-                  {selectedDay.averageScore === null
-                    ? "—"
-                    : `${Math.round(selectedDay.averageScore)}%`}
-                </dd>
-              </div>
-            </dl>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
 function LeaderboardRow({ member }: { member: DailyLeaderboardMember }) {
   return (
     <li
@@ -1022,7 +451,6 @@ function DailyLeaderboard({ dashboard }: { dashboard: StudentDailyDashboard }) {
   const visible = community.leaderboard.slice(0, 5);
   const viewer = community.leaderboard.find((member) => member.isViewer);
   if (viewer && !visible.some((member) => member.id === viewer.id)) visible.push(viewer);
-  const hasTodayActivity = community.leaderboard.some((member) => member.todayAttempts > 0);
 
   return (
     <section
@@ -1055,12 +483,6 @@ function DailyLeaderboard({ dashboard }: { dashboard: StudentDailyDashboard }) {
           <LeaderboardRow key={member.id} member={member} />
         ))}
       </ol>
-      {!hasTodayActivity ? (
-        <p className="mt-3 rounded-xl bg-border px-3 py-2 text-xs leading-5 text-text-secondary">
-          No community member has recorded practice today. Ordering uses today&apos;s practice and
-          streak.
-        </p>
-      ) : null}
       <div className="mt-3 border-t border-border pt-3 text-center">
         <Link
           href={`/app/community?community=${encodeURIComponent(community.slug)}&tab=members&sort=today`}
@@ -1256,7 +678,6 @@ export function StudentDailyDashboardView({
   communitySlug,
   selectedCommunitySlug,
   initialDashboard,
-  calendarMonth,
 }: {
   userId: string;
   communityOptions?: import("@/lib/community-switch").CommunitySwitchOption[];
@@ -1269,9 +690,8 @@ export function StudentDailyDashboardView({
   /** What that resolved to — for the switcher's selected value only. */
   selectedCommunitySlug?: string;
   initialDashboard?: StudentDailyDashboard;
-  calendarMonth?: string;
 }) {
-  const { data } = useDashboard(communitySlug, initialDashboard, calendarMonth);
+  const { data } = useDashboard(communitySlug, initialDashboard);
   const dashboard = data?.dashboard;
 
   if (!dashboard)
@@ -1294,7 +714,6 @@ export function StudentDailyDashboardView({
       hasUnlimitedAccess={hasUnlimitedAccess}
       unlimitedPlan={unlimitedPlan}
       dashboard={dashboard}
-      calendarMonth={calendarMonth}
     />
   );
 }
@@ -1380,7 +799,7 @@ function DashboardDataSkeleton({
         <MetricCard pending icon={<Clock3 className="size-4" />} label="Today" value="" />
       </section>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section className="rounded-2xl border border-border bg-card p-5">
           <h2 className="font-display text-lg font-semibold tracking-tight">Practice calendar</h2>
           <div className={`mt-2 h-3 w-52 ${line}`} aria-hidden="true" />
@@ -1426,7 +845,6 @@ function DashboardContent({
   hasUnlimitedAccess,
   unlimitedPlan,
   dashboard,
-  calendarMonth,
 }: {
   userId: string;
   communityOptions?: import("@/lib/community-switch").CommunitySwitchOption[];
@@ -1435,7 +853,6 @@ function DashboardContent({
   hasUnlimitedAccess: boolean;
   unlimitedPlan: SubscriptionPlan | null;
   dashboard: StudentDailyDashboard;
-  calendarMonth?: string;
 }) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -1514,12 +931,14 @@ function DashboardContent({
         />
       </section>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <ActivityCalendar
-          days={dashboard.activity}
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <PracticeCalendar
+          initialDays={dashboard.activity}
           examDates={dashboard.examDates ?? []}
           userId={userId}
-          calendarMonth={calendarMonth}
+          communitySlug={challenge.community?.slug}
+          semesters={community?.semesters ?? []}
+          currentSemesterId={community?.currentSemesterId}
           onExamDatesChange={handleExamDatesChange}
         />
         <DailyLeaderboard dashboard={dashboard} />
