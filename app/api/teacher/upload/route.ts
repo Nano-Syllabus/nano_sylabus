@@ -10,11 +10,22 @@ import {
   type ApiRecord as TeacherApiRecord,
 } from "@/lib/teacher-app/client";
 import {
+  isTeacherUploadFileSupported,
   TEACHER_UPLOAD_MAX_BYTES,
   TEACHER_UPLOAD_MAX_LABEL,
+  teacherUploadShelf,
   teacherUploadSizeError,
   teacherUploadStorageFileName,
 } from "@/lib/teacher-upload";
+import {
+  downloadDriveFile,
+  driveContentType,
+  driveFileName,
+  driveFolderSupportEnabled,
+  DriveLinkError,
+  resolveDriveLink,
+  type DriveEntry,
+} from "@/lib/google-drive";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type ApiRecord = Record<string, unknown>;
@@ -269,7 +280,64 @@ async function savePreview(input: {
   }
 }
 
+/**
+ * Store the bytes for the private preview and record the document row.
+ *
+ * Split out of the small-file path because a Drive import has the bytes in
+ * memory too, and the two must not drift: a preview saved one way and not the
+ * other means the creator can open one document in the portal and not another,
+ * with nothing on screen explaining why.
+ */
+async function savePreviewFromBuffer(input: {
+  teacherId: string;
+  fileBuffer: Buffer;
+  fileName: string;
+  mimeType: string;
+  collectionPath: string;
+  documentId: string;
+}) {
+  const storagePath = `${input.teacherId}/${randomUUID()}-${teacherUploadStorageFileName(input.fileName)}`;
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.storage
+    .from("teacher-documents")
+    .upload(storagePath, input.fileBuffer, { contentType: input.mimeType, upsert: false });
+  if (error) throw error;
+  await savePreview({
+    teacherId: input.teacherId,
+    storagePath,
+    collectionPath: input.collectionPath,
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    sizeBytes: input.fileBuffer.length,
+    documentId: input.documentId,
+  });
+}
+
+function driveErrorStatus(error: DriveLinkError) {
+  switch (error.kind) {
+    case "invalid":
+    case "unsupported":
+      return 400;
+    // Not 403: nothing about THIS app refused the request. The file is private,
+    // which is the creator's own setting and the message says how to change it.
+    case "sharing":
+      return 409;
+    case "not-found":
+      return 404;
+    case "too-large":
+      return 413;
+    default:
+      return 502;
+  }
+}
+
 function errorResponse(error: unknown) {
+  if (error instanceof DriveLinkError) {
+    return NextResponse.json({ error: error.message, code: error.kind }, {
+      status: driveErrorStatus(error),
+    });
+  }
+
   console.error("Upload route error:", error);
   const status =
     error instanceof UpstreamUploadError
@@ -378,6 +446,108 @@ export async function POST(request: Request) {
         }
       }
 
+      /**
+       * Step one of a link import: what does this link actually point at?
+       *
+       * Kept apart from the import itself so the creator SEES the file list
+       * before anything is fetched — a folder link can name twenty documents,
+       * and importing them on a paste, with no confirmation, is not the same
+       * gesture as choosing files from a picker. It also means the sharing
+       * error arrives immediately rather than after a partial import.
+       */
+      if (action === "drive-resolve") {
+        const shelf = teacherUploadShelf(path);
+        const entries = await resolveDriveLink(text(input?.link));
+        const files = entries.map((entry) => {
+          const name = driveFileName(entry);
+          return {
+            id: entry.id,
+            name,
+            mimeType: entry.mimeType,
+            contentType: driveContentType(entry),
+            sizeBytes: entry.sizeBytes,
+            // A name is only absent on the keyless path, where nothing is known
+            // until the bytes arrive — so it cannot be pre-judged unsupported.
+            supported: !name || isTeacherUploadFileSupported(name, shelf),
+            tooLarge: Boolean(entry.sizeBytes) && entry.sizeBytes > TEACHER_UPLOAD_MAX_BYTES,
+          };
+        });
+        return NextResponse.json({
+          files,
+          shelf,
+          folderSupport: driveFolderSupportEnabled(),
+          maxBytes: TEACHER_UPLOAD_MAX_BYTES,
+          maxLabel: TEACHER_UPLOAD_MAX_LABEL,
+        });
+      }
+
+      /**
+       * Step two: one file, fetched and then walked down exactly the path a
+       * local upload takes — `uploadAndIndex`, then the private preview copy.
+       *
+       * One file per request rather than the whole folder in one, so the dialog
+       * can report progress and a single unreadable document does not cost the
+       * creator the nineteen that would have imported. The id comes back from
+       * `drive-resolve`; it is not trusted for anything beyond naming a public
+       * Drive file, which is a thing anyone could fetch anyway. What IS checked
+       * is the destination, on the same `validateDestination` every other
+       * branch here uses.
+       */
+      if (action === "drive-import") {
+        const fileId = text(input?.fileId);
+        if (!/^[A-Za-z0-9_-]{10,}$/.test(fileId)) {
+          return NextResponse.json({ error: "Invalid Drive file." }, { status: 400 });
+        }
+        const entry: DriveEntry = {
+          id: fileId,
+          name: safeFilename(text(input?.fileName)),
+          mimeType: text(input?.mimeType),
+          sizeBytes: numberValue(input?.sizeBytes),
+          isFolder: false,
+        };
+        const download = await downloadDriveFile(entry);
+        const fileName = safeFilename(download.fileName || entry.name);
+        const shelf = teacherUploadShelf(path);
+        if (!isTeacherUploadFileSupported(fileName, shelf)) {
+          return NextResponse.json(
+            { error: `${shelf} cannot read "${fileName}". Convert it to PDF first.` },
+            { status: 400 },
+          );
+        }
+        const sizeError = teacherUploadSizeError(download.buffer.length);
+        if (sizeError) return NextResponse.json({ error: sizeError }, { status: 413 });
+
+        const result = await uploadAndIndex({
+          collectionKey: teacher.collection_sk,
+          fileBuffer: download.buffer,
+          fileName,
+          mimeType: download.mimeType,
+          path,
+          metadata: text(input?.metadata),
+        });
+        let previewWarning = "";
+        try {
+          await savePreviewFromBuffer({
+            teacherId: teacher.id,
+            fileBuffer: download.buffer,
+            fileName,
+            mimeType: download.mimeType,
+            collectionPath: result.collectionPath,
+            documentId: indexedDocumentId(result.index),
+          });
+        } catch {
+          previewWarning =
+            "The document was indexed, but its private preview could not be saved. Check the latest database migration.";
+        }
+        return NextResponse.json({
+          upload: result.upload,
+          index: result.index,
+          jobId: jobId(result.index),
+          fileName,
+          previewWarning,
+        });
+      }
+
       return NextResponse.json({ error: "Unknown upload action." }, { status: 400 });
     }
 
@@ -406,22 +576,12 @@ export async function POST(request: Request) {
     });
     let previewWarning = "";
     try {
-      const storagePath = `${teacher.id}/${randomUUID()}-${teacherUploadStorageFileName(file.name)}`;
-      const admin = createSupabaseAdminClient();
-      const { error } = await admin.storage
-        .from("teacher-documents")
-        .upload(storagePath, fileBuffer, {
-          contentType: file.type || "application/octet-stream",
-          upsert: false,
-        });
-      if (error) throw error;
-      await savePreview({
+      await savePreviewFromBuffer({
         teacherId: teacher.id,
-        storagePath,
-        collectionPath: result.collectionPath,
+        fileBuffer,
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",
-        sizeBytes: file.size,
+        collectionPath: result.collectionPath,
         documentId: indexedDocumentId(result.index),
       });
     } catch {

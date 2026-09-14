@@ -31,6 +31,7 @@ import {
 } from "@/lib/teacher-score-insights";
 import {
   isTeacherSyllabusFileSupported,
+  TEACHER_MATERIAL_FILE_ACCEPT,
   TEACHER_SYLLABUS_FILE_ACCEPT,
   TEACHER_UPLOAD_MAX_LABEL,
   teacherUploadSizeError,
@@ -390,9 +391,14 @@ function safeCommunityReturnTo(value: string | null) {
   }
 }
 
+function byteSizeLabel(bytes: number) {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function fileSizeLabel(file: File) {
-  if (file.size < 1024 * 1024) return `${Math.max(1, Math.round(file.size / 1024))} KB`;
-  return `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+  return byteSizeLabel(file.size);
 }
 
 function selectedFilesTitle(files: File[], singular: string, plural: string) {
@@ -1085,6 +1091,64 @@ async function uploadTeacherDocument(file: File, path: string) {
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",
         sizeBytes: file.size,
+      }),
+    }),
+  );
+}
+
+type DriveCandidate = {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  supported: boolean;
+  tooLarge: boolean;
+};
+
+/** Ask the server what a pasted Drive link points at, without importing it yet. */
+async function resolveDriveLink(link: string, path: string) {
+  const payload = await responsePayload(
+    await fetch("/api/teacher/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ action: "drive-resolve", path, link }),
+    }),
+  );
+  const files = Array.isArray(payload.files) ? payload.files : [];
+  return files.map((item) => {
+    const record = asRecord(item);
+    return {
+      id: text(record.id),
+      name: text(record.name),
+      mimeType: text(record.mimeType),
+      sizeBytes: Number(record.sizeBytes) || 0,
+      supported: record.supported !== false,
+      tooLarge: record.tooLarge === true,
+    } satisfies DriveCandidate;
+  });
+}
+
+/**
+ * Import one Drive file.
+ *
+ * Deliberately NOT the two-step staged flow `uploadTeacherDocument` uses. That
+ * one exists because the bytes start in the creator's browser and must not pass
+ * through the deployment's request-body limit; these bytes never touch the
+ * browser at all — the server fetches them from Drive directly — so staging
+ * them into storage first would be a round trip in the wrong direction.
+ */
+async function importDriveFile(file: DriveCandidate, path: string) {
+  return responsePayload(
+    await fetch("/api/teacher/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        action: "drive-import",
+        path,
+        fileId: file.id,
+        fileName: file.name,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
       }),
     }),
   );
@@ -10439,65 +10503,150 @@ function UploadDialog({
     jobs: Array<{ jobId: string; fileName: string }>;
   }) => void;
 }) {
+  const [source, setSource] = useState<"files" | "drive">("files");
   const [files, setFiles] = useState<File[]>([]);
+  const [link, setLink] = useState("");
+  const [driveFiles, setDriveFiles] = useState<DriveCandidate[]>([]);
+  const [resolving, setResolving] = useState(false);
   const shelfRoot = `${subject.folderPath}/${shelf}`;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [uploadStatus, setUploadStatus] = useState({ current: 0, total: 0 });
   const completedJobs = useRef<Array<{ jobId: string; fileName: string }>>([]);
-  const accept =
-    shelf === "Syllabus"
-      ? TEACHER_SYLLABUS_FILE_ACCEPT
-      : ".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp";
+  const accept = shelf === "Syllabus" ? TEACHER_SYLLABUS_FILE_ACCEPT : TEACHER_MATERIAL_FILE_ACCEPT;
+  // A file that cannot be read by this shelf, or is over the ceiling, is shown
+  // in the list and skipped — telling the creator WHICH of twenty files was left
+  // out is the whole point of resolving before importing.
+  const importable = driveFiles.filter((file) => file.supported && !file.tooLarge);
+  const pending = source === "files" ? files.length : importable.length;
+
+  /** One item's worth of work, whichever source it came from. */
+  type Job = { name: string; run: () => Promise<ApiRecord> };
+
+  async function runJobs(jobs: Job[], verb: string) {
+    setBusy(true);
+    setError("");
+    setUploadStatus({ current: 0, total: jobs.length });
+    const failed: Array<{ name: string; error: string }> = [];
+    const warnings: string[] = [];
+
+    for (const [index, job] of jobs.entries()) {
+      setUploadStatus({ current: index + 1, total: jobs.length });
+      try {
+        const payload = await job.run();
+        completedJobs.current.push({ jobId: text(payload.jobId), fileName: job.name });
+        const warning = text(payload.previewWarning);
+        if (warning) warnings.push(`${job.name}: ${warning}`);
+      } catch (caught) {
+        failed.push({
+          name: job.name,
+          error: caught instanceof Error ? caught.message : `Could not ${verb} this file.`,
+        });
+      }
+    }
+    return { failed, warnings };
+  }
+
+  function reportFailures(
+    failed: Array<{ name: string; error: string }>,
+    keep: () => void,
+    verb: string,
+  ) {
+    keep();
+    setError(
+      `${failed.length} file${failed.length === 1 ? "" : "s"} could not be ${verb}:\n${failed
+        .map((item) => `${item.name}: ${item.error}`)
+        .join(
+          "\n",
+        )}\n\nSuccessful files are already indexing. Retry to ${verb === "uploaded" ? "upload" : "import"} only the files listed here.`,
+    );
+    setBusy(false);
+    setUploadStatus({ current: 0, total: 0 });
+  }
+
+  function finish(warnings: string[], verb: string) {
+    const count = completedJobs.current.length;
+    onUploaded({
+      message: warnings.length
+        ? warnings.join("\n")
+        : `${count} file${count === 1 ? "" : "s"} ${verb} and indexing started`,
+      jobs: completedJobs.current,
+    });
+  }
+
+  async function checkLink() {
+    const pasted = link.trim();
+    if (!pasted) {
+      setError("Paste a Google Drive link first.");
+      return;
+    }
+    setResolving(true);
+    setError("");
+    setDriveFiles([]);
+    try {
+      const resolved = await resolveDriveLink(pasted, shelfRoot);
+      setDriveFiles(resolved);
+      const skipped = resolved.filter((file) => !file.supported || file.tooLarge);
+      if (skipped.length) {
+        setError(
+          `${skipped.length} file${skipped.length === 1 ? "" : "s"} will be skipped:\n${skipped
+            .map(
+              (file) =>
+                `${file.name}: ${file.tooLarge ? `larger than ${TEACHER_UPLOAD_MAX_LABEL}` : `${shelf} cannot read this type`}`,
+            )
+            .join("\n")}`,
+        );
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That link could not be read.");
+    } finally {
+      setResolving(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (source === "drive") {
+      // A link the creator typed but never checked should import, not scold.
+      if (!driveFiles.length) {
+        await checkLink();
+        return;
+      }
+      if (!importable.length) {
+        setError("None of the files at that link can be added to this shelf.");
+        return;
+      }
+      const { failed, warnings } = await runJobs(
+        importable.map((file) => ({
+          name: file.name || "Drive file",
+          run: () => importDriveFile(file, shelfRoot),
+        })),
+        "import",
+      );
+      if (failed.length) {
+        const names = new Set(failed.map((item) => item.name));
+        reportFailures(failed, () => setDriveFiles(driveFiles.filter((f) => names.has(f.name))), "imported");
+        return;
+      }
+      finish(warnings, "imported from Drive");
+      return;
+    }
+
     if (!files.length) {
       setError("Choose one or more files first.");
       return;
     }
-    setBusy(true);
-    setError("");
-    setUploadStatus({ current: 0, total: files.length });
-    const failed: Array<{ file: File; error: string }> = [];
-    const warnings: string[] = [];
-
-    for (const [index, file] of files.entries()) {
-      setUploadStatus({ current: index + 1, total: files.length });
-      try {
-        const payload = await uploadTeacherDocument(file, shelfRoot);
-        completedJobs.current.push({ jobId: text(payload.jobId), fileName: file.name });
-        const warning = text(payload.previewWarning);
-        if (warning) warnings.push(`${file.name}: ${warning}`);
-      } catch (caught) {
-        failed.push({
-          file,
-          error: caught instanceof Error ? caught.message : "Could not upload this file.",
-        });
-      }
-    }
-
+    const { failed, warnings } = await runJobs(
+      files.map((file) => ({ name: file.name, run: () => uploadTeacherDocument(file, shelfRoot) })),
+      "upload",
+    );
     if (failed.length) {
-      setFiles(failed.map((item) => item.file));
-      setError(
-        `${failed.length} file${failed.length === 1 ? "" : "s"} could not be uploaded:\n${failed
-          .map((item) => `${item.file.name}: ${item.error}`)
-          .join(
-            "\n",
-          )}\n\nSuccessful files are already indexing. Retry to upload only the files listed here.`,
-      );
-      setBusy(false);
-      setUploadStatus({ current: 0, total: 0 });
+      const names = new Set(failed.map((item) => item.name));
+      reportFailures(failed, () => setFiles(files.filter((file) => names.has(file.name))), "uploaded");
       return;
     }
-
-    const uploadedCount = completedJobs.current.length;
-    onUploaded({
-      message: warnings.length
-        ? warnings.join("\n")
-        : `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} uploaded and indexing started`,
-      jobs: completedJobs.current,
-    });
+    finish(warnings, "uploaded");
   }
 
   return (
@@ -10508,7 +10657,107 @@ function UploadDialog({
           {subject.folderPath}/{shelf}
         </p>
       </div>
+      <div className="mt-5 flex gap-1 rounded-lg border border-border bg-bg-secondary p-1" role="tablist">
+        {(
+          [
+            ["files", "Choose files"],
+            ["drive", "Google Drive link"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={source === value}
+            disabled={busy}
+            onClick={() => {
+              setSource(value);
+              setError("");
+            }}
+            className={cn(
+              "min-h-10 flex-1 rounded-md px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              source === value
+                ? "bg-bg-primary text-text-primary shadow-sm"
+                : "text-text-muted hover:text-text-primary",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <form className="mt-5" onSubmit={submit}>
+        <div className={source === "drive" ? undefined : "hidden"}>
+          <label htmlFor="teacher-upload-link" className="block text-sm font-medium">
+            Paste a Drive link
+          </label>
+          <div className="mt-2 flex gap-2">
+            <input
+              id="teacher-upload-link"
+              type="url"
+              inputMode="url"
+              placeholder="https://drive.google.com/file/d/…"
+              value={link}
+              disabled={busy}
+              className={cn(inputClass, "min-w-0 flex-1")}
+              onChange={(event) => {
+                setLink(event.target.value);
+                setDriveFiles([]);
+                setError("");
+              }}
+              aria-describedby="teacher-upload-link-hint"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void checkLink()}
+              disabled={busy || resolving || !link.trim()}
+              aria-busy={resolving}
+            >
+              {resolving ? "Checking…" : "Check link"}
+            </Button>
+          </div>
+          <p id="teacher-upload-link-hint" className="mt-2 text-xs text-text-muted">
+            The file or folder must be shared as{" "}
+            <strong className="font-medium text-text-secondary">Anyone with the link</strong> —
+            open it in Drive, press Share, and set General access. A folder link adds every
+            document inside it. Google Docs and Slides are converted to PDF, Sheets to CSV.
+          </p>
+          {driveFiles.length ? (
+            <div className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border bg-bg-secondary/70">
+              {driveFiles.map((file) => {
+                const skipped = !file.supported || file.tooLarge;
+                return (
+                  <div
+                    key={file.id}
+                    className="flex min-h-12 items-center gap-3 bg-bg-primary px-3 py-2"
+                  >
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs",
+                        skipped
+                          ? "bg-warning/20 text-warning-foreground"
+                          : "bg-success/15 text-success",
+                      )}
+                      aria-hidden="true"
+                    >
+                      {skipped ? "!" : "✓"}
+                    </span>
+                    <span className="rounded-full border border-border px-2.5 py-1 text-xs">
+                      {shelf}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {file.name || "Drive file"}
+                    </span>
+                    <span className="text-xs text-text-muted">
+                      {skipped ? "Skipped" : byteSizeLabel(file.sizeBytes)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+        <div className={source === "files" ? undefined : "hidden"}>
         <label htmlFor="teacher-upload-file" className="block text-sm font-medium">
           Choose files
         </label>
@@ -10553,10 +10802,13 @@ function UploadDialog({
             setError("");
           }}
         />
+        </div>
         {busy && uploadStatus.total ? (
           <div className="mt-4 rounded-lg border border-border bg-bg-secondary p-4" role="status">
             <div className="flex items-center justify-between gap-4 text-sm">
-              <span className="font-medium">Uploading and indexing</span>
+              <span className="font-medium">
+                {source === "drive" ? "Importing from Drive and indexing" : "Uploading and indexing"}
+              </span>
               <span className="text-text-muted">
                 {uploadStatus.current} of {uploadStatus.total}
               </span>
@@ -10584,12 +10836,20 @@ function UploadDialog({
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" disabled={busy || !files.length} aria-busy={busy}>
+          <Button
+            type="submit"
+            disabled={busy || resolving || (source === "files" ? !files.length : !link.trim())}
+            aria-busy={busy}
+          >
             {busy
-              ? `Uploading ${uploadStatus.current} of ${uploadStatus.total}…`
-              : files.length
-                ? `Upload ${files.length} file${files.length === 1 ? "" : "s"} and index`
-                : "Upload files and index"}
+              ? `${source === "drive" ? "Importing" : "Uploading"} ${uploadStatus.current} of ${uploadStatus.total}…`
+              : source === "drive"
+                ? pending
+                  ? `Import ${pending} file${pending === 1 ? "" : "s"} and index`
+                  : "Check link"
+                : pending
+                  ? `Upload ${pending} file${pending === 1 ? "" : "s"} and index`
+                  : "Upload files and index"}
           </Button>
         </div>
       </form>
