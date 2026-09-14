@@ -118,24 +118,6 @@ export type TeacherChallengeGradeResponse = {
   verdict?: string;
 };
 
-export type TeacherPracticePaper = {
-  id: string;
-  title: string;
-  subject: string;
-  chapters: string[];
-  questions: Array<{
-    id: string;
-    chapter: string;
-    band_label: string;
-    question_type: string;
-    marks: number;
-    text: string;
-  }>;
-  total_marks: number;
-  pass_marks: number;
-  warning?: string | null;
-};
-
 export type TeacherPracticePaperGradeResponse = {
   submission_id: string;
   set_id: string;
@@ -147,6 +129,21 @@ export type TeacherPracticePaperGradeResponse = {
     question: string;
     marks: number;
     student_answer?: string;
+    score: number;
+    feedback: string;
+  }>;
+  total_score: number;
+  total_marks: number;
+  graded: boolean;
+  evaluation: import("@/lib/tenant/client").PracticeEvaluation;
+};
+
+export type TeacherStandaloneGradeResponse = {
+  results: Array<{
+    question_id: string;
+    chapter?: string;
+    question: string;
+    marks: number;
     score: number;
     feedback: string;
   }>;
@@ -911,6 +908,13 @@ export const createTeacherChallengeExam = (
     questions?: number;
     duration_minutes?: number;
     pass_percent?: number;
+    /**
+     * Question TEXTS this student has already been shown — the worked examples
+     * from /solved-questions. Nothing about a student is remembered upstream
+     * between calls, so passing these is the difference between being examined
+     * and being re-shown a solution.
+     */
+    exclude_questions?: string[];
   },
 ) =>
   teacherRequest<TeacherChallengeExam>("/v1/collection/challenge/exam", key, {
@@ -1028,23 +1032,6 @@ export type TeacherPracticeBand = {
   marks_each: number;
 };
 
-export const generateTeacherPracticePaper = (
-  key: string,
-  input: {
-    subject: string;
-    chapters?: string[];
-    bands: TeacherPracticeBand[];
-    title?: string;
-    instruction?: string;
-    pass_marks?: number;
-  },
-) =>
-  teacherRequest<TeacherPracticePaper>("/api/v1/practice/generate", key, {
-    method: "POST",
-    body: input,
-    timeoutMs: 120_000,
-  });
-
 export const gradeTeacherPracticePaper = (
   key: string,
   paperId: string,
@@ -1058,6 +1045,42 @@ export const gradeTeacherPracticePaper = (
     method: "POST",
     body: input,
     timeoutMs: 120_000,
+  });
+
+/**
+ * Grade answers with no stored paper behind them — the caller resends every
+ * question, its marks, and (when it has one) its reference answer.
+ *
+ * This is the SAFETY NET under the pooled challenge exam. That exam's attempt
+ * lives in the course API's memory (`_ATTEMPTS`, capped at 500, dropped on
+ * restart), so a student who is mid-sitting when the API restarts would
+ * otherwise have nothing to hand in to. The questions themselves are durable —
+ * this app persists them on the challenge row — so the sitting can still be
+ * marked here, question by question.
+ *
+ * `reference_answer` is optional upstream and this path has none to send: the
+ * exam response deliberately withholds them so the paper cannot be read out of
+ * itself. Marking is therefore a shade less exact than `/exam/{id}/submit`,
+ * which is the correct trade against losing a student's twenty minutes.
+ */
+export const gradeTeacherAnswers = (
+  key: string,
+  input: {
+    instruction?: string;
+    items: Array<{
+      question_id: string;
+      question: string;
+      marks: number;
+      chapter?: string;
+      reference_answer?: string;
+      student_answer: string;
+    }>;
+  },
+) =>
+  teacherRequest<TeacherStandaloneGradeResponse>("/api/v1/practice/grade", key, {
+    method: "POST",
+    body: input,
+    timeoutMs: 180_000,
   });
 
 export async function gradeTeacherPracticePaperFile(

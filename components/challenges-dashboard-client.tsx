@@ -140,6 +140,66 @@ async function apiJson<T>(response: Response): Promise<T> {
   return payload;
 }
 
+/**
+ * The placeholder for a step whose content is genuinely still being built.
+ *
+ * Only the unknown part is a skeleton — the heading, the instruction line and
+ * the step rail above it are all real and stay put. The bars are `bg-border`
+ * because that token reads as an absent line in both themes; `bg-bg-secondary`
+ * disappears against the card it sits on.
+ */
+function ChallengeBuildingNotice({ label, lines = 2 }: { label: string; lines?: number }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mt-6 rounded-xl border border-border bg-bg-secondary p-5"
+    >
+      <p className="flex items-center gap-2 text-sm font-medium text-text-secondary">
+        <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        {label}
+      </p>
+      <div className="mt-4 space-y-2" aria-hidden="true">
+        {Array.from({ length: lines }, (_, index) => (
+          <div
+            key={index}
+            className="h-3 animate-pulse rounded bg-border motion-reduce:animate-none"
+            style={{ width: `${100 - index * 12}%` }}
+          />
+        ))}
+      </div>
+      <p className="mt-4 text-xs text-text-muted">
+        Keep reading — this appears here on its own when it is ready.
+      </p>
+    </div>
+  );
+}
+
+function ChallengeBuildFailure({
+  message,
+  retrying,
+  onRetry,
+}: {
+  message: string;
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="mt-6 rounded-xl border border-warning/40 bg-warning/10 p-5">
+      <p className="text-sm font-semibold">This part of the challenge could not be prepared.</p>
+      <p className="mt-1 text-sm text-text-secondary">{message}</p>
+      <button
+        type="button"
+        disabled={retrying}
+        onClick={onRetry}
+        className="mt-4 min-h-10 rounded-lg bg-text-primary px-5 text-sm font-semibold text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {retrying ? "Trying again…" : "Try again"}
+      </button>
+    </div>
+  );
+}
+
 function ChallengeDetail({
   challenge,
   onBack,
@@ -197,7 +257,16 @@ function ChallengeDetail({
         : null,
   );
   const [clock, setClock] = useState(() => Date.now());
+  const [retryingContent, setRetryingContent] = useState(false);
   const content = challenge.content;
+  /**
+   * `pending` means the worked examples and the exam are still being built. It
+   * is a fact about two steps, never about the whole screen — the lesson the
+   * student is reading is finished and must render normally.
+   */
+  const contentPending = content?.contentStatus;
+  const buildingRest = contentPending === "pending" && !content?.contentError;
+  const buildFailed = contentPending === "pending" ? content?.contentError || "" : "";
 
   useEffect(() => {
     setSidebarSuppressed(focusMode);
@@ -230,6 +299,57 @@ function ChallengeDetail({
     const timer = window.setInterval(() => setClock(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, [challenge.status, content?.examExpiresAt]);
+
+  /**
+   * Wait for the half of the challenge that `/start` did not block on.
+   *
+   * The server hands back the lesson as soon as it is written and finishes the
+   * worked examples and the exam behind the response, which is what took the
+   * open from about thirty seconds down to the reading. That work lands while
+   * the student is on step one or two, so this asks a row-read endpoint for it
+   * rather than making them wait for a screen they are not looking at.
+   *
+   * It is NOT a refresh of anything already on screen: the poll stops the moment
+   * the row reports `ready`, and the only thing it ever replaces is content this
+   * client knows to be incomplete.
+   */
+  useEffect(() => {
+    if (contentPending !== "pending") return;
+    let cancelled = false;
+    let attempt = 0;
+    let timer = 0;
+    // Chained timeouts rather than an interval: the delay has to widen as the
+    // wait goes on, and an interval fixes its period at the moment it is armed.
+    // Tight while the build is plausibly still running, slow after that, and it
+    // gives up rather than polling a tab someone left open all afternoon.
+    const schedule = () => {
+      if (cancelled || attempt >= 40) return;
+      timer = window.setTimeout(() => void tick(), attempt < 10 ? 1_500 : 5_000);
+    };
+    const tick = async () => {
+      attempt += 1;
+      try {
+        const response = await fetch(`/api/student/challenges/${challenge.id}/content`);
+        const payload = (await response.json().catch(() => ({}))) as {
+          challenge?: StudentChallengeDetail;
+        };
+        if (cancelled) return;
+        const next = response.ok ? payload.challenge?.content : null;
+        if (next && (next.contentStatus === "ready" || next.contentError)) {
+          onChange(payload.challenge as StudentChallengeDetail);
+          return;
+        }
+      } catch {
+        // A dropped poll is not worth surfacing; the next tick asks again.
+      }
+      schedule();
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [challenge.id, contentPending, onChange]);
 
   useEffect(() => {
     if (challenge.status !== "completed" || !challenge.latestAttempt) return;
@@ -296,6 +416,21 @@ function ChallengeDetail({
       );
     } finally {
       setLoadingPrerequisiteKey(null);
+    }
+  };
+
+  const retryContentBuild = async () => {
+    setRetryingContent(true);
+    setError("");
+    try {
+      const payload = await apiJson<{ challenge: StudentChallengeDetail }>(
+        await fetch(`/api/student/challenges/${challenge.id}/content?retry=1`),
+      );
+      onChange(payload.challenge);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not prepare this challenge.");
+    } finally {
+      setRetryingContent(false);
     }
   };
 
@@ -826,6 +961,17 @@ function ChallengeDetail({
                     </article>
                   ))}
                 </div>
+              ) : buildingRest ? (
+                <ChallengeBuildingNotice
+                  label="Working the past questions for this topic…"
+                  lines={3}
+                />
+              ) : buildFailed ? (
+                <ChallengeBuildFailure
+                  message={buildFailed}
+                  retrying={retryingContent}
+                  onRetry={() => void retryContentBuild()}
+                />
               ) : (
                 <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
                   No solved example is available for this topic yet.
@@ -861,6 +1007,14 @@ function ChallengeDetail({
                     </article>
                   ))}
                 </div>
+              ) : buildingRest ? (
+                <ChallengeBuildingNotice label="Setting your questions from the course material…" />
+              ) : buildFailed ? (
+                <ChallengeBuildFailure
+                  message={buildFailed}
+                  retrying={retryingContent}
+                  onRetry={() => void retryContentBuild()}
+                />
               ) : (
                 <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
                   No practice question is available. Return to the hub and try another challenge.
@@ -1325,12 +1479,24 @@ function ChallengeDetail({
               disabled={
                 savingStep !== null ||
                 submitting ||
-                (activeStep === 4 && !content.examQuestions.length)
+                // Steps three and four are the two the background build fills
+                // in. Neither can be walked past while it is still empty —
+                // advancing step three would mark worked examples "reviewed"
+                // that the student has not been shown — and the label says which
+                // of the two it is rather than leaving a dead button.
+                (activeStep === 3 && buildingRest) ||
+                (activeStep === 4 && (buildingRest || !content.examQuestions.length))
               }
               onClick={() => void goNext()}
               className={`${focusButtonClass} bg-blue-600 text-white`}
             >
-              {savingStep ? "Saving…" : activeStep === 4 ? "Continue to submission →" : "Next →"}
+              {savingStep
+                ? "Saving…"
+                : buildingRest && (activeStep === 3 || activeStep === 4)
+                  ? "Preparing…"
+                  : activeStep === 4
+                    ? "Continue to submission →"
+                    : "Next →"}
             </button>
           ) : resultReady ? (
             <div className="flex flex-wrap justify-end gap-3">

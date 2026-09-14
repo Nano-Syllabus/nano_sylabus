@@ -1,16 +1,20 @@
+import { after } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   getStudentCourseSubjectAccess,
   getStudentCourseSubjectAccessForCourse,
 } from "@/lib/student-courses";
 import {
-  generateTeacherPracticePaper,
+  createTeacherChallengeExam,
+  gradeTeacherAnswers,
   gradeTeacherPracticePaper,
   gradeTeacherPracticePaperFile,
   getTeacherChallengePrerequisites,
   getTeacherChallengeReading,
   getTeacherChallengeSolvedQuestions,
   getTeacherPracticeTopics,
+  submitTeacherChallengeExam,
+  submitTeacherChallengeExamFile,
   TeacherApiError,
   type ApiRecord,
   type TeacherChallengeExam,
@@ -20,8 +24,10 @@ import {
   type TeacherChallengeSolvedQuestion,
   type TeacherChallengeSolvedResponse,
   type TeacherPracticePaperGradeResponse,
+  type TeacherStandaloneGradeResponse,
 } from "@/lib/teacher-app/client";
 import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
+import { memo } from "@/lib/http/memo";
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 
 const UNDEFINED_TABLE = "42P01";
@@ -29,6 +35,17 @@ const POSTGREST_MISSING_TABLE = "PGRST205";
 export const CHALLENGE_PASS_PERCENT = 40;
 export const CHALLENGE_QUESTIONS = 2;
 export const CHALLENGE_MARKS_PER_QUESTION = 10;
+
+/**
+ * How long a half-built challenge may sit before any reader re-runs the tail of
+ * its build. The background pass normally lands in a few seconds; this only
+ * fires when the process that owned it went away (a deploy, a crash) and would
+ * otherwise leave the row waiting for worked examples forever.
+ */
+const CONTENT_PENDING_STALE_MS = 90_000;
+
+/** Challenge ids whose background completion is running in THIS process. */
+const completionsInFlight = new Map<string, Promise<StudentChallengeDetail | null>>();
 
 export function isMissingChallengeTable(error: { code?: string } | null) {
   return error?.code === UNDEFINED_TABLE || error?.code === POSTGREST_MISSING_TABLE;
@@ -105,9 +122,30 @@ export type ChallengeExamQuestion = {
   questionType: string;
 };
 
+/**
+ * `pending` means the row holds a real lesson but its worked examples and exam
+ * are still being built behind the response. It is never a loading spinner for
+ * the whole screen — the student reads the lesson while the rest lands.
+ */
+export type ChallengeContentStatus = "ready" | "pending";
+
 export type StudentChallengeContent = {
   provider?: "collection-challenge-v1";
-  examProvider?: "practice-paper-v1";
+  /**
+   * Which upstream issued this paper, and therefore which route marks it.
+   *
+   * `challenge-exam-v1` is the pooled challenge exam: questions are assembled
+   * from the collection's own RAG index (`rag_service.challenge_store`) and only
+   * the shortfall is generated, so a topic with a healthy pool costs no model
+   * call at all. `practice-paper-v1` is the older persisted practice paper, kept
+   * as a value because rows issued before the switch still have to grade.
+   */
+  examProvider?: "practice-paper-v1" | "challenge-exam-v1";
+  contentStatus?: ChallengeContentStatus;
+  /** When the background completion was handed off; drives the stale re-kick. */
+  contentPendingSince?: string;
+  /** Why the background completion last failed, if it did. */
+  contentError?: string | null;
   upstreamChallengeId?: string;
   topicKeys?: string[];
   canStart?: boolean;
@@ -689,59 +727,52 @@ function examQuestion(question: TeacherChallengeExam["questions"][number]): Chal
   };
 }
 
+/**
+ * Issue the sitting from the collection's own question pool.
+ *
+ * WHY NOT `/api/v1/practice/generate`, WHICH THIS USED TO CALL
+ * ------------------------------------------------------------
+ * Two reasons, and both of them were visible to students.
+ *
+ * COST. `practice/generate` writes every paper from scratch — there is no pool
+ * and no cache behind it, so opening a challenge was a guaranteed Gemini call
+ * for two questions plus their full reference answers, every time, for every
+ * student on the same topic. `/v1/collection/challenge/exam` asks the pool in
+ * the RAG index FIRST and generates only the shortfall, so the second student
+ * on a topic usually pays nothing, and serving least-served-first is what keeps
+ * a retake from handing back the paper that was just failed.
+ *
+ * CORRECTNESS. `practice/generate` takes marks BANDS, not topics. This sent one
+ * band labelled "Challenge", which matches no chapter in the index, so the
+ * setter was free to range across the whole subject — an Oscillation challenge
+ * came back with a question on Maxwell's equations. The challenge route builds
+ * one band per topic the challenge covers, each drawing only on that topic's own
+ * material, so it cannot happen.
+ *
+ * `exclude` is the worked examples this student was just shown: nothing about a
+ * student is remembered upstream between calls, so the client walking the steps
+ * is the only thing that knows the two requests belong to the same person.
+ */
 async function issueChallengeExam(input: {
   collectionKey: string;
   subject: string;
   topicKeys: string[];
-  chapters?: string[];
   questionCount: number;
   durationMinutes: number;
+  exclude?: string[];
 }): Promise<TeacherChallengeExam> {
-  const questionCount = Math.max(1, input.questionCount);
-  const marksEach = CHALLENGE_MARKS_PER_QUESTION;
-  const totalMarks = questionCount * marksEach;
-  const paper = await generateTeacherPracticePaper(input.collectionKey, {
+  const exam = await createTeacherChallengeExam(input.collectionKey, {
     subject: input.subject,
-    chapters: input.chapters?.length ? input.chapters : input.topicKeys,
-    title: `${input.subject} challenge`,
-    instruction: "Set concise handwritten-answer questions on only the requested topic.",
-    pass_marks: Math.ceil((totalMarks * CHALLENGE_PASS_PERCENT) / 100),
-    bands: [
-      {
-        label: "Challenge",
-        question_type: "Short answer",
-        count: questionCount,
-        marks_each: marksEach,
-      },
-    ],
+    topics: input.topicKeys,
+    questions: Math.max(1, input.questionCount),
+    duration_minutes: input.durationMinutes,
+    pass_percent: CHALLENGE_PASS_PERCENT,
+    exclude_questions: (input.exclude || []).filter(Boolean),
   });
-  if (!paper.id || !paper.questions?.length) {
+  if (!exam.attempt_id || !exam.questions?.length) {
     throw new Error("The course API could not issue a live challenge exam.");
   }
-  return {
-    attempt_id: paper.id,
-    subject: paper.subject || input.subject,
-    topics: input.topicKeys.map((topicKey, index) => ({
-      topic_key: topicKey,
-      title: input.chapters?.[index] || paper.chapters?.[index] || topicKey,
-      order_index: index,
-    })),
-    questions: paper.questions.map((question) => ({
-      id: question.id,
-      topic_key: input.topicKeys[0] || question.chapter,
-      topic: question.chapter || input.topicKeys[0] || "",
-      marks: number(question.marks),
-      question_type: question.question_type || "Short answer",
-      text: question.text,
-    })),
-    total_marks: number(paper.total_marks),
-    pass_marks:
-      number(paper.pass_marks) ||
-      Math.ceil((number(paper.total_marks) * CHALLENGE_PASS_PERCENT) / 100),
-    duration_minutes: input.durationMinutes,
-    expires_at: new Date(Date.now() + input.durationMinutes * 60_000).toISOString(),
-    warning: paper.warning,
-  };
+  return exam;
 }
 
 async function requireChallengeAccess(userId: string, row: ChallengeRow) {
@@ -757,17 +788,47 @@ async function requireChallengeAccess(userId: string, row: ChallengeRow) {
   return access;
 }
 
-async function resolveChallengeLane(userId: string, row: ChallengeRow) {
-  const admin = createSupabaseAdminClient();
-  const access = await requireChallengeAccess(userId, row);
+type ChallengeAccess = Awaited<ReturnType<typeof requireChallengeAccess>>;
 
-  const { data: teacher, error } = await admin
-    .from("teachers")
-    .select("collection_sk")
-    .eq("id", access.teacherId)
-    .maybeSingle();
-  if (error) throw error;
-  const collectionKey = String(teacher?.collection_sk || "").trim();
+/**
+ * A creator's collection key, memoized per teacher.
+ *
+ * It is one row on `teachers` that effectively never changes, and every single
+ * challenge call — start, refresh, each progress tick, submit — was fetching it
+ * again. TTL is short because a creator whose collection is provisioned mid-
+ * session must not be told for an hour that it is "not ready yet".
+ */
+function collectionKeyForTeacher(teacherId: string) {
+  return memo(
+    `challenge:collection-sk:${teacherId}`,
+    async () => {
+      const { data, error } = await createSupabaseAdminClient()
+        .from("teachers")
+        .select("collection_sk")
+        .eq("id", teacherId)
+        .maybeSingle();
+      if (error) throw error;
+      return String(data?.collection_sk || "").trim();
+    },
+    { ttlSeconds: 60, staleSeconds: 240 },
+  );
+}
+
+/**
+ * `access` is threaded through rather than re-resolved.
+ *
+ * `getStudentCourseSubjectAccessForCourse` is three to four sequential Supabase
+ * round trips, and `startStudentChallenge` used to pay for it twice — once
+ * directly and once again inside here — before a single upstream call had
+ * started. The caller that has already authorized the row passes what it found.
+ */
+async function resolveChallengeLane(
+  userId: string,
+  row: ChallengeRow,
+  known?: ChallengeAccess,
+) {
+  const access = known ?? (await requireChallengeAccess(userId, row));
+  const collectionKey = await collectionKeyForTeacher(access.teacherId);
   if (!collectionKey) {
     throw new Error("This course creator's study collection is not ready yet.");
   }
@@ -834,7 +895,7 @@ function contentWithExam(
 ): StudentChallengeContent {
   return {
     ...content,
-    examProvider: "practice-paper-v1",
+    examProvider: "challenge-exam-v1",
     examQuestions: (exam.questions || []).map(examQuestion),
     examExpiresAt: exam.expires_at,
     examAttemptNumber: attemptNumber,
@@ -842,17 +903,26 @@ function contentWithExam(
   };
 }
 
-function granularChallengeContent(
+/**
+ * Steps one and two — the syllabus ordering and the reading — and nothing else.
+ *
+ * This is deliberately everything the student can see BEFORE they need a worked
+ * example, because it is what `/start` now waits for. `prerequisites` costs no
+ * model call at all (it is the subject's own chapter order) and the reading is
+ * usually served from the collection's cache, so this half is cheap. The worked
+ * examples and the exam are built behind the response by
+ * `runChallengeContentCompletion`, which returns here through `contentStatus`.
+ */
+function challengeLessonContent(
   prerequisites: TeacherChallengePrerequisitesResponse,
   learning: TeacherChallengeLearnResponse,
-  solved: TeacherChallengeSolvedResponse,
-  practiceTopics: ApiRecord | null = null,
 ): StudentChallengeContent {
-  const topicKeys = (prerequisites.topics || []).map((topic) => topic.topic_key).filter(Boolean);
-  const topicTitle = prerequisites.topics?.[0]?.title || "this topic";
   return {
     provider: "collection-challenge-v1",
-    topicKeys,
+    contentStatus: "pending",
+    contentPendingSince: new Date().toISOString(),
+    contentError: null,
+    topicKeys: (prerequisites.topics || []).map((topic) => topic.topic_key).filter(Boolean),
     canStart: prerequisites.can_start,
     prerequisites: (prerequisites.prerequisites || []).map((prerequisite) => ({
       topicKey: prerequisite.topic_key,
@@ -868,7 +938,7 @@ function granularChallengeContent(
     prerequisiteBlockers: prerequisites.blockers || [],
     prerequisiteWarnings: prerequisites.warnings || [],
     learningWarning: warningText(learning.warnings),
-    solvedWarning: studentFacingSolvedWarning(solved, practiceTopics, topicKeys, topicTitle),
+    solvedWarning: null,
     lesson: {
       title: learning.reading.headline || "What you need to know",
       content: lessonParagraphs(learning.reading.content),
@@ -879,36 +949,88 @@ function granularChallengeContent(
         excerpt: "",
       })),
     },
-    solvedExamples: (solved.questions || []).map(solvedExample),
+    solvedExamples: [],
     examQuestions: [],
     warning: null,
   };
 }
 
+/** Step three, folded into content that already carries steps one and two. */
+function contentWithSolved(
+  content: StudentChallengeContent,
+  solved: TeacherChallengeSolvedResponse,
+  practiceTopics: ApiRecord | null,
+  topicTitle: string,
+): StudentChallengeContent {
+  return {
+    ...content,
+    solvedWarning: studentFacingSolvedWarning(
+      solved,
+      practiceTopics,
+      content.topicKeys || [],
+      topicTitle,
+    ),
+    solvedExamples: (solved.questions || []).map(solvedExample),
+  };
+}
+
 function hasLiveExam(detail: StudentChallengeDetail, externalAttemptId: string) {
+  const content = detail.content;
   if (
-    detail.content?.provider !== "collection-challenge-v1" ||
-    detail.content.examProvider !== "practice-paper-v1" ||
+    content?.provider !== "collection-challenge-v1" ||
+    !content.examProvider ||
     !externalAttemptId ||
-    !detail.content.examExpiresAt
+    !content.examExpiresAt
   ) {
     return false;
   }
+  /**
+   * The pooled exam sets questions at the marks value this subject's own
+   * examiner uses (`_marks_each`, measured from its question bank), which is not
+   * always ten. Pinning the check to `CHALLENGE_MARKS_PER_QUESTION` would call
+   * every such paper stale and re-issue one on every open — so the marks shape
+   * is only enforced for the legacy practice papers, which really were always
+   * banded at ten.
+   */
   const hasCurrentMarkingShape =
-    detail.content.examQuestions.length === CHALLENGE_QUESTIONS &&
-    detail.content.examQuestions.every(
-      (question) => question.marks === CHALLENGE_MARKS_PER_QUESTION,
-    );
+    content.examQuestions.length === CHALLENGE_QUESTIONS &&
+    (content.examProvider === "challenge-exam-v1" ||
+      content.examQuestions.every((question) => question.marks === CHALLENGE_MARKS_PER_QUESTION));
   if (!hasCurrentMarkingShape) return false;
-  const expiresAt = Date.parse(detail.content.examExpiresAt);
+  const expiresAt = Date.parse(content.examExpiresAt);
   return (
     Number.isFinite(expiresAt) &&
     expiresAt > Date.now() &&
-    number(detail.content.examAttemptNumber) > detail.attemptCount
+    number(content.examAttemptNumber) > detail.attemptCount
   );
 }
 
-/** Lazily materializes grounded content so unopened daily cards cost no AI work. */
+/**
+ * Everything a student must wait for before the challenge screen can be drawn —
+ * and nothing they will not look at for another two minutes.
+ *
+ * WHY THIS RETURNS BEFORE THE CHALLENGE IS FINISHED
+ * -------------------------------------------------
+ * It used to build all four steps in one request and measured about thirty
+ * seconds: three to four Supabase round trips for access (paid TWICE, because
+ * `resolveChallengeLane` re-resolved what this function had already resolved),
+ * then a blocking `/prerequisites` call, then a fan-out whose slowest leg wrote
+ * two exam questions and their reference answers from scratch on every single
+ * open. The student sat on a spinner for all of it and then landed on step one,
+ * which needs none of it.
+ *
+ * So the wait is now only what step one and step two render: the syllabus
+ * ordering (no model call — it is the subject's own chapter order) and the
+ * reading (normally served from the collection's cache). The worked examples and
+ * the exam are handed to `runChallengeContentCompletion` behind the response,
+ * and they land while the student is still reading. `content.contentStatus` says
+ * which state the row is in, and readers pick the rest up through
+ * `getStudentChallengeContent` or through their next `/progress` write.
+ *
+ * The one path that still blocks is issuing a FRESH exam onto a challenge whose
+ * lesson is already built — there the student is waiting for the paper itself,
+ * so there is nothing to hide the wait behind.
+ */
 export async function startStudentChallenge(
   userId: string,
   challengeId: string,
@@ -924,19 +1046,32 @@ export async function startStudentChallenge(
   if (loadError) throw loadError;
   if (!raw) return null;
   const row = raw as ChallengeRow;
-  await requireChallengeAccess(userId, row);
+  const access = await requireChallengeAccess(userId, row);
   const current = toDetail(row);
   const externalAttemptId = String(row.external_paper_id || "");
   const sourceDocumentTopic = isSourceDocumentChallengeRow(row);
   if (current.status === "completed" && !options.restart) {
     return withLatestAttemptReview(userId, row, current);
   }
-  if (!sourceDocumentTopic && hasLiveExam(current, externalAttemptId)) return current;
-  if (!sourceDocumentTopic && current.content?.provider === "collection-challenge-v1") {
-    return refreshStudentChallengeExam(userId, challengeId, { allowCompleted: options.restart });
+  if (!sourceDocumentTopic) {
+    // A build that has not finished is not a stale paper. Reopening a challenge
+    // whose tail is still running must hand back the lesson that is already
+    // there — never fall through and issue a second exam alongside the one the
+    // background pass is about to write.
+    if (current.content?.contentStatus === "pending" && !options.restart) {
+      restartStaleContentCompletion(userId, challengeId, current.content);
+      return current;
+    }
+    if (hasLiveExam(current, externalAttemptId)) return current;
+    if (current.content?.provider === "collection-challenge-v1") {
+      return refreshStudentChallengeExam(userId, challengeId, {
+        allowCompleted: options.restart,
+        access,
+      });
+    }
   }
 
-  const lane = await resolveChallengeLane(userId, row);
+  const lane = await resolveChallengeLane(userId, row, access);
   const prerequisiteRequest = {
     subject: lane.subject,
     // A legacy row may point at the uploaded QB/syllabus file itself. Let the
@@ -968,45 +1103,22 @@ export async function startStudentChallenge(
   const selectedTopicKeys = (prerequisites.topics || [])
     .map((topic) => topic.topic_key)
     .filter(Boolean);
-  const [learning, solved, challengeExam, practiceTopics] = await Promise.all([
-    getTeacherChallengeReading(lane.collectionKey, {
-      subject: lane.subject,
-      topics: selectedTopicKeys,
-    }),
-    getTeacherChallengeSolvedQuestions(lane.collectionKey, {
-      subject: lane.subject,
-      topics: selectedTopicKeys,
-      limit: 2,
-    }),
-    issueChallengeExam({
-      collectionKey: lane.collectionKey,
-      subject: lane.subject,
-      topicKeys: selectedTopicKeys,
-      chapters: (prerequisites.topics || []).map((topic) => topic.title).filter(Boolean),
-      questionCount: CHALLENGE_QUESTIONS,
-      durationMinutes: number(row.duration_minutes) || 20,
-    }),
-    getTeacherPracticeTopics(lane.collectionKey, lane.subject, {
-      totalMarks: CHALLENGE_QUESTIONS * CHALLENGE_MARKS_PER_QUESTION,
-      maxQuestions: CHALLENGE_QUESTIONS,
-    }).catch(() => null),
-  ]);
+  const learning = await getTeacherChallengeReading(lane.collectionKey, {
+    subject: lane.subject,
+    topics: selectedTopicKeys,
+  });
   const title = `Master ${selectedTopic?.title || row.topic_title || lane.subject}`;
-  const content = contentWithExam(
-    granularChallengeContent(prerequisites, learning, solved, practiceTopics),
-    challengeExam,
-    number(row.attempt_count) + 1,
-  );
+  const content = challengeLessonContent(prerequisites, learning);
   const now = new Date().toISOString();
   const { data, error } = await admin
     .from("student_challenges")
     .update({
       status: "started",
-      external_paper_id: challengeExam.attempt_id,
+      // The previous sitting's paper is gone the moment its lesson is rebuilt;
+      // leaving the id behind would let `hasLiveExam` claim a live exam that no
+      // longer has questions on the row.
+      external_paper_id: null,
       content,
-      total_marks: challengeExam.total_marks,
-      pass_marks: challengeExam.pass_marks,
-      duration_minutes: challengeExam.duration_minutes,
       ...(selectedTopic
         ? {
             topic_key: selectedTopic.topic_key,
@@ -1022,7 +1134,201 @@ export async function startStudentChallenge(
     .select("*")
     .single();
   if (error) throw error;
+  scheduleChallengeContentCompletion(userId, challengeId);
   return toDetail(data as ChallengeRow);
+}
+
+/**
+ * The half of a challenge the student is not looking at yet: its worked examples
+ * and its exam. Runs behind `/start`'s response.
+ *
+ * The exam goes AFTER the worked examples rather than beside them, because it
+ * must not re-ask what the student was just shown the solution to — `exclude`
+ * carries those question texts, and nothing about a student is remembered
+ * upstream between two calls, so this is the only place that knows the two
+ * requests belong to one person. Same ordering, and the same reason, as the
+ * course API's own composite route.
+ */
+async function runChallengeContentCompletion(
+  userId: string,
+  challengeId: string,
+): Promise<StudentChallengeDetail | null> {
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error: loadError } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (loadError) throw loadError;
+  if (!raw) return null;
+  const row = raw as ChallengeRow;
+  const detail = toDetail(row);
+  const pending = detail.content;
+  // Another process may have finished it between the schedule and this run.
+  if (!pending || pending.contentStatus !== "pending") return detail;
+
+  const access = await requireChallengeAccess(userId, row);
+  const lane = await resolveChallengeLane(userId, row, access);
+  const topicKeys = pending.topicKeys?.length
+    ? pending.topicKeys
+    : [String(row.topic_key || "")].filter(Boolean);
+  const topicTitle = String(row.topic_title || detail.topicTitle || "this topic");
+
+  try {
+    const solved = await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
+      subject: lane.subject,
+      topics: topicKeys,
+      limit: 2,
+    });
+    // Only fetched when it can change what the student is told. It exists to
+    // phrase ONE warning — whether the thin worked examples mean "no past paper
+    // covers this topic" or "this course has no question bank at all" — and
+    // fetching it for a grounded response bought nothing.
+    const practiceTopics = solved.grounded
+      ? null
+      : await getTeacherPracticeTopics(lane.collectionKey, lane.subject, {
+          totalMarks: CHALLENGE_QUESTIONS * CHALLENGE_MARKS_PER_QUESTION,
+          maxQuestions: CHALLENGE_QUESTIONS,
+        }).catch(() => null);
+    const exam = await issueChallengeExam({
+      collectionKey: lane.collectionKey,
+      subject: lane.subject,
+      topicKeys,
+      questionCount: CHALLENGE_QUESTIONS,
+      durationMinutes: number(row.duration_minutes) || 20,
+      exclude: (solved.questions || []).map((question) => question.text),
+    });
+    const content: StudentChallengeContent = {
+      ...contentWithExam(
+        contentWithSolved(pending, solved, practiceTopics, topicTitle),
+        exam,
+        number(row.attempt_count) + 1,
+      ),
+      contentStatus: "ready",
+      contentPendingSince: undefined,
+      contentError: null,
+    };
+    const now = new Date().toISOString();
+    const { data, error } = await admin
+      .from("student_challenges")
+      .update({
+        external_paper_id: exam.attempt_id,
+        content,
+        total_marks: exam.total_marks,
+        pass_marks: exam.pass_marks,
+        duration_minutes: exam.duration_minutes,
+        // The clock the student sees starts when the paper exists, not when the
+        // lesson did — otherwise every second spent building this ate into the
+        // twenty minutes they are given to sit it.
+        started_at: now,
+        updated_at: now,
+      })
+      .eq("id", challengeId)
+      .eq("user_id", userId)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return toDetail(data as ChallengeRow);
+  } catch (cause) {
+    const message =
+      cause instanceof Error ? cause.message : "Could not finish preparing this challenge.";
+    console.warn(`[challenge] background completion failed for ${challengeId}: ${message}`);
+    // The row stays `pending` with the failure recorded on it: the lesson the
+    // student is reading is real and must not be thrown away, and a reader can
+    // ask for the tail again. Re-stamping the clock is what lets the stale
+    // re-kick retry rather than hammering a failing upstream.
+    const { data } = await admin
+      .from("student_challenges")
+      .update({
+        content: {
+          ...pending,
+          contentStatus: "pending",
+          contentPendingSince: new Date().toISOString(),
+          contentError: message,
+        } satisfies StudentChallengeContent,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", challengeId)
+      .eq("user_id", userId)
+      .select("*")
+      .maybeSingle();
+    return data ? toDetail(data as ChallengeRow) : detail;
+  } finally {
+    completionsInFlight.delete(challengeId);
+  }
+}
+
+/**
+ * Hand the tail of the build to the runtime and return immediately.
+ *
+ * `after()` is what keeps the work alive past the response without holding the
+ * response open. Outside a request scope it throws — a cron, a test — and there
+ * the promise is already running under its own steam, so the throw is caught
+ * and ignored rather than guarded with a framework check.
+ */
+function scheduleChallengeContentCompletion(userId: string, challengeId: string) {
+  if (completionsInFlight.has(challengeId)) return;
+  const task = runChallengeContentCompletion(userId, challengeId).catch(() => null);
+  completionsInFlight.set(challengeId, task);
+  try {
+    after(() => task);
+  } catch {
+    // Not in a request scope. The work is under way regardless.
+  }
+}
+
+/**
+ * Re-run a completion whose owning process went away.
+ *
+ * Nothing here is a retry loop: a build that is merely slow is left alone, and
+ * only a row that has been `pending` past `CONTENT_PENDING_STALE_MS` — a deploy
+ * mid-build, a crash, an upstream that failed and recorded it — is picked up
+ * again. `force` is the student pressing the retry the failure surfaced.
+ */
+function restartStaleContentCompletion(
+  userId: string,
+  challengeId: string,
+  content: StudentChallengeContent,
+  force = false,
+) {
+  if (content.contentStatus !== "pending") return;
+  if (completionsInFlight.has(challengeId)) return;
+  const since = Date.parse(content.contentPendingSince || "");
+  const stale = !Number.isFinite(since) || Date.now() - since > CONTENT_PENDING_STALE_MS;
+  if (!force && !stale) return;
+  scheduleChallengeContentCompletion(userId, challengeId);
+}
+
+/**
+ * The current state of a challenge, for a client waiting on its background half.
+ *
+ * Cheap by design — one row read and the access check — because the challenge
+ * screen polls it while the student reads. It also re-kicks a build that has
+ * gone stale, so a student who was mid-open during a deploy is not left holding
+ * a challenge that never finishes.
+ */
+export async function getStudentChallengeContent(
+  userId: string,
+  challengeId: string,
+  options: { retry?: boolean } = {},
+): Promise<StudentChallengeDetail | null> {
+  const { data: raw, error } = await createSupabaseAdminClient()
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!raw) return null;
+  const row = raw as ChallengeRow;
+  await requireChallengeAccess(userId, row);
+  const detail = toDetail(row);
+  if (detail.content) {
+    restartStaleContentCompletion(userId, challengeId, detail.content, options.retry);
+  }
+  if (detail.status === "completed") return withLatestAttemptReview(userId, row, detail);
+  return detail;
 }
 
 /** Reopens a completed challenge with a fresh sitting; prior attempts remain durable. */
@@ -1037,7 +1343,7 @@ export async function restartStudentChallenge(userId: string, challengeId: strin
 export async function refreshStudentChallengeExam(
   userId: string,
   challengeId: string,
-  options: { allowCompleted?: boolean } = {},
+  options: { allowCompleted?: boolean; access?: ChallengeAccess } = {},
 ) {
   const admin = createSupabaseAdminClient();
   const { data: raw, error: loadError } = await admin
@@ -1049,23 +1355,32 @@ export async function refreshStudentChallengeExam(
   if (loadError) throw loadError;
   if (!raw) return null;
   const row = raw as ChallengeRow;
-  await requireChallengeAccess(userId, row);
+  const access = options.access ?? (await requireChallengeAccess(userId, row));
   const detail = toDetail(row);
   if (detail.status === "completed" && !options.allowCompleted) return detail;
   if (detail.content?.provider !== "collection-challenge-v1") {
     return startStudentChallenge(userId, challengeId, { restart: options.allowCompleted });
   }
+  // A lesson whose tail is still building already has an exam on the way. Issuing
+  // a second one here would race that write and leave the row pointing at an
+  // attempt whose questions it never stored.
+  if (detail.content.contentStatus === "pending") {
+    restartStaleContentCompletion(userId, challengeId, detail.content);
+    return detail;
+  }
 
-  const lane = await resolveChallengeLane(userId, row);
+  const lane = await resolveChallengeLane(userId, row, access);
   const exam = await issueChallengeExam({
     collectionKey: lane.collectionKey,
     subject: lane.subject,
     topicKeys: detail.content.topicKeys?.length
       ? detail.content.topicKeys
       : [String(row.topic_key || "")].filter(Boolean),
-    chapters: [String(row.topic_title || detail.topicTitle)].filter(Boolean),
     questionCount: CHALLENGE_QUESTIONS,
     durationMinutes: detail.durationMinutes,
+    // A retake must not be handed the worked examples as its paper. The pool
+    // serves least-served-first, so this mostly matters on a thin topic.
+    exclude: (detail.content.solvedExamples || []).map((example) => example.question),
   });
   if (!exam.attempt_id || !exam.questions?.length) {
     throw new Error("The course API could not issue a fresh challenge exam.");
@@ -1114,15 +1429,121 @@ export async function submitStudentChallengeAttempt(input: {
   const row = raw as ChallengeRow;
   const attemptId = String(row.external_paper_id || "");
   if (!attemptId) throw new Error("Start the challenge before submitting it.");
+  const detail = toDetail(row);
   const lane = await resolveChallengeLane(input.userId, row);
-  const graded = await gradeTeacherPracticePaper(lane.collectionKey, attemptId, {
-    student_name: "Student",
-    answers: input.answers.map((answer) => ({
-      question_id: answer.questionId,
-      answer_text: answer.answerText,
+  const answers = input.answers.map((answer) => ({
+    question_id: answer.questionId,
+    answer_text: answer.answerText,
+  }));
+  if (detail.content?.examProvider !== "challenge-exam-v1") {
+    const graded = await gradeTeacherPracticePaper(lane.collectionKey, attemptId, {
+      student_name: "Student",
+      answers,
+    });
+    return practiceGradeAsChallengeGrade(graded, attemptId, lane.subject, number(row.pass_marks));
+  }
+  try {
+    return await submitTeacherChallengeExam(lane.collectionKey, attemptId, { answers });
+  } catch (cause) {
+    if (!isLostChallengeAttempt(cause)) throw cause;
+    return gradeChallengeFromStoredQuestions({
+      collectionKey: lane.collectionKey,
+      subject: lane.subject,
+      attemptId,
+      questions: detail.content?.examQuestions || [],
+      passMarks: number(row.pass_marks),
+      answers: input.answers,
+    });
+  }
+}
+
+/**
+ * Whether an upstream failure means "that sitting is gone", not "that was wrong".
+ *
+ * The pooled challenge exam holds its attempt in the course API's memory — a map
+ * capped at 500 entries, cleared by a restart — so a deploy during a student's
+ * twenty minutes takes the paper out from under them. That reads as a 404 or a
+ * 410 on submit, and it is the one upstream failure this app answers by marking
+ * the sitting itself rather than by handing back an error.
+ */
+function isLostChallengeAttempt(cause: unknown) {
+  return cause instanceof TeacherApiError && [404, 410].includes(cause.status);
+}
+
+/**
+ * Mark a sitting from the questions this app stored, when the upstream attempt
+ * that held them is gone.
+ *
+ * `/api/v1/practice/grade` is self-contained: it takes each question, its marks
+ * and the student's answer, and needs no stored paper behind it. What it does
+ * not get here is the reference answer — the exam response withholds those by
+ * design, so the paper cannot be read out of its own response — which makes this
+ * marking a shade less exact than `/exam/{id}/submit`. That is the right trade
+ * against telling a student who has just written for twenty minutes that their
+ * answers cannot be marked at all.
+ */
+async function gradeChallengeFromStoredQuestions(input: {
+  collectionKey: string;
+  subject: string;
+  attemptId: string;
+  questions: ChallengeExamQuestion[];
+  passMarks: number;
+  answers: Array<{ questionId: string; answerText: string }>;
+}): Promise<TeacherChallengeGradeResponse> {
+  if (!input.questions.length) {
+    throw new Error(
+      "This sitting expired on the course server and its questions are no longer available. Start a fresh exam.",
+    );
+  }
+  const answerFor = new Map(input.answers.map((answer) => [answer.questionId, answer.answerText]));
+  const graded = await gradeTeacherAnswers(input.collectionKey, {
+    items: input.questions.map((question) => ({
+      question_id: question.id,
+      question: question.question,
+      marks: question.marks,
+      chapter: question.topic,
+      student_answer: answerFor.get(question.id) || "",
     })),
   });
-  return practiceGradeAsChallengeGrade(graded, attemptId, lane.subject, number(row.pass_marks));
+  return standaloneGradeAsChallengeGrade(
+    graded,
+    input.attemptId,
+    input.subject,
+    input.passMarks,
+    answerFor,
+  );
+}
+
+function standaloneGradeAsChallengeGrade(
+  graded: TeacherStandaloneGradeResponse,
+  attemptId: string,
+  subject: string,
+  passMarks: number,
+  answerFor: Map<string, string>,
+): TeacherChallengeGradeResponse {
+  const totalScore = number(graded.total_score);
+  const totalMarks = number(graded.total_marks);
+  return {
+    attempt_id: attemptId,
+    subject,
+    results: (graded.results || []).map((result) => ({
+      question_id: result.question_id,
+      topic: result.chapter || "",
+      question: result.question,
+      marks: number(result.marks),
+      student_answer: answerFor.get(result.question_id) || "",
+      score: number(result.score),
+      feedback: result.feedback,
+    })),
+    total_score: totalScore,
+    total_marks: totalMarks,
+    percentage: totalMarks > 0 ? (totalScore / totalMarks) * 100 : 0,
+    pass_marks: passMarks,
+    passed: graded.graded && totalScore >= passMarks,
+    graded: graded.graded,
+    stored: false,
+    evaluation: graded.evaluation,
+  };
 }
 
 function practiceGradeAsChallengeGrade(
@@ -1169,7 +1590,16 @@ export async function submitStudentChallengeFile(input: {
   const row = raw as ChallengeRow;
   const attemptId = String(row.external_paper_id || "");
   if (!attemptId) throw new Error("Start the challenge before submitting it.");
+  const detail = toDetail(row);
   const lane = await resolveChallengeLane(input.userId, row);
+  if (detail.content?.examProvider === "challenge-exam-v1") {
+    // No stored-question fallback on this one: reading the answers off the scan
+    // is the upstream's job and there is no local copy of what the student wrote.
+    return submitTeacherChallengeExamFile(lane.collectionKey, attemptId, {
+      studentName: input.studentName,
+      file: input.file,
+    });
+  }
   const graded = await gradeTeacherPracticePaperFile(lane.collectionKey, attemptId, {
     studentName: input.studentName,
     file: input.file,
