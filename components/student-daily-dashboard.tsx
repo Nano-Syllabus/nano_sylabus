@@ -7,13 +7,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
+  BookOpen,
   Check,
   CircleGauge,
   Clock3,
+  FileText,
   Flame,
   LibraryBig,
   LoaderCircle,
   LockKeyholeOpen,
+  Sparkles,
+  Star,
   X,
   Zap,
 } from "lucide-react";
@@ -375,6 +379,183 @@ function MetricCard({
   );
 }
 
+function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboard }) {
+  const challenge = [...dashboard.challenge.challenges]
+    .filter((item) => item.status !== "completed")
+    .sort(
+      (left, right) =>
+        Number(right.status === "started") - Number(left.status === "started") ||
+        left.position - right.position,
+    )[0];
+  const community = dashboard.challenge.community;
+  const params = new URLSearchParams();
+  if (community) params.set("community", community.slug);
+  if (challenge) params.set("challenge", challenge.id);
+  const fallbackHref = community
+    ? `/app/challenges?${params.toString()}`
+    : "/app/community";
+  const eyebrow = challenge
+    ? challenge.status === "started"
+      ? "Pick up where you left off"
+      : dashboard.todayChallengeCompletions > 0
+        ? "Your next challenge"
+        : "Your first challenge"
+    : community
+      ? "Your challenge space"
+      : "Choose your programme";
+  const action = challenge
+    ? challenge.status === "started"
+      ? "Continue challenge"
+      : "Start a challenge"
+    : community
+      ? "Find a challenge"
+      : "Browse communities";
+
+  return (
+    <section
+      className="relative mt-6 overflow-hidden rounded-[28px] border border-black/10 bg-[#cbf738] px-6 py-7 sm:px-8 sm:py-8 lg:px-10 lg:py-9 text-black shadow-sm"
+      aria-labelledby="starter-challenge-heading"
+    >
+      {/* Lighter organic curved hill / glow at the bottom matching reference */}
+      <div
+        className="pointer-events-none absolute -bottom-16 -left-12 h-64 w-[540px] rounded-[100%] bg-gradient-to-tr from-[#e5ff75]/80 via-[#daf955]/60 to-transparent blur-md"
+        aria-hidden="true"
+      />
+      <svg
+        className="pointer-events-none absolute bottom-0 left-0 h-28 w-full opacity-35"
+        viewBox="0 0 1200 160"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M 0 160 Q 350 30 900 160 Z"
+          fill="rgba(255, 255, 255, 0.4)"
+        />
+      </svg>
+
+      {/* Top right challenge counter matching reference (CHALLENGE 01 / 1 /) */}
+      <div className="absolute right-6 top-6 text-right select-none sm:right-8 sm:top-7">
+        <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-black/75 sm:text-xs">
+          Challenge {String(challenge?.position ?? 1).padStart(2, "0")}
+        </p>
+        <p className="mt-0.5 text-sm font-bold text-black/60 font-mono tracking-tight">
+          {challenge?.position ?? 1} /
+        </p>
+      </div>
+
+      <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        {/* Left Column: Eyebrow, Heading, Subtitle, CTA Button */}
+        <div className="max-w-xl">
+          <p className="inline-flex min-h-7 items-center rounded-full bg-black/[0.08] px-3.5 py-1 text-[11px] font-extrabold uppercase tracking-[0.1em] text-black/80">
+            {eyebrow}
+          </p>
+          <h2
+            id="starter-challenge-heading"
+            className="mt-3.5 font-display text-[clamp(2.2rem,4vw,3.25rem)] font-extrabold leading-[1.02] tracking-[-0.045em] text-black"
+          >
+            One topic.
+            <br />
+            One small win.
+          </h2>
+
+          <div className="mt-3.5 max-w-md text-sm sm:text-[15px] font-medium leading-relaxed text-black/80">
+            {challenge ? (
+              <>
+                <p className="font-semibold text-black/95 truncate">
+                  {challenge.subjectName}: {challenge.topicTitle}
+                </p>
+                <p className="mt-1">
+                  Learn the idea. Practice with a solved question.
+                  <br className="hidden sm:inline" />
+                  {" "}Then close the book and take the exam yourself.
+                </p>
+              </>
+            ) : (
+              <p>
+                Learn the idea. Practice with a solved question.
+                <br className="hidden sm:inline" />
+                {" "}Then close the book and take the exam yourself.
+              </p>
+            )}
+          </div>
+
+          <Link
+            href={fallbackHref}
+            className={cn(
+              "mt-6 inline-flex min-h-12 items-center justify-center gap-2.5 rounded-full bg-[#111215] px-7 text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-black hover:scale-[1.02] active:scale-[0.98]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 focus-visible:ring-offset-[#cbf738]",
+            )}
+          >
+            {action}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        </div>
+
+        {/* Right Column: Stacked Notebook Graphic & 3-Step Circles */}
+        <div className="relative hidden items-center justify-end gap-6 pt-4 select-none lg:flex xl:gap-8" aria-hidden="true">
+          {/* Stacked Notebook Illustration */}
+          <div className="relative shrink-0">
+            {/* Back page for stacked 3D effect */}
+            <div className="absolute -bottom-1.5 -left-1.5 h-full w-full rotate-[-7deg] rounded-2xl border-2 border-black bg-black/10" />
+            <div className="absolute -bottom-1 -left-1 h-full w-full rotate-[-5deg] rounded-2xl border-2 border-black bg-[#dcfb80]" />
+
+            {/* Front notebook page */}
+            <div className="relative rotate-[-3deg] rounded-2xl border-2 border-black bg-[#faffeb] px-5 py-4 shadow-[4px_4px_0_rgba(0,0,0,0.06)] min-w-[125px]">
+              {/* Binder marks on left spine */}
+              <div className="absolute -left-1 top-4 h-2 w-1 rounded-sm bg-black" />
+              <div className="absolute -left-1 top-8 h-2 w-1 rounded-sm bg-black" />
+              <div className="absolute -left-1 top-12 h-2 w-1 rounded-sm bg-black" />
+
+              {/* Topic badge */}
+              <div className="inline-flex items-center rounded-full border border-black/80 bg-black/[0.04] px-2.5 py-0.5 text-[11px] font-bold text-black">
+                Topic {String(challenge?.position ?? 1).padStart(2, "0")}
+              </div>
+
+              {/* Content lines */}
+              <div className="mt-3.5 h-[2px] w-20 rounded-full bg-black" />
+              <div className="mt-2.5 h-[2px] w-14 rounded-full bg-black/60" />
+              <div className="mt-2.5 h-[2px] w-18 rounded-full bg-black/40" />
+            </div>
+          </div>
+
+          {/* 3 Step Flow with Arrows */}
+          <div className="flex items-center gap-3 xl:gap-4">
+            {/* Step 1: Learn */}
+            <div className="flex flex-col items-center">
+              <div className="grid size-14 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
+                <BookOpen className="size-6 text-black stroke-[1.8]" />
+              </div>
+              <span className="mt-2 text-xs font-bold text-black tracking-tight">Learn</span>
+            </div>
+
+            {/* Arrow 1 */}
+            <ArrowRight className="size-4 shrink-0 text-black stroke-[2.2]" />
+
+            {/* Step 2: Practice */}
+            <div className="flex flex-col items-center">
+              <div className="grid size-14 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
+                <FileText className="size-6 text-black stroke-[1.8]" />
+              </div>
+              <span className="mt-2 text-xs font-bold text-black tracking-tight">Practice</span>
+            </div>
+
+            {/* Arrow 2 */}
+            <ArrowRight className="size-4 shrink-0 text-black stroke-[2.2]" />
+
+            {/* Step 3: Take the exam */}
+            <div className="flex flex-col items-center">
+              <div className="grid size-14 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
+                <Star className="size-6 text-black stroke-[1.8]" />
+              </div>
+              <span className="mt-2 text-xs font-bold text-black tracking-tight whitespace-nowrap">Take the exam</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function SemesterProgress({
   dashboard,
   compact = false,
@@ -680,6 +861,11 @@ function DashboardDataSkeleton({
       </header>
 
       <section
+        className="mt-6 min-h-[250px] animate-pulse rounded-[28px] bg-border motion-reduce:animate-none"
+        aria-label="Loading your next challenge"
+      />
+
+      <section
         className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
         aria-label="Daily learning metrics"
       >
@@ -798,6 +984,8 @@ function DashboardContent({
           </button>
         ) : null}
       </header>
+
+      <StarterChallengeBanner dashboard={dashboard} />
 
       <section
         className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"

@@ -1537,8 +1537,10 @@ function ChallengeDetail({
 
 export function ChallengesDashboardClient({
   dashboard: serverDashboard,
+  initialChallengeId,
 }: {
   dashboard: StudentChallengeDashboard;
+  initialChallengeId?: string;
 }) {
   const router = useRouter();
   // Re-renders the RSC payload. Only the recovery paths below use it now.
@@ -1591,6 +1593,7 @@ export function ChallengesDashboardClient({
   const [selected, setSelected] = useState<StudentChallengeDetail | null>(null);
   const [openingId, setOpeningId] = useState("");
   const [openError, setOpenError] = useState("");
+  const openedInitialChallengeRef = useRef("");
   const selectedScopeKey = dashboard.scope
     ? `${dashboard.scope.courseId}:${dashboard.scope.subjectSlug.trim().toLowerCase()}`
     : "all";
@@ -1645,6 +1648,16 @@ export function ChallengesDashboardClient({
       setOpeningId("");
     }
   };
+
+  useEffect(() => {
+    if (!initialChallengeId || openedInitialChallengeRef.current === initialChallengeId) return;
+    const initialChallenge = dashboard.challenges.find(
+      (challenge) => challenge.id === initialChallengeId,
+    );
+    if (!initialChallenge) return;
+    openedInitialChallengeRef.current = initialChallengeId;
+    void openChallenge(initialChallenge);
+  }, [dashboard.challenges, initialChallengeId]);
 
   if (selected) {
     const nextChallenge = nextAvailableChallenge(dashboard.challenges, selected);

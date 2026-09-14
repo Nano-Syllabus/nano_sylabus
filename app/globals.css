@@ -76,6 +76,12 @@
   --note-green: rgba(56, 161, 105, 0.12);
   --community-banner: #0b2859;
   --community-accent: #2f6fed;
+  --challenge-banner: #cbf738;
+  --challenge-banner-glow: #e5ff75;
+  --challenge-banner-ink: #000000;
+  --challenge-banner-paper: #faffeb;
+  --challenge-banner-shadow: rgba(0, 0, 0, 0.12);
+  --challenge-banner-button-text: #ffffff;
 }
 
 [data-theme="dark"] {
@@ -107,6 +113,12 @@
   --note-green: rgba(74, 222, 128, 0.13);
   --community-banner: #0a1e42;
   --community-accent: #6f9cff;
+  --challenge-banner: #cbf738;
+  --challenge-banner-glow: #e5ff75;
+  --challenge-banner-ink: #000000;
+  --challenge-banner-paper: #faffeb;
+  --challenge-banner-shadow: rgba(0, 0, 0, 0.2);
+  --challenge-banner-button-text: #ffffff;
 }
 
 @layer base {

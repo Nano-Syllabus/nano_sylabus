@@ -14,6 +14,7 @@ export default async function ChallengesPage({
     courseId?: string;
     subject?: string;
     community?: string;
+    challenge?: string;
   }>;
 }) {
   const { user } = await requireOnboardedUser();
@@ -35,7 +36,11 @@ export default async function ChallengesPage({
   return (
     <>
       <SetAppShell title="Challenge Hub" />
-      <ChallengesDashboardClient key={active.selected?.id ?? "none"} dashboard={dashboard} />
+      <ChallengesDashboardClient
+        key={active.selected?.id ?? "none"}
+        dashboard={dashboard}
+        initialChallengeId={String(params.challenge || "").trim() || undefined}
+      />
     </>
   );
 }
