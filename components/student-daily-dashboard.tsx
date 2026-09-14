@@ -14,14 +14,11 @@ import {
   LibraryBig,
   LoaderCircle,
   LockKeyholeOpen,
-  Trophy,
-  Users,
   X,
   Zap,
 } from "lucide-react";
 import type {
   DailyExamDate,
-  DailyLeaderboardMember,
   StudentDailyDashboard,
 } from "@/lib/data/student-daily-dashboard";
 import type { SubscriptionPlan } from "@/lib/types";
@@ -378,127 +375,13 @@ function MetricCard({
   );
 }
 
-function LeaderboardRow({ member }: { member: DailyLeaderboardMember }) {
-  return (
-    <li
-      className={cn(
-        "grid grid-cols-[34px_minmax(0,1fr)_64px_62px] items-center gap-2 border-t border-border px-1 py-3 text-sm first:border-t-0 sm:grid-cols-[42px_minmax(0,1fr)_84px_70px]",
-      )}
-    >
-      <span className="text-xs font-semibold text-text-muted tabular-nums">
-        #{member.dailyRank}
-      </span>
-      <span className="flex min-w-0 items-center gap-2.5">
-        <span
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-full bg-border text-xs font-semibold",
-            member.isViewer &&
-              "bg-[var(--community-accent)]/15 text-[var(--community-accent)] ring-1 ring-[var(--community-accent)]/30",
-          )}
-        >
-          {member.initials}
-        </span>
-        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span className="truncate font-medium">{member.name}</span>
-          {member.isViewer ? (
-            <span className="shrink-0 rounded-full bg-[var(--community-accent)]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--community-accent)]">
-              You
-            </span>
-          ) : null}
-        </span>
-      </span>
-      <span className="text-right font-semibold tabular-nums">{member.todayAttempts}</span>
-      <span className="text-right text-text-secondary tabular-nums">{member.streak}d</span>
-    </li>
-  );
-}
-
-function DailyLeaderboard({ dashboard }: { dashboard: StudentDailyDashboard }) {
-  const community = dashboard.community;
-  if (!community) {
-    return (
-      <section
-        className="flex min-h-[330px] flex-col rounded-2xl border border-border bg-card p-5 sm:p-6"
-        aria-labelledby="leaderboard-heading"
-      >
-        <div className="flex items-center gap-2 text-text-secondary">
-          <Trophy className="size-4" aria-hidden="true" />
-          <p className="text-xs font-semibold uppercase tracking-[0.14em]">Daily standings</p>
-        </div>
-        <h2 id="leaderboard-heading" className="mt-2 font-display text-xl font-semibold">
-          Community leaderboard
-        </h2>
-        <div className="my-auto py-8 text-center">
-          <Users className="mx-auto size-7 text-text-muted" aria-hidden="true" />
-          <h3 className="mt-3 font-semibold">No active community</h3>
-          <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-text-secondary">
-            Join your programme community to compare today&apos;s real practice activity.
-          </p>
-          <Link
-            href="/communities"
-            className={cn(
-              "mt-5 inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-semibold text-text-inverse",
-              focusRing,
-            )}
-          >
-            Browse communities <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
-        </div>
-      </section>
-    );
-  }
-
-  const visible = community.leaderboard.slice(0, 5);
-  const viewer = community.leaderboard.find((member) => member.isViewer);
-  if (viewer && !visible.some((member) => member.id === viewer.id)) visible.push(viewer);
-
-  return (
-    <section
-      className="rounded-2xl border border-border bg-card p-5 sm:p-6"
-      aria-labelledby="leaderboard-heading"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-text-secondary">
-            <Trophy className="size-4" aria-hidden="true" />
-            <p className="text-xs font-semibold uppercase tracking-[0.14em]">Today</p>
-          </div>
-          <h2 id="leaderboard-heading" className="mt-2 font-display text-xl font-semibold">
-            Community leaderboard
-          </h2>
-          <p className="mt-1 text-sm text-text-secondary">{community.name}</p>
-        </div>
-        <p className="inline-flex min-h-10 items-center text-sm text-text-secondary">
-          {formatNumber(community.memberCount)} members
-        </p>
-      </div>
-      <div className="mt-5 grid grid-cols-[34px_minmax(0,1fr)_64px_62px] gap-2 border-b border-border px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted sm:grid-cols-[42px_minmax(0,1fr)_84px_70px]">
-        <span>Rank</span>
-        <span>Member</span>
-        <span className="text-right">Today</span>
-        <span className="text-right">Streak</span>
-      </div>
-      <ol>
-        {visible.map((member) => (
-          <LeaderboardRow key={member.id} member={member} />
-        ))}
-      </ol>
-      <div className="mt-3 border-t border-border pt-3 text-center">
-        <Link
-          href={`/app/community?community=${encodeURIComponent(community.slug)}&tab=members&sort=today`}
-          className={cn(
-            "inline-flex min-h-10 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--community-accent)] hover:underline",
-            focusRing,
-          )}
-        >
-          View full leaderboard <ArrowRight className="size-4" aria-hidden="true" />
-        </Link>
-      </div>
-    </section>
-  );
-}
-
-function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
+function SemesterProgress({
+  dashboard,
+  compact = false,
+}: {
+  dashboard: StudentDailyDashboard;
+  compact?: boolean;
+}) {
   const community = dashboard.community;
   const [semesterId, setSemesterId] = useState(community?.currentSemesterId ?? "");
   const semester = useMemo(
@@ -526,25 +409,39 @@ function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
       className="overflow-hidden rounded-2xl border border-border bg-card"
       aria-labelledby="semester-progress-heading"
     >
-      <div className="flex flex-col gap-4 border-b border-border px-5 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
-        <div>
+      <div
+        className={cn(
+          "flex flex-col gap-4 border-b border-border px-5 py-5",
+          !compact && "sm:flex-row sm:items-end sm:justify-between sm:px-6",
+        )}
+      >
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
             Programme map
           </p>
-          <h2 id="semester-progress-heading" className="mt-2 font-display text-xl font-semibold">
+          <h2
+            id="semester-progress-heading"
+            className="mt-2 font-display text-xl font-semibold leading-tight"
+          >
             Semester progress
           </h2>
           <p className="mt-1 text-sm text-text-secondary">
             Real topic readiness from your indexed subjects.
           </p>
         </div>
-        <label className="grid gap-1.5 text-xs font-medium text-text-secondary">
+        <label
+          className={cn(
+            "grid gap-1.5 text-xs font-medium text-text-secondary",
+            compact && "w-full",
+          )}
+        >
           Semester
           <select
             value={semester?.id ?? ""}
             onChange={(event) => setSemesterId(event.target.value)}
             className={cn(
-              "min-h-11 min-w-[220px] rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary",
+              "min-h-11 rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary",
+              compact ? "w-full min-w-0" : "min-w-[220px]",
               focusRing,
             )}
           >
@@ -814,17 +711,20 @@ function DashboardDataSkeleton({
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-display text-xl font-semibold">Community leaderboard</h2>
-          <div className={`mt-2 h-3 w-24 ${line}`} aria-hidden="true" />
+          <div className="flex flex-col gap-4">
+            <div>
+              <div className={`h-3 w-24 ${line}`} aria-hidden="true" />
+              <h2 className="mt-2 font-display text-xl font-semibold">Semester progress</h2>
+              <div className={`mt-2 h-3 w-44 ${line}`} aria-hidden="true" />
+            </div>
+            <div className={`h-11 w-full rounded-xl ${line}`} aria-hidden="true" />
+          </div>
           <div className="mt-5 space-y-4" aria-hidden="true">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <div className="size-8 shrink-0 rounded-full bg-border animate-pulse motion-reduce:animate-none" />
-                <div className="min-w-0 flex-1">
-                  <div className={`h-3 w-32 ${line}`} />
-                  <div className={`mt-1.5 h-3 w-16 ${line}`} />
-                </div>
-                <div className={`h-3 w-8 ${line}`} />
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="border-t border-border pt-4">
+                <div className={`h-3 w-40 ${line}`} />
+                <div className={`mt-2 h-3 w-28 ${line}`} />
+                <div className={`mt-3 h-2 w-full ${line}`} />
               </div>
             ))}
           </div>
@@ -929,7 +829,7 @@ function DashboardContent({
         />
       </section>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <PracticeCalendar
           initialDays={dashboard.activity}
           examDates={dashboard.examDates ?? []}
@@ -939,11 +839,7 @@ function DashboardContent({
           currentSemesterId={community?.currentSemesterId}
           onExamDatesChange={handleExamDatesChange}
         />
-        <DailyLeaderboard dashboard={dashboard} />
-      </div>
-
-      <div className="mt-6">
-        <SemesterProgress dashboard={dashboard} />
+        <SemesterProgress dashboard={dashboard} compact />
       </div>
 
       {unlimitedPlan ? (

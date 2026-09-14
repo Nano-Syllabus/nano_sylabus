@@ -823,7 +823,7 @@ export function PracticeCalendar({
           {Array.from({ length: startWeekday }).map((_, index) => (
             <div
               key={`leading-${index}`}
-              className="h-[58px] sm:h-[66px] w-full rounded-[10px] border border-[#cbd5e1] bg-white overflow-hidden flex items-center justify-center"
+              className="h-[52px] sm:h-[58px] w-full rounded-[10px] border border-[#cbd5e1] bg-white overflow-hidden flex items-center justify-center"
               aria-hidden="true"
             >
               <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -877,7 +877,7 @@ export function PracticeCalendar({
                   onClick={() => setSelectedDate(currentAdDateStr)}
                   title={`${formatNepaliDate(currentBsDate)} (${compactDate(currentAdDateStr)})`}
                   className={cn(
-                    "h-[58px] sm:h-[66px] w-full rounded-[10px] border border-[#cbd5e1] bg-white overflow-hidden flex items-center justify-center cursor-pointer transition hover:border-slate-400",
+                    "h-[52px] sm:h-[58px] w-full rounded-[10px] border border-[#cbd5e1] bg-white overflow-hidden flex items-center justify-center cursor-pointer transition hover:border-slate-400",
                     focusRing,
                     isSelected && "ring-2 ring-[#0066ff] ring-offset-2",
                   )}
@@ -920,7 +920,7 @@ export function PracticeCalendar({
                   onClick={() => setSelectedDate(currentAdDateStr)}
                   title={`Today: ${formatNepaliDate(currentBsDate)} (${compactDate(currentAdDateStr)})`}
                   className={cn(
-                    "h-[58px] sm:h-[66px] w-full rounded-[10px] border-[1.5px] border-[#0066ff] bg-white flex flex-col items-center justify-center shadow-xs transition cursor-pointer relative",
+                    "h-[52px] sm:h-[58px] w-full rounded-[10px] border-[1.5px] border-[#0066ff] bg-white flex flex-col items-center justify-center shadow-xs transition cursor-pointer relative",
                     focusRing,
                   )}
                 >
@@ -944,7 +944,7 @@ export function PracticeCalendar({
                   onClick={() => setSelectedDate(currentAdDateStr)}
                   title={`Exam: ${exam.title} on ${formatNepaliDate(currentBsDate)}`}
                   className={cn(
-                    "h-[58px] sm:h-[66px] w-full rounded-[10px] border border-[#fecdd3] bg-[#fff1f2] flex flex-col items-center justify-center transition cursor-pointer hover:bg-rose-100/60 relative",
+                    "h-[52px] sm:h-[58px] w-full rounded-[10px] border border-[#fecdd3] bg-[#fff1f2] flex flex-col items-center justify-center transition cursor-pointer hover:bg-rose-100/60 relative",
                     focusRing,
                     isSelected && "ring-2 ring-rose-500 ring-offset-2",
                   )}
@@ -967,7 +967,7 @@ export function PracticeCalendar({
                 onClick={() => setSelectedDate(currentAdDateStr)}
                 title={`${formatNepaliDate(currentBsDate)} (${compactDate(currentAdDateStr)})`}
                 className={cn(
-                  "h-[58px] sm:h-[66px] w-full rounded-[10px] border border-[#e2e8f0] bg-white flex flex-col items-center justify-center transition cursor-pointer hover:border-slate-300 hover:shadow-xs relative",
+                  "h-[52px] sm:h-[58px] w-full rounded-[10px] border border-[#e2e8f0] bg-white flex flex-col items-center justify-center transition cursor-pointer hover:border-slate-300 hover:shadow-xs relative",
                   focusRing,
                   isSelected && "ring-2 ring-[#0066ff] ring-offset-2",
                 )}
@@ -986,7 +986,7 @@ export function PracticeCalendar({
             return Array.from({ length: trailing }).map((_, index) => (
               <div
                 key={`trailing-${index}`}
-                className="h-[58px] sm:h-[66px] w-full rounded-[10px] border border-[#f1f5f9] bg-white flex flex-col items-center justify-center"
+                className="h-[52px] sm:h-[58px] w-full rounded-[10px] border border-[#f1f5f9] bg-white flex flex-col items-center justify-center"
               >
                 <span className="text-[16px] sm:text-[17px] font-[700] text-[#6366f1]/80">
                   {toDevanagariDigits(index + 1)}

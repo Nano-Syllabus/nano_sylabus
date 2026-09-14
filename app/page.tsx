@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { DM_Sans, Manrope } from "next/font/google";
+import { LandingPrimaryCta } from "@/components/landing-primary-cta";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 
 const dmSans = DM_Sans({ subsets: ["latin"], display: "swap" });
@@ -201,9 +202,7 @@ export default function LandingPage() {
             </a>
           </nav>
           <div className="flex items-center gap-3">
-            <Cta href="/flow" size="nav">
-              Find my starting point
-            </Cta>
+            <LandingPrimaryCta />
           </div>
         </div>
       </header>
@@ -245,7 +244,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-9 flex flex-wrap items-center gap-6">
                 <Cta href="/flow" blue size="hero">
-                  Get Started
+                  Choose your program
                 </Cta>
                 <a
                   href="#steps"

@@ -138,10 +138,22 @@ describe("unified Figma library", () => {
     const desktopNav = readFileSync("components/app-sidebar.tsx", "utf8");
     const mobileNav = readFileSync("components/app-nav.tsx", "utf8");
     const oldRoute = readFileSync("app/app/communities/page.tsx", "utf8");
+    const settingsPage = readFileSync("app/app/settings/page.tsx", "utf8");
+    const settingsForm = readFileSync("components/settings-form.tsx", "utf8");
 
     expect(library).toContain("/api/student/materials?subject=");
     expect(library).toContain("courseId=");
     expect(library).toContain("/membership");
+    expect(library).toContain("semesterSelectionReducer");
+    expect(library).toContain('type: "browse"');
+    expect(library).toContain("void saveRunningSemester(term)");
+    expect(library).toContain("onClick={() => browseTerm(term)}");
+    expect(library).not.toContain("async function selectTerm");
+    expect(settingsPage).toContain("getActiveCommunity(user.id)");
+    expect(settingsPage).toContain("currentTermId: community.membership.currentTermId");
+    expect(settingsForm).toContain('label="Running semester"');
+    expect(settingsForm).toContain("saveRunningSemester(event.target.value)");
+    expect(settingsForm).toContain("/membership`");
     expect(desktopNav).not.toContain('label: "Subject Explorer"');
     expect(desktopNav).toContain('!isCollapsed && "Today"');
     expect(desktopNav).toContain('!isCollapsed && "Community"');

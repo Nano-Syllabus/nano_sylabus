@@ -4,10 +4,14 @@ import { ArrowLeft, BookOpen, Download, FileText, LibraryBig, RefreshCw } from "
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
 import { SubjectTopicProgress } from "@/components/subject-topic-progress";
+import {
+  initialSemesterSelection,
+  semesterSelectionReducer,
+} from "@/lib/community-semester-selection";
 import { cn, titleCase } from "@/lib/utils";
 
 export type LibraryNanoAiMaterial = {
@@ -147,11 +151,23 @@ export function LibraryNanoAiWorkspace({
     null;
   const initialTerm =
     orderedTerms.find((term) => term.id === initialSelection.termId) ?? currentTerm;
+  const savedSemesterSelection = initialSemesterSelection(
+    orderedTerms,
+    community?.membership?.currentTermId,
+  );
+  const [semesterSelection, dispatchSemesterSelection] = useReducer(
+    semesterSelectionReducer,
+    {
+      ...savedSemesterSelection,
+      viewedTermId: initialTerm?.id ?? savedSemesterSelection.viewedTermId,
+    },
+  );
+  const selectedTerm =
+    orderedTerms.find((term) => term.id === semesterSelection.viewedTermId) ?? currentTerm;
   const initialSubject =
     initialTerm?.subjects.find((subject) => subject.slug === initialSelection.subjectSlug) ??
     initialTerm?.subjects[0] ??
     null;
-  const [selectedTerm, setSelectedTerm] = useState<CommunityTerm | null>(initialTerm);
   const [selectedSubject, setSelectedSubject] = useState<LibraryNanoAiSubject | null>(
     initialSubject ? { ...initialSubject, progress: insights[initialSubject.id] } : null,
   );
@@ -162,8 +178,15 @@ export function LibraryNanoAiWorkspace({
   const [restoredDocument, setRestoredDocument] = useState(false);
   const [savingSemester, setSavingSemester] = useState(false);
   const [semesterError, setSemesterError] = useState("");
-  const [savedTermId, setSavedTermId] = useState(currentTerm?.id ?? "");
   const semesterSaveInFlight = useRef(false);
+
+  useEffect(() => {
+    if (!savedSemesterSelection.currentTermId) return;
+    dispatchSemesterSelection({
+      type: "current-saved",
+      termId: savedSemesterSelection.currentTermId,
+    });
+  }, [savedSemesterSelection.currentTermId]);
 
   useEffect(() => {
     if (!selectedSubject) {
@@ -241,14 +264,21 @@ export function LibraryNanoAiWorkspace({
 
   const visibleMaterials = materials;
 
-  async function selectTerm(term: CommunityTerm) {
-    if (semesterSaveInFlight.current) return;
-    setSelectedTerm(term);
+  function browseTerm(term: CommunityTerm) {
+    dispatchSemesterSelection({ type: "browse", termId: term.id });
     setSelectedSubject(null);
     updateLibraryUrl({ semester: term.id, subject: null, document: null });
-    if (community?.membership?.status !== "active" || term.id === savedTermId) {
+  }
+
+  async function saveRunningSemester(term: CommunityTerm) {
+    if (semesterSaveInFlight.current) return;
+    if (
+      community?.membership?.status !== "active" ||
+      term.id === semesterSelection.currentTermId
+    ) {
       return;
     }
+    dispatchSemesterSelection({ type: "choose-current", termId: term.id });
     semesterSaveInFlight.current = true;
     setSavingSemester(true);
     setSemesterError("");
@@ -265,12 +295,13 @@ export function LibraryNanoAiWorkspace({
       if (!response.ok || payload.currentTermId !== term.id) {
         throw new Error(payload.error || "Could not save your current semester.");
       }
-      setSavedTermId(term.id);
+      dispatchSemesterSelection({ type: "current-saved", termId: term.id });
       router.refresh();
     } catch (error) {
-      const savedTerm = orderedTerms.find((item) => item.id === savedTermId) ?? null;
-      setSelectedTerm(savedTerm);
-      updateLibraryUrl({ semester: savedTerm?.id, subject: null, document: null });
+      dispatchSemesterSelection({
+        type: "choose-current",
+        termId: semesterSelection.currentTermId,
+      });
       setSemesterError(
         error instanceof Error ? error.message : "Could not save your current semester.",
       );
@@ -341,10 +372,10 @@ export function LibraryNanoAiWorkspace({
           <div className="flex h-11 w-full items-center rounded-full border border-border bg-card px-4 sm:w-[220px]">
             <select
               id="current-semester-selector"
-              value={savedTermId}
+              value={semesterSelection.draftTermId}
               onChange={(event) => {
                 const term = orderedTerms.find((item) => item.id === event.target.value);
-                if (term) void selectTerm(term);
+                if (term) void saveRunningSemester(term);
               }}
               disabled={savingSemester || orderedTerms.length === 0}
               className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-text-primary outline-none disabled:cursor-not-allowed disabled:opacity-60"
@@ -357,6 +388,11 @@ export function LibraryNanoAiWorkspace({
               ))}
             </select>
           </div>
+          {semesterError ? (
+            <p role="alert" className="max-w-[220px] text-xs text-destructive">
+              {semesterError}
+            </p>
+          ) : null}
         </div>
       </header>
 
@@ -371,8 +407,7 @@ export function LibraryNanoAiWorkspace({
               <button
                 key={term.id}
                 type="button"
-                disabled={savingSemester}
-                onClick={() => void selectTerm(term)}
+                onClick={() => browseTerm(term)}
                 className={cn(
                   "h-10 shrink-0 rounded-full border px-[18px] text-[13px] font-medium transition-colors",
                   active
@@ -386,11 +421,6 @@ export function LibraryNanoAiWorkspace({
             );
           })}
         </div>
-        {semesterError ? (
-          <p role="alert" className="mt-2 text-xs text-destructive">
-            {semesterError}
-          </p>
-        ) : null}
       </section>
 
       <section className="mt-7" aria-labelledby="library-subjects-heading">

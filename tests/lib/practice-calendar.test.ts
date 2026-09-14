@@ -49,13 +49,16 @@ describe("practice calendar exam planning", () => {
     expect(source).toContain("useCalendarMonth(communitySlug, visibleMonth");
   });
 
-  it("gives the calendar and leaderboard a 60/40 desktop split", () => {
+  it("gives the calendar and semester progress a 60/40 desktop split", () => {
     const source = readFileSync("components/student-daily-dashboard.tsx", "utf8");
 
     expect(source).not.toContain('className="mt-6 grid gap-6 xl:grid-cols-2"');
     expect(
-      source.match(/className="mt-6 grid gap-6 xl:grid-cols-\[minmax\(0,3fr\)_minmax\(0,2fr\)\]"/g),
+      source.match(
+        /className="mt-6 grid (?:items-start )?gap-6 xl:grid-cols-\[minmax\(0,3fr\)_minmax\(0,2fr\)\]"/g,
+      ),
     ).toHaveLength(2);
+    expect(source).toContain("<SemesterProgress dashboard={dashboard} compact />");
   });
 
   it("uses the available 60% width for readable upcoming-exam rows", () => {
