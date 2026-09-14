@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Bell,
@@ -41,6 +42,7 @@ import type {
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 import { cn, titleCase } from "@/lib/utils";
 import { CommunityLeaveControl } from "@/components/community-leave-control";
+import { patchDashboardRunningSemester } from "@/lib/query/dashboard";
 
 type CommunitySection = "overview" | "members";
 
@@ -193,6 +195,7 @@ export function CommunityHubClient({
   initialInviteOpen?: boolean;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { community } = initialData;
   const [section, setSection] = useState<CommunitySection>(initialSection);
   const [selectedTermId, setSelectedTermId] = useState(initialData.currentTermId);
@@ -425,12 +428,16 @@ export function CommunityHubClient({
           body: JSON.stringify({ termId: selectedTermId }),
         },
       );
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as {
+        currentTermId?: string;
+        error?: string;
+      };
+      if (!response.ok || payload.currentTermId !== selectedTermId) {
         setActionError(payload.error || "Could not update your semester. Try again.");
         return;
       }
       setCurrentTermId(selectedTermId);
+      patchDashboardRunningSemester(queryClient, community.slug, selectedTermId);
       router.refresh();
     } catch {
       setActionError("Could not reach NanoSyllabus. Check your connection and try again.");

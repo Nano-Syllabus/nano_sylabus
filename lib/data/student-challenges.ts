@@ -481,25 +481,46 @@ export function dailyChallengeAssignmentCount({
   activeRecommendationCount,
   availableCount,
   minimumRecommendationCount = 0,
+  dailyCount = 0,
+  maximumDailyCount = Infinity,
 }: {
   activeCount: number;
   activeRecommendationCount: number;
   availableCount: number;
   minimumRecommendationCount?: number;
+  dailyCount?: number;
+  maximumDailyCount?: number;
 }) {
   const openSlots = Math.max(0, 3 - activeCount);
   const scopedSlots = Math.max(0, minimumRecommendationCount - activeRecommendationCount);
   const requested = Math.max(openSlots, scopedSlots);
-  return Math.min(availableCount, requested);
+  return Math.min(availableCount, requested, Math.max(0, maximumDailyCount - dailyCount));
+}
+
+async function hasUnlimitedDailyChallenges(userId: string): Promise<boolean> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("user_subscriptions")
+    .select("ends_at,subscription_plans(slug,is_unlimited)")
+    .eq("user_id", userId)
+    .eq("status", "active");
+  if (error) throw error;
+  const now = Date.now();
+  return (data ?? []).some((subscription) => {
+    const plan = Array.isArray(subscription.subscription_plans)
+      ? subscription.subscription_plans[0]
+      : subscription.subscription_plans;
+    const active = !subscription.ends_at || new Date(subscription.ends_at).getTime() > now;
+    return active && (plan?.slug === "plus-monthly" || plan?.is_unlimited === true);
+  });
 }
 
 /**
- * Keeps three real, unfinished challenges in today's general queue. Completed
- * rows stay immutable for history/metrics, while the next unused recommendation
- * is inserted as a fresh assignment and sorts above the older active rows. A
- * subject-scoped caller can request its own three matching assignments so
- * opening a subject preserves the same three-challenge experience even when
- * other subjects already filled the general queue.
+ * Keeps up to three real, unfinished challenges in today's general queue.
+ * Free students receive at most three assignments total per day; Plus and
+ * unlimited subscribers get the next unused recommendation as they finish.
+ * Completed rows stay immutable for history/metrics. A subject-scoped caller
+ * can request three matching assignments only within that daily allowance.
  */
 export async function ensureDailyChallenges(
   userId: string,
@@ -507,7 +528,10 @@ export async function ensureDailyChallenges(
   options: EnsureDailyChallengeOptions = {},
 ): Promise<StudentChallengeSummary[]> {
   const date = nepaliChallengeDate();
-  const existing = await listDailyRows(userId, date);
+  const [existing, unlimitedDailyChallenges] = await Promise.all([
+    listDailyRows(userId, date),
+    hasUnlimitedDailyChallenges(userId),
+  ]);
   if (existing === null) return [];
 
   // Old catalogues sometimes exposed uploaded files (for example
@@ -532,6 +556,8 @@ export async function ensureDailyChallenges(
       activeRecommendationCount,
       availableCount: available.length,
       minimumRecommendationCount: options.minimumRecommendationCount,
+      dailyCount: existing.filter((row) => !isSourceDocumentChallengeRow(row)).length,
+      maximumDailyCount: unlimitedDailyChallenges ? Infinity : 3,
     }),
   );
 

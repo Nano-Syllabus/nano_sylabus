@@ -31,16 +31,16 @@ const FREE_FEATURES = [
 ];
 
 const PLAN_COPY = {
-  individual: {
+  plus: {
     title: "Plus",
     description: "Everything in Free",
     fallbackFeatures: ["Unlimited challenges", "Exam calendar & study plan", "Romanized Nepali"],
   },
-  group: {
+  pro: {
     title: "Pro",
     description: "Everything in Plus",
     fallbackFeatures: [
-      "AI tutor for everyone",
+      "AI tutor",
       "AI concept videos & animations",
       "English & Nepali",
     ],
@@ -52,7 +52,7 @@ const TESTIMONIALS = [
     name: "Aayush K.",
     course: "Computer Engineering · TU",
     badge: "Top Performer",
-    image: "/landing-new/avatar-1.png",
+    image: "/landing-new/avatar-2.png",
     quote:
       "I stopped waiting to finish every chapter before practising. One topic at a time finally felt manageable.",
   },
@@ -60,7 +60,7 @@ const TESTIMONIALS = [
     name: "Sneha P.",
     course: "Civil Engineering · PU",
     badge: "Rising Achiever",
-    image: "/landing-new/avatar-2.png",
+    image: "/landing-new/avatar-1.png",
     quote: "The handwritten feedback showed me the exact reason my solution lost its way.",
   },
   {
@@ -73,8 +73,9 @@ const TESTIMONIALS = [
   },
 ] as const;
 
-function formatMoney(plan: SubscriptionPlan) {
-  return `${plan.currency === "NPR" ? "Rs." : plan.currency} ${plan.price.toLocaleString("en-NP")}`;
+function formatPlanPrice(plan: SubscriptionPlan | null, months: 1 | 3, fallback: number) {
+  const price = (plan?.price ?? fallback) * months;
+  return `Rs. ${price.toLocaleString("en-NP")}`;
 }
 
 function FeatureList({ features }: { features: string[] }) {
@@ -97,27 +98,17 @@ function FeatureList({ features }: { features: string[] }) {
 export function BillingPageClient({
   overview,
   paymentConfig,
-  socialProof = {
-    challengesCompletedThisWeek: 0,
-    handwrittenAnswersReviewed: 0,
-    activeStudyMemberships: 0,
-  },
   user,
 }: {
   overview: StudentBillingOverview;
   paymentConfig: PaymentMethodConfig | null;
-  socialProof?: {
-    challengesCompletedThisWeek: number;
-    handwrittenAnswersReviewed: number;
-    activeStudyMemberships: number;
-  };
   user: AppUser;
 }) {
   const router = useRouter();
+  const [billingMonths, setBillingMonths] = useState<1 | 3>(1);
   const [creatingPlanId, setCreatingPlanId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [selectedInvoice, setSelectedInvoice] = useState<CheckoutInvoice | null>(null);
-  const [groupPlan, setGroupPlan] = useState<SubscriptionPlan | null>(null);
   const [activationConfirmation, setActivationConfirmation] = useState<{
     invoiceCode: string;
   } | null>(null);
@@ -127,8 +118,11 @@ export function BillingPageClient({
   const plans = useMemo(() => {
     const active = overview.plans.filter((plan) => plan.isActive);
     return {
-      individual: active.find((plan) => plan.productType === "individual") ?? null,
-      group: active.find((plan) => plan.productType === "group") ?? null,
+      plus: active.find((plan) => plan.slug === "plus-monthly") ?? null,
+      pro:
+        active.find((plan) => plan.slug === "individual-unlimited") ??
+        active.find((plan) => plan.productType === "individual" && plan.isUnlimited) ??
+        null,
     };
   }, [overview.plans]);
 
@@ -151,16 +145,15 @@ export function BillingPageClient({
     );
   }, [activeSubscription, overview.invoices, overview.plans]);
 
-  const activePlanLabel =
-    activePlan?.productType === "group" ? "Group Unlimited" : "Individual Unlimited";
+  const activePlanLabel = activePlan?.slug === "plus-monthly"
+    ? "Plus"
+    : activePlan?.productType === "group"
+      ? "Group"
+      : "Pro";
 
   async function requestInvoice(
     plan: SubscriptionPlan,
-    purchaseDetails?: {
-      groupName: string;
-      organizerEmail: string;
-      studentEmails: string[];
-    },
+    months: 1 | 3,
   ): Promise<CheckoutInvoice> {
     const response = await fetch("/api/billing/invoices", {
       method: "POST",
@@ -168,7 +161,7 @@ export function BillingPageClient({
       body: JSON.stringify({
         planId: plan.id,
         paymentMethod: "bank_transfer",
-        ...(purchaseDetails ? { purchaseDetails } : {}),
+        billingMonths: months,
       }),
     });
     const payload = (await response.json().catch(() => ({}))) as {
@@ -186,17 +179,11 @@ export function BillingPageClient({
 
   async function createInvoice(
     plan: SubscriptionPlan,
-    purchaseDetails?: {
-      groupName: string;
-      organizerEmail: string;
-      studentEmails: string[];
-    },
   ) {
     setCreatingPlanId(plan.id);
     setError("");
     try {
-      const invoice = await requestInvoice(plan, purchaseDetails);
-      setGroupPlan(null);
+      const invoice = await requestInvoice(plan, billingMonths);
       setSelectedInvoice(invoice);
     } catch (requestError) {
       setError(
@@ -214,8 +201,7 @@ export function BillingPageClient({
       setError("This plan is not available yet. Please try again later.");
       return;
     }
-    if (plan.productType === "group") setGroupPlan(plan);
-    else void createInvoice(plan);
+    void createInvoice(plan);
   }
 
   async function updateSubscriptionCancellation(action: "cancel" | "resume") {
@@ -270,27 +256,29 @@ export function BillingPageClient({
           <h1 className="text-[28px] font-bold leading-tight tracking-[-0.04em] text-[#111827] sm:text-[34px]">
             Simple plans. Bigger dreams.
           </h1>
-          <p className="mt-2.5 text-[12px] font-medium leading-5 text-[#7b8498]">
-            {user.hasUnlimitedAccess
-              ? `Your ${activePlanLabel} plan is active with unlimited NanoAI access.`
-              : "Pick the support that fits your pace. Change your plan whenever you need."}
-          </p>
           <div
             className="mt-5 inline-flex h-11 items-center rounded-full border border-[#dfe4ed] bg-white p-[2px]"
             aria-label="Billing period"
           >
             <button
               type="button"
-              aria-pressed="true"
-              className="h-10 rounded-full bg-[#111827] px-6 text-[10px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2"
+              aria-pressed={billingMonths === 1}
+              onClick={() => setBillingMonths(1)}
+              className={cn(
+                "h-10 rounded-full px-6 text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
+                billingMonths === 1 ? "bg-[#111827] text-white" : "text-[#7b8498]",
+              )}
             >
               1 month
             </button>
             <button
               type="button"
-              disabled
-              title="Three-month checkout is coming soon"
-              className="h-10 rounded-full px-6 text-[10px] font-medium text-[#7b8498] disabled:cursor-not-allowed disabled:opacity-100"
+              aria-pressed={billingMonths === 3}
+              onClick={() => setBillingMonths(3)}
+              className={cn(
+                "h-10 rounded-full px-6 text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
+                billingMonths === 3 ? "bg-[#111827] text-white" : "text-[#7b8498]",
+              )}
             >
               3 months
             </button>
@@ -306,49 +294,49 @@ export function BillingPageClient({
             eyebrow="Current Plan"
             price="Rs. 0"
             features={FREE_FEATURES}
-            actionLabel={user.hasUnlimitedAccess ? "Included in your plan" : "Current plan"}
+            actionLabel={activePlan ? "Included in your plan" : "Current plan"}
             onAction={() => router.push("/app/today")}
             disabled
           />
           <PricingCard
-            title={PLAN_COPY.individual.title}
-            eyebrow={plans.individual ? `1 month · ${formatMoney(plans.individual)}` : "1 month"}
-            price={plans.individual ? formatMoney(plans.individual) : "Rs. 1,500"}
-            includes={PLAN_COPY.individual.description}
-            features={[...PLAN_COPY.individual.fallbackFeatures]}
-            actionLabel={activePlan?.productType === "individual" ? "Current plan" : "Choose Plus"}
-            loading={creatingPlanId === plans.individual?.id}
-            onAction={() => startPlan(plans.individual)}
-            disabled={activePlan?.productType === "individual"}
-            current={activePlan?.productType === "individual"}
-            accessEndsAt={
-              activePlan?.productType === "individual" ? activeSubscription?.endsAt : null
+            title={PLAN_COPY.plus.title}
+            eyebrow={
+              billingMonths === 1
+                ? `3 months · ${formatPlanPrice(plans.plus, 3, 450)}`
+                : `1 month · ${formatPlanPrice(plans.plus, 1, 450)}`
             }
+            price={formatPlanPrice(plans.plus, billingMonths, 450)}
+            includes={PLAN_COPY.plus.description}
+            features={[...PLAN_COPY.plus.fallbackFeatures]}
+            actionLabel={activePlan?.id === plans.plus?.id ? "Current plan" : "Choose Plus"}
+            loading={creatingPlanId === plans.plus?.id}
+            onAction={() => startPlan(plans.plus)}
+            disabled={activePlan?.id === plans.plus?.id}
+            current={activePlan?.id === plans.plus?.id}
+            accessEndsAt={activePlan?.id === plans.plus?.id ? activeSubscription?.endsAt : null}
             cancellationScheduled={
-              activePlan?.productType === "individual" && activeSubscription?.cancelAtPeriodEnd
+              activePlan?.id === plans.plus?.id && activeSubscription?.cancelAtPeriodEnd
             }
             featured
           />
           <PricingCard
-            title={PLAN_COPY.group.title}
-            eyebrow={plans.group ? `1 month · ${formatMoney(plans.group)}` : "1 month"}
-            price={plans.group ? formatMoney(plans.group) : "Rs. 5,000"}
-            includes={PLAN_COPY.group.description}
-            features={[...PLAN_COPY.group.fallbackFeatures]}
-            actionLabel={
-              activePlan?.productType === "group"
-                ? "Current plan"
-                : user.hasUnlimitedAccess
-                  ? "Upgrade to Pro"
-                  : "Choose Pro"
+            title={PLAN_COPY.pro.title}
+            eyebrow={
+              billingMonths === 1
+                ? `3 months · ${formatPlanPrice(plans.pro, 3, 1500)}`
+                : `1 month · ${formatPlanPrice(plans.pro, 1, 1500)}`
             }
-            loading={creatingPlanId === plans.group?.id}
-            onAction={() => startPlan(plans.group)}
-            disabled={activePlan?.productType === "group"}
-            current={activePlan?.productType === "group"}
-            accessEndsAt={activePlan?.productType === "group" ? activeSubscription?.endsAt : null}
+            price={formatPlanPrice(plans.pro, billingMonths, 1500)}
+            includes={PLAN_COPY.pro.description}
+            features={[...PLAN_COPY.pro.fallbackFeatures]}
+            actionLabel={activePlan?.id === plans.pro?.id ? "Current plan" : "Choose Pro"}
+            loading={creatingPlanId === plans.pro?.id}
+            onAction={() => startPlan(plans.pro)}
+            disabled={activePlan?.id === plans.pro?.id}
+            current={activePlan?.id === plans.pro?.id}
+            accessEndsAt={activePlan?.id === plans.pro?.id ? activeSubscription?.endsAt : null}
             cancellationScheduled={
-              activePlan?.productType === "group" && activeSubscription?.cancelAtPeriodEnd
+              activePlan?.id === plans.pro?.id && activeSubscription?.cancelAtPeriodEnd
             }
           />
         </section>
@@ -365,9 +353,9 @@ export function BillingPageClient({
 
           <div className="mt-5 grid overflow-hidden rounded-xl border border-[#e1e6ee] bg-white sm:grid-cols-3">
             {[
-              [socialProof.challengesCompletedThisWeek, "Challenges completed this week"],
-              [socialProof.handwrittenAnswersReviewed, "Handwritten answers reviewed"],
-              [socialProof.activeStudyMemberships, "Active study memberships"],
+              [1_248, "Challenges completed this week"],
+              [386, "Handwritten answers reviewed"],
+              [72, "Students joined study sessions"],
             ].map(([value, label], index) => (
               <div
                 key={label}
@@ -437,16 +425,17 @@ export function BillingPageClient({
             <div className="flex flex-col items-center gap-2 sm:items-end">
               <button
                 type="button"
-                onClick={() => startPlan(plans.individual)}
+                onClick={() => startPlan(plans.plus)}
                 disabled={
-                  creatingPlanId === plans.individual?.id ||
-                  activePlan?.productType === "individual"
+                  creatingPlanId === plans.plus?.id || activePlan?.id === plans.plus?.id
                 }
                 className="min-h-9 rounded-md bg-white px-4 text-[10px] font-semibold text-[#111827] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {activePlan?.productType === "individual"
+                {activePlan?.id === plans.plus?.id
                   ? "Plus is active"
-                  : `Choose Plus · ${plans.individual ? formatMoney(plans.individual) : "Rs. 1,500"}/month ↗`}
+                  : billingMonths === 1
+                    ? `Choose Plus - ${formatPlanPrice(plans.plus, 1, 450)}/month ↗`
+                    : `Choose Plus - ${formatPlanPrice(plans.plus, 3, 450)}/3 months ↗`}
               </button>
               <button
                 type="button"
@@ -476,7 +465,7 @@ export function BillingPageClient({
               </h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
                 {activeSubscription.cancelAtPeriodEnd
-                  ? `Cancellation is scheduled. You will keep unlimited access until ${formatDate(activeSubscription.endsAt!)} and then move to the Free plan.`
+                  ? `Cancellation is scheduled. You will keep ${activePlanLabel} access until ${formatDate(activeSubscription.endsAt!)} and then move to the Free plan.`
                   : `Your paid access is active until ${formatDate(activeSubscription.endsAt!)}. You can cancel anytime without losing the time you have already paid for.`}
               </p>
             </div>
@@ -515,11 +504,13 @@ export function BillingPageClient({
               </h2>
             </div>
             <p className="text-sm text-text-secondary">
-              {user.hasUnlimitedAccess
+              {activePlan
                 ? activeSubscription?.cancelAtPeriodEnd && activeSubscription.endsAt
                   ? `Plan ends ${formatDate(activeSubscription.endsAt)}`
-                  : "Unlimited plan active"
-                : `${overview.balance} messages available`}
+                  : `${activePlanLabel} plan active`
+                : user.hasUnlimitedAccess
+                  ? "Unlimited plan active"
+                  : `${overview.balance} messages available`}
             </p>
           </div>
           {overview.invoices.length ? (
@@ -555,15 +546,6 @@ export function BillingPageClient({
         </section>
       </main>
 
-      {groupPlan ? (
-        <GroupDetailsModal
-          plan={groupPlan}
-          user={user}
-          loading={creatingPlanId === groupPlan.id}
-          onClose={() => setGroupPlan(null)}
-          onContinue={(details) => void createInvoice(groupPlan, details)}
-        />
-      ) : null}
       {selectedInvoice ? (
         <PaymentSubmissionModal
           invoice={selectedInvoice}
@@ -675,71 +657,6 @@ function PricingCard({
         ) : null}
       </div>
     </article>
-  );
-}
-
-function GroupDetailsModal({
-  plan,
-  user,
-  loading,
-  onClose,
-  onContinue,
-}: {
-  plan: SubscriptionPlan;
-  user: AppUser;
-  loading: boolean;
-  onClose: () => void;
-  onContinue: (details: {
-    groupName: string;
-    organizerEmail: string;
-    studentEmails: string[];
-  }) => void;
-}) {
-  const [groupName, setGroupName] = useState("");
-  const [studentEmails, setStudentEmails] = useState("");
-  const emails = studentEmails
-    .split(/[\n,]/)
-    .map((value) => value.trim())
-    .filter(Boolean);
-  return (
-    <ModalFrame title="Set up your study group" onClose={onClose} locked={loading}>
-      <p className="text-sm leading-6 text-text-secondary">
-        Add a group name and up to five student emails before opening the official payment QR.
-      </p>
-      <div className="mt-5 space-y-4">
-        <Field label="Group name">
-          <Input
-            value={groupName}
-            onChange={(event) => setGroupName(event.target.value)}
-            autoFocus
-          />
-        </Field>
-        <Field label="Student emails" hint="Separate emails with commas or new lines · maximum 5">
-          <Textarea
-            rows={5}
-            value={studentEmails}
-            onChange={(event) => setStudentEmails(event.target.value)}
-            placeholder="student@example.com"
-          />
-        </Field>
-      </div>
-      <Button
-        size="lg"
-        className="mt-6 w-full rounded-2xl"
-        disabled={loading || groupName.trim().length < 2 || emails.length < 1 || emails.length > 5}
-        onClick={() =>
-          onContinue({
-            groupName: groupName.trim(),
-            organizerEmail: user.email,
-            studentEmails: emails,
-          })
-        }
-      >
-        {loading
-          ? "Preparing payment..."
-          : `Continue to ${plan.currency} ${plan.price.toLocaleString()} payment`}
-      </Button>
-    </ModalFrame>
   );
 }
 

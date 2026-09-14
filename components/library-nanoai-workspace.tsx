@@ -4,6 +4,7 @@ import { ArrowLeft, BookOpen, Download, FileText, LibraryBig, RefreshCw } from "
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
@@ -13,6 +14,7 @@ import {
   semesterSelectionReducer,
 } from "@/lib/community-semester-selection";
 import { cn, titleCase } from "@/lib/utils";
+import { patchDashboardRunningSemester } from "@/lib/query/dashboard";
 
 export type LibraryNanoAiMaterial = {
   name: string;
@@ -141,6 +143,7 @@ export function LibraryNanoAiWorkspace({
   onMaterialOpen: (material: LibraryNanoAiMaterial, subject: LibraryNanoAiSubject) => void;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const orderedTerms = useMemo(
     () => [...(community?.terms ?? [])].sort((a, b) => a.position - b.position),
     [community?.terms],
@@ -267,7 +270,8 @@ export function LibraryNanoAiWorkspace({
   function browseTerm(term: CommunityTerm) {
     dispatchSemesterSelection({ type: "browse", termId: term.id });
     setSelectedSubject(null);
-    updateLibraryUrl({ semester: term.id, subject: null, document: null });
+    // Browsing is temporary; a reload should return to the saved running term.
+    updateLibraryUrl({});
   }
 
   async function saveRunningSemester(term: CommunityTerm) {
@@ -296,6 +300,7 @@ export function LibraryNanoAiWorkspace({
         throw new Error(payload.error || "Could not save your current semester.");
       }
       dispatchSemesterSelection({ type: "current-saved", termId: term.id });
+      patchDashboardRunningSemester(queryClient, community.slug, term.id);
       router.refresh();
     } catch (error) {
       dispatchSemesterSelection({
@@ -315,7 +320,7 @@ export function LibraryNanoAiWorkspace({
     const subjectWithProgress = { ...subject, progress: insights[subject.id] };
     setSelectedSubject(subjectWithProgress);
     onSubjectSelect(subjectWithProgress);
-    updateLibraryUrl({ semester: selectedTerm?.id, subject: subject.slug, document: null });
+    updateLibraryUrl({});
   }
 
   if (!community) {
@@ -524,11 +529,7 @@ export function LibraryNanoAiWorkspace({
                           disabled={!canOpen}
                           onClick={() => {
                             onMaterialOpen(material, selectedSubject!);
-                            updateLibraryUrl({
-                              semester: selectedTerm!.id,
-                              subject: selectedSubject!.slug,
-                              document: material.documentId,
-                            });
+                            updateLibraryUrl({});
                           }}
                           className={cn(
                             "group flex min-h-20 w-full items-center gap-3 rounded-2xl bg-bg-secondary px-4 py-4 text-left transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",

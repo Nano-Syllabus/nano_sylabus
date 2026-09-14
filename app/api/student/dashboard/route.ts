@@ -41,12 +41,10 @@ export async function GET(request: Request) {
     const month = params.get("month") || undefined;
     const dashboard = await getStudentDailyDashboard(user.id, undefined, community, month);
 
-    // 60s, matching `dashboardQuery`'s staleTime in lib/query/dashboard.ts.
-    // The two windows are deliberately the same number: the query decides
-    // whether to ask at all, this decides whether asking costs a body, and a
-    // client told to hold something longer than the server considers it valid
-    // is the mismatch that makes one cache serve what the other has discarded.
-    return privateJson({ dashboard }, { request, profile: { maxAge: 60, swr: 300 } });
+    // A full reload must read a newly saved running semester, even if the
+    // browser fetched this dashboard moments ago. The ETag still makes an
+    // unchanged response cheap to transfer.
+    return privateJson({ dashboard }, { request });
   } catch (error) {
     return errorJson(
       error instanceof Error ? error.message : "Could not load your dashboard.",

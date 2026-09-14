@@ -243,9 +243,9 @@ export default function LandingPage() {
                 gaps, and study with people who get it.
               </p>
               <div className="mt-9 flex flex-wrap items-center gap-6">
-                <Cta href="/flow" blue size="hero">
+                <LandingPrimaryCta blue size="hero">
                   Choose your program
-                </Cta>
+                </LandingPrimaryCta>
                 <a
                   href="#steps"
                   className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:text-[#3049ed] hover:border-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]"
@@ -480,7 +480,7 @@ export default function LandingPage() {
               <p className="text-sm font-medium text-[#5b5e55]">
                 A challenge is a learning loop. Not just a quiz.
               </p>
-              <Cta href="/flow">Find my starting point</Cta>
+              <LandingPrimaryCta size="default">Find my starting point</LandingPrimaryCta>
             </div>
           </div>
         </section>
@@ -772,9 +772,9 @@ export default function LandingPage() {
               <em className="font-serif font-normal italic">A lot more learning.</em>
             </h2>
             <div className="mt-9">
-              <Cta href="/flow" size="hero">
+              <LandingPrimaryCta size="hero">
                 Let’s find my starting point
-              </Cta>
+              </LandingPrimaryCta>
             </div>
 
             {/* Big 8-point star graphic bottom right */}

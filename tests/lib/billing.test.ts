@@ -4,10 +4,16 @@ import {
   CHAT_MESSAGE_CREDIT_COST,
   computeNextBalance,
   getCreditWarning,
+  getActivePlanTierLabel,
   getSubscriptionEndDate,
 } from "@/lib/billing";
 
 describe("billing helpers", () => {
+  it("labels Plus separately from Free and Pro throughout the app", () => {
+    expect(getActivePlanTierLabel({ activePlanTier: "plus", hasUnlimitedAccess: false })).toBe("Plus");
+    expect(getActivePlanTierLabel({ activePlanTier: "pro", hasUnlimitedAccess: true })).toBe("Pro");
+    expect(getActivePlanTierLabel({ hasUnlimitedAccess: false })).toBeNull();
+  });
   it("computes the next balance from a ledger movement", () => {
     expect(computeNextBalance(10, -CHAT_MESSAGE_CREDIT_COST)).toBe(9);
     expect(computeNextBalance(9, 50)).toBe(59);

@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { AppUser, ChatSessionSummary } from "@/lib/types";
+import { getActivePlanTierLabel } from "@/lib/billing";
 import { cn, compactSessionTitle, groupDateLabel } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
@@ -1023,7 +1024,7 @@ export function AppSidebar({
                     {user.fullName || user.email?.split("@")[0] || "User"}
                   </p>
                   <p className="truncate text-[13px] text-text-muted mt-0.5">
-                    {user.hasUnlimitedAccess ? "Unlimited plan" : "Free plan"}
+                    {`${getActivePlanTierLabel(user) ?? "Free"} plan`}
                   </p>
                 </div>
               </div>
@@ -1165,7 +1166,7 @@ export function AppSidebar({
                   {user.fullName || user.email?.split("@")[0] || "User"}
                 </p>
                 <p className="truncate text-[13px] text-text-muted mt-0.5">
-                  {user.hasUnlimitedAccess ? "Unlimited plan" : "Free plan"}
+                  {`${getActivePlanTierLabel(user) ?? "Free"} plan`}
                 </p>
               </div>
               <div className="flex items-center pr-1 text-text-muted">

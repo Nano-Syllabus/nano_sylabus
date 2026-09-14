@@ -68,6 +68,26 @@ describe("student challenge metrics", () => {
     ).toBe(2);
   });
 
+  it("caps Free at three assignments but lets paid plans refill after completion", () => {
+    expect(
+      dailyChallengeAssignmentCount({
+        activeCount: 1,
+        activeRecommendationCount: 1,
+        availableCount: 10,
+        dailyCount: 3,
+        maximumDailyCount: 3,
+      }),
+    ).toBe(0);
+    expect(
+      dailyChallengeAssignmentCount({
+        activeCount: 1,
+        activeRecommendationCount: 1,
+        availableCount: 10,
+        dailyCount: 3,
+      }),
+    ).toBe(2);
+  });
+
   it("uses the grading API verdict instead of reconstructing a pass threshold", () => {
     const result = calculateAttemptMetrics(
       [

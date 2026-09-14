@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const { data: subscription, error: subscriptionError } = await admin
       .from("user_subscriptions")
       .select(
-        "id, user_id, invoice_id, status, ends_at, cancel_at_period_end, subscription_plans!inner(is_unlimited)",
+        "id, user_id, invoice_id, status, ends_at, cancel_at_period_end, subscription_plans!inner(product_type)",
       )
       .eq("id", parsed.data.subscriptionId)
       .eq("user_id", user.id)
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     const plan = Array.isArray(subscription.subscription_plans)
       ? subscription.subscription_plans[0]
       : subscription.subscription_plans;
-    if (!plan?.is_unlimited) {
+    if (!plan || !["individual", "group"].includes(plan.product_type)) {
       return NextResponse.json(
         { error: "This subscription cannot be cancelled from billing." },
         { status: 409 },

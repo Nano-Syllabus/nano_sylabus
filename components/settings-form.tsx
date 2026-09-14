@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import {
@@ -23,6 +24,7 @@ import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { AppUser, StudentProfile } from "@/lib/types";
 import { ThemeSetting } from "@/components/theme-setting";
 import { usePublishedCatalog } from "@/lib/query/catalog";
+import { patchDashboardRunningSemester } from "@/lib/query/dashboard";
 
 function engineeringBoard(value: string) {
   return normalizeBoard(value) === "IOE" ? "IOE" : "IOE";
@@ -48,6 +50,7 @@ export function SettingsForm({
   } | null;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [fullName, setFullName] = useState(profile.fullName);
   const [college, setCollege] = useState(profile.college);
   const [board, setBoard] = useState(engineeringBoard(profile.board));
@@ -159,6 +162,7 @@ export function SettingsForm({
       if (!response.ok || payload.currentTermId !== termId) {
         throw new Error(payload.error || "Could not save your running semester.");
       }
+      patchDashboardRunningSemester(queryClient, runningSemester.communitySlug, termId);
       router.refresh();
     } catch (error) {
       setSemester(previousTermId);

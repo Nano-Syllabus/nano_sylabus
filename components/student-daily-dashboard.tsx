@@ -384,6 +384,9 @@ function SemesterProgress({
 }) {
   const community = dashboard.community;
   const [semesterId, setSemesterId] = useState(community?.currentSemesterId ?? "");
+  useEffect(() => {
+    setSemesterId(community?.currentSemesterId ?? "");
+  }, [community?.currentSemesterId, community?.slug]);
   const semester = useMemo(
     () => community?.semesters.find((item) => item.id === semesterId) ?? community?.semesters[0],
     [community, semesterId],
