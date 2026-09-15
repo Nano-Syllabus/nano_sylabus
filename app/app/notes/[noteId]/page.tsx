@@ -22,8 +22,8 @@ export default async function NoteDetailPage({
     <>
       <SetAppShell
         title={
-          <Link href="/app/notes" className="text-text-secondary hover:text-text-primary">
-            ← My Notes
+          <Link href="/app/notes/saved" className="text-text-secondary hover:text-text-primary">
+            ← My saved notes
           </Link>
         }
       />

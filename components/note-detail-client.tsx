@@ -107,7 +107,7 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
           onCancel={() => setConfirmDelete(false)}
           onConfirm={async () => {
             await fetch(`/api/notes/${current.id}`, { method: "DELETE" });
-            router.push("/app/notes");
+            router.push("/app/notes/saved");
             router.refresh();
           }}
         />

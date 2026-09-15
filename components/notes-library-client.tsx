@@ -40,7 +40,11 @@ export function NotesLibraryClient({ notes, initialSubjectSlug = null }: NotesLi
 
   function updateSubjectFilter(value: string) {
     setSubjectFilter(value);
-    router.replace(value === "all" ? "/app/notes" : `/app/notes?subject=${encodeURIComponent(value)}`);
+    // `/app/notes` is the revision docs now; this library lives one level down,
+    // so its own filter must not navigate the reader out of it.
+    router.replace(
+      value === "all" ? "/app/notes/saved" : `/app/notes/saved?subject=${encodeURIComponent(value)}`,
+    );
   }
 
   const filtered = useMemo(() => {
@@ -111,7 +115,7 @@ export function NotesLibraryClient({ notes, initialSubjectSlug = null }: NotesLi
               Showing notes for <span className="font-medium text-text-primary">{activeSubjectLabel}</span>
             </p>
             <Link
-              href="/app/notes"
+              href="/app/notes/saved"
               className="text-sm font-medium text-text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
             >
               View all notes

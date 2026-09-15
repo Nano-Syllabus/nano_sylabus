@@ -18,7 +18,7 @@ export default async function RevisionPage() {
       <SetAppShell
         title={
           <Link
-            href="/app/notes/revision"
+            href="/app/notes"
             className="text-text-secondary hover:text-text-primary"
           >
             ← Revision docs

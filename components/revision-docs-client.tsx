@@ -126,10 +126,22 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
             ))}
           </div>
         </section>
+      ) : topic.readingPending ? (
+        /* Being written right now, not missing. Telling a student to restart a
+           challenge whose reading is thirty seconds away would throw away the
+           paper they are about to sit. */
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-8 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted"
+        >
+          The reading for this topic is still being written from your course material. Reload this
+          page in a moment and it will be here.
+        </p>
       ) : (
         <p className="mt-8 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
-          This challenge was passed before its reading was kept. Restart it from the Challenge Hub
-          to file a fresh one here.
+          This challenge has no reading kept for it. Restart it from the Challenge Hub to file a
+          fresh one here.
         </p>
       )}
 
@@ -285,8 +297,9 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
         </span>
         <h1 className="mt-4 font-display text-2xl font-semibold">Nothing filed here yet</h1>
         <p className="mt-3 max-w-prose text-sm text-text-secondary">
-          Pass a challenge and its reading is kept here — the concepts, the past questions and the
-          worked examples — organised by semester, subject and unit.
+          Open a challenge and its reading is filed here as you go — the concepts, the past
+          questions and the worked examples — organised by semester, subject and unit. Passing it
+          keeps it; you do not have to wait until then to come back to it.
         </p>
         <Link
           href="/app/challenges"
@@ -429,6 +442,15 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
       </nav>
 
       <div className="border-t border-border p-3">
+        {/* The student's OWN corpus, reachable from the tree rather than from a
+            header that made the reader choose a mode before seeing anything. */}
+        <Link
+          href="/app/notes/saved"
+          className="flex min-h-10 items-center justify-between rounded-lg px-2 text-sm font-medium text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        >
+          My saved notes
+          <ChevronRight className="size-4" aria-hidden="true" />
+        </Link>
         <Link
           href="/app/notes/revision/cards"
           className="flex min-h-10 items-center justify-between rounded-lg px-2 text-sm font-medium text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"

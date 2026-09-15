@@ -7,6 +7,7 @@ import {
   type StudentChallengeContent,
 } from "@/lib/data/student-challenges";
 import {
+  listCreatorPrivateSubjectAccess,
   listStudentCommunitySubjectAccess,
   type StudentCourseSubjectAccess,
 } from "@/lib/student-courses";
@@ -69,6 +70,12 @@ export type RevisionDocTopic = {
   /** Percentage of the paper, or null when the row predates score capture. */
   scorePercent: number | null;
   attempts: number;
+  /** True when the reading for this topic is still being written — the challenge
+   *  was opened, its lesson shell is on the row, and the background pass that
+   *  fills it in has not landed yet. Distinct from an OLD challenge that simply
+   *  never had a reading: one is "come back in a moment", the other is "restart
+   *  it", and telling a student the wrong one of those wastes their time. */
+  readingPending: boolean;
   /** The one sentence the topic reduces to. "" on a challenge passed before the
    *  concept-led reading existed. */
   bigIdea: string;
@@ -124,6 +131,12 @@ function scopeKey(courseId: string, subjectSlug: string) {
   return `${courseId}:${subjectSlug.trim().toLowerCase()}`;
 }
 
+/** Subject identity for a challenge that carries no course, matched on slug or
+ *  name the way `getStudentCourseSubjectAccess` matches one. */
+function subjectKey(value: string) {
+  return value.trim().toLowerCase();
+}
+
 function semesterLabel(term: NonNullable<StudentCourseSubjectAccess["term"]>) {
   return `Year ${term.yearNumber} · Semester ${term.semesterNumber}`;
 }
@@ -137,6 +150,7 @@ function scorePercent(row: ChallengeRow) {
 
 function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {
   const content = (row.content ?? null) as StudentChallengeContent | null;
+  const reading = content?.lesson?.content ?? [];
   return {
     challengeId: text(row.id),
     topicKey: text(row.topic_key),
@@ -144,10 +158,16 @@ function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {
     subjectName,
     completedAt: text(row.completed_at) || text(row.updated_at),
     inProgress: text(row.status) !== "completed",
+    // `pending` is the challenge's own word for "the tail of this is still
+    // building", set by `/start` and cleared by the background pass. Read it
+    // rather than inferred from the empty reading, so a build that FAILED —
+    // which also leaves the reading empty, but is not going to fill itself in —
+    // is not presented as one still in flight.
+    readingPending: !reading.length && content?.contentStatus === "pending",
     scorePercent: scorePercent(row),
     attempts: Number(row.attempt_count) || 0,
     bigIdea: content?.lesson?.bigIdea || "",
-    reading: content?.lesson?.content ?? [],
+    reading,
     focus: content?.lesson?.focus || "",
     connections: content?.lesson?.connections ?? [],
     pastQuestions: content?.pastQuestions ?? [],
@@ -189,13 +209,19 @@ async function unitsByTopicKey(
 
 export async function getStudentRevisionDocs(userId: string): Promise<StudentRevisionDocs> {
   const admin = createSupabaseAdminClient();
-  const [access, completed] = await Promise.all([
+  const [community, privateSubjects, completed] = await Promise.all([
     listStudentCommunitySubjectAccess(userId, admin),
+    // A creator studying their own uploaded material has no community and no
+    // course: their challenges carry `course_id = null` and are authorised by
+    // subject alone. Leaving them out of this list is why those rows used to
+    // vanish from the docs entirely while the Challenge Hub happily ran them —
+    // `requireChallengeAccess` consults both, and so must this.
+    listCreatorPrivateSubjectAccess(userId, admin).catch(() => []),
     admin
       .from("student_challenges")
       .select(
         "id,course_id,subject_slug,subject_name,topic_key,topic_title,title,content,status," +
-          "completed_at,updated_at,attempt_count,last_score,last_total_marks",
+          "unit_number,completed_at,updated_at,attempt_count,last_score,last_total_marks",
       )
       .eq("user_id", userId)
       // Started, not just passed. The reading is written and stored the moment a
@@ -217,15 +243,36 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
   if (completed.error) throw completed.error;
 
   const accessByScope = new Map(
-    access.map((subject) => [scopeKey(subject.courseId, subject.subjectSlug), subject]),
+    community.map((subject) => [scopeKey(subject.courseId, subject.subjectSlug), subject]),
+  );
+  // Community first, private second — the same precedence
+  // `getStudentCourseSubjectAccess` applies when a challenge with no course is
+  // opened, so a subject that is both resolves to the community copy here too.
+  const accessBySlug = new Map(
+    [...privateSubjects, ...community]
+      .flatMap((subject) => [
+        [subjectKey(subject.subjectSlug), subject] as const,
+        [subjectKey(subject.subjectName), subject] as const,
+      ])
+      .filter(([key]) => Boolean(key)),
   );
 
-  // A row whose subject the student no longer has is dropped here rather than
-  // rendered from the durable copy: leaving a community must take its material
-  // with it, exactly as opening the challenge itself would find.
+  /**
+   * The subject a filed challenge belongs to, or null if the student no longer
+   * has it. A row that has lost its subject is dropped rather than rendered from
+   * the durable copy: leaving a community must take its material with it,
+   * exactly as opening the challenge itself would find.
+   */
+  function subjectFor(row: ChallengeRow) {
+    const courseId = text(row.course_id);
+    const slug = text(row.subject_slug);
+    if (courseId) return accessByScope.get(scopeKey(courseId, slug)) ?? null;
+    return accessBySlug.get(subjectKey(slug)) ?? accessBySlug.get(subjectKey(text(row.subject_name))) ?? null;
+  }
+
   const rows = ((completed.data ?? []) as unknown as ChallengeRow[]).filter(
     (row) =>
-      accessByScope.has(scopeKey(text(row.course_id), text(row.subject_slug))) &&
+      Boolean(subjectFor(row)) &&
       // Every field this page renders is read off `content`. A row without it —
       // a challenge assigned but never opened, or one whose `/start` has not
       // landed yet — would file an empty page under a real topic title, which
@@ -237,8 +284,8 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
   const usedSubjects = [
     ...new Map(
       rows.map((row) => {
-        const key = scopeKey(text(row.course_id), text(row.subject_slug));
-        return [key, accessByScope.get(key) as StudentCourseSubjectAccess];
+        const subject = subjectFor(row) as StudentCourseSubjectAccess;
+        return [scopeKey(subject.courseId, subject.subjectSlug), subject];
       }),
     ).values(),
   ];
@@ -253,9 +300,9 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
   const topicOrder = new Map<string, number>();
 
   for (const row of rows) {
-    const key = scopeKey(text(row.course_id), text(row.subject_slug));
-    const subjectAccess = accessByScope.get(key);
+    const subjectAccess = subjectFor(row);
     if (!subjectAccess) continue;
+    const key = scopeKey(subjectAccess.courseId, subjectAccess.subjectSlug);
 
     const term = subjectAccess.term;
     const semesterId = term?.id || `unscheduled:${subjectAccess.courseId}`;
@@ -289,7 +336,11 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
     }
 
     const placement = placements.get(`${key}:${text(row.topic_key)}`);
-    const unitNumber = placement?.unitNumber ?? UNPLACED_UNIT;
+    // The catalogue's answer first — it is live, and it is the one that moves
+    // when a teacher re-numbers a unit. The unit written onto the row at
+    // assignment is the fallback, and it is what keeps a topic under its real
+    // unit after `/start` has rewritten `topic_key` out from under the join.
+    const unitNumber = placement?.unitNumber || text(row.unit_number) || UNPLACED_UNIT;
     const unitKey = `${subjectKey}:${unitNumber}`;
     let unit = unitsByKey.get(unitKey);
     if (!unit) {

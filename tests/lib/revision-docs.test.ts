@@ -4,11 +4,15 @@ import { communityLearningFixture } from "../helpers/learning-database";
 const mocks = vi.hoisted(() => ({
   admin: vi.fn(),
   access: vi.fn(),
+  creatorAccess: vi.fn(),
   topics: vi.fn(),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.admin }));
 vi.mock("@/lib/student-courses", () => ({
   listStudentCommunitySubjectAccess: mocks.access,
+  // A creator revising their own private subjects. Defaults to none so the
+  // community cases below stay about community access.
+  listCreatorPrivateSubjectAccess: mocks.creatorAccess,
 }));
 vi.mock("@/lib/data/community-learning-topics", () => ({
   readCourseLearningTopics: mocks.topics,
@@ -75,6 +79,7 @@ describe("revision docs", () => {
     db.tables.student_challenges = [completedRow()];
     mocks.admin.mockReturnValue(db.admin);
     mocks.access.mockResolvedValue([SUBJECT_ACCESS]);
+    mocks.creatorAccess.mockResolvedValue([]);
     mocks.topics.mockResolvedValue([
       { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", position: 4 },
     ]);
@@ -189,6 +194,70 @@ describe("revision docs", () => {
     );
     expect(byTitle.get("Laplace Transform")?.inProgress).toBe(true);
     expect(byTitle.get("Fourier Series")?.inProgress).toBe(false);
+  });
+
+  it("files the challenge under the unit written on its own row when the catalogue has moved on", async () => {
+    // `/start` rewrites `topic_key` to whatever the provider resolved, so the
+    // catalogue join misses and the topic used to fall into "Other topics" — the
+    // docs quietly losing the syllabus structure they exist to present.
+    db.tables.student_challenges = [completedRow({ topic_key: "laplace-v2", unit_number: "2" })];
+    mocks.topics.mockResolvedValue([
+      { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", position: 4 },
+    ]);
+
+    const docs = await getStudentRevisionDocs("member");
+
+    expect(docs.semesters[0].subjects[0].units[0].label).toBe("Unit 2");
+  });
+
+  it("keeps a challenge that has no course, matched on its subject", async () => {
+    // A creator studying their own uploaded material: no community, no course,
+    // authorised by subject alone — exactly as `requireChallengeAccess` finds it.
+    db.tables.student_challenges = [completedRow({ course_id: null })];
+    mocks.access.mockResolvedValue([]);
+    mocks.creatorAccess.mockResolvedValue([
+      {
+        courseId: "private:profile-1",
+        teacherId: "teacher-1",
+        subjectSlug: "teacher_nims",
+        subjectName: "Nims",
+        folderPath: "Nims",
+        accessKind: "owner-private" as const,
+      },
+    ]);
+
+    const docs = await getStudentRevisionDocs("member");
+
+    expect(docs.topicCount).toBe(1);
+    expect(docs.semesters[0].subjects[0].name).toBe("Nims");
+  });
+
+  it("says a reading still being written is coming, not that it was never kept", async () => {
+    db.tables.student_challenges = [
+      completedRow({
+        status: "started",
+        completed_at: null,
+        content: { contentStatus: "pending", lesson: { content: [] }, pastQuestions: [] },
+      }),
+    ];
+
+    const docs = await getStudentRevisionDocs("member");
+    const topic = docs.semesters[0].subjects[0].units[0].topics[0];
+
+    // Filed the moment the challenge opens — the student can see the page exists
+    // — and the page itself says the reading is on its way.
+    expect(topic.reading).toEqual([]);
+    expect(topic.readingPending).toBe(true);
+  });
+
+  it("does not promise a reading whose build has already finished without one", async () => {
+    db.tables.student_challenges = [
+      completedRow({ content: { contentStatus: "ready", lesson: { content: [] } } }),
+    ];
+
+    const docs = await getStudentRevisionDocs("member");
+
+    expect(docs.semesters[0].subjects[0].units[0].topics[0].readingPending).toBe(false);
   });
 
   it("reports a missing challenge table as unavailable, not as nothing revised", async () => {

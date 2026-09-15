@@ -488,6 +488,58 @@ function rowRecommendationKey(row: ChallengeRow) {
   ].join(":");
 }
 
+/** Subject identity for a row or a recommendation, without the topic. */
+function subjectRecommendationKey(courseId: string | null, subjectSlug: string) {
+  return `${courseId || "owner-private"}:${subjectSlug.trim().toLowerCase()}`;
+}
+
+/**
+ * Rows sitting on a topic this subject no longer teaches.
+ *
+ * A challenge is assigned against the subject's topic catalogue and then keeps
+ * the `topic_key` it was given. That key can stop being something a student may
+ * be OFFERED while still resolving perfectly well — which is exactly what happens
+ * when a syllabus is re-read and a unit is replaced by the bullets under it.
+ * "Oscillation" stops being a study session and becomes the week that contains
+ * "Mechanical Oscillation: Introduction", "Free oscillation" and four others.
+ *
+ * The row does not notice. It stays unfinished, it keeps counting against the
+ * three daily slots, and the student is handed a whole unit under a column that
+ * says Subtopic — forever, because nothing ever retires it.
+ *
+ * So a row whose topic is absent from its OWN subject's current recommendations
+ * is treated the way `isSourceDocumentChallengeRow` treats a row built on an
+ * uploaded file: kept in storage for auditability, never occupying a slot and
+ * never listed. Scoped per subject, and only for subjects the recommendations
+ * actually cover — a subject that is simply not in today's scope has no
+ * catalogue here to be missing from, and must not have its rows retired on the
+ * strength of that silence.
+ */
+export function retiredTopicRows(
+  rows: ChallengeRow[],
+  recommendations: ChallengeRecommendation[],
+) {
+  const offerable = new Map<string, Set<string>>();
+  for (const recommendation of recommendations) {
+    const subject = subjectRecommendationKey(recommendation.courseId, recommendation.subjectSlug);
+    const keys = offerable.get(subject) ?? new Set<string>();
+    keys.add(recommendation.topicKey.trim().toLowerCase());
+    offerable.set(subject, keys);
+  }
+  return new Set(
+    rows
+      .filter((row) => {
+        const subject = subjectRecommendationKey(
+          row.course_id ? String(row.course_id) : null,
+          String(row.subject_slug ?? ""),
+        );
+        const keys = offerable.get(subject);
+        return Boolean(keys) && !keys?.has(String(row.topic_key ?? "").trim().toLowerCase());
+      })
+      .map((row) => String(row.id)),
+  );
+}
+
 function isSourceDocumentChallengeRow(row: ChallengeRow) {
   return isChallengeSourceDocumentTopic({
     topicKey: String(row.topic_key || ""),
@@ -555,12 +607,14 @@ export async function ensureDailyChallenges(
   if (existing === null) return [];
 
   // Old catalogues sometimes exposed uploaded files (for example
-  // "Applied Mechanics QB") as if they were syllabus chapters. Keep those
-  // rows in storage for auditability, but do not let them occupy today's
-  // student challenge slots.
-  const active = existing.filter(
-    (row) => row.status !== "completed" && !isSourceDocumentChallengeRow(row),
-  );
+  // "Applied Mechanics QB") as if they were syllabus chapters, and a unit that
+  // has since been re-read into its own bullets stops being a subtopic anyone
+  // may be offered. Keep both in storage for auditability, but do not let them
+  // occupy today's student challenge slots or appear in the list.
+  const retired = retiredTopicRows(existing, recommendations);
+  const offerableRow = (row: ChallengeRow) =>
+    !isSourceDocumentChallengeRow(row) && !retired.has(String(row.id));
+  const active = existing.filter((row) => row.status !== "completed" && offerableRow(row));
   const assignedKeys = new Set(existing.map(rowRecommendationKey));
   const recommendationKeys = new Set(recommendations.map(recommendationKey));
   const activeRecommendationCount = active.filter((row) =>
@@ -576,7 +630,7 @@ export async function ensureDailyChallenges(
       activeRecommendationCount,
       availableCount: available.length,
       minimumRecommendationCount: options.minimumRecommendationCount,
-      dailyCount: existing.filter((row) => !isSourceDocumentChallengeRow(row)).length,
+        dailyCount: existing.filter(offerableRow).length,
       maximumDailyCount: unlimitedDailyChallenges ? Infinity : 3,
     }),
   );
@@ -611,6 +665,12 @@ export async function ensureDailyChallenges(
       topic_key: recommendation.topicKey,
       topic_title: topicTitle,
       topic_blurb: recommendation.topicBlurb,
+      // The syllabus's own unit for this subtopic, written down at assignment.
+      // `/start` rewrites `topic_key` to whatever the provider resolved, so the
+      // revision docs' catalogue join on that key is not something to depend on
+      // — this is the copy that survives a re-extraction. See the migration
+      // 20260915120000_challenge_syllabus_unit.sql for the whole argument.
+      unit_number: recommendation.unitNumber || "",
       title: topicTitle,
       recommendation_reason: recommendation.reason,
       duration_minutes: 20,
@@ -620,7 +680,7 @@ export async function ensureDailyChallenges(
   if (error?.code === "23505") {
     const concurrent = (await listDailyRows(userId, date)) ?? [];
     return concurrent
-      .filter((row) => row.status !== "completed" && !isSourceDocumentChallengeRow(row))
+      .filter((row) => row.status !== "completed" && offerableRow(row))
       .sort((left, right) => {
         const created = String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""));
         return created || number(left.position) - number(right.position);
@@ -630,7 +690,7 @@ export async function ensureDailyChallenges(
   if (error) throw error;
 
   return (((await listDailyRows(userId, date)) ?? []) as ChallengeRow[])
-    .filter((row) => row.status !== "completed" && !isSourceDocumentChallengeRow(row))
+    .filter((row) => row.status !== "completed" && offerableRow(row))
     .sort((left, right) => {
       const created = String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""));
       return created || number(left.position) - number(right.position);

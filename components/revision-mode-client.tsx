@@ -217,7 +217,7 @@ export function RevisionModeClient({ notes }: { notes: RevisionNoteSummary[] }) 
 
       <div className="mt-8 flex flex-col gap-2">
         <Button onClick={() => setPhase("select")}>Review again</Button>
-        <Link href="/app/notes">
+        <Link href="/app/notes/saved">
           <Button variant="outline" className="w-full">
             Back to notes
           </Button>

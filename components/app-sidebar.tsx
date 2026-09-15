@@ -56,6 +56,9 @@ const NAV = [
       ]
     : []),
   {
+    /** The revision DOCS — every challenge the student has opened, filed under
+     *  the course's own semester/subject/unit shape. `/app/notes/saved` (their
+     *  own written notes) and the flashcard deck hang off that page. */
     href: "/app/notes",
     label: "Revision",
     icon: (

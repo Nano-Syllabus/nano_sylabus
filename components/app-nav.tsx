@@ -117,6 +117,7 @@ const NAV = [
       ]
     : []),
   {
+    /** See app-sidebar.tsx: Revision means the challenge docs. */
     href: "/app/notes",
     label: "Revision",
     icon: (
