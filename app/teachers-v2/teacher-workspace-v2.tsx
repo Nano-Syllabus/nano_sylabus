@@ -10861,7 +10861,15 @@ function UploadDialog({
         return;
       }
       if (!importable.length) {
-        setError("None of the files at that link can be added to this shelf.");
+        // "cannot be added to this shelf" reads as a file-TYPE problem, and for a
+        // single oversize PDF that is simply the wrong explanation.
+        const oversize = driveFiles.filter((file) => file.tooLarge).length;
+        const wrongType = driveFiles.filter((file) => !file.supported).length;
+        setError(
+          oversize && !wrongType
+            ? `${oversize === 1 ? "That file is" : `All ${oversize} files are`} larger than ${TEACHER_UPLOAD_MAX_LABEL}, which is the most this portal accepts.`
+            : "None of the files at that link can be added to this shelf.",
+        );
         return;
       }
       /**

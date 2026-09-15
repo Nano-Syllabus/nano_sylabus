@@ -162,6 +162,28 @@ describe("draining the Drive import queue", () => {
     expect(mocks.fail).toHaveBeenCalledWith("row-1", expect.stringContaining("course-pack.zip"));
   });
 
+  it("refuses a file Drive already said is oversize, without fetching it", async () => {
+    // 71.9 MB, the size Drive reports for a real PDF that was pasted in testing.
+    queue([item({ sizeBytes: 75_387_542 })]);
+
+    const result = await drainDriveQueue("collection-secret", "teacher-1");
+
+    expect(result).toEqual({ imported: 0, failed: 1 });
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(mocks.fail).toHaveBeenCalledWith("row-1", expect.stringContaining("50 MB"));
+  });
+
+  it("still fetches when Drive reports no size, since 0 means unknown", async () => {
+    // Google-native exports and the keyless path both report no size at all;
+    // treating that as "fits" is what lets `readCapped` be the real backstop.
+    queue([item({ sizeBytes: 0 })]);
+
+    const result = await drainDriveQueue("collection-secret", "teacher-1");
+
+    expect(result).toEqual({ imported: 1, failed: 0 });
+    expect(mocks.download).toHaveBeenCalledTimes(1);
+  });
+
   it("stops when the queue is empty", async () => {
     queue([]);
 

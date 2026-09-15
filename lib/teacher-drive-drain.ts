@@ -44,6 +44,24 @@ async function importOne(collectionKey: string, teacherId: string, item: DriveIm
   const destinationError = await validateDestination(collectionKey, item.destinationPath);
   if (destinationError) throw new Error(destinationError);
 
+  /**
+   * Refuse an oversize file BEFORE fetching it, when Drive told us the size.
+   *
+   * `readCapped` stops the stream at the ceiling, so nothing could overrun — but
+   * stopping there means 50 MB has already crossed the wire to learn something
+   * the metadata said up front. Measured on a 71.9 MB PDF: 8.9 seconds and 50 MB
+   * spent to reach a verdict that was available for free, and the claim function
+   * will hand the row back twice more before giving up.
+   *
+   * `sizeBytes` is 0 when it is genuinely unknown — Google-native exports report
+   * no size, and the keyless path has no metadata at all — so this only fires on
+   * a size Drive actually stated, and `readCapped` still backs it up.
+   */
+  if (item.sizeBytes > 0) {
+    const knownSizeError = teacherUploadSizeError(item.sizeBytes);
+    if (knownSizeError) throw new Error(knownSizeError);
+  }
+
   const entry: DriveEntry = {
     id: item.driveFileId,
     name: item.fileName,
