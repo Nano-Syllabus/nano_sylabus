@@ -243,8 +243,8 @@ export default function LandingPage() {
                 gaps, and study with people who get it.
               </p>
               <div className="mt-9 flex flex-wrap items-center gap-6">
-                <LandingPrimaryCta blue size="hero">
-                  Choose your program
+                <LandingPrimaryCta blue size="hero" communityOnly>
+                  Find your program
                 </LandingPrimaryCta>
                 <a
                   href="#steps"
