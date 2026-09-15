@@ -66,7 +66,7 @@ export default function ChallengesLoading() {
           ))}
         </section>
 
-        <h2 className="text-xl font-semibold">Available Daily Micro-Topic Challenges</h2>
+        <h2 className="text-xl font-semibold">Available Daily Subtopic Challenges</h2>
         <div className="mt-4 space-y-3">
           {Array.from({ length: 4 }).map((_, index) => (
             <div key={index} className="h-24 rounded-2xl border border-border bg-card" />

@@ -70,7 +70,15 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
         {topic.title}
       </h1>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-text-muted">
-        {percent ? (
+        {/* Started and passed are both here, and must never look alike: the whole
+            claim of these docs is that a page says what you already worked
+            through, and calling an open challenge "Passed" would be the one lie
+            the page cannot afford. */}
+        {topic.inProgress ? (
+          <span className="inline-flex min-h-6 items-center rounded-full bg-blue-500/10 px-2.5 font-semibold text-blue-700 dark:text-blue-300">
+            In progress
+          </span>
+        ) : percent ? (
           <span className="inline-flex min-h-6 items-center rounded-full bg-success/15 px-2.5 font-semibold text-success">
             Passed · {percent}
           </span>
@@ -79,9 +87,15 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
             Passed
           </span>
         )}
-        {completed ? <span>Completed {completed}</span> : null}
+        {completed ? (
+          <span>
+            {topic.inProgress ? "Last opened" : "Completed"} {completed}
+          </span>
+        ) : null}
         {topic.attempts > 1 ? <span>· {topic.attempts} attempts</span> : null}
-        {/* The id a student quotes when this specific page's material is wrong. */}
+        {/* The id support needs when this specific page's material is wrong. On
+            the row it is a hover; here there is room for it, and this is the page
+            a student is actually looking at when they report one. */}
         <code className="select-all rounded bg-bg-secondary px-2 py-1 font-mono text-[11px] text-text-secondary">
           {topic.challengeId}
         </code>

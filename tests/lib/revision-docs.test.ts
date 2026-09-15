@@ -18,10 +18,11 @@ import { getStudentRevisionDocs } from "@/lib/data/student-revision-docs";
 
 /**
  * What these guard is the claim the revision docs make about every page in them:
- * "you passed this, and here is what it said."
+ * "you worked through this, and here is what it said."
  *
- * So: only passed challenges, only subjects the student still has, in the
- * curriculum's own order, with the reading read back rather than regenerated.
+ * So: challenges that have been opened (passed or still in progress, and never one
+ * with no material yet), only subjects the student still has, in the curriculum's
+ * own order, with the reading read back rather than regenerated.
  */
 
 const SUBJECT_ACCESS = {
@@ -145,6 +146,51 @@ describe("revision docs", () => {
     expect(docs.semesters[0].subjects[0].units[0].topics[0].title).toBe("Laplace Transform");
   });
 
+  it("files a challenge that is still in progress, and marks it as such", async () => {
+    // The reading is written by `/start`, so a student midway through a topic
+    // already has the material this page exists to hand back. Withholding it
+    // until they pass hides precisely the topic they are working on today.
+    db.tables.student_challenges = [
+      completedRow({ id: "challenge-open", status: "started", completed_at: null }),
+    ];
+
+    const docs = await getStudentRevisionDocs("member");
+
+    const topic = docs.semesters[0].subjects[0].units[0].topics[0];
+    expect(topic.title).toBe("Laplace Transform");
+    expect(topic.inProgress).toBe(true);
+    // The reading is the whole point — it must come back intact, not stubbed.
+    expect(topic.reading.length).toBeGreaterThan(0);
+  });
+
+  it("does not file a challenge that has no material yet", async () => {
+    // Assigned but never opened: filing it would put an empty page under a real
+    // topic title, which reads as "this taught you nothing" rather than "not yet".
+    db.tables.student_challenges = [
+      completedRow({ id: "challenge-empty", status: "started", completed_at: null, content: null }),
+    ];
+
+    const docs = await getStudentRevisionDocs("member");
+
+    expect(docs.topicCount).toBe(0);
+    expect(docs.semesters).toEqual([]);
+  });
+
+  it("never calls an unfinished topic passed", async () => {
+    db.tables.student_challenges = [
+      completedRow({ id: "challenge-open", status: "started", completed_at: null }),
+      completedRow({ id: "challenge-done", topic_key: "fourier", topic_title: "Fourier Series" }),
+    ];
+
+    const docs = await getStudentRevisionDocs("member");
+
+    const byTitle = new Map(
+      docs.semesters[0].subjects[0].units.flatMap((unit) => unit.topics).map((t) => [t.title, t]),
+    );
+    expect(byTitle.get("Laplace Transform")?.inProgress).toBe(true);
+    expect(byTitle.get("Fourier Series")?.inProgress).toBe(false);
+  });
+
   it("reports a missing challenge table as unavailable, not as nothing revised", async () => {
     db.tables.student_challenges = [];
     db.failures.set("student_challenges:select", "missing");
@@ -152,7 +198,7 @@ describe("revision docs", () => {
       from: () => ({
         select: () => ({
           eq: () => ({
-            eq: () => ({
+            in: () => ({
               order: () => Promise.resolve({ data: null, error: { code: "42P01" } }),
             }),
           }),

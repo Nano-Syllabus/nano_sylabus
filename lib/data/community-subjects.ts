@@ -327,6 +327,7 @@ export async function syncCommunitySubjectTopics(
         topicKey: topic.topic_key,
         topicTitle: topic.title,
         topicBlurb: topic.blurb,
+        unitNumber: String(topic.unit_number || "").trim(),
         reason: "Newly extracted from this community's indexed learning material.",
       }));
       await Promise.all(

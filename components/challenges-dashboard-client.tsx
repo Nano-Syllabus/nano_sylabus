@@ -768,7 +768,7 @@ function ChallengeDetail({
         <div className={focusMode ? "mx-auto w-full max-w-2xl" : ""}>
           {!focusMode ? (
             <>
-              <header className="grid grid-cols-[1fr_auto] items-start gap-4 sm:grid-cols-[auto_1fr_auto]">
+              <header className="flex items-start justify-between gap-4">
                 <button
                   type="button"
                   onClick={onBack}
@@ -776,26 +776,19 @@ function ChallengeDetail({
                 >
                   ← Back
                 </button>
-                <div className="hidden min-w-0 text-center sm:block">
-                  <p className="truncate text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-                    {challenge.subjectName} challenge
-                  </p>
-                  <h1 className="mt-1 truncate font-display text-xl font-semibold">
-                    {challenge.title}
-                  </h1>
-                </div>
                 <div className="flex items-center justify-end gap-2">
                   {timerBox}
                   {focusToggle}
                 </div>
               </header>
 
-              <div className="mt-5 sm:hidden">
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-                  {challenge.subjectName} challenge
-                </p>
-                <h1 className="mt-1 font-display text-xl font-semibold">{challenge.title}</h1>
-              </div>
+              {/* The topic, on its own row and nothing else.
+                  It used to be the middle column of a three-column grid, so the
+                  heading was capped between the Back button and the timer and
+                  truncated there, and a second mobile-only copy repeated it below
+                  with the subject eyebrow above both. One row under the controls is
+                  the same markup at every breakpoint and has the full width to use. */}
+              <h1 className="mt-5 font-display text-xl font-semibold">{challenge.title}</h1>
 
               <nav
                 aria-label="Challenge progress"
@@ -917,7 +910,11 @@ function ChallengeDetail({
 
             {activeStep === 2 ? (
               <div>
-                <h2 className="text-xl font-semibold">📘 Key Concepts</h2>
+                {/* Which topic this is, above the section label: the page heading
+                    is a scroll away by the time the reading is open, and "Key
+                    Concepts" alone does not say concepts of WHAT. */}
+                <p className="text-sm font-semibold text-text-muted">{challenge.topicTitle}</p>
+                <h2 className="mt-1 text-xl font-semibold">📘 Key Concepts</h2>
                 <p className="mt-2 text-sm text-text-muted">
                   Understand the idea first, then read it applied. The worked example below makes
                   sense on its own once the concepts do.
@@ -1858,7 +1855,7 @@ export function ChallengesDashboardClient({
 
         <section className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="border-b border-border px-5 py-5 md:px-6">
-            <h2 className="text-xl font-semibold">Available Daily Micro-Topic Challenges</h2>
+            <h2 className="text-xl font-semibold">Available Daily Subtopic Challenges</h2>
             {dashboard.scope ? (
               <p className="mt-1 text-sm text-text-muted">
                 Showing {dashboard.scope.subjectName} challenges only.
@@ -1868,17 +1865,18 @@ export function ChallengesDashboardClient({
 
           {dashboard.challenges.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[820px] border-collapse text-left text-sm">
                 <thead className="bg-bg-secondary text-text-secondary">
                   <tr>
-                    <th scope="col" className="px-5 py-4 font-semibold md:px-6">
-                      Challenge ID
+                    <th scope="col" className="w-px px-5 py-4 font-semibold md:px-6">
+                      <span className="sr-only">Challenge number</span>
+                      <span aria-hidden="true">#</span>
                     </th>
                     <th scope="col" className="px-5 py-4 font-semibold">
                       Subject
                     </th>
                     <th scope="col" className="px-5 py-4 font-semibold">
-                      Micro Topic
+                      Subtopic
                     </th>
                     <th scope="col" className="px-5 py-4 font-semibold">
                       Est. Time
@@ -1892,19 +1890,30 @@ export function ChallengesDashboardClient({
                   </tr>
                 </thead>
                 <tbody>
-                  {dashboard.challenges.map((challenge) => {
+                  {dashboard.challenges.map((challenge, index) => {
                     const score = challengeScore(challenge);
                     const completed = challenge.status === "completed";
                     const started = challenge.status === "started";
                     return (
                       <tr key={challenge.id} className="border-t border-border">
-                        {/* The id a student quotes when something is wrong with one
-                            specific challenge. Monospace and selectable, never
-                            truncated to a prefix — half an id identifies nothing. */}
+                        {/* A row number, because that is what a student uses this
+                            column for — "the third one" — and a 36-character UUID
+                            told them nothing while costing the table the width of
+                            two real columns.
+
+                            The UUID is still the only identifier support can act
+                            on, so it stays on the row: `title` surfaces it on hover
+                            and it is selectable from there. Counting is per render,
+                            so it renumbers when the list is filtered — which is
+                            correct for a position and is exactly why the real id
+                            had to stay reachable rather than be replaced. */}
                         <td className="px-5 py-4 md:px-6">
-                          <code className="select-all whitespace-nowrap rounded bg-bg-secondary px-2 py-1 font-mono text-xs text-text-secondary">
-                            {challenge.id}
-                          </code>
+                          <span
+                            title={challenge.id}
+                            className="inline-flex min-w-7 justify-center whitespace-nowrap rounded bg-bg-secondary px-2 py-1 font-mono text-xs tabular-nums text-text-secondary"
+                          >
+                            {index + 1}
+                          </span>
                         </td>
                         <td className="px-5 py-4 font-medium">{challenge.subjectName}</td>
                         <td className="max-w-xs px-5 py-4">
@@ -2002,7 +2011,7 @@ export function ChallengesDashboardClient({
                   ? "Ask the community creator to refresh this subject's extracted topics."
                   : dashboard.community
                     ? `${dashboard.community.name} has no available challenges yet. Published topics will appear here automatically.`
-                    : "Join a community and its real micro-topics will appear here."}
+                    : "Join a community and its real subtopics will appear here."}
               </p>
               <Link
                 href={
@@ -2053,6 +2062,11 @@ export function ChallengesDashboardClient({
                   <button
                     key={challenge.id}
                     type="button"
+                    /* Same trade as the "#" column above: the UUID is reachable on
+                       hover rather than printed under every row, where it was a
+                       line of noise per entry and the topic is what a student
+                       scans this list for. */
+                    title={challenge.id}
                     onClick={() => void openChallenge(challenge)}
                     disabled={openingId === challenge.id}
                     className="grid min-h-16 w-full grid-cols-[1fr_auto] items-center gap-4 px-5 py-4 text-left hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 disabled:opacity-60 md:px-6"
@@ -2062,9 +2076,6 @@ export function ChallengesDashboardClient({
                       <span className="mt-1 block text-xs text-text-muted">
                         {challenge.subjectName} · {challenge.date}
                       </span>
-                      <code className="mt-1 block select-all font-mono text-[11px] text-text-muted">
-                        {challenge.id}
-                      </code>
                     </span>
                     <span className="text-sm font-semibold text-text-secondary">
                       {openingId === challenge.id

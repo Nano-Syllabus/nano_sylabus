@@ -28,6 +28,7 @@ import {
 } from "@/lib/teacher-app/client";
 import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
 import { memo } from "@/lib/http/memo";
+import { devCollectionKey } from "@/lib/dev-collection-key";
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 
 const UNDEFINED_TABLE = "42P01";
@@ -62,6 +63,10 @@ export type ChallengeRecommendation = {
   topicKey: string;
   topicTitle: string;
   topicBlurb: string;
+  /** The unit this subtopic sits under, "" when the syllabus does not number it.
+   *  A challenge covers one SUBTOPIC; the unit is how it is grouped and how the
+   *  revision docs rebuild "Unit 1" out of the topics filed beneath it. */
+  unitNumber: string;
   reason: string;
 };
 
@@ -305,7 +310,13 @@ function toSummary(row: ChallengeRow): StudentChallengeSummary {
     subjectName,
     topicKey: String(row.topic_key ?? ""),
     topicTitle,
-    title: topicTitle === rawTopicTitle ? String(row.title ?? "") : topicTitle,
+    // The topic, never the stored `title`. Challenges were written to the row as
+    // "Master <topic>", which put a word we do not say to students into the page
+    // heading, the focus-mode rail, the compact bar and the exam record that
+    // grading stores. The topic name is what every other surface already shows
+    // (`topicTitle` below, the daily dashboard, the challenge list), so reading it
+    // here is what makes them agree rather than one more place to strip a prefix.
+    title: topicTitle,
     recommendationReason: String(row.recommendation_reason ?? ""),
     status: (row.status as ChallengeStatus) ?? "assigned",
     durationMinutes: number(row.duration_minutes) || 20,
@@ -794,6 +805,11 @@ type ChallengeAccess = Awaited<ReturnType<typeof requireChallengeAccess>>;
  * session must not be told for an hour that it is "not ready yet".
  */
 function collectionKeyForTeacher(teacherId: string) {
+  // Local dev against a local api-service: the key in Supabase was issued by
+  // production and means nothing to it. See lib/dev-collection-key.ts — this is
+  // "" in every build that ships, so the memo below is the only real path.
+  const devKey = devCollectionKey();
+  if (devKey) return Promise.resolve(devKey);
   return memo(
     `challenge:collection-sk:${teacherId}`,
     async () => {
@@ -904,9 +920,47 @@ function contentWithExam(
  * The worked examples and the exam are built behind the response by
  * `runChallengeContentCompletion`, which returns here through `contentStatus`.
  */
+/** The reading as the screen stores it. `null` while the tail is still building. */
+function lessonFromReading(learning: TeacherChallengeLearnResponse | null) {
+  if (!learning) {
+    return {
+      title: "",
+      content: [] as string[],
+      focus: "",
+      bigIdea: "",
+      connections: [] as string[],
+      sources: [] as Array<{ title: string; source: string; excerpt: string }>,
+    };
+  }
+  return {
+    title: learning.reading.headline || "What you need to know",
+    content: lessonParagraphs(learning.reading.content),
+    focus: learning.reading.focus || "",
+    bigIdea: learning.reading.big_idea || "",
+    connections: (learning.reading.connections || []).filter(Boolean),
+    sources: (learning.reading.sources || []).map((source) => ({
+      title: source.chapter?.trim() || source.filename?.trim() || "Course material",
+      source: source.source_path?.trim() || source.filename?.trim() || "Indexed source",
+      excerpt: "",
+    })),
+  };
+}
+
+/** Fold a reading that arrived late into content that already carries step one. */
+function contentWithReading(
+  content: StudentChallengeContent,
+  learning: TeacherChallengeLearnResponse,
+): StudentChallengeContent {
+  return {
+    ...content,
+    learningWarning: warningText(content.learningWarning, warningText(learning.warnings)),
+    lesson: lessonFromReading(learning),
+  };
+}
+
 function challengeLessonContent(
   pastQuestions: TeacherChallengePastQuestionsResponse,
-  learning: TeacherChallengeLearnResponse,
+  learning: TeacherChallengeLearnResponse | null,
 ): StudentChallengeContent {
   const topicKeys = (pastQuestions.topics || []).map((topic) => topic.topic_key).filter(Boolean);
   const topicTitle = pastQuestions.topics?.[0]?.title || "this topic";
@@ -933,20 +987,13 @@ function challengeLessonContent(
     pastQuestionsGrounded: pastQuestions.grounded,
     pastQuestionBlockers: pastQuestions.blockers || [],
     pastQuestionWarnings: pastQuestions.warnings || [],
-    learningWarning: warningText(learning.warnings),
+    learningWarning: learning ? warningText(learning.warnings) : null,
     solvedWarning: null,
-    lesson: {
-      title: learning.reading.headline || "What you need to know",
-      content: lessonParagraphs(learning.reading.content),
-      focus: learning.reading.focus || "",
-      bigIdea: learning.reading.big_idea || "",
-      connections: (learning.reading.connections || []).filter(Boolean),
-      sources: (learning.reading.sources || []).map((source) => ({
-        title: source.chapter?.trim() || source.filename?.trim() || "Course material",
-        source: source.source_path?.trim() || source.filename?.trim() || "Indexed source",
-        excerpt: "",
-      })),
-    },
+    // `null` learning is the fast path: `/start` no longer waits on the reading,
+    // so the lesson is an empty shell here and `contentWithReading` fills it in
+    // from the background pass. An empty `content` array is what the screen reads
+    // as "still building", the same signal the worked examples already use.
+    lesson: lessonFromReading(learning),
     solvedExamples: [],
     examQuestions: [],
     warning: null,
@@ -1062,10 +1109,20 @@ export async function startStudentChallenge(
     }
     if (hasLiveExam(current, externalAttemptId)) return current;
     if (current.content?.provider === "collection-challenge-v1") {
-      return refreshStudentChallengeExam(userId, challengeId, {
-        allowCompleted: options.restart,
-        access,
-      });
+      // A restart is the student explicitly asking for a fresh paper, so that one
+      // is still awaited — they are asking for the exam itself and a stale set of
+      // questions would be the wrong answer.
+      if (options.restart) {
+        return refreshStudentChallengeExam(userId, challengeId, {
+          allowCompleted: true,
+          access,
+        });
+      }
+      // A plain reopen is not. The lesson is already written and is what the
+      // student is about to read; the paper is issued behind them rather than in
+      // front of them.
+      scheduleChallengeExamRefresh(userId, challengeId, access);
+      return current;
     }
   }
 
@@ -1086,13 +1143,44 @@ export async function startStudentChallenge(
   try {
     pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, topicRequest);
   } catch (error) {
-    // Daily rows assigned before the collection-scoped wiring may carry a
-    // legacy topic key. Let the API choose the real highest-weight topic once.
     if (!(error instanceof TeacherApiError) || ![404, 422].includes(error.status)) throw error;
-    pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, {
-      ...topicRequest,
-      topics: [],
-    });
+    /**
+     * THE SUBTOPIC IS TRIED TWICE BEFORE IT IS GIVEN UP ON.
+     *
+     * A daily row assigned before this subject's catalogue was re-extracted can
+     * carry a key the provider no longer knows. Sending `topics: []` at that
+     * point does work — the provider picks its most heavily examined chapter —
+     * but that chapter is a UNIT, so the challenge silently stops being about a
+     * subtopic at all, and the student is handed a week of the course with no
+     * sign anything changed.
+     *
+     * The provider resolves a topic by key OR by the title a student sees, so
+     * the title is a second, better shot at the same subtopic: a re-extraction
+     * that renumbers keys almost never renames "Ohm's law". Only when that also
+     * misses is the choice handed over.
+     */
+    const topicTitle = String(row.topic_title || "").trim();
+    if (topicTitle && !sourceDocumentTopic) {
+      try {
+        pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, {
+          ...topicRequest,
+          topics: [topicTitle],
+        });
+      } catch (retryError) {
+        if (!(retryError instanceof TeacherApiError) || ![404, 422].includes(retryError.status)) {
+          throw retryError;
+        }
+        pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, {
+          ...topicRequest,
+          topics: [],
+        });
+      }
+    } else {
+      pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, {
+        ...topicRequest,
+        topics: [],
+      });
+    }
   }
   if (!pastQuestions.can_start) {
     throw new Error(
@@ -1103,6 +1191,12 @@ export async function startStudentChallenge(
   const selectedTopicKeys = (pastQuestions.topics || [])
     .map((topic) => topic.topic_key)
     .filter(Boolean);
+  // Deliberately AFTER the past questions, not alongside them. Overlapping the two
+  // would halve this wait, but the reading is a model call and `can_start` is not
+  // known until the past questions come back — so a speculative reading is paid
+  // for in full every time a challenge cannot start or the provider is down.
+  // `keeps the assignment intact when the provider is unavailable` pins that: it
+  // asserts the reading is never called when step one fails.
   const learning = await getTeacherChallengeReading(lane.collectionKey, {
     subject: lane.subject,
     topics: selectedTopicKeys,
@@ -1164,7 +1258,7 @@ async function runChallengeContentCompletion(
   if (!raw) return null;
   const row = raw as ChallengeRow;
   const detail = toDetail(row);
-  const pending = detail.content;
+  let pending = detail.content;
   // Another process may have finished it between the schedule and this run.
   if (!pending || pending.contentStatus !== "pending") return detail;
 
@@ -1176,11 +1270,25 @@ async function runChallengeContentCompletion(
   const topicTitle = String(row.topic_title || detail.topicTitle || "this topic");
 
   try {
-    const solved = await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
-      subject: lane.subject,
-      topics: topicKeys,
-      limit: 2,
-    });
+    // A row written before `/start` carried the reading (or one whose reading call
+    // failed) still has an empty lesson here. Refetched alongside the worked
+    // examples rather than before them: they share no inputs, and in the normal
+    // case there is nothing to fetch at all.
+    const needsReading = !pending.lesson?.content?.length;
+    const [learning, solved] = await Promise.all([
+      needsReading
+        ? getTeacherChallengeReading(lane.collectionKey, {
+            subject: lane.subject,
+            topics: topicKeys,
+          }).catch(() => null)
+        : Promise.resolve(null),
+      getTeacherChallengeSolvedQuestions(lane.collectionKey, {
+        subject: lane.subject,
+        topics: topicKeys,
+        limit: 2,
+      }),
+    ]);
+    if (learning) pending = contentWithReading(pending, learning);
     // Only fetched when it can change what the student is told. It exists to
     // phrase ONE warning — whether the thin worked examples mean "no past paper
     // covers this topic" or "this course has no question bank at all" — and
@@ -1271,6 +1379,38 @@ function scheduleChallengeContentCompletion(userId: string, challengeId: string)
   if (completionsInFlight.has(challengeId)) return;
   const task = runChallengeContentCompletion(userId, challengeId).catch(() => null);
   completionsInFlight.set(challengeId, task);
+  try {
+    after(() => task);
+  } catch {
+    // Not in a request scope. The work is under way regardless.
+  }
+}
+
+/**
+ * Re-issue an expired exam WITHOUT the student waiting on it.
+ *
+ * Reopening a challenge used to await `refreshStudentChallengeExam`, which issues
+ * a paper through the tenant API on a 120s timeout. That is the whole reason
+ * "Continue" sat on `Opening…` — and it bought nothing, because a reopened
+ * challenge lands on step 1 (past questions) and the exam is not read until step
+ * 3. The student was blocked on a model call for a screen two steps away.
+ *
+ * So the lesson is handed back immediately and the paper is issued behind it, the
+ * same shape `/start` already uses for the worked examples. `examRefreshInFlight`
+ * is what stops a second open (or an impatient double click) from issuing a
+ * second paper alongside the one already on its way — the same race
+ * `refreshStudentChallengeExam` guards against for a pending build.
+ */
+const examRefreshInFlight = new Map<string, Promise<StudentChallengeDetail | null>>();
+
+function scheduleChallengeExamRefresh(userId: string, challengeId: string, access: ChallengeAccess) {
+  if (examRefreshInFlight.has(challengeId) || completionsInFlight.has(challengeId)) return;
+  const task = refreshStudentChallengeExam(userId, challengeId, { access })
+    .catch(() => null)
+    .finally(() => {
+      examRefreshInFlight.delete(challengeId);
+    });
+  examRefreshInFlight.set(challengeId, task);
   try {
     after(() => task);
   } catch {

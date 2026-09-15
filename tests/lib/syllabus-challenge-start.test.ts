@@ -352,7 +352,10 @@ describe("starting a saved syllabus challenge", () => {
     expect(db.tables.student_challenges[0].status).toBe("assigned");
   });
 
-  it("retries the topic lookup without a stale provider topic key", async () => {
+  it("retries a stale subtopic key by its title before giving up on the subtopic", async () => {
+    // A re-extraction renumbers keys; it almost never renames "Ohm's law". The
+    // title is therefore a second shot at the SAME subtopic, and taking it is
+    // what stops the challenge quietly becoming a unit-level one.
     mocks.pastQuestions.mockRejectedValueOnce(new TeacherApiError("Unknown topic", 404));
 
     const result = await startStudentChallenge("member", "challenge-1");
@@ -364,6 +367,22 @@ describe("starting a saved syllabus challenge", () => {
       limit: 6,
     });
     expect(mocks.pastQuestions).toHaveBeenNthCalledWith(2, "collection", {
+      subject: "Nims",
+      topics: ["Identifiers"],
+      limit: 6,
+    });
+    // The subtopic was recovered, so the provider is never asked to choose.
+    expect(mocks.pastQuestions).toHaveBeenCalledTimes(2);
+  });
+
+  it("only lets the provider choose once both the key and the title miss", async () => {
+    mocks.pastQuestions
+      .mockRejectedValueOnce(new TeacherApiError("Unknown topic", 404))
+      .mockRejectedValueOnce(new TeacherApiError("Unknown topic", 404));
+
+    await startStudentChallenge("member", "challenge-1");
+
+    expect(mocks.pastQuestions).toHaveBeenNthCalledWith(3, "collection", {
       subject: "Nims",
       topics: [],
       limit: 6,

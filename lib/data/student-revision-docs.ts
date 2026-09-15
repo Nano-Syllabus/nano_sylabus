@@ -25,9 +25,16 @@ import {
  *     Semester  →  Subject  →  Unit  →  Topic
  *
  * which is the shape of documentation, and is navigated like documentation. It is
- * NOT a syllabus browser: a topic appears only once its challenge has been passed,
- * because the claim this page makes about every page in it is "you have done this,
- * here is what it said". An empty unit is a unit with nothing proved in it yet.
+ * NOT a syllabus browser: a topic appears once its challenge has been OPENED, and
+ * never before, because the claim this page makes about every page in it is "you
+ * have worked on this, here is what it said". An empty unit is a unit nothing has
+ * been started in yet.
+ *
+ * Started counts, and is marked. The reading is written and stored by `/start`, so
+ * a challenge in progress already has everything this page shows; withholding it
+ * would hide precisely the topic the student is working on right now. `inProgress`
+ * carries that distinction to the UI so a topic still open is never presented as
+ * one already proved.
  *
  * NOTHING IS GENERATED HERE
  * -------------------------
@@ -55,6 +62,10 @@ export type RevisionDocTopic = {
   title: string;
   subjectName: string;
   completedAt: string;
+  /** True while the challenge is still open. The material is real and worth
+   *  re-reading either way, but the page must not claim a topic was proved when
+   *  it was only started — that is the one thing these docs assert. */
+  inProgress: boolean;
   /** Percentage of the paper, or null when the row predates score capture. */
   scorePercent: number | null;
   attempts: number;
@@ -132,6 +143,7 @@ function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {
     title: text(row.topic_title) || text(row.title) || "Untitled topic",
     subjectName,
     completedAt: text(row.completed_at) || text(row.updated_at),
+    inProgress: text(row.status) !== "completed",
     scorePercent: scorePercent(row),
     attempts: Number(row.attempt_count) || 0,
     bigIdea: content?.lesson?.bigIdea || "",
@@ -182,12 +194,21 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
     admin
       .from("student_challenges")
       .select(
-        "id,course_id,subject_slug,subject_name,topic_key,topic_title,title,content," +
+        "id,course_id,subject_slug,subject_name,topic_key,topic_title,title,content,status," +
           "completed_at,updated_at,attempt_count,last_score,last_total_marks",
       )
       .eq("user_id", userId)
-      .eq("status", "completed")
-      .order("completed_at", { ascending: false }),
+      // Started, not just passed. The reading is written and stored the moment a
+      // challenge is opened, so a student who is midway through one already HAS
+      // the material this page exists to give back — refusing to show it until
+      // they pass means the topic they are actively studying is the one topic
+      // they cannot look up. A started row with no content yet is dropped below.
+      .in("status", ["completed", "started"])
+      // `completed_at` is null on a started row, and Postgres sorts nulls first on
+      // DESC — which would file everything in progress above everything passed.
+      // `updated_at` is set on both and means "last touched", which is the order
+      // this page actually wants.
+      .order("updated_at", { ascending: false }),
   ]);
 
   if (isMissingChallengeTable(completed.error)) {
@@ -202,8 +223,14 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
   // A row whose subject the student no longer has is dropped here rather than
   // rendered from the durable copy: leaving a community must take its material
   // with it, exactly as opening the challenge itself would find.
-  const rows = ((completed.data ?? []) as unknown as ChallengeRow[]).filter((row) =>
-    accessByScope.has(scopeKey(text(row.course_id), text(row.subject_slug))),
+  const rows = ((completed.data ?? []) as unknown as ChallengeRow[]).filter(
+    (row) =>
+      accessByScope.has(scopeKey(text(row.course_id), text(row.subject_slug))) &&
+      // Every field this page renders is read off `content`. A row without it —
+      // a challenge assigned but never opened, or one whose `/start` has not
+      // landed yet — would file an empty page under a real topic title, which
+      // reads as "this topic taught you nothing" rather than "not yet".
+      Boolean((row.content ?? null) as StudentChallengeContent | null),
   );
   if (!rows.length) return { semesters: [], topicCount: 0, unavailable: false };
 

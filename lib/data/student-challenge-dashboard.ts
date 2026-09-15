@@ -539,7 +539,13 @@ export async function getStudentChallengeDashboard(
           const sharedTopics = courseId
             ? await readCourseLearningTopics(courseId, courseSubject.teacherId, subjectSlug, admin)
             : null;
-          let topics: Array<Pick<PracticeTopic, "topic_key" | "title" | "blurb">>;
+          // `unit_number` is the syllabus knowledge that says which unit a
+          // subtopic sits under. It was dropped by the Pick<> here, so every
+          // recommendation reached the challenge with no idea where in the
+          // course it belonged.
+          let topics: Array<
+            Pick<PracticeTopic, "topic_key" | "title" | "blurb"> & { unit_number?: string | null }
+          >;
           if (sharedTopics !== null) {
             topics = sharedTopics;
           } else {
@@ -598,6 +604,7 @@ export async function getStudentChallengeDashboard(
               topicKey: topic.topic_key,
               topicTitle: topic.title,
               topicBlurb: topic.blurb?.trim() || "",
+              unitNumber: String(topic.unit_number || "").trim(),
               reason: recommendationReason(topicMastery),
             })),
           };
