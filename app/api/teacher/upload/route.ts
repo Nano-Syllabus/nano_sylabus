@@ -243,7 +243,11 @@ export async function POST(request: Request) {
           return [
             {
               driveFileId: fileId,
-              fileName: safeFilename(text(record.fileName)),
+              // Empty rather than `safeFilename("")`, which is the literal string
+              // "upload": on the keyless path nothing is known about the file
+              // until its bytes arrive, and the queue should say "Drive file"
+              // until the drain writes the real name back.
+              fileName: text(record.fileName) ? safeFilename(text(record.fileName)) : "",
               mimeType: text(record.mimeType),
               sizeBytes: numberValue(record.sizeBytes),
               destinationPath: path,

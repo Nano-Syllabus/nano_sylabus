@@ -49,6 +49,23 @@ const EXPORTS: Record<string, { mimeType: string; extension: string; docsPath: s
 };
 
 export const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
+
+/**
+ * `docs.google.com/document/d/…` → the native type behind that editor.
+ *
+ * This is the only thing that tells a KEYLESS import what it is looking at. With
+ * no API key there is no metadata call, so `resolveDriveLink` has no mimeType to
+ * report — and without one, a Doc, a Sheet and a PDF are indistinguishable and
+ * all three get sent to the binary download host. For a Doc that host answers
+ * with HTML, which the code below then reports as a sharing problem: the teacher
+ * is told to fix a setting that was never wrong. The path segment is the fact
+ * that was sitting in the URL the whole time.
+ */
+const DOCS_PATH_MIME: Record<string, string> = {
+  document: "application/vnd.google-apps.document",
+  presentation: "application/vnd.google-apps.presentation",
+  spreadsheets: "application/vnd.google-apps.spreadsheet",
+};
 const SHORTCUT_MIME = "application/vnd.google-apps.shortcut";
 /** One page is plenty for a shelf; a folder past this is a filing problem. */
 const MAX_FOLDER_FILES = 100;
@@ -96,7 +113,9 @@ export function driveFolderSupportEnabled() {
  * host allowlist is the check that matters: `docs.google.com.evil.test/d/x/`
  * matches the path shape perfectly.
  */
-export function parseDriveLink(raw: string): { id: string; kind: "file" | "folder" } | null {
+export function parseDriveLink(
+  raw: string,
+): { id: string; kind: "file" | "folder"; docsMime?: string } | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
   // A bare id, which the share dialog does not produce but people do paste.
@@ -117,7 +136,11 @@ export function parseDriveLink(raw: string): { id: string; kind: "file" | "folde
   if (folder) return { id: folder[1], kind: "folder" };
 
   const path = url.pathname.match(/\/d\/([A-Za-z0-9_-]+)/);
-  if (path) return { id: path[1], kind: "file" };
+  if (path) {
+    const editor = url.pathname.match(/^\/(document|presentation|spreadsheets)\//)?.[1];
+    const docsMime = editor ? DOCS_PATH_MIME[editor] : undefined;
+    return docsMime ? { id: path[1], kind: "file", docsMime } : { id: path[1], kind: "file" };
+  }
 
   const query = url.searchParams.get("id");
   if (query && /^[A-Za-z0-9_-]+$/.test(query)) return { id: query, kind: "file" };
@@ -186,9 +209,13 @@ export async function resolveDriveLink(raw: string): Promise<DriveEntry[]> {
         "unsupported",
       );
     }
-    // Without a key there is no metadata call. The name and type are read off
-    // the download response instead, so the entry here is a placeholder.
-    return [{ id: parsed.id, name: "", mimeType: "", sizeBytes: 0, isFolder: false }];
+    // Without a key there is no metadata call, so the name is read off the
+    // download response instead and the entry here is mostly a placeholder. The
+    // TYPE is not guesswork though when the link is an editor URL: that is what
+    // sends a Doc down the export path rather than the binary one.
+    return [
+      { id: parsed.id, name: "", mimeType: parsed.docsMime || "", sizeBytes: 0, isFolder: false },
+    ];
   }
 
   const record = await driveJson(`/files/${encodeURIComponent(parsed.id)}`, {
@@ -292,7 +319,9 @@ export async function downloadDriveFile(entry: DriveEntry): Promise<DriveDownloa
   if (exported) {
     const url = key
       ? new URL(`${API_ROOT}/files/${encodeURIComponent(entry.id)}/export`)
-      : new URL(`https://docs.google.com/${exported.docsPath}/d/${encodeURIComponent(entry.id)}/export`);
+      : new URL(
+          `https://docs.google.com/${exported.docsPath}/d/${encodeURIComponent(entry.id)}/export`,
+        );
     if (key) {
       url.searchParams.set("mimeType", exported.mimeType);
       url.searchParams.set("key", key);
@@ -300,9 +329,17 @@ export async function downloadDriveFile(entry: DriveEntry): Promise<DriveDownloa
       url.searchParams.set("format", exported.extension.slice(1));
     }
     const response = await driveFetch(url, label);
+    // A private Doc is not a 403 on the keyless export host either — it is a
+    // sign-in page with a 200. Indexing that would file Google's login markup
+    // as the teacher's chapter.
+    if (!key && (response.headers.get("content-type") || "").includes("text/html")) {
+      throw new DriveLinkError(sharingMessage(), "sharing");
+    }
+    // Keyless there is no metadata, so the title comes off the export response.
+    const named = entry.name || driveNameFromResponse(response) || "drive-export";
     return {
       buffer: await readCapped(response, label),
-      fileName: driveFileName(entry),
+      fileName: driveFileName({ ...entry, name: named }),
       mimeType: exported.mimeType,
     };
   }

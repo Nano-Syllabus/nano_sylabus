@@ -1098,6 +1098,15 @@ async function uploadTeacherDocument(file: File, path: string) {
   );
 }
 
+/**
+ * Whether folder links work here — null until a `drive-resolve` has told us.
+ *
+ * It starts UNKNOWN rather than true because the hint text is read before
+ * anything is pasted, and promising a folder import that this deployment cannot
+ * do is worse than saying nothing about folders at all.
+ */
+let driveFolderSupport: boolean | null = null;
+
 type DriveCandidate = {
   id: string;
   name: string;
@@ -1116,6 +1125,10 @@ async function resolveDriveLink(link: string, path: string) {
       body: JSON.stringify({ action: "drive-resolve", path, link }),
     }),
   );
+  // Whether a FOLDER link can be read at all depends on the deployment having a
+  // Drive API key: listing a folder's children is an API call, and there is no
+  // credential-free way to make it. A single public file needs no key.
+  driveFolderSupport = payload.folderSupport === true;
   const files = Array.isArray(payload.files) ? payload.files : [];
   return files.map((item) => {
     const record = asRecord(item);
@@ -10731,6 +10744,7 @@ function UploadDialog({
   const [link, setLink] = useState("");
   const [driveFiles, setDriveFiles] = useState<DriveCandidate[]>([]);
   const [resolving, setResolving] = useState(false);
+  const [folderSupport, setFolderSupport] = useState<boolean | null>(driveFolderSupport);
   const shelfRoot = `${subject.folderPath}/${shelf}`;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -10811,6 +10825,7 @@ function UploadDialog({
     setDriveFiles([]);
     try {
       const resolved = await resolveDriveLink(pasted, shelfRoot);
+      setFolderSupport(driveFolderSupport);
       setDriveFiles(resolved);
       const skipped = resolved.filter((file) => !file.supported || file.tooLarge);
       if (skipped.length) {
@@ -10824,6 +10839,12 @@ function UploadDialog({
         );
       }
     } catch (caught) {
+      // A folder link refused for want of a key is itself the answer to "can
+      // this deployment read folders", so the hint stops offering it.
+      if (caught instanceof ResponseError && caught.code === "unsupported") {
+        driveFolderSupport = false;
+        setFolderSupport(false);
+      }
       setError(caught instanceof Error ? caught.message : "That link could not be read.");
     } finally {
       setResolving(false);
@@ -10968,10 +10989,15 @@ function UploadDialog({
             </Button>
           </div>
           <p id="teacher-upload-link-hint" className="mt-2 text-xs text-text-muted">
-            The file or folder must be shared as{" "}
+            The file must be shared as{" "}
             <strong className="font-medium text-text-secondary">Anyone with the link</strong> — open
-            it in Drive, press Share, and set General access. A folder link adds every document
-            inside it. Google Docs and Slides are converted to PDF, Sheets to CSV.
+            it in Drive, press Share, and set General access.{" "}
+            {folderSupport === true
+              ? "A folder link adds every document inside it. "
+              : folderSupport === false
+                ? "Link one file at a time — folder links need a Drive API key this deployment does not have. "
+                : ""}
+            Google Docs and Slides are converted to PDF, Sheets to CSV.
           </p>
           <DriveImportQueue onSettled={onQueueSettled} />
           {driveFiles.length ? (
