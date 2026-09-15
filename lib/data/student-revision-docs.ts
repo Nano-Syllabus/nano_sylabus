@@ -56,6 +56,9 @@ import {
 /** Where a topic files when its course catalogue does not place it in a unit. */
 const UNPLACED_UNIT = "";
 
+/** Two topics in one subject share this title, so it identifies neither. */
+const AMBIGUOUS_TITLE = { unitNumber: UNPLACED_UNIT, position: Number.MAX_SAFE_INTEGER };
+
 export type RevisionDocTopic = {
   /** The challenge this was proved by. Shown, because it is the id a student
    *  quotes when a specific topic's material is wrong. */
@@ -132,9 +135,10 @@ function scopeKey(courseId: string, subjectSlug: string) {
   return `${courseId}:${subjectSlug.trim().toLowerCase()}`;
 }
 
-/** Subject identity for a challenge that carries no course, matched on slug or
- *  name the way `getStudentCourseSubjectAccess` matches one. */
-function subjectKey(value: string) {
+/** Case-folded identity for a subject or topic name, matched the way
+ *  `getStudentCourseSubjectAccess` matches one. Named for what it produces
+ *  rather than `subjectKey`, which the walk below already uses for a local. */
+function matchKey(value: string) {
   return value.trim().toLowerCase();
 }
 
@@ -197,11 +201,28 @@ async function unitsByTopicKey(
         subject.subjectSlug,
         admin,
       ).catch(() => null);
+      const scope = scopeKey(subject.courseId, subject.subjectSlug);
       for (const topic of topics ?? []) {
-        placements.set(`${scopeKey(subject.courseId, subject.subjectSlug)}:${topic.topic_key}`, {
+        const placement = {
           unitNumber: topic.unit_number ?? UNPLACED_UNIT,
           position: topic.position,
-        });
+        };
+        placements.set(`${scope}:${topic.topic_key}`, placement);
+        // AND by title, because the key is not stable and the title is.
+        //
+        // `/start` overwrites a challenge's `topic_key` with whatever key the
+        // provider resolved the topic to, and re-extracting a subject renumbers
+        // those keys again — so the key a filed challenge carries frequently is
+        // not the key the catalogue now lists it under, and the topic lands in
+        // "Other topics" beside real syllabus units. A re-extraction that
+        // renumbers keys almost never renames "Oscillation", which is the same
+        // reasoning `startStudentChallenge` already retries a lost subtopic on.
+        //
+        // Set only if the title is not already taken: a title that appears twice
+        // in one subject cannot identify a unit, and guessing between them would
+        // file a topic under the wrong one, which is worse than "Other topics".
+        const titleKey = `${scope}:title:${matchKey(topic.title)}`;
+        placements.set(titleKey, placements.has(titleKey) ? AMBIGUOUS_TITLE : placement);
       }
     }),
   );
@@ -280,8 +301,8 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
   const accessBySlug = new Map(
     [...privateSubjects, ...community]
       .flatMap((subject) => [
-        [subjectKey(subject.subjectSlug), subject] as const,
-        [subjectKey(subject.subjectName), subject] as const,
+        [matchKey(subject.subjectSlug), subject] as const,
+        [matchKey(subject.subjectName), subject] as const,
       ])
       .filter(([key]) => Boolean(key)),
   );
@@ -296,7 +317,7 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
     const courseId = text(row.course_id);
     const slug = text(row.subject_slug);
     if (courseId) return accessByScope.get(scopeKey(courseId, slug)) ?? null;
-    return accessBySlug.get(subjectKey(slug)) ?? accessBySlug.get(subjectKey(text(row.subject_name))) ?? null;
+    return accessBySlug.get(matchKey(slug)) ?? accessBySlug.get(matchKey(text(row.subject_name))) ?? null;
   }
 
   const rows = ((completed.data ?? []) as unknown as ChallengeRow[]).filter(
@@ -364,11 +385,14 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       semester.subjects.push(subject);
     }
 
-    const placement = placements.get(`${key}:${text(row.topic_key)}`);
-    // The catalogue's answer first — it is live, and it is the one that moves
-    // when a teacher re-numbers a unit. The unit written onto the row at
-    // assignment is the fallback, and it is what keeps a topic under its real
-    // unit after `/start` has rewritten `topic_key` out from under the join.
+    // Three ways to place a topic, best first. The catalogue is live and moves
+    // when a teacher renumbers a unit, so it wins; its title index catches the
+    // rows whose key `/start` rewrote; and the unit stamped on the row at
+    // assignment is what survives when the catalogue has dropped the topic
+    // altogether — a unit re-read into its own bullets, for instance.
+    const placement =
+      placements.get(`${key}:${text(row.topic_key)}`) ??
+      placements.get(`${key}:title:${matchKey(text(row.topic_title) || text(row.title))}`);
     const unitNumber = placement?.unitNumber || text(row.unit_number) || UNPLACED_UNIT;
     const unitKey = `${subjectKey}:${unitNumber}`;
     let unit = unitsByKey.get(unitKey);

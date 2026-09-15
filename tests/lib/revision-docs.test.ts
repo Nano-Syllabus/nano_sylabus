@@ -293,6 +293,34 @@ describe("revision docs", () => {
     expect(docs.semesters[0].subjects[0].units[0].label).toBe("Unit 2");
   });
 
+  it("places a topic by title when /start rewrote its key", async () => {
+    // The reported symptom: "Oscillation" sitting under OTHER TOPICS beside the
+    // real syllabus units, because the row's key no longer matches the catalogue.
+    db.tables.student_challenges = [
+      completedRow({ topic_key: "laplace-v2-provider", unit_number: "" }),
+    ];
+
+    const docs = await getStudentRevisionDocs("member");
+
+    expect(docs.semesters[0].subjects[0].units[0].label).toBe("Unit 2");
+  });
+
+  it("refuses to guess when two topics in a subject share a title", async () => {
+    // "Introduction" lives under three different units in a typical syllabus.
+    // Filing under the wrong one is worse than filing under Other topics.
+    db.tables.student_challenges = [
+      completedRow({ topic_key: "unknown-key", topic_title: "Introduction", unit_number: "" }),
+    ];
+    mocks.topics.mockResolvedValue([
+      { topic_key: "intro-1", title: "Introduction", unit_number: "1", position: 0 },
+      { topic_key: "intro-2", title: "Introduction", unit_number: "4", position: 9 },
+    ]);
+
+    const docs = await getStudentRevisionDocs("member");
+
+    expect(docs.semesters[0].subjects[0].units[0].label).toBe("Other topics");
+  });
+
   it("reports a missing challenge table as unavailable, not as nothing revised", async () => {
     db.tables.student_challenges = [];
     db.failures.set("student_challenges:select", "missing");

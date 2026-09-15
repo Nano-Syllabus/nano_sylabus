@@ -186,16 +186,129 @@ function applyMedia(value: string, tokens: string[]): string {
     });
 }
 
+/**
+ * Whether a `$…$` candidate is really maths.
+ *
+ * THE FAILURE THIS EXISTS TO STOP
+ * -------------------------------
+ * Course notes are OCR'd PDFs, and they do not balance their dollar signs. One
+ * stray `$` pairs with the next one several sentences away, and everything
+ * between is handed to KaTeX — which ignores whitespace in maths mode, so a
+ * paragraph comes back as a single unreadable word:
+ *
+ *   $F(x) = -kx where k is force constant. or, \frac{d^2x}{dt^2} = 0 where $
+ *   ->  F(x)=−kxwherekisforceconstant.or,dt2d2x=0where
+ *
+ * The backend already knows this shape — `_solve_prompt` in routers/challenge.py
+ * warns the model that "a renderer strips the spaces inside $...$ and the student
+ * is shown 'Ohm′sLaw'" — but a prompt cannot govern text lifted verbatim out of a
+ * teacher's notes, so the renderer has to refuse it.
+ *
+ * TWO RULES, BOTH CONSERVATIVE
+ * ----------------------------
+ * The first is Pandoc's, and it is what every serious Markdown-plus-maths
+ * implementation uses: an opening `$` is not followed by whitespace and a closing
+ * `$` is not preceded by it. `costs $5 and $7 each` stops being an equation.
+ *
+ * The second is that maths is not prose. Real inline maths — `$V = IR$`,
+ * `$R_{eq}$`, `$\frac{d^2x}{dt^2} + \omega^2 x = 0$` — contains almost no
+ * ordinary words once commands and `\text{…}` are set aside, because its words
+ * ARE symbols. A span carrying three or more real words is a sentence somebody
+ * lost a delimiter in.
+ *
+ * A rejected span stays exactly as it was typed. Visible dollar signs around a
+ * readable sentence is a small, obvious blemish; a paragraph rendered as one
+ * 90-character word is unreadable and looks like the product is broken.
+ */
+export function isInlineMath(candidate: string) {
+  if (!candidate || /^\s|\s$/.test(candidate)) return false;
+
+  const symbolic = candidate
+    // `\text{...}` and friends hold prose ON PURPOSE. It is not evidence of a
+    // lost delimiter, so it is not counted as prose.
+    .replace(/\\(?:text|textrm|textbf|textit|mathrm|mathbf|mathit|operatorname)\s*\{[^}]*\}/g, " ")
+    // Command names are not words a reader reads: `\omega` is one symbol.
+    .replace(/\\[a-zA-Z]+/g, " ");
+  const words = symbolic.match(/[A-Za-z]{3,}/g) ?? [];
+  return words.length < 3;
+}
+
+/**
+ * Pulls code spans and maths out of a run of prose, leaving placeholders.
+ *
+ * A SCANNER RATHER THAN A REGEX, FOR ONE REASON: BACKTRACKING.
+ *
+ * `String.replace` consumes whatever it matched. So when a `$…$` span turns out
+ * to be a sentence and is rejected, a regex has already eaten its CLOSING dollar
+ * — and that dollar is very often the opening one of the real equation that
+ * follows. On the paragraph this was reported for, rejecting
+ *
+ *     $F(x) = -kx where k is force constant. … 0 where $
+ *
+ * also destroyed the perfectly good `$\omega = \sqrt{\frac{k}{m}}$` immediately
+ * after it, which then printed as raw LaTeX.
+ *
+ * Scanning by hand means a rejected opener costs exactly one character: the `$`
+ * is emitted as itself and the walk resumes from the very next character, so
+ * every later delimiter is still available to open a span that IS maths.
+ */
+function maskCodeAndMath(value: string, tokens: string[]): string {
+  const push = (html: string) => {
+    tokens.push(html);
+    return `@@TOKEN_${tokens.length - 1}@@`;
+  };
+  let out = "";
+  let index = 0;
+
+  while (index < value.length) {
+    const char = value[index];
+
+    if (char === "`") {
+      const close = value.indexOf("`", index + 1);
+      if (close > index + 1) {
+        out += push(`<code>${value.slice(index + 1, close)}</code>`);
+        index = close + 1;
+        continue;
+      }
+    }
+
+    if (char === "$") {
+      // `$$…$$` first: the single-dollar rule below would read it as an empty
+      // expression and leave a stray dollar either side of the result.
+      if (value[index + 1] === "$") {
+        const close = value.indexOf("$$", index + 2);
+        if (close > index + 1) {
+          out += push(renderMath(value.slice(index + 2, close), true));
+          index = close + 2;
+          continue;
+        }
+      }
+      const line = value.indexOf("\n", index + 1);
+      const close = value.indexOf("$", index + 1);
+      if (close > index + 1 && (line === -1 || close < line)) {
+        const inner = value.slice(index + 1, close);
+        if (isInlineMath(inner)) {
+          out += push(renderMath(inner, false));
+          index = close + 1;
+          continue;
+        }
+      }
+      // Not maths: the dollar is literal and the scan resumes AFTER it, never
+      // after the candidate's closing delimiter.
+      out += "$";
+      index += 1;
+      continue;
+    }
+
+    out += char;
+    index += 1;
+  }
+  return out;
+}
+
 function applyInlineStyles(value: string): string {
   const tokens: string[] = [];
-  const masked = value.replace(/`([^`]+)`|\$([^$\n]+)\$/g, (match, codeContent, mathContent) => {
-    if (codeContent) {
-      tokens.push(`<code>${codeContent}</code>`);
-    } else {
-      tokens.push(renderMath(mathContent, false));
-    }
-    return `@@TOKEN_${tokens.length - 1}@@`;
-  });
+  const masked = maskCodeAndMath(value, tokens);
 
   // After code and math are masked out, so a `![x](y)` inside a code span stays
   // the literal text it was written as, and before the emphasis pass, so an

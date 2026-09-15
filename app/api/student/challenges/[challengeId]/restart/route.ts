@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { mayRestartChallenges } from "@/lib/challenge-refetch";
 import { restartStudentChallenge } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
@@ -16,6 +17,11 @@ export async function POST(
       data: { user },
     } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // The button is hidden for everyone else, which is presentation, not
+    // authorisation — this endpoint is one `fetch` away from any console.
+    if (!mayRestartChallenges(user.email)) {
+      return NextResponse.json({ error: "Not available on this account." }, { status: 403 });
+    }
 
     const { challengeId } = await params;
     const challenge = await restartStudentChallenge(user.id, challengeId);

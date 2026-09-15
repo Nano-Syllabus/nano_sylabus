@@ -234,6 +234,7 @@ function ChallengeDetail({
   onHubPatch,
   nextChallenge,
   onNext,
+  canRestart,
 }: {
   challenge: StudentChallengeDetail;
   onBack: () => void;
@@ -246,6 +247,9 @@ function ChallengeDetail({
   onHubPatch: (patch: (d: StudentChallengeDashboard) => StudentChallengeDashboard) => void;
   nextChallenge: StudentChallengeSummary | null;
   onNext: () => Promise<boolean>;
+  /** Resolved on the server from the restart allowlist. Drawing the button is
+   *  all this decides — `POST /restart` checks the same list for itself. */
+  canRestart: boolean;
 }) {
   const router = useRouter();
   // Patches the cached dashboard in place, keyed the same way the page reads it.
@@ -1557,14 +1561,19 @@ function ChallengeDetail({
               </button>
             ) : resultReady ? (
               <div className="flex flex-wrap justify-end gap-3">
-                <button
-                  type="button"
-                  disabled={restarting || openingNext}
-                  onClick={() => void restartChallenge()}
-                  className={`${focusButtonClass} border border-border bg-card text-text-primary hover:bg-bg-secondary`}
-                >
-                  {restarting ? "Restarting…" : "Restart challenge"}
-                </button>
+                {/* Re-issuing a graded challenge costs a model call and hands out
+                    a second attempt at a topic already scored, so it is not a
+                    control every student gets. See lib/challenge-refetch.ts. */}
+                {canRestart ? (
+                  <button
+                    type="button"
+                    disabled={restarting || openingNext}
+                    onClick={() => void restartChallenge()}
+                    className={`${focusButtonClass} border border-border bg-card text-text-primary hover:bg-bg-secondary`}
+                  >
+                    {restarting ? "Restarting…" : "Restart challenge"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={noNextAvailable || restarting || openingNext}
@@ -1596,11 +1605,15 @@ function ChallengeDetail({
 export function ChallengesDashboardClient({
   dashboard: serverDashboard,
   initialChallengeId,
+  canRestartChallenge = false,
 }: {
   dashboard: StudentChallengeDashboard;
   /** Opened straight away, so the dashboard's starter card lands the student
    *  inside the challenge rather than on the hub they came from. */
   initialChallengeId?: string;
+  /** Defaults to hidden: a caller that forgets to pass it must not hand the
+   *  control to everyone. */
+  canRestartChallenge?: boolean;
 }) {
   const router = useRouter();
   // Re-renders the RSC payload. Only the recovery paths below use it now.
@@ -1738,6 +1751,7 @@ export function ChallengesDashboardClient({
         onBack={() => setSelected(null)}
         onChange={setSelected}
         onHubPatch={patchHub}
+        canRestart={canRestartChallenge}
         nextChallenge={nextChallenge}
         onNext={async () => {
           if (nextChallenge) return openChallenge(nextChallenge);

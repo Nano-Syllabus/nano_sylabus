@@ -6,6 +6,7 @@ import { SetAppShell } from "@/components/set-app-shell";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getStudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
 import { getActiveCommunity } from "@/lib/data/active-community";
+import { mayRestartChallenges } from "@/lib/challenge-refetch";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,9 @@ export default async function ChallengesPage({
         key={active.selected?.id ?? "none"}
         dashboard={dashboard}
         initialChallengeId={String(params.challenge || "").trim() || undefined}
+        // Resolved here so the allowlist itself never reaches the browser. The
+        // route enforces it again; this only decides whether to draw the button.
+        canRestartChallenge={mayRestartChallenges(user.email)}
       />
     </>
   );

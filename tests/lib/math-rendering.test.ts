@@ -102,3 +102,63 @@ describe("renderMathText before the KaTeX chunk arrives", () => {
     expect(render(String.raw`$\frac{p}{q}$`)).toContain("katex");
   });
 });
+
+/**
+ * Course notes are OCR'd PDFs and they do not balance their dollar signs. A
+ * stray `$` used to pair with the next one several sentences away, and KaTeX —
+ * which ignores whitespace in maths mode — handed back the paragraph as one
+ * unreadable word. Both the challenge lesson and the revision docs render
+ * through `applyInlineStyles`, so these guard both.
+ */
+describe("a lost delimiter never turns a sentence into an equation", () => {
+  // The paragraph this was reported for, verbatim in shape: a `$` opens, the
+  // next one is four clauses away, and a real equation follows right after it.
+  const REPORTED = String.raw`position i.e. $F(x) = -kx where k is force constant. or, m\frac{d^2x}{dt^2} = -kx or, \frac{d^2x}{dt^2} + \omega^2x = 0 where $\omega = \sqrt{\frac{k}{m}}$ is angular frequency`;
+
+  it("leaves the prose readable instead of stripping its spaces", () => {
+    const html = renderMarkdown(REPORTED);
+    expect(html).toContain("where k is force constant");
+    // The old rendering: KaTeX ate the sentence and returned "kxwherekis…".
+    expect(html).not.toContain("forceconstant");
+  });
+
+  it("still renders the equation that follows the rejected span", () => {
+    // A regex consumes the closing delimiter of what it rejects, which is the
+    // opening delimiter of this one. Rejecting must cost one character, not two.
+    for (const html of [renderMarkdown(REPORTED), renderMathText(REPORTED)]) {
+      expect(html).toContain("katex");
+      // The raw source, not KaTeX's own `mord sqrt` class.
+      expect(html).not.toContain(String.raw`\sqrt{`);
+    }
+  });
+
+  it("does not read prices as maths", () => {
+    const html = renderMathText("It costs $5 and $7 each, so budget for the term.");
+    expect(html).not.toContain("katex");
+    expect(html).toContain("$5");
+  });
+
+  it("keeps deliberate prose inside \\text{} as maths", () => {
+    const html = renderMathText(String.raw`Then $\text{force} = ma \text{ where } m \text{ is mass}$ holds.`);
+    expect(html).toContain("katex");
+    expect(html).not.toContain("$");
+  });
+
+  it("renders ordinary inline maths untouched", () => {
+    for (const source of [
+      String.raw`The law is $V = IR$ here.`,
+      String.raw`With $R_{eq}$ and $\frac{p}{q}$.`,
+      String.raw`Angular frequency $\omega = \sqrt{\frac{k}{m}}$ follows.`,
+    ]) {
+      const html = renderMathText(source);
+      expect(html).toContain("katex");
+      expect(html).not.toContain("$");
+    }
+  });
+
+  it("does not leave stray dollars around display maths inside a sentence", () => {
+    const html = renderMarkdown(String.raw`Given $$\frac{d^2x}{dt^2} + \omega^2 x = 0$$ we solve.`);
+    expect(html).toContain("katex-display");
+    expect(html).not.toContain("$");
+  });
+});
