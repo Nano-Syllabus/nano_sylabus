@@ -2,7 +2,6 @@
 import { CommunitySwitcher } from "@/components/community-switcher";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -14,18 +13,14 @@ import {
   FileText,
   Flame,
   LibraryBig,
-  LoaderCircle,
   LockKeyholeOpen,
   Sparkles,
   Star,
-  X,
-  Zap,
 } from "lucide-react";
 import type {
   DailyExamDate,
   StudentDailyDashboard,
 } from "@/lib/data/student-daily-dashboard";
-import type { SubscriptionPlan } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "@/lib/query/dashboard";
 import { PracticeCalendar } from "@/components/practice-calendar";
@@ -39,227 +34,6 @@ function formatNumber(value: number, maximumFractionDigits = 0) {
 
 function firstName(value: string) {
   return value.trim().split(/\s+/)[0] || "Student";
-}
-
-function formatPrice(plan: SubscriptionPlan) {
-  return new Intl.NumberFormat("en-NP", {
-    style: "currency",
-    currency: plan.currency,
-    currencyDisplay: "code",
-    maximumFractionDigits: 0,
-  }).format(plan.price);
-}
-
-function billingInterval(plan: SubscriptionPlan) {
-  if (plan.billingType === "monthly") return "/ month";
-  return "one-time";
-}
-
-function UpgradeModal({
-  open,
-  plan,
-  onClose,
-}: {
-  open: boolean;
-  plan: SubscriptionPlan;
-  onClose: () => void;
-}) {
-  const router = useRouter();
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const creatingInvoiceRef = useRef(false);
-  const [creatingInvoice, setCreatingInvoice] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    const previousFocus =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    closeButtonRef.current?.focus();
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !creatingInvoiceRef.current) {
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab" || !dialogRef.current) return;
-      const focusable = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", onKeyDown);
-      previousFocus?.focus();
-    };
-  }, [onClose, open]);
-
-  if (!open) return null;
-
-  async function startPaidUpgrade() {
-    creatingInvoiceRef.current = true;
-    setCreatingInvoice(true);
-    setError("");
-    try {
-      const response = await fetch("/api/billing/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ planId: plan.id, paymentMethod: "bank_transfer" }),
-      });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        setError(payload.error || "Could not prepare your upgrade. Try again.");
-        return;
-      }
-      router.push("/app/billing");
-    } catch {
-      setError("Could not reach NanoSyllabus. Check your connection and try again.");
-    } finally {
-      creatingInvoiceRef.current = false;
-      setCreatingInvoice(false);
-    }
-  }
-
-  function openReferral() {
-    onClose();
-    router.push("/app/community?invite=referral");
-  }
-
-  const price = formatPrice(plan);
-
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !creatingInvoice) onClose();
-      }}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="upgrade-dialog-title"
-        aria-describedby="upgrade-dialog-description"
-        className="max-h-[min(720px,calc(100dvh-2rem))] w-full max-w-xl overflow-y-auto rounded-3xl border border-border bg-bg-primary p-5 shadow-2xl sm:p-7"
-      >
-        <div className="flex items-start justify-between gap-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
-              {plan.name}
-            </p>
-            <h2 id="upgrade-dialog-title" className="mt-2 font-display text-2xl font-semibold">
-              Upgrade to Unlimited
-            </h2>
-          </div>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            onClick={onClose}
-            disabled={creatingInvoice}
-            className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-full bg-border text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50",
-              focusRing,
-            )}
-            aria-label="Close upgrade dialog"
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        <p id="upgrade-dialog-description" className="mt-3 text-sm leading-6 text-text-secondary">
-          Choose the official paid plan or invite a peer. Both paths use your real billing account.
-        </p>
-
-        <section className="mt-6 rounded-2xl border border-border bg-border p-5">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
-                Pay with official QR
-              </p>
-              <p className="mt-2 font-display text-3xl font-semibold tabular-nums">{price}</p>
-            </div>
-            <p className="pb-1 text-sm text-text-secondary">{billingInterval(plan)}</p>
-          </div>
-          {plan.features.length ? (
-            <ul className="mt-4 grid gap-2 text-sm text-text-secondary">
-              {plan.features.slice(0, 4).map((feature) => (
-                <li key={feature} className="flex items-start gap-2">
-                  <Check className="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
-                  <span>{feature}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void startPaidUpgrade()}
-            disabled={creatingInvoice}
-            aria-busy={creatingInvoice}
-            className={cn(
-              "mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-text-primary px-5 text-sm font-semibold text-text-inverse hover:opacity-90 disabled:cursor-wait disabled:opacity-60",
-              focusRing,
-            )}
-          >
-            {creatingInvoice ? (
-              <LoaderCircle
-                className="size-4 animate-spin motion-reduce:animate-none"
-                aria-hidden="true"
-              />
-            ) : (
-              <Zap className="size-4" aria-hidden="true" />
-            )}
-            {creatingInvoice ? "Preparing invoice…" : `Continue with ${price}`}
-          </button>
-        </section>
-
-        <section className="mt-3 rounded-2xl border border-border p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
-            Free via peer referral
-          </p>
-          <p className="mt-2 text-sm leading-6 text-text-secondary">
-            Active paid Pro members can share a tracked link. When your friend buys one month of
-            Individual Pro, they get 60 days total and you get 30 extra days after payment approval.
-          </p>
-          <button
-            type="button"
-            onClick={openReferral}
-            disabled={creatingInvoice}
-            className={cn(
-              "mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-border px-5 text-sm font-semibold hover:bg-border disabled:opacity-50",
-              focusRing,
-            )}
-          >
-            Create referral link <ArrowRight className="size-4" aria-hidden="true" />
-          </button>
-        </section>
-
-        {error ? (
-          <p
-            role="alert"
-            className="mt-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive"
-          >
-            {error}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -394,15 +168,6 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
   const fallbackHref = community
     ? `/app/challenges?${params.toString()}`
     : "/app/community";
-  const eyebrow = challenge
-    ? challenge.status === "started"
-      ? "Pick up where you left off"
-      : dashboard.todayChallengeCompletions > 0
-        ? "Your next challenge"
-        : "Your first challenge"
-    : community
-      ? "Your challenge space"
-      : "Choose your programme";
   const action = challenge
     ? challenge.status === "started"
       ? "Continue challenge"
@@ -433,25 +198,12 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
         />
       </svg>
 
-      {/* Top right challenge counter matching reference (CHALLENGE 01 / 1 /) */}
-      <div className="absolute right-6 top-5 text-right select-none sm:right-8 sm:top-5.5">
-        <p className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-black/75 sm:text-[11px]">
-          Challenge {String(challenge?.position ?? 1).padStart(2, "0")}
-        </p>
-        <p className="mt-0.5 text-xs sm:text-sm font-bold text-black/60 font-mono tracking-tight">
-          {challenge?.position ?? 1} /
-        </p>
-      </div>
-
       <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-        {/* Left Column: Eyebrow, Heading, Subtitle, CTA Button */}
+        {/* Left column: the automatically selected challenge and its CTA. */}
         <div className="max-w-xl">
-          <p className="inline-flex min-h-6 items-center rounded-full bg-black/[0.08] px-3 py-0.5 text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-black/80">
-            {eyebrow}
-          </p>
           <h2
             id="starter-challenge-heading"
-            className="mt-2.5 font-display text-[clamp(1.75rem,3vw,2.5rem)] font-extrabold leading-[1.04] tracking-[-0.04em] text-black"
+            className="font-display text-[clamp(1.75rem,3vw,2.5rem)] font-extrabold leading-[1.04] tracking-[-0.04em] text-black"
           >
             One topic.
             <br />
@@ -460,22 +212,11 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
 
           <div className="mt-2.5 max-w-md text-xs sm:text-sm font-medium leading-relaxed text-black/80">
             {challenge ? (
-              <>
-                <p className="font-semibold text-black/95 truncate">
-                  {challenge.subjectName}: {challenge.topicTitle}
-                </p>
-                <p className="mt-0.5">
-                  Learn the idea. Practice with a solved question.
-                  <br className="hidden sm:inline" />
-                  {" "}Then close the book and take the exam yourself.
-                </p>
-              </>
-            ) : (
-              <p>
-                Learn the idea. Practice with a solved question.
-                <br className="hidden sm:inline" />
-                {" "}Then close the book and take the exam yourself.
+              <p className="font-semibold text-black/95 truncate">
+                {challenge.subjectName}: {challenge.topicTitle}
               </p>
+            ) : (
+              <p>Choose a programme to get your next challenge.</p>
             )}
           </div>
 
@@ -755,7 +496,6 @@ export function StudentDailyDashboardView({
   fullName,
   creditBalance,
   hasUnlimitedAccess,
-  unlimitedPlan,
   communitySlug,
   selectedCommunitySlug,
   initialDashboard,
@@ -765,7 +505,6 @@ export function StudentDailyDashboardView({
   fullName: string;
   creditBalance: number;
   hasUnlimitedAccess: boolean;
-  unlimitedPlan: SubscriptionPlan | null;
   /** What the URL asked for — the query key. `undefined` means "the default". */
   communitySlug?: string;
   /** What that resolved to — for the switcher's selected value only. */
@@ -793,7 +532,6 @@ export function StudentDailyDashboardView({
       fullName={fullName}
       creditBalance={creditBalance}
       hasUnlimitedAccess={hasUnlimitedAccess}
-      unlimitedPlan={unlimitedPlan}
       dashboard={dashboard}
     />
   );
@@ -853,7 +591,7 @@ function DashboardDataSkeleton({
       <header className="flex flex-col gap-5 border-b border-border pb-7 pt-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-display text-[clamp(2rem,3.4vw,2.9rem)] font-semibold leading-[1.05] tracking-[-0.045em]">
-            Welcome back, {fullName.trim().split(/\s+/)[0] || "there"}.
+            Welcome, {fullName.trim().split(/\s+/)[0] || "there"}.
           </h1>
           {/* Keep the heading footprint stable while the dashboard data loads. */}
           <div className={`mt-3 h-4 w-64 ${line}`} aria-hidden="true" />
@@ -930,7 +668,6 @@ function DashboardContent({
   fullName,
   creditBalance,
   hasUnlimitedAccess,
-  unlimitedPlan,
   dashboard,
 }: {
   userId: string;
@@ -938,10 +675,8 @@ function DashboardContent({
   fullName: string;
   creditBalance: number;
   hasUnlimitedAccess: boolean;
-  unlimitedPlan: SubscriptionPlan | null;
   dashboard: StudentDailyDashboard;
 }) {
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const queryClient = useQueryClient();
   const community = dashboard.community;
   const challenge = dashboard.challenge;
@@ -966,23 +701,9 @@ function DashboardContent({
       <header className="flex flex-col gap-5 border-b border-border pb-7 pt-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-display text-[clamp(2rem,4vw,3.35rem)] font-semibold leading-[1.02] tracking-[-0.045em]">
-            Welcome back, {firstName(fullName)}.
+            Welcome, {firstName(fullName)}.
           </h1>
         </div>
-        {!hasUnlimitedAccess ? (
-          <button
-            type="button"
-            onClick={() => setUpgradeOpen(true)}
-            disabled={!unlimitedPlan}
-            className={cn(
-              "inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold hover:bg-border disabled:cursor-not-allowed disabled:opacity-50",
-              focusRing,
-            )}
-            title={unlimitedPlan ? undefined : "Unlimited plan is currently unavailable"}
-          >
-            <Zap className="size-4" aria-hidden="true" /> Unlock Unlimited
-          </button>
-        ) : null}
       </header>
 
       <StarterChallengeBanner dashboard={dashboard} />
@@ -1032,14 +753,6 @@ function DashboardContent({
         />
         <SemesterProgress dashboard={dashboard} compact />
       </div>
-
-      {unlimitedPlan ? (
-        <UpgradeModal
-          open={upgradeOpen}
-          plan={unlimitedPlan}
-          onClose={() => setUpgradeOpen(false)}
-        />
-      ) : null}
     </main>
   );
 }

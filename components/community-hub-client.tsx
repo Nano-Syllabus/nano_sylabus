@@ -154,6 +154,34 @@ function Modal({
   );
 }
 
+function DiscordWatermark() {
+  return (
+    <svg
+      className="pointer-events-none absolute left-[51%] sm:left-[54%] top-1/2 -translate-x-1/2 -translate-y-1/2 size-28 sm:size-32 select-none text-white/[0.12]"
+      viewBox="0 0 127.14 96.36"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.92,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.15,53,91.08,65.69,84.69,65.69Z" />
+    </svg>
+  );
+}
+
+function getCommunityAbbreviation(community: { slug?: string; name: string }) {
+  if (community.slug) {
+    const cleanSlug = community.slug.replace(/[^a-zA-Z0-9]/g, "");
+    if (cleanSlug.length >= 2 && cleanSlug.length <= 5) {
+      return cleanSlug.toUpperCase();
+    }
+  }
+  const words = community.name.trim().split(/\s+/);
+  if (words.length > 1) {
+    const acronym = words.map((w) => w[0]).join("").toUpperCase();
+    if (acronym.length >= 2 && acronym.length <= 5) return acronym;
+  }
+  return community.slug?.split("-")[0].toUpperCase() || "HUB";
+}
+
 function MetricCard({
   icon,
   label,
@@ -185,13 +213,13 @@ export function CommunityHubClient({
   communityOptions = [],
   initialData,
   initialSection = "overview",
-  memberRanking = "xp",
+  memberRanking = "streak",
   initialInviteOpen = false,
 }: {
   communityOptions?: import("@/lib/community-switch").CommunitySwitchOption[];
   initialData: CommunityHubData;
   initialSection?: CommunitySection;
-  memberRanking?: "xp" | "today";
+  memberRanking?: "streak" | "today";
   initialInviteOpen?: boolean;
 }) {
   const router = useRouter();
@@ -242,6 +270,20 @@ export function CommunityHubClient({
       })),
     [community.terms],
   );
+
+  const abbreviation = useMemo(
+    () => getCommunityAbbreviation(community),
+    [community],
+  );
+
+  const currentSemesterProgress = useMemo(() => {
+    if (initialData.contentReadiness !== null && initialData.contentReadiness !== undefined) {
+      return initialData.contentReadiness;
+    }
+    if (!currentSubjects.length) return 0;
+    const total = currentSubjects.reduce((sum, s) => sum + (s.progress || 0), 0);
+    return Math.round(total / currentSubjects.length);
+  }, [initialData.contentReadiness, currentSubjects]);
 
   async function generateInvite() {
     setInviteLoading(true);
@@ -447,82 +489,114 @@ export function CommunityHubClient({
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1480px] px-4 pb-20 pt-3 sm:px-6 md:px-8 lg:px-10">
-      {communityOptions.length ? (
-        <div className="mb-5 flex justify-end">
-          <CommunitySwitcher options={communityOptions} selectedSlug={community.slug} />
+    <main className="mx-auto w-full max-w-[1480px] px-4 pb-20 pt-2 sm:px-6 md:px-8 lg:px-10">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
+            Community Hub
+          </h1>
         </div>
-      ) : null}
-      {!initialData.canManage ? (
-        <div className="mb-4 flex justify-end">
-          <CommunityLeaveControl key={community.id} community={community} />
-        </div>
-      ) : null}
-      <section className="relative isolate overflow-hidden rounded-2xl bg-[var(--community-banner)] px-5 py-5 text-white sm:px-7 sm:py-6 lg:px-8 lg:py-7">
-        <div className="pointer-events-none absolute inset-0 opacity-15 [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:24px_24px]" />
-        <div className="pointer-events-none absolute -right-20 -top-28 size-72 rounded-full border border-white/20" />
-        <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-center">
+        {communityOptions.length > 1 ? (
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            <CommunitySwitcher options={communityOptions} selectedSlug={community.slug} />
+          </div>
+        ) : null}
+      </div>
+
+      <section className="relative isolate overflow-hidden rounded-[24px] sm:rounded-[28px] bg-[#1242be] px-6 py-7 text-white shadow-lg sm:px-8 sm:py-8 lg:px-9 lg:py-8">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.12),transparent_70%)]" />
+        <DiscordWatermark />
+
+        <div className="relative grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-center">
           <div className="max-w-3xl">
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-medium text-white/80">
-              <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1">
+            <div>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
+                <span className="size-1.5 rounded-full bg-[#4ade80]" />
                 {initialData.canManage ? "Community creator" : "Joined community"}
               </span>
-              <span>{community.university}</span>
-              <span aria-hidden="true">·</span>
-              <span>{community.faculty}</span>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium text-white/80 sm:text-sm">
+                <span>{community.university}</span>
+                <span className="text-white/50" aria-hidden="true">
+                  ·
+                </span>
+                <span>{community.faculty}</span>
+              </div>
             </div>
-            <p className="text-xs font-medium uppercase tracking-wider text-white/65">
-              Your program community
-            </p>
-            <h1 className="mt-1.5 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-              {titleCase(community.name)}
+
+            <h1 className="mt-3.5 font-display text-5xl font-black tracking-tight text-white sm:text-6xl leading-none">
+              {abbreviation}
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-5 text-white/75">
-              {community.description ||
-                "Study your shared syllabus, practise its topics, and improve the community library together."}
+
+            <p className="mt-2.5 font-serif text-2xl font-bold italic tracking-wide text-[#fde047] sm:text-3xl lg:text-[32px]">
+              Your syllabus. Your people.
             </p>
-            <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/75">
+
+            <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs font-medium text-white/90 sm:text-sm">
               <span>
-                <strong className="text-white">{community.totalYears}</strong> years
+                <strong className="font-bold text-white">{community.totalYears}</strong> years
+              </span>
+              <span className="text-white/40" aria-hidden="true">
+                |
               </span>
               <span>
-                <strong className="text-white">{community.totalSemesters}</strong> semesters
+                <strong className="font-bold text-white">{community.totalSemesters}</strong>{" "}
+                semesters
+              </span>
+              <span className="text-white/40" aria-hidden="true">
+                |
               </span>
               <span>
-                <strong className="text-white">{initialData.subjects.length}</strong> subjects
+                <strong className="font-bold text-white">{initialData.subjects.length}</strong>{" "}
+                subjects
+              </span>
+              <span className="text-white/40" aria-hidden="true">
+                |
               </span>
               <span>
-                <strong className="text-white">{initialData.memberCount}</strong> members
+                <strong className="font-bold text-white">{initialData.memberCount}</strong> members
               </span>
             </div>
           </div>
 
-          <div className="border-t border-white/20 pt-5 lg:border-l lg:border-t-0 lg:py-1 lg:pl-7">
-            <p className="text-xs font-semibold uppercase tracking-widest text-white/65">
+          <div className="border-t border-white/20 pt-6 lg:border-l lg:border-t-0 lg:py-2 lg:pl-8">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
               Current semester
             </p>
-            <p className="mt-2 text-lg font-semibold">
+            <p className="mt-1.5 font-display text-xl font-bold text-white sm:text-2xl">
               Year {currentTerm.yearNumber} · Semester {currentTerm.semesterNumber}
             </p>
-            <p className="mt-1 text-sm text-white/70">
+            <p className="mt-1 text-xs text-white/80 sm:text-sm">
               {currentSubjects.length} subject{currentSubjects.length === 1 ? "" : "s"} ·{" "}
               {currentSubjects.reduce((sum, subject) => sum + Number(subject.topicCount || 0), 0)}{" "}
               topics ready
             </p>
-            <div className="mt-4 grid grid-cols-2 gap-2">
+
+            <div className="mt-4 flex items-center gap-3">
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/25">
+                <div
+                  className="h-full rounded-full bg-[#d4ff36] transition-all duration-500"
+                  style={{ width: `${currentSemesterProgress}%` }}
+                />
+              </div>
+              <span className="text-xs font-bold tabular-nums text-[#d4ff36]">
+                {currentSemesterProgress}%
+              </span>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => setAnnouncementsOpen(true)}
-                className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/25 bg-white/10 px-3 text-sm font-semibold text-white hover:bg-white/15 focus-visible:ring-white ${focusRing}`}
+                className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 text-xs font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/20 sm:text-sm ${focusRing}`}
               >
-                <Bell className="size-4" aria-hidden="true" /> Announcements
+                <Megaphone className="size-4" aria-hidden="true" /> Announcements
               </button>
               <button
                 type="button"
                 onClick={openPeerInvite}
-                className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-white px-3 text-sm font-semibold text-[var(--community-banner)] hover:opacity-90 focus-visible:ring-white ${focusRing}`}
+                className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#d4ff36] px-3 text-xs font-bold text-black shadow-sm transition-colors hover:bg-[#c2f022] sm:text-sm ${focusRing}`}
               >
-                <UserRoundPlus className="size-4" aria-hidden="true" /> Invite peer
+                <Users className="size-4" aria-hidden="true" /> Invite peer
               </button>
             </div>
           </div>
@@ -571,6 +645,19 @@ export function CommunityHubClient({
       ) : null}
       {section === "members" ? (
         <CommunityMembers data={initialData} ranking={memberRanking} />
+      ) : null}
+
+      {!initialData.canManage ? (
+        <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-border pt-8 sm:flex-row">
+          <p className="text-xs text-text-muted">
+            You are a member of {titleCase(community.name)}.
+          </p>
+          <CommunityLeaveControl
+            key={community.id}
+            community={community}
+            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-full border border-rose-200 bg-rose-50/50 px-4 py-1.5 text-xs font-semibold text-rose-600 hover:border-rose-300 hover:bg-rose-100/70 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-400"
+          />
+        </div>
       ) : null}
 
       <Modal
@@ -1319,14 +1406,14 @@ function CommunityForum({
   );
 }
 
-function CommunityMembers({ data, ranking }: { data: CommunityHubData; ranking: "xp" | "today" }) {
+function CommunityMembers({ data, ranking }: { data: CommunityHubData; ranking: "streak" | "today" }) {
   const members =
     ranking === "today"
       ? [...data.members].sort(
           (left, right) =>
             right.todayAttempts - left.todayAttempts ||
             right.streak - left.streak ||
-            right.xp - left.xp ||
+            right.completedChallenges - left.completedChallenges ||
             left.joinedAt.localeCompare(right.joinedAt),
         )
       : data.members;
@@ -1344,8 +1431,8 @@ function CommunityMembers({ data, ranking }: { data: CommunityHubData; ranking: 
         </h2>
         <p className="mt-2 text-sm text-text-secondary">
           {ranking === "today"
-            ? "Ranked by today's real challenge activity, then streak and community XP."
-            : "Ranked by XP earned from this community's challenges and accepted contributions."}
+            ? "Ranked by today's real challenge activity, then current streak."
+            : "Ranked by current study streak, with completed challenges as the tie-breaker."}
         </p>
       </div>
       {members.length ? (
@@ -1355,7 +1442,7 @@ function CommunityMembers({ data, ranking }: { data: CommunityHubData; ranking: 
             <span aria-hidden="true" />
             <span>Member</span>
             <span>{ranking === "today" ? "Today" : "Completed"}</span>
-            <span className="text-right">{ranking === "today" ? "Streak" : "XP"}</span>
+            <span className="text-right">Streak</span>
           </div>
           <div className="divide-y divide-border">
             {members.map((member, index) => (
@@ -1379,7 +1466,7 @@ function CommunityMembers({ data, ranking }: { data: CommunityHubData; ranking: 
                   </p>
                   <p className="mt-1 text-xs text-text-muted">
                     {ranking === "today"
-                      ? `${formatNumber(member.xp)} XP`
+                      ? `${formatNumber(member.completedChallenges)} completed challenges`
                       : member.role === "creator"
                         ? "Community creator"
                         : `Joined ${formatDate(member.joinedAt)}`}
@@ -1400,7 +1487,7 @@ function CommunityMembers({ data, ranking }: { data: CommunityHubData; ranking: 
                       {member.completedChallenges} challenges
                     </span>
                     <span className="text-sm font-semibold tabular-nums sm:text-right">
-                      {formatNumber(member.xp)} XP
+                      {member.streak}d streak
                     </span>
                   </>
                 )}

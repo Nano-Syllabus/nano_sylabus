@@ -69,7 +69,8 @@ export function AdminPaymentDetailClient({
           </div>
           <div className="space-y-4 px-5 py-5">
             <DetailRow label="Student" value={submission.studentName} />
-            <DetailRow label="Reference" value={submission.reference} />
+            <DetailRow label="Login email" value={submission.studentEmail || "Email unavailable"} />
+            <DetailRow label="Invoice ID" value={submission.reference} />
             <DetailRow label="Payer name" value={submission.payerName || "Not provided"} />
             {submission.screenshotUrl ? (
               <div className="space-y-2 border-b border-border pb-4">
@@ -102,7 +103,6 @@ export function AdminPaymentDetailClient({
             ) : (
               <DetailRow label="Private receipt" value="Not provided" />
             )}
-            <DetailRow label="Note" value={submission.note || "No note"} />
             <DetailRow label="Submitted" value={formatDate(submission.submittedAt)} />
             {submission.reviewedAt ? (
               <DetailRow label="Reviewed" value={formatDate(submission.reviewedAt)} />

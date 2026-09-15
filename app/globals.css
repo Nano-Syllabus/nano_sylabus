@@ -127,6 +127,7 @@
   }
 
   html {
+    scroll-behavior: smooth;
     font-family: var(--font-sans);
     background-color: var(--bg-primary);
     -webkit-font-smoothing: antialiased;
@@ -149,6 +150,12 @@
   select option {
     background-color: var(--bg-primary);
     color: var(--text-primary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
   }
 }
 

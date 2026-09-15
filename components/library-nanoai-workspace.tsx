@@ -477,7 +477,7 @@ export function LibraryNanoAiWorkspace({
             id="library-resources-heading"
             className="text-[17px] font-semibold text-text-primary"
           >
-            3. Choose Chapter
+            Study Resources
           </h2>
           <div className="mt-4">
             {!selectedSubject ? (

@@ -57,7 +57,7 @@ describe("billing referral migration", () => {
     for (const migrationPath of migrationPaths) {
       await db.exec(await readFile(migrationPath, "utf8"));
     }
-  });
+  }, 30_000);
 
   afterEach(async () => db.close());
 

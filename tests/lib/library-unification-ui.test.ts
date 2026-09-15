@@ -1,7 +1,8 @@
-import { createElement } from "react";
+import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   generateCommunityTerms,
   mapCommunitySummary,
@@ -13,6 +14,17 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { LibraryNanoAiWorkspace } from "@/components/library-nanoai-workspace";
+
+function renderWorkspace(props: ComponentProps<typeof LibraryNanoAiWorkspace>) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      createElement(LibraryNanoAiWorkspace, props),
+    ),
+  );
+}
 
 const baseTerm = generateCommunityTerms(1, 2)[0];
 const community: CommunityDetail = {
@@ -61,8 +73,7 @@ const community: CommunityDetail = {
 describe("unified Figma library", () => {
   it("shows the saved current semester even when a deep link views an older one", () => {
     const secondTerm = { ...generateCommunityTerms(1, 2)[1], id: "term-2", subjects: [] };
-    const html = renderToStaticMarkup(
-      createElement(LibraryNanoAiWorkspace, {
+    const html = renderWorkspace({
         community: {
           ...community,
           membership: { ...community.membership!, currentTermId: "term-2" },
@@ -72,16 +83,14 @@ describe("unified Figma library", () => {
         initialSelection: { termId: "term-1", subjectSlug: "applied-mechanics", documentId: null },
         onSubjectSelect: vi.fn(),
         onMaterialOpen: vi.fn(),
-      }),
-    );
+      });
 
     expect(html).toContain('<option value="term-2" selected="">2nd Semester</option>');
     expect(html).not.toContain('<option value="term-1" selected="">');
   });
 
   it("renders real community semesters, subjects, and progress in the three-step design", () => {
-    const html = renderToStaticMarkup(
-      createElement(LibraryNanoAiWorkspace, {
+    const html = renderWorkspace({
         community,
         insights: {
           "subject-1": {
@@ -109,12 +118,12 @@ describe("unified Figma library", () => {
         initialSelection: { termId: null, subjectSlug: null, documentId: null },
         onSubjectSelect: vi.fn(),
         onMaterialOpen: vi.fn(),
-      }),
-    );
+      });
 
     expect(html).toContain("1. Choose Semester");
     expect(html).toContain("2. Choose Subject");
-    expect(html).toContain("3. Choose Chapter");
+    expect(html).toContain("Study Resources");
+    expect(html).not.toContain("3. Choose Chapter");
     expect(html).toContain("1st Semester");
     expect(html).toContain("Applied Mechanics");
     const appliedMechanicsCard =

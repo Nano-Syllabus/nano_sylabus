@@ -5,6 +5,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
+export const runtime = "nodejs";
+
 const invoiceSchema = z.object({
   planId: z.string().uuid(),
   paymentMethod: z.literal("bank_transfer").default("bank_transfer"),
@@ -30,6 +32,52 @@ function serializeInvoice(row: Record<string, any>) {
     billingPeriodStart: row.billing_period_start,
     billingPeriodEnd: row.billing_period_end,
   };
+}
+
+function formatSimpleInvoiceCode(value: number) {
+  return value < 1000 ? String(value).padStart(3, "0") : String(value);
+}
+
+async function nextAvailableSimpleInvoiceCode(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+) {
+  const { data, error } = await admin.from("invoices").select("invoice_code");
+  if (error) throw error;
+
+  const usedCodes = new Set(
+    (data ?? [])
+      .map((row) => String(row.invoice_code ?? ""))
+      .filter((code) => /^\d+$/.test(code))
+      .map(Number),
+  );
+
+  let nextValue = 1;
+  while (usedCodes.has(nextValue)) nextValue += 1;
+  return formatSimpleInvoiceCode(nextValue);
+}
+
+async function ensureSimpleInvoiceCode(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  invoice: Record<string, any>,
+) {
+  if (/^\d{3,}$/.test(String(invoice.invoice_code ?? ""))) return invoice;
+  if (invoice.status !== "pending_payment") return invoice;
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const invoiceCode = await nextAvailableSimpleInvoiceCode(admin);
+    const { data, error } = await admin
+      .from("invoices")
+      .update({ invoice_code: invoiceCode })
+      .eq("id", invoice.id)
+      .in("status", ["pending_payment"])
+      .select("*")
+      .maybeSingle();
+
+    if (!error && data) return data;
+    if (error?.code !== "23505") throw error;
+  }
+
+  throw new Error("Could not allocate a short invoice ID. Please try again.");
 }
 
 export async function POST(request: Request) {
@@ -89,8 +137,9 @@ export async function POST(request: Request) {
 
     const paymentConfig = await getActiveManualPaymentConfig();
     if (existingInvoice) {
+      const normalizedInvoice = await ensureSimpleInvoiceCode(admin, existingInvoice);
       return NextResponse.json({
-        invoice: serializeInvoice(existingInvoice),
+        invoice: serializeInvoice(normalizedInvoice),
         paymentConfig,
         reused: true,
       });
@@ -129,8 +178,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const normalizedInvoice = await ensureSimpleInvoiceCode(admin, invoice);
+
     return NextResponse.json({
-      invoice: serializeInvoice(invoice),
+      invoice: serializeInvoice(normalizedInvoice),
       paymentConfig,
       reused: false,
     });

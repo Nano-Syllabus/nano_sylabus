@@ -94,6 +94,23 @@ export type CommunityHubData = {
   };
 };
 
+/**
+ * The community leaderboard is a consistency board: current study streak is
+ * the primary signal, with completed challenges used only to break ties.
+ * Keep this ranking in the data layer so every consumer gets the same order.
+ */
+export function rankCommunityMembersByStreak(members: CommunityHubMember[]) {
+  return [...members]
+    .sort(
+      (left, right) =>
+        right.streak - left.streak ||
+        right.completedChallenges - left.completedChallenges ||
+        right.todayAttempts - left.todayAttempts ||
+        left.joinedAt.localeCompare(right.joinedAt),
+    )
+    .map((member, index) => ({ ...member, rank: index + 1 }));
+}
+
 type MembershipRow = {
   user_id: string;
   role: string;
@@ -401,7 +418,8 @@ export async function getCommunityHubForUser(
     return shelves.has("syllabus") && shelves.has("question-bank");
   }).length;
 
-  const members = membershipRows
+  const members = rankCommunityMembersByStreak(
+    membershipRows
     .map((membership) => {
       const id = String(membership.user_id);
       const name = profiles.get(id) || "Unnamed member";
@@ -426,14 +444,8 @@ export async function getCommunityHubForUser(
         streak: calculateActivityStreak(memberDailyRows),
         isViewer: id === userId,
       } satisfies CommunityHubMember;
-    })
-    .sort(
-      (left, right) =>
-        right.xp - left.xp ||
-        right.completedChallenges - left.completedChallenges ||
-        left.joinedAt.localeCompare(right.joinedAt),
-    )
-    .map((member, index) => ({ ...member, rank: index + 1 }));
+    }),
+  );
 
   const posts: CommunityHubPost[] = postRows.flatMap((row) => {
     const subject = subjectById.get(String(row.subject_id));

@@ -3,9 +3,20 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { BookOpen, Check, CheckCircle2, LoaderCircle, ShieldCheck, X } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  CheckCircle2,
+  CreditCard,
+  LoaderCircle,
+  ShieldCheck,
+  Smartphone,
+  Upload,
+  UploadCloud,
+  Wallet,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Textarea } from "@/components/ui/field";
 import { ReceiptUploadFromPhone } from "@/components/receipt-upload-from-phone";
 import type {
   AppUser,
@@ -114,6 +125,8 @@ export function BillingPageClient({
   } | null>(null);
   const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false);
   const [updatingSubscription, setUpdatingSubscription] = useState(false);
+  const [cancelledSubscriptionIds, setCancelledSubscriptionIds] = useState<string[]>([]);
+  const [success, setSuccess] = useState("");
 
   const plans = useMemo(() => {
     const active = overview.plans.filter((plan) => plan.isActive);
@@ -130,11 +143,12 @@ export function BillingPageClient({
     const now = Date.now();
     return (
       overview.subscriptions.find((subscription) => {
+        if (cancelledSubscriptionIds.includes(subscription.id)) return false;
         if (subscription.status !== "active") return false;
         return !subscription.endsAt || new Date(subscription.endsAt).getTime() > now;
       }) ?? null
     );
-  }, [overview.subscriptions]);
+  }, [cancelledSubscriptionIds, overview.subscriptions]);
 
   const activePlan = useMemo(() => {
     if (!activeSubscription) return null;
@@ -150,6 +164,25 @@ export function BillingPageClient({
     : activePlan?.productType === "group"
       ? "Group"
       : "Pro";
+  const plusIsCurrent = Boolean(activePlan && plans.plus && activePlan.id === plans.plus.id);
+  const proIsCurrent = Boolean(activePlan && plans.pro && activePlan.id === plans.pro.id);
+
+  const hasUnlimitedAccess = cancelledSubscriptionIds.length > 0
+    ? overview.subscriptions.some((subscription) => {
+        if (
+          cancelledSubscriptionIds.includes(subscription.id) ||
+          subscription.status !== "active"
+        ) {
+          return false;
+        }
+        if (subscription.endsAt && new Date(subscription.endsAt).getTime() <= Date.now()) {
+          return false;
+        }
+        return overview.plans.some(
+          (plan) => plan.id === subscription.planId && plan.isUnlimited,
+        );
+      })
+    : user.hasUnlimitedAccess;
 
   async function requestInvoice(
     plan: SubscriptionPlan,
@@ -182,6 +215,7 @@ export function BillingPageClient({
   ) {
     setCreatingPlanId(plan.id);
     setError("");
+    setSuccess("");
     try {
       const invoice = await requestInvoice(plan, billingMonths);
       setSelectedInvoice(invoice);
@@ -204,27 +238,40 @@ export function BillingPageClient({
     void createInvoice(plan);
   }
 
-  async function updateSubscriptionCancellation(action: "cancel" | "resume") {
+  async function cancelSubscription() {
     if (!activeSubscription) return;
     setUpdatingSubscription(true);
     setError("");
+    setSuccess("");
     try {
       const response = await fetch("/api/billing/subscriptions/cancel", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ subscriptionId: activeSubscription.id, action }),
+        body: JSON.stringify({ subscriptionId: activeSubscription.id, action: "cancel" }),
       });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        subscription?: { status?: string };
+        cancelledSubscriptionIds?: string[];
+      };
       if (!response.ok) {
-        throw new Error(payload.error || "Could not update your subscription.");
+        throw new Error(payload.error || "Could not cancel your subscription.");
       }
+      if (payload.subscription?.status !== "cancelled") {
+        throw new Error("Your subscription did not cancel. Please try again.");
+      }
+      const cancelledIds = payload.cancelledSubscriptionIds?.length
+        ? payload.cancelledSubscriptionIds
+        : [activeSubscription.id];
+      setCancelledSubscriptionIds((current) => Array.from(new Set([...current, ...cancelledIds])));
+      setSuccess("Subscription cancelled. You can choose the same plan or a different plan now.");
       setCancelConfirmationOpen(false);
       router.refresh();
     } catch (requestError) {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Could not update your subscription. Please try again.",
+          : "Could not cancel your subscription. Please try again.",
       );
     } finally {
       setUpdatingSubscription(false);
@@ -246,6 +293,22 @@ export function BillingPageClient({
               onClick={() => setError("")}
               aria-label="Dismiss billing error"
               className="flex size-10 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
+        {success ? (
+          <div
+            role="status"
+            className="mx-auto mb-5 flex max-w-[1000px] items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 py-2 pl-4 pr-2 text-sm text-emerald-800"
+          >
+            <span>{success}</span>
+            <button
+              type="button"
+              onClick={() => setSuccess("")}
+              aria-label="Dismiss billing confirmation"
+              className="flex size-10 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
             >
               <X className="size-4" aria-hidden="true" />
             </button>
@@ -291,7 +354,7 @@ export function BillingPageClient({
         >
           <PricingCard
             title="Free"
-            eyebrow="Current Plan"
+            eyebrow={activePlan ? "Base plan" : "Current Plan"}
             price="Rs. 0"
             features={FREE_FEATURES}
             actionLabel={activePlan ? "Included in your plan" : "Current plan"}
@@ -308,15 +371,12 @@ export function BillingPageClient({
             price={formatPlanPrice(plans.plus, billingMonths, 450)}
             includes={PLAN_COPY.plus.description}
             features={[...PLAN_COPY.plus.fallbackFeatures]}
-            actionLabel={activePlan?.id === plans.plus?.id ? "Current plan" : "Choose Plus"}
+            actionLabel={plusIsCurrent ? "Current plan" : "Choose Plus"}
             loading={creatingPlanId === plans.plus?.id}
             onAction={() => startPlan(plans.plus)}
-            disabled={activePlan?.id === plans.plus?.id}
-            current={activePlan?.id === plans.plus?.id}
-            accessEndsAt={activePlan?.id === plans.plus?.id ? activeSubscription?.endsAt : null}
-            cancellationScheduled={
-              activePlan?.id === plans.plus?.id && activeSubscription?.cancelAtPeriodEnd
-            }
+            disabled={plusIsCurrent}
+            current={plusIsCurrent}
+            accessEndsAt={plusIsCurrent ? activeSubscription?.endsAt : null}
             featured
           />
           <PricingCard
@@ -329,15 +389,12 @@ export function BillingPageClient({
             price={formatPlanPrice(plans.pro, billingMonths, 1500)}
             includes={PLAN_COPY.pro.description}
             features={[...PLAN_COPY.pro.fallbackFeatures]}
-            actionLabel={activePlan?.id === plans.pro?.id ? "Current plan" : "Choose Pro"}
+            actionLabel={proIsCurrent ? "Current plan" : "Choose Pro"}
             loading={creatingPlanId === plans.pro?.id}
             onAction={() => startPlan(plans.pro)}
-            disabled={activePlan?.id === plans.pro?.id}
-            current={activePlan?.id === plans.pro?.id}
-            accessEndsAt={activePlan?.id === plans.pro?.id ? activeSubscription?.endsAt : null}
-            cancellationScheduled={
-              activePlan?.id === plans.pro?.id && activeSubscription?.cancelAtPeriodEnd
-            }
+            disabled={proIsCurrent}
+            current={proIsCurrent}
+            accessEndsAt={proIsCurrent ? activeSubscription?.endsAt : null}
           />
         </section>
 
@@ -414,38 +471,36 @@ export function BillingPageClient({
             <span className="size-1.5 rounded-full bg-[#dce1ea]" />
           </div>
 
-          <div className="mt-6 grid items-center gap-5 rounded-xl bg-[linear-gradient(105deg,#3047ef_0%,#3b58f7_55%,#397be8_100%)] px-6 py-5 text-white lg:grid-cols-[72px_1fr_auto] lg:px-8">
-            <BookOpen className="size-12 stroke-[1.4]" aria-hidden="true" />
-            <div>
-              <h2 className="text-[16px] font-semibold">Ready for more than 3 challenges a day?</h2>
-              <p className="mt-1 text-[10px] text-white/80">
-                Get unlimited practice and a study plan built around your exam dates.
-              </p>
-            </div>
-            <div className="flex flex-col items-center gap-2 sm:items-end">
-              <button
-                type="button"
-                onClick={() => startPlan(plans.plus)}
-                disabled={
-                  creatingPlanId === plans.plus?.id || activePlan?.id === plans.plus?.id
-                }
-                className="min-h-9 rounded-md bg-white px-4 text-[10px] font-semibold text-[#111827] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {activePlan?.id === plans.plus?.id
-                  ? "Plus is active"
-                  : billingMonths === 1
+          {!activePlan ? (
+            <div className="mt-6 grid items-center gap-5 rounded-xl bg-[linear-gradient(105deg,#3047ef_0%,#3b58f7_55%,#397be8_100%)] px-6 py-5 text-white lg:grid-cols-[72px_1fr_auto] lg:px-8">
+              <BookOpen className="size-12 stroke-[1.4]" aria-hidden="true" />
+              <div>
+                <h2 className="text-[16px] font-semibold">Ready for more than 3 challenges a day?</h2>
+                <p className="mt-1 text-[10px] text-white/80">
+                  Get unlimited practice and a study plan built around your exam dates.
+                </p>
+              </div>
+              <div className="flex flex-col items-center gap-2 sm:items-end">
+                <button
+                  type="button"
+                  onClick={() => startPlan(plans.plus)}
+                  disabled={creatingPlanId === plans.plus?.id}
+                  className="min-h-9 rounded-md bg-white px-4 text-[10px] font-semibold text-[#111827] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {billingMonths === 1
                     ? `Choose Plus - ${formatPlanPrice(plans.plus, 1, 450)}/month ↗`
                     : `Choose Plus - ${formatPlanPrice(plans.plus, 3, 450)}/3 months ↗`}
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push("/app/today")}
-                className="min-h-10 rounded-md px-2 text-[9px] font-medium text-white underline decoration-white/60 underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
-              >
-                Keep using Free
-              </button>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/app/today")}
+                  className="min-h-10 rounded-md px-2 text-[9px] font-medium text-white underline decoration-white/60 underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+                >
+                  Keep using Free
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
           <p className="mt-5 text-center text-[9px] font-medium text-[#a0a8b7]">
             NanoSyllabus · Learn. Practise. Get feedback. Study together.
           </p>
@@ -464,32 +519,23 @@ export function BillingPageClient({
                 {activePlanLabel}
               </h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
-                {activeSubscription.cancelAtPeriodEnd
-                  ? `Cancellation is scheduled. You will keep ${activePlanLabel} access until ${formatDate(activeSubscription.endsAt!)} and then move to the Free plan.`
-                  : `Your paid access is active until ${formatDate(activeSubscription.endsAt!)}. You can cancel anytime without losing the time you have already paid for.`}
+                Your paid access is active
+                {activeSubscription.endsAt
+                  ? ` until ${formatDate(activeSubscription.endsAt)}`
+                  : ""}
+                . Cancelling ends access immediately, after which you can choose this plan or a
+                different plan again.
               </p>
             </div>
-            {activeSubscription.cancelAtPeriodEnd ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="shrink-0"
-                disabled={updatingSubscription}
-                onClick={() => void updateSubscriptionCancellation("resume")}
-              >
-                {updatingSubscription ? "Updating..." : "Keep subscription"}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="danger"
-                className="shrink-0"
-                disabled={updatingSubscription}
-                onClick={() => setCancelConfirmationOpen(true)}
-              >
-                Cancel subscription
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="danger"
+              className="shrink-0"
+              disabled={updatingSubscription}
+              onClick={() => setCancelConfirmationOpen(true)}
+            >
+              Cancel subscription
+            </Button>
           </section>
         ) : null}
 
@@ -505,10 +551,8 @@ export function BillingPageClient({
             </div>
             <p className="text-sm text-text-secondary">
               {activePlan
-                ? activeSubscription?.cancelAtPeriodEnd && activeSubscription.endsAt
-                  ? `Plan ends ${formatDate(activeSubscription.endsAt)}`
-                  : `${activePlanLabel} plan active`
-                : user.hasUnlimitedAccess
+                ? `${activePlanLabel} plan active`
+                : hasUnlimitedAccess
                   ? "Unlimited plan active"
                   : `${overview.balance} messages available`}
             </p>
@@ -567,10 +611,9 @@ export function BillingPageClient({
       {cancelConfirmationOpen && activeSubscription && activePlan ? (
         <CancelSubscriptionConfirmation
           planName={activePlanLabel}
-          endsAt={activeSubscription.endsAt}
           loading={updatingSubscription}
           onClose={() => setCancelConfirmationOpen(false)}
-          onConfirm={() => void updateSubscriptionCancellation("cancel")}
+          onConfirm={() => void cancelSubscription()}
         />
       ) : null}
     </>
@@ -588,7 +631,6 @@ function PricingCard({
   disabled = false,
   current = false,
   accessEndsAt = null,
-  cancellationScheduled = false,
   onAction,
   featured = false,
 }: {
@@ -602,7 +644,6 @@ function PricingCard({
   disabled?: boolean;
   current?: boolean;
   accessEndsAt?: string | null;
-  cancellationScheduled?: boolean;
   onAction: () => void;
   featured?: boolean;
 }) {
@@ -649,9 +690,7 @@ function PricingCard({
         {current ? (
           <p className="mt-2 text-center text-[10px] font-medium text-[#697387]">
             {accessEndsAt
-              ? cancellationScheduled
-                ? `Ends ${formatDate(accessEndsAt)}`
-                : `Active until ${formatDate(accessEndsAt)}`
+              ? `Active until ${formatDate(accessEndsAt)}`
               : "Active with no expiry date"}
           </p>
         ) : null}
@@ -671,194 +710,343 @@ function PaymentSubmissionModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [reference, setReference] = useState(invoice.paymentSubmission?.reference ?? "");
-  const [payerName, setPayerName] = useState(invoice.paymentSubmission?.proofMeta?.payerName ?? "");
   const [receipt, setReceipt] = useState<File | null>(null);
   const [mobileUploadSessionId, setMobileUploadSessionId] = useState<string | null>(null);
-  const [mobileReceiptName, setMobileReceiptName] = useState("");
-  const [fileInputKey, setFileInputKey] = useState(0);
-  const [note, setNote] = useState(invoice.paymentSubmission?.proofMeta?.note ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) onClose();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [saving, onClose]);
+
+  const hasProof = Boolean(
+    receipt || mobileUploadSessionId || invoice.paymentSubmission?.proofStoragePath,
+  );
+
+  function handleFileSelect(file: File) {
+    if (!file) return;
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+    if (!validTypes.includes(file.type) && !/\.(jpe?g|png|webp|pdf)$/i.test(file.name)) {
+      setError("Please select a JPG, PNG, WebP, or PDF file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("File size must be 5 MB or less.");
+      return;
+    }
+    setError("");
+    setReceipt(file);
+    setMobileUploadSessionId(null);
+  }
 
   async function submitPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!hasProof) {
+      setError("Please upload your payment screenshot before submitting.");
+      return;
+    }
+
     const activationStartedAt = Date.now();
     setSaving(true);
     setError("");
+
     const formData = new FormData();
     formData.set("invoiceId", invoice.id);
-    formData.set("reference", reference);
-    formData.set("payerName", payerName);
-    formData.set("note", note);
-    if (receipt) formData.set("receipt", receipt);
-    else if (mobileUploadSessionId) formData.set("mobileUploadSessionId", mobileUploadSessionId);
-    const response = await fetch("/api/billing/payments", { method: "POST", body: formData });
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      setError(payload.error || "Failed to submit payment.");
-      setSaving(false);
-      return;
-    }
-    const payload = (await response.json().catch(() => ({}))) as {
-      access?: string;
-    };
-    if (payload.access !== "active") {
-      setError("Your payment was saved, but access is not active yet. Please try again.");
-      setSaving(false);
-      return;
+    if (receipt) {
+      formData.set("receipt", receipt);
+    } else if (mobileUploadSessionId) {
+      formData.set("mobileUploadSessionId", mobileUploadSessionId);
     }
 
-    const remainingConfirmationDelay = Math.max(0, 3_000 - (Date.now() - activationStartedAt));
-    if (remainingConfirmationDelay > 0) {
-      await new Promise((resolve) => window.setTimeout(resolve, remainingConfirmationDelay));
+    try {
+      const response = await fetch("/api/billing/payments", { method: "POST", body: formData });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        setError(payload.error || "Failed to submit payment.");
+        setSaving(false);
+        return;
+      }
+      const payload = (await response.json().catch(() => ({}))) as { access?: string };
+      if (payload.access !== "active") {
+        setError("Your payment was saved, but access is not active yet. Please try again.");
+        setSaving(false);
+        return;
+      }
+
+      const remainingConfirmationDelay = Math.max(0, 3_000 - (Date.now() - activationStartedAt));
+      if (remainingConfirmationDelay > 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, remainingConfirmationDelay));
+      }
+      setSaving(false);
+      onSaved();
+    } catch {
+      setError("Network error while submitting payment. Please try again.");
+      setSaving(false);
     }
-    setSaving(false);
-    onSaved();
   }
 
   return (
-    <ModalFrame title="Scan, pay and send your receipt" onClose={onClose} locked={saving} wide>
-      <form onSubmit={submitPayment} className="grid gap-7 md:grid-cols-[220px_1fr]">
-        <div>
-          {paymentConfig ? (
-            <Image
-              src={paymentConfig.qrImageUrl}
-              alt={`Official ${paymentConfig.displayName} payment QR`}
-              width={220}
-              height={220}
-              unoptimized
-              className="aspect-square w-full rounded-2xl border border-border bg-card object-contain p-2"
-            />
-          ) : (
-            <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-border p-5 text-center text-sm text-text-secondary">
-              Payment QR is not configured yet.
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !saving) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="billing-dialog-title"
+        tabIndex={-1}
+        className="max-h-[min(94dvh,850px)] w-full max-w-[1040px] overflow-y-auto rounded-[32px] bg-white p-7 text-[#111827] shadow-2xl focus:outline-none sm:p-9 md:p-10"
+      >
+        {/* Modal Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3.5 sm:gap-4">
+            <div className="flex size-13 shrink-0 items-center justify-center rounded-full bg-[#e3f7d4] text-[#24591e] sm:size-14">
+              <CreditCard className="size-6 sm:size-7" strokeWidth={2.2} aria-hidden="true" />
             </div>
-          )}
-          {paymentConfig ? (
-            <div className="mt-3 text-sm text-text-secondary">
-              <p className="font-semibold text-text-primary">
-                {paymentConfig.bankName || paymentConfig.displayName}
-              </p>
-              <p>{paymentConfig.accountName}</p>
-              {paymentConfig.accountNumber ? <p>A/C {paymentConfig.accountNumber}</p> : null}
-            </div>
-          ) : null}
-        </div>
-        <div>
-          <div className="rounded-2xl bg-bg-secondary p-4">
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-sm text-text-secondary">Total today</span>
-              <strong className="text-xl">
-                {invoice.currency} {invoice.amount.toLocaleString()}
-              </strong>
-            </div>
-            <p className="mt-3 border-t border-border pt-3 font-mono text-sm">
-              Remark: {invoice.invoiceCode}
-            </p>
-          </div>
-          <div className="mt-5 space-y-4">
-            <Field label="Transaction reference">
-              <Input value={reference} onChange={(event) => setReference(event.target.value)} />
-            </Field>
-            <Field label="Payer name">
-              <Input value={payerName} onChange={(event) => setPayerName(event.target.value)} />
-            </Field>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-text-secondary">
-                Payment receipt *
+              <h2
+                id="billing-dialog-title"
+                className="font-display text-2xl font-bold tracking-tight text-gray-950 sm:text-[28px]"
+              >
+                Verify your payment
+              </h2>
+              <p className="mt-0.5 text-sm font-medium text-gray-500 sm:text-base">
+                Complete these 2 steps to activate your access.
               </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_280px] sm:items-stretch">
-                <div className="rounded-xl border border-border bg-bg-primary p-3">
-                  <label
-                    htmlFor="payment-receipt"
-                    className="text-sm font-semibold text-text-primary"
-                  >
-                    Choose on this computer
-                  </label>
-                  <Input
-                    key={fileInputKey}
-                    id="payment-receipt"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
-                    onChange={(event) => {
-                      setReceipt(event.target.files?.[0] ?? null);
-                      if (event.target.files?.[0]) {
-                        setMobileUploadSessionId(null);
-                        setMobileReceiptName("");
-                      }
-                    }}
-                    className="mt-2 h-auto min-h-11 py-2 file:mr-2 file:rounded-md file:border-0 file:bg-bg-tertiary file:px-2 file:py-1 file:text-xs file:font-semibold"
-                  />
-                  <p className="mt-2 text-xs leading-5 text-text-muted">
-                    JPG, PNG, WebP, or PDF · max 5 MB
-                  </p>
-                </div>
-                <ReceiptUploadFromPhone
-                  invoiceId={invoice.id}
-                  onReady={(sessionId, fileName) => {
-                    setMobileUploadSessionId(sessionId);
-                    setMobileReceiptName(fileName);
-                    setReceipt(null);
-                    setFileInputKey((current) => current + 1);
-                  }}
-                  onCleared={() => {
-                    setMobileUploadSessionId(null);
-                    setMobileReceiptName("");
-                  }}
-                />
-              </div>
-              {mobileReceiptName ? (
-                <p className="sr-only" role="status">
-                  Receipt {mobileReceiptName} received from phone.
-                </p>
-              ) : null}
             </div>
-            <Field label="Note (optional)">
-              <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
-            </Field>
           </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            aria-label="Close payment dialog"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-400 transition hover:bg-gray-200 hover:text-gray-700 disabled:opacity-50 sm:size-10"
+          >
+            <X className="size-4 sm:size-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        <form onSubmit={submitPayment} className="mt-7 sm:mt-8">
+          {/* Two Steps Grid */}
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
+            {/* Step 1: Pay via QR */}
+            <div className="flex flex-col justify-between rounded-[22px] border border-[#e4f5e0] bg-[#f8fdf9] p-6 sm:p-7">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 sm:text-lg">
+                  1. Pay via QR
+                </h3>
+
+                <div className="mt-5 flex items-center gap-4 sm:gap-6">
+                  {/* QR Code Container */}
+                  <div className="flex size-[160px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-gray-200/80 bg-white p-2.5 shadow-xs sm:size-[180px]">
+                    {paymentConfig ? (
+                      <Image
+                        src={paymentConfig.qrImageUrl}
+                        alt={`Official ${paymentConfig.displayName} payment QR`}
+                        width={180}
+                        height={180}
+                        unoptimized
+                        className="size-full rounded-xl object-contain"
+                      />
+                    ) : (
+                      <div className="flex size-full flex-col items-center justify-center p-2 text-center text-xs text-gray-400">
+                        Payment QR not configured yet
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Payment Amount & Remarks */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-[#e3f7d4] text-[#24591e]">
+                      <Wallet className="size-4" aria-hidden="true" />
+                    </div>
+                    <p className="mt-1.5 text-xs font-semibold text-gray-500 sm:text-sm">Payment amount</p>
+                    <p className="font-display text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
+                      {invoice.currency} {invoice.amount.toLocaleString()}
+                    </p>
+
+                    <div className="my-3.5 w-full border-t border-gray-200/70" />
+
+                    <p className="text-xs font-semibold text-gray-500 sm:text-sm">Remarks</p>
+                    <div className="mt-1.5 inline-flex items-center rounded-lg bg-[#e3f7d4] px-3 py-1.5 text-xs font-bold text-[#24591e] sm:text-sm">
+                      Invoice ID: {invoice.invoiceCode}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 1 Bottom Notice */}
+              <div className="mt-6 flex items-start gap-3 rounded-xl border border-[#d6f2ca] bg-[#eefae8] p-3.5 text-xs sm:text-[13px] leading-relaxed text-gray-700">
+                <Smartphone className="mt-0.5 size-4 shrink-0 text-[#24591e]" aria-hidden="true" />
+                <p>
+                  Make sure the screenshot clearly shows the invoice ID ({invoice.invoiceCode}) in
+                  the remarks section after payment.
+                </p>
+              </div>
+            </div>
+
+            {/* Step 2: Upload payment screenshot */}
+            <div className="flex flex-col justify-between rounded-[22px] border border-gray-200/90 bg-white p-6 sm:p-7">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 sm:text-lg">
+                  2. Upload payment screenshot
+                </h3>
+
+                <div className="mt-5 grid grid-cols-1 items-stretch gap-3.5 sm:grid-cols-[1fr_auto_1fr]">
+                  {/* Option A: Device File Upload */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) handleFileSelect(file);
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={cn(
+                      "relative flex min-h-[220px] flex-1 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-4 text-center transition-colors sm:p-5",
+                      isDragging
+                        ? "border-emerald-500 bg-emerald-50/50"
+                        : receipt
+                          ? "border-emerald-400 bg-emerald-50/30"
+                          : "border-gray-200 bg-gray-50/40 hover:border-gray-300",
+                    )}
+                  >
+                    {receipt ? (
+                      <div className="flex flex-col items-center p-1">
+                        <CheckCircle2 className="size-9 text-emerald-600 mb-1" aria-hidden="true" />
+                        <p className="max-w-[150px] truncate text-xs font-bold text-gray-900 sm:text-sm">
+                          {receipt.name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {(receipt.size / (1024 * 1024)).toFixed(2)} MB
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReceipt(null);
+                          }}
+                          className="mt-2.5 text-xs font-semibold text-red-600 hover:underline"
+                        >
+                          Change file
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <UploadCloud className="size-9 text-gray-800" strokeWidth={1.8} aria-hidden="true" />
+                        <p className="mt-2 text-sm font-bold text-gray-900 sm:text-[15px]">
+                          Upload screenshot
+                        </p>
+                        <p className="mt-0.5 max-w-[150px] text-xs leading-snug text-gray-500">
+                          Drag and drop or click to upload from your device.
+                        </p>
+                        <span className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[#e3f7d4] px-4 py-2 text-xs font-bold text-gray-900 shadow-xs transition hover:bg-[#d5f3c1] sm:text-sm">
+                          <Upload className="size-4" aria-hidden="true" />
+                          Choose file
+                        </span>
+                        <p className="mt-2 text-[10.5px] text-gray-400">
+                          JPG, PNG, WebP or PDF · Max 5 MB
+                        </p>
+                      </>
+                    )}
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileSelect(file);
+                      }}
+                    />
+                  </div>
+
+                  {/* Middle OR Divider */}
+                  <div className="relative flex items-center justify-center my-1 sm:my-0 sm:flex-col">
+                    <div className="hidden sm:block absolute inset-y-0 w-px bg-gray-200" />
+                    <div className="sm:hidden absolute inset-x-0 h-px bg-gray-200" />
+                    <span className="relative z-10 flex size-7 items-center justify-center rounded-full border border-gray-200 bg-white text-[11px] font-bold text-gray-400 shadow-2xs">
+                      OR
+                    </span>
+                  </div>
+
+                  {/* Option B: Scan QR for Phone Upload */}
+                  <ReceiptUploadFromPhone
+                    invoiceId={invoice.id}
+                    variant="qr-card"
+                    onReady={(sessionId) => {
+                      setMobileUploadSessionId(sessionId);
+                      setReceipt(null);
+                    }}
+                    onCleared={() => {
+                      setMobileUploadSessionId(null);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Error display */}
           {error ? (
-            <p role="alert" className="mt-4 text-sm text-destructive">
+            <p role="alert" className="mt-4 text-center text-sm font-medium text-destructive">
               {error}
             </p>
           ) : null}
+
+          {/* Saving Status Notification */}
           {saving ? (
             <div
-              className="mt-5 flex items-start gap-3 rounded-2xl border border-border bg-bg-secondary p-4 text-left"
+              className="mt-4 flex items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"
               role="status"
               aria-live="polite"
             >
-              <LoaderCircle
-                className="mt-0.5 size-5 shrink-0 animate-spin text-text-primary motion-reduce:animate-none"
-                aria-hidden="true"
-              />
-              <div>
-                <p className="text-sm font-semibold text-text-primary">Activating your access</p>
-                <p className="mt-1 text-xs leading-5 text-text-secondary">
-                  Your receipt is saved. Access will be ready in about five seconds.
-                </p>
-              </div>
+              <LoaderCircle className="size-4 animate-spin text-gray-900" />
+              <span>Activating your access. Please wait a few seconds...</span>
             </div>
           ) : null}
+
+          {/* Main CTA Button */}
           <Button
             type="submit"
             size="lg"
-            className="mt-6 w-full rounded-2xl"
-            disabled={
-              !paymentConfig ||
-              saving ||
-              !reference.trim() ||
-              !payerName.trim() ||
-              (!receipt && !mobileUploadSessionId && !invoice.paymentSubmission?.proofStoragePath)
-            }
+            disabled={!hasProof || saving || !paymentConfig}
+            className={cn(
+              "mt-6 w-full rounded-2xl py-4 text-base font-bold transition-all",
+              hasProof && !saving && paymentConfig
+                ? "bg-[#101828] text-white hover:bg-black active:scale-[0.99] shadow-sm cursor-pointer"
+                : "bg-[#d0d7e2] text-white cursor-not-allowed hover:bg-[#d0d7e2]",
+            )}
             aria-busy={saving}
           >
             {saving ? "Activating access..." : "Submit payment & activate access"}
           </Button>
-        </div>
-      </form>
-    </ModalFrame>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -898,13 +1086,11 @@ function PaymentActivationConfirmation({
 
 function CancelSubscriptionConfirmation({
   planName,
-  endsAt,
   loading,
   onClose,
   onConfirm,
 }: {
   planName: string;
-  endsAt: string | null;
   loading: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -912,22 +1098,18 @@ function CancelSubscriptionConfirmation({
   return (
     <ModalFrame title={`Cancel ${planName}?`} onClose={onClose} locked={loading}>
       <p className="text-sm leading-6 text-text-secondary">
-        Your plan will not continue after the current paid period. You will keep every paid feature
-        until{" "}
-        <strong className="font-semibold text-text-primary">
-          {endsAt ? formatDate(endsAt) : "your plan ends"}
-        </strong>
-        , then your account will move to the Free plan.
+        This immediately ends your {planName} access and moves your account to the Free plan. You
+        can buy {planName} again or choose a different plan right after cancellation.
       </p>
       <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-        This does not issue a refund or remove access early.
+        Any remaining paid time will be forfeited. This action does not issue an automatic refund.
       </div>
       <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" disabled={loading} onClick={onClose}>
           Keep plan
         </Button>
         <Button type="button" variant="danger" disabled={loading} onClick={onConfirm}>
-          {loading ? "Cancelling..." : "Cancel at period end"}
+          {loading ? "Cancelling..." : "Cancel now"}
         </Button>
       </div>
     </ModalFrame>

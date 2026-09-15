@@ -139,7 +139,12 @@ export default async function AdminBillingPage({
               <tbody className="divide-y divide-border">
                 {visible.map((submission) => (
                   <tr key={submission.id} className="hover:bg-muted/35">
-                    <td className="px-5 py-4 font-medium">{submission.studentName}</td>
+                    <td className="px-5 py-4">
+                      <p className="font-medium">{submission.studentName}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {submission.studentEmail || "Email unavailable"}
+                      </p>
+                    </td>
                     <td className="px-5 py-4 text-muted-foreground">{submission.planName}</td>
                     <td className="px-5 py-4 font-mono text-xs">{submission.reference}</td>
                     <td className="px-5 py-4">

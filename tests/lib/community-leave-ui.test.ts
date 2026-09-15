@@ -1,5 +1,6 @@
-import { createElement } from "react";
+import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import {
   generateCommunityTerms,
@@ -16,6 +17,15 @@ import { CommunityLeaveControl } from "@/components/community-leave-control";
 import { CommunitySubjectExplorer } from "@/components/community-subject-explorer";
 import { CommunityCatalogClient } from "@/components/community-catalog-client";
 import { CommunityHubClient } from "@/components/community-hub-client";
+
+function renderWithQueryClient(element: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return renderToStaticMarkup(
+    createElement(QueryClientProvider, { client: queryClient }, element),
+  );
+}
 
 const community: CommunityDetail = {
   ...mapCommunitySummary({
@@ -60,7 +70,7 @@ describe("community leave controls (without browser)", () => {
     ).toBe("");
   });
   it("puts leave in the Subject Explorer header, including an empty community", () => {
-    const html = renderToStaticMarkup(
+    const html = renderWithQueryClient(
       createElement(CommunitySubjectExplorer, { community, insights: {} }),
     );
     expect(html.slice(0, html.indexOf("</header>"))).toContain(
@@ -68,7 +78,7 @@ describe("community leave controls (without browser)", () => {
     );
   });
   it("loads the persisted current semester in both the box and current badge", () => {
-    const html = renderToStaticMarkup(
+    const html = renderWithQueryClient(
       createElement(CommunitySubjectExplorer, {
         community: {
           ...community,
@@ -109,7 +119,7 @@ describe("community leave controls (without browser)", () => {
     expect(html).not.toContain("Leave Henglish community");
   });
   it("labels an owned community as full learner access", () => {
-    const html = renderToStaticMarkup(
+    const html = renderWithQueryClient(
       createElement(CommunitySubjectExplorer, {
         community: {
           ...community,
@@ -125,7 +135,7 @@ describe("community leave controls (without browser)", () => {
     expect(html).toContain('href="/teachers?view=communities&amp;community=henglish"');
     expect(html).toContain("Admin Workspace");
   });
-  it("shows leave near the top of Community Hub instead of only beneath the feed", () => {
+  it("keeps leave in a dedicated membership footer below the community overview", () => {
     const data: CommunityHubData = {
       community,
       currentTerm: community.terms[0],
@@ -143,9 +153,10 @@ describe("community leave controls (without browser)", () => {
       activity: [],
       viewer: { rank: null, xp: 0, weeklyXp: 0, completedThisWeek: 0, streak: 0, bestScore: null },
     };
-    const html = renderToStaticMarkup(createElement(CommunityHubClient, { initialData: data }));
-    expect(html.indexOf('aria-label="Leave Henglish community"')).toBeLessThan(
-      html.indexOf("Your program community"),
+    const html = renderWithQueryClient(createElement(CommunityHubClient, { initialData: data }));
+    expect(html).toContain("You are a member of Henglish.");
+    expect(html.indexOf('aria-label="Leave Henglish community"')).toBeGreaterThan(
+      html.indexOf("Community leaderboard"),
     );
     expect(html).not.toContain("Leave and switch");
   });

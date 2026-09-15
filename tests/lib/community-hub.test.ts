@@ -4,6 +4,7 @@ import {
   calculateActivityStreak,
   communityDateKey,
   documentBelongsToSubject,
+  rankCommunityMembersByStreak,
 } from "@/lib/data/community-hub";
 
 describe("community hub calculations", () => {
@@ -46,6 +47,42 @@ describe("community hub calculations", () => {
         attempt_count: 1,
         completed_count: 1,
       },
+    ]);
+  });
+
+  it("ranks community members by current streak instead of XP", () => {
+    const ranked = rankCommunityMembersByStreak([
+      {
+        id: "member-1",
+        name: "First",
+        initials: "F",
+        role: "member",
+        joinedAt: "2026-09-01T00:00:00.000Z",
+        xp: 999,
+        rank: 0,
+        completedChallenges: 1,
+        todayAttempts: 1,
+        streak: 2,
+        isViewer: false,
+      },
+      {
+        id: "member-2",
+        name: "Second",
+        initials: "S",
+        role: "member",
+        joinedAt: "2026-09-02T00:00:00.000Z",
+        xp: 1,
+        rank: 0,
+        completedChallenges: 5,
+        todayAttempts: 1,
+        streak: 5,
+        isViewer: false,
+      },
+    ]);
+
+    expect(ranked.map((member) => [member.id, member.rank])).toEqual([
+      ["member-2", 1],
+      ["member-1", 2],
     ]);
   });
 
