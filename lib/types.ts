@@ -87,6 +87,7 @@ export interface AppUser {
   role: AppRole;
   creditBalance: number;
   hasUnlimitedAccess: boolean;
+  activePlanTier?: "plus" | "pro" | "group";
 }
 
 export interface ChatSessionSummary {

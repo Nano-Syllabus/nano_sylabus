@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
-import { applyChallengeCompletion, applyPracticeAttempt } from "@/lib/query/dashboard";
+import {
+  applyChallengeCompletion,
+  applyPracticeAttempt,
+  patchDashboardRunningSemester,
+} from "@/lib/query/dashboard";
 import { keys } from "@/lib/query/keys";
 import type { StudentDailyDashboard } from "@/lib/data/student-daily-dashboard";
 
@@ -73,6 +77,28 @@ const read = (client: QueryClient) =>
     .dashboard;
 
 describe("dashboard local updates", () => {
+  it("mirrors a saved running semester across cached views of only that community", () => {
+    const client = seed();
+    client.setQueryData(keys.student.dashboard("bct"), { dashboard: dashboard() });
+    client.setQueryData(keys.student.dashboard("other"), {
+      dashboard: dashboard({
+        community: { ...dashboard().community!, slug: "other", currentSemesterId: "other-term" },
+      }),
+    });
+
+    patchDashboardRunningSemester(client, "bct", "t8");
+
+    expect(read(client).community?.currentSemesterId).toBe("t8");
+    expect(
+      (client.getQueryData(keys.student.dashboard("bct")) as { dashboard: StudentDailyDashboard })
+        .dashboard.community?.currentSemesterId,
+    ).toBe("t8");
+    expect(
+      (client.getQueryData(keys.student.dashboard("other")) as { dashboard: StudentDailyDashboard })
+        .dashboard.community?.currentSemesterId,
+    ).toBe("other-term");
+  });
+
   it("moves every figure a completion moves, without a refetch", () => {
     const client = seed();
     applyChallengeCompletion(client, COMMUNITY, { challengeId: "c1" });

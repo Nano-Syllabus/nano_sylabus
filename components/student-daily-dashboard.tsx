@@ -7,21 +7,22 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
+  BookOpen,
   Check,
   CircleGauge,
   Clock3,
+  FileText,
   Flame,
   LibraryBig,
   LoaderCircle,
   LockKeyholeOpen,
-  Trophy,
-  Users,
+  Sparkles,
+  Star,
   X,
   Zap,
 } from "lucide-react";
 import type {
   DailyExamDate,
-  DailyLeaderboardMember,
   StudentDailyDashboard,
 } from "@/lib/data/student-daily-dashboard";
 import type { SubscriptionPlan } from "@/lib/types";
@@ -378,129 +379,195 @@ function MetricCard({
   );
 }
 
-function LeaderboardRow({ member }: { member: DailyLeaderboardMember }) {
-  return (
-    <li
-      className={cn(
-        "grid grid-cols-[34px_minmax(0,1fr)_64px_62px] items-center gap-2 border-t border-border px-1 py-3 text-sm first:border-t-0 sm:grid-cols-[42px_minmax(0,1fr)_84px_70px]",
-      )}
-    >
-      <span className="text-xs font-semibold text-text-muted tabular-nums">
-        #{member.dailyRank}
-      </span>
-      <span className="flex min-w-0 items-center gap-2.5">
-        <span
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-full bg-border text-xs font-semibold",
-            member.isViewer &&
-              "bg-[var(--community-accent)]/15 text-[var(--community-accent)] ring-1 ring-[var(--community-accent)]/30",
-          )}
-        >
-          {member.initials}
-        </span>
-        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span className="truncate font-medium">{member.name}</span>
-          {member.isViewer ? (
-            <span className="shrink-0 rounded-full bg-[var(--community-accent)]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--community-accent)]">
-              You
-            </span>
-          ) : null}
-        </span>
-      </span>
-      <span className="text-right font-semibold tabular-nums">{member.todayAttempts}</span>
-      <span className="text-right text-text-secondary tabular-nums">{member.streak}d</span>
-    </li>
-  );
-}
-
-function DailyLeaderboard({ dashboard }: { dashboard: StudentDailyDashboard }) {
-  const community = dashboard.community;
-  if (!community) {
-    return (
-      <section
-        className="flex min-h-[330px] flex-col rounded-2xl border border-border bg-card p-5 sm:p-6"
-        aria-labelledby="leaderboard-heading"
-      >
-        <div className="flex items-center gap-2 text-text-secondary">
-          <Trophy className="size-4" aria-hidden="true" />
-          <p className="text-xs font-semibold uppercase tracking-[0.14em]">Daily standings</p>
-        </div>
-        <h2 id="leaderboard-heading" className="mt-2 font-display text-xl font-semibold">
-          Community leaderboard
-        </h2>
-        <div className="my-auto py-8 text-center">
-          <Users className="mx-auto size-7 text-text-muted" aria-hidden="true" />
-          <h3 className="mt-3 font-semibold">No active community</h3>
-          <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-text-secondary">
-            Join your programme community to compare today&apos;s real practice activity.
-          </p>
-          <Link
-            href="/communities"
-            className={cn(
-              "mt-5 inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-semibold text-text-inverse",
-              focusRing,
-            )}
-          >
-            Browse communities <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
-        </div>
-      </section>
-    );
-  }
-
-  const visible = community.leaderboard.slice(0, 5);
-  const viewer = community.leaderboard.find((member) => member.isViewer);
-  if (viewer && !visible.some((member) => member.id === viewer.id)) visible.push(viewer);
+function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboard }) {
+  const challenge = [...dashboard.challenge.challenges]
+    .filter((item) => item.status !== "completed")
+    .sort(
+      (left, right) =>
+        Number(right.status === "started") - Number(left.status === "started") ||
+        left.position - right.position,
+    )[0];
+  const community = dashboard.challenge.community;
+  const params = new URLSearchParams();
+  if (community) params.set("community", community.slug);
+  if (challenge) params.set("challenge", challenge.id);
+  const fallbackHref = community
+    ? `/app/challenges?${params.toString()}`
+    : "/app/community";
+  const eyebrow = challenge
+    ? challenge.status === "started"
+      ? "Pick up where you left off"
+      : dashboard.todayChallengeCompletions > 0
+        ? "Your next challenge"
+        : "Your first challenge"
+    : community
+      ? "Your challenge space"
+      : "Choose your programme";
+  const action = challenge
+    ? challenge.status === "started"
+      ? "Continue challenge"
+      : "Start a challenge"
+    : community
+      ? "Find a challenge"
+      : "Browse communities";
 
   return (
     <section
-      className="rounded-2xl border border-border bg-card p-5 sm:p-6"
-      aria-labelledby="leaderboard-heading"
+      className="relative mt-5 overflow-hidden rounded-[24px] border border-black/10 bg-[#cbf738] px-6 py-5 sm:px-8 sm:py-6 lg:px-9 lg:py-6 text-black shadow-sm"
+      aria-labelledby="starter-challenge-heading"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-text-secondary">
-            <Trophy className="size-4" aria-hidden="true" />
-            <p className="text-xs font-semibold uppercase tracking-[0.14em]">Today</p>
-          </div>
-          <h2 id="leaderboard-heading" className="mt-2 font-display text-xl font-semibold">
-            Community leaderboard
-          </h2>
-          <p className="mt-1 text-sm text-text-secondary">{community.name}</p>
-        </div>
-        <p className="inline-flex min-h-10 items-center text-sm text-text-secondary">
-          {formatNumber(community.memberCount)} members
+      {/* Lighter organic curved hill / glow at the bottom matching reference */}
+      <div
+        className="pointer-events-none absolute -bottom-16 -left-12 h-48 w-[460px] rounded-[100%] bg-gradient-to-tr from-[#e5ff75]/80 via-[#daf955]/60 to-transparent blur-md"
+        aria-hidden="true"
+      />
+      <svg
+        className="pointer-events-none absolute bottom-0 left-0 h-20 w-full opacity-35"
+        viewBox="0 0 1200 160"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M 0 160 Q 350 30 900 160 Z"
+          fill="rgba(255, 255, 255, 0.4)"
+        />
+      </svg>
+
+      {/* Top right challenge counter matching reference (CHALLENGE 01 / 1 /) */}
+      <div className="absolute right-6 top-5 text-right select-none sm:right-8 sm:top-5.5">
+        <p className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-black/75 sm:text-[11px]">
+          Challenge {String(challenge?.position ?? 1).padStart(2, "0")}
+        </p>
+        <p className="mt-0.5 text-xs sm:text-sm font-bold text-black/60 font-mono tracking-tight">
+          {challenge?.position ?? 1} /
         </p>
       </div>
-      <div className="mt-5 grid grid-cols-[34px_minmax(0,1fr)_64px_62px] gap-2 border-b border-border px-1 pb-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted sm:grid-cols-[42px_minmax(0,1fr)_84px_70px]">
-        <span>Rank</span>
-        <span>Member</span>
-        <span className="text-right">Today</span>
-        <span className="text-right">Streak</span>
-      </div>
-      <ol>
-        {visible.map((member) => (
-          <LeaderboardRow key={member.id} member={member} />
-        ))}
-      </ol>
-      <div className="mt-3 border-t border-border pt-3 text-center">
-        <Link
-          href={`/app/community?community=${encodeURIComponent(community.slug)}&tab=members&sort=today`}
-          className={cn(
-            "inline-flex min-h-10 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--community-accent)] hover:underline",
-            focusRing,
-          )}
-        >
-          View full leaderboard <ArrowRight className="size-4" aria-hidden="true" />
-        </Link>
+
+      <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        {/* Left Column: Eyebrow, Heading, Subtitle, CTA Button */}
+        <div className="max-w-xl">
+          <p className="inline-flex min-h-6 items-center rounded-full bg-black/[0.08] px-3 py-0.5 text-[10.5px] font-extrabold uppercase tracking-[0.1em] text-black/80">
+            {eyebrow}
+          </p>
+          <h2
+            id="starter-challenge-heading"
+            className="mt-2.5 font-display text-[clamp(1.75rem,3vw,2.5rem)] font-extrabold leading-[1.04] tracking-[-0.04em] text-black"
+          >
+            One topic.
+            <br />
+            One small win.
+          </h2>
+
+          <div className="mt-2.5 max-w-md text-xs sm:text-sm font-medium leading-relaxed text-black/80">
+            {challenge ? (
+              <>
+                <p className="font-semibold text-black/95 truncate">
+                  {challenge.subjectName}: {challenge.topicTitle}
+                </p>
+                <p className="mt-0.5">
+                  Learn the idea. Practice with a solved question.
+                  <br className="hidden sm:inline" />
+                  {" "}Then close the book and take the exam yourself.
+                </p>
+              </>
+            ) : (
+              <p>
+                Learn the idea. Practice with a solved question.
+                <br className="hidden sm:inline" />
+                {" "}Then close the book and take the exam yourself.
+              </p>
+            )}
+          </div>
+
+          <Link
+            href={fallbackHref}
+            className={cn(
+              "mt-4 sm:mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#111215] px-6 text-xs sm:text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-black hover:scale-[1.02] active:scale-[0.98]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 focus-visible:ring-offset-[#cbf738]",
+            )}
+          >
+            {action}
+            <ArrowRight className="size-3.5 sm:size-4" aria-hidden="true" />
+          </Link>
+        </div>
+
+        {/* Right Column: Stacked Notebook Graphic & 3-Step Circles */}
+        <div className="relative hidden items-center justify-end gap-5 select-none lg:flex xl:gap-7" aria-hidden="true">
+          {/* Stacked Notebook Illustration */}
+          <div className="relative shrink-0">
+            {/* Back page for stacked 3D effect */}
+            <div className="absolute -bottom-1 -left-1 h-full w-full rotate-[-7deg] rounded-xl border-2 border-black bg-black/10" />
+            <div className="absolute -bottom-0.5 -left-0.5 h-full w-full rotate-[-5deg] rounded-xl border-2 border-black bg-[#dcfb80]" />
+
+            {/* Front notebook page */}
+            <div className="relative rotate-[-3deg] rounded-xl border-2 border-black bg-[#faffeb] px-4 py-3 shadow-[3px_3px_0_rgba(0,0,0,0.06)] min-w-[110px]">
+              {/* Binder marks on left spine */}
+              <div className="absolute -left-1 top-3.5 h-1.5 w-1 rounded-sm bg-black" />
+              <div className="absolute -left-1 top-6.5 h-1.5 w-1 rounded-sm bg-black" />
+              <div className="absolute -left-1 top-9.5 h-1.5 w-1 rounded-sm bg-black" />
+
+              {/* Topic badge */}
+              <div className="inline-flex items-center rounded-full border border-black/80 bg-black/[0.04] px-2 py-0.5 text-[10px] font-bold text-black">
+                Topic {String(challenge?.position ?? 1).padStart(2, "0")}
+              </div>
+
+              {/* Content lines */}
+              <div className="mt-2.5 h-[2px] w-16 rounded-full bg-black" />
+              <div className="mt-2 h-[2px] w-11 rounded-full bg-black/60" />
+              <div className="mt-2 h-[2px] w-14 rounded-full bg-black/40" />
+            </div>
+          </div>
+
+          {/* 3 Step Flow with Arrows */}
+          <div className="flex items-center gap-2.5 xl:gap-3.5">
+            {/* Step 1: Learn */}
+            <div className="flex flex-col items-center">
+              <div className="grid size-12 sm:size-13 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
+                <BookOpen className="size-5 text-black stroke-[1.8]" />
+              </div>
+              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight">Learn</span>
+            </div>
+
+            {/* Arrow 1 */}
+            <ArrowRight className="size-3.5 shrink-0 text-black stroke-[2.2]" />
+
+            {/* Step 2: Practice */}
+            <div className="flex flex-col items-center">
+              <div className="grid size-12 sm:size-13 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
+                <FileText className="size-5 text-black stroke-[1.8]" />
+              </div>
+              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight">Practice</span>
+            </div>
+
+            {/* Arrow 2 */}
+            <ArrowRight className="size-3.5 shrink-0 text-black stroke-[2.2]" />
+
+            {/* Step 3: Take the exam */}
+            <div className="flex flex-col items-center">
+              <div className="grid size-12 sm:size-13 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
+                <Star className="size-5 text-black stroke-[1.8]" />
+              </div>
+              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight whitespace-nowrap">Take the exam</span>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
 }
 
-function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
+function SemesterProgress({
+  dashboard,
+  compact = false,
+}: {
+  dashboard: StudentDailyDashboard;
+  compact?: boolean;
+}) {
   const community = dashboard.community;
   const [semesterId, setSemesterId] = useState(community?.currentSemesterId ?? "");
+  useEffect(() => {
+    setSemesterId(community?.currentSemesterId ?? "");
+  }, [community?.currentSemesterId, community?.slug]);
   const semester = useMemo(
     () => community?.semesters.find((item) => item.id === semesterId) ?? community?.semesters[0],
     [community, semesterId],
@@ -526,25 +593,39 @@ function SemesterProgress({ dashboard }: { dashboard: StudentDailyDashboard }) {
       className="overflow-hidden rounded-2xl border border-border bg-card"
       aria-labelledby="semester-progress-heading"
     >
-      <div className="flex flex-col gap-4 border-b border-border px-5 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
-        <div>
+      <div
+        className={cn(
+          "flex flex-col gap-4 border-b border-border px-5 py-5",
+          !compact && "sm:flex-row sm:items-end sm:justify-between sm:px-6",
+        )}
+      >
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
             Programme map
           </p>
-          <h2 id="semester-progress-heading" className="mt-2 font-display text-xl font-semibold">
+          <h2
+            id="semester-progress-heading"
+            className="mt-2 font-display text-xl font-semibold leading-tight"
+          >
             Semester progress
           </h2>
           <p className="mt-1 text-sm text-text-secondary">
             Real topic readiness from your indexed subjects.
           </p>
         </div>
-        <label className="grid gap-1.5 text-xs font-medium text-text-secondary">
+        <label
+          className={cn(
+            "grid gap-1.5 text-xs font-medium text-text-secondary",
+            compact && "w-full",
+          )}
+        >
           Semester
           <select
             value={semester?.id ?? ""}
             onChange={(event) => setSemesterId(event.target.value)}
             className={cn(
-              "min-h-11 min-w-[220px] rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary",
+              "min-h-11 rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary",
+              compact ? "w-full min-w-0" : "min-w-[220px]",
               focusRing,
             )}
           >
@@ -780,6 +861,11 @@ function DashboardDataSkeleton({
       </header>
 
       <section
+        className="mt-5 min-h-[190px] animate-pulse rounded-[24px] bg-border motion-reduce:animate-none"
+        aria-label="Loading your next challenge"
+      />
+
+      <section
         className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
         aria-label="Daily learning metrics"
       >
@@ -814,17 +900,20 @@ function DashboardDataSkeleton({
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-display text-xl font-semibold">Community leaderboard</h2>
-          <div className={`mt-2 h-3 w-24 ${line}`} aria-hidden="true" />
+          <div className="flex flex-col gap-4">
+            <div>
+              <div className={`h-3 w-24 ${line}`} aria-hidden="true" />
+              <h2 className="mt-2 font-display text-xl font-semibold">Semester progress</h2>
+              <div className={`mt-2 h-3 w-44 ${line}`} aria-hidden="true" />
+            </div>
+            <div className={`h-11 w-full rounded-xl ${line}`} aria-hidden="true" />
+          </div>
           <div className="mt-5 space-y-4" aria-hidden="true">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <div className="size-8 shrink-0 rounded-full bg-border animate-pulse motion-reduce:animate-none" />
-                <div className="min-w-0 flex-1">
-                  <div className={`h-3 w-32 ${line}`} />
-                  <div className={`mt-1.5 h-3 w-16 ${line}`} />
-                </div>
-                <div className={`h-3 w-8 ${line}`} />
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="border-t border-border pt-4">
+                <div className={`h-3 w-40 ${line}`} />
+                <div className={`mt-2 h-3 w-28 ${line}`} />
+                <div className={`mt-3 h-2 w-full ${line}`} />
               </div>
             ))}
           </div>
@@ -896,6 +985,8 @@ function DashboardContent({
         ) : null}
       </header>
 
+      <StarterChallengeBanner dashboard={dashboard} />
+
       <section
         className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
         aria-label="Daily learning metrics"
@@ -929,7 +1020,7 @@ function DashboardContent({
         />
       </section>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <PracticeCalendar
           initialDays={dashboard.activity}
           examDates={dashboard.examDates ?? []}
@@ -939,11 +1030,7 @@ function DashboardContent({
           currentSemesterId={community?.currentSemesterId}
           onExamDatesChange={handleExamDatesChange}
         />
-        <DailyLeaderboard dashboard={dashboard} />
-      </div>
-
-      <div className="mt-6">
-        <SemesterProgress dashboard={dashboard} />
+        <SemesterProgress dashboard={dashboard} compact />
       </div>
 
       {unlimitedPlan ? (

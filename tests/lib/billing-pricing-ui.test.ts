@@ -2,12 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import type {
-  AppUser,
-  StudentBillingOverview,
-  SubscriptionPlan,
-  UserSubscription,
-} from "@/lib/types";
+import type { AppUser, StudentBillingOverview, SubscriptionPlan, UserSubscription } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -15,25 +10,27 @@ vi.mock("next/navigation", () => ({
 
 import { BillingPageClient } from "@/components/billing-page-client";
 
-function plan(productType: "individual" | "group", price: number): SubscriptionPlan {
+function plan(slug: string, price: number, isUnlimited: boolean): SubscriptionPlan {
   return {
-    id: `${productType}-id`,
-    name: `${productType} plan`,
-    slug: `${productType}-unlimited`,
-    credits: 1,
+    id: `${slug}-id`,
+    name: slug === "plus-monthly" ? "Plus" : "Pro",
+    slug,
+    credits: 0,
     price,
     currency: "NPR",
     billingType: "monthly",
-    productType,
-    seatLimit: productType === "group" ? 5 : 1,
-    isUnlimited: true,
-    features: [`${productType} feature from API`],
+    productType: "individual",
+    seatLimit: 1,
+    isUnlimited,
+    features: [],
     isActive: true,
     createdAt: "2026-09-08T00:00:00.000Z",
     updatedAt: "2026-09-08T00:00:00.000Z",
   };
 }
 
+const plus = plan("plus-monthly", 450, false);
+const pro = plan("individual-unlimited", 1500, true);
 const user: AppUser = {
   id: "user-id",
   email: "student@example.com",
@@ -60,113 +57,120 @@ function activeSubscription(planId: string): UserSubscription {
   };
 }
 
-describe("billing pricing UI", () => {
-  it("renders the compact Figma pricing story while keeping paid values API-driven", () => {
-    const overview: StudentBillingOverview = {
-      balance: 15,
-      plans: [plan("individual", 1600), plan("group", 5200)],
-      invoices: [],
-      subscriptions: [],
-    };
-    const html = renderToStaticMarkup(
-      createElement(BillingPageClient, { overview, paymentConfig: null, user }),
-    );
+function markup(subscriptions: UserSubscription[] = [], paidUser = user) {
+  const overview: StudentBillingOverview = {
+    balance: 15,
+    plans: [plus, pro],
+    invoices: [],
+    subscriptions,
+  };
+  return renderToStaticMarkup(
+    createElement(BillingPageClient, { overview, paymentConfig: null, user: paidUser }),
+  );
+}
 
-    expect(html).toContain("Simple plans. Bigger dreams.");
-    expect(html).toContain("Pick the support that fits your pace.");
-    expect(html).toContain("1 month");
-    expect(html).toContain("3 months");
-    expect(html).toContain("font-[family-name:var(--font-poppins)]");
-    expect(html).toContain("Current plan");
-    expect(html).toContain("Choose Plus");
-    expect(html).toContain("Choose Pro");
-    expect(html).toContain("Rs. 1,600");
-    expect(html).toContain("Rs. 5,200");
-    expect(html).toContain("You don’t have to prepare alone.");
-    expect(html).toContain("Real Stories, Real Growth");
-    expect(html).toContain("Ready for more than 3 challenges a day?");
+describe("billing pricing UI", () => {
+  it("matches every visible Figma pricing value, plan feature, and story", () => {
+    const html = markup();
+
+    for (const value of [
+      "Simple plans. Bigger dreams.",
+      "1 month",
+      "3 months",
+      "Rs. 0",
+      "Rs. 450",
+      "Rs. 1,350",
+      "Rs. 1,500",
+      "Rs. 4,500",
+      "3 challenges / day",
+      "AI answer grading",
+      "All semesters &amp; subjects",
+      "Community PDFs &amp; materials",
+      "Learning analytics",
+      "Group study sessions",
+      "Everything in Free",
+      "Unlimited challenges",
+      "Exam calendar &amp; study plan",
+      "Romanized Nepali",
+      "Everything in Plus",
+      "AI tutor",
+      "AI concept videos &amp; animations",
+      "English &amp; Nepali",
+      "Choose Plus",
+      "Choose Pro",
+      "You don’t have to prepare alone.",
+      "1,248",
+      "Challenges completed this week",
+      "386",
+      "Handwritten answers reviewed",
+      "72",
+      "Students joined study sessions",
+      "Real Stories, Real Growth",
+      "Aayush K.",
+      "Sneha P.",
+      "Resha D.",
+      "Ready for more than 3 challenges a day?",
+      "Choose Plus - Rs. 450/month ↗",
+      "Keep using Free",
+    ]) {
+      expect(html).toContain(value);
+    }
+    expect(html).not.toContain("Rs. 5,000");
     expect(html).not.toMatch(/discount|coupon/i);
+    expect(html).toContain("font-[family-name:var(--font-poppins)]");
     expect(html).toContain("bg-[#d9ff69]");
     expect(html).toContain("bg-[#3548f5]");
     expect(html).toContain("max-w-[1000px]");
   });
 
-  it("keeps free access separate from paid checkout without promotional-code paths", () => {
+  it("keeps Free separate and sends the selected paid tier and duration to checkout", () => {
     const source = readFileSync("components/billing-page-client.tsx", "utf8");
+    const invoiceRoute = readFileSync("app/api/billing/invoices/route.ts", "utf8");
 
-    expect(source).not.toMatch(/discount|coupon/i);
     expect(source).toContain('"Included in your plan" : "Current plan"');
-    expect(source).toContain('onAction={() => router.push("/app/today")}');
-    expect(source).toContain('"Current plan" : "Choose Plus"');
-    expect(source).toContain("onAction={() => startPlan(plans.individual)}");
-    expect(source).toContain('className="mt-auto pt-7"');
+    expect(source).toContain('onAction={() => startPlan(plans.plus)}');
+    expect(source).toContain('onAction={() => startPlan(plans.pro)}');
+    expect(source).toContain("onClick={() => setBillingMonths(3)}");
+    expect(source).toContain("billingMonths: months");
+    expect(invoiceRoute).toContain("plan.price * payload.billingMonths");
+    expect(invoiceRoute).toContain("payload.billingMonths * 30");
+    expect(invoiceRoute).toContain('.eq("amount", invoiceAmount)');
   });
 
-  it("shows processing and active-access confirmation after receipt submission", () => {
-    const source = readFileSync("components/billing-page-client.tsx", "utf8");
-
-    expect(source).toContain("Activating your access");
-    expect(source).toContain("Access will be ready in about five seconds.");
-    expect(source).toContain("Your paid access is active");
-    expect(source).toContain("Plan access activated by Nano Syllabus");
+  it("shows the active Plus plan even though it does not grant unlimited AI", () => {
+    const html = markup([activeSubscription(plus.id)]);
+    expect(html).toContain("Plus plan active");
+    expect(html).toContain("Active until");
+    expect(html).toContain("Cancel subscription");
   });
 
-  it("shows the approved plan as current and prevents duplicate checkout", () => {
-    const individual = plan("individual", 1500);
-    const paidUser = { ...user, hasUnlimitedAccess: true };
-    const overview: StudentBillingOverview = {
-      balance: 1,
-      plans: [individual, plan("group", 5000)],
-      invoices: [],
-      subscriptions: [activeSubscription(individual.id)],
-    };
-
-    const html = renderToStaticMarkup(
-      createElement(BillingPageClient, { overview, paymentConfig: null, user: paidUser }),
-    );
-
-    expect(html).toContain(
-      "Your Individual Unlimited plan is active with unlimited NanoAI access.",
-    );
-    expect(html).toContain("Current Plan");
+  it("shows the active Pro plan and prevents duplicate checkout", () => {
+    const html = markup([activeSubscription(pro.id)], { ...user, hasUnlimitedAccess: true });
+    expect(html).toContain("Pro plan active");
     expect(html).toContain("Current plan");
     expect(html).toContain("Active until");
-    expect(html).toContain("Upgrade to Pro");
-    expect(html).toContain("Unlimited plan active");
     expect(html).toContain("Cancel subscription");
-    expect(html).toContain(
-      "You can cancel anytime without losing the time you have already paid for.",
-    );
+    expect(html).toContain("You can cancel anytime without losing the time you have already paid for.");
   });
 
-  it("uses a scheduled end-of-period cancellation flow instead of removing paid access immediately", () => {
+  it("keeps paid access until period end on cancellation, including Plus", () => {
     const source = readFileSync("components/billing-page-client.tsx", "utf8");
     const route = readFileSync("app/api/billing/subscriptions/cancel/route.ts", "utf8");
+    const html = markup([{ ...activeSubscription(plus.id), cancelAtPeriodEnd: true }]);
 
     expect(source).toContain("/api/billing/subscriptions/cancel");
     expect(source).toContain("Cancel at period end");
-    expect(source).toContain("Keep subscription");
     expect(route).toContain("cancel_at_period_end: true");
-    expect(route).toContain('status !== "active"');
-    expect(route).toContain("subscription_cancellation_scheduled");
+    expect(route).toContain('!["individual", "group"].includes(plan.product_type)');
+    expect(html).toContain("Cancellation is scheduled.");
+    expect(html).toContain("Plus access until Oct 9, 2026");
+    expect(html).toContain("Keep subscription");
   });
 
-  it("labels a scheduled cancellation by its final access date", () => {
-    const individual = plan("individual", 1500);
-    const paidUser = { ...user, hasUnlimitedAccess: true };
-    const overview: StudentBillingOverview = {
-      balance: 1,
-      plans: [individual],
-      invoices: [],
-      subscriptions: [{ ...activeSubscription(individual.id), cancelAtPeriodEnd: true }],
-    };
-
-    const html = renderToStaticMarkup(
-      createElement(BillingPageClient, { overview, paymentConfig: null, user: paidUser }),
-    );
-
-    expect(html).toContain("Cancellation is scheduled.");
-    expect(html).toContain("Plan ends Oct 9, 2026");
-    expect(html).toContain("Keep subscription");
+  it("retains the receipt activation confirmation", () => {
+    const source = readFileSync("components/billing-page-client.tsx", "utf8");
+    expect(source).toContain("Activating your access");
+    expect(source).toContain("Access will be ready in about five seconds.");
+    expect(source).toContain("Your paid access is active");
   });
 });

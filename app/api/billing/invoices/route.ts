@@ -8,6 +8,7 @@ import { getVerifiedUser } from "@/lib/supabase/verified-user";
 const invoiceSchema = z.object({
   planId: z.string().uuid(),
   paymentMethod: z.literal("bank_transfer").default("bank_transfer"),
+  billingMonths: z.union([z.literal(1), z.literal(3)]).default(1),
   purchaseDetails: z.object({
     groupName: z.string().trim().min(2).max(120),
     organizerEmail: z.string().trim().email().max(160),
@@ -68,11 +69,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Add the group name and 1–5 student emails." }, { status: 400 });
     }
 
+    const invoiceAmount = plan.price * payload.billingMonths;
+
     const { data: existingInvoice, error: existingError } = await admin
       .from("invoices")
       .select("*")
       .eq("user_id", user.id)
       .eq("plan_id", payload.planId)
+      .eq("amount", invoiceAmount)
       .in("status", ["pending_payment", "payment_submitted"])
       .gt("expires_at", new Date().toISOString())
       .order("created_at", { ascending: false })
@@ -94,7 +98,7 @@ export async function POST(request: Request) {
 
     const startsAt = new Date();
     const endsAt = plan.billing_type === "monthly"
-      ? new Date(startsAt.getTime() + 30 * 24 * 60 * 60 * 1000)
+      ? new Date(startsAt.getTime() + payload.billingMonths * 30 * 24 * 60 * 60 * 1000)
       : null;
 
     const { data: invoice, error: invoiceError } = await admin
@@ -103,14 +107,17 @@ export async function POST(request: Request) {
         user_id: user.id,
         plan_id: payload.planId,
         status: "pending_payment",
-        amount: plan.price,
-        subtotal: plan.price,
+        amount: invoiceAmount,
+        subtotal: invoiceAmount,
         currency: plan.currency,
         payment_method: payload.paymentMethod,
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         billing_period_start: startsAt.toISOString(),
         billing_period_end: endsAt?.toISOString() ?? null,
-        purchase_meta: payload.purchaseDetails ?? {},
+        purchase_meta: {
+          ...(payload.purchaseDetails ?? {}),
+          billingMonths: payload.billingMonths,
+        },
       })
       .select("*")
       .single();

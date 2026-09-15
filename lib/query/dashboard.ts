@@ -227,6 +227,26 @@ export function invalidateDashboard(client: QueryClient) {
   return client.invalidateQueries({ queryKey: ["student", "dashboard"] });
 }
 
+/** Mirror a confirmed membership save into every cached view of that community. */
+export function patchDashboardRunningSemester(
+  client: QueryClient,
+  communitySlug: string,
+  termId: string,
+) {
+  client.setQueriesData<DashboardPayload>(
+    { queryKey: ["student", "dashboard"] },
+    (previous) => {
+      if (!previous || previous.dashboard.community?.slug !== communitySlug) return previous;
+      return {
+        dashboard: {
+          ...previous.dashboard,
+          community: { ...previous.dashboard.community, currentSemesterId: termId },
+        },
+      };
+    },
+  );
+}
+
 /**
  * The patch helpers, bound to the community the dashboard is actually keyed by.
  *

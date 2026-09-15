@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useReducer, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, BarChart3, BookOpen, CalendarRange, X } from "lucide-react";
 import { academicOrdinalLabel } from "@/lib/academic";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
@@ -14,6 +15,7 @@ import {
   initialSemesterSelection,
   semesterSelectionReducer,
 } from "@/lib/community-semester-selection";
+import { patchDashboardRunningSemester } from "@/lib/query/dashboard";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -227,6 +229,7 @@ export function CommunitySubjectExplorer({
   insights: Record<string, CommunitySubjectExplorerInsight>;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const availableTerms = useMemo(
     () => [...community.terms].sort((a, b) => a.position - b.position),
     [community.terms],
@@ -285,6 +288,7 @@ export function CommunitySubjectExplorer({
         throw new Error(payload.error || "Could not save your current semester. Please try again.");
       }
       dispatchSemester({ type: "current-saved", termId: term.id });
+      patchDashboardRunningSemester(queryClient, community.slug, term.id);
       setCurrentNotice(`Semester ${term.semesterNumber} saved as your current semester.`);
     } catch (failure) {
       setCurrentError(

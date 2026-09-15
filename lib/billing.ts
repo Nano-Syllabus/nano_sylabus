@@ -1,7 +1,16 @@
-import type { BillingType } from "@/lib/types";
+import type { AppUser, BillingType } from "@/lib/types";
 
 export const STARTER_CREDITS = 20;
 export const CHAT_MESSAGE_CREDIT_COST = 1;
+
+export function getActivePlanTierLabel(
+  user: Pick<AppUser, "activePlanTier" | "hasUnlimitedAccess">,
+): string | null {
+  if (user.activePlanTier === "plus") return "Plus";
+  if (user.activePlanTier === "pro") return "Pro";
+  if (user.activePlanTier === "group") return "Group";
+  return user.hasUnlimitedAccess ? "Unlimited" : null;
+}
 
 export function computeNextBalance(currentBalance: number, amount: number) {
   return currentBalance + amount;

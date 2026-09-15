@@ -7,8 +7,10 @@ const mocks = vi.hoisted(() => ({
   reading: vi.fn(),
   solved: vi.fn(),
   practiceTopics: vi.fn(),
-  generatePracticePaper: vi.fn(),
+  createExam: vi.fn(),
+  submitExam: vi.fn(),
   submitExamFile: vi.fn(),
+  gradeAnswers: vi.fn(),
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.admin }));
 vi.mock("@/lib/student-courses", () => ({
@@ -21,20 +23,37 @@ vi.mock("@/lib/teacher-app/client", async (original) => ({
   getTeacherChallengeReading: mocks.reading,
   getTeacherChallengeSolvedQuestions: mocks.solved,
   getTeacherPracticeTopics: mocks.practiceTopics,
-  generateTeacherPracticePaper: mocks.generatePracticePaper,
-  gradeTeacherPracticePaperFile: mocks.submitExamFile,
+  createTeacherChallengeExam: mocks.createExam,
+  submitTeacherChallengeExam: mocks.submitExam,
+  submitTeacherChallengeExamFile: mocks.submitExamFile,
+  gradeTeacherAnswers: mocks.gradeAnswers,
 }));
 import {
+  getStudentChallengeContent,
   restartStudentChallenge,
   startStudentChallenge,
+  submitStudentChallengeAttempt,
   submitStudentChallengeFile,
 } from "@/lib/data/student-challenges";
+import { invalidateMemo } from "@/lib/http/memo";
 import { TeacherApiError } from "@/lib/teacher-app/client";
 
 describe("starting a saved syllabus challenge", () => {
   let db: ReturnType<typeof communityLearningFixture>;
+
+  /** The row as it stands once the background half of the build has landed. */
+  const settled = () =>
+    vi.waitFor(() => {
+      const row = db.tables.student_challenges[0];
+      expect((row.content as { contentStatus?: string })?.contentStatus).toBe("ready");
+      return row;
+    });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // The collection key is memoized per teacher, so a run that did not clear it
+    // would serve the previous test's fixture.
+    invalidateMemo("challenge:collection-sk");
     db = communityLearningFixture();
     db.tables.student_challenges = [
       {
@@ -76,42 +95,44 @@ describe("starting a saved syllabus challenge", () => {
       question_bank_questions: 0,
       topics: [{ topic_key: "provider-42", title: "Identifiers", qb_question_count: 0 }],
     });
-    mocks.generatePracticePaper.mockResolvedValue({
-      id: "practice-set-1",
-      title: "Nims challenge",
+    mocks.createExam.mockResolvedValue({
+      attempt_id: "attempt-1",
       subject: "Nims",
-      chapters: ["Identifiers"],
+      topics: [{ topic_key: "provider-42", title: "Identifiers", order_index: 0 }],
       questions: [
         {
           id: "q1",
-          text: "Explain identifiers.",
-          chapter: "Identifiers",
-          band_label: "Challenge",
+          topic_key: "provider-42",
+          topic: "Identifiers",
           marks: 10,
           question_type: "Short answer",
+          text: "Explain identifiers.",
         },
         {
           id: "q2",
-          text: "Give one identifier example.",
-          chapter: "Identifiers",
-          band_label: "Challenge",
+          topic_key: "provider-42",
+          topic: "Identifiers",
           marks: 10,
           question_type: "Short answer",
+          text: "Give one identifier example.",
         },
       ],
       total_marks: 20,
       pass_marks: 8,
+      duration_minutes: 20,
+      expires_at: new Date(Date.now() + 20 * 60_000).toISOString(),
+      warning: null,
     });
     mocks.submitExamFile.mockResolvedValue({
-      submission_id: "submission-1",
-      set_id: "practice-set-1",
-      student_name: "Student",
-      source: "file",
+      attempt_id: "attempt-1",
+      subject: "Nims",
       results: [],
       total_score: 8,
-      total_marks: 10,
+      total_marks: 20,
+      percentage: 0.4,
+      pass_marks: 8,
+      passed: true,
       graded: true,
-      evaluation: {},
     });
   });
 
@@ -126,29 +147,84 @@ describe("starting a saved syllabus challenge", () => {
       subject: "Nims",
       topics: ["provider-42"],
     });
+    expect(result?.topicKey).toBe("provider-42");
+    expect(result?.content?.topicKeys).toEqual(["provider-42"]);
+
+    await settled();
     expect(mocks.solved).toHaveBeenCalledWith("collection", {
       subject: "Nims",
       topics: ["provider-42"],
       limit: 2,
     });
-    expect(mocks.generatePracticePaper).toHaveBeenCalledWith("collection", {
+    expect(mocks.createExam).toHaveBeenCalledWith("collection", {
       subject: "Nims",
-      chapters: ["Identifiers"],
-      title: "Nims challenge",
-      instruction: "Set concise handwritten-answer questions on only the requested topic.",
-      pass_marks: 8,
-      bands: [
-        {
-          label: "Challenge",
-          question_type: "Short answer",
-          count: 2,
-          marks_each: 10,
-        },
-      ],
+      topics: ["provider-42"],
+      questions: 2,
+      duration_minutes: 20,
+      pass_percent: 40,
+      exclude_questions: [],
     });
-    expect(result?.topicKey).toBe("provider-42");
-    expect(result?.content?.topicKeys).toEqual(["provider-42"]);
-    expect(db.tables.student_challenges[0].external_paper_id).toBe("practice-set-1");
+    expect(db.tables.student_challenges[0].external_paper_id).toBe("attempt-1");
+  });
+
+  it("hands back the lesson before the exam has been built", async () => {
+    let releaseSolved = () => {};
+    mocks.solved.mockReturnValue(
+      new Promise((resolve) => {
+        releaseSolved = () => resolve({ questions: [], grounded: true, warnings: [] });
+      }),
+    );
+
+    const result = await startStudentChallenge("member", "challenge-1");
+
+    expect(result?.content?.contentStatus).toBe("pending");
+    expect(result?.content?.lesson.content).toEqual(["Source material"]);
+    expect(result?.content?.examQuestions).toEqual([]);
+    expect(mocks.createExam).not.toHaveBeenCalled();
+
+    releaseSolved();
+    await settled();
+    expect(mocks.createExam).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not issue a second exam when a pending challenge is reopened", async () => {
+    let releaseSolved = () => {};
+    mocks.solved.mockReturnValue(
+      new Promise((resolve) => {
+        releaseSolved = () => resolve({ questions: [], grounded: true, warnings: [] });
+      }),
+    );
+    await startStudentChallenge("member", "challenge-1");
+
+    const reopened = await startStudentChallenge("member", "challenge-1");
+
+    expect(reopened?.content?.contentStatus).toBe("pending");
+    expect(mocks.pastQuestions).toHaveBeenCalledTimes(1);
+    expect(mocks.reading).toHaveBeenCalledTimes(1);
+
+    releaseSolved();
+    await settled();
+    expect(mocks.createExam).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the worked examples out of the exam it then sets", async () => {
+    mocks.solved.mockResolvedValue({
+      questions: [
+        { id: "s1", text: "Worked: name three identifiers.", solution: "…", topic: "Identifiers" },
+      ],
+      grounded: true,
+      warnings: [],
+    });
+
+    await startStudentChallenge("member", "challenge-1");
+    await settled();
+
+    expect(mocks.createExam).toHaveBeenCalledWith(
+      "collection",
+      expect.objectContaining({ exclude_questions: ["Worked: name three identifiers."] }),
+    );
+    // A grounded response needs no coverage lookup to phrase its warning.
+    expect(mocks.practiceTopics).not.toHaveBeenCalled();
   });
 
   it("replaces a legacy Question Bank document challenge with a real syllabus topic", async () => {
@@ -187,14 +263,17 @@ describe("starting a saved syllabus challenge", () => {
       topics: [{ topic_key: "provider-42", title: "Identifiers", qb_question_count: 3 }],
     });
 
-    const result = await startStudentChallenge("member", "challenge-1");
+    await startStudentChallenge("member", "challenge-1");
+    await settled();
+    const ready = await getStudentChallengeContent("member", "challenge-1");
 
-    expect(result?.content?.solvedWarning).toContain("Past questions are indexed for Identifiers");
-    expect(result?.content?.solvedWarning).not.toContain("Upload past papers");
+    expect(ready?.content?.solvedWarning).toContain("Past questions are indexed for Identifiers");
+    expect(ready?.content?.solvedWarning).not.toContain("Upload past papers");
   });
 
   it("submits the handwritten sheet against the saved live challenge attempt", async () => {
     await startStudentChallenge("member", "challenge-1");
+    await settled();
     const file = {
       name: "answers.jpg",
       mimeType: "image/jpeg",
@@ -208,10 +287,60 @@ describe("starting a saved syllabus challenge", () => {
       file,
     });
 
-    expect(mocks.submitExamFile).toHaveBeenCalledWith("collection", "practice-set-1", {
+    expect(mocks.submitExamFile).toHaveBeenCalledWith("collection", "attempt-1", {
       studentName: "Student",
       file,
     });
+  });
+
+  it("marks a typed sitting from its stored questions when the attempt is gone", async () => {
+    mocks.submitExam.mockRejectedValue(new TeacherApiError("attempt not found", 404));
+    mocks.gradeAnswers.mockResolvedValue({
+      results: [
+        {
+          question_id: "q1",
+          chapter: "Identifiers",
+          question: "Explain identifiers.",
+          marks: 10,
+          score: 9,
+          feedback: "Sound.",
+        },
+      ],
+      total_score: 9,
+      total_marks: 10,
+      graded: true,
+      evaluation: {},
+    });
+    await startStudentChallenge("member", "challenge-1");
+    await settled();
+
+    const graded = await submitStudentChallengeAttempt({
+      userId: "member",
+      challengeId: "challenge-1",
+      answers: [{ questionId: "q1", answerText: "A name for a value." }],
+    });
+
+    expect(mocks.gradeAnswers).toHaveBeenCalledWith("collection", {
+      items: [
+        {
+          question_id: "q1",
+          question: "Explain identifiers.",
+          marks: 10,
+          chapter: "Identifiers",
+          student_answer: "A name for a value.",
+        },
+        {
+          question_id: "q2",
+          question: "Give one identifier example.",
+          marks: 10,
+          chapter: "Identifiers",
+          student_answer: "",
+        },
+      ],
+    });
+    expect(graded.total_score).toBe(9);
+    expect(graded.results[0].student_answer).toBe("A name for a value.");
+    expect(graded.stored).toBe(false);
   });
 
   it("keeps the assignment intact when the provider is unavailable", async () => {
@@ -276,7 +405,9 @@ describe("starting a saved syllabus challenge", () => {
     expect(result?.status).toBe("started");
     expect(mocks.pastQuestions).toHaveBeenCalledTimes(1);
     expect(mocks.reading).toHaveBeenCalledTimes(1);
+
+    await settled();
     expect(mocks.solved).toHaveBeenCalledTimes(1);
-    expect(mocks.generatePracticePaper).toHaveBeenCalledTimes(1);
+    expect(mocks.createExam).toHaveBeenCalledTimes(1);
   });
 });

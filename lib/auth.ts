@@ -42,6 +42,7 @@ function toAppUser(
   profile: StudentProfile | null,
   creditBalance: number,
   hasUnlimitedAccess: boolean,
+  activePlanTier?: AppUser["activePlanTier"],
 ): AppUser {
   return {
     id: user.id,
@@ -56,6 +57,7 @@ function toAppUser(
     role: profile?.role ?? "student",
     creditBalance,
     hasUnlimitedAccess,
+    ...(activePlanTier ? { activePlanTier } : {}),
   };
 }
 
@@ -90,7 +92,7 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
       .maybeSingle(),
     supabase
       .from("user_subscriptions")
-      .select("ends_at, subscription_plans(is_unlimited)")
+      .select("ends_at, subscription_plans(slug,product_type,is_unlimited)")
       .eq("user_id", user.id)
       .eq("status", "active")
       .order("starts_at", { ascending: false }),
@@ -123,8 +125,27 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
       return Boolean(plan?.is_unlimited && notExpired);
     });
 
+  const activePlans = (subscriptionResult.data ?? [])
+    .filter((subscription: any) =>
+      !subscription.ends_at || new Date(subscription.ends_at).getTime() > now,
+    )
+    .map((subscription: any) =>
+      Array.isArray(subscription.subscription_plans)
+        ? subscription.subscription_plans[0]
+        : subscription.subscription_plans,
+    );
+  const activePlanTier: AppUser["activePlanTier"] = DEV_AUTH_BYPASS
+    ? "pro"
+    : activePlans.some((plan: any) => plan?.product_type === "group")
+      ? "group"
+      : activePlans.some((plan: any) => plan?.is_unlimited)
+        ? "pro"
+        : activePlans.some((plan: any) => plan?.slug === "plus-monthly")
+          ? "plus"
+          : undefined;
+
   return {
-    user: toAppUser(user, profile, creditBalance, hasUnlimitedAccess),
+    user: toAppUser(user, profile, creditBalance, hasUnlimitedAccess, activePlanTier),
     profile,
     studyDiagnosticCompleted: hasCompletedStudyDiagnostic(user.user_metadata?.study_answers),
   };

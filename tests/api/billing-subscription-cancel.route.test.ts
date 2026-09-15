@@ -24,7 +24,7 @@ const subscription = {
   status: "active",
   ends_at: "2030-10-09T00:00:00.000Z",
   cancel_at_period_end: false,
-  subscription_plans: { is_unlimited: true },
+  subscription_plans: { product_type: "individual" },
 };
 
 function request(body: unknown) {
@@ -104,7 +104,7 @@ describe("POST /api/billing/subscriptions/cancel", () => {
     );
   });
 
-  it("will not cancel an already-ended or non-unlimited subscription", async () => {
+  it("will not cancel an already-ended subscription", async () => {
     const lookup = query({
       data: { ...subscription, ends_at: "2020-10-09T00:00:00.000Z" },
       error: null,
@@ -118,5 +118,33 @@ describe("POST /api/billing/subscriptions/cancel", () => {
       error: "This subscription has already ended.",
     });
     expect(lookup.update).not.toHaveBeenCalled();
+  });
+
+  it("allows an active Plus subscription to be cancelled at period end", async () => {
+    const plusSubscription = {
+      ...subscription,
+      subscription_plans: { product_type: "individual", is_unlimited: false },
+    };
+    const lookup = query({ data: plusSubscription, error: null });
+    const updated = query({
+      data: { ...plusSubscription, cancel_at_period_end: true },
+      error: null,
+    });
+    const audit = { insert: vi.fn(async () => ({ error: null })) };
+    let calls = 0;
+    mocks.createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "billing_audit_logs") return audit;
+        calls += 1;
+        return calls === 1 ? lookup : updated;
+      }),
+    });
+
+    const response = await POST(request({ subscriptionId: subscription.id, action: "cancel" }));
+
+    expect(response.status).toBe(200);
+    expect(updated.update).toHaveBeenCalledWith(
+      expect.objectContaining({ cancel_at_period_end: true }),
+    );
   });
 });

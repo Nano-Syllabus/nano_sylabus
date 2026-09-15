@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Badge } from "@/components/ui/badge";
 import type { AppUser } from "@/lib/types";
+import { getActivePlanTierLabel } from "@/lib/billing";
 import { AppShellContext } from "@/components/app-shell-context";
 
 /**
@@ -136,7 +137,7 @@ export function AppShell({
             <div className="flex min-w-0 shrink-0 items-center gap-1.5 md:gap-2">
               {!dynamicActions && pathname !== "/app/challenges" && (
                 <Badge variant={user.hasUnlimitedAccess || user.creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
-                  {user.hasUnlimitedAccess ? "Unlimited" : `${user.creditBalance} messages`}
+                  {getActivePlanTierLabel(user) ?? `${user.creditBalance} messages`}
                 </Badge>
               )}
               {dynamicActions ?? actions}

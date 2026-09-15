@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import {
@@ -23,6 +24,7 @@ import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { AppUser, StudentProfile } from "@/lib/types";
 import { ThemeSetting } from "@/components/theme-setting";
 import { usePublishedCatalog } from "@/lib/query/catalog";
+import { patchDashboardRunningSemester } from "@/lib/query/dashboard";
 
 function engineeringBoard(value: string) {
   return normalizeBoard(value) === "IOE" ? "IOE" : "IOE";
@@ -36,18 +38,28 @@ export function SettingsForm({
   user,
   profile,
   examsSat,
+  runningSemester,
 }: {
   user: AppUser;
   profile: StudentProfile;
   examsSat: number;
+  runningSemester: {
+    communitySlug: string;
+    currentTermId?: string | null;
+    terms: Array<{ id: string; semesterNumber: number }>;
+  } | null;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [fullName, setFullName] = useState(profile.fullName);
   const [college, setCollege] = useState(profile.college);
   const [board, setBoard] = useState(engineeringBoard(profile.board));
   const [grade, setGrade] = useState(engineeringLevel(profile.grade));
   const [program, setProgram] = useState("");
-  const [semester, setSemester] = useState<string>("");
+  const [semester, setSemester] = useState(runningSemester?.currentTermId ?? "");
+  const [savingSemester, setSavingSemester] = useState(false);
+  const [semesterError, setSemesterError] = useState("");
+  const semesterSaveInFlight = useRef(false);
   const isBachelor = grade.toLowerCase().includes("bachelor");
   const [boardScore, setBoardScore] = useState(profile.boardScore ?? "");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(
@@ -115,6 +127,53 @@ export function SettingsForm({
       setProgram(programOptions[0]);
     }
   }, [program, programOptions]);
+
+  useEffect(() => {
+    setSemester(runningSemester?.currentTermId ?? "");
+  }, [runningSemester?.currentTermId]);
+
+  async function saveRunningSemester(termId: string) {
+    if (
+      !runningSemester ||
+      semesterSaveInFlight.current ||
+      termId === semester ||
+      !runningSemester.terms.some((term) => term.id === termId)
+    ) {
+      return;
+    }
+    const previousTermId = semester;
+    setSemester(termId);
+    setSemesterError("");
+    setSavingSemester(true);
+    semesterSaveInFlight.current = true;
+    try {
+      const response = await fetch(
+        `/api/communities/${encodeURIComponent(runningSemester.communitySlug)}/membership`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ termId }),
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        currentTermId?: string;
+        error?: string;
+      };
+      if (!response.ok || payload.currentTermId !== termId) {
+        throw new Error(payload.error || "Could not save your running semester.");
+      }
+      patchDashboardRunningSemester(queryClient, runningSemester.communitySlug, termId);
+      router.refresh();
+    } catch (error) {
+      setSemester(previousTermId);
+      setSemesterError(
+        error instanceof Error ? error.message : "Could not save your running semester.",
+      );
+    } finally {
+      semesterSaveInFlight.current = false;
+      setSavingSemester(false);
+    }
+  }
 
   function toggleSubject(subject: string) {
     setSelectedSubjects((current) => {
@@ -247,7 +306,6 @@ export function SettingsForm({
                 if (nextBoard !== board) {
                   setGrade("");
                   setProgram("");
-                  setSemester("");
                 }
                 setBoard(nextBoard);
               }}
@@ -266,7 +324,6 @@ export function SettingsForm({
               onChange={(event) => {
                 const nextGrade = event.target.value;
                 if (!nextGrade.toLowerCase().includes("bachelor")) {
-                  setSemester("");
                   setProgram("");
                 }
                 setGrade(nextGrade);
@@ -296,21 +353,37 @@ export function SettingsForm({
               </Select>
             </Field>
           ) : null}
-          {isBachelor && (
-            <Field label="Semester">
+          {isBachelor && runningSemester?.terms.length ? (
+            <Field
+              label="Running semester"
+              hint="This saved semester is used as the default across Nano Syllabus."
+            >
               <Select
                 value={semester}
-                onChange={(event) => setSemester(event.target.value)}
+                disabled={savingSemester}
+                aria-busy={savingSemester}
+                aria-invalid={Boolean(semesterError)}
+                onChange={(event) => void saveRunningSemester(event.target.value)}
               >
-                <option value="">Select semester</option>
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                  <option key={sem} value={String(sem)}>
-                    {sem === 1 ? "1st" : sem === 2 ? "2nd" : sem === 3 ? "3rd" : `${sem}th`} Semester
+                {runningSemester.terms.map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {term.semesterNumber === 1
+                      ? "1st"
+                      : term.semesterNumber === 2
+                        ? "2nd"
+                        : term.semesterNumber === 3
+                          ? "3rd"
+                          : `${term.semesterNumber}th`} Semester
                   </option>
                 ))}
               </Select>
+              {semesterError ? (
+                <p role="alert" className="mt-2 text-xs text-destructive">
+                  {semesterError}
+                </p>
+              ) : null}
             </Field>
-          )}
+          ) : null}
           <Field label="Last published Board Result">
             <Input value={boardScore} onChange={(event) => setBoardScore(event.target.value)} />
           </Field>

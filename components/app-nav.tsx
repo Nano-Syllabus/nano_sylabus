@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import type { AppUser } from "@/lib/types";
+import { getActivePlanTierLabel } from "@/lib/billing";
 import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import { cn } from "@/lib/utils";
 
@@ -222,7 +223,9 @@ export function AppNav({ user }: { user: AppUser }) {
               <div className="truncate text-[12px] font-medium">{user.fullName}</div>
               <div className="truncate text-[10px] text-text-muted">{user.email}</div>
               <div className="mt-0.5 text-[10px] text-text-muted">
-                {user.hasUnlimitedAccess ? "Unlimited plan" : `${user.creditBalance} messages left`}
+                {getActivePlanTierLabel(user)
+                  ? `${getActivePlanTierLabel(user)} plan`
+                  : `${user.creditBalance} messages left`}
               </div>
             </div>
           </div>

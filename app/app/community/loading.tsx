@@ -55,25 +55,48 @@ export default function CommunityHubLoading() {
         ))}
       </nav>
 
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-44 rounded-2xl border border-border bg-card p-5">
-            <div className={`h-4 w-28 ${skeleton}`} />
-            <div className={`mt-4 h-7 w-20 ${skeleton}`} />
+      <div className="mt-8 grid gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+        <div className="min-w-0">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-36 rounded-2xl border border-border bg-card p-4 sm:p-5">
+                <div className={`h-9 w-9 rounded-xl ${skeleton}`} />
+                <div className={`mt-4 h-4 w-28 ${skeleton}`} />
+                <div className={`mt-2 h-3 w-24 ${skeleton}`} />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      <div className="mt-10 grid gap-3 sm:grid-cols-2">
-        {Array.from({ length: 2 }).map((_, index) => (
-          <div key={index} className="h-52 rounded-2xl border border-border bg-card p-5">
-            <div className={`h-10 w-10 rounded-xl ${skeleton}`} />
-            <div className={`mt-5 h-3 w-28 ${skeleton}`} />
-            <div className={`mt-3 h-6 w-48 max-w-full ${skeleton}`} />
-            <div className={`mt-3 h-4 w-full ${skeleton}`} />
-            <div className={`mt-2 h-4 w-4/5 ${skeleton}`} />
+          <div className="mt-8 grid gap-3 sm:grid-cols-2">
+            {Array.from({ length: 2 }).map((_, index) => (
+              <div key={index} className="h-52 rounded-2xl border border-border bg-card p-5">
+                <div className={`h-10 w-10 rounded-xl ${skeleton}`} />
+                <div className={`mt-5 h-3 w-28 ${skeleton}`} />
+                <div className={`mt-3 h-6 w-48 max-w-full ${skeleton}`} />
+                <div className={`mt-3 h-4 w-full ${skeleton}`} />
+                <div className={`mt-2 h-4 w-4/5 ${skeleton}`} />
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+
+        <div className="min-h-[430px] rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <div className={`h-3 w-20 ${skeleton}`} />
+          <div className={`mt-3 h-6 w-56 max-w-full ${skeleton}`} />
+          <div className={`mt-2 h-4 w-24 ${skeleton}`} />
+          <div className={`mt-6 h-3 w-full ${skeleton}`} />
+          <div className="mt-2 space-y-0">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="flex items-center gap-3 border-t border-border py-4">
+                <div className={`h-3 w-5 ${skeleton}`} />
+                <div className={`size-8 rounded-full ${skeleton}`} />
+                <div className={`h-4 min-w-0 flex-1 ${skeleton}`} />
+                <div className={`h-3 w-8 ${skeleton}`} />
+                <div className={`h-3 w-8 ${skeleton}`} />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </main>
   );

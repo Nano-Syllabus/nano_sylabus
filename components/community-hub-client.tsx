@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Bell,
@@ -28,6 +29,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Share2,
+  Trophy,
   UserRoundPlus,
   Users,
   X,
@@ -40,6 +42,7 @@ import type {
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 import { cn, titleCase } from "@/lib/utils";
 import { CommunityLeaveControl } from "@/components/community-leave-control";
+import { patchDashboardRunningSemester } from "@/lib/query/dashboard";
 
 type CommunitySection = "overview" | "members";
 
@@ -163,15 +166,17 @@ function MetricCard({
   detail: string;
 }) {
   return (
-    <article className="rounded-2xl border border-border bg-bg-primary p-5">
+    <article className="rounded-2xl border border-border bg-bg-primary p-4 sm:p-5">
       <div className="flex items-start justify-between gap-4">
-        <span className="flex size-10 items-center justify-center rounded-xl bg-bg-secondary text-text-secondary">
+        <span className="flex size-9 items-center justify-center rounded-xl bg-bg-secondary text-text-secondary">
           {icon}
         </span>
-        <p className="font-display text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
+        <p className="font-display text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">
+          {value}
+        </p>
       </div>
-      <h3 className="mt-5 text-sm font-semibold">{label}</h3>
-      <p className="mt-1 text-xs leading-5 text-text-muted">{detail}</p>
+      <h3 className="mt-4 text-sm font-semibold">{label}</h3>
+      <p className="mt-1 text-[11px] leading-5 text-text-muted sm:text-xs">{detail}</p>
     </article>
   );
 }
@@ -190,6 +195,7 @@ export function CommunityHubClient({
   initialInviteOpen?: boolean;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { community } = initialData;
   const [section, setSection] = useState<CommunitySection>(initialSection);
   const [selectedTermId, setSelectedTermId] = useState(initialData.currentTermId);
@@ -422,12 +428,16 @@ export function CommunityHubClient({
           body: JSON.stringify({ termId: selectedTermId }),
         },
       );
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as {
+        currentTermId?: string;
+        error?: string;
+      };
+      if (!response.ok || payload.currentTermId !== selectedTermId) {
         setActionError(payload.error || "Could not update your semester. Try again.");
         return;
       }
       setCurrentTermId(selectedTermId);
+      patchDashboardRunningSemester(queryClient, community.slug, selectedTermId);
       router.refresh();
     } catch {
       setActionError("Could not reach NanoSyllabus. Check your connection and try again.");
@@ -557,11 +567,7 @@ export function CommunityHubClient({
       ) : null}
 
       {section === "overview" ? (
-        <CommunityOverview
-          data={initialData}
-          voteCounts={voteCounts}
-          onOpenReferral={openPeerInvite}
-        />
+        <CommunityOverview data={initialData} onOpenReferral={openPeerInvite} />
       ) : null}
       {section === "members" ? (
         <CommunityMembers data={initialData} ranking={memberRanking} />
@@ -846,45 +852,43 @@ export function CommunityHubClient({
 
 function CommunityOverview({
   data,
-  voteCounts,
   onOpenReferral,
 }: {
   data: CommunityHubData;
-  voteCounts: Record<string, number>;
   onOpenReferral: () => void;
 }) {
   return (
-    <div className="pt-8">
-      <section className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4" aria-label="Community metrics">
-        <MetricCard
-          icon={<Users className="size-5" aria-hidden="true" />}
-          label="Total members"
-          value={formatNumber(data.memberCount)}
-          detail="Active community memberships"
-        />
-        <MetricCard
-          icon={<BookOpen className="size-5" aria-hidden="true" />}
-          label="Total subjects"
-          value={formatNumber(data.subjects.length)}
-          detail={`Across ${data.community.totalSemesters} generated semesters`}
-        />
-        <MetricCard
-          icon={<FileText className="size-5" aria-hidden="true" />}
-          label="Total materials"
-          value={formatNumber(data.materialCount)}
-          detail="Files in linked subject repositories"
-        />
-        <MetricCard
-          icon={<ClipboardCheck className="size-5" aria-hidden="true" />}
-          label="Content readiness"
-          value={data.contentReadiness === null ? "—" : `${data.contentReadiness}%`}
-          detail="Subjects containing both a syllabus and Question Bank"
-        />
-      </section>
+    <div className="grid gap-8 pt-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+      <div className="min-w-0">
+        <section className="grid gap-3 sm:grid-cols-2" aria-label="Community metrics">
+          <MetricCard
+            icon={<Users className="size-5" aria-hidden="true" />}
+            label="Total members"
+            value={formatNumber(data.memberCount)}
+            detail="Active community memberships"
+          />
+          <MetricCard
+            icon={<BookOpen className="size-5" aria-hidden="true" />}
+            label="Total subjects"
+            value={formatNumber(data.subjects.length)}
+            detail={`Across ${data.community.totalSemesters} generated semesters`}
+          />
+          <MetricCard
+            icon={<FileText className="size-5" aria-hidden="true" />}
+            label="Total materials"
+            value={formatNumber(data.materialCount)}
+            detail="Files in linked subject repositories"
+          />
+          <MetricCard
+            icon={<ClipboardCheck className="size-5" aria-hidden="true" />}
+            label="Content readiness"
+            value={data.contentReadiness === null ? "—" : `${data.contentReadiness}%`}
+            detail="Subjects containing both a syllabus and Question Bank"
+          />
+        </section>
 
-      <div className="mt-10 grid gap-10 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
         <section
-          className="grid gap-3 sm:grid-cols-2"
+          className="mt-8 grid gap-3 sm:grid-cols-2"
           aria-label="Community invitations and study room"
         >
           <article className="flex min-h-52 flex-col rounded-2xl border border-border bg-bg-secondary p-5">
@@ -929,23 +933,104 @@ function CommunityOverview({
             </a>
           </article>
         </section>
-
-        {data.posts[0] ? (
-          <aside className="space-y-8" aria-label="Community highlights">
-            <section className="border-t border-border pt-6">
-              <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
-                Latest contribution
-              </p>
-              <h2 className="mt-2 font-display text-lg font-semibold">{data.posts[0].title}</h2>
-              <p className="mt-2 text-sm text-text-secondary">
-                {voteCounts[data.posts[0].id] || 0} / {data.community.contributionThreshold}{" "}
-                community votes
-              </p>
-            </section>
-          </aside>
-        ) : null}
       </div>
+
+      <CommunityTodayLeaderboard data={data} />
     </div>
+  );
+}
+
+function CommunityTodayLeaderboard({ data }: { data: CommunityHubData }) {
+  const members = [...data.members].sort(
+    (left, right) =>
+      right.todayAttempts - left.todayAttempts ||
+      right.streak - left.streak ||
+      right.xp - left.xp ||
+      left.joinedAt.localeCompare(right.joinedAt),
+  );
+  const visible = members.slice(0, 5);
+  const viewer = members.find((member) => member.isViewer);
+  if (viewer && !visible.some((member) => member.id === viewer.id)) visible.push(viewer);
+
+  return (
+    <aside
+      className="min-w-0 rounded-2xl border border-border bg-bg-primary p-5 sm:p-6"
+      aria-labelledby="community-today-leaderboard-heading"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-text-secondary">
+            <Trophy className="size-4" aria-hidden="true" />
+            <p className="text-xs font-semibold uppercase tracking-[0.14em]">Today</p>
+          </div>
+          <h2
+            id="community-today-leaderboard-heading"
+            className="mt-2 font-display text-xl font-semibold"
+          >
+            Community leaderboard
+          </h2>
+          <p className="mt-1 text-sm text-text-secondary">{data.community.name}</p>
+        </div>
+        <p className="inline-flex min-h-10 items-center text-sm text-text-secondary">
+          {formatNumber(data.memberCount)} members
+        </p>
+      </div>
+
+      <div className="mt-5 grid grid-cols-[28px_minmax(0,1fr)_42px_42px] gap-2 border-b border-border px-1 pb-2 text-[10px] font-semibold uppercase tracking-wide text-text-muted sm:grid-cols-[34px_minmax(0,1fr)_48px_48px] sm:text-[11px]">
+        <span>Rank</span>
+        <span>Member</span>
+        <span className="text-right">Today</span>
+        <span className="text-right">Streak</span>
+      </div>
+      {visible.length ? (
+        <ol>
+          {visible.map((member, index) => (
+            <li
+              key={member.id}
+              className="grid grid-cols-[28px_minmax(0,1fr)_42px_42px] items-center gap-2 border-t border-border px-1 py-3 text-sm first:border-t-0 sm:grid-cols-[34px_minmax(0,1fr)_48px_48px]"
+            >
+              <span className="text-xs font-semibold text-text-muted tabular-nums">
+                #{index + 1}
+              </span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  className={cn(
+                    "flex size-8 shrink-0 items-center justify-center rounded-full bg-bg-secondary text-xs font-semibold",
+                    member.isViewer &&
+                      "bg-[var(--community-accent)]/15 text-[var(--community-accent)] ring-1 ring-[var(--community-accent)]/30",
+                  )}
+                >
+                  {member.initials}
+                </span>
+                <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className="truncate font-medium">{member.name}</span>
+                  {member.isViewer ? (
+                    <span className="shrink-0 rounded-full bg-[var(--community-accent)]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--community-accent)]">
+                      You
+                    </span>
+                  ) : null}
+                </span>
+              </span>
+              <span className="text-right font-semibold tabular-nums">{member.todayAttempts}</span>
+              <span className="text-right text-text-secondary tabular-nums">
+                {member.streak}d
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="py-10 text-center text-sm text-text-secondary">No activity yet today.</p>
+      )}
+
+      <div className="mt-3 border-t border-border pt-3 text-center">
+        <Link
+          href={`/app/community?community=${encodeURIComponent(data.community.slug)}&tab=members&sort=today`}
+          className={`inline-flex min-h-10 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--community-accent)] hover:underline ${focusRing}`}
+        >
+          View full leaderboard <ArrowRight className="size-4" aria-hidden="true" />
+        </Link>
+      </div>
+    </aside>
   );
 }
 

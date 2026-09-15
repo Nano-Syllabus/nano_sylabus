@@ -4,6 +4,8 @@ import { SetAppShell } from "@/components/set-app-shell";
 import { SettingsForm } from "@/components/settings-form";
 import { requireOnboardedUser } from "@/lib/auth";
 import { countStudentExamsSat } from "@/lib/data/student-stats";
+import { getActiveCommunity } from "@/lib/data/active-community";
+import { getCommunity } from "@/lib/data/communities";
 import { HydrationBoundary, prefetchQueries } from "@/lib/query/hydrate";
 import { publishedCatalogServerQuery } from "@/lib/query/server";
 
@@ -19,10 +21,24 @@ export default async function SettingsPage() {
   // The auth check stays ahead of both, deliberately — it can redirect, and
   // starting work for a request that is about to be sent elsewhere is work
   // thrown away.
-  const [examsSat, dehydratedState] = await Promise.all([
+  const [examsSat, dehydratedState, activeCommunity] = await Promise.all([
     countStudentExamsSat(user.id),
     prefetchQueries((client) => client.prefetchQuery(publishedCatalogServerQuery)),
+    getActiveCommunity(user.id),
   ]);
+  const community = activeCommunity.selected
+    ? await getCommunity(activeCommunity.selected.slug, user.id)
+    : null;
+  const runningSemester =
+    community?.membership?.status === "active"
+      ? {
+          communitySlug: community.slug,
+          currentTermId: community.membership.currentTermId,
+          terms: [...community.terms]
+            .sort((left, right) => left.position - right.position)
+            .map((term) => ({ id: term.id, semesterNumber: term.semesterNumber })),
+        }
+      : null;
 
   return (
     <>
@@ -37,7 +53,12 @@ export default async function SettingsPage() {
         falls back to fetching client-side with its own retry.
       */}
       <HydrationBoundary state={dehydratedState}>
-        <SettingsForm user={user} profile={profile!} examsSat={examsSat} />
+        <SettingsForm
+          user={user}
+          profile={profile!}
+          examsSat={examsSat}
+          runningSemester={runningSemester}
+        />
       </HydrationBoundary>
     </>
   );
