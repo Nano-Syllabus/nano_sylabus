@@ -29,6 +29,9 @@ export type StudentCommunityLearningScope = {
   communitySlug: string;
   communityName: string;
   courseId: string | null;
+  /** The semester this student says they are in, off their own membership row.
+   *  Null when they have not picked one, which is the whole-course view. */
+  currentTermId: string | null;
 };
 
 /**
@@ -43,7 +46,7 @@ export async function getStudentCommunityLearningScope(
 ): Promise<StudentCommunityLearningScope | null> {
   const membershipResult = await admin
     .from("community_memberships")
-    .select("community_id,role,joined_at")
+    .select("community_id,role,joined_at,current_term_id")
     .eq("user_id", studentId)
     .eq("status", "active")
     .order("joined_at", { ascending: false });
@@ -87,6 +90,7 @@ export async function getStudentCommunityLearningScope(
     communitySlug: String(community.slug || ""),
     communityName: String(community.name || "Community"),
     courseId: community.study_course_id ? String(community.study_course_id) : null,
+    currentTermId: membership?.current_term_id ? String(membership.current_term_id) : null,
   };
 }
 

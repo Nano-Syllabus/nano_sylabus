@@ -150,17 +150,21 @@ describe("community subject publication access", () => {
         }),
       ]),
     );
+    // `currentTermId` is the student's own semester, which scopes the daily
+    // challenge queue. Null here: this fixture's memberships pick no term.
     expect(scope).toEqual({
       communityId: "community-1",
       communitySlug: "coding",
       communityName: "Coding",
       courseId: "course-1",
+      currentTermId: null,
     });
     expect(ownedScope).toEqual({
       communityId: "community-2",
       communitySlug: "my-community",
       communityName: "My Community",
       courseId: "course-2",
+      currentTermId: null,
     });
   });
 });

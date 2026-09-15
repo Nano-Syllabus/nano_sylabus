@@ -337,6 +337,33 @@ async function loadScopedChallengeMetrics(
   };
 }
 
+/**
+ * The subjects for the semester the student says they are in.
+ *
+ * A community course carries its WHOLE programme — eight semesters of it — and
+ * every published subject in it was reaching the daily queue. A first-semester
+ * student was being handed Engineering Mathematics III beside Basic Electrical
+ * Engineering: a subject they have not been taught, cannot answer, and whose
+ * failed attempts still land on their record.
+ *
+ * The semester is the student's own answer, stored on their membership row and
+ * set from the Community Hub, so this narrows to what they say they are
+ * studying rather than to a date the platform guessed.
+ *
+ * FALLS BACK RATHER THAN EMPTIES. A student who has never picked a semester, or
+ * whose pick names a term with no published subjects yet, keeps the full list —
+ * a queue with nothing in it is a worse answer than a queue that is too broad,
+ * and it is the answer a silent filter would give.
+ */
+function subjectsInCurrentTerm<T extends { term?: { id: string } }>(
+  subjects: T[],
+  currentTermId: string | null,
+) {
+  if (!currentTermId) return subjects;
+  const inTerm = subjects.filter((subject) => subject.term?.id === currentTermId);
+  return inTerm.length ? inTerm : subjects;
+}
+
 function subjectScopeKey(courseId: string | null, subjectSlug: string) {
   return `${courseId ?? "owner-private"}:${subjectSlug.trim().toLowerCase()}`;
 }
@@ -451,7 +478,10 @@ export async function getStudentChallengeDashboard(
   );
   const currentCourseId = communityScope?.courseId ?? null;
   const communitySubjects = currentCourseId
-    ? allCommunitySubjects.filter((subject) => subject.courseId === currentCourseId)
+    ? subjectsInCurrentTerm(
+        allCommunitySubjects.filter((subject) => subject.courseId === currentCourseId),
+        communityScope?.currentTermId ?? null,
+      )
     : [];
   const mastery = currentCourseId
     ? allMastery.filter((row) => row.courseId === currentCourseId)
