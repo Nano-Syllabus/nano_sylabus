@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { CommunityCatalogClient } from "@/components/community-catalog-client";
-import { LandingHeader } from "@/components/landing-header";
 import { listPublicCommunities } from "@/lib/data/communities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
-import { examThemeClass } from "@/components/exam-theme";
 
 export const dynamic = "force-dynamic";
 
