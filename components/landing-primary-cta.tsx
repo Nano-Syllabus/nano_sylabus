@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 
 export function LandingPrimaryCta({
   children,
@@ -15,26 +13,6 @@ export function LandingPrimaryCta({
   size?: "default" | "hero" | "nav";
   className?: string;
 }) {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void loadSupabaseBrowserClient()
-      .then((supabase) => supabase.auth.getSession())
-      .then(({ data: { session } }) => {
-        if (!cancelled) setIsLoggedIn(Boolean(session?.user));
-      })
-      .catch(() => {
-        // This CTA is non-gating, so a failed session check keeps the safe
-        // signed-out destination instead of blocking the landing page.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const sizeClass =
     size === "hero"
       ? "min-h-[58px] px-8 text-[15px] font-semibold"
@@ -47,10 +25,10 @@ export function LandingPrimaryCta({
 
   return (
     <Link
-      href={isLoggedIn ? "/app" : "/communities"}
+      href="/communities"
       className={`inline-flex items-center justify-center gap-2.5 rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${sizeClass} ${colorClass} ${className}`}
     >
-      <span>{isLoggedIn ? "Continue learning" : (children ?? "Start Learning")}</span>
+      <span>{children ?? "Find your program"}</span>
       <span aria-hidden="true" className="text-base font-bold leading-none">
         ↗
       </span>

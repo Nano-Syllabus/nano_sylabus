@@ -98,7 +98,7 @@ describe("community leave controls (without browser)", () => {
     );
     expect(html).toContain('aria-label="Leave Henglish community"');
   });
-  it("lets a creator open the same joined community as a student or as its admin", () => {
+  it("routes a creator's community card to its admin workspace", () => {
     const html = renderToStaticMarkup(
       createElement(CommunityCatalogClient, {
         initialCommunities: [
@@ -111,11 +111,9 @@ describe("community leave controls (without browser)", () => {
         signedIn: true,
       }),
     );
-    expect(html).toContain('href="/app/communities/henglish"');
-    expect(html).toContain("Open as student");
+    expect(html).toContain('aria-label="Open Henglish admin workspace"');
     expect(html).toContain('href="/teachers?view=communities&amp;community=henglish"');
-    expect(html).toContain("Admin workspace");
-    expect(html).toContain("do not use that join slot");
+    expect(html).toContain("Creator");
     expect(html).not.toContain("Leave Henglish community");
   });
   it("labels an owned community as full learner access", () => {

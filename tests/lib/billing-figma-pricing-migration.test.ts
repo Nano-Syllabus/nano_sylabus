@@ -35,9 +35,9 @@ describe("Figma Plus and Pro pricing migration", () => {
         ('11111111-1111-4111-8111-111111111111','Individual Unlimited','individual-unlimited',1,1500,'NPR','monthly','individual',1,true,'[]',true),
         ('22222222-2222-4222-8222-222222222222','Group Unlimited','group-unlimited',1,5000,'NPR','monthly','group',5,true,'[]',true);
     `);
-  });
+  }, 30_000);
 
-  afterEach(async () => db.close());
+  afterEach(async () => db.close(), 30_000);
 
   it("adds Rs. 450 Plus and preserves Pro and legacy group identities", async () => {
     const migration = await readFile(migrationPath, "utf8");

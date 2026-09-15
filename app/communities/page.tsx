@@ -27,10 +27,7 @@ export default async function CommunitiesPage({
   const communities = await listPublicCommunities(user?.id);
 
   return (
-    <div
-      className={`${examThemeClass} community-catalog-light hero-glow min-h-screen bg-background text-foreground`}
-    >
-      <LandingHeader />
+    <div className="min-h-screen bg-white text-[#101114]">
       <CommunityCatalogClient
         initialCommunities={communities}
         signedIn={Boolean(user)}
