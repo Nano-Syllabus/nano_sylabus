@@ -200,3 +200,111 @@ export async function readCourseLearningTopics(
     admin,
   );
 }
+
+export type CourseLearningTopicsRequest = {
+  courseId: string;
+  teacherId: string;
+  subjectSlug: string;
+};
+
+/** The key `readCourseLearningTopicsBatch` returns its results under. */
+export function courseLearningTopicsKey(request: CourseLearningTopicsRequest) {
+  return `${request.courseId}\u0000${request.teacherId}\u0000${request.subjectSlug}`;
+}
+
+/**
+ * `readCourseLearningTopics` for many subjects, in a fixed number of round trips.
+ *
+ * The single-subject version costs a `community_subjects` lookup and a topics read
+ * EACH, and the Challenge Hub calls it once per subject — so a student with thirty
+ * subjects paid sixty-odd Supabase round trips to render one page, all of them
+ * asking neighbouring rows of the same two tables. `communityIdForCourse` was
+ * already memoised for this reason; this does the same for the two queries under
+ * it.
+ *
+ * One `community_subjects` query covers every request, and
+ * `readCommunityLearningTopics` is handed all the subjects at once — which is the
+ * shape it was always written for, and which also collapses its syllabus fallback
+ * (`teacher_subject_syllabi`, `teachers`) from per-subject to once.
+ *
+ * Returns a map keyed by `courseLearningTopicsKey`. The single-subject contract is
+ * preserved exactly, because callers branch on it: `null` means "no community owns
+ * this course, go ask the creator service", while `[]` means "the community owns it
+ * and publishes nothing", which must NOT trigger that fallback.
+ */
+export async function readCourseLearningTopicsBatch(
+  requests: CourseLearningTopicsRequest[],
+  admin: SupabaseClient,
+): Promise<Map<string, CommunityLearningTopic[] | null>> {
+  const results = new Map<string, CommunityLearningTopic[] | null>();
+  if (!requests.length) return results;
+
+  const communityByCourse = new Map<string, string | null>();
+  await Promise.all(
+    [...new Set(requests.map((request) => request.courseId))].map(async (courseId) => {
+      communityByCourse.set(courseId, await communityIdForCourse(courseId, admin));
+    }),
+  );
+
+  const owned: CourseLearningTopicsRequest[] = [];
+  for (const request of requests) {
+    if (communityByCourse.get(request.courseId)) owned.push(request);
+    else results.set(courseLearningTopicsKey(request), null);
+  }
+  if (!owned.length) return results;
+
+  // Three `in` filters are a cross product rather than an exact tuple match, so
+  // this can return rows nobody asked for. That is fine and deliberate: the tuple
+  // is re-checked below and anything unmatched is dropped. Over-fetching a few
+  // neighbouring rows once beats one exact query per subject.
+  const matched = await admin
+    .from("community_subjects")
+    .select("id,name,teacher_id,external_subject_slug,community_id")
+    .in("community_id", [
+      ...new Set(owned.map((request) => communityByCourse.get(request.courseId) as string)),
+    ])
+    .in("teacher_id", [...new Set(owned.map((request) => request.teacherId))])
+    .in("external_subject_slug", [...new Set(owned.map((request) => request.subjectSlug))])
+    .eq("status", "active")
+    .eq("publication_status", "published");
+  if (matched.error) throw matched.error;
+
+  const subjectByKey = new Map<string, LearningSubject>();
+  for (const row of matched.data ?? []) {
+    for (const request of owned) {
+      if (
+        String(row.community_id) === communityByCourse.get(request.courseId) &&
+        String(row.teacher_id) === request.teacherId &&
+        String(row.external_subject_slug) === request.subjectSlug
+      ) {
+        subjectByKey.set(courseLearningTopicsKey(request), {
+          id: String(row.id),
+          name: String(row.name),
+          teacherId: request.teacherId,
+          externalSubjectSlug: request.subjectSlug,
+        });
+      }
+    }
+  }
+
+  // Owned by a community but publishing nothing: [] , never null.
+  for (const request of owned) {
+    const key = courseLearningTopicsKey(request);
+    if (!subjectByKey.has(key)) results.set(key, []);
+  }
+
+  const subjects = [...subjectByKey.values()];
+  if (!subjects.length) return results;
+
+  const topics = await readCommunityLearningTopics(subjects, admin);
+  const bySubjectId = new Map<string, CommunityLearningTopic[]>();
+  for (const topic of topics) {
+    const list = bySubjectId.get(topic.community_subject_id);
+    if (list) list.push(topic);
+    else bySubjectId.set(topic.community_subject_id, [topic]);
+  }
+  for (const [key, subject] of subjectByKey) {
+    results.set(key, bySubjectId.get(subject.id) ?? []);
+  }
+  return results;
+}

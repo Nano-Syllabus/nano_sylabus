@@ -933,11 +933,38 @@ async function resolveChallengeLane(userId: string, row: ChallengeRow, known?: C
   return { collectionKey, subject: access.subjectName || String(row.subject_name || "") };
 }
 
+/**
+ * Operator-facing text that must never be filed as a student's reading.
+ *
+ * A reading is stored once, on `/start`, and is then handed back verbatim every
+ * time the challenge or its revision doc is opened. So anything that reaches
+ * `lesson.content` is permanent until the row is cleared — which is how a
+ * challenge came to open on "GEMINI_API_KEY is not configured, so NSDI returned
+ * a grounded extractive answer from cached/retrieved evidence", under the
+ * heading "What you need to know", for as long as that row existed.
+ *
+ * Which key a server is missing is not something a student can act on. The
+ * provider has its own fallback for an unreachable writing service now
+ * (`_extractive_reading` in routers/challenge.py), so this is the second line
+ * rather than the first — but the first line lives in another service, and the
+ * cost of it failing again is durable garbage in front of a student.
+ *
+ * Dropping the paragraph leaves the lesson empty, which is already a state the
+ * app understands: `contentStatus` stays `pending`, the screen says the reading
+ * is still being written, and the background pass fetches it again. Storing
+ * nothing and retrying beats storing this and never retrying.
+ */
+const OPERATOR_DIAGNOSTIC = /\b(?:GEMINI_API_KEY|OPENAI_API_KEY|API key)\b|\bis not configured\b/i;
+
+/** Exported under a test-only name: the hygiene rule above is worth pinning. */
+export const lessonParagraphsForTest = (content: string) => lessonParagraphs(content);
+
 function lessonParagraphs(content: string) {
   return content
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((paragraph) => !OPERATOR_DIAGNOSTIC.test(paragraph));
 }
 
 function warningText(...warnings: Array<string | null | undefined | string[]>) {
@@ -1189,29 +1216,33 @@ export async function startStudentChallenge(
   if (current.status === "completed" && !options.restart) {
     return withLatestAttemptReview(userId, row, current);
   }
-  if (!sourceDocumentTopic) {
+  /**
+   * EVERY SHORT-CIRCUIT BELOW IS FOR A REOPEN, NEVER FOR A RESTART.
+   *
+   * Each one hands back content that is already on the row — which is exactly
+   * right when a student is returning to a challenge they are part-way through,
+   * and exactly wrong when they have asked for it to be built again. A restart
+   * that swapped only the paper left the lesson, the past questions and the
+   * worked examples untouched, so a reading that came out badly the first time
+   * survived every restart the student pressed.
+   *
+   * So a restart falls through to the full build below: past questions, the
+   * reading, and — behind the response — the worked examples and a fresh paper,
+   * every one of them fetched from the course API rather than read off the row.
+   */
+  if (!sourceDocumentTopic && !options.restart) {
     // A build that has not finished is not a stale paper. Reopening a challenge
     // whose tail is still running must hand back the lesson that is already
     // there — never fall through and issue a second exam alongside the one the
     // background pass is about to write.
-    if (current.content?.contentStatus === "pending" && !options.restart) {
+    if (current.content?.contentStatus === "pending") {
       restartStaleContentCompletion(userId, challengeId, current.content);
       return current;
     }
     if (hasLiveExam(current, externalAttemptId)) return current;
     if (current.content?.provider === "collection-challenge-v1") {
-      // A restart is the student explicitly asking for a fresh paper, so that one
-      // is still awaited — they are asking for the exam itself and a stale set of
-      // questions would be the wrong answer.
-      if (options.restart) {
-        return refreshStudentChallengeExam(userId, challengeId, {
-          allowCompleted: true,
-          access,
-        });
-      }
-      // A plain reopen is not. The lesson is already written and is what the
-      // student is about to read; the paper is issued behind them rather than in
-      // front of them.
+      // The lesson is already written and is what the student is about to read;
+      // the paper is issued behind them rather than in front of them.
       scheduleChallengeExamRefresh(userId, challengeId, access);
       return current;
     }
@@ -1566,7 +1597,12 @@ export async function getStudentChallengeContent(
 export async function restartStudentChallenge(userId: string, challengeId: string) {
   const detail = await getStudentChallenge(userId, challengeId);
   if (!detail) return null;
-  if (detail.status !== "completed") return startStudentChallenge(userId, challengeId);
+  // `restart` on BOTH paths. An unfinished challenge used to be sent through the
+  // ordinary open, which is the one that short-circuits on content already sitting
+  // on the row — so pressing restart on the challenge a student is actually
+  // looking at did nothing at all, no call left the app, and the reading they
+  // wanted rebuilt came straight back. Finished or not, a restart means "build
+  // this again from the course material".
   return startStudentChallenge(userId, challengeId, { restart: true });
 }
 

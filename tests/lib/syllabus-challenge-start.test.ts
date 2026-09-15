@@ -429,4 +429,64 @@ describe("starting a saved syllabus challenge", () => {
     expect(mocks.solved).toHaveBeenCalledTimes(1);
     expect(mocks.createExam).toHaveBeenCalledTimes(1);
   });
+
+  it("rebuilds an UNFINISHED challenge through the course API too", async () => {
+    // This did nothing at all. An unfinished challenge went through the ordinary
+    // open, which short-circuits on content already sitting on the row — so the
+    // one challenge a student is actually looking at was the one they could not
+    // rebuild, and no call left the app.
+    await startStudentChallenge("member", "challenge-1");
+    await settled();
+    const before = {
+      pastQuestions: mocks.pastQuestions.mock.calls.length,
+      reading: mocks.reading.mock.calls.length,
+      solved: mocks.solved.mock.calls.length,
+      createExam: mocks.createExam.mock.calls.length,
+    };
+
+    const result = await restartStudentChallenge("member", "challenge-1");
+    await settled();
+
+    expect(result?.status).toBe("started");
+    // Every step fetched again, not read back off the row.
+    expect(mocks.pastQuestions).toHaveBeenCalledTimes(before.pastQuestions + 1);
+    expect(mocks.reading).toHaveBeenCalledTimes(before.reading + 1);
+    expect(mocks.solved).toHaveBeenCalledTimes(before.solved + 1);
+    expect(mocks.createExam).toHaveBeenCalledTimes(before.createExam + 1);
+  });
+
+  it("refetches the READING on a restart, not just the paper", async () => {
+    // A restart used to swap only the exam, so a lesson that came out badly the
+    // first time survived every restart the student pressed.
+    await startStudentChallenge("member", "challenge-1");
+    await settled();
+    mocks.reading.mockResolvedValue({
+      reading: {
+        headline: "Rebuilt",
+        content: "The rebuilt reading.",
+        focus: "",
+        big_idea: "",
+        connections: [],
+        sources: [],
+      },
+      warnings: [],
+    });
+
+    const result = await restartStudentChallenge("member", "challenge-1");
+
+    expect(result?.content?.lesson?.title).toBe("Rebuilt");
+    expect(result?.content?.lesson?.content).toEqual(["The rebuilt reading."]);
+  });
+
+  it("still hands a plain reopen its stored content without calling out", async () => {
+    // The short-circuits are for a reopen and must survive the change above:
+    // returning to a challenge part-way through should cost nothing.
+    await startStudentChallenge("member", "challenge-1");
+    await settled();
+    const calls = mocks.reading.mock.calls.length;
+
+    await startStudentChallenge("member", "challenge-1");
+
+    expect(mocks.reading).toHaveBeenCalledTimes(calls);
+  });
 });

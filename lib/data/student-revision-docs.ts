@@ -1,5 +1,9 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { readCourseLearningTopics } from "@/lib/data/community-learning-topics";
+import {
+  courseLearningTopicsKey,
+  readCourseLearningTopicsBatch,
+  type CommunityLearningTopic,
+} from "@/lib/data/community-learning-topics";
 import {
   isMissingChallengeTable,
   isMissingColumn,
@@ -193,14 +197,32 @@ async function unitsByTopicKey(
   admin: ReturnType<typeof createSupabaseAdminClient>,
 ) {
   const placements = new Map<string, { unitNumber: string; position: number }>();
+  // One batch instead of a lookup per subject. Read individually this was a
+  // `community_subjects` query and a topics read EACH, and Revision asks about
+  // every subject a student has — the same round-trip pile-up the Challenge Hub
+  // had, against the same two tables.
+  //
+  // The old per-subject `.catch(() => null)` degraded one subject to "no unit
+  // placements"; a batch can only fail as a whole, so the catch does the same for
+  // all of them. That is the pre-existing fallback either way: placements are a
+  // refinement, and the caller already handles a topic having none.
+  const batch = await readCourseLearningTopicsBatch(
+    subjects.map((subject) => ({
+      courseId: subject.courseId,
+      teacherId: subject.teacherId,
+      subjectSlug: subject.subjectSlug,
+    })),
+    admin,
+  ).catch(() => new Map<string, CommunityLearningTopic[] | null>());
   await Promise.all(
     subjects.map(async (subject) => {
-      const topics = await readCourseLearningTopics(
-        subject.courseId,
-        subject.teacherId,
-        subject.subjectSlug,
-        admin,
-      ).catch(() => null);
+      const topics = batch.get(
+        courseLearningTopicsKey({
+          courseId: subject.courseId,
+          teacherId: subject.teacherId,
+          subjectSlug: subject.subjectSlug,
+        }),
+      ) ?? null;
       const scope = scopeKey(subject.courseId, subject.subjectSlug);
       for (const topic of topics ?? []) {
         const placement = {

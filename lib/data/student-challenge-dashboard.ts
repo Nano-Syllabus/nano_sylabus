@@ -13,7 +13,10 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { type PracticeTopic, type PracticeTopicStatus } from "@/lib/tenant/client";
 import { getTeacherPracticeTopics } from "@/lib/teacher-app/client";
-import { readCourseLearningTopics } from "@/lib/data/community-learning-topics";
+import {
+  courseLearningTopicsKey,
+  readCourseLearningTopicsBatch,
+} from "@/lib/data/community-learning-topics";
 import {
   getStudentCommunityLearningScope,
   listStudentCommunitySubjectAccess,
@@ -516,6 +519,29 @@ export async function getStudentChallengeDashboard(
     }
   }
 
+  // Resolved for every subject at once, before the fan-out. Read per subject this
+  // was a `community_subjects` lookup and a topics read EACH — the two queries
+  // under `communityIdForCourse`, which was memoised for exactly this reason — so
+  // a student with thirty subjects spent sixty-odd round trips on neighbouring
+  // rows of the same two tables before the page could render.
+  const sharedTopicsByKey = await timed(
+    `challenge:shared-topics-batch(${subjects.length})`,
+    () =>
+      readCourseLearningTopicsBatch(
+        subjects
+          .filter(
+            (courseSubject) =>
+              courseSubject.accessKind !== "owner-private" && Boolean(courseSubject.courseId),
+          )
+          .map((courseSubject) => ({
+            courseId: courseSubject.courseId as string,
+            teacherId: courseSubject.teacherId,
+            subjectSlug: courseSubject.subjectSlug,
+          })),
+        admin,
+      ),
+  );
+
   const subjectResults = await timed(`challenge:per-subject-fanout(${subjects.length})`, async () =>
     Promise.all(
     subjects.map(
@@ -536,8 +562,16 @@ export async function getStudentChallengeDashboard(
           // Use the same catalogue as Subject Explorer, including syllabi saved
           // before automatic publication existed. An empty community map must
           // not be replaced by a different, stale provider topic list.
+          // `?? null` keeps the old contract on a key the batch never saw: fall
+          // back to the creator service, exactly as an un-owned course did.
           const sharedTopics = courseId
-            ? await readCourseLearningTopics(courseId, courseSubject.teacherId, subjectSlug, admin)
+            ? sharedTopicsByKey.get(
+                courseLearningTopicsKey({
+                  courseId,
+                  teacherId: courseSubject.teacherId,
+                  subjectSlug,
+                }),
+              ) ?? null
             : null;
           // `unit_number` is the syllabus knowledge that says which unit a
           // subtopic sits under. It was dropped by the Pick<> here, so every

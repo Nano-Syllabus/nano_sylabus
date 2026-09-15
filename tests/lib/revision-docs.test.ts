@@ -14,9 +14,32 @@ vi.mock("@/lib/student-courses", () => ({
   // community cases below stay about community access.
   listCreatorPrivateSubjectAccess: mocks.creatorAccess,
 }));
-vi.mock("@/lib/data/community-learning-topics", () => ({
-  readCourseLearningTopics: mocks.topics,
-}));
+// Defined inside the factory: `vi.mock` is hoisted above every const, so a helper
+// declared outside it is still in the temporal dead zone when the factory runs.
+vi.mock("@/lib/data/community-learning-topics", () => {
+  const key = (request: { courseId: string; teacherId: string; subjectSlug: string }) =>
+    `${request.courseId}\u0000${request.teacherId}\u0000${request.subjectSlug}`;
+  return {
+    readCourseLearningTopics: mocks.topics,
+    courseLearningTopicsKey: key,
+    // Revision reads every subject's catalogue in one batch. Expressed through the
+    // same `mocks.topics` the cases below already drive, so `mockResolvedValue`
+    // still answers for every subject and `mockRejectedValue` still fails the read
+    // — the batch fails whole, which is the behaviour being relied on.
+    readCourseLearningTopicsBatch: async (
+      requests: Array<{ courseId: string; teacherId: string; subjectSlug: string }>,
+    ) => {
+      const resolved = new Map<string, unknown>();
+      for (const request of requests) {
+        resolved.set(
+          key(request),
+          await mocks.topics(request.courseId, request.teacherId, request.subjectSlug),
+        );
+      }
+      return resolved;
+    },
+  };
+});
 
 import { getStudentRevisionDocs } from "@/lib/data/student-revision-docs";
 
