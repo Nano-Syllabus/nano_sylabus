@@ -3,7 +3,7 @@ import { communityLearningFixture } from "../helpers/learning-database";
 const mocks = vi.hoisted(() => ({
   admin: vi.fn(),
   access: vi.fn(),
-  prerequisites: vi.fn(),
+  pastQuestions: vi.fn(),
   reading: vi.fn(),
   solved: vi.fn(),
   practiceTopics: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock("@/lib/student-courses", () => ({
 }));
 vi.mock("@/lib/teacher-app/client", async (original) => ({
   ...(await original<typeof import("@/lib/teacher-app/client")>()),
-  getTeacherChallengePrerequisites: mocks.prerequisites,
+  getTeacherChallengePastQuestions: mocks.pastQuestions,
   getTeacherChallengeReading: mocks.reading,
   getTeacherChallengeSolvedQuestions: mocks.solved,
   getTeacherPracticeTopics: mocks.practiceTopics,
@@ -50,10 +50,11 @@ describe("starting a saved syllabus challenge", () => {
     ];
     mocks.admin.mockReturnValue(db.admin);
     mocks.access.mockResolvedValue({ teacherId: "teacher-1", subjectName: "Nims" });
-    mocks.prerequisites.mockResolvedValue({
+    mocks.pastQuestions.mockResolvedValue({
       can_start: true,
       topics: [{ topic_key: "provider-42", title: "Identifiers" }],
-      prerequisites: [],
+      questions: [],
+      grounded: false,
       blockers: [],
       warnings: [],
     });
@@ -116,10 +117,10 @@ describe("starting a saved syllabus challenge", () => {
 
   it("opens the published provider topic and retains its ID for progress", async () => {
     const result = await startStudentChallenge("member", "challenge-1");
-    expect(mocks.prerequisites).toHaveBeenCalledWith("collection", {
+    expect(mocks.pastQuestions).toHaveBeenCalledWith("collection", {
       subject: "Nims",
       topics: ["provider-42"],
-      limit: 3,
+      limit: 6,
     });
     expect(mocks.reading).toHaveBeenCalledWith("collection", {
       subject: "Nims",
@@ -155,20 +156,21 @@ describe("starting a saved syllabus challenge", () => {
     db.tables.student_challenges[0].topic_key = "applied_mechanics_qb";
     db.tables.student_challenges[0].topic_title = "Applied Mechanics QB";
     mocks.access.mockResolvedValue({ teacherId: "teacher-1", subjectName: "Applied Mechanics" });
-    mocks.prerequisites.mockResolvedValue({
+    mocks.pastQuestions.mockResolvedValue({
       can_start: true,
       topics: [{ topic_key: "introduction", title: "Introduction" }],
-      prerequisites: [],
+      questions: [],
+      grounded: false,
       blockers: [],
       warnings: [],
     });
 
     const result = await startStudentChallenge("member", "challenge-1");
 
-    expect(mocks.prerequisites).toHaveBeenCalledWith("collection", {
+    expect(mocks.pastQuestions).toHaveBeenCalledWith("collection", {
       subject: "Applied Mechanics",
       topics: [],
-      limit: 3,
+      limit: 6,
     });
     expect(result?.topicKey).toBe("introduction");
     expect(result?.topicTitle).toBe("Introduction");
@@ -213,35 +215,35 @@ describe("starting a saved syllabus challenge", () => {
   });
 
   it("keeps the assignment intact when the provider is unavailable", async () => {
-    mocks.prerequisites.mockRejectedValue(new TeacherApiError("Unavailable", 503));
+    mocks.pastQuestions.mockRejectedValue(new TeacherApiError("Unavailable", 503));
     await expect(startStudentChallenge("member", "challenge-1")).rejects.toThrow();
-    expect(mocks.prerequisites).toHaveBeenCalledTimes(1);
+    expect(mocks.pastQuestions).toHaveBeenCalledTimes(1);
     expect(mocks.reading).not.toHaveBeenCalled();
     expect(mocks.solved).not.toHaveBeenCalled();
     expect(db.tables.student_challenges[0].status).toBe("assigned");
   });
 
-  it("retries prerequisites without a stale provider topic key", async () => {
-    mocks.prerequisites.mockRejectedValueOnce(new TeacherApiError("Unknown topic", 404));
+  it("retries the topic lookup without a stale provider topic key", async () => {
+    mocks.pastQuestions.mockRejectedValueOnce(new TeacherApiError("Unknown topic", 404));
 
     const result = await startStudentChallenge("member", "challenge-1");
 
     expect(result?.topicKey).toBe("provider-42");
-    expect(mocks.prerequisites).toHaveBeenNthCalledWith(1, "collection", {
+    expect(mocks.pastQuestions).toHaveBeenNthCalledWith(1, "collection", {
       subject: "Nims",
       topics: ["provider-42"],
-      limit: 3,
+      limit: 6,
     });
-    expect(mocks.prerequisites).toHaveBeenNthCalledWith(2, "collection", {
+    expect(mocks.pastQuestions).toHaveBeenNthCalledWith(2, "collection", {
       subject: "Nims",
       topics: [],
-      limit: 3,
+      limit: 6,
     });
   });
 
   it("does not start a topic when its material cannot support an exam", async () => {
-    const payload = await mocks.prerequisites();
-    mocks.prerequisites.mockResolvedValue({ ...payload, can_start: false });
+    const payload = await mocks.pastQuestions();
+    mocks.pastQuestions.mockResolvedValue({ ...payload, can_start: false });
     await expect(startStudentChallenge("member", "challenge-1")).rejects.toThrow(
       "not taught by the course material",
     );
@@ -253,7 +255,7 @@ describe("starting a saved syllabus challenge", () => {
     await expect(startStudentChallenge("member", "challenge-1")).rejects.toThrow(
       "no longer have access",
     );
-    expect(mocks.prerequisites).not.toHaveBeenCalled();
+    expect(mocks.pastQuestions).not.toHaveBeenCalled();
   });
 
   it("does not expose a completed challenge after its community access ends", async () => {
@@ -263,7 +265,7 @@ describe("starting a saved syllabus challenge", () => {
     await expect(startStudentChallenge("member", "challenge-1")).rejects.toThrow(
       "no longer have access",
     );
-    expect(mocks.prerequisites).not.toHaveBeenCalled();
+    expect(mocks.pastQuestions).not.toHaveBeenCalled();
   });
 
   it("restarts a completed challenge with a fresh sitting", async () => {
@@ -272,7 +274,7 @@ describe("starting a saved syllabus challenge", () => {
     const result = await restartStudentChallenge("member", "challenge-1");
 
     expect(result?.status).toBe("started");
-    expect(mocks.prerequisites).toHaveBeenCalledTimes(1);
+    expect(mocks.pastQuestions).toHaveBeenCalledTimes(1);
     expect(mocks.reading).toHaveBeenCalledTimes(1);
     expect(mocks.solved).toHaveBeenCalledTimes(1);
     expect(mocks.generatePracticePaper).toHaveBeenCalledTimes(1);

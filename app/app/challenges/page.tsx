@@ -1,4 +1,7 @@
-import { ChallengesDashboardClient } from "@/components/challenges-dashboard-client";
+import {
+  CHALLENGE_HUB_TITLE,
+  ChallengesDashboardClient,
+} from "@/components/challenges-dashboard-client";
 import { SetAppShell } from "@/components/set-app-shell";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getStudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
@@ -34,7 +37,7 @@ export default async function ChallengesPage({
 
   return (
     <>
-      <SetAppShell title="Challenge Hub" />
+      <SetAppShell title={CHALLENGE_HUB_TITLE} />
       <ChallengesDashboardClient key={active.selected?.id ?? "none"} dashboard={dashboard} />
     </>
   );
