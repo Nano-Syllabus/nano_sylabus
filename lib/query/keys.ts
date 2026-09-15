@@ -81,8 +81,6 @@ export const keys = {
       all: () => ["student", "challenges"] as const,
       progress: (challengeId: string) =>
         ["student", "challenges", "progress", challengeId] as const,
-      prerequisites: (challengeId: string, topicKey: string) =>
-        ["student", "challenges", "prerequisites", challengeId, topicKey] as const,
     },
   },
 

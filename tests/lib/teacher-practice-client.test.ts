@@ -4,7 +4,8 @@ import {
   askTeacherSubject,
   createTeacherChallengeExam,
   generateTeacherCollectionPaper,
-  getTeacherChallengePrerequisites,
+  generateTeacherPracticePaper,
+  getTeacherChallengePastQuestions,
   getTeacherChallengeReading,
   getTeacherChallengeSolvedQuestions,
   getTeacherCollectionReadiness,
@@ -46,10 +47,10 @@ describe("teacher collection API client", () => {
       await askTeacherSubject("collection-secret", "Physics", "Explain flux", 5, "Be concise", []);
       await getTeacherCollectionWeightage("collection-secret", "Physics & Math");
       await getTeacherCollectionReadiness("collection-secret", "Physics & Math");
-      await getTeacherChallengePrerequisites("collection-secret", {
+      await getTeacherChallengePastQuestions("collection-secret", {
         subject: "Physics",
         topics: ["Induction"],
-        limit: 3,
+        limit: 6,
       });
       await getTeacherChallengeReading("collection-secret", {
         subject: "Physics",
@@ -81,7 +82,7 @@ describe("teacher collection API client", () => {
         "/v1/collection/ask",
         "/v1/collection/weightage?subject=Physics+%26+Math",
         "/v1/collection/readiness?subject=Physics+%26+Math",
-        "/v1/collection/challenge/prerequisites",
+        "/v1/collection/challenge/past-questions",
         "/v1/collection/challenge/learn",
         "/v1/collection/challenge/solved-questions",
         "/v1/collection/challenge/exam",
@@ -101,7 +102,7 @@ describe("teacher collection API client", () => {
       expect(received[3].body).toEqual({
         subject: "Physics",
         topics: ["Induction"],
-        limit: 3,
+        limit: 6,
       });
       expect(received[4].body).toEqual({
         subject: "Physics",

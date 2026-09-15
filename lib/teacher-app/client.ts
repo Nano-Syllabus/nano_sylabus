@@ -12,16 +12,37 @@ export type TeacherChallengeTopic = {
   order_index: number;
 };
 
-export type TeacherChallengePrerequisite = TeacherChallengeTopic & {
-  taught: boolean;
-  bank_questions: number;
-  reason: string;
+/** One real question this subject's papers set on the topic. Never carries a
+ *  solution: worked solutions are step three, after the reading. */
+export type TeacherChallengePastQuestion = {
+  id: string;
+  text: string;
+  topic?: string;
+  topic_key?: string;
+  marks?: number | null;
+  year?: string;
 };
 
 export type TeacherChallengeReading = {
   headline: string;
   content: string;
   focus: string;
+  /** The one sentence the topic reduces to. Absent on a reading cached before the
+   *  concept-led rewrite, so every reader must tolerate it being missing. */
+  big_idea?: string;
+  overview?: string;
+  steps?: Array<{
+    heading?: string;
+    intuition?: string;
+    why?: string;
+    body?: string;
+    formula?: string;
+    exam_use?: string;
+    worked_example?: string;
+  }>;
+  formulas?: string[];
+  connections?: string[];
+  pitfalls?: string[];
   sources: Array<{
     chunk_id?: string;
     document_id?: string;
@@ -61,14 +82,17 @@ export type TeacherChallengeExam = {
   warning?: string | null;
 };
 
-export type TeacherChallengePrerequisitesResponse = {
+export type TeacherChallengePastQuestionsResponse = {
   collection: string;
   subject: string;
   subject_slug: string;
   topics: TeacherChallengeTopic[];
   topic_source: "syllabus" | "stored" | "index_chapters" | "none";
   can_start: boolean;
-  prerequisites: TeacherChallengePrerequisite[];
+  questions: TeacherChallengePastQuestion[];
+  /** False => the bank has nothing on this topic, so `questions` is empty rather
+   *  than filled from a neighbouring chapter. */
+  grounded: boolean;
   blockers: string[];
   warnings: string[];
   note: string;
@@ -870,12 +894,12 @@ export const getTeacherCollectionPapers = (key: string, subject?: string) =>
 export const getTeacherCollectionPaper = (key: string, paperId: string) =>
   teacherRequest<ApiRecord>(`/v1/collection/papers/${encodeURIComponent(paperId)}`, key);
 
-export const getTeacherChallengePrerequisites = (
+export const getTeacherChallengePastQuestions = (
   key: string,
   input: { subject: string; topics: string[]; limit?: number },
 ) =>
-  teacherRequest<TeacherChallengePrerequisitesResponse>(
-    "/v1/collection/challenge/prerequisites",
+  teacherRequest<TeacherChallengePastQuestionsResponse>(
+    "/v1/collection/challenge/past-questions",
     key,
     { method: "POST", body: input, timeoutMs: 120_000 },
   );

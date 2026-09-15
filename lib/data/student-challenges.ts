@@ -9,7 +9,7 @@ import {
   gradeTeacherAnswers,
   gradeTeacherPracticePaper,
   gradeTeacherPracticePaperFile,
-  getTeacherChallengePrerequisites,
+  getTeacherChallengePastQuestions,
   getTeacherChallengeReading,
   getTeacherChallengeSolvedQuestions,
   getTeacherPracticeTopics,
@@ -20,7 +20,7 @@ import {
   type TeacherChallengeExam,
   type TeacherChallengeGradeResponse,
   type TeacherChallengeLearnResponse,
-  type TeacherChallengePrerequisitesResponse,
+  type TeacherChallengePastQuestionsResponse,
   type TeacherChallengeSolvedQuestion,
   type TeacherChallengeSolvedResponse,
   type TeacherPracticePaperGradeResponse,
@@ -34,6 +34,7 @@ const UNDEFINED_TABLE = "42P01";
 const POSTGREST_MISSING_TABLE = "PGRST205";
 export const CHALLENGE_PASS_PERCENT = 40;
 export const CHALLENGE_QUESTIONS = 2;
+export const CHALLENGE_PAST_QUESTIONS = 6;
 export const CHALLENGE_MARKS_PER_QUESTION = 10;
 
 /**
@@ -104,14 +105,23 @@ export type ChallengeSolvedExample = {
   source: string;
 };
 
-export type ChallengePrerequisite = {
+/**
+ * One real question this subject's own papers set on the topic — unsolved.
+ *
+ * It replaces the prerequisite chapters that used to open a challenge. A student
+ * opening a challenge is shown what the examiner actually asks before a line of
+ * the reading is written for them; the worked solutions stay at the learning
+ * step, where they cannot be read as the answer to the topic and skipped past.
+ */
+export type ChallengePastQuestion = {
+  id: string;
+  question: string;
+  topic: string;
   topicKey: string;
-  title: string;
-  unitNumber: string;
-  orderIndex: number;
-  taught: boolean;
-  bankQuestions: number;
-  reason: string;
+  /** Null when the question bank does not print one. Never guessed. */
+  marks: number | null;
+  /** The session a real paper printed beside it, or "" when it printed none. */
+  year: string;
 };
 
 export type ChallengeExamQuestion = {
@@ -149,11 +159,13 @@ export type StudentChallengeContent = {
   upstreamChallengeId?: string;
   topicKeys?: string[];
   canStart?: boolean;
-  prerequisites?: ChallengePrerequisite[];
-  prerequisiteNote?: string;
-  prerequisiteSource?: "syllabus" | "stored" | "index_chapters" | "none";
-  prerequisiteBlockers?: string[];
-  prerequisiteWarnings?: string[];
+  pastQuestions?: ChallengePastQuestion[];
+  pastQuestionNote?: string;
+  pastQuestionSource?: "syllabus" | "stored" | "index_chapters" | "none";
+  /** False => this subject's bank has nothing on the topic. */
+  pastQuestionsGrounded?: boolean;
+  pastQuestionBlockers?: string[];
+  pastQuestionWarnings?: string[];
   learningWarning?: string | null;
   solvedWarning?: string | null;
   examWarning?: string | null;
@@ -161,6 +173,11 @@ export type StudentChallengeContent = {
     title: string;
     content: string[];
     focus: string;
+    /** The one sentence the topic reduces to. Absent on a reading written before
+     *  the concept-led rewrite, so the UI must render without it. */
+    bigIdea?: string;
+    /** Where the topic sits in the subject: what it builds on, what builds on it. */
+    connections?: string[];
     sources?: Array<{ title: string; source: string; excerpt: string }>;
   };
   solvedExamples: ChallengeSolvedExample[];
@@ -173,14 +190,6 @@ export type StudentChallengeContent = {
 export type StudentChallengeDetail = StudentChallengeSummary & {
   content: StudentChallengeContent | null;
   latestAttempt: ChallengeAttemptReview | null;
-};
-
-export type StudentChallengePrerequisiteReading = {
-  topicKey: string;
-  title: string;
-  content: string[];
-  focus: string;
-  warning: string | null;
 };
 
 export type ChallengeAttemptReview = {
@@ -296,7 +305,7 @@ function toSummary(row: ChallengeRow): StudentChallengeSummary {
     subjectName,
     topicKey: String(row.topic_key ?? ""),
     topicTitle,
-    title: topicTitle === rawTopicTitle ? String(row.title ?? "") : `Master ${topicTitle}`,
+    title: topicTitle === rawTopicTitle ? String(row.title ?? "") : topicTitle,
     recommendationReason: String(row.recommendation_reason ?? ""),
     status: (row.status as ChallengeStatus) ?? "assigned",
     durationMinutes: number(row.duration_minutes) || 20,
@@ -591,7 +600,7 @@ export async function ensureDailyChallenges(
       topic_key: recommendation.topicKey,
       topic_title: topicTitle,
       topic_blurb: recommendation.topicBlurb,
-      title: `Master ${topicTitle}`,
+      title: topicTitle,
       recommendation_reason: recommendation.reason,
       duration_minutes: 20,
     };
@@ -687,46 +696,6 @@ export async function getStudentChallengeGradeContext(userId: string, challengeI
   return {
     detail: toDetail(row),
     externalPaperId: String(row.external_paper_id ?? ""),
-  };
-}
-
-/** Loads a prerequisite lesson only when the student asks to read it. */
-export async function getStudentChallengePrerequisiteReading(
-  userId: string,
-  challengeId: string,
-  topicKey: string,
-): Promise<StudentChallengePrerequisiteReading | null> {
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from("student_challenges")
-    .select("*")
-    .eq("id", challengeId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-
-  const row = data as ChallengeRow;
-  const detail = toDetail(row);
-  const prerequisite = detail.content?.prerequisites?.find(
-    (candidate) => candidate.topicKey === topicKey,
-  );
-  if (!prerequisite) throw new Error("This topic is not a prerequisite for this challenge.");
-  if (!prerequisite.taught) {
-    throw new Error("No course notes are available for this prerequisite yet.");
-  }
-
-  const lane = await resolveChallengeLane(userId, row);
-  const learning = await getTeacherChallengeReading(lane.collectionKey, {
-    subject: lane.subject,
-    topics: [prerequisite.topicKey],
-  });
-  return {
-    topicKey: prerequisite.topicKey,
-    title: learning.reading.headline || prerequisite.title,
-    content: lessonParagraphs(learning.reading.content),
-    focus: learning.reading.focus || "",
-    warning: warningText(learning.warnings),
   };
 }
 
@@ -848,11 +817,7 @@ function collectionKeyForTeacher(teacherId: string) {
  * directly and once again inside here — before a single upstream call had
  * started. The caller that has already authorized the row passes what it found.
  */
-async function resolveChallengeLane(
-  userId: string,
-  row: ChallengeRow,
-  known?: ChallengeAccess,
-) {
+async function resolveChallengeLane(userId: string, row: ChallengeRow, known?: ChallengeAccess) {
   const access = known ?? (await requireChallengeAccess(userId, row));
   const collectionKey = await collectionKeyForTeacher(access.teacherId);
   if (!collectionKey) {
@@ -933,42 +898,49 @@ function contentWithExam(
  * Steps one and two — the syllabus ordering and the reading — and nothing else.
  *
  * This is deliberately everything the student can see BEFORE they need a worked
- * example, because it is what `/start` now waits for. `prerequisites` costs no
- * model call at all (it is the subject's own chapter order) and the reading is
- * usually served from the collection's cache, so this half is cheap. The worked
- * examples and the exam are built behind the response by
+ * example, because it is what `/start` now waits for. The past questions cost no
+ * model call at all (they are lifted off the subject's own question bank) and the
+ * reading is usually served from the collection's cache, so this half is cheap.
+ * The worked examples and the exam are built behind the response by
  * `runChallengeContentCompletion`, which returns here through `contentStatus`.
  */
 function challengeLessonContent(
-  prerequisites: TeacherChallengePrerequisitesResponse,
+  pastQuestions: TeacherChallengePastQuestionsResponse,
   learning: TeacherChallengeLearnResponse,
 ): StudentChallengeContent {
+  const topicKeys = (pastQuestions.topics || []).map((topic) => topic.topic_key).filter(Boolean);
+  const topicTitle = pastQuestions.topics?.[0]?.title || "this topic";
   return {
     provider: "collection-challenge-v1",
     contentStatus: "pending",
     contentPendingSince: new Date().toISOString(),
     contentError: null,
-    topicKeys: (prerequisites.topics || []).map((topic) => topic.topic_key).filter(Boolean),
-    canStart: prerequisites.can_start,
-    prerequisites: (prerequisites.prerequisites || []).map((prerequisite) => ({
-      topicKey: prerequisite.topic_key,
-      title: prerequisite.title,
-      unitNumber: prerequisite.unit_number || "",
-      orderIndex: number(prerequisite.order_index),
-      taught: prerequisite.taught,
-      bankQuestions: number(prerequisite.bank_questions),
-      reason: prerequisite.reason,
+    topicKeys,
+    canStart: pastQuestions.can_start,
+    pastQuestions: (pastQuestions.questions || []).map((question) => ({
+      id: String(question.id || ""),
+      question: String(question.text || ""),
+      topic: question.topic || topicTitle,
+      topicKey: question.topic_key || topicKeys[0] || "",
+      // Never defaulted to a number. A marks figure the bank did not print is a
+      // figure a student would read as the examiner's, and it would be ours.
+      marks:
+        question.marks === null || question.marks === undefined ? null : number(question.marks),
+      year: question.year || "",
     })),
-    prerequisiteNote: prerequisites.note || "",
-    prerequisiteSource: prerequisites.topic_source,
-    prerequisiteBlockers: prerequisites.blockers || [],
-    prerequisiteWarnings: prerequisites.warnings || [],
+    pastQuestionNote: pastQuestions.note || "",
+    pastQuestionSource: pastQuestions.topic_source,
+    pastQuestionsGrounded: pastQuestions.grounded,
+    pastQuestionBlockers: pastQuestions.blockers || [],
+    pastQuestionWarnings: pastQuestions.warnings || [],
     learningWarning: warningText(learning.warnings),
     solvedWarning: null,
     lesson: {
       title: learning.reading.headline || "What you need to know",
       content: lessonParagraphs(learning.reading.content),
       focus: learning.reading.focus || "",
+      bigIdea: learning.reading.big_idea || "",
+      connections: (learning.reading.connections || []).filter(Boolean),
       sources: (learning.reading.sources || []).map((source) => ({
         title: source.chapter?.trim() || source.filename?.trim() || "Course material",
         source: source.source_path?.trim() || source.filename?.trim() || "Indexed source",
@@ -1040,14 +1012,14 @@ function hasLiveExam(detail: StudentChallengeDetail, externalAttemptId: string) 
  * It used to build all four steps in one request and measured about thirty
  * seconds: three to four Supabase round trips for access (paid TWICE, because
  * `resolveChallengeLane` re-resolved what this function had already resolved),
- * then a blocking `/prerequisites` call, then a fan-out whose slowest leg wrote
+ * then a blocking step-one call, then a fan-out whose slowest leg wrote
  * two exam questions and their reference answers from scratch on every single
  * open. The student sat on a spinner for all of it and then landed on step one,
  * which needs none of it.
  *
- * So the wait is now only what step one and step two render: the syllabus
- * ordering (no model call — it is the subject's own chapter order) and the
- * reading (normally served from the collection's cache). The worked examples and
+ * So the wait is now only what the first two steps render: the topic's past
+ * questions (no model call — they are lifted off the subject's own question
+ * bank) and the reading (normally served from the collection's cache). The worked examples and
  * the exam are handed to `runChallengeContentCompletion` behind the response,
  * and they land while the student is still reading. `content.contentStatus` says
  * which state the row is in, and readers pick the rest up through
@@ -1098,7 +1070,7 @@ export async function startStudentChallenge(
   }
 
   const lane = await resolveChallengeLane(userId, row, access);
-  const prerequisiteRequest = {
+  const topicRequest = {
     subject: lane.subject,
     // A legacy row may point at the uploaded QB/syllabus file itself. Let the
     // provider choose a real syllabus topic instead of building a challenge on
@@ -1106,35 +1078,37 @@ export async function startStudentChallenge(
     topics: sourceDocumentTopic
       ? []
       : [String(row.topic_key || row.topic_title || "")].filter(Boolean),
-    limit: 3,
+    // How many past questions step one shows — enough to recognise the shape of
+    // what gets asked, few enough to read before starting the reading.
+    limit: CHALLENGE_PAST_QUESTIONS,
   };
-  let prerequisites: TeacherChallengePrerequisitesResponse;
+  let pastQuestions: TeacherChallengePastQuestionsResponse;
   try {
-    prerequisites = await getTeacherChallengePrerequisites(lane.collectionKey, prerequisiteRequest);
+    pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, topicRequest);
   } catch (error) {
     // Daily rows assigned before the collection-scoped wiring may carry a
     // legacy topic key. Let the API choose the real highest-weight topic once.
     if (!(error instanceof TeacherApiError) || ![404, 422].includes(error.status)) throw error;
-    prerequisites = await getTeacherChallengePrerequisites(lane.collectionKey, {
-      ...prerequisiteRequest,
+    pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, {
+      ...topicRequest,
       topics: [],
     });
   }
-  if (!prerequisites.can_start) {
+  if (!pastQuestions.can_start) {
     throw new Error(
       "This topic is not taught by the course material yet, so its challenge cannot start.",
     );
   }
-  const selectedTopic = prerequisites.topics?.[0];
-  const selectedTopicKeys = (prerequisites.topics || [])
+  const selectedTopic = pastQuestions.topics?.[0];
+  const selectedTopicKeys = (pastQuestions.topics || [])
     .map((topic) => topic.topic_key)
     .filter(Boolean);
   const learning = await getTeacherChallengeReading(lane.collectionKey, {
     subject: lane.subject,
     topics: selectedTopicKeys,
   });
-  const title = `Master ${selectedTopic?.title || row.topic_title || lane.subject}`;
-  const content = challengeLessonContent(prerequisites, learning);
+  const title = String(selectedTopic?.title || row.topic_title || lane.subject);
+  const content = challengeLessonContent(pastQuestions, learning);
   const now = new Date().toISOString();
   const { data, error } = await admin
     .from("student_challenges")

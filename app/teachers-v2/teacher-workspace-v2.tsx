@@ -15,8 +15,10 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { CommunityStudySpaceClient } from "@/components/community-study-space-client";
-const CommunityTopicExtractionControl = dynamic(
-  () => import("@/components/community-topic-extraction-control").then((m) => m.CommunityTopicExtractionControl),
+const CommunityTopicExtractionControl = dynamic(() =>
+  import("@/components/community-topic-extraction-control").then(
+    (m) => m.CommunityTopicExtractionControl,
+  ),
 );
 const TeacherCoursesClient = dynamic(
   () => import("@/components/teacher-courses-client").then((m) => m.TeacherCoursesClient),
@@ -31,6 +33,7 @@ import {
 } from "@/lib/teacher-score-insights";
 import {
   isTeacherSyllabusFileSupported,
+  TEACHER_MATERIAL_FILE_ACCEPT,
   TEACHER_SYLLABUS_FILE_ACCEPT,
   TEACHER_UPLOAD_MAX_LABEL,
   teacherUploadSizeError,
@@ -390,9 +393,14 @@ function safeCommunityReturnTo(value: string | null) {
   }
 }
 
+function byteSizeLabel(bytes: number) {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function fileSizeLabel(file: File) {
-  if (file.size < 1024 * 1024) return `${Math.max(1, Math.round(file.size / 1024))} KB`;
-  return `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+  return byteSizeLabel(file.size);
 }
 
 function selectedFilesTitle(files: File[], singular: string, plural: string) {
@@ -1090,6 +1098,292 @@ async function uploadTeacherDocument(file: File, path: string) {
   );
 }
 
+/**
+ * Whether folder links work here — null until a `drive-resolve` has told us.
+ *
+ * It starts UNKNOWN rather than true because the hint text is read before
+ * anything is pasted, and promising a folder import that this deployment cannot
+ * do is worse than saying nothing about folders at all.
+ */
+let driveFolderSupport: boolean | null = null;
+
+type DriveCandidate = {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  supported: boolean;
+  tooLarge: boolean;
+};
+
+/** Ask the server what a pasted Drive link points at, without importing it yet. */
+async function resolveDriveLink(link: string, path: string) {
+  const payload = await responsePayload(
+    await fetch("/api/teacher/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ action: "drive-resolve", path, link }),
+    }),
+  );
+  // Whether a FOLDER link can be read at all depends on the deployment having a
+  // Drive API key: listing a folder's children is an API call, and there is no
+  // credential-free way to make it. A single public file needs no key.
+  driveFolderSupport = payload.folderSupport === true;
+  const files = Array.isArray(payload.files) ? payload.files : [];
+  return files.map((item) => {
+    const record = asRecord(item);
+    return {
+      id: text(record.id),
+      name: text(record.name),
+      mimeType: text(record.mimeType),
+      sizeBytes: Number(record.sizeBytes) || 0,
+      supported: record.supported !== false,
+      tooLarge: record.tooLarge === true,
+    } satisfies DriveCandidate;
+  });
+}
+
+type DriveQueueItem = {
+  id: string;
+  fileName: string;
+  shelf: string;
+  destinationPath: string;
+  status: "queued" | "importing" | "done" | "failed";
+  error: string;
+  warning: string;
+};
+
+function toQueueItem(value: unknown): DriveQueueItem {
+  const record = asRecord(value);
+  const status = text(record.status);
+  return {
+    id: text(record.id),
+    fileName: text(record.fileName) || "Drive file",
+    shelf: text(record.shelf),
+    destinationPath: text(record.destinationPath),
+    status: (["queued", "importing", "done", "failed"].includes(status)
+      ? status
+      : "queued") as DriveQueueItem["status"],
+    error: text(record.error),
+    warning: text(record.warning),
+  };
+}
+
+/**
+ * Hand a set of Drive files to the import queue and return immediately.
+ *
+ * Deliberately NOT the two-step staged flow `uploadTeacherDocument` uses. That
+ * one exists because the bytes start in the creator's browser and must not pass
+ * through the deployment's request-body limit; these bytes never touch the
+ * browser at all — the server fetches them from Drive directly.
+ *
+ * And deliberately not one request per file any more. The whole folder is one
+ * enqueue, the importing happens behind it, and the creator is free to close
+ * the dialog the moment this resolves.
+ */
+async function enqueueDriveImports(files: DriveCandidate[], path: string, link: string) {
+  const payload = await responsePayload(
+    await fetch("/api/teacher/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        action: "drive-enqueue",
+        path,
+        link,
+        files: files.map((file) => ({
+          fileId: file.id,
+          fileName: file.name,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+        })),
+      }),
+    }),
+  );
+  return Number(payload.queuedCount) || 0;
+}
+
+/** Read the queue. Also nudges a drain when there is work and nothing running —
+ *  a serverless drain can be cut short, and polling is when we find out. */
+async function readDriveQueue() {
+  const payload = await responsePayload(
+    await fetch("/api/teacher/drive-queue", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    }),
+  );
+  const items = Array.isArray(payload.items) ? payload.items.map(toQueueItem) : [];
+  return { items, unavailable: payload.unavailable === true };
+}
+
+function nudgeDriveQueue() {
+  void fetch("/api/teacher/drive-queue", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ action: "drain" }),
+  }).catch(() => {});
+}
+
+/**
+ * Live status for the import queue.
+ *
+ * Shown inside the upload dialog, but it is not the dialog's progress bar: it
+ * reads the server's queue, so it says the same thing after a reload, on another
+ * device, and to a creator who closed this dialog ten minutes ago and came back.
+ */
+function DriveImportQueue({ onSettled }: { onSettled?: () => void }) {
+  const [items, setItems] = useState<DriveQueueItem[]>([]);
+  const [unavailable, setUnavailable] = useState(false);
+  const settledRef = useRef(0);
+  /**
+   * The callback is read through a ref rather than depended on.
+   *
+   * Both call sites pass an inline arrow, so its identity changes on every
+   * render of the workspace — and as an effect dependency that would tear down
+   * and restart the polling loop each time, which is both a leak of timers and a
+   * queue that never settles into its 3-second rhythm.
+   */
+  const onSettledRef = useRef(onSettled);
+  onSettledRef.current = onSettled;
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let idleRounds = 0;
+
+    async function tick() {
+      try {
+        const { items: next, unavailable: missing } = await readDriveQueue();
+        if (cancelled) return;
+        setItems(next);
+        setUnavailable(missing);
+        if (missing) return; // Nothing to poll for on a deployment without the table.
+
+        const pending = next.filter(
+          (item) => item.status === "queued" || item.status === "importing",
+        ).length;
+        const settled = next.length - pending;
+        // Refresh the shelf only when something new actually landed, rather than
+        // on every poll — the document list is a real request.
+        if (settled > settledRef.current) onSettledRef.current?.();
+        settledRef.current = settled;
+
+        if (pending) {
+          // Two quiet rounds with work still queued means no drain is running —
+          // its function was cut short, or the enqueue's never started. Start one.
+          idleRounds = next.some((item) => item.status === "importing") ? 0 : idleRounds + 1;
+          if (idleRounds >= 2) {
+            nudgeDriveQueue();
+            idleRounds = 0;
+          }
+        }
+        // Keeps polling when idle, slowly: this dialog is where a creator queues
+        // the NEXT folder, and a loop that stopped at zero would show that one
+        // nothing at all.
+        timer = setTimeout(tick, pending ? 3_000 : 10_000);
+      } catch {
+        // A failed poll is not worth showing: the queue is durable and the next
+        // tick reads it again.
+        if (!cancelled) timer = setTimeout(tick, 10_000);
+      }
+    }
+
+    void tick();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  if (unavailable) {
+    return (
+      <p className="mt-4 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+        The import queue is not available on this deployment. Run the latest database migration.
+      </p>
+    );
+  }
+  if (!items.length) return null;
+
+  const pending = items.filter(
+    (item) => item.status === "queued" || item.status === "importing",
+  ).length;
+  const failed = items.filter((item) => item.status === "failed").length;
+
+  return (
+    <section
+      className="mt-4 rounded-lg border border-border bg-bg-secondary p-3"
+      aria-live="polite"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">
+          {pending ? `Importing in the background · ${pending} left` : "Import queue"}
+        </p>
+        <p className="text-xs text-text-muted">
+          {items.length - pending} of {items.length} finished
+          {failed ? ` · ${failed} failed` : ""}
+        </p>
+      </div>
+      <ul className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border">
+        {items.map((item) => (
+          <li key={item.id} className="bg-bg-primary px-3 py-2">
+            <div className="flex min-h-9 items-center gap-3">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs",
+                  item.status === "done"
+                    ? "bg-success/15 text-success"
+                    : item.status === "failed"
+                      ? "bg-destructive/15 text-destructive"
+                      : "bg-border text-text-muted",
+                )}
+              >
+                {item.status === "done" ? "✓" : item.status === "failed" ? "!" : "·"}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm">{item.fileName}</span>
+              <span className="shrink-0 text-xs text-text-muted">
+                {item.status === "queued"
+                  ? "Queued"
+                  : item.status === "importing"
+                    ? "Importing…"
+                    : item.status === "done"
+                      ? "Indexed"
+                      : "Failed"}
+              </span>
+            </div>
+            {item.error ? <p className="mt-1 pl-9 text-xs text-destructive">{item.error}</p> : null}
+            {item.warning ? (
+              <p className="mt-1 pl-9 text-xs text-text-muted">{item.warning}</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {pending ? (
+        <p className="mt-2 text-xs text-text-muted">
+          You can close this dialog — importing continues without it.
+        </p>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          onClick={() => {
+            void fetch("/api/teacher/drive-queue", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify({ action: "clear", failed: true }),
+            })
+              .then(() => setItems([]))
+              .catch(() => {});
+          }}
+        >
+          Clear finished
+        </Button>
+      )}
+    </section>
+  );
+}
+
 function Dialog({
   title,
   onClose,
@@ -1532,7 +1826,8 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   const selectedSubject =
     workspace?.subjects.find((subject) => subject.slug === selectedSlug) || null;
   const selectedCommunitySubject = dashboard?.communityWorkspace?.canManage
-    ? dashboard.communityWorkspace.terms.flatMap((term) => term.subjects)
+    ? dashboard.communityWorkspace.terms
+        .flatMap((term) => term.subjects)
         .find((subject) => subject.externalSubjectSlug === selectedSubject?.slug)
     : undefined;
   const subjectDocuments = useMemo(
@@ -2036,58 +2331,58 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           ) : null}
           {view === "subjects" && selectedSubject ? (
             <>
-            {selectedCommunitySubject && dashboard?.communityWorkspace ? (
-              <div className="mb-5">
-                <CommunityTopicExtractionControl
-                  key={selectedCommunitySubject.id}
-                  communitySlug={dashboard.communityWorkspace.slug}
-                  subject={selectedCommunitySubject}
-                  onExtracted={loadDashboard}
-                />
-              </div>
-            ) : null}
-            <SubjectView
-              subject={selectedSubject}
-              documents={subjectDocuments}
-              sourceTree={workspace.sourceTree}
-              tab={subjectTab}
-              onTab={setSubjectTab}
-              onBack={() => {
-                setSelectedSlug("");
-                window.history.pushState(
-                  null,
-                  "",
-                  teacherSubjectsHref({
-                    community: communitySlug,
-                    term: communityTermId,
-                    library: showSubjectLibrary || !communitySlug,
-                  }),
-                );
-              }}
-              onUpload={(shelf) => setDialog({ type: "upload", shelf })}
-              onCreateFolder={(shelf) => setDialog({ type: "create-folder", shelf })}
-              onDocument={(document) => setDialog({ type: "document", document })}
-              syllabus={
-                syllabi[selectedSubject.slug] || {
-                  state: "idle",
-                  structure: [],
-                  updatedAt: null,
-                  error: "",
+              {selectedCommunitySubject && dashboard?.communityWorkspace ? (
+                <div className="mb-5">
+                  <CommunityTopicExtractionControl
+                    key={selectedCommunitySubject.id}
+                    communitySlug={dashboard.communityWorkspace.slug}
+                    subject={selectedCommunitySubject}
+                    onExtracted={loadDashboard}
+                  />
+                </div>
+              ) : null}
+              <SubjectView
+                subject={selectedSubject}
+                documents={subjectDocuments}
+                sourceTree={workspace.sourceTree}
+                tab={subjectTab}
+                onTab={setSubjectTab}
+                onBack={() => {
+                  setSelectedSlug("");
+                  window.history.pushState(
+                    null,
+                    "",
+                    teacherSubjectsHref({
+                      community: communitySlug,
+                      term: communityTermId,
+                      library: showSubjectLibrary || !communitySlug,
+                    }),
+                  );
+                }}
+                onUpload={(shelf) => setDialog({ type: "upload", shelf })}
+                onCreateFolder={(shelf) => setDialog({ type: "create-folder", shelf })}
+                onDocument={(document) => setDialog({ type: "document", document })}
+                syllabus={
+                  syllabi[selectedSubject.slug] || {
+                    state: "idle",
+                    structure: [],
+                    updatedAt: null,
+                    error: "",
+                  }
                 }
-              }
-              setSyllabus={(next) =>
-                setSyllabi((current) => ({ ...current, [selectedSubject.slug]: next }))
-              }
-              chat={chatMessages[selectedSubject.slug] || []}
-              setChat={(next) =>
-                setChatMessages((current) => ({ ...current, [selectedSubject.slug]: next }))
-              }
-              onSubjectRemoved={async (message) => {
-                setSelectedSlug("");
-                setToast(message);
-                await Promise.all([loadWorkspace(), loadDashboard()]);
-              }}
-            />
+                setSyllabus={(next) =>
+                  setSyllabi((current) => ({ ...current, [selectedSubject.slug]: next }))
+                }
+                chat={chatMessages[selectedSubject.slug] || []}
+                setChat={(next) =>
+                  setChatMessages((current) => ({ ...current, [selectedSubject.slug]: next }))
+                }
+                onSubjectRemoved={async (message) => {
+                  setSelectedSlug("");
+                  setToast(message);
+                  await Promise.all([loadWorkspace(), loadDashboard()]);
+                }}
+              />
             </>
           ) : null}
           {view === "settings" ? (
@@ -2212,6 +2507,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               if (jobId) void pollIndexingJob(jobId, fileName);
             });
           }}
+          onQueueSettled={() => void loadWorkspace()}
         />
       ) : null}
       {dialog?.type === "create-folder" && selectedSubject ? (
@@ -4582,6 +4878,7 @@ function ClassroomDetailView({
                 setShowUploadMaterialModal(false);
                 await onChanged(result.message);
               }}
+              onQueueSettled={() => void onChanged("Drive import indexed")}
             />
           ) : null}
           {materialDocument ? (
@@ -10430,6 +10727,7 @@ function UploadDialog({
   shelf,
   onClose,
   onUploaded,
+  onQueueSettled,
 }: {
   subject: TeacherSubject;
   shelf: Shelf;
@@ -10438,66 +10736,194 @@ function UploadDialog({
     message: string;
     jobs: Array<{ jobId: string; fileName: string }>;
   }) => void;
+  /** Called when a background import lands, so the shelf can pick it up. */
+  onQueueSettled?: () => void;
 }) {
+  const [source, setSource] = useState<"files" | "drive">("files");
   const [files, setFiles] = useState<File[]>([]);
+  const [link, setLink] = useState("");
+  const [driveFiles, setDriveFiles] = useState<DriveCandidate[]>([]);
+  const [resolving, setResolving] = useState(false);
+  const [folderSupport, setFolderSupport] = useState<boolean | null>(driveFolderSupport);
   const shelfRoot = `${subject.folderPath}/${shelf}`;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [uploadStatus, setUploadStatus] = useState({ current: 0, total: 0 });
+  /** How many files this dialog has handed to the queue. Non-zero switches the
+   *  footer from "Cancel / Queue" to "Done", because the work is already away. */
+  const [queuedCount, setQueuedCount] = useState(0);
   const completedJobs = useRef<Array<{ jobId: string; fileName: string }>>([]);
-  const accept =
-    shelf === "Syllabus"
-      ? TEACHER_SYLLABUS_FILE_ACCEPT
-      : ".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp";
+  const accept = shelf === "Syllabus" ? TEACHER_SYLLABUS_FILE_ACCEPT : TEACHER_MATERIAL_FILE_ACCEPT;
+  // A file that cannot be read by this shelf, or is over the ceiling, is shown
+  // in the list and skipped — telling the creator WHICH of twenty files was left
+  // out is the whole point of resolving before importing.
+  const importable = driveFiles.filter((file) => file.supported && !file.tooLarge);
+  const pending = source === "files" ? files.length : importable.length;
+
+  /** One item's worth of work, whichever source it came from. */
+  type Job = { name: string; run: () => Promise<ApiRecord> };
+
+  async function runJobs(jobs: Job[], verb: string) {
+    setBusy(true);
+    setError("");
+    setUploadStatus({ current: 0, total: jobs.length });
+    const failed: Array<{ name: string; error: string }> = [];
+    const warnings: string[] = [];
+
+    for (const [index, job] of jobs.entries()) {
+      setUploadStatus({ current: index + 1, total: jobs.length });
+      try {
+        const payload = await job.run();
+        completedJobs.current.push({ jobId: text(payload.jobId), fileName: job.name });
+        const warning = text(payload.previewWarning);
+        if (warning) warnings.push(`${job.name}: ${warning}`);
+      } catch (caught) {
+        failed.push({
+          name: job.name,
+          error: caught instanceof Error ? caught.message : `Could not ${verb} this file.`,
+        });
+      }
+    }
+    return { failed, warnings };
+  }
+
+  function reportFailures(
+    failed: Array<{ name: string; error: string }>,
+    keep: () => void,
+    verb: string,
+  ) {
+    keep();
+    setError(
+      `${failed.length} file${failed.length === 1 ? "" : "s"} could not be ${verb}:\n${failed
+        .map((item) => `${item.name}: ${item.error}`)
+        .join(
+          "\n",
+        )}\n\nSuccessful files are already indexing. Retry to ${verb === "uploaded" ? "upload" : "import"} only the files listed here.`,
+    );
+    setBusy(false);
+    setUploadStatus({ current: 0, total: 0 });
+  }
+
+  function finish(warnings: string[], verb: string) {
+    const count = completedJobs.current.length;
+    onUploaded({
+      message: warnings.length
+        ? warnings.join("\n")
+        : `${count} file${count === 1 ? "" : "s"} ${verb} and indexing started`,
+      jobs: completedJobs.current,
+    });
+  }
+
+  async function checkLink() {
+    const pasted = link.trim();
+    if (!pasted) {
+      setError("Paste a Google Drive link first.");
+      return;
+    }
+    setResolving(true);
+    setError("");
+    setDriveFiles([]);
+    try {
+      const resolved = await resolveDriveLink(pasted, shelfRoot);
+      setFolderSupport(driveFolderSupport);
+      setDriveFiles(resolved);
+      const skipped = resolved.filter((file) => !file.supported || file.tooLarge);
+      if (skipped.length) {
+        setError(
+          `${skipped.length} file${skipped.length === 1 ? "" : "s"} will be skipped:\n${skipped
+            .map(
+              (file) =>
+                `${file.name}: ${file.tooLarge ? `larger than ${TEACHER_UPLOAD_MAX_LABEL}` : `${shelf} cannot read this type`}`,
+            )
+            .join("\n")}`,
+        );
+      }
+    } catch (caught) {
+      // A folder link refused for want of a key is itself the answer to "can
+      // this deployment read folders", so the hint stops offering it.
+      if (caught instanceof ResponseError && caught.code === "unsupported") {
+        driveFolderSupport = false;
+        setFolderSupport(false);
+      }
+      setError(caught instanceof Error ? caught.message : "That link could not be read.");
+    } finally {
+      setResolving(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (source === "drive") {
+      // A link the creator typed but never checked should import, not scold.
+      if (!driveFiles.length) {
+        await checkLink();
+        return;
+      }
+      if (!importable.length) {
+        // "cannot be added to this shelf" reads as a file-TYPE problem, and for a
+        // single oversize PDF that is simply the wrong explanation.
+        const oversize = driveFiles.filter((file) => file.tooLarge).length;
+        const wrongType = driveFiles.filter((file) => !file.supported).length;
+        setError(
+          oversize && !wrongType
+            ? `${oversize === 1 ? "That file is" : `All ${oversize} files are`} larger than ${TEACHER_UPLOAD_MAX_LABEL}, which is the most this portal accepts.`
+            : "None of the files at that link can be added to this shelf.",
+        );
+        return;
+      }
+      /**
+       * Queue and go.
+       *
+       * The dialog's job ends here: the files are written down server-side and
+       * the importing happens behind this call. It used to sit on a per-file
+       * loop with the dialog locked open, which meant a twenty-file folder held
+       * the creator hostage and a closed lid lost the remainder.
+       */
+      setBusy(true);
+      setError("");
+      try {
+        const count = await enqueueDriveImports(importable, shelfRoot, link.trim());
+        /**
+         * The dialog stays OPEN, and shows the queue.
+         *
+         * Closing it on success would have been the obvious move, and it is the
+         * wrong one: the creator has just handed over twenty files and the only
+         * thing they want to know is which of them worked. `onUploaded` closes
+         * this dialog, so it is not called — the queue panel below is the
+         * report, and Done dismisses it once they have read it.
+         */
+        setQueuedCount((current) => current + count);
+        setDriveFiles([]);
+        setLink("");
+      } catch (caught) {
+        setError(
+          caught instanceof Error ? caught.message : "Those files could not be queued for import.",
+        );
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     if (!files.length) {
       setError("Choose one or more files first.");
       return;
     }
-    setBusy(true);
-    setError("");
-    setUploadStatus({ current: 0, total: files.length });
-    const failed: Array<{ file: File; error: string }> = [];
-    const warnings: string[] = [];
-
-    for (const [index, file] of files.entries()) {
-      setUploadStatus({ current: index + 1, total: files.length });
-      try {
-        const payload = await uploadTeacherDocument(file, shelfRoot);
-        completedJobs.current.push({ jobId: text(payload.jobId), fileName: file.name });
-        const warning = text(payload.previewWarning);
-        if (warning) warnings.push(`${file.name}: ${warning}`);
-      } catch (caught) {
-        failed.push({
-          file,
-          error: caught instanceof Error ? caught.message : "Could not upload this file.",
-        });
-      }
-    }
-
+    const { failed, warnings } = await runJobs(
+      files.map((file) => ({ name: file.name, run: () => uploadTeacherDocument(file, shelfRoot) })),
+      "upload",
+    );
     if (failed.length) {
-      setFiles(failed.map((item) => item.file));
-      setError(
-        `${failed.length} file${failed.length === 1 ? "" : "s"} could not be uploaded:\n${failed
-          .map((item) => `${item.file.name}: ${item.error}`)
-          .join(
-            "\n",
-          )}\n\nSuccessful files are already indexing. Retry to upload only the files listed here.`,
+      const names = new Set(failed.map((item) => item.name));
+      reportFailures(
+        failed,
+        () => setFiles(files.filter((file) => names.has(file.name))),
+        "uploaded",
       );
-      setBusy(false);
-      setUploadStatus({ current: 0, total: 0 });
       return;
     }
-
-    const uploadedCount = completedJobs.current.length;
-    onUploaded({
-      message: warnings.length
-        ? warnings.join("\n")
-        : `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} uploaded and indexing started`,
-      jobs: completedJobs.current,
-    });
+    finish(warnings, "uploaded");
   }
 
   return (
@@ -10508,52 +10934,162 @@ function UploadDialog({
           {subject.folderPath}/{shelf}
         </p>
       </div>
+      <div
+        className="mt-5 flex gap-1 rounded-lg border border-border bg-bg-secondary p-1"
+        role="tablist"
+      >
+        {(
+          [
+            ["files", "Choose files"],
+            ["drive", "Google Drive link"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={source === value}
+            disabled={busy}
+            onClick={() => {
+              setSource(value);
+              setError("");
+            }}
+            className={cn(
+              "min-h-10 flex-1 rounded-md px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              source === value
+                ? "bg-bg-primary text-text-primary shadow-sm"
+                : "text-text-muted hover:text-text-primary",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <form className="mt-5" onSubmit={submit}>
-        <label htmlFor="teacher-upload-file" className="block text-sm font-medium">
-          Choose files
-        </label>
-        <input
-          id="teacher-upload-file"
-          type="file"
-          accept={accept}
-          multiple
-          disabled={busy}
-          className={cn(
-            inputClass,
-            "mt-2 min-w-0 max-w-full overflow-hidden text-ellipsis file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-medium",
-          )}
-          onChange={(event) => {
-            const selected = Array.from(event.target.files || []);
-            const accepted: File[] = [];
-            const rejected: string[] = [];
+        <div className={source === "drive" ? undefined : "hidden"}>
+          <label htmlFor="teacher-upload-link" className="block text-sm font-medium">
+            Paste a Drive link
+          </label>
+          <div className="mt-2 flex gap-2">
+            <input
+              id="teacher-upload-link"
+              type="url"
+              inputMode="url"
+              placeholder="https://drive.google.com/file/d/…"
+              value={link}
+              disabled={busy}
+              className={cn(inputClass, "min-w-0 flex-1")}
+              onChange={(event) => {
+                setLink(event.target.value);
+                setDriveFiles([]);
+                setError("");
+              }}
+              aria-describedby="teacher-upload-link-hint"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void checkLink()}
+              disabled={busy || resolving || !link.trim()}
+              aria-busy={resolving}
+            >
+              {resolving ? "Checking…" : "Check link"}
+            </Button>
+          </div>
+          <p id="teacher-upload-link-hint" className="mt-2 text-xs text-text-muted">
+            The file must be shared as{" "}
+            <strong className="font-medium text-text-secondary">Anyone with the link</strong> — open
+            it in Drive, press Share, and set General access.{" "}
+            {folderSupport === true
+              ? "A folder link adds every document inside it. "
+              : folderSupport === false
+                ? "Link one file at a time — folder links need a Drive API key this deployment does not have. "
+                : ""}
+            Google Docs and Slides are converted to PDF, Sheets to CSV.
+          </p>
+          <DriveImportQueue onSettled={onQueueSettled} />
+          {driveFiles.length ? (
+            <div className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border bg-bg-secondary/70">
+              {driveFiles.map((file) => {
+                const skipped = !file.supported || file.tooLarge;
+                return (
+                  <div
+                    key={file.id}
+                    className="flex min-h-12 items-center gap-3 bg-bg-primary px-3 py-2"
+                  >
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs",
+                        skipped
+                          ? "bg-warning/20 text-warning-foreground"
+                          : "bg-success/15 text-success",
+                      )}
+                      aria-hidden="true"
+                    >
+                      {skipped ? "!" : "✓"}
+                    </span>
+                    <span className="rounded-full border border-border px-2.5 py-1 text-xs">
+                      {shelf}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {file.name || "Drive file"}
+                    </span>
+                    <span className="text-xs text-text-muted">
+                      {skipped ? "Skipped" : byteSizeLabel(file.sizeBytes)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+        <div className={source === "files" ? undefined : "hidden"}>
+          <label htmlFor="teacher-upload-file" className="block text-sm font-medium">
+            Choose files
+          </label>
+          <input
+            id="teacher-upload-file"
+            type="file"
+            accept={accept}
+            multiple
+            disabled={busy}
+            className={cn(
+              inputClass,
+              "mt-2 min-w-0 max-w-full overflow-hidden text-ellipsis file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-medium",
+            )}
+            onChange={(event) => {
+              const selected = Array.from(event.target.files || []);
+              const accepted: File[] = [];
+              const rejected: string[] = [];
 
-            selected.forEach((file) => {
-              const sizeError = teacherUploadSizeError(file.size);
-              if (sizeError) rejected.push(`${file.name}: ${sizeError}`);
-              else accepted.push(file);
-            });
+              selected.forEach((file) => {
+                const sizeError = teacherUploadSizeError(file.size);
+                if (sizeError) rejected.push(`${file.name}: ${sizeError}`);
+                else accepted.push(file);
+              });
 
-            setFiles(accepted);
-            setError(rejected.join("\n"));
-            event.currentTarget.value = "";
-          }}
-          aria-invalid={error ? "true" : undefined}
-          aria-describedby={error ? "teacher-upload-error" : "teacher-upload-hint"}
-        />
-        <p id="teacher-upload-hint" className="mt-2 text-xs text-text-muted">
-          Each file uploads to the teacher collection, queues indexing, and keeps a private preview
-          copy. Maximum size per file: {TEACHER_UPLOAD_MAX_LABEL}.
-        </p>
-        <SelectedFileRows
-          label={shelf}
-          files={files}
-          disabled={busy}
-          onRemove={(index) => {
-            setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
-            setError("");
-          }}
-        />
-        {busy && uploadStatus.total ? (
+              setFiles(accepted);
+              setError(rejected.join("\n"));
+              event.currentTarget.value = "";
+            }}
+            aria-invalid={error ? "true" : undefined}
+            aria-describedby={error ? "teacher-upload-error" : "teacher-upload-hint"}
+          />
+          <p id="teacher-upload-hint" className="mt-2 text-xs text-text-muted">
+            Each file uploads to the teacher collection, queues indexing, and keeps a private
+            preview copy. Maximum size per file: {TEACHER_UPLOAD_MAX_LABEL}.
+          </p>
+          <SelectedFileRows
+            label={shelf}
+            files={files}
+            disabled={busy}
+            onRemove={(index) => {
+              setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+              setError("");
+            }}
+          />
+        </div>
+        {busy && source === "files" && uploadStatus.total ? (
           <div className="mt-4 rounded-lg border border-border bg-bg-secondary p-4" role="status">
             <div className="flex items-center justify-between gap-4 text-sm">
               <span className="font-medium">Uploading and indexing</span>
@@ -10582,14 +11118,26 @@ function UploadDialog({
         ) : null}
         <div className="mt-6 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
+            {queuedCount ? "Done" : "Cancel"}
           </Button>
-          <Button type="submit" disabled={busy || !files.length} aria-busy={busy}>
+          <Button
+            type="submit"
+            disabled={busy || resolving || (source === "files" ? !files.length : !link.trim())}
+            aria-busy={busy}
+          >
             {busy
-              ? `Uploading ${uploadStatus.current} of ${uploadStatus.total}…`
-              : files.length
-                ? `Upload ${files.length} file${files.length === 1 ? "" : "s"} and index`
-                : "Upload files and index"}
+              ? source === "drive"
+                ? "Queueing…"
+                : `Uploading ${uploadStatus.current} of ${uploadStatus.total}…`
+              : source === "drive"
+                ? pending
+                  ? `Queue ${pending} file${pending === 1 ? "" : "s"} for import`
+                  : queuedCount
+                    ? "Queue another link"
+                    : "Check link"
+                : pending
+                  ? `Upload ${pending} file${pending === 1 ? "" : "s"} and index`
+                  : "Upload files and index"}
           </Button>
         </div>
       </form>

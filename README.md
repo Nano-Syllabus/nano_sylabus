@@ -37,6 +37,12 @@ docs/        Product and operations notes
 - `TEACHER_APP_API_TOKEN` required for creating teacher workspaces
 - `TENANT_API_REJECT_UNAUTHORIZED` optional, defaults to `0`
 - `TENANT_API_TIMEOUT_MS` optional, minimum enforced timeout is `30000`
+- `GOOGLE_DRIVE_API_KEY` optional. A Google Cloud API key with the Drive API
+  enabled. Without it a creator can import a link to a single file shared as
+  "Anyone with the link"; with it, folder links work too and filenames, sizes
+  and file types are known before anything is downloaded. It is an API key and
+  deliberately not OAuth — reading a private Drive needs the restricted
+  `drive.readonly` scope, which Google gates behind a security assessment.
 
 ## Common Commands
 
