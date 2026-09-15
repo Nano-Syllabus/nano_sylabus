@@ -92,4 +92,15 @@ describe("practice calendar exam planning", () => {
     expect(calendarSource).toContain('className="font-display text-xl font-semibold"');
     expect(dashboardSource).toContain('className="font-display text-xl font-semibold"');
   });
+
+  it("uses the requested dashboard greeting without an upgrade button", () => {
+    const dashboardSource = readFileSync("components/student-daily-dashboard.tsx", "utf8");
+    const todayPageSource = readFileSync("app/app/today/page.tsx", "utf8");
+
+    expect(dashboardSource).toContain("Welcome, {firstName(fullName)}.");
+    expect(dashboardSource).not.toContain("Welcome back,");
+    expect(dashboardSource).not.toContain("Unlock Unlimited");
+    expect(dashboardSource).not.toContain("UpgradeModal");
+    expect(todayPageSource).not.toContain("listSubscriptionPlans");
+  });
 });

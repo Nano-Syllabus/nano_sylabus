@@ -1,7 +1,6 @@
 import { SetAppShell } from "@/components/set-app-shell";
 import { StudentDailyDashboardView } from "@/components/student-daily-dashboard";
 import { requireOnboardedUser } from "@/lib/auth";
-import { listSubscriptionPlans } from "@/lib/data/billing";
 import { getActiveCommunity } from "@/lib/data/active-community";
 
 export const dynamic = "force-dynamic";
@@ -21,15 +20,12 @@ export const dynamic = "force-dynamic";
  *
  *   requireOnboardedUser   ~120ms, and `cache()`d for the request
  *   getActiveCommunity     ~240ms, needed for the community switcher
- *   listSubscriptionPlans  cheap, and the same for every student
  *
  * The dashboard itself now comes from `useDashboard` inside the view, which
  * holds it across client-side navigations — so moving between tabs stops
  * costing a server round trip at all, and the sidebar warms it on hover.
  *
- * The two remaining reads go together rather than in sequence. They share
- * nothing but `user.id`, so awaiting them one after the other was adding the
- * slower one's latency to the faster one for free.
+ * The active-community read follows authentication because it needs `user.id`.
  */
 export default async function TodayPage({
   searchParams,
@@ -38,15 +34,10 @@ export default async function TodayPage({
 }) {
   const { user } = await requireOnboardedUser();
   const params = await searchParams;
-  const [active, plans] = await Promise.all([
-    getActiveCommunity(
-      user.id,
-      typeof params.community === "string" ? params.community : undefined,
-    ),
-    listSubscriptionPlans(),
-  ]);
-  const unlimitedPlan =
-    plans.find((plan) => plan.slug === "individual-unlimited" && plan.isUnlimited) ?? null;
+  const active = await getActiveCommunity(
+    user.id,
+    typeof params.community === "string" ? params.community : undefined,
+  );
 
   return (
     <>
@@ -58,7 +49,6 @@ export default async function TodayPage({
         fullName={user.fullName}
         creditBalance={user.creditBalance}
         hasUnlimitedAccess={user.hasUnlimitedAccess}
-        unlimitedPlan={unlimitedPlan}
         /**
          * TWO DIFFERENT SLUGS, ON PURPOSE.
          *

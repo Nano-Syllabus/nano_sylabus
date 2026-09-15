@@ -189,7 +189,7 @@ export default function LandingPage() {
               The little steps
             </a>
             <a
-              href="#people"
+              href="#discord-community"
               className="transition-colors hover:text-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]"
             >
               The people
@@ -622,7 +622,10 @@ export default function LandingPage() {
         </section>
 
         {/* ── Section 04 / Community (Discord) ── */}
-        <section className="relative overflow-hidden bg-[#3049ed] text-white">
+        <section
+          id="discord-community"
+          className="relative scroll-mt-24 overflow-hidden bg-[#3049ed] text-white"
+        >
           <div className="relative mx-auto flex min-h-[780px] max-w-[1460px] flex-col gap-12 px-6 py-20 sm:px-10 lg:block lg:min-h-[780px] lg:px-12 lg:py-0 2xl:min-h-[690px] 2xl:px-0">
             {/* The reference deliberately lets the community visual sit between the copy and the detail list. */}
             <div

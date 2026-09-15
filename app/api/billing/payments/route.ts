@@ -10,11 +10,27 @@ export const runtime = "nodejs";
 
 const paymentFieldsSchema = z.object({
   invoiceId: z.string().uuid(),
-  reference: z.string().trim().min(3).max(120),
-  payerName: z.string().trim().min(2).max(120),
-  note: z.string().trim().max(500).optional().default(""),
   mobileUploadSessionId: z.string().uuid().optional(),
 });
+
+function authenticatedPayerName(user: {
+  email?: string | null;
+  user_metadata?: Record<string, unknown>;
+}, profileName?: string | null) {
+  const metadataName =
+    typeof user.user_metadata?.full_name === "string"
+      ? user.user_metadata.full_name.trim()
+      : typeof user.user_metadata?.name === "string"
+        ? user.user_metadata.name.trim()
+        : "";
+
+  return (
+    profileName?.trim() ||
+    metadataName ||
+    user.email?.split("@")[0]?.trim() ||
+    "Student"
+  );
+}
 
 export async function POST(request: Request) {
   let uploadedPath: string | null = null;
@@ -32,9 +48,6 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const parsed = paymentFieldsSchema.safeParse({
       invoiceId: formData.get("invoiceId"),
-      reference: formData.get("reference"),
-      payerName: formData.get("payerName"),
-      note: formData.get("note") ?? "",
       mobileUploadSessionId: formData.get("mobileUploadSessionId") || undefined,
     });
 
@@ -48,7 +61,7 @@ export async function POST(request: Request) {
     const admin = createSupabaseAdminClient();
     const { data: invoice, error: invoiceError } = await admin
       .from("invoices")
-      .select("id, user_id, status, amount, expires_at")
+      .select("id, user_id, status, amount, expires_at, invoice_code")
       .eq("id", parsed.data.invoiceId)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -94,7 +107,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedReference = parsed.data.reference.toUpperCase();
+    const normalizedReference = String(invoice.invoice_code).trim().toUpperCase();
     const duplicateQuery = admin
       .from("payment_submissions")
       .select("id")
@@ -172,14 +185,27 @@ export async function POST(request: Request) {
       mobileUploadSession?.proof_storage_path ??
       existingSubmission?.proof_storage_path ??
       null;
+    const { data: profile, error: profileError } = await admin
+      .from("student_profiles")
+      .select("full_name")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      if (uploadedPath) await admin.storage.from("payment-receipts").remove([uploadedPath]);
+      return NextResponse.json({ error: profileError.message }, { status: 500 });
+    }
+
+    const submitterEmail = user.email?.trim().toLowerCase() ?? "";
+    const payerName = authenticatedPayerName(user, profile?.full_name);
     const values = {
       reference: normalizedReference,
-      payer_name: parsed.data.payerName,
+      payer_name: payerName,
       proof_storage_path: proofPath,
-      note: parsed.data.note || null,
+      note: null,
       proof_meta: {
-        payerName: parsed.data.payerName,
-        note: parsed.data.note || undefined,
+        payerName,
+        submitterEmail,
       },
       status: "submitted",
       submitted_at: new Date().toISOString(),
@@ -227,7 +253,7 @@ export async function POST(request: Request) {
       submission_id: submissionId,
       actor_id: user.id,
       action: existingSubmission ? "payment_resubmitted" : "payment_submitted",
-      metadata: { reference: normalizedReference },
+      metadata: { reference: normalizedReference, submitterEmail },
     });
 
     const { data: activation, error: activationError } = await admin.rpc(

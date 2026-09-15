@@ -137,11 +137,29 @@ describe("billing pricing UI", () => {
     expect(invoiceRoute).toContain('.eq("amount", invoiceAmount)');
   });
 
+  it("does not mark a missing paid plan as current when the user is on Free", () => {
+    const overview: StudentBillingOverview = {
+      balance: 15,
+      plans: [pro],
+      invoices: [],
+      subscriptions: [],
+    };
+    const html = renderToStaticMarkup(
+      createElement(BillingPageClient, { overview, paymentConfig: null, user }),
+    );
+
+    expect(html.match(/>Current plan<\/button>/g)).toHaveLength(1);
+    expect(html).toContain("Choose Plus");
+    expect(html).not.toContain("Active with no expiry date");
+  });
+
   it("shows the active Plus plan even though it does not grant unlimited AI", () => {
     const html = markup([activeSubscription(plus.id)]);
     expect(html).toContain("Plus plan active");
     expect(html).toContain("Active until");
     expect(html).toContain("Cancel subscription");
+    expect(html).toContain("Base plan");
+    expect(html).not.toContain("Ready for more than 3 challenges a day?");
   });
 
   it("shows the active Pro plan and prevents duplicate checkout", () => {
@@ -150,27 +168,45 @@ describe("billing pricing UI", () => {
     expect(html).toContain("Current plan");
     expect(html).toContain("Active until");
     expect(html).toContain("Cancel subscription");
-    expect(html).toContain("You can cancel anytime without losing the time you have already paid for.");
+    expect(html).toContain("Cancelling ends access immediately");
+    expect(html).toContain("Base plan");
+    expect(html).not.toContain("Choose Plus - Rs. 450/month");
   });
 
-  it("keeps paid access until period end on cancellation, including Plus", () => {
+  it("cancels paid access immediately and makes every paid plan selectable again", () => {
     const source = readFileSync("components/billing-page-client.tsx", "utf8");
     const route = readFileSync("app/api/billing/subscriptions/cancel/route.ts", "utf8");
-    const html = markup([{ ...activeSubscription(plus.id), cancelAtPeriodEnd: true }]);
+    const html = markup([
+      {
+        ...activeSubscription(plus.id),
+        status: "cancelled",
+        endsAt: "2026-09-13T08:00:00.000Z",
+        cancelledAt: "2026-09-13T08:00:00.000Z",
+      },
+    ]);
 
     expect(source).toContain("/api/billing/subscriptions/cancel");
-    expect(source).toContain("Cancel at period end");
-    expect(route).toContain("cancel_at_period_end: true");
-    expect(route).toContain('!["individual", "group"].includes(plan.product_type)');
-    expect(html).toContain("Cancellation is scheduled.");
-    expect(html).toContain("Plus access until Oct 9, 2026");
-    expect(html).toContain("Keep subscription");
+    expect(source).toContain("Cancel now");
+    expect(source).toContain("same plan or a different plan now");
+    expect(source).toContain("payload.cancelledSubscriptionIds");
+    expect(route).toContain('status: "cancelled"');
+    expect(route).toContain("cancelledSubscriptionIds: subscriptionIds");
+    expect(route).toContain("subscriptionsToCancel.map");
+    expect(route).toContain("ends_at: cancelledAt");
+    expect(route).toContain("cancel_at_period_end: false");
+    expect(route).toContain('["individual", "group"].includes(plan.product_type)');
+    expect(html).toContain("Choose Plus");
+    expect(html).toContain("Choose Pro");
+    expect(html).not.toContain("Cancel subscription");
+    expect(html).toContain("Current plan</button>");
+    expect(html).not.toContain("Pro plan active");
+    expect(html).not.toContain("Plus plan active");
   });
 
   it("retains the receipt activation confirmation", () => {
     const source = readFileSync("components/billing-page-client.tsx", "utf8");
     expect(source).toContain("Activating your access");
-    expect(source).toContain("Access will be ready in about five seconds.");
+    expect(source).toContain("Please wait a few seconds...");
     expect(source).toContain("Your paid access is active");
   });
 });

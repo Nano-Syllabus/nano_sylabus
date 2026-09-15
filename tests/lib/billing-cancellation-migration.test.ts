@@ -30,11 +30,11 @@ describe("subscription cancellation migration", () => {
       );
     `);
     await db.exec(await readFile(migrationPath, "utf8"));
-  });
+  }, 30_000);
 
   afterEach(async () => db.close());
 
-  it("stores a scheduled cancellation without changing the active subscription", async () => {
+  it("stores the metadata for an immediate subscription cancellation", async () => {
     await db.exec(`
       insert into auth.users values ('11111111-1111-4111-8111-111111111111');
       insert into public.subscription_plans values ('22222222-2222-4222-8222-222222222222');
@@ -47,7 +47,9 @@ describe("subscription cancellation migration", () => {
         now() + interval '30 days'
       );
       update public.user_subscriptions
-      set cancel_at_period_end = true,
+      set status = 'cancelled',
+          ends_at = now(),
+          cancel_at_period_end = false,
           cancelled_at = now(),
           cancellation_reason = 'No longer needed'
       where id = '33333333-3333-4333-8333-333333333333';
@@ -63,8 +65,8 @@ describe("subscription cancellation migration", () => {
     );
 
     expect(result.rows[0]).toMatchObject({
-      status: "active",
-      cancel_at_period_end: true,
+      status: "cancelled",
+      cancel_at_period_end: false,
       cancellation_reason: "No longer needed",
     });
     expect(result.rows[0]?.cancelled_at).toBeTruthy();

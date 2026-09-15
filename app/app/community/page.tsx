@@ -25,7 +25,7 @@ export default async function CommunityPage({
   const initialSection = ["overview", "members"].includes(tab)
     ? (tab as "overview" | "members")
     : "overview";
-  const memberRanking = params.sort === "today" ? "today" : "xp";
+  const memberRanking = params.sort === "today" ? "today" : "streak";
   const initialInviteOpen = params.invite === "referral";
 
   return (

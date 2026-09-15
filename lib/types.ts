@@ -230,9 +230,9 @@ export interface UserSubscription {
   startsAt: string;
   endsAt: string | null;
   /**
-   * The user has asked not to renew after the current paid period. Access is
-   * deliberately retained until `endsAt` so cancelling never removes time
-   * they have already paid for.
+   * Legacy scheduling flag retained for older subscription rows. New student
+   * cancellations end immediately by setting the subscription status to
+   * `cancelled` and moving `endsAt` to the cancellation timestamp.
    */
   cancelAtPeriodEnd: boolean;
   cancelledAt: string | null;
@@ -294,6 +294,7 @@ export interface AdminPaymentSubmissionSummary {
   invoiceId: string;
   userId: string;
   studentName: string;
+  studentEmail: string;
   planName: string;
   planCredits: number;
   amount: number;

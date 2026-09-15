@@ -325,6 +325,7 @@ export async function getStudentBillingOverview(userId: string): Promise<Student
 
 export async function listAdminPaymentSubmissions() {
   const supabase = await createSupabaseServerClient();
+  const admin = createSupabaseAdminClient();
   const { data: submissionRows, error: submissionError } = await supabase
     .from("payment_submissions")
     .select("*")
@@ -365,6 +366,13 @@ export async function listAdminPaymentSubmissions() {
   const namesByUserId = new Map(
     (profileRows ?? []).map((profile) => [profile.user_id, profile.full_name]),
   );
+  const authUsers = await Promise.all(
+    userIds.map(async (userId) => {
+      const { data } = await admin.auth.admin.getUserById(userId);
+      return [userId, data.user?.email?.trim().toLowerCase() ?? ""] as const;
+    }),
+  );
+  const emailsByUserId = new Map(authUsers);
 
   return submissionRows.map((submission) => {
     const invoice = invoicesById.get(submission.invoice_id)!;
@@ -375,6 +383,10 @@ export async function listAdminPaymentSubmissions() {
       invoiceId: invoice.id,
       userId: submission.user_id,
       studentName: namesByUserId.get(submission.user_id) || "Student",
+      studentEmail:
+        (typeof submission.proof_meta?.submitterEmail === "string"
+          ? submission.proof_meta.submitterEmail
+          : "") || emailsByUserId.get(submission.user_id) || "",
       planName: plan.name,
       planCredits: plan.credits,
       amount: invoice.amount,
@@ -390,6 +402,7 @@ export async function listAdminPaymentSubmissions() {
 
 export async function getAdminPaymentSubmissionDetail(submissionId: string) {
   const supabase = await createSupabaseServerClient();
+  const admin = createSupabaseAdminClient();
   const { data: submissionRow, error: submissionError } = await supabase
     .from("payment_submissions")
     .select("*")
@@ -438,7 +451,6 @@ export async function getAdminPaymentSubmissionDetail(submissionId: string) {
   const proofMeta = submissionRow.proof_meta ?? {};
   let receiptUrl: string | null = null;
   if (typeof submissionRow.proof_storage_path === "string" && submissionRow.proof_storage_path) {
-    const admin = createSupabaseAdminClient();
     const { data: signedReceipt } = await admin.storage
       .from("payment-receipts")
       .createSignedUrl(submissionRow.proof_storage_path, 15 * 60);
@@ -450,6 +462,10 @@ export async function getAdminPaymentSubmissionDetail(submissionId: string) {
     invoiceId: invoice.id,
     userId: submissionRow.user_id,
     studentName: profileRow?.full_name || "Student",
+    studentEmail:
+      (typeof proofMeta.submitterEmail === "string" ? proofMeta.submitterEmail : "") ||
+      (await admin.auth.admin.getUserById(submissionRow.user_id)).data.user?.email?.trim().toLowerCase() ||
+      "",
     planName: plan.name,
     planCredits: plan.credits,
     amount: invoice.amount,

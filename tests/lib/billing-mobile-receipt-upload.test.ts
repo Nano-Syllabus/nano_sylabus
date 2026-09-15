@@ -60,7 +60,7 @@ describe("mobile receipt upload handoff", () => {
     expect(mobile).toContain("Your desktop will show the receipt automatically");
     expect(mobile).toContain("Upload another photo");
     expect(billing).toContain("mobileUploadSessionId");
-    expect(billing).toContain("Choose on this computer");
+    expect(billing).toContain("Choose file");
   });
 
   it("auto-activates submitted payments and keeps an admin revoke path", () => {
@@ -78,7 +78,7 @@ describe("mobile receipt upload handoff", () => {
     expect(paymentRoute).toContain('"auto_approve_payment_submission"');
     expect(paymentRoute).toContain('status: "paid"');
     expect(billing).toContain("Activating your access");
-    expect(billing).toContain("Access will be ready in about five seconds.");
+    expect(billing).toContain("Please wait a few seconds...");
     expect(billing).toContain("Your paid access is active");
     expect(adminDetail).toContain("Revoke access");
     expect(adminDetail).toContain('action: "cancel"');

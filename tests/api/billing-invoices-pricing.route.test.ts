@@ -34,10 +34,11 @@ function chain(result: unknown) {
     order: vi.fn(),
     limit: vi.fn(),
     insert: vi.fn(),
+    update: vi.fn(),
     maybeSingle: vi.fn(async () => result),
     single: vi.fn(async () => result),
   };
-  for (const key of ["select", "eq", "in", "gt", "order", "limit", "insert"] as const) {
+  for (const key of ["select", "eq", "in", "gt", "order", "limit", "insert", "update"] as const) {
     query[key].mockReturnValue(query);
   }
   return query;

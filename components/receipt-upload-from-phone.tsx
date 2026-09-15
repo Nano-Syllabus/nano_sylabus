@@ -16,11 +16,13 @@ export function ReceiptUploadFromPhone({
   onReady,
   onCleared,
   className,
+  variant = "default",
 }: {
   invoiceId: string;
   onReady: (sessionId: string, fileName: string) => void;
   onCleared?: () => void;
   className?: string;
+  variant?: "default" | "qr-card";
 }) {
   const [session, setSession] = useState<UploadSession | null>(null);
   const [status, setStatus] = useState<"loading" | "pending" | "uploaded" | "expired" | "error">(
@@ -134,6 +136,73 @@ export function ReceiptUploadFromPhone({
     } finally {
       setRemoving(false);
     }
+  }
+
+  if (variant === "qr-card") {
+    return (
+      <div
+        className={cn(
+          "flex flex-1 flex-col items-center justify-between rounded-2xl border border-gray-100 bg-[#f8fafc] p-4 text-center min-h-[220px] sm:p-5",
+          className,
+        )}
+        aria-label="Upload receipt using phone"
+      >
+        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+          OR SCAN THIS QR CODE
+        </p>
+
+        {status === "uploaded" ? (
+          <div className="flex my-auto flex-col items-center justify-center p-2 text-center" role="status">
+            <CheckCircle2 className="size-9 text-emerald-600 mb-1" aria-hidden="true" />
+            <p className="text-sm font-semibold text-emerald-700">Received from phone</p>
+            <p className="mt-0.5 max-w-[150px] truncate text-xs text-gray-500" title={fileName}>
+              {fileName}
+            </p>
+            <button
+              type="button"
+              onClick={() => void removeUploadedReceipt()}
+              disabled={removing}
+              className="mt-2 text-xs font-semibold text-red-600 hover:underline disabled:opacity-50"
+            >
+              {removing ? "Removing…" : "Remove"}
+            </button>
+          </div>
+        ) : (
+          <div className="my-auto flex flex-col items-center">
+            <div className="flex size-[98px] sm:size-[108px] items-center justify-center rounded-xl border border-gray-200/90 bg-white p-1.5 shadow-2xs">
+              {session && status === "pending" ? (
+                <QRCodeSVG
+                  value={session.uploadUrl}
+                  size={90}
+                  level="M"
+                  marginSize={0}
+                  title="Phone receipt upload QR code"
+                />
+              ) : status === "loading" ? (
+                <LoaderCircle className="size-7 animate-spin text-gray-400" />
+              ) : (
+                <Smartphone className="size-7 text-gray-400" />
+              )}
+            </div>
+            {error ? (
+              <p role="alert" className="mt-1 text-[11px] text-destructive">
+                {error}
+              </p>
+            ) : null}
+          </div>
+        )}
+
+        <div className="w-full text-left">
+          <div className="flex items-start gap-2 text-xs text-gray-600 leading-snug">
+            <Smartphone className="mt-0.5 size-4 shrink-0 text-gray-500" />
+            <p>Open this page on your phone and upload the screenshot directly from your device.</p>
+          </div>
+          <p className="mt-1.5 text-center text-[10.5px] text-gray-400">
+            This QR is for easy upload, not for payment.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
