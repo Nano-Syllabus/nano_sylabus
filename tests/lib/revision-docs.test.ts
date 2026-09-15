@@ -260,6 +260,39 @@ describe("revision docs", () => {
     expect(docs.semesters[0].subjects[0].units[0].topics[0].readingPending).toBe(false);
   });
 
+  it("still renders when the unit column has not been migrated yet", async () => {
+    // Code reaches a deployment before its migration does. For that window
+    // `unit_number` does not exist and Postgres answers 42703 — which used to
+    // take the whole section down over a field that only groups topics.
+    const rows = [completedRow()];
+    let askedFor = "";
+    let attempts = 0;
+    mocks.admin.mockReturnValue({
+      from: () => ({
+        select: (columns: string) => {
+          askedFor = columns;
+          attempts += 1;
+          const result =
+            attempts === 1
+              ? { data: null, error: { code: "42703" } }
+              : { data: rows, error: null };
+          return { eq: () => ({ in: () => ({ order: async () => result }) }) };
+        },
+      }),
+    });
+
+    const docs = await getStudentRevisionDocs("member");
+
+    expect(attempts).toBe(2);
+    // The retry drops the column rather than the query.
+    expect(askedFor).not.toContain("unit_number");
+    expect(docs.unavailable).toBe(false);
+    expect(docs.topicCount).toBe(1);
+    // Placement falls back to the live catalogue, which is what it did before
+    // the column existed.
+    expect(docs.semesters[0].subjects[0].units[0].label).toBe("Unit 2");
+  });
+
   it("reports a missing challenge table as unavailable, not as nothing revised", async () => {
     db.tables.student_challenges = [];
     db.failures.set("student_challenges:select", "missing");

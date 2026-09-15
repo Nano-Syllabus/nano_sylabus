@@ -32,6 +32,9 @@ import { devCollectionKey } from "@/lib/dev-collection-key";
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 
 const UNDEFINED_TABLE = "42P01";
+const UNDEFINED_COLUMN = "42703";
+/** PostgREST's own code for a column its schema cache does not know. */
+const POSTGREST_MISSING_COLUMN = "PGRST204";
 const POSTGREST_MISSING_TABLE = "PGRST205";
 export const CHALLENGE_PASS_PERCENT = 40;
 export const CHALLENGE_QUESTIONS = 2;
@@ -51,6 +54,22 @@ const completionsInFlight = new Map<string, Promise<StudentChallengeDetail | nul
 
 export function isMissingChallengeTable(error: { code?: string } | null) {
   return error?.code === UNDEFINED_TABLE || error?.code === POSTGREST_MISSING_TABLE;
+}
+
+/**
+ * A column the code knows about and the database does not.
+ *
+ * Code ships before its migration runs — that is the normal order of a deploy,
+ * not a mistake — and for the window in between, every query naming the new
+ * column fails outright. `unit_number` is the live example: it is a nicety that
+ * files a revision topic under its syllabus unit, and a missing one took down
+ * the whole Challenge Hub and the whole Revision section with a 42703.
+ *
+ * So the queries that use it degrade instead. What the column buys is worth
+ * having and is never worth a page for.
+ */
+export function isMissingColumn(error: { code?: string } | null) {
+  return error?.code === UNDEFINED_COLUMN || error?.code === POSTGREST_MISSING_COLUMN;
 }
 
 export type ChallengeStatus = "assigned" | "started" | "completed";
@@ -676,7 +695,19 @@ export async function ensureDailyChallenges(
       duration_minutes: 20,
     };
   });
-  const { error } = await admin.from("student_challenges").insert(rows);
+  let { error } = await admin.from("student_challenges").insert(rows);
+  if (isMissingColumn(error)) {
+    // The migration has not run here yet. Assign the challenges anyway and let
+    // the revision docs fall back to the live catalogue for unit placement,
+    // which is what they did before this column existed.
+    console.warn(
+      "[challenge] student_challenges.unit_number is missing — assigning without it. " +
+        "Run supabase/migrations/20260915120000_challenge_syllabus_unit.sql.",
+    );
+    ({ error } = await admin
+      .from("student_challenges")
+      .insert(rows.map(({ unit_number: _unitNumber, ...row }) => row)));
+  }
   if (error?.code === "23505") {
     const concurrent = (await listDailyRows(userId, date)) ?? [];
     return concurrent

@@ -2,6 +2,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { readCourseLearningTopics } from "@/lib/data/community-learning-topics";
 import {
   isMissingChallengeTable,
+  isMissingColumn,
   type ChallengePastQuestion,
   type ChallengeSolvedExample,
   type StudentChallengeContent,
@@ -207,22 +208,29 @@ async function unitsByTopicKey(
   return placements;
 }
 
-export async function getStudentRevisionDocs(userId: string): Promise<StudentRevisionDocs> {
-  const admin = createSupabaseAdminClient();
-  const [community, privateSubjects, completed] = await Promise.all([
-    listStudentCommunitySubjectAccess(userId, admin),
-    // A creator studying their own uploaded material has no community and no
-    // course: their challenges carry `course_id = null` and are authorised by
-    // subject alone. Leaving them out of this list is why those rows used to
-    // vanish from the docs entirely while the Challenge Hub happily ran them —
-    // `requireChallengeAccess` consults both, and so must this.
-    listCreatorPrivateSubjectAccess(userId, admin).catch(() => []),
+/** Everything the docs read off a challenge row, minus the unit. */
+const DOC_COLUMNS =
+  "id,course_id,subject_slug,subject_name,topic_key,topic_title,title,content,status," +
+  "completed_at,updated_at,attempt_count,last_score,last_total_marks";
+
+/**
+ * The filed challenges, asked for WITH the stored unit and again without it.
+ *
+ * `unit_number` arrived with a migration, and code reaches a deployment before
+ * its migration does. For that window the column does not exist and Postgres
+ * answers 42703 — which took the entire Revision section down over a field whose
+ * only job is to group topics that the live catalogue can usually place anyway.
+ * One retry is the whole fix; the second query is the one this page ran for its
+ * entire life before the column existed.
+ */
+async function readFiledChallenges(
+  userId: string,
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+) {
+  const query = (columns: string) =>
     admin
       .from("student_challenges")
-      .select(
-        "id,course_id,subject_slug,subject_name,topic_key,topic_title,title,content,status," +
-          "unit_number,completed_at,updated_at,attempt_count,last_score,last_total_marks",
-      )
+      .select(columns)
       .eq("user_id", userId)
       // Started, not just passed. The reading is written and stored the moment a
       // challenge is opened, so a student who is midway through one already HAS
@@ -234,7 +242,28 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       // DESC — which would file everything in progress above everything passed.
       // `updated_at` is set on both and means "last touched", which is the order
       // this page actually wants.
-      .order("updated_at", { ascending: false }),
+      .order("updated_at", { ascending: false });
+
+  const withUnit = await query(`${DOC_COLUMNS},unit_number`);
+  if (!isMissingColumn(withUnit.error)) return withUnit;
+  console.warn(
+    "[revision] student_challenges.unit_number is missing — placing topics from the " +
+      "catalogue only. Run supabase/migrations/20260915120000_challenge_syllabus_unit.sql.",
+  );
+  return query(DOC_COLUMNS);
+}
+
+export async function getStudentRevisionDocs(userId: string): Promise<StudentRevisionDocs> {
+  const admin = createSupabaseAdminClient();
+  const [community, privateSubjects, completed] = await Promise.all([
+    listStudentCommunitySubjectAccess(userId, admin),
+    // A creator studying their own uploaded material has no community and no
+    // course: their challenges carry `course_id = null` and are authorised by
+    // subject alone. Leaving them out of this list is why those rows used to
+    // vanish from the docs entirely while the Challenge Hub happily ran them —
+    // `requireChallengeAccess` consults both, and so must this.
+    listCreatorPrivateSubjectAccess(userId, admin).catch(() => []),
+    readFiledChallenges(userId, admin),
   ]);
 
   if (isMissingChallengeTable(completed.error)) {

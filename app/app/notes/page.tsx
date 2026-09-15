@@ -1,9 +1,6 @@
-import Link from "next/link";
 import { SetAppShell } from "@/components/set-app-shell";
 import { RevisionDocsClient } from "@/components/revision-docs-client";
-import { Button } from "@/components/ui/button";
 import { requireOnboardedUser } from "@/lib/auth";
-import { getNoteAccessPolicy } from "@/lib/data/note-access";
 import { getStudentRevisionDocs } from "@/lib/data/student-revision-docs";
 
 export const dynamic = "force-dynamic";
@@ -31,31 +28,26 @@ export const dynamic = "force-dynamic";
  * and the docs tree links to them alongside the flashcard deck. Folding them into
  * this page would have mixed the two claims it makes — "you worked through this"
  * and "you wrote this down" are not the same shelf.
+ *
+ * NOT GATED
+ * ---------
+ * The docs used to answer Free with an upgrade card. There was nothing to sell
+ * behind it: every page here is material the student has ALREADY been given —
+ * the reading a challenge was built from, written and paid for when they opened
+ * it — and the docs only hand it back instead of throwing it away when the
+ * challenge closes. Charging to re-read what you were already shown reads as a
+ * punishment, and it hit hardest the student who does not yet know the feature
+ * exists. The flashcard deck at `/app/notes/revision/cards` keeps its own gate;
+ * that one revises a different corpus and is a different product decision.
  */
 export default async function RevisionPage() {
   const { user } = await requireOnboardedUser();
-  const access = await getNoteAccessPolicy(user.id);
-  // Not fetched when the gate is closed: building the tree for a reader who will
-  // not be shown it is work nobody asked for.
-  const docs = access.revisionEnabled ? await getStudentRevisionDocs(user.id) : null;
+  const docs = await getStudentRevisionDocs(user.id);
 
   return (
     <>
       <SetAppShell title="Revision" />
-      {docs ? (
-        <RevisionDocsClient docs={docs} />
-      ) : (
-        <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-bg-primary p-8 text-center">
-          <h2 className="font-display text-3xl">Revision is a paid feature</h2>
-          <p className="mt-3 text-sm text-text-secondary">
-            Upgrade from Free to keep every challenge you have worked through — its concepts, past
-            questions and worked examples — as docs you can come back to.
-          </p>
-          <Link href="/app/billing" className="mt-6 inline-block">
-            <Button>View plans</Button>
-          </Link>
-        </div>
-      )}
+      <RevisionDocsClient docs={docs} />
     </>
   );
 }
