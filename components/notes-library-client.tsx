@@ -65,8 +65,8 @@ export function NotesLibraryClient({ notes, initialSubjectSlug = null }: NotesLi
 
   return (
     <>
-      <div className="border-b border-border bg-bg-secondary px-4 py-3 md:px-6">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2">
+      <div className="border-b border-border bg-bg-secondary py-3">
+        <div className="student-page-width flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1">
             <input
               value={search}
@@ -108,7 +108,7 @@ export function NotesLibraryClient({ notes, initialSubjectSlug = null }: NotesLi
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
+      <div className="student-page-frame">
         {activeSubjectLabel && subjectFilter !== "all" ? (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-bg-secondary px-4 py-3">
             <p className="text-sm text-text-secondary">
@@ -150,7 +150,7 @@ export function NotesLibraryClient({ notes, initialSubjectSlug = null }: NotesLi
                   onFocus={() => router.prefetch(`/app/notes/${note.id}`)}
                   className="mt-3 block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
                 >
-                  <h3 className="line-clamp-2 font-display text-xl leading-snug">{note.title}</h3>
+                  <h3 className="type-student-card-title line-clamp-2">{note.title}</h3>
                   <p className="mt-2 line-clamp-3 text-xs text-text-secondary">
                     {note.answerContent.replace(/[*_`#]/g, "")}
                   </p>
@@ -201,7 +201,7 @@ function EmptyState({ subjectLabel }: { subjectLabel: string | null }) {
   return (
     <div className="rounded-xl border border-dashed border-border p-12 text-center">
       <p className="text-3xl">📭</p>
-      <h3 className="mt-3 font-display text-2xl">
+      <h3 className="type-student-section-title mt-3">
         {subjectLabel ? `No notes for ${subjectLabel}` : "No notes match these filters"}
       </h3>
       <p className="mt-2 text-sm text-text-muted">

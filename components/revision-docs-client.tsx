@@ -62,11 +62,11 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
   const percent = formatPercent(topic.scorePercent);
   const completed = formatDate(topic.completedAt);
   return (
-    <article className="mx-auto max-w-3xl px-4 py-8 sm:px-8">
+    <article className="student-reading-frame">
       <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
         {topic.subjectName}
       </p>
-      <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+      <h1 className="type-student-page-title mt-1">
         {topic.title}
       </h1>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-text-muted">
@@ -115,7 +115,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
 
       {topic.reading.length ? (
         <section className="mt-8">
-          <h2 className="font-display text-lg font-semibold">Concepts</h2>
+          <h2 className="type-student-section-title">Concepts</h2>
           <div className="mt-3 space-y-3">
             {topic.reading.map((paragraph, index) => (
               <Markdown
@@ -159,7 +159,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
 
       {topic.connections.length ? (
         <section className="mt-6 rounded-xl border border-border bg-bg-secondary p-4 sm:p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+          <h2 className="type-student-eyebrow text-text-muted">
             How this connects
           </h2>
           <ul className="mt-3 space-y-2">
@@ -180,7 +180,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
 
       {topic.pastQuestions.length ? (
         <section className="mt-8">
-          <h2 className="font-display text-lg font-semibold">Past questions on this topic</h2>
+          <h2 className="type-student-section-title">Past questions on this topic</h2>
           <ol className="mt-3 space-y-3">
             {topic.pastQuestions.map((question, index) => (
               <li
@@ -204,7 +204,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
 
       {topic.solvedExamples.length ? (
         <section className="mt-8">
-          <h2 className="font-display text-lg font-semibold">Worked examples</h2>
+          <h2 className="type-student-section-title">Worked examples</h2>
           <div className="mt-3 space-y-4">
             {topic.solvedExamples.map((example, index) => (
               <article
@@ -280,8 +280,8 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
 
   if (docs.unavailable) {
     return (
-      <div className="mx-auto max-w-2xl px-5 py-16 text-center">
-        <h1 className="font-display text-2xl font-semibold">Revision docs are unavailable</h1>
+      <div className="student-reading-frame max-w-2xl py-16 text-center">
+        <h1 className="type-student-page-title">Revision docs are unavailable</h1>
         <p className="mt-3 text-sm text-text-secondary">
           The challenge history this section is built from could not be read. Try again shortly.
         </p>
@@ -291,11 +291,11 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
 
   if (!docs.topicCount) {
     return (
-      <div className="mx-auto max-w-2xl px-5 py-16 text-center">
+      <div className="student-reading-frame max-w-2xl py-16 text-center">
         <span className="mx-auto grid size-12 place-items-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
           <BookOpen className="size-6" aria-hidden="true" />
         </span>
-        <h1 className="mt-4 font-display text-2xl font-semibold">Nothing filed here yet</h1>
+        <h1 className="type-student-page-title mt-4">Nothing filed here yet</h1>
         <p className="mt-3 max-w-prose text-sm text-text-secondary">
           Open a challenge and its reading is filed here as you go — the concepts, the past
           questions and the worked examples — organised by semester, subject and unit. Passing it

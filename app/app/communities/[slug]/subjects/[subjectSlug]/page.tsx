@@ -31,7 +31,7 @@ export default async function CommunitySubjectPage({ params, searchParams }: Pag
   return (
     <>
       <SetAppShell title={subject.name} />
-      <main className="w-full max-w-[1100px] px-4 pb-24 pt-5 lg:p-7">
+      <main className="student-page-frame">
         <Link
           href={`/app/communities/${encodeURIComponent(community.slug)}/semesters/${encodeURIComponent(term.id)}`}
           className="inline-flex min-h-10 items-center gap-2 text-sm text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
@@ -43,7 +43,7 @@ export default async function CommunitySubjectPage({ params, searchParams }: Pag
             Year {term.yearNumber} · Semester {term.semesterNumber}
             {subject.code ? ` · ${subject.code}` : ""}
           </p>
-          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">
+          <h1 className="type-student-page-title mt-2">
             {titleCase(subject.name)}
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">

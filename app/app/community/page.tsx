@@ -41,12 +41,12 @@ export default async function CommunityPage({
           initialInviteOpen={initialInviteOpen}
         />
       ) : (
-        <main className="mx-auto w-full max-w-[1240px] px-4 pb-24 pt-8 sm:px-6 lg:px-10">
+        <main className="student-page-frame">
           <section className="flex min-h-[60vh] flex-col items-center justify-center rounded-3xl border border-dashed border-border px-6 py-16 text-center">
             <span className="flex size-14 items-center justify-center rounded-2xl bg-bg-secondary text-text-secondary">
               <Building2 className="size-7" aria-hidden="true" />
             </span>
-            <h1 className="mt-5 font-display text-3xl font-semibold tracking-tight">
+            <h1 className="type-student-page-title mt-5">
               Join your program community
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-text-secondary">

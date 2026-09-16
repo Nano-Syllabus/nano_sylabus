@@ -1,7 +1,7 @@
 export default function CommunityStudyLoading() {
   return (
     <main
-      className="w-full max-w-[1240px] animate-pulse px-4 py-5 lg:p-7"
+      className="student-page-frame animate-pulse"
       aria-label="Loading community"
     >
       <div className="h-10 w-36 rounded bg-bg-tertiary" />

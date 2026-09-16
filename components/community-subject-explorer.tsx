@@ -305,7 +305,7 @@ export function CommunitySubjectExplorer({
   }
 
   return (
-    <main className="w-full max-w-[1240px] px-4 pb-24 pt-5 lg:p-7">
+    <main className="student-page-frame">
       <header className="border-b border-border pb-6">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm font-medium text-text-secondary">{titleCase(community.name)}</p>
@@ -318,7 +318,7 @@ export function CommunitySubjectExplorer({
             <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
               {community.university} · {community.faculty}
             </p>
-            <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">
+            <h1 className="type-student-page-title mt-2">
               Subject Explorer &amp; In-App Reader
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">
@@ -586,7 +586,7 @@ export function CommunitySemesterSubjects({
   term: CommunityTerm;
 }) {
   return (
-    <main className="w-full max-w-[1240px] px-4 pb-24 pt-5 lg:p-7">
+    <main className="student-page-frame">
       <Link
         href={`/app/communities/${encodeURIComponent(community.slug)}`}
         className={`inline-flex min-h-10 items-center gap-2 rounded-md text-sm text-text-secondary hover:text-text-primary ${focusRing}`}
@@ -601,7 +601,7 @@ export function CommunitySemesterSubjects({
         </p>
         <div className="mt-2 flex flex-wrap items-end gap-4">
           <div className="min-w-0 flex-1">
-            <h1 className="font-display text-3xl font-semibold tracking-tight">
+            <h1 className="type-student-page-title">
               {academicOrdinalLabel(term.semesterNumber, "Semester")} subjects
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-text-secondary">

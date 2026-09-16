@@ -130,7 +130,7 @@ describe("unified Figma library", () => {
       html.match(/<button[^>]*>.*?Applied Mechanics.*?<\/button>/)?.[0] ?? "";
     expect(appliedMechanicsCard).not.toContain("3 chapters");
     expect(appliedMechanicsCard).not.toContain("64%");
-    expect(html).toContain("font-figma-library");
+    expect(html).toContain("type-student-page-title");
     expect(html).toContain("/figma/library/book-open.svg");
     expect(html).toContain("Choose running semester");
     expect(html).toContain("lg:grid-cols-2");

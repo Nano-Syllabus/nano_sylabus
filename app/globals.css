@@ -185,6 +185,118 @@ body:has(.exam-prep-theme) {
   font-family: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
 }
 
+/*
+ * Student app type scale
+ *
+ * The creator workspace uses a deliberately quiet five-step hierarchy. These
+ * utilities give the student app that same rhythm: one page title, one section
+ * title, one card title, and predictable body and metadata sizes. Keeping the
+ * scale here prevents each screen from inventing a near-identical pixel value.
+ */
+@utility type-student-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1rem;
+  text-transform: uppercase;
+}
+
+@utility type-student-page-title {
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+}
+
+@utility type-student-section-title {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+@utility type-student-card-title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+}
+
+@utility type-student-body {
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+}
+
+@utility type-student-meta {
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+
+@utility type-student-metric {
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+/*
+ * Student app layout
+ *
+ * Creator screens use one 1240px reading frame with 16px mobile and 24px
+ * desktop gutters. Student screens used several almost-identical frames
+ * (1240/1440/1480px with 14/16/24/26px padding), which made switching tabs
+ * feel like every page belonged to a different product. These utilities are
+ * intentionally about rhythm, not decoration: page geometry, reading width,
+ * and the default card edge are shared without flattening specialised views
+ * such as an exam sitting or the library reader.
+ */
+@utility student-page-frame {
+  width: 100%;
+  max-width: 77.5rem;
+  margin-inline: auto;
+  padding: 1.25rem 1rem 4.5rem;
+}
+
+@utility student-page-width {
+  width: 100%;
+  max-width: 77.5rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+@utility student-reading-frame {
+  width: 100%;
+  max-width: 48rem;
+  margin-inline: auto;
+  padding: 1.25rem 1rem 3.5rem;
+}
+
+@utility student-surface {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--card);
+  padding: 1rem;
+}
+
+@media (min-width: 40rem) {
+  .student-page-frame {
+    padding: 1.5rem 1.5rem 4.5rem;
+  }
+
+  .student-reading-frame {
+    padding: 1.75rem 1.5rem 3.5rem;
+  }
+
+  .student-page-width {
+    padding-inline: 1.5rem;
+  }
+}
+
 @utility text-sidebar-crisp {
   color: var(--text-primary);
   font-weight: 500;

@@ -274,12 +274,12 @@ export function SettingsForm({
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-6">
+    <div className="student-reading-frame">
       <ThemeSetting />
 
       <div className="rounded-lg border border-border bg-bg-primary">
         <div className="border-b border-border px-5 py-3">
-          <h2 className="font-display text-xl">Profile & preferences</h2>
+          <h2 className="type-student-section-title">Profile & preferences</h2>
         </div>
         <div className="space-y-4 p-5">
           <Field label="Full name">
@@ -470,7 +470,7 @@ export function SettingsForm({
 
       <div className="mt-6 rounded-lg border border-border bg-bg-primary">
         <div className="border-b border-border px-5 py-3">
-          <h2 className="font-display text-xl">Account</h2>
+          <h2 className="type-student-section-title">Account</h2>
         </div>
         <div className="space-y-4 p-5">
           <div className="rounded-md border border-border bg-bg-secondary p-4">

@@ -40,7 +40,7 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
 
   return (
     <>
-      <article className="mx-auto max-w-3xl px-5 py-10 animate-fade-in">
+      <article className="student-reading-frame animate-fade-in">
         <div className="flex flex-wrap items-center gap-2">
           {current.subjectSlug ? (
             <Link
@@ -58,7 +58,7 @@ export function NoteDetailClient({ note }: { note: RevisionNoteDetail }) {
           </span>
         </div>
 
-        <h1 className="mt-5 max-w-3xl break-words font-display text-3xl leading-[1.12] sm:text-4xl">
+        <h1 className="type-student-page-title mt-5 max-w-3xl break-words">
           {displayTitle}
         </h1>
 

@@ -574,7 +574,7 @@ export function PracticeCalendar({
     >
       {/* ── Top Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-3">
-        <h2 id="activity-calendar-heading" className="font-display text-xl font-semibold">
+        <h2 id="activity-calendar-heading" className="type-student-section-title">
           Practice calendar
         </h2>
 
@@ -1003,7 +1003,7 @@ export function PracticeCalendar({
         aria-labelledby="upcoming-exams-heading"
       >
         <div className="mb-4 flex items-center justify-between">
-          <h3 id="upcoming-exams-heading" className="font-display text-xl font-semibold">
+          <h3 id="upcoming-exams-heading" className="type-student-section-title">
             Upcoming exams
           </h3>
         </div>

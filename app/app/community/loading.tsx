@@ -13,8 +13,8 @@ const skeleton = "animate-pulse rounded bg-border motion-reduce:animate-none";
  * yet is the community's name, description and counts, and only those are
  * placeheld.
  *
- * The container matches `CommunityHubClient` exactly (`max-w-[1480px]` and the
- * same padding), so nothing shifts when the real page replaces this one.
+ * The container matches `CommunityHubClient` exactly, so nothing shifts when
+ * the real page replaces this one.
  *
  * Placeholder fill is `bg-border`, never `bg-bg-secondary`: in the dark theme
  * `--bg-secondary` and `--card` are the same colour, so a `bg-bg-secondary`
@@ -24,7 +24,7 @@ const skeleton = "animate-pulse rounded bg-border motion-reduce:animate-none";
 export default function CommunityHubLoading() {
   return (
     <main
-      className="mx-auto w-full max-w-[1480px] px-4 pb-20 pt-3 sm:px-6 md:px-8 lg:px-10"
+      className="student-page-frame"
       aria-busy="true"
       aria-label="Loading community hub"
     >

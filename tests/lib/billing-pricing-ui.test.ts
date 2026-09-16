@@ -63,6 +63,11 @@ function markup(subscriptions: UserSubscription[] = [], paidUser = user) {
     plans: [plus, pro],
     invoices: [],
     subscriptions,
+    socialProof: {
+      challengesCompletedThisWeek: 17,
+      handwrittenAnswersReviewed: 29,
+      activeStudyCommunityMembers: 43,
+    },
   };
   return renderToStaticMarkup(
     createElement(BillingPageClient, { overview, paymentConfig: null, user: paidUser }),
@@ -99,12 +104,12 @@ describe("billing pricing UI", () => {
       "Choose Plus",
       "Choose Pro",
       "You don’t have to prepare alone.",
-      "1,248",
+      "17",
       "Challenges completed this week",
-      "386",
+      "29",
       "Handwritten answers reviewed",
-      "72",
-      "Students joined study sessions",
+      "43",
+      "Students active in study communities",
       "Real Stories, Real Growth",
       "Aayush K.",
       "Sneha P.",
@@ -116,11 +121,18 @@ describe("billing pricing UI", () => {
       expect(html).toContain(value);
     }
     expect(html).not.toContain("Rs. 5,000");
+    expect(html).not.toContain("1,248");
+    expect(html).not.toContain("386");
+    expect(html).not.toContain("Students joined study sessions");
     expect(html).not.toMatch(/discount|coupon/i);
-    expect(html).toContain("font-[family-name:var(--font-poppins)]");
+    expect(html.match(/Everything in Free/g) ?? []).toHaveLength(2);
+    expect(html).toContain("type-student-body");
+    expect(html).not.toContain("font-[family-name:var(--font-poppins)]");
     expect(html).toContain("bg-[#d9ff69]");
     expect(html).toContain("bg-[#3548f5]");
-    expect(html).toContain("max-w-[1000px]");
+    expect(html).toContain("student-page-width");
+    expect(html).not.toContain("max-w-[1000px]");
+    expect(html).not.toContain("max-w-[320px]");
   });
 
   it("keeps Free separate and sends the selected paid tier and duration to checkout", () => {
@@ -137,12 +149,30 @@ describe("billing pricing UI", () => {
     expect(invoiceRoute).toContain('.eq("amount", invoiceAmount)');
   });
 
+  it("uses the Figma CTA banner composition for students without a paid plan", () => {
+    const source = readFileSync("components/billing-page-client.tsx", "utf8");
+
+    expect(source).toContain('src="/figma-pricing-book-open.svg"');
+    expect(source).toContain("rounded-[20px] bg-[#3049ed]");
+    expect(source).toContain("max-w-[560px] flex-col items-center text-center");
+    expect(source).toContain("type-student-card-title text-white");
+    expect(source).toContain("type-student-body mt-1.5");
+    expect(source).toContain("min-h-10 rounded-md bg-white px-5 text-sm font-semibold");
+    expect(source).toContain("focus-visible:ring-offset-[#3049ed]");
+    expect(source).not.toContain("text-xl font-extrabold");
+  });
+
   it("does not mark a missing paid plan as current when the user is on Free", () => {
     const overview: StudentBillingOverview = {
       balance: 15,
       plans: [pro],
       invoices: [],
       subscriptions: [],
+      socialProof: {
+        challengesCompletedThisWeek: 0,
+        handwrittenAnswersReviewed: 0,
+        activeStudyCommunityMembers: 0,
+      },
     };
     const html = renderToStaticMarkup(
       createElement(BillingPageClient, { overview, paymentConfig: null, user }),
@@ -155,7 +185,7 @@ describe("billing pricing UI", () => {
 
   it("shows the active Plus plan even though it does not grant unlimited AI", () => {
     const html = markup([activeSubscription(plus.id)]);
-    expect(html).toContain("Plus plan active");
+    expect(html).toContain("Your subscription");
     expect(html).toContain("Active until");
     expect(html).toContain("Cancel subscription");
     expect(html).toContain("Base plan");
@@ -164,7 +194,7 @@ describe("billing pricing UI", () => {
 
   it("shows the active Pro plan and prevents duplicate checkout", () => {
     const html = markup([activeSubscription(pro.id)], { ...user, hasUnlimitedAccess: true });
-    expect(html).toContain("Pro plan active");
+    expect(html).toContain("Your subscription");
     expect(html).toContain("Current plan");
     expect(html).toContain("Active until");
     expect(html).toContain("Cancel subscription");

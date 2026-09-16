@@ -103,7 +103,7 @@ function MetricCard({
     return (
       <article className="min-w-0 rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
+          <span className="type-student-eyebrow text-text-muted">
             {label}
           </span>
           <span className="text-text-secondary" aria-hidden="true">
@@ -129,7 +129,7 @@ function MetricCard({
       )}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
+        <span className="type-student-eyebrow text-text-muted">
           {label}
         </span>
         <span className="text-text-secondary" aria-hidden="true">
@@ -138,7 +138,7 @@ function MetricCard({
       </div>
       <p
         className={cn(
-          "mt-5 truncate font-display text-[clamp(1.65rem,2.2vw,2.15rem)] font-semibold leading-none tracking-[-0.04em] tabular-nums",
+          "type-student-metric mt-5 truncate tabular-nums",
           // The settle is slower than the lift, so the number arrives with a
           // small flourish and then calms down rather than snapping back.
           "transition-[color,transform,text-shadow] duration-700 ease-out motion-reduce:transition-none",
@@ -203,7 +203,7 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
         <div className="max-w-xl">
           <h2
             id="starter-challenge-heading"
-            className="font-display text-[clamp(1.75rem,3vw,2.5rem)] font-extrabold leading-[1.04] tracking-[-0.04em] text-black"
+            className="type-student-page-title text-black"
           >
             One topic.
             <br />
@@ -318,10 +318,10 @@ function SemesterProgress({
     return (
       <section className="rounded-2xl border border-dashed border-border p-7 text-center">
         <LibraryBig className="mx-auto size-7 text-text-muted" aria-hidden="true" />
-        <h2 className="mt-3 font-display text-xl font-semibold">
+        <h2 className="type-student-section-title mt-3">
           Semester progress starts with a community
         </h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-text-secondary">
+        <p className="type-student-body mx-auto mt-2 max-w-xl text-text-secondary">
           Semester-to-subject mappings come from your joined programme community, so nothing is
           guessed from profile text.
         </p>
@@ -341,16 +341,16 @@ function SemesterProgress({
         )}
       >
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
+          <p className="type-student-eyebrow text-text-muted">
             Programme map
           </p>
           <h2
             id="semester-progress-heading"
-            className="mt-2 font-display text-xl font-semibold leading-tight"
+            className="type-student-section-title mt-2"
           >
             Semester progress
           </h2>
-          <p className="mt-1 text-sm text-text-secondary">
+          <p className="type-student-body mt-1 text-text-secondary">
             Real topic readiness from your indexed subjects.
           </p>
         </div>
@@ -390,10 +390,10 @@ function SemesterProgress({
               </p>
             </div>
             <div className="text-right">
-              <p className="font-display text-2xl font-semibold tabular-nums">
+              <p className="type-student-metric tabular-nums">
                 {semester.readiness === null ? "—" : `${Math.round(semester.readiness)}%`}
               </p>
-              <p className="text-xs text-text-muted">Average readiness</p>
+              <p className="type-student-meta text-text-muted">Average readiness</p>
             </div>
           </div>
 
@@ -411,9 +411,9 @@ function SemesterProgress({
                           {subject.code}
                         </span>
                       ) : null}
-                      <h3 className="truncate text-sm font-semibold">{subject.name}</h3>
+                      <h3 className="type-student-card-title truncate">{subject.name}</h3>
                     </div>
-                    <p className="mt-1 text-xs text-text-muted">
+                    <p className="type-student-meta mt-1 text-text-muted">
                       {subject.topicCount === null
                         ? "Topics syncing"
                         : `${formatNumber(subject.topicCount)} topics`}{" "}
@@ -432,7 +432,7 @@ function SemesterProgress({
                         />
                       ) : null}
                     </div>
-                    <p className="mt-1.5 text-xs text-text-muted">
+                    <p className="type-student-meta mt-1.5 text-text-muted">
                       {subject.readiness === null
                         ? "No graded practice yet"
                         : `${Math.round(subject.readiness)}% ready`}
@@ -570,7 +570,7 @@ function DashboardDataSkeleton({
   const line = "animate-pulse rounded-full bg-border motion-reduce:animate-none";
   return (
     <main
-      className="mx-auto w-full max-w-[1440px] px-4 pb-20 pt-4 sm:px-6 lg:px-8"
+      className="student-page-frame"
       aria-busy="true"
     >
       {/*
@@ -590,7 +590,7 @@ function DashboardDataSkeleton({
       ) : null}
       <header className="flex flex-col gap-5 border-b border-border pb-7 pt-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-display text-[clamp(2rem,3.4vw,2.9rem)] font-semibold leading-[1.05] tracking-[-0.045em]">
+          <h1 className="type-student-page-title">
             Welcome, {fullName.trim().split(/\s+/)[0] || "there"}.
           </h1>
           {/* Keep the heading footprint stable while the dashboard data loads. */}
@@ -625,7 +625,7 @@ function DashboardDataSkeleton({
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-display text-xl font-semibold">Practice calendar</h2>
+          <h2 className="type-student-section-title">Practice calendar</h2>
           <div className={`mt-2 h-3 w-52 ${line}`} aria-hidden="true" />
           <div className="mt-5 grid grid-cols-7 gap-2" aria-hidden="true">
             {Array.from({ length: 35 }).map((_, index) => (
@@ -641,7 +641,7 @@ function DashboardDataSkeleton({
           <div className="flex flex-col gap-4">
             <div>
               <div className={`h-3 w-24 ${line}`} aria-hidden="true" />
-              <h2 className="mt-2 font-display text-xl font-semibold">Semester progress</h2>
+              <h2 className="type-student-section-title mt-2">Semester progress</h2>
               <div className={`mt-2 h-3 w-44 ${line}`} aria-hidden="true" />
             </div>
             <div className={`h-11 w-full rounded-xl ${line}`} aria-hidden="true" />
@@ -689,7 +689,7 @@ function DashboardContent({
     );
   }
   return (
-    <main className="mx-auto w-full max-w-[1440px] px-4 pb-20 pt-4 sm:px-6 lg:px-8">
+    <main className="student-page-frame">
       {communityOptions.length ? (
         <div className="mb-5 flex justify-end">
           <CommunitySwitcher
@@ -700,7 +700,7 @@ function DashboardContent({
       ) : null}
       <header className="flex flex-col gap-5 border-b border-border pb-7 pt-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-display text-[clamp(2rem,4vw,3.35rem)] font-semibold leading-[1.02] tracking-[-0.045em]">
+          <h1 className="type-student-page-title">
             Welcome, {firstName(fullName)}.
           </h1>
         </div>

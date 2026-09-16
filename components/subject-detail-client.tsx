@@ -465,7 +465,7 @@ export function SubjectDetailClient({
   const bankFiles = materials.filter((item) => isBankShelf(item.shelf));
 
   return (
-    <main className="w-full max-w-[1240px] px-[14px] pb-24 pt-[18px] lg:p-[26px]">
+    <main className="student-page-frame">
       <p className="mb-4 text-[13px] text-text-muted">
         <Link href="/app/explore" className={`hover:underline ${focusRing}`}>
           My courses
@@ -476,7 +476,7 @@ export function SubjectDetailClient({
       <div className="mb-7 flex flex-wrap items-start gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">
+            <h1 className="type-student-page-title">
               {titleCase(detail.name)}
             </h1>
             {isPrivate ? (

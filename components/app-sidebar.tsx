@@ -393,8 +393,8 @@ export function AppSidebar({
       {/* ── Brand ── */}
       <div
         className={cn(
-          "flex items-center pb-2 pt-6",
-          isCollapsed ? "justify-center px-0" : "justify-between px-6",
+          "mb-3 flex items-center pt-[18px]",
+          isCollapsed ? "justify-center px-0" : "justify-between px-3",
         )}
       >
         <Link
@@ -460,7 +460,7 @@ export function AppSidebar({
       </div>
 
       {/* ── Nav Links ── */}
-      <nav className={cn("mt-4 space-y-1", isCollapsed ? "px-2" : "px-6")}>
+      <nav className={cn("space-y-1", isCollapsed ? "px-2" : "px-3")}>
         <Link
           href="/app/today"
           onClick={() => onCloseMobile?.()}
@@ -485,10 +485,10 @@ export function AppSidebar({
             void prefetchDashboard(queryClient, activeCommunitySlug);
           }}
           className={cn(
-            "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
+            "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
             isCollapsed
-              ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
-              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+              ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
+              : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
             pathname === "/app/today"
               ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
@@ -521,10 +521,10 @@ export function AppSidebar({
           onPointerEnter={() => router.prefetch("/app/community")}
           onFocus={() => router.prefetch("/app/community")}
           className={cn(
-            "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
+            "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
             isCollapsed
-              ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
-              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+              ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
+              : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
             pathname.startsWith("/app/community")
               ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
@@ -559,10 +559,10 @@ export function AppSidebar({
           onPointerEnter={() => router.prefetch("/app/challenges")}
           onFocus={() => router.prefetch("/app/challenges")}
           className={cn(
-            "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
+            "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
             isCollapsed
-              ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
-              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+              ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
+              : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
             pathname.startsWith("/app/challenges")
               ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
@@ -596,12 +596,12 @@ export function AppSidebar({
             }
           }}
           className={cn(
-            "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
+            "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
             isCollapsed
-              ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
-              : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+              ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
+              : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
             pathname.startsWith("/app/chat")
-              ? "bg-bg-secondary text-text-primary"
+              ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
           title={isCollapsed ? "Library" : undefined}
@@ -679,12 +679,12 @@ export function AppSidebar({
               onPointerEnter={() => router.prefetch(item.href)}
               onFocus={() => router.prefetch(item.href)}
               className={cn(
-                "flex items-center text-[15px] leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-[22px] [&_svg]:w-[22px] [&_svg]:shrink-0",
+                "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
                 isCollapsed
-                  ? "mx-auto h-10 w-10 justify-center rounded-xl p-2.5"
-                  : "text-sidebar-crisp gap-3 rounded-xl px-2 py-2.5",
+                  ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
+                  : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
                 isActive
-                  ? "bg-bg-secondary text-text-primary"
+                  ? "bg-text-primary text-text-inverse"
                   : "hover:bg-bg-secondary hover:text-text-primary",
               )}
               title={isCollapsed ? item.label : undefined}

@@ -37,7 +37,7 @@ const shimmer = "animate-pulse rounded-full bg-border motion-reduce:animate-none
 export default function TodayLoading() {
   return (
     <main
-      className="mx-auto w-full max-w-[1440px] px-4 pb-20 pt-4 sm:px-6 lg:px-8"
+      className="student-page-frame"
       aria-busy="true"
       aria-label="Loading dashboard"
     >
