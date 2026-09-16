@@ -21,16 +21,51 @@ function singleResult(data: Record<string, unknown> | null) {
 }
 
 describe("community challenge subject access", () => {
+  /**
+   * THESE TESTS PIN THE VERDICT, NOT THE QUERY PLAN.
+   *
+   * They used to assert which tables were never read — `community_subjects` for
+   * a non-member, `teacher_course_subjects` once community access had won. That
+   * held while the reads were a waterfall, and it was the waterfall that made
+   * this the slowest thing in front of every challenge request: the reads are
+   * issued together now and the verdict is decided on the results.
+   *
+   * So each case below hands the read it used to skip a row that WOULD grant
+   * access, and asserts the answer is unchanged. That is the property those
+   * assertions were standing in for, and it is a stricter one — it fails if a
+   * subject row is ever allowed to authorize a student whose membership or
+   * enrollment does not.
+   */
   it("denies subject access after membership and legacy enrollment are revoked", async () => {
     const queries = {
       communities: singleResult({ id: "community-1" }),
       community_memberships: singleResult(null),
       teacher_course_enrollments: singleResult(null),
+      teacher_courses: singleResult({
+        id: "community-course",
+        teacher_id: "teacher-1",
+        status: "published",
+        visibility: "unlisted",
+      }),
+      // Both subject rows are present and grantable. Neither may stand in for
+      // the membership and the enrollment that are gone.
+      teacher_course_subjects: singleResult({
+        course_id: "community-course",
+        teacher_id: "teacher-1",
+        subject_slug: "computer-programming",
+        subject_name: "Computer Programming",
+        folder_path: "Computer Programming",
+      }),
+      community_subjects: singleResult({
+        teacher_id: "teacher-1",
+        external_subject_slug: "computer-programming",
+        name: "Computer Programming",
+        folder_path: "Computer Programming",
+      }),
     };
     const admin = { from: vi.fn((table: keyof typeof queries) => queries[table]) };
     expect(await getStudentCourseSubjectAccessForCourse("student-1", "community-course", "computer-programming", admin as never)).toBeNull();
     expect(queries.community_memberships.eq).toHaveBeenCalledWith("status", "active");
-    expect(admin.from).not.toHaveBeenCalledWith("community_subjects");
   });
   it("treats active community membership as access even if a legacy enrollment row is missing", async () => {
     const queries = {
@@ -41,7 +76,15 @@ describe("community challenge subject access", () => {
         status: "published",
         visibility: "unlisted",
       }),
-      teacher_course_subjects: singleResult(null),
+      // A course-subject row that would grant plain `course` access. Community
+      // membership outranks it, and must keep doing so now that both are read.
+      teacher_course_subjects: singleResult({
+        course_id: "community-course",
+        teacher_id: "teacher-1",
+        subject_slug: "computer-programming",
+        subject_name: "Computer Programming",
+        folder_path: "Computer Programming",
+      }),
       communities: singleResult({ id: "community-1" }),
       community_memberships: singleResult({ status: "active" }),
       community_subjects: singleResult({
@@ -67,7 +110,6 @@ describe("community challenge subject access", () => {
       subjectSlug: "computer-programming",
       accessKind: "community",
     });
-    expect(admin.from).not.toHaveBeenCalledWith("teacher_course_subjects");
   });
 
   it("resolves a Creator Workspace subject through active community membership", async () => {
@@ -149,7 +191,6 @@ describe("community challenge subject access", () => {
       subjectSlug: "math",
       accessKind: "community",
     });
-    expect(admin.from).not.toHaveBeenCalledWith("teacher_course_enrollments");
   });
 
   it("streams community subject documents without a legacy course enrollment", async () => {
@@ -204,7 +245,14 @@ describe("community challenge subject access", () => {
       teacher_course_subjects: singleResult(null),
       communities: singleResult({ id: "community-1" }),
       community_memberships: singleResult(null),
-      community_subjects: singleResult(null),
+      // Still published, still attached to the community. Membership ended, so
+      // it grants nothing.
+      community_subjects: singleResult({
+        teacher_id: "teacher-1",
+        external_subject_slug: "computer-programming",
+        name: "Computer Programming",
+        folder_path: "Computer Programming",
+      }),
     };
     const admin = {
       from: vi.fn((table: keyof typeof queries) => queries[table]),
@@ -218,7 +266,6 @@ describe("community challenge subject access", () => {
         admin as never,
       ),
     ).resolves.toBeNull();
-    expect(admin.from).not.toHaveBeenCalledWith("community_subjects");
   });
 });
 

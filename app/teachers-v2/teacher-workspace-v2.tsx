@@ -1275,6 +1275,16 @@ function DriveImportQueue({
 }) {
   const [items, setItems] = useState<DriveQueueItem[]>([]);
   const [unavailable, setUnavailable] = useState(false);
+  /**
+   * Whether the first poll has come back yet.
+   *
+   * Without it, "no rows" and "not asked yet" are the same state, and the panel
+   * asserts that nothing has been imported before it has any grounds to — so a
+   * creator whose files ARE there is told they are not, for as long as the round
+   * trip takes, and then contradicted. An import queue is the one panel where
+   * that flash reads as data loss.
+   */
+  const [loaded, setLoaded] = useState(false);
   const settledRef = useRef(0);
   /**
    * The callback is read through a ref rather than depended on.
@@ -1298,6 +1308,7 @@ function DriveImportQueue({
         if (cancelled) return;
         setItems(next);
         setUnavailable(missing);
+        setLoaded(true);
         if (missing) return; // Nothing to poll for on a deployment without the table.
 
         const pending = next.filter(
@@ -1341,6 +1352,35 @@ function DriveImportQueue({
       <p className="mt-4 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
         The import queue is not available on this deployment. Run the latest database migration.
       </p>
+    );
+  }
+  // Only the rows are unknown, so only the rows are placeheld — the panel frame
+  // and its heading are known and are drawn for real. `bg-border`, never
+  // `bg-bg-secondary`: on this panel the secondary surface IS the background.
+  if (!loaded && emptyMessage) {
+    return (
+      <section
+        className="mt-4 rounded-lg border border-border bg-bg-secondary p-3"
+        aria-busy="true"
+        aria-label="Loading the import queue"
+      >
+        <div className="flex items-center justify-between px-1 pb-2">
+          <span className="font-display text-sm font-semibold">Import queue</span>
+          <span className="h-3 w-24 animate-pulse rounded bg-border" />
+        </div>
+        <div className="space-y-2">
+          {[0, 1].map((row) => (
+            <div
+              key={row}
+              className="flex items-center gap-3 rounded-lg border border-border bg-bg-primary px-3 py-3"
+            >
+              <span className="size-6 shrink-0 animate-pulse rounded-full bg-border" />
+              <span className="h-3.5 flex-1 animate-pulse rounded bg-border" style={{ maxWidth: row ? "14rem" : "9rem" }} />
+              <span className="h-3 w-16 shrink-0 animate-pulse rounded bg-border" />
+            </div>
+          ))}
+        </div>
+      </section>
     );
   }
   if (!items.length) {
@@ -9937,6 +9977,15 @@ function CreateSubjectDialog({
    *  of the wizard and must not read like one. */
   const [driveError, setDriveError] = useState("");
   const [uploadStatus, setUploadStatus] = useState({ current: 0, total: 0, shelf: "" });
+  /**
+   * True once nothing further is needed FROM THIS PAGE.
+   *
+   * Only the browser-side uploads need it: those bytes live in this tab and no
+   * server can fetch them. Indexing, and the whole Drive import, run on our side
+   * — so holding the creator here for those is asking them to watch a progress
+   * bar for work their machine is not doing. See the notice below.
+   */
+  const [detachable, setDetachable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
@@ -10098,6 +10147,9 @@ function CreateSubjectDialog({
       );
       const failedUploads: SubjectCreationResult["failedUploads"] = [];
       setUploadStatus({ current: 0, total: uploads.length, shelf: "" });
+      // A run with no browser-side file (Drive-only, or a pasted syllabus) never
+      // needed this page in the first place.
+      setDetachable(uploads.length === 0);
       for (const [index, upload] of uploads.entries()) {
         const shelfLabel = uploadShelfLabel(upload.shelf);
         setUploadStatus({ current: index + 1, total: uploads.length, shelf: shelfLabel });
@@ -10116,6 +10168,9 @@ function CreateSubjectDialog({
           });
         }
       }
+      // Every byte that had to leave this tab has left it. Whatever remains —
+      // indexing, and the Drive queue below — is ours.
+      setDetachable(true);
       if (failedUploads.length) {
         const details = failedUploads
           .map(
@@ -10175,7 +10230,12 @@ function CreateSubjectDialog({
   const selectedFileCount =
     (syllabusFile || syllabusText.trim() ? 1 : 0) + materialFiles.length + bankFiles.length;
   return (
-    <Dialog title="Add a subject" onClose={busy ? () => undefined : onClose}>
+    // Closable mid-run, on purpose. Dismissing the dialog does not cancel
+    // anything: the upload loop is an ordinary async function that keeps running
+    // in this tab, and the subject, its shelves and its Drive queue are already
+    // server-side records. Refusing the close taught creators that the work was
+    // theirs to babysit, which it is not.
+    <Dialog title="Add a subject" onClose={onClose}>
       {communityContext ? (
         <p className="mb-5 rounded-lg border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
           {titleCase(communityContext.name)}
@@ -10653,7 +10713,8 @@ function CreateSubjectDialog({
             </label>
             <p className="mt-1 text-sm text-text-muted">
               Paste a shared link. Anyone with the link must be able to view it. The files are
-              fetched in the background after the subject is created.
+              fetched on our side after the subject is created — you do not have to stay on
+              this page for them.
             </p>
             <input
               id="subject-drive-link"
@@ -10761,6 +10822,29 @@ function CreateSubjectDialog({
               ) : (
                 <p className="text-sm">{progress || "Creating…"}</p>
               )}
+              {/* What is actually safe to do, stated plainly and truthfully.
+                  The two cases are genuinely different: bytes still in this tab
+                  can only be sent by this tab, while indexing and the Drive queue
+                  are server-side and need nothing from the creator. */}
+              <p className="mt-3 border-t border-border pt-3 text-sm text-text-secondary">
+                {detachable ? (
+                  <>
+                    <span className="font-medium text-text-primary">
+                      You can close this page.
+                    </span>{" "}
+                    Indexing{driveLink.trim() ? " and the Drive import" : ""} finishes on our
+                    side — it will be waiting in the subject when you come back.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-text-primary">
+                      Keep this tab open until the files finish uploading
+                    </span>{" "}
+                    — they are being sent from this device. You can close this dialog; it
+                    does not stop them.
+                  </>
+                )}
+              </p>
             </div>
           ) : null}
           <div className="mt-6 flex justify-end gap-2 border-t border-border pt-5">

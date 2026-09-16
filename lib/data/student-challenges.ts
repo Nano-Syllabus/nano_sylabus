@@ -1,9 +1,6 @@
 import { after } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import {
-  getStudentCourseSubjectAccess,
-  getStudentCourseSubjectAccessForCourse,
-} from "@/lib/student-courses";
+import { getStudentCourseSubjectAccessCached } from "@/lib/student-courses";
 import {
   createTeacherChallengeExam,
   gradeTeacherAnswers,
@@ -906,13 +903,20 @@ async function issueChallengeExam(input: {
   return exam;
 }
 
+/**
+ * Whether this student may still open this challenge's subject.
+ *
+ * Cached for 30s per student-subject rather than re-derived per request — see
+ * `getStudentCourseSubjectAccessCached`. Every route in this file runs this, and
+ * `/content` runs it on a poll, so it was the fixed cost in front of reads that
+ * otherwise touch one row.
+ */
 async function requireChallengeAccess(userId: string, row: ChallengeRow) {
-  const admin = createSupabaseAdminClient();
-  const courseId = row.course_id ? String(row.course_id) : null;
-  const subjectSlug = String(row.subject_slug || "");
-  const access = courseId
-    ? await getStudentCourseSubjectAccessForCourse(userId, courseId, subjectSlug, admin)
-    : await getStudentCourseSubjectAccess(userId, subjectSlug, admin);
+  const access = await getStudentCourseSubjectAccessCached(
+    userId,
+    row.course_id ? String(row.course_id) : null,
+    String(row.subject_slug || ""),
+  );
   if (!access) {
     throw new Error("You no longer have access to the course that assigned this challenge.");
   }

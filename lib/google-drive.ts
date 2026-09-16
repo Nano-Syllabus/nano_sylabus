@@ -192,6 +192,28 @@ function entryFrom(record: Record<string, unknown>): DriveEntry {
   };
 }
 
+/**
+ * One file's metadata, fetched server-side. Null when there is no API key.
+ *
+ * The import worker needs this because the metadata it was HANDED came from the
+ * browser, and the browser only has it when the resolve that produced it ran with
+ * a key. Without one, the row reaches the queue with no name, no type and size 0
+ * — and a size of 0 is indistinguishable from "unknown", so the cheap size guard
+ * silently does not fire. That is how a 97.9 MB PDF got past a 50 MB ceiling and
+ * wedged its row in `importing`: nothing rejected it, and the download it should
+ * never have started was left to fail on its own.
+ *
+ * The worker runs on the server, where the key lives, so it can simply ask.
+ */
+export async function fetchDriveMetadata(fileId: string): Promise<DriveEntry | null> {
+  if (!apiKey()) return null;
+  const record = await driveJson(`/files/${encodeURIComponent(fileId)}`, {
+    fields: "id,name,mimeType,size",
+    supportsAllDrives: "true",
+  });
+  return entryFrom(record);
+}
+
 /** What a link points at: one file, or the files directly inside one folder. */
 export async function resolveDriveLink(raw: string): Promise<DriveEntry[]> {
   const parsed = parseDriveLink(raw);

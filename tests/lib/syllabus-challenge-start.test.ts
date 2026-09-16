@@ -16,6 +16,10 @@ vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.admin 
 vi.mock("@/lib/student-courses", () => ({
   getStudentCourseSubjectAccessForCourse: mocks.access,
   getStudentCourseSubjectAccess: mocks.access,
+  // What the challenge routes actually call now: the same resolution, memoized
+  // per student-subject so a poll does not re-run it. The mock stands in for the
+  // resolution, not the cache — `clearMemo()` in `beforeEach` covers the cache.
+  getStudentCourseSubjectAccessCached: mocks.access,
 }));
 vi.mock("@/lib/teacher-app/client", async (original) => ({
   ...(await original<typeof import("@/lib/teacher-app/client")>()),

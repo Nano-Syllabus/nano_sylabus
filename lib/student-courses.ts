@@ -1,6 +1,7 @@
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { invalidateMemo, memo } from "@/lib/http/memo";
 import { clearStudentStudyTrails } from "@/lib/data/study-trail-cleanup";
 import { mapTeacherCourse, type TeacherCourse } from "@/lib/teacher-courses";
 import { profileFromUser, withTeacherAvatar } from "@/lib/teacher-public-profile";
@@ -585,24 +586,31 @@ async function getCommunitySubjectAccessForCourse(
   if (!communityResult.data?.id) return null;
 
   const communityId = String(communityResult.data.id);
-  const membershipResult = await admin
-    .from("community_memberships")
-    .select("status")
-    .eq("community_id", communityId)
-    .eq("user_id", studentId)
-    .eq("status", "active")
-    .maybeSingle();
+  // Both depend on the community id and on nothing else, so they are asked at
+  // the same time. Membership still decides the answer — a non-member gets null
+  // exactly as before; the subject read is simply already in flight rather than
+  // queued behind it, which is what this is called on every challenge request to
+  // authorize a row the student is only reading.
+  const [membershipResult, subjectResult] = await Promise.all([
+    admin
+      .from("community_memberships")
+      .select("status")
+      .eq("community_id", communityId)
+      .eq("user_id", studentId)
+      .eq("status", "active")
+      .maybeSingle(),
+    admin
+      .from("community_subjects")
+      .select("teacher_id,external_subject_slug,name,folder_path")
+      .eq("community_id", communityId)
+      .eq("external_subject_slug", subjectSlug)
+      .eq("status", "active")
+      .eq("publication_status", "published")
+      .maybeSingle(),
+  ]);
   if (membershipResult.error) throw membershipResult.error;
   if (!membershipResult.data) return null;
 
-  const subjectResult = await admin
-    .from("community_subjects")
-    .select("teacher_id,external_subject_slug,name,folder_path")
-    .eq("community_id", communityId)
-    .eq("external_subject_slug", subjectSlug)
-    .eq("status", "active")
-    .eq("publication_status", "published")
-    .maybeSingle();
   if (subjectResult.error) throw subjectResult.error;
   if (!subjectResult.data?.teacher_id || !subjectResult.data.external_subject_slug) return null;
 
@@ -791,45 +799,56 @@ export async function getStudentCourseSubjectAccessForCourse(
     const access = await getCreatorPrivateSubjectAccess(studentId, subjectSlug, admin);
     return access?.courseId === courseId ? access : null;
   }
-  // Community membership is the primary entitlement for community subjects.
-  // The hidden study-course enrollment is only a compatibility/mastery row;
-  // preserve the community access kind for authorization and diagnostics.
-  const communityAccess = await getCommunitySubjectAccessForCourse(
-    studentId,
-    courseId,
-    subjectSlug,
-    admin,
-  );
-  const enrollmentResult = await admin
-    .from("teacher_course_enrollments")
-    .select("course_id")
-    .eq("student_id", studentId)
-    .eq("course_id", courseId)
-    .in("status", ["active", "completed"])
-    .maybeSingle();
+  /**
+   * FOUR INDEPENDENT READS, ASKED AT ONCE.
+   *
+   * None of these four depends on any of the others — they were sequential only
+   * because each `if` reads better next to the query that answers it. Read that
+   * way it was up to seven round trips deep, and this function is the
+   * authorization check in front of EVERY challenge request, including the
+   * `/content` poll the challenge screen runs every couple of seconds while a
+   * student reads. The checks below are unchanged and still run in the same
+   * order on the same results; only the waiting is shared.
+   *
+   * Community membership stays the primary entitlement for community subjects —
+   * the hidden study-course enrollment is only a compatibility/mastery row, so
+   * the community access kind is preserved for authorization and diagnostics.
+   */
+  const [communityAccess, enrollmentResult, courseResult, subjectResult] = await Promise.all([
+    getCommunitySubjectAccessForCourse(studentId, courseId, subjectSlug, admin),
+    admin
+      .from("teacher_course_enrollments")
+      .select("course_id")
+      .eq("student_id", studentId)
+      .eq("course_id", courseId)
+      .in("status", ["active", "completed"])
+      .maybeSingle(),
+    admin
+      .from("teacher_courses")
+      .select("id,teacher_id,status,visibility")
+      .eq("id", courseId)
+      .is("archived_at", null)
+      .maybeSingle(),
+    admin
+      .from("teacher_course_subjects")
+      .select("course_id,teacher_id,subject_slug,subject_name,folder_path")
+      .eq("course_id", courseId)
+      .eq("subject_slug", subjectSlug)
+      .maybeSingle(),
+  ]);
   if (enrollmentResult.error) throw enrollmentResult.error;
   if (!enrollmentResult.data && !communityAccess) return null;
 
-  const courseResult = await admin
-    .from("teacher_courses")
-    .select("id,teacher_id,status,visibility")
-    .eq("id", courseId)
-    .is("archived_at", null)
-    .maybeSingle();
   if (courseResult.error) throw courseResult.error;
   if (!courseResult.data || !isStudentVisibleCourse(courseResult.data)) return null;
   if (communityAccess) return communityAccess;
 
-  const subjectResult = await admin
-    .from("teacher_course_subjects")
-    .select("course_id,teacher_id,subject_slug,subject_name,folder_path")
-    .eq("course_id", courseId)
-    .eq("subject_slug", subjectSlug)
-    .maybeSingle();
   if (subjectResult.error) throw subjectResult.error;
-  if (!subjectResult.data) {
-    return getCommunitySubjectAccessForCourse(studentId, courseId, subjectSlug, admin);
-  }
+  // No course subject row and no community access — the second lookup this used
+  // to make here asked `getCommunitySubjectAccessForCourse` the identical
+  // question a few lines after it had already been answered `null`, for three
+  // more round trips and the same answer.
+  if (!subjectResult.data) return null;
 
   return {
     courseId: String(subjectResult.data.course_id || courseId),
@@ -848,25 +867,37 @@ export async function getStudentCourseSubjectAccess(
   const requested = subjectAccessKey(subject);
   if (!requested) return null;
 
-  const privateAccess = await getCreatorPrivateSubjectAccess(studentId, subject, admin);
+  /**
+   * The three entitlements are asked at once and ranked afterwards.
+   *
+   * Private profile, community membership and course enrollment are three
+   * unrelated tables; the precedence between them is a rule about the ANSWERS,
+   * not about the order the questions have to be asked in. Awaiting them in
+   * turn made a student with none of the first two wait out both before the
+   * enrollment read even started.
+   */
+  const [privateAccess, communitySubjects, enrollmentResult] = await Promise.all([
+    getCreatorPrivateSubjectAccess(studentId, subject, admin),
+    // A community membership is itself the student's entitlement to every
+    // active subject attached to that community. Community workspaces use a
+    // hidden course for mastery data, but membership must not depend on a
+    // duplicate legacy teacher_course_enrollments row.
+    listStudentCommunitySubjectAccess(studentId, admin),
+    admin
+      .from("teacher_course_enrollments")
+      .select("course_id")
+      .eq("student_id", studentId)
+      .in("status", ["active", "completed"]),
+  ]);
   if (privateAccess) return privateAccess;
 
-  // A community membership is itself the student's entitlement to every
-  // active subject attached to that community. Community workspaces use a
-  // hidden course for mastery data, but membership must not depend on a
-  // duplicate legacy teacher_course_enrollments row.
-  const communityAccess = (await listStudentCommunitySubjectAccess(studentId, admin)).find(
+  const communityAccess = communitySubjects.find(
     (item) =>
       subjectAccessKey(item.subjectSlug) === requested ||
       subjectAccessKey(item.subjectName) === requested,
   );
   if (communityAccess) return communityAccess;
 
-  const enrollmentResult = await admin
-    .from("teacher_course_enrollments")
-    .select("course_id")
-    .eq("student_id", studentId)
-    .in("status", ["active", "completed"]);
   if (enrollmentResult.error) throw enrollmentResult.error;
 
   const enrolledCourseIds = (enrollmentResult.data || [])
@@ -912,6 +943,56 @@ export async function getStudentCourseSubjectAccess(
     subjectName: String(match.subject_name || ""),
     folderPath: String(match.folder_path || ""),
   };
+}
+
+/**
+ * ONE ENTITLEMENT LOOKUP PER STUDENT-SUBJECT PER 30s, NOT ONE PER REQUEST.
+ *
+ * Every challenge route authorizes its row the same way — load the row, then ask
+ * whether this student may still see that course's subject — and the answer is
+ * the same for all of them. `/content` alone asks it every couple of seconds for
+ * the whole time a student reads a lesson, and each ask was a fan-out of reads
+ * against four tables to confirm something that changes when a student enrolls
+ * or leaves a course and at no other time.
+ *
+ * WHY CACHING AN AUTHORIZATION DECISION IS SAFE HERE, AND WHERE IT STOPS
+ * ---------------------------------------------------------------------
+ * The key carries the whole identity of the decision — the student, the course
+ * and the subject — so no two students can share an entry. The window is the 30s
+ * the rest of the app's caches already agree on, and there is deliberately NO
+ * stale-while-revalidate: a stale window would keep serving a revoked
+ * entitlement while it refreshed behind the reader, which is the one thing this
+ * must not do. A `null` is cached too, so a student who does not have access
+ * does not get to re-run the fan-out by holding down a poll.
+ *
+ * The two events that make an entry wrong both call `invalidateStudentCourseAccess`,
+ * so enrolling and leaving take effect at once rather than 30s later.
+ *
+ * This is the read path only. Anything that WRITES on the strength of an
+ * entitlement — grading, recording a score — is welcome to use it, because the
+ * decision it caches is the same one; what must never be cached is the row
+ * itself, and this returns none.
+ */
+export function getStudentCourseSubjectAccessCached(
+  studentId: string,
+  courseId: string | null,
+  subjectSlug: string,
+): Promise<StudentCourseSubjectAccess | null> {
+  return memo(
+    `${STUDENT_ACCESS_MEMO}:${studentId}:${courseId || ""}:${subjectSlug}`,
+    () =>
+      courseId
+        ? getStudentCourseSubjectAccessForCourse(studentId, courseId, subjectSlug)
+        : getStudentCourseSubjectAccess(studentId, subjectSlug),
+    { ttlSeconds: 30 },
+  );
+}
+
+const STUDENT_ACCESS_MEMO = "student:course-subject-access";
+
+/** Drop a student's cached entitlements, after enrolling or leaving a course. */
+export function invalidateStudentCourseAccess(studentId: string) {
+  invalidateMemo(`${STUDENT_ACCESS_MEMO}:${studentId}`);
 }
 
 export async function getStudentCourseSubjectAccessForDocumentPath(
@@ -1028,6 +1109,7 @@ export async function enrollStudentInCourse(
   );
   if (result.error) throw result.error;
 
+  invalidateStudentCourseAccess(studentId);
   return course;
 }
 
@@ -1056,6 +1138,7 @@ export async function enrollStudentInCourseByInviteCode(
   );
   if (result.error) throw result.error;
 
+  invalidateStudentCourseAccess(studentId);
   return course;
 }
 
@@ -1124,6 +1207,7 @@ export async function leaveStudentCourse(
     throw new StudentCourseError("You are not enrolled in this course.", 404);
   }
 
+  invalidateStudentCourseAccess(studentId);
   return {
     id: String(courseResult.data.id || ""),
     slug: String(courseResult.data.slug || slug),

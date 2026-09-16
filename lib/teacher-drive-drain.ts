@@ -4,7 +4,12 @@ import {
   failDriveImport,
   type DriveImportItem,
 } from "@/lib/data/teacher-drive-queue";
-import { downloadDriveFile, DriveLinkError, type DriveEntry } from "@/lib/google-drive";
+import {
+  downloadDriveFile,
+  DriveLinkError,
+  fetchDriveMetadata,
+  type DriveEntry,
+} from "@/lib/google-drive";
 import {
   indexedDocumentId,
   jobId,
@@ -57,16 +62,44 @@ async function importOne(collectionKey: string, teacherId: string, item: DriveIm
    * no size, and the keyless path has no metadata at all — so this only fires on
    * a size Drive actually stated, and `readCapped` still backs it up.
    */
-  if (item.sizeBytes > 0) {
-    const knownSizeError = teacherUploadSizeError(item.sizeBytes);
+  let known = { name: item.fileName, mimeType: item.mimeType, sizeBytes: item.sizeBytes };
+
+  // ASK DRIVE OURSELVES WHEN THE ROW DOES NOT KNOW.
+  //
+  // The row's metadata came from the browser, which only has it when the resolve
+  // that produced it ran with an API key. A deployment without one enqueues rows
+  // with no name, no type and size 0 — and `sizeBytes > 0` below then reads that
+  // 0 as "nothing to check" rather than "not known", so the ceiling never applies.
+  // The worker is on the server and the key is here, so the honest thing is to ask
+  // rather than to trust what arrived.
+  if (!known.sizeBytes || !known.name) {
+    try {
+      const fresh = await fetchDriveMetadata(item.driveFileId);
+      if (fresh) {
+        known = {
+          name: known.name || fresh.name,
+          mimeType: known.mimeType || fresh.mimeType,
+          sizeBytes: known.sizeBytes || fresh.sizeBytes,
+        };
+      }
+    } catch (cause) {
+      // A metadata call that fails is not a reason to abandon the import: the
+      // download below still enforces the ceiling, and it reports sharing and
+      // not-found faults with better messages than this call can.
+      if (!(cause instanceof DriveLinkError)) throw cause;
+    }
+  }
+
+  if (known.sizeBytes > 0) {
+    const knownSizeError = teacherUploadSizeError(known.sizeBytes);
     if (knownSizeError) throw new Error(knownSizeError);
   }
 
   const entry: DriveEntry = {
     id: item.driveFileId,
-    name: item.fileName,
-    mimeType: item.mimeType,
-    sizeBytes: item.sizeBytes,
+    name: known.name,
+    mimeType: known.mimeType,
+    sizeBytes: known.sizeBytes,
     isFolder: false,
   };
   const download = await downloadDriveFile(entry);
