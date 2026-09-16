@@ -27,6 +27,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   askTeacherSubjectStream,
   getTeacherCollectionReadiness,
+  toTeacherSubjectAttachments,
   TeacherApiError,
   type ApiRecord,
 } from "@/lib/teacher-app/client";
@@ -1062,16 +1063,12 @@ export async function POST(request: Request) {
           let servedFrom: string | null = null;
           let tenantTokenUsage = normalizeTokenUsage(null);
           let privateSourcesSent = false;
+          let attachmentsHonored = false;
 
           try {
             enqueue("status", { message: "Connecting to syllabus stream..." });
 
             if (usesCreatorCollectionStream) {
-              if (latestUserAttachments.length > 0) {
-                throw new Error(
-                  "Image attachments are not supported in collection chat yet. Ask with text or open the material from Library & NanoAI.",
-                );
-              }
               enqueue("status", {
                 message: isCommunitySubject
                   ? "Reading this community subject's materials..."
@@ -1119,6 +1116,14 @@ export async function POST(request: Request) {
                       explicitTopic: event.next_topic,
                       nextContextChunk: event.next_context_chunk,
                     });
+                    // A collection endpoint that understands attachments says so in
+                    // `served_from`. One that predates them ignores the field
+                    // entirely (pydantic drops unknown keys), so the only evidence
+                    // that an image was read is this marker — see the notice below.
+                    attachmentsHonored =
+                      attachmentsHonored ||
+                      (typeof event.served_from === "string" &&
+                        event.served_from.includes("attachment"));
                     privateSourcesSent = true;
                     enqueue("sources", {
                       sources: tenantSources,
@@ -1139,7 +1144,18 @@ export async function POST(request: Request) {
                     throw new Error(event.message);
                   }
                 },
+                toTeacherSubjectAttachments(latestUserAttachments),
               );
+              // Never let an ignored image pass as an answer. A tenant API older
+              // than collection attachments drops them silently, and the reply
+              // that comes back reads like a considered answer to a question it
+              // never saw — worse than the refusal this used to be.
+              if (latestUserAttachments.length > 0 && !attachmentsHonored) {
+                enqueue("status", {
+                  message:
+                    "This collection's API has not been updated for image attachments, so the answer above was written without reading the image.",
+                });
+              }
               if (!privateSourcesSent) {
                 chunksRetrieved = tenantSources.length;
                 servedFrom =

@@ -1,6 +1,7 @@
 import { getTenantApiEnv } from "@/lib/env";
 import { agentFor, transportFor } from "@/lib/http-agents";
 import { trackApiRequest } from "@/lib/api-request-tracking";
+import { createLimiter } from "@/lib/http/limit";
 import { invalidateMemo, memo } from "@/lib/http/memo";
 
 export type ApiRecord = Record<string, unknown>;
@@ -563,9 +564,18 @@ async function teacherStreamRequest(
   );
 }
 
-// Workspace metadata should be fast. Two short attempts keep a transient
-// upstream hiccup from blocking the whole creator screen for half a minute.
-const workspaceReadOptions = { timeoutMs: 6_000, retries: 1 } as const;
+// Workspace metadata IS fast — 0.15s of work each, measured in-process on the
+// production box. What it is not is alone on that box, and a timeout here is
+// almost never the collection being slow to read; it is this request waiting
+// behind whatever else the single uvicorn worker was handed.
+//
+// 6s was too tight for that. Two attempts at 6s gave the whole screen 12.5s and
+// then showed "Couldn't load your workspace" — which on 2026-09-16 is exactly
+// what every one of the day's 47 collection reads did, three seconds behind a
+// 105-request topic sweep that is now gated (see `practiceTopicsGate`). Ten
+// seconds is still far under the route's own budget and survives a burst that
+// the gate has already made much smaller.
+const workspaceReadOptions = { timeoutMs: 10_000, retries: 1 } as const;
 
 export const getTeacherMe = (key: string) =>
   teacherRequest<ApiRecord>("/v1/collection/me", key, workspaceReadOptions);
@@ -578,6 +588,105 @@ export const getTeacherSourceTree = (key: string) =>
 
 export const getTeacherDocuments = (key: string) =>
   teacherRequest<ApiRecord | ApiRecord[]>("/v1/collection/documents", key, workspaceReadOptions);
+
+/**
+ * THE LAST WORKSPACE THAT LOADED, KEPT ONLY TO SURVIVE A BUSY UPSTREAM.
+ *
+ * This is NOT a cache: the fresh read is always attempted and always wins, so a
+ * file uploaded a second ago is in the tree a second later, exactly as before.
+ * The snapshot is consulted in one situation — the fresh read failed with
+ * something transient — and in that situation the alternative is not fresher
+ * data, it is an error page.
+ *
+ * Which is the real change. The creator workspace is four independent reads and
+ * it rendered only if ALL FOUR returned; one slow `source-tree` took down the
+ * subjects, the papers, the classrooms and the public profile with it. A
+ * teacher's own collection from a few minutes ago is a far better answer than
+ * "Couldn't load your workspace", and `stale` is carried out to the UI so it can
+ * say so rather than pretend.
+ *
+ * ONLY TRANSIENT FAILURES FALL BACK. A revoked or rotated key is 401 and must
+ * keep reaching the caller, which turns it into "ask an administrator to rotate
+ * it" — serving a snapshot there would hide the one error the teacher can act
+ * on, for a quarter of an hour, and let them edit a workspace they can no longer
+ * write to.
+ *
+ * SCOPE: one Node process, like `lib/http/memo.ts`, and keyed by the collection
+ * secret, so it is per-teacher by construction and nothing crosses accounts.
+ */
+const WORKSPACE_SNAPSHOT_MS = 15 * 60 * 1000;
+const WORKSPACE_SNAPSHOT_MAX_ENTRIES = 200;
+const workspaceSnapshots = new Map<string, { value: unknown; storedAt: number }>();
+
+function isTransientTeacherError(error: unknown): boolean {
+  if (error instanceof TeacherApiError) return [408, 429, 500, 502, 503, 504].includes(error.status);
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? String((error as { code?: unknown }).code || "")
+      : "";
+  return ["ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT", "ENOTFOUND"].includes(code);
+}
+
+async function withWorkspaceSnapshot<T>(
+  name: string,
+  key: string,
+  load: () => Promise<T>,
+): Promise<{ value: T; stale: boolean }> {
+  const cacheKey = `${name}:${key}`;
+  try {
+    const value = await load();
+    // A Map re-insert does not move an existing key, so delete first: the
+    // eviction below drops the OLDEST entry and that is only true if a refreshed
+    // entry counts as recently used.
+    workspaceSnapshots.delete(cacheKey);
+    workspaceSnapshots.set(cacheKey, { value, storedAt: Date.now() });
+    if (workspaceSnapshots.size > WORKSPACE_SNAPSHOT_MAX_ENTRIES) {
+      const oldest = workspaceSnapshots.keys().next();
+      if (!oldest.done) workspaceSnapshots.delete(oldest.value);
+    }
+    return { value, stale: false };
+  } catch (error) {
+    const snapshot = workspaceSnapshots.get(cacheKey);
+    if (!isTransientTeacherError(error) || !snapshot) throw error;
+    if (Date.now() - snapshot.storedAt > WORKSPACE_SNAPSHOT_MS) {
+      workspaceSnapshots.delete(cacheKey);
+      throw error;
+    }
+    console.error(`[teacher-workspace] ${name} failed; serving the last good read`, error);
+    return { value: snapshot.value as T, stale: true };
+  }
+}
+
+/** For tests, and for anything that must prove a read went upstream. */
+export function clearTeacherWorkspaceSnapshots() {
+  workspaceSnapshots.clear();
+}
+
+export type TeacherWorkspaceReads = {
+  collection: ApiRecord;
+  subjects: { subjects: ApiRecord[] };
+  sourceTree: ApiRecord;
+  documents: ApiRecord | ApiRecord[];
+  /** At least one of the four came from the snapshot above. */
+  stale: boolean;
+};
+
+/** The four reads the creator workspace is built from, in one round of fan-out. */
+export async function readTeacherWorkspace(key: string): Promise<TeacherWorkspaceReads> {
+  const [collection, subjects, sourceTree, documents] = await Promise.all([
+    withWorkspaceSnapshot("me", key, () => getTeacherMe(key)),
+    withWorkspaceSnapshot("subjects", key, () => getTeacherSubjects(key)),
+    withWorkspaceSnapshot("source-tree", key, () => getTeacherSourceTree(key)),
+    withWorkspaceSnapshot("documents", key, () => getTeacherDocuments(key)),
+  ]);
+  return {
+    collection: collection.value,
+    subjects: subjects.value,
+    sourceTree: sourceTree.value,
+    documents: documents.value,
+    stale: collection.stale || subjects.stale || sourceTree.stale || documents.stale,
+  };
+}
 
 export const getTeacherDocument = (key: string, documentId: string) =>
   teacherRequest<ApiRecord>(`/v1/collection/documents/${encodeURIComponent(documentId)}`, key);
@@ -789,6 +898,38 @@ export const askTeacherSubject = (
     },
   });
 
+/**
+ * An attachment on the wire: raw base64 with the `data:` header stripped.
+ *
+ * The browser hands these over as data URLs, and the collection endpoint wants
+ * the payload on its own — it decodes straight to the bytes it passes the model.
+ */
+export type TeacherSubjectAttachment = {
+  mime_type: string;
+  data: string;
+  name: string;
+};
+
+export const toTeacherSubjectAttachments = (
+  attachments: Array<{ name?: string; mimeType?: string; dataUrl?: string }>,
+): TeacherSubjectAttachment[] =>
+  attachments.flatMap((attachment) => {
+    const dataUrl = attachment.dataUrl ?? "";
+    const comma = dataUrl.indexOf(",");
+    // Anything that is not a base64 data URL is dropped here rather than sent as
+    // junk the server would only drop again, one round trip later.
+    if (comma < 0 || !dataUrl.slice(0, comma).includes("base64")) return [];
+    const data = dataUrl.slice(comma + 1);
+    if (!data) return [];
+    return [
+      {
+        mime_type: attachment.mimeType || dataUrl.slice(5, dataUrl.indexOf(";")) || "image/png",
+        data,
+        name: attachment.name ?? "",
+      },
+    ];
+  });
+
 export const askTeacherSubjectStream = (
   key: string,
   subject: string,
@@ -797,6 +938,7 @@ export const askTeacherSubjectStream = (
   prompt: string,
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   onEvent: (event: TeacherSubjectStreamEvent) => void | Promise<void>,
+  attachments: TeacherSubjectAttachment[] = [],
 ) =>
   teacherStreamRequest(
     "/v1/collection/ask/stream",
@@ -807,6 +949,7 @@ export const askTeacherSubjectStream = (
       top_k: topK,
       prompt,
       conversation_history: conversationHistory,
+      attachments,
     },
     onEvent,
   );
@@ -847,21 +990,36 @@ export const getTeacherCollectionReadiness = (key: string, subject: string) =>
  * TTL 300s / stale 900s: after the first load nobody waits for this again,
  * including the request that finds the entry expired — it is served from
  * memory while the refresh runs behind it.
+ *
+ * AND IT IS GATED, because the memo only helps the SECOND load.
+ * ------------------------------------------------------------
+ * Every caller of this maps over subjects with `Promise.all`, so a cold process
+ * asks for all of them in the same instant. For one community that is 35
+ * requests, and on 2026-09-16 three concurrent renders made it 105 inside two
+ * seconds — enough to saturate the tenant API's `weightage` pool (103 rejected)
+ * and push the creator workspace's own reads past their timeout, three seconds
+ * later, on a box where each of those reads is 0.15s of work. See
+ * `lib/http/limit.ts` for the measurement. Four in flight keeps a fan-out a
+ * queue instead of a burst; the work is not reduced, only spread.
  */
+const practiceTopicsGate = createLimiter(4);
+
 export const getTeacherPracticeTopics = (
   key: string,
   subject: string,
   options: { totalMarks?: number; maxQuestions?: number; refresh?: boolean } = {},
 ) => {
   const request = () =>
-    teacherRequest<ApiRecord>(
-      withQuery("/api/v1/practice/topics", {
-        subject,
-        total_marks: options.totalMarks,
-        max_questions: options.maxQuestions,
-        refresh: options.refresh,
-      }),
-      key,
+    practiceTopicsGate(() =>
+      teacherRequest<ApiRecord>(
+        withQuery("/api/v1/practice/topics", {
+          subject,
+          total_marks: options.totalMarks,
+          max_questions: options.maxQuestions,
+          refresh: options.refresh,
+        }),
+        key,
+      ),
     );
 
   if (options.refresh) return request();

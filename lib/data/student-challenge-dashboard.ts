@@ -405,6 +405,11 @@ function uniqueSubjects(...groups: SubjectAccess[][]) {
   return [...result.values()];
 }
 
+/** Passed, and therefore behind the student rather than in front of them. */
+function isPassedTopic(mastery: TopicMastery | undefined) {
+  return Boolean(mastery && mastery.attempts > 0 && mastery.status === "strong");
+}
+
 function topicPriority(status: PracticeTopicStatus | undefined, attempts: number) {
   if (status === "weak") return 0;
   if (status === "developing") return 1;
@@ -628,13 +633,29 @@ export async function getStudentChallengeDashboard(
                 subjectName,
               }),
           );
+          /**
+           * THE COURSE IN ORDER, STARTING AT THE BEGINNING.
+           *
+           * This used to rank by mastery — weakest topic first — which is the
+           * right answer for revision and the wrong one for a student who has
+           * not started. With nothing attempted every topic scored the same, so
+           * the order fell through to the catalogue and looked correct; the
+           * moment one attempt landed the queue began jumping around the
+           * syllabus, offering Unit 7 before Unit 2 had been seen.
+           *
+           * A subtopic challenge is the course being taught, so it runs in the
+           * order the course is taught: first subtopic of the first unit, then
+           * the next, and a topic already passed steps aside so the queue moves
+           * on. A topic that has been attempted and NOT passed keeps its place —
+           * that is where the student actually is, and skipping past it would
+           * quietly write the topic off.
+           */
           const rankedTopics = learningTopics
-            .map((topic) => ({ topic, mastery: stored.get(topic.topic_key) }))
+            .map((topic, index) => ({ topic, index, mastery: stored.get(topic.topic_key) }))
             .sort(
               (left, right) =>
-                topicPriority(left.mastery?.status, left.mastery?.attempts ?? 0) -
-                  topicPriority(right.mastery?.status, right.mastery?.attempts ?? 0) ||
-                (left.mastery?.percentage ?? 0) - (right.mastery?.percentage ?? 0),
+                Number(isPassedTopic(left.mastery)) - Number(isPassedTopic(right.mastery)) ||
+                left.index - right.index,
             );
           const next = rankedTopics[0]?.topic;
           return {

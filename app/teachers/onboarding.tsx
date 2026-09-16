@@ -14,10 +14,19 @@ export function TeacherOnboarding({ userEmail }: { userEmail: string }) {
     setLoading(true);
     setError("");
     try {
-      await onboardTeacher();
+      // The action RETURNS its failures — see `onboardTeacher`. A thrown one is
+      // redacted to "an error occurred in the Server Components render" by the
+      // production build, which is why this used to be the only thing the screen
+      // could ever say. The catch below is now for a genuine crash only.
+      const result = await onboardTeacher();
+      if (!result.ok) {
+        setError(result.message);
+        setLoading(false);
+        return;
+      }
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to onboard.");
+    } catch {
+      setError("Something went wrong activating your workspace. Try again.");
       setLoading(false);
     }
   };

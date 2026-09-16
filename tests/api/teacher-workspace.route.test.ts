@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
     getTeacherSourceTree: vi.fn(),
     getTeacherDocuments: vi.fn(),
     createSupabaseAdminClient: vi.fn(),
+    stale: vi.fn(() => false),
     MockTeacherApiError,
   };
 });
@@ -34,11 +35,25 @@ vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: mocks.createSupabaseAdminClient,
 }));
 
+// `readTeacherWorkspace` is the real module's one round of fan-out over these
+// four, plus the last-good-snapshot fallback. Stubbing it as the fan-out alone
+// keeps every assertion below about the ROUTE — what it asks for, what it
+// classifies a 401 or a 504 as — and leaves the snapshot rule to the unit test
+// that can drive it directly (tests/lib/teacher-workspace-snapshot.test.ts).
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherMe: mocks.getTeacherMe,
   getTeacherSubjects: mocks.getTeacherSubjects,
   getTeacherSourceTree: mocks.getTeacherSourceTree,
   getTeacherDocuments: mocks.getTeacherDocuments,
+  readTeacherWorkspace: async (key: string) => {
+    const [collection, subjects, sourceTree, documents] = await Promise.all([
+      mocks.getTeacherMe(key),
+      mocks.getTeacherSubjects(key),
+      mocks.getTeacherSourceTree(key),
+      mocks.getTeacherDocuments(key),
+    ]);
+    return { collection, subjects, sourceTree, documents, stale: mocks.stale() };
+  },
   TeacherApiError: mocks.MockTeacherApiError,
 }));
 
@@ -75,6 +90,7 @@ describe("GET /api/teacher/workspace", () => {
     chain.select.mockReturnValue(chain);
     chain.eq.mockReturnValue(chain);
     mocks.createSupabaseAdminClient.mockReturnValue({ from: vi.fn(() => chain) });
+    mocks.stale.mockReturnValue(false);
   });
 
   it("returns the real workspace without exposing the collection key", async () => {
@@ -195,6 +211,24 @@ describe("GET /api/teacher/workspace", () => {
       error: "The creator service is taking longer than expected. Please try again in a moment.",
       code: "teacher_service_unavailable",
     });
+  });
+
+  it("says so when the workspace came from the last read that succeeded", async () => {
+    mocks.stale.mockReturnValue(true);
+
+    const response = await GET();
+    const payload = await response.json();
+
+    // 200 and `stale`, not 503: the teacher gets their subjects, papers and
+    // public profile, and the banner tells them how current they are.
+    expect(response.status).toBe(200);
+    expect(payload.stale).toBe(true);
+    expect(payload.subjects.subjects[0].name).toBe("Physics");
+  });
+
+  it("does not mark a healthy read stale", async () => {
+    const payload = await (await GET()).json();
+    expect(payload.stale).toBe(false);
   });
 });
 

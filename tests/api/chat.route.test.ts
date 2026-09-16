@@ -56,6 +56,17 @@ vi.mock("@/lib/teacher-app/client", () => ({
   askTeacherSubject,
   askTeacherSubjectStream,
   getTeacherCollectionReadiness,
+  toTeacherSubjectAttachments: (
+    attachments: Array<{ name?: string; mimeType?: string; dataUrl?: string }>,
+  ) =>
+    attachments.flatMap((attachment) => {
+      const dataUrl = attachment.dataUrl ?? "";
+      const comma = dataUrl.indexOf(",");
+      if (comma < 0 || !dataUrl.slice(0, comma).includes("base64")) return [];
+      const data = dataUrl.slice(comma + 1);
+      if (!data) return [];
+      return [{ mime_type: attachment.mimeType || "image/png", data, name: attachment.name ?? "" }];
+    }),
   TeacherApiError: class TeacherApiError extends Error {
     constructor(
       message: string,
@@ -291,6 +302,154 @@ describe("POST /api/chat", () => {
       expect.stringContaining("Teach the subject: OPT MATH"),
       [],
       expect.any(Function),
+      [],
+    );
+    expect(askTeacherSubject).not.toHaveBeenCalled();
+    expect(chatTenantStream).not.toHaveBeenCalled();
+    expect(getTenantName).not.toHaveBeenCalled();
+  });
+
+  it("passes an attached image through to the owner collection stream", async () => {
+    ensureStarterCreditsForUser.mockResolvedValue(10);
+    getCreditBalanceForUser.mockResolvedValue(10);
+    getStudentCourseSubjectAccessForCourse.mockResolvedValue({
+      courseId: "private:11111111-1111-4111-8111-111111111111",
+      teacherId: "teacher-1",
+      subjectSlug: "opt-math",
+      subjectName: "OPT MATH",
+      folderPath: "OPT MATH",
+      accessKind: "owner-private",
+    });
+    askTeacherSubjectStream.mockImplementation(async (...args: unknown[]) => {
+      const onEvent = args[6] as (event: unknown) => void | Promise<void>;
+      await onEvent({
+        type: "token",
+        text: "The first partial derivatives are 3x^2 - 3ay and 3y^2 - 3ax.",
+      });
+      await onEvent({
+        type: "sources",
+        chunks: [
+          {
+            score: 0.9,
+            text: "Algebra and geometry",
+            source: { filename: "opt-math.pdf", page: 2 },
+          },
+        ],
+        chunks_retrieved: 1,
+        served_from: "owner_private_collection",
+        next_topic: "Quadratic equations",
+      });
+      await onEvent({ type: "done", ok: true });
+    });
+
+    const query = (result: { data?: unknown; error?: unknown } = { data: null, error: null }) => {
+      const builder = {
+        select: vi.fn(() => builder),
+        eq: vi.fn(() => builder),
+        update: vi.fn(() => builder),
+        insert: vi.fn(() => builder),
+        single: vi.fn(async () => result),
+        maybeSingle: vi.fn(async () => result),
+        then: (
+          resolve: (value: { data?: unknown; error?: unknown }) => unknown,
+          reject?: (reason: unknown) => unknown,
+        ) => Promise.resolve(result).then(resolve, reject),
+      };
+      return builder;
+    };
+    const sessionQuery = query({
+      data: { id: "session-1", subject_context: "OPT MATH" },
+      error: null,
+    });
+    let messageNumber = 0;
+    createSupabaseServerClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } } })),
+      },
+      from: vi.fn((table: string) => {
+        if (table === "student_profiles") {
+          return query({
+            data: {
+              user_id: "user-1",
+              full_name: "Student",
+              college: "Campus",
+              grade: "11",
+              board_score: null,
+              subjects: ["OPT MATH"],
+              target_grade: "A",
+            },
+            error: null,
+          });
+        }
+        if (table === "chat_sessions") return sessionQuery;
+        if (table === "chat_messages") {
+          messageNumber += 1;
+          return query({ data: { id: `message-${messageNumber}` }, error: null });
+        }
+        if (table === "credits_ledger") return query();
+        throw new Error(`Unexpected table access: ${table}`);
+      }),
+    });
+    createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn(() => {
+        const builder = query({
+          data: { handle: "student-teacher", collection_sk: "collection-secret" },
+          error: null,
+        });
+        return builder;
+      }),
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: null,
+          language: "EN",
+          subjectContext: "OPT MATH",
+          tenantSubject: {
+            courseId: "private:11111111-1111-4111-8111-111111111111",
+            name: "OPT MATH",
+            slug: "opt-math",
+            namespaceSlug: "opt-math",
+            folderPath: "OPT MATH",
+          },
+          messages: [
+            {
+              role: "user",
+              content: "sove this",
+              attachments: [
+                {
+                  id: "att-1",
+                  name: "problem.png",
+                  mimeType: "image/png",
+                  size: 12,
+                  dataUrl: "data:image/png;base64,aGVsbG8=",
+                },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+    const stream = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(stream).toContain("The first partial derivatives");
+    expect(stream).toContain("Quadratic equations");
+    expect(stream).toContain("owner_private_collection");
+    // The image must survive the hop as raw base64 with the data-URL header
+    // stripped: collection chat used to refuse attachments outright.
+    expect(askTeacherSubjectStream).toHaveBeenCalledWith(
+      "collection-secret",
+      "OPT MATH",
+      "sove this",
+      8,
+      expect.stringContaining("Teach the subject: OPT MATH"),
+      [],
+      expect.any(Function),
+      [{ mime_type: "image/png", data: "aGVsbG8=", name: "problem.png" }],
     );
     expect(askTeacherSubject).not.toHaveBeenCalled();
     expect(chatTenantStream).not.toHaveBeenCalled();
@@ -411,6 +570,7 @@ describe("POST /api/chat", () => {
       expect.stringContaining("Teach the subject: Math"),
       [],
       expect.any(Function),
+      [],
     );
     expect(chatTenantStream).not.toHaveBeenCalled();
     expect(getTenantName).not.toHaveBeenCalled();

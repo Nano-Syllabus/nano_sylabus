@@ -59,6 +59,7 @@ type MainView =
   | "today"
   | "communities"
   | "subjects"
+  | "activity"
   | "courses"
   | "classrooms"
   | "exams"
@@ -119,6 +120,9 @@ type Workspace = {
   subjects: TeacherSubject[];
   documents: TeacherDocument[];
   sourceTree: ApiRecord;
+  /** The creator service could not be reached and the server answered from the
+   *  last read that succeeded. Everything on screen is real, just not current. */
+  stale: boolean;
 };
 
 type TeacherDashboard = {
@@ -674,6 +678,7 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
     subjects,
     documents,
     sourceTree: asRecord(payload.sourceTree),
+    stale: payload.stale === true,
   };
 }
 
@@ -1230,7 +1235,44 @@ function nudgeDriveQueue() {
  * reads the server's queue, so it says the same thing after a reload, on another
  * device, and to a creator who closed this dialog ten minutes ago and came back.
  */
-function DriveImportQueue({ onSettled }: { onSettled?: () => void }) {
+/**
+ * Activity: what the workspace is doing when the creator is not watching.
+ *
+ * A Drive folder is imported by a drain worker AFTER the dialog that queued it
+ * has closed — that is the whole point of the queue, and it is also why there
+ * was no way to find out how it went. The subject wizard closes on success, so
+ * a creator who pasted a twenty-file link had nowhere to learn which files
+ * landed, which failed, or whether anything was still running.
+ *
+ * `DriveImportQueue` already answers all of that and polls for itself; it simply
+ * had no home outside the upload dialog. This gives it one.
+ *
+ * It renders nothing when the queue is empty, so the empty state lives here
+ * rather than inside it — a panel that vanishes is right inside a dialog and
+ * wrong as a whole page.
+ */
+function ActivityView({ onSettled }: { onSettled?: () => void }) {
+  return (
+    <section>
+      <h1 className="font-display text-2xl font-semibold">Activity</h1>
+      <p className="mt-2 max-w-prose text-sm text-text-secondary">
+        Imports run in the background, so you can close a dialog or this tab and they carry on.
+        Anything still running, finished or failed in the last while shows here.
+      </p>
+      <DriveImportQueue onSettled={onSettled} emptyMessage="Nothing has been imported recently." />
+    </section>
+  );
+}
+
+function DriveImportQueue({
+  onSettled,
+  emptyMessage,
+}: {
+  onSettled?: () => void;
+  /** Given only where an empty queue still needs to say something — the Activity
+   *  page. Inside the upload dialog a queue with no rows renders nothing. */
+  emptyMessage?: string;
+}) {
   const [items, setItems] = useState<DriveQueueItem[]>([]);
   const [unavailable, setUnavailable] = useState(false);
   const settledRef = useRef(0);
@@ -1301,7 +1343,13 @@ function DriveImportQueue({ onSettled }: { onSettled?: () => void }) {
       </p>
     );
   }
-  if (!items.length) return null;
+  if (!items.length) {
+    return emptyMessage ? (
+      <p className="mt-4 rounded-lg border border-border bg-bg-secondary p-4 text-sm text-text-muted">
+        {emptyMessage}
+      </p>
+    ) : null;
+  }
 
   const pending = items.filter(
     (item) => item.status === "queued" || item.status === "importing",
@@ -1753,6 +1801,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       requestedView === "today" ||
       requestedView === "communities" ||
       requestedView === "subjects" ||
+      requestedView === "activity" ||
       requestedView === "courses" ||
       requestedView === "classrooms" ||
       requestedView === "exams" ||
@@ -2054,6 +2103,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               ["today", "Analytics"],
               ["communities", "My Communities"],
               ["subjects", "Create Subjects"],
+              ["activity", "Activity"],
               ["settings", "Your Public Profile"],
             ] as const
           ).map(([value, label]) => (
@@ -2201,6 +2251,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               ["today", "Analytics"],
               ["communities", "My Communities"],
               ["subjects", "Create Subjects"],
+              ["activity", "Activity"],
               ["settings", "Your Public Profile"],
             ] as const
           ).map(([value, label]) => (
@@ -2222,6 +2273,29 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
         </nav>
 
         <main className="w-full max-w-[1240px] p-4 pb-16 md:p-[26px]">
+          {/* The workspace opened from the last read that succeeded, because the
+              creator service did not answer this one. Said plainly and in one
+              line: the teacher is looking at their own collection, and the only
+              thing they cannot trust is how recent it is. The alternative this
+              replaced was the whole screen refusing to open. */}
+          {workspace.stale ? (
+            <div
+              role="status"
+              className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border-strong bg-bg-primary p-4 text-sm"
+            >
+              <span className="text-text-secondary">
+                The creator service is busy, so this is your workspace as it was a few minutes ago.
+                Anything you add now is saved normally.
+              </span>
+              <button
+                type="button"
+                onClick={() => void loadWorkspace()}
+                className={cn("font-medium underline underline-offset-4", interactive)}
+              >
+                Reload now
+              </button>
+            </div>
+          ) : null}
           {view === "today" ? (
             <TodayView
               teacherHandle={workspace.teacher.fullName}
@@ -2295,6 +2369,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               onDashboardRefresh={() => void loadDashboard()}
             />
           ) : null}
+          {view === "activity" ? <ActivityView onSettled={() => void loadWorkspace()} /> : null}
           {view === "subjects" && !selectedSubject && !showSubjectLibrary ? (
             <CommunitiesView
               subjectsMode
@@ -9846,6 +9921,21 @@ function CreateSubjectDialog({
   const [bankFiles, setBankFiles] = useState<File[]>([]);
   const [materialDropActive, setMaterialDropActive] = useState(false);
   const [bankDropActive, setBankDropActive] = useState(false);
+  /**
+   * A Drive folder, collected here and imported after the subject exists.
+   *
+   * It cannot be resolved at this step: `drive-resolve` runs
+   * `validateDestination` against the shelf it would land on, and this subject's
+   * shelves are created by `createSubject` a moment from now. So the wizard
+   * writes the link down and the import happens on the far side of creation —
+   * which is also the gesture the upload dialog already makes, where queueing
+   * hands the work to a drain worker and lets the creator go.
+   */
+  const [driveLink, setDriveLink] = useState("");
+  const [driveShelf, setDriveShelf] = useState<"Notes" | "Question Bank">("Notes");
+  /** Kept apart from `error`: the subject WAS created, so this is not a failure
+   *  of the wizard and must not read like one. */
+  const [driveError, setDriveError] = useState("");
   const [uploadStatus, setUploadStatus] = useState({ current: 0, total: 0, shelf: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -10040,6 +10130,37 @@ function CreateSubjectDialog({
         setUploadStatus({ current: 0, total: 0, shelf: "" });
         return;
       }
+      // The Drive folder, now that the shelf it lands on exists. Queued, not
+      // awaited to completion: a drain worker does the fetching, and a folder of
+      // twenty files must not hold this dialog open. A link that cannot be read
+      // is reported without losing the subject — it is already created, and its
+      // files are already uploaded.
+      const pastedLink = driveLink.trim();
+      if (pastedLink) {
+        setProgress("Queueing the Google Drive folder…");
+        const shelfPath = `${folderPath}/${driveShelf}`;
+        try {
+          const resolved = await resolveDriveLink(pastedLink, shelfPath);
+          const importable = resolved.filter((file) => file.supported && !file.tooLarge);
+          if (!importable.length) {
+            setDriveError(
+              resolved.length
+                ? `The subject was created, but none of the ${resolved.length} file(s) at that Drive link can go on the ${driveShelf} shelf.`
+                : "The subject was created, but that Drive link did not resolve to any file.",
+            );
+          } else {
+            await enqueueDriveImports(importable, shelfPath, pastedLink);
+            setDriveLink("");
+          }
+        } catch (caught) {
+          setDriveError(
+            `The subject was created, but the Drive link could not be read: ${
+              caught instanceof Error ? caught.message : "unknown error"
+            }`,
+          );
+        }
+      }
+
       setProgress("Opening the subject workspace…");
       await onCreated({ name: clean, slug, jobs: indexingJobsRef.current, failedUploads });
     } catch (caught) {
@@ -10522,6 +10643,73 @@ function CreateSubjectDialog({
               }
             />
           </div>
+          {/* ── Google Drive ──────────────────────────────────────────────
+              A creator whose material already lives in Drive should not have to
+              download twenty files to upload them again. The link is collected
+              here and imported once the shelves exist; see `driveLink`. */}
+          <div className="mt-5 rounded-lg border border-border bg-bg-secondary p-4">
+            <label htmlFor="subject-drive-link" className="font-display text-sm font-semibold">
+              Or import from a Google Drive folder
+            </label>
+            <p className="mt-1 text-sm text-text-muted">
+              Paste a shared link. Anyone with the link must be able to view it. The files are
+              fetched in the background after the subject is created.
+            </p>
+            <input
+              id="subject-drive-link"
+              type="url"
+              inputMode="url"
+              value={driveLink}
+              onChange={(event) => {
+                setDriveLink(event.target.value);
+                setDriveError("");
+              }}
+              placeholder="https://drive.google.com/drive/folders/…"
+              className="mt-3 min-h-11 w-full rounded-md border border-border bg-bg-primary px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+            />
+            {driveLink.trim() ? (
+              <fieldset className="mt-3">
+                <legend className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  Put these on
+                </legend>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(["Notes", "Question Bank"] as const).map((shelf) => (
+                    <label
+                      key={shelf}
+                      className={cn(
+                        "inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full border px-4 text-sm font-medium",
+                        driveShelf === shelf
+                          ? "border-text-primary bg-bg-primary"
+                          : "border-border hover:bg-bg-primary",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="subject-drive-shelf"
+                        value={shelf}
+                        checked={driveShelf === shelf}
+                        onChange={() => setDriveShelf(shelf)}
+                        className="sr-only"
+                      />
+                      {shelf}
+                    </label>
+                  ))}
+                </div>
+                {/* The shelf decides which file types are accepted, so saying it
+                    here is cheaper than a rejection after the fact. */}
+                <p className="mt-2 text-xs text-text-muted">
+                  {driveShelf === "Notes"
+                    ? "PDF, Word, PowerPoint, text, or image files."
+                    : "PDF, Word, Markdown, or plain-text files."}
+                </p>
+              </fieldset>
+            ) : null}
+            {driveError ? (
+              <p role="alert" className="mt-3 whitespace-pre-line text-sm text-red-500">
+                {driveError}
+              </p>
+            ) : null}
+          </div>
           {materialFiles.length || bankFiles.length ? (
             <div
               role="status"
@@ -10589,7 +10777,9 @@ function CreateSubjectDialog({
                 ? "Creating…"
                 : selectedFileCount
                   ? `Create subject · upload ${selectedFileCount} file${selectedFileCount === 1 ? "" : "s"}`
-                  : "Create the subject"}
+                  : driveLink.trim()
+                    ? "Create subject · import from Drive"
+                    : "Create the subject"}
             </Button>
           </div>
         </div>

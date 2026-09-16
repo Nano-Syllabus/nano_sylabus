@@ -584,11 +584,33 @@ export function dailyChallengeAssignmentCount({
 }) {
   const openSlots = Math.max(0, 3 - activeCount);
   const scopedSlots = Math.max(0, minimumRecommendationCount - activeRecommendationCount);
-  const requested = Math.max(openSlots, scopedSlots);
-  return Math.min(availableCount, requested, Math.max(0, maximumDailyCount - dailyCount));
+  /**
+   * TWO CEILINGS, BECAUSE A FILTERED SUBJECT IS A DIFFERENT QUESTION.
+   *
+   * The plain queue is measured across everything open: three on your plate,
+   * and solving one lets the next arrive.
+   *
+   * A student who has FILTERED to one subject is asking about that subject, and
+   * measuring them against the same global count answers a question they did
+   * not ask — their three open challenges are other subjects, the allowance is
+   * spent, and the subject they chose shows an empty hub with "ask the community
+   * creator to refresh this subject's topics", which is not the reason and not
+   * something they can act on.
+   *
+   * So a scoped request is measured against what is open IN THAT SCOPE. It is
+   * still a ceiling, not a bypass: at most three open per subject, so nobody
+   * accumulates an unbounded pile by switching filters.
+   */
+  const openAllowance = Math.max(0, maximumDailyCount - dailyCount);
+  const scopedAllowance = Math.max(0, maximumDailyCount - activeRecommendationCount);
+  const requested = Math.max(
+    Math.min(openSlots, openAllowance),
+    Math.min(scopedSlots, scopedAllowance),
+  );
+  return Math.min(availableCount, requested);
 }
 
-async function hasUnlimitedDailyChallenges(userId: string): Promise<boolean> {
+async function hasUnlimitedConcurrentChallenges(userId: string): Promise<boolean> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("user_subscriptions")
@@ -619,9 +641,9 @@ export async function ensureDailyChallenges(
   options: EnsureDailyChallengeOptions = {},
 ): Promise<StudentChallengeSummary[]> {
   const date = nepaliChallengeDate();
-  const [existing, unlimitedDailyChallenges] = await Promise.all([
+  const [existing, unlimitedConcurrentChallenges] = await Promise.all([
     listDailyRows(userId, date),
-    hasUnlimitedDailyChallenges(userId),
+    hasUnlimitedConcurrentChallenges(userId),
   ]);
   if (existing === null) return [];
 
@@ -649,8 +671,20 @@ export async function ensureDailyChallenges(
       activeRecommendationCount,
       availableCount: available.length,
       minimumRecommendationCount: options.minimumRecommendationCount,
-        dailyCount: existing.filter(offerableRow).length,
-      maximumDailyCount: unlimitedDailyChallenges ? Infinity : 3,
+        // OPEN AT ONCE, NOT ISSUED TODAY.
+      //
+      // This counted every row dated today, completed ones included, against a
+      // ceiling of three. So a student who finished all three was done until
+      // tomorrow — and, worse, one whose three happened to be other subjects saw
+      // nothing at all under a subject they had explicitly filtered to. Measured
+      // on the live data: 39 rows across 12 students, every one of them at the
+      // ceiling, which is a Challenge Hub that cannot hand anybody a challenge.
+      //
+      // Counting only what is still OPEN makes the ceiling mean "three on your
+      // plate", so solving one lets the next arrive — which is what the queue
+      // was always described as doing.
+      dailyCount: active.length,
+      maximumDailyCount: unlimitedConcurrentChallenges ? Infinity : 3,
     }),
   );
 

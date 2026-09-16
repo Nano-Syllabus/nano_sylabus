@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
-import {
-  getTeacherDocuments,
-  getTeacherMe,
-  getTeacherSourceTree,
-  getTeacherSubjects,
-  TeacherApiError,
-} from "@/lib/teacher-app/client";
+import { readTeacherWorkspace, TeacherApiError } from "@/lib/teacher-app/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { profileFromUser, withTeacherAvatar } from "@/lib/teacher-public-profile";
 import { groupSubjectCommunities } from "@/lib/teacher-subject-access";
+
+// The four tenant reads get 10s and one retry each (`workspaceReadOptions`), so
+// the worst honest case is ~20s. Vercel's default function budget is shorter
+// than that, which would kill the invocation mid-retry and hand the browser a
+// platform error instead of this route's own 503 and Retry-After.
+export const maxDuration = 30;
 
 export async function GET() {
   try {
@@ -38,14 +38,11 @@ export async function GET() {
     // a screen that computes nothing.
     const admin = createSupabaseAdminClient();
     const [
-      collection, subjects, sourceTree, documents,
+      tenant,
       documentFilesResult, subjectProfilesResult, communityLinks,
       profileResult, publicProfile,
     ] = await Promise.all([
-      getTeacherMe(teacher.collection_sk),
-      getTeacherSubjects(teacher.collection_sk),
-      getTeacherSourceTree(teacher.collection_sk),
-      getTeacherDocuments(teacher.collection_sk),
+      readTeacherWorkspace(teacher.collection_sk),
       admin
         .from("teacher_document_files")
         .select("id,collection_path,external_document_id")
@@ -69,6 +66,7 @@ export async function GET() {
         .maybeSingle(),
       withTeacherAvatar(admin, profileFromUser(user, teacher.handle)),
     ]);
+    const { collection, subjects, sourceTree, documents } = tenant;
     const { data: documentFiles } = documentFilesResult;
     const { data: subjectProfiles } = subjectProfilesResult;
     const { data: profile } = profileResult;
@@ -78,6 +76,10 @@ export async function GET() {
     const communitiesBySubject = groupSubjectCommunities(communityLinks.data || []);
 
     return NextResponse.json({
+      // Truthful about which of the two things the teacher is looking at: the
+      // collection as it is, or the last one that loaded. Only ever set when the
+      // alternative was an error page.
+      stale: tenant.stale,
       teacher: {
         handle: teacher.handle,
         email: user.email ?? "",
