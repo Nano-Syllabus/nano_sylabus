@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { CommunityCatalogClient } from "@/components/community-catalog-client";
-import { LandingHeader } from "@/components/landing-header";
 import { listPublicCommunities } from "@/lib/data/communities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
-import { examThemeClass } from "@/components/exam-theme";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +25,7 @@ export default async function CommunitiesPage({
   const communities = await listPublicCommunities(user?.id);
 
   return (
-    <div
-      className={`${examThemeClass} community-catalog-light hero-glow min-h-screen bg-background text-foreground`}
-    >
-      <LandingHeader />
+    <div className="min-h-screen bg-white text-[#101114]">
       <CommunityCatalogClient
         initialCommunities={communities}
         signedIn={Boolean(user)}

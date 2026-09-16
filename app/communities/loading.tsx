@@ -1,9 +1,6 @@
-import { LandingHeader } from "@/components/landing-header";
-
 export default function CommunitiesLoading() {
   return (
-    <div className="min-h-screen bg-bg-primary text-text-primary">
-      <LandingHeader />
+    <div className="min-h-screen bg-white text-[#101114]">
       <main
         className="mx-auto w-full max-w-7xl animate-pulse px-4 py-10 sm:px-6 lg:px-8"
         aria-label="Loading communities"

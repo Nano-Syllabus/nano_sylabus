@@ -3,14 +3,18 @@
 import {
   AlertTriangle,
   FileCheck2,
+  FileText,
   Lightbulb,
   ListChecks,
   LoaderCircle,
   Maximize2,
   Minimize2,
+  Pencil,
+  Sparkles,
   Target,
   Upload,
   X,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1774,211 +1778,270 @@ export function ChallengesDashboardClient({
   }
 
   return (
-    <main className="min-h-screen w-full bg-bg-secondary text-text-primary">
-      <div className="mx-auto max-w-7xl px-4 py-8 pb-20 md:px-8">
-        <header className="mb-8 grid gap-5 border-b border-border pb-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-end">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-300">
-              <Target className="size-5" aria-hidden="true" />
+    <main className="min-h-screen w-full bg-[#f8f9fa] dark:bg-bg-secondary text-text-primary">
+      <div className="mx-auto max-w-[1060px] px-4 sm:px-6 md:px-8 py-8 pb-24">
+        <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-text-primary mb-6">
+          Challenge Hub
+        </h1>
+
+        {/* Challenge Loop Top Card */}
+        <section className="relative overflow-hidden rounded-[24px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-7 sm:p-9 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          {/* Top right decorative lime accent corner */}
+          <div
+            className="pointer-events-none absolute top-0 right-0 size-28 sm:size-34 rounded-bl-full bg-[#d7ff3b] select-none z-0"
+            aria-hidden="true"
+          />
+          {/* Top right badge text */}
+          <div className="pointer-events-none absolute top-4 sm:top-5 right-4 sm:right-5 z-10 select-none">
+            <span className="font-display text-[11px] sm:text-[12px] font-bold tracking-tight text-[#0a0a0a]">
+              1 topic · 1 result
             </span>
-            <div className="min-w-0">
-              <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
-                Challenge Hub
-              </h1>
-              <p className="mt-1 text-sm text-text-muted">
-                {dashboard.community
-                  ? `Showing only ${dashboard.community.name} subjects, progress, and history.`
-                  : "Join a community to start its challenges and track your progress."}
-              </p>
+          </div>
+
+          <h2 className="font-display text-[22px] font-bold tracking-[-0.01em] text-text-primary">
+            Challenge loop
+          </h2>
+
+          <div className="relative mt-8">
+            {/* Connecting line behind step icons on larger screens */}
+            <div
+              className="hidden md:block absolute top-[29px] left-[10%] right-[10%] h-[1.5px] bg-[#e5e7eb] dark:bg-border/70 -z-0"
+              aria-hidden="true"
+            />
+
+            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
+              {/* Step 1: Past question */}
+              <div className="flex flex-col items-start md:items-center text-left md:text-center">
+                <div className="flex size-[58px] items-center justify-center rounded-[16px] border-[1.5px] border-[#18181b] dark:border-white/80 bg-white dark:bg-bg-primary text-black dark:text-white shadow-xs">
+                  <svg
+                    className="size-5 text-black dark:text-white"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                </div>
+                <h3 className="mt-3 text-[14px] font-bold text-text-primary">Past question</h3>
+                <p className="mt-0.5 text-[12px] text-[#6b7280] dark:text-text-muted leading-relaxed max-w-[170px]">
+                  See what the exam expects.
+                </p>
+              </div>
+
+              {/* Step 2: Learn */}
+              <div className="flex flex-col items-start md:items-center text-left md:text-center">
+                <div className="flex size-[58px] items-center justify-center rounded-[16px] border-[1.5px] border-[#18181b] dark:border-white/80 bg-white dark:bg-bg-primary text-black dark:text-white shadow-xs">
+                  <svg
+                    className="size-5 text-black dark:text-white"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect width="18" height="18" x="3" y="3" rx="3" />
+                    <path d="M7 8h10" />
+                    <path d="M7 12h10" />
+                    <path d="M7 16h10" />
+                  </svg>
+                </div>
+                <h3 className="mt-3 text-[14px] font-bold text-text-primary">Learn</h3>
+                <p className="mt-0.5 text-[12px] text-[#6b7280] dark:text-text-muted leading-relaxed max-w-[170px]">
+                  Study the exact topic you need.
+                </p>
+              </div>
+
+              {/* Step 3: Handwritten exam */}
+              <div className="flex flex-col items-start md:items-center text-left md:text-center">
+                <div className="flex size-[58px] items-center justify-center rounded-[16px] border-[1.5px] border-[#18181b] dark:border-white/80 bg-white dark:bg-bg-primary text-black dark:text-white shadow-xs">
+                  <svg
+                    className="size-5 text-black dark:text-white"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                    <path d="m15 5 4 4" />
+                  </svg>
+                </div>
+                <h3 className="mt-3 text-[14px] font-bold text-text-primary">Handwritten exam</h3>
+                <p className="mt-0.5 text-[12px] text-[#6b7280] dark:text-text-muted leading-relaxed max-w-[170px]">
+                  Attempt it on your own paper.
+                </p>
+              </div>
+
+              {/* Step 4: AI grade */}
+              <div className="flex flex-col items-start md:items-center text-left md:text-center">
+                <div className="flex size-[60px] items-center justify-center rounded-[18px] bg-[#18181b] dark:bg-black text-[#d7ff3b] shadow-[0_4px_16px_rgba(0,0,0,0.2)] relative z-10">
+                  <svg
+                    className="size-6 text-[#d7ff3b] fill-current"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" />
+                  </svg>
+                </div>
+                <h3 className="mt-3 text-[14px] font-bold text-text-primary">AI grade</h3>
+                <p className="mt-0.5 text-[12px] text-[#6b7280] dark:text-text-muted leading-relaxed max-w-[170px]">
+                  Upload for marks and feedback.
+                </p>
+              </div>
             </div>
           </div>
+        </section>
 
-          <div className="min-w-0">
-            <label
-              htmlFor="priority-subject"
-              className="text-xs font-semibold uppercase tracking-wide text-text-muted"
-            >
-              Priority subject
-            </label>
-            <select
-              id="priority-subject"
-              value={selectedScopeKey}
-              onChange={(event) => changePrioritySubject(event.target.value)}
-              className="mt-2 min-h-11 w-full cursor-pointer rounded-lg border border-border bg-card px-3 text-sm font-medium text-text-primary transition-colors duration-100 hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary motion-reduce:transition-none"
-            >
-              <option value="all">All subjects</option>
-              {dashboard.subjectOptions.map((subject) => (
-                <option key={subject.scopeKey} value={subject.scopeKey}>
-                  {subject.subjectName}
-                </option>
-              ))}
-            </select>
-            <p className="mt-2 text-xs text-text-muted">
-              {selectedSubject
-                ? `Showing ${selectedSubject.subjectName} challenges.`
-                : dashboard.community
-                  ? `Showing all ${dashboard.community.name} subjects.`
-                  : "No learner community is active."}
+        {/* 3 Metrics Cards */}
+        <section className="mt-6 grid gap-4 md:grid-cols-3" aria-label="Challenge summary metrics">
+          {/* Card 1: Today's Quota */}
+          <article className="rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b7280] dark:text-text-muted">
+              TODAY&apos;S QUOTA
             </p>
-          </div>
-        </header>
-
-        <section className="mb-6 grid gap-4 md:grid-cols-3" aria-label="Weekly challenge summary">
-          <article className="rounded-xl border border-border bg-card p-6">
-            <p className="text-sm text-text-muted">Weekly Target Progress</p>
-            <p className="mt-1 text-2xl font-bold">
-              {dashboard.passedThisWeek} / {WEEKLY_CHALLENGE_TARGET} Completed
-            </p>
+            <div className="mt-2 flex items-baseline gap-1.5">
+              <span className="text-[32px] font-extrabold tracking-tight text-text-primary">
+                {dashboard.todayCompletedCount ?? (dashboard.passedThisWeek > 0 ? dashboard.passedThisWeek : 0)}
+              </span>
+              <span className="text-[32px] font-extrabold tracking-tight text-[#84cc16]">
+                / 5
+              </span>
+            </div>
             <div
-              className="mt-4 h-2 overflow-hidden rounded-full bg-bg-tertiary"
+              className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
               aria-hidden="true"
             >
-              <span
-                className="block h-full rounded-full bg-blue-600 transition-[width] duration-300 motion-reduce:transition-none"
-                style={{ width: `${weeklyProgress}%` }}
+              <div
+                className="h-full rounded-full bg-[#2563eb] transition-[width] duration-300 motion-reduce:transition-none"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.max(
+                      (((dashboard.todayCompletedCount ?? (dashboard.passedThisWeek > 0 ? dashboard.passedThisWeek : 0)) / 5) * 100),
+                      (dashboard.todayCompletedCount || dashboard.passedThisWeek) ? 14 : 0
+                    )
+                  )}%`,
+                }}
               />
             </div>
           </article>
 
-          <article className="rounded-xl border border-border bg-card p-6">
-            <p className="text-sm text-text-muted">Avg. Test Score</p>
-            <p className="mt-1 text-2xl font-bold text-success">
-              {dashboard.averageTestScore === null
-                ? "—"
-                : `${dashboard.averageTestScore.toFixed(1)}%`}
+          {/* Card 2: Daily Target */}
+          <article className="rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b7280] dark:text-text-muted">
+              DAILY TARGET
             </p>
-            <p className="mt-1 text-xs text-text-muted">Passing threshold: 40%</p>
+            <p className="mt-2 text-[32px] font-extrabold tracking-tight text-text-primary">
+              5
+            </p>
           </article>
 
-          <article className="rounded-xl border border-border bg-card p-6">
-            <p className="text-sm text-text-muted">Weekly Peer Leaderboard</p>
-            <p className="mt-1 text-2xl font-bold">
-              {dashboard.leaderboard?.practicePerDayRank
-                ? `Rank #${dashboard.leaderboard.practicePerDayRank}`
-                : "Not ranked yet"}
+          {/* Card 3: 7-Day Average */}
+          <article className="rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b7280] dark:text-text-muted">
+              7-DAY AVERAGE
             </p>
-            <p className="mt-1 text-xs font-medium text-blue-700 dark:text-blue-300">
-              {challengesBehind > 0
-                ? `${challengesBehind} challenge${challengesBehind === 1 ? "" : "s"} behind the weekly leader`
-                : dashboard.passedThisWeek > 0
-                  ? "You are level with the weekly leader"
-                  : "Complete a challenge to enter the ranking"}
+            <p className="mt-2 text-[32px] font-extrabold tracking-tight text-text-primary">
+              {dashboard.practicePerDay > 0
+                ? dashboard.practicePerDay.toFixed(1)
+                : dashboard.averageTestScore !== null
+                  ? `${dashboard.averageTestScore.toFixed(1)}%`
+                  : "0.0"}
             </p>
           </article>
         </section>
 
-        <section className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="border-b border-border px-5 py-5 md:px-6">
-            <h2 className="text-xl font-semibold">Available Daily Subtopic Challenges</h2>
-            {dashboard.scope ? (
-              <p className="mt-1 text-sm text-text-muted">
-                Showing {dashboard.scope.subjectName} challenges only.
-              </p>
-            ) : null}
+        {/* Available Challenges Section */}
+        <section className="mt-6 rounded-[24px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#f1f3f5] dark:border-border/60">
+            <div>
+              <h2 className="text-[19px] font-bold tracking-tight text-text-primary">
+                Available challenges
+              </h2>
+              {dashboard.scope ? (
+                <p className="mt-0.5 text-xs text-text-muted">
+                  Showing {dashboard.scope.subjectName} challenges only.
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label
+                htmlFor="priority-subject"
+                className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b7280] dark:text-text-muted whitespace-nowrap"
+              >
+                PRIORITY SUBJECT
+              </label>
+              <select
+                id="priority-subject"
+                value={selectedScopeKey}
+                onChange={(event) => changePrioritySubject(event.target.value)}
+                className="min-h-9 cursor-pointer rounded-xl border border-[#e5e7eb] dark:border-border bg-white dark:bg-bg-primary px-3.5 py-1 text-[13px] font-medium text-text-primary shadow-2xs transition-colors duration-100 hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <option value="all">All subjects</option>
+                {dashboard.subjectOptions.map((subject) => (
+                  <option key={subject.scopeKey} value={subject.scopeKey}>
+                    {subject.subjectName}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {dashboard.challenges.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] border-collapse text-left text-sm">
-                <thead className="bg-bg-secondary text-text-secondary">
-                  <tr>
-                    <th scope="col" className="w-px px-5 py-4 font-semibold md:px-6">
-                      <span className="sr-only">Challenge number</span>
-                      <span aria-hidden="true">#</span>
-                    </th>
-                    <th scope="col" className="px-5 py-4 font-semibold">
-                      Subject
-                    </th>
-                    <th scope="col" className="px-5 py-4 font-semibold">
-                      Subtopic
-                    </th>
-                    <th scope="col" className="px-5 py-4 font-semibold">
-                      Est. Time
-                    </th>
-                    <th scope="col" className="px-5 py-4 font-semibold">
-                      Status
-                    </th>
-                    <th scope="col" className="px-5 py-4 font-semibold md:px-6">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboard.challenges.map((challenge, index) => {
-                    const score = challengeScore(challenge);
-                    const completed = challenge.status === "completed";
-                    const started = challenge.status === "started";
-                    return (
-                      <tr key={challenge.id} className="border-t border-border">
-                        {/* A row number, because that is what a student uses this
-                            column for — "the third one" — and a 36-character UUID
-                            told them nothing while costing the table the width of
-                            two real columns.
+            <div className="divide-y divide-[#f1f3f5] dark:divide-border/50">
+              {dashboard.challenges.map((challenge) => {
+                const completed = challenge.status === "completed";
+                const started = challenge.status === "started";
+                return (
+                  <div
+                    key={challenge.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-6 py-5 hover:bg-bg-secondary/40 rounded-xl px-2 -mx-2 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-6">
+                      <p className="font-bold text-[15px] sm:text-[16px] text-text-primary w-full sm:w-[240px] md:w-[280px] shrink-0 truncate">
+                        {challenge.subjectName}
+                      </p>
+                      <p className="text-[14px] sm:text-[15px] text-[#6b7280] dark:text-text-secondary flex-1 min-w-0 truncate pr-2">
+                        {challenge.topicTitle}
+                      </p>
+                    </div>
 
-                            The UUID is still the only identifier support can act
-                            on, so it stays on the row: `title` surfaces it on hover
-                            and it is selectable from there. Counting is per render,
-                            so it renumbers when the list is filtered — which is
-                            correct for a position and is exactly why the real id
-                            had to stay reachable rather than be replaced. */}
-                        <td className="px-5 py-4 md:px-6">
-                          <span
-                            title={challenge.id}
-                            className="inline-flex min-w-7 justify-center whitespace-nowrap rounded bg-bg-secondary px-2 py-1 font-mono text-xs tabular-nums text-text-secondary"
-                          >
-                            {index + 1}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 font-medium">{challenge.subjectName}</td>
-                        <td className="max-w-xs px-5 py-4">
-                          <span className="block font-medium">{challenge.topicTitle}</span>
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-4">
-                          {challenge.durationMinutes} mins
-                        </td>
-                        <td className="px-5 py-4">
-                          <span
-                            className={`inline-flex min-h-7 items-center whitespace-nowrap rounded-full px-3 text-xs font-semibold ${
-                              completed
-                                ? "bg-success/15 text-success"
-                                : started
-                                  ? "bg-blue-500/10 text-blue-700 dark:text-blue-300"
-                                  : "bg-warning/15 text-warning"
-                            }`}
-                          >
-                            {completed
-                              ? `Completed${score === null ? "" : ` (${Math.round(score)}%)`}`
-                              : started
-                                ? "In Progress"
-                                : "New Available"}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 md:px-6">
-                          <button
-                            type="button"
-                            onClick={() => void openChallenge(challenge)}
-                            disabled={openingId === challenge.id}
-                            aria-busy={openingId === challenge.id}
-                            className={`inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-lg px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary disabled:opacity-60 ${
-                              completed
-                                ? "border border-border bg-bg-primary text-text-primary hover:bg-bg-secondary"
-                                : "bg-blue-600 text-white hover:bg-blue-700"
-                            }`}
-                          >
-                            {openingId === challenge.id
-                              ? "Opening…"
-                              : completed
-                                ? "View Details"
-                                : started
-                                  ? "Continue"
-                                  : "Start Challenge"}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    <div className="flex items-center justify-between sm:justify-end gap-6 shrink-0">
+                      <span className="text-[14px] text-[#6b7280] dark:text-text-muted whitespace-nowrap">
+                        {challenge.durationMinutes} min
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void openChallenge(challenge)}
+                        disabled={openingId === challenge.id}
+                        aria-busy={openingId === challenge.id}
+                        className={`inline-flex min-h-9 min-w-[76px] items-center justify-center rounded-[10px] px-5 text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60 ${
+                          completed
+                            ? "border border-border bg-bg-primary text-text-primary hover:bg-bg-secondary"
+                            : "bg-[#2563eb] text-white hover:bg-[#1d4ed8] shadow-[0_1px_2px_rgba(37,99,235,0.2)]"
+                        }`}
+                      >
+                        {openingId === challenge.id
+                          ? "Opening…"
+                          : completed
+                            ? "View Details"
+                            : started
+                              ? "Continue"
+                              : "Start"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : refreshing || (needsRecovery && retryCount < 2) ? (
             <div

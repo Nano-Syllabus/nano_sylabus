@@ -9,15 +9,19 @@ export function LandingPrimaryCta({
   blue = false,
   size = "nav",
   className = "",
+  communityOnly = false,
 }: {
   children?: React.ReactNode;
   blue?: boolean;
   size?: "default" | "hero" | "nav";
   className?: string;
+  communityOnly?: boolean;
 }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
+    if (communityOnly) return;
+
     let cancelled = false;
 
     void loadSupabaseBrowserClient()
@@ -33,7 +37,7 @@ export function LandingPrimaryCta({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [communityOnly]);
 
   const sizeClass =
     size === "hero"
@@ -47,10 +51,16 @@ export function LandingPrimaryCta({
 
   return (
     <Link
-      href={isLoggedIn ? "/app" : "/communities"}
+      href={communityOnly ? "/communities" : isLoggedIn ? "/app" : "/communities"}
       className={`inline-flex items-center justify-center gap-2.5 rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${sizeClass} ${colorClass} ${className}`}
     >
-      <span>{isLoggedIn ? "Continue learning" : (children ?? "Start Learning")}</span>
+      <span>
+        {communityOnly
+          ? (children ?? "Find your program")
+          : isLoggedIn
+            ? "Continue learning"
+            : (children ?? "Start Learning")}
+      </span>
       <span aria-hidden="true" className="text-base font-bold leading-none">
         ↗
       </span>

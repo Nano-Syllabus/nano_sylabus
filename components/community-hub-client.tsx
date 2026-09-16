@@ -975,46 +975,50 @@ function CommunityOverview({
         </section>
 
         <section
-          className="mt-8 grid gap-3 sm:grid-cols-2"
+          className="mt-8 grid gap-4 sm:grid-cols-2"
           aria-label="Community invitations and study room"
         >
-          <article className="flex min-h-52 flex-col rounded-2xl border border-border bg-bg-secondary p-5">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-bg-primary text-[var(--community-accent)] shadow-sm">
+          <article className="flex min-h-56 flex-col rounded-[22px] border border-border bg-bg-primary p-6 sm:p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <span className="flex size-11 items-center justify-center rounded-full border border-border/80 bg-bg-primary text-[#1768ff] shadow-sm">
               <UserRoundPlus className="size-5" aria-hidden="true" />
             </span>
-            <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-text-muted">
+            <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.14em] text-text-muted">
               Peer referral
             </p>
-            <h3 className="mt-2 font-display text-xl font-semibold">Give 1 month. Get 1 month.</h3>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
+            <h3 className="mt-2.5 text-[22px] font-bold tracking-tight text-text-primary">
+              Give 1 month. Get 1 month.
+            </h3>
+            <p className="mt-2.5 text-[14.5px] leading-relaxed text-text-secondary">
               After your friend&apos;s first paid Pro subscription is approved, both accounts get 30
               days automatically.
             </p>
             <button
               type="button"
               onClick={onOpenReferral}
-              className={`mt-auto inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-text-primary px-4 text-sm font-semibold text-text-inverse hover:opacity-90 ${focusRing}`}
+              className={`mt-6 inline-flex min-h-11 items-center justify-center gap-2.5 self-start rounded-full bg-[#101114] px-6 text-sm font-semibold text-white shadow-sm hover:bg-[#26282d] hover:-translate-y-0.5 transition-all duration-150 active:translate-y-0 ${focusRing}`}
             >
               Create referral link <ArrowRight className="size-4" aria-hidden="true" />
             </button>
           </article>
 
-          <article className="flex min-h-52 flex-col rounded-2xl border border-border bg-bg-primary p-5">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-bg-secondary text-[var(--community-accent)]">
+          <article className="flex min-h-56 flex-col rounded-[22px] border border-border bg-bg-primary p-6 sm:p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <span className="flex size-11 items-center justify-center rounded-full border border-border/80 bg-bg-secondary text-[#5865F2] shadow-sm">
               <MessageCircle className="size-5" aria-hidden="true" />
             </span>
-            <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-text-muted">
+            <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.14em] text-text-muted">
               Discord co-study server
             </p>
-            <h3 className="mt-2 font-display text-xl font-semibold">Discord Study Room</h3>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
+            <h3 className="mt-2.5 text-[22px] font-bold tracking-tight text-text-primary">
+              Discord Study Room
+            </h3>
+            <p className="mt-2.5 text-[14.5px] leading-relaxed text-text-secondary">
               Join the NanoSyllabus Discord room for voice study, questions, and peer help.
             </p>
             <a
               href={DISCORD_STUDY_ROOM_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className={`mt-auto inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl border border-border px-4 text-sm font-semibold hover:bg-bg-secondary ${focusRing}`}
+              className={`mt-6 inline-flex min-h-11 items-center justify-center gap-2.5 self-start rounded-full border border-border bg-bg-primary px-6 text-sm font-semibold text-text-primary hover:bg-bg-secondary hover:-translate-y-0.5 transition-all duration-150 active:translate-y-0 ${focusRing}`}
             >
               Join Discord <ArrowRight className="size-4" aria-hidden="true" />
             </a>
