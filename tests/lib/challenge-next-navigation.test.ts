@@ -64,7 +64,7 @@ describe("next challenge navigation", () => {
     expect(next).toBeNull();
   });
 
-  it("starts an untouched challenge at the past questions", () => {
+  it("starts an untouched challenge at the learn step", () => {
     expect(
       initialChallengeStep({
         ...challenge("ratio", "assigned", 2),
@@ -78,7 +78,7 @@ describe("next challenge navigation", () => {
     ).toBe(1);
   });
 
-  it("resumes at the three-step position the saved progress implies", () => {
+  it("resumes at the two-step position the saved progress implies", () => {
     const base = {
       ...challenge("ratio", "started", 2),
       content: {
@@ -90,10 +90,11 @@ describe("next challenge navigation", () => {
     } as StudentChallengeDetail;
 
     // Progress is still recorded at the old granularity — two columns, two API
-    // calls — and the three-step layout reads both of them. A student who has
-    // done the reading but not its worked examples is still IN the learn step.
-    expect(initialChallengeStep({ ...base, lessonRead: true })).toBe(2);
-    expect(initialChallengeStep({ ...base, lessonRead: true, examplesReviewed: true })).toBe(3);
-    expect(initialChallengeStep({ ...base, status: "completed" })).toBe(3);
+    // calls — but only the far edge of the learning step moves a student off it.
+    // The reading now sits INSIDE step one, under the worked past questions, so
+    // a student who read it and stopped is still on step one.
+    expect(initialChallengeStep({ ...base, lessonRead: true })).toBe(1);
+    expect(initialChallengeStep({ ...base, lessonRead: true, examplesReviewed: true })).toBe(2);
+    expect(initialChallengeStep({ ...base, status: "completed" })).toBe(2);
   });
 });

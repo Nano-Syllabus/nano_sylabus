@@ -18,7 +18,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useContext, useEffect, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { AppShellContext } from "@/components/app-shell-context";
 import { Markdown } from "@/components/markdown";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
@@ -72,36 +80,63 @@ type GradeResult = {
 };
 
 /**
- * THREE STEPS, NOT SIX.
+ * TWO STEPS: LEARN, THEN PRACTISE.
  *
- * The challenge used to be walked as six: prerequisites, reading, worked
- * example, practice question, submit, result. Six numbered stages to look at
- * before starting is a wall, and four of them were not decisions the student
- * makes — reading and worked examples are one act of learning, and question,
- * upload and result are one act of practising, split only by which request had
- * returned.
+ * The challenge used to be walked as six (prerequisites, reading, worked
+ * example, practice question, submit, result), then as three (see the past
+ * questions, learn, practise). It is two, and the second of those collapses is
+ * the one that matters.
  *
- * So they are three, and each is a thing the student actually does:
+ *   1  Learn    the past questions worked, then the concepts under them
+ *   2  Practise, hand in, and read the marking
  *
- *   1  See    what this topic gets asked
- *   2  Learn  the concepts, then the same questions worked
- *   3  Practise, hand in, and read the marking
+ * WHY THE PAST QUESTIONS COME FIRST, AND WORKED.
+ *
+ * The three-step version opened on the past questions deliberately UNSOLVED —
+ * "you are not meant to be able to answer them yet" — on the theory that a
+ * student shown the answer before the reading does not read it. That order is
+ * now reversed, because it described the wrong student. The one sitting this
+ * exam opens a set paper and works out what is being asked from the questions
+ * themselves; the concepts are what they reach for when a question does not
+ * give way. Leading with the worked questions puts the reading where a student
+ * actually wants it — after the thing that made them want it — rather than
+ * ahead of the only evidence that it matters.
+ *
+ * So the worked questions lead, the rest of the real past questions are listed
+ * under them, and the concept reading closes the step. There is no separate
+ * "Solved Example" section: a solved example WAS one of these past questions,
+ * and printing it twice, once bare at the top and once worked three screens
+ * later, was the redundancy that made the old step one feel like a gate.
  *
  * Progress is still recorded at the old granularity — `lessonRead` and
  * `examplesReviewed` are separate columns and separate API calls — because the
  * server's record of what a student has done should not be coarsened to match a
  * layout decision.
  */
-type ChallengeStep = 1 | 2 | 3;
+type ChallengeStep = 1 | 2;
 
 export function initialChallengeStep(challenge: StudentChallengeDetail): ChallengeStep {
-  if (challenge.status === "completed") return 3;
-  // Both halves of the learning step done: the next thing is to practise.
-  if (challenge.examplesReviewed) return 3;
-  // The reading is done but its worked examples are not, which is still step 2 —
-  // it opens on the reading and the examples are below it.
-  if (challenge.lessonRead) return 2;
+  if (challenge.status === "completed") return 2;
+  // `examplesReviewed` is the far edge of the learning step, and it is the only
+  // one that moves a student off it. `lessonRead` alone no longer advances
+  // anything: the reading is INSIDE step one now rather than being step two, so
+  // a student who read it and stopped is still in the middle of the same step.
+  if (challenge.examplesReviewed) return 2;
   return 1;
+}
+
+/**
+ * Question text reduced to what two sources would agree on: case, whitespace and
+ * trailing punctuation all vary between the question bank row and the worked
+ * copy of the same question, and none of that variation makes it a different
+ * question.
+ */
+function normalizeQuestionText(question: string) {
+  return question
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[.?!,;:]+$/g, "")
+    .trim();
 }
 
 function savedResults(challenge: StudentChallengeDetail): GradeResult[] {
@@ -296,6 +331,22 @@ function ChallengeDetail({
   const contentPending = content?.contentStatus;
   const buildingRest = contentPending === "pending" && !content?.contentError;
   const buildFailed = contentPending === "pending" ? content?.contentError || "" : "";
+  /**
+   * The past questions that are NOT already worked above.
+   *
+   * `solvedExamples` are themselves past questions — the same rows, carrying a
+   * solution — so listing `pastQuestions` untouched underneath them printed two
+   * or three of them twice on one screen. Matching on the question text is what
+   * is available: the two lists come from different routes and share no id.
+   */
+  const unworkedPastQuestions = useMemo(() => {
+    const worked = new Set(
+      (content?.solvedExamples ?? []).map((example) => normalizeQuestionText(example.question)),
+    );
+    return (content?.pastQuestions ?? []).filter(
+      (pastQuestion) => !worked.has(normalizeQuestionText(pastQuestion.question)),
+    );
+  }, [content?.solvedExamples, content?.pastQuestions]);
 
   useEffect(() => {
     setSidebarSuppressed(focusMode);
@@ -476,7 +527,7 @@ function ChallengeDetail({
       setScore({ earned: payload.totalScore, total: payload.totalMarks, passed: payload.passed });
       setScanFile(null);
       onChange(payload.challenge);
-      setActiveStep(3);
+      setActiveStep(2);
       /**
        * Move the dashboard's numbers here, in this tick, with no request.
        *
@@ -573,10 +624,6 @@ function ChallengeDetail({
 
   const goNext = async () => {
     if (activeStep === 1) {
-      setActiveStep(2);
-      return;
-    }
-    if (activeStep === 2) {
       // Never record examples the student was not shown, whatever the button did.
       if (buildingRest) return;
       // One step to the student, two rows to the server. Both are recorded on
@@ -584,37 +631,33 @@ function ChallengeDetail({
       // they are rather than advancing on a half-saved record.
       if (!challenge.lessonRead && !(await markStep("lesson"))) return;
       if (!challenge.examplesReviewed && !(await markStep("examples"))) return;
-      setActiveStep(3);
+      setActiveStep(2);
     }
   };
 
   const steps = [
     {
       number: 1,
-      label: "Past Questions",
-      complete: activeStep > 1 || challenge.lessonRead,
-    },
-    {
-      number: 2,
       label: "Learn",
       complete: challenge.lessonRead && challenge.examplesReviewed,
     },
-    { number: 3, label: "Practice", complete: challenge.status === "completed" },
+    { number: 2, label: "Practice", complete: challenge.status === "completed" },
   ] as const;
 
   const activeWarning =
     activeStep === 1
-      ? [...(content.pastQuestionBlockers || []), ...(content.pastQuestionWarnings || [])]
+      ? // The past questions, their worked solutions and the reading are one
+        // step now, so all three sets of warnings are one line rather than one
+        // each on screens the student never sees separately.
+        [
+          ...(content.pastQuestionBlockers || []),
+          ...(content.pastQuestionWarnings || []),
+          content.learningWarning,
+          content.solvedWarning || content.warning,
+        ]
           .filter(Boolean)
           .join(" ")
-      : activeStep === 2
-        ? // The reading and the worked examples are one step now, so their two
-          // warnings are one line rather than one each on screens the student
-          // never sees separately.
-          [content.learningWarning, content.solvedWarning || content.warning]
-            .filter(Boolean)
-            .join(" ")
-        : content.examWarning;
+      : content.examWarning;
 
   const resultEvaluation = evaluation ?? challenge.latestAttempt?.evaluation ?? null;
   const resultPercentage =
@@ -627,7 +670,7 @@ function ChallengeDetail({
     results.filter((result) => Boolean(result.student_answer?.trim())).length;
   const resultMarksLost =
     resultEvaluation?.marks_lost ?? (score ? Math.max(0, score.total - score.earned) : 0);
-  const resultReady = activeStep === 3 && Boolean(score && challenge.status === "completed");
+  const resultReady = activeStep === 2 && Boolean(score && challenge.status === "completed");
 
   const focusButtonClass =
     "min-h-10 rounded-lg px-5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary disabled:cursor-not-allowed disabled:opacity-50";
@@ -857,27 +900,96 @@ function ChallengeDetail({
                     <ListChecks className="size-5" aria-hidden="true" />
                   </span>
                   <div>
-                    <h2 className="text-xl font-semibold">Past Questions</h2>
+                    <h2 className="text-xl font-semibold">Past Questions, Worked</h2>
                     <p className="mt-1 max-w-prose text-sm leading-6 text-text-muted">
-                      What {challenge.subjectName} has actually asked on this topic. Read them first
-                      — you are not meant to be able to answer them yet.
+                      What {challenge.subjectName} actually asks on this topic, answered end to
+                      end. Work through these first — the concepts they rest on are underneath.
                     </p>
                   </div>
                 </div>
-                {content.pastQuestions?.length ? (
+
+                {content.solvedExamples.length ? (
                   <div className="mt-6 space-y-4">
-                    <ol className="space-y-3">
-                      {content.pastQuestions.map((pastQuestion, index) => (
+                    {content.solvedExamples.map((example, index) => (
+                      <article
+                        key={`${example.question}-${index}`}
+                        className="rounded-xl border border-border bg-bg-secondary p-5"
+                      >
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                          <span className="text-blue-600 dark:text-blue-400">
+                            Question {index + 1}
+                          </span>
+                          {/* Year and marks are printed only when a real paper printed
+                            them. An absent year is not a gap to fill in. */}
+                          {example.year ? <span>· {example.year}</span> : null}
+                          {example.marks ? (
+                            <span>· {displayNumber(example.marks)} marks</span>
+                          ) : null}
+                        </div>
+                        <Markdown
+                          text={example.question}
+                          className="mt-3 max-w-prose text-sm font-semibold leading-6"
+                        />
+                        <div className="mt-4 overflow-x-auto rounded-lg bg-card p-4 text-sm leading-7 text-text-secondary">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                            Solution
+                          </p>
+                          {/* NOT `whitespace-pre-wrap`. A solution is block markdown
+                              now — headed sections, comparison tables, fenced code —
+                              and preserving source newlines on top of that puts a
+                              blank line between every rendered block and stops a
+                              table from collapsing its own row whitespace. */}
+                          <Markdown
+                            text={example.solution}
+                            className="mt-2 text-text-secondary"
+                          />
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : buildingRest ? (
+                  <ChallengeBuildingNotice
+                    label="Working the past questions for this topic…"
+                    lines={3}
+                  />
+                ) : buildFailed ? (
+                  <ChallengeBuildFailure
+                    message={buildFailed}
+                    retrying={retryingContent}
+                    onRetry={() => void retryContentBuild()}
+                  />
+                ) : (
+                  <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5">
+                    <p className="inline-flex items-center gap-2 text-sm font-semibold text-text-primary">
+                      <AlertTriangle className="size-4 text-warning" aria-hidden="true" />
+                      No past question on this topic is worked yet
+                    </p>
+                    <p className="mt-1 max-w-prose text-sm leading-6 text-text-secondary">
+                      Nothing in this course&apos;s question bank has been set on it. Read the
+                      concepts below — the challenge still runs from the course notes.
+                    </p>
+                  </div>
+                )}
+
+                {/* The rest of the real paper. These are deliberately bare: they are
+                    what the student tries once the worked ones and the concepts have
+                    done their job, and a solution here would spend the only unseen
+                    questions this topic has. */}
+                {unworkedPastQuestions.length ? (
+                  <section className="mt-8 border-t border-border pt-8">
+                    <h3 className="text-base font-semibold">Also asked on this topic</h3>
+                    <p className="mt-1 max-w-prose text-sm leading-6 text-text-muted">
+                      The same papers set these too, unworked. Try them once the concepts below
+                      make sense.
+                    </p>
+                    <ol className="mt-4 space-y-3">
+                      {unworkedPastQuestions.map((pastQuestion, index) => (
                         <li
                           key={pastQuestion.id}
                           className="rounded-xl border border-border bg-bg-secondary p-4 sm:p-5"
                         >
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                            <span className="text-blue-600 dark:text-blue-400">
-                              Question {index + 1}
-                            </span>
-                            {/* Year and marks are printed only when a real paper printed
-                              them. An absent year is not a gap to fill in. */}
+                            <span>Question {content.solvedExamples.length + index + 1}</span>
                             {pastQuestion.year ? <span>· {pastQuestion.year}</span> : null}
                             {pastQuestion.marks ? (
                               <span>· {displayNumber(pastQuestion.marks)} marks</span>
@@ -890,158 +1002,87 @@ function ChallengeDetail({
                         </li>
                       ))}
                     </ol>
+                  </section>
+                ) : null}
 
-                    <div className="rounded-xl bg-blue-500/10 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-                        What to do with these
-                      </p>
-                      <p className="mt-1 max-w-prose text-sm leading-6 text-text-secondary">
-                        Notice what they keep asking for. The reading next teaches exactly that, and
-                        the worked solutions come after it.
-                      </p>
+                <div className="mt-8 border-t border-border pt-8">
+                  {/* Which topic this is, above the section label: the page heading
+                      is a scroll away by the time the reading is open, and "Key
+                      Concepts" alone does not say concepts of WHAT. */}
+                  <p className="text-sm font-semibold text-text-muted">{challenge.topicTitle}</p>
+                  <h2 className="mt-1 text-xl font-semibold">📘 Key Concepts</h2>
+                  <p className="mt-2 text-sm text-text-muted">
+                    What those questions are really testing, and why the solutions go the way they
+                    do.
+                  </p>
+                  {/* The one sentence the topic reduces to, given the weight it deserves:
+                    it is what a student reconstructs the rest from. Absent on a reading
+                    written before the concept-led rewrite, so it is never assumed. */}
+                  {content.lesson.bigIdea ? (
+                    <div className="mt-6 flex items-start gap-3 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 sm:p-5">
+                      <Lightbulb
+                        className="mt-0.5 size-5 shrink-0 text-blue-600 dark:text-blue-400"
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+                          The idea
+                        </p>
+                        <Markdown
+                          text={content.lesson.bigIdea}
+                          className="mt-1 max-w-prose text-sm font-medium leading-6 text-text-primary"
+                        />
+                      </div>
                     </div>
+                  ) : null}
+                  <h3 className="mt-6 text-base font-semibold">{content.lesson.title}</h3>
+                  <div className="mt-3 space-y-3">
+                    {content.lesson.content.map((paragraph, index) => (
+                      <Markdown
+                        key={`${paragraph}-${index}`}
+                        text={paragraph}
+                        className="max-w-prose text-sm leading-7 text-text-secondary"
+                      />
+                    ))}
                   </div>
-                ) : (
-                  <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5">
-                    <p className="inline-flex items-center gap-2 text-sm font-semibold text-text-primary">
-                      <AlertTriangle className="size-4 text-warning" aria-hidden="true" />
-                      No past question on this topic is indexed yet
-                    </p>
-                    <p className="mt-1 max-w-prose text-sm leading-6 text-text-secondary">
-                      Nothing in this course&apos;s question bank has been set on it. Continue to
-                      the concept reading — the challenge still runs from the course notes.
-                    </p>
+                  {content.lesson.connections?.length ? (
+                    <section className="mt-5 rounded-xl border border-border bg-bg-secondary p-4 sm:p-5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                        How this connects
+                      </p>
+                      <ul className="mt-3 space-y-2">
+                        {content.lesson.connections.map((connection, index) => (
+                          <li key={`${connection}-${index}`} className="flex gap-2">
+                            <span aria-hidden="true" className="text-text-muted">
+                              ·
+                            </span>
+                            <Markdown
+                              text={connection}
+                              className="max-w-prose text-sm leading-6 text-text-secondary"
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+                  <div className="mt-5 rounded-xl bg-blue-500/10 p-4">
+                    <p className="text-sm font-semibold">Core focus</p>
+                    <Markdown
+                      text={content.lesson.focus}
+                      className="mt-1 text-sm leading-6 text-text-secondary"
+                    />
                   </div>
-                )}
+                  {content.lesson.sources?.length ? (
+                    <p className="mt-5 text-xs text-text-muted">
+                      Grounded in {content.lesson.sources.length} uploaded course{" "}
+                      {content.lesson.sources.length === 1 ? "source" : "sources"}.
+                    </p>
+                  ) : null}
+                </div>
               </div>
             ) : null}
 
             {activeStep === 2 ? (
-              <div>
-                {/* Which topic this is, above the section label: the page heading
-                    is a scroll away by the time the reading is open, and "Key
-                    Concepts" alone does not say concepts of WHAT. */}
-                <p className="text-sm font-semibold text-text-muted">{challenge.topicTitle}</p>
-                <h2 className="mt-1 text-xl font-semibold">📘 Key Concepts</h2>
-                <p className="mt-2 text-sm text-text-muted">
-                  Understand the idea first, then read it applied. The worked example below makes
-                  sense on its own once the concepts do.
-                </p>
-                {/* The one sentence the topic reduces to, given the weight it deserves:
-                  it is what a student reconstructs the rest from. Absent on a reading
-                  written before the concept-led rewrite, so it is never assumed. */}
-                {content.lesson.bigIdea ? (
-                  <div className="mt-6 flex items-start gap-3 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 sm:p-5">
-                    <Lightbulb
-                      className="mt-0.5 size-5 shrink-0 text-blue-600 dark:text-blue-400"
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-                        The idea
-                      </p>
-                      <Markdown
-                        text={content.lesson.bigIdea}
-                        className="mt-1 max-w-prose text-sm font-medium leading-6 text-text-primary"
-                      />
-                    </div>
-                  </div>
-                ) : null}
-                <h3 className="mt-6 text-base font-semibold">{content.lesson.title}</h3>
-                <div className="mt-3 space-y-3">
-                  {content.lesson.content.map((paragraph, index) => (
-                    <Markdown
-                      key={`${paragraph}-${index}`}
-                      text={paragraph}
-                      className="max-w-prose text-sm leading-7 text-text-secondary"
-                    />
-                  ))}
-                </div>
-                {content.lesson.connections?.length ? (
-                  <section className="mt-5 rounded-xl border border-border bg-bg-secondary p-4 sm:p-5">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                      How this connects
-                    </p>
-                    <ul className="mt-3 space-y-2">
-                      {content.lesson.connections.map((connection, index) => (
-                        <li key={`${connection}-${index}`} className="flex gap-2">
-                          <span aria-hidden="true" className="text-text-muted">
-                            ·
-                          </span>
-                          <Markdown
-                            text={connection}
-                            className="max-w-prose text-sm leading-6 text-text-secondary"
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-                <div className="mt-5 rounded-xl bg-blue-500/10 p-4">
-                  <p className="text-sm font-semibold">Core focus</p>
-                  <Markdown
-                    text={content.lesson.focus}
-                    className="mt-1 text-sm leading-6 text-text-secondary"
-                  />
-                </div>
-                {content.lesson.sources?.length ? (
-                  <p className="mt-5 text-xs text-text-muted">
-                    Grounded in {content.lesson.sources.length} uploaded course{" "}
-                    {content.lesson.sources.length === 1 ? "source" : "sources"}.
-                  </p>
-                ) : null}
-
-                <div className="mt-8 border-t border-border pt-8">
-                  <h2 className="text-xl font-semibold">✅ Solved Example</h2>
-                  <p className="mt-2 text-sm text-text-muted">
-                    The same kind of question, worked end to end. Follow it before trying one
-                    yourself.
-                  </p>
-                  {content.solvedExamples.length ? (
-                    <div className="mt-6 space-y-4">
-                      {content.solvedExamples.map((example, index) => (
-                        <article
-                          key={`${example.question}-${index}`}
-                          className="rounded-xl border border-border bg-bg-secondary p-5"
-                        >
-                          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                            Example {index + 1} · {example.marks} marks
-                          </p>
-                          <Markdown
-                            text={example.question}
-                            className="mt-3 text-sm font-semibold leading-6"
-                          />
-                          <div className="mt-4 rounded-lg bg-card p-4 text-sm leading-7 text-text-secondary">
-                            <strong className="text-text-primary">Solution</strong>
-                            <Markdown
-                              text={example.solution}
-                              className="mt-1 whitespace-pre-wrap text-text-secondary"
-                            />
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : buildingRest ? (
-                    <ChallengeBuildingNotice
-                      label="Working the past questions for this topic…"
-                      lines={3}
-                    />
-                  ) : buildFailed ? (
-                    <ChallengeBuildFailure
-                      message={buildFailed}
-                      retrying={retryingContent}
-                      onRetry={() => void retryContentBuild()}
-                    />
-                  ) : (
-                    <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
-                      No solved example is available for this topic yet.
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : null}
-
-            {activeStep === 3 ? (
               <div>
                 <h2 className="text-xl font-semibold">📝 Your Turn</h2>
                 <p className="mt-2 text-sm text-text-muted">
@@ -1544,24 +1585,22 @@ function ChallengeDetail({
             >
               ← Previous
             </button>
-            {activeStep < 3 ? (
+            {activeStep < 2 ? (
               <button
                 type="button"
                 /* Leaving the learn step records its worked examples as reviewed.
                    While they are still being built the student has not seen them,
                    so the step cannot be left yet — the same gate main put on the
                    old step three, moved to where that section now lives. */
-                disabled={savingStep !== null || submitting || (activeStep === 2 && buildingRest)}
+                disabled={savingStep !== null || submitting || buildingRest}
                 onClick={() => void goNext()}
                 className={`${focusButtonClass} bg-blue-600 text-white`}
               >
                 {savingStep
                   ? "Saving…"
-                  : activeStep === 2
-                    ? buildingRest
-                      ? "Preparing examples…"
-                      : "Start practising →"
-                    : "Next →"}
+                  : buildingRest
+                    ? "Working the past questions…"
+                    : "Start practising →"}
               </button>
             ) : resultReady ? (
               <div className="flex flex-wrap justify-end gap-3">
@@ -1809,8 +1848,10 @@ export function ChallengesDashboardClient({
               aria-hidden="true"
             />
 
-            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
-              {/* Step 1: Past question */}
+            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8">
+              {/* Step 1: Learn — the past questions worked, then the concepts.
+                  One card, because it is one step on the challenge screen; two
+                  cards here would describe a flow the student never walks. */}
               <div className="flex flex-col items-start md:items-center text-left md:text-center">
                 <div className="flex size-[58px] items-center justify-center rounded-[16px] border-[1.5px] border-[#18181b] dark:border-white/80 bg-white dark:bg-bg-primary text-black dark:text-white shadow-xs">
                   <svg
@@ -1826,38 +1867,13 @@ export function ChallengesDashboardClient({
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                   </svg>
                 </div>
-                <h3 className="mt-3 text-[14px] font-bold text-text-primary">Past question</h3>
-                <p className="mt-0.5 text-[12px] text-[#6b7280] dark:text-text-muted leading-relaxed max-w-[170px]">
-                  See what the exam expects.
-                </p>
-              </div>
-
-              {/* Step 2: Learn */}
-              <div className="flex flex-col items-start md:items-center text-left md:text-center">
-                <div className="flex size-[58px] items-center justify-center rounded-[16px] border-[1.5px] border-[#18181b] dark:border-white/80 bg-white dark:bg-bg-primary text-black dark:text-white shadow-xs">
-                  <svg
-                    className="size-5 text-black dark:text-white"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <rect width="18" height="18" x="3" y="3" rx="3" />
-                    <path d="M7 8h10" />
-                    <path d="M7 12h10" />
-                    <path d="M7 16h10" />
-                  </svg>
-                </div>
                 <h3 className="mt-3 text-[14px] font-bold text-text-primary">Learn</h3>
                 <p className="mt-0.5 text-[12px] text-[#6b7280] dark:text-text-muted leading-relaxed max-w-[170px]">
-                  Study the exact topic you need.
+                  Past questions worked, then the concepts under them.
                 </p>
               </div>
 
-              {/* Step 3: Handwritten exam */}
+              {/* Step 2: Handwritten exam */}
               <div className="flex flex-col items-start md:items-center text-left md:text-center">
                 <div className="flex size-[58px] items-center justify-center rounded-[16px] border-[1.5px] border-[#18181b] dark:border-white/80 bg-white dark:bg-bg-primary text-black dark:text-white shadow-xs">
                   <svg
@@ -1880,7 +1896,7 @@ export function ChallengesDashboardClient({
                 </p>
               </div>
 
-              {/* Step 4: AI grade */}
+              {/* Step 3: AI grade */}
               <div className="flex flex-col items-start md:items-center text-left md:text-center">
                 <div className="flex size-[60px] items-center justify-center rounded-[18px] bg-[#18181b] dark:bg-black text-[#d7ff3b] shadow-[0_4px_16px_rgba(0,0,0,0.2)] relative z-10">
                   <svg
