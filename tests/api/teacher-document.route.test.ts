@@ -25,7 +25,7 @@ vi.mock("@/lib/teacher-app/client", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.createSupabaseAdminClient }));
 
-import { DELETE, POST } from "@/app/api/teacher/documents/[documentId]/route";
+import { DELETE, GET, POST } from "@/app/api/teacher/documents/[documentId]/route";
 
 const context = (documentId = "doc-1") => ({ params: Promise.resolve({ documentId }) });
 
@@ -55,6 +55,65 @@ describe("/api/teacher/documents/[documentId]", () => {
     expect(mocks.indexTeacherDocument).toHaveBeenCalledWith("collection-secret", {
       documentId: "doc-1",
     });
+  });
+
+  it("indexes by path when the browser supplies one", async () => {
+    // The file this route exists for most — stored but never indexed — has no
+    // index row, so its id 404s and only the path resolves.
+    const response = await POST(
+      new Request("http://localhost", {
+        method: "POST",
+        body: JSON.stringify({ path: "Physics/Syllabus/physics-syllabus.txt" }),
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ jobId: "job-1" });
+    expect(mocks.indexTeacherDocument).toHaveBeenCalledWith("collection-secret", {
+      path: "Physics/Syllabus/physics-syllabus.txt",
+    });
+  });
+
+  it("refuses a path that climbs out of the collection", async () => {
+    const response = await POST(
+      new Request("http://localhost", {
+        method: "POST",
+        body: JSON.stringify({ path: "../other-teacher/Notes/secret.pdf" }),
+      }),
+      context(),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.indexTeacherDocument).not.toHaveBeenCalled();
+  });
+
+  it("still describes a document the collection index has never heard of", async () => {
+    mocks.getTeacherDocument.mockRejectedValue(new mocks.MockTeacherApiError("Nope", 404));
+
+    const response = await GET(
+      new Request("http://localhost?path=Physics%2FSyllabus%2Fphysics-syllabus.txt"),
+      context(),
+    );
+    const payload = await response.json();
+
+    // A 404 here would read as "your file is gone" about a file that is on the
+    // shelf, and would take the preview and the Index now button with it.
+    expect(response.status).toBe(200);
+    expect(payload.document).toMatchObject({
+      path: "Physics/Syllabus/physics-syllabus.txt",
+      indexed: false,
+      chunk_count: 0,
+    });
+    expect(payload.file.name).toBe("physics-syllabus.txt");
+  });
+
+  it("still 404s a missing document when the browser named no path", async () => {
+    mocks.getTeacherDocument.mockRejectedValue(new mocks.MockTeacherApiError("Nope", 404));
+
+    const response = await GET(new Request("http://localhost"), context());
+
+    expect(response.status).toBe(404);
   });
 
   it("deletes only through the authenticated teacher collection", async () => {

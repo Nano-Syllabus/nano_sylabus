@@ -92,7 +92,17 @@ type TeacherDocument = {
   path: string;
   shelf: Shelf | "Other";
   sizeBytes: number;
-  status: "ready" | "processing" | "error";
+  /**
+   * `unindexed` is the state this list used to be unable to say.
+   *
+   * A file the portal uploaded but never got indexed has no row in the
+   * collection index at all, so the tenant API reports it as `indexed: false`,
+   * `chunk_count: 0`, `status: ""` — exactly what a file whose indexing job is
+   * still queued reports. Flattening the two into "Indexing" told a creator to
+   * wait for something that was never going to happen, and the wait had no end
+   * and no button.
+   */
+  status: "ready" | "processing" | "unindexed" | "error";
   chunks: number;
   previewAvailable: boolean;
 };
@@ -626,11 +636,17 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
     const rawStatus = text(document.status).toLowerCase();
     const status: TeacherDocument["status"] =
       document.indexed ||
-      ["ready", "indexed", "complete", "completed", "success"].includes(rawStatus)
+      ["ok", "ready", "indexed", "complete", "completed", "success"].includes(rawStatus)
         ? "ready"
-        : ["failed", "error", "cancelled", "canceled"].includes(rawStatus)
+        : // `empty` is the indexer's verdict that there was nothing readable in
+          // the file. It is an outcome, not a stage, and waiting will not change
+          // it — so it belongs with the failures.
+          ["failed", "error", "cancelled", "canceled", "empty"].includes(rawStatus)
           ? "error"
-          : "processing";
+          : // Only a status that NAMES work in progress reads as in progress.
+            ["queued", "running", "processing", "pending", "indexing"].includes(rawStatus)
+            ? "processing"
+            : "unindexed";
     return [
       {
         id,
@@ -1153,6 +1169,9 @@ type DriveQueueItem = {
   fileName: string;
   shelf: string;
   destinationPath: string;
+  /** The link this file was pasted from. Carried to the browser so a failed row
+   *  can offer the creator the way back to it, not only the retry button. */
+  sourceLink: string;
   status: "queued" | "importing" | "done" | "failed";
   error: string;
   warning: string;
@@ -1166,6 +1185,7 @@ function toQueueItem(value: unknown): DriveQueueItem {
     fileName: text(record.fileName) || "Drive file",
     shelf: text(record.shelf),
     destinationPath: text(record.destinationPath),
+    sourceLink: text(record.sourceLink),
     status: (["queued", "importing", "done", "failed"].includes(status)
       ? status
       : "queued") as DriveQueueItem["status"],
@@ -1218,6 +1238,25 @@ async function readDriveQueue() {
   );
   const items = Array.isArray(payload.items) ? payload.items.map(toQueueItem) : [];
   return { items, unavailable: payload.unavailable === true };
+}
+
+/**
+ * Put failed imports back on the queue and return the queue as it now stands.
+ *
+ * Takes row ids, not files: the row already holds the link, the Drive file id
+ * and the destination, so a retry asks the server to run the same instruction
+ * again rather than rebuilding it here. That is what lets the button work on the
+ * Activity page, where the dialog that queued the file is long gone.
+ */
+async function retryDriveImports(ids: string[]) {
+  const payload = await responsePayload(
+    await fetch("/api/teacher/drive-queue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ action: "retry", ids }),
+    }),
+  );
+  return Array.isArray(payload.items) ? payload.items.map(toQueueItem) : [];
 }
 
 function nudgeDriveQueue() {
@@ -1285,7 +1324,20 @@ function DriveImportQueue({
    * that flash reads as data loss.
    */
   const [loaded, setLoaded] = useState(false);
+  /** The rows whose retry is in flight, so each button can say so for itself
+   *  rather than the whole panel going busy. */
+  const [retrying, setRetrying] = useState<string[]>([]);
+  const [retryError, setRetryError] = useState("");
   const settledRef = useRef(0);
+  /**
+   * Poll now, instead of waiting out the current timer.
+   *
+   * A retry moves rows back to `queued`, and the loop is on its idle 10-second
+   * beat when it happens — so without this the row a creator just retried sits
+   * there reading "Failed" for up to ten seconds after they pressed the button,
+   * which reads as the button having done nothing.
+   */
+  const pollNowRef = useRef<() => void>(() => {});
   /**
    * The callback is read through a ref rather than depended on.
    *
@@ -1340,12 +1392,38 @@ function DriveImportQueue({
       }
     }
 
+    pollNowRef.current = () => {
+      if (cancelled) return;
+      if (timer) clearTimeout(timer);
+      void tick();
+    };
+
     void tick();
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
   }, []);
+
+  async function runRetry(ids: string[]) {
+    if (!ids.length || retrying.length) return;
+    setRetrying(ids);
+    setRetryError("");
+    try {
+      setItems(await retryDriveImports(ids));
+      pollNowRef.current();
+    } catch (caught) {
+      setRetryError(
+        caught instanceof Error
+          ? caught.message
+          : ids.length === 1
+            ? "That import could not be retried."
+            : "Those imports could not be retried.",
+      );
+    } finally {
+      setRetrying([]);
+    }
+  }
 
   if (unavailable) {
     return (
@@ -1394,7 +1472,8 @@ function DriveImportQueue({
   const pending = items.filter(
     (item) => item.status === "queued" || item.status === "importing",
   ).length;
-  const failed = items.filter((item) => item.status === "failed").length;
+  const failedIds = items.filter((item) => item.status === "failed").map((item) => item.id);
+  const failed = failedIds.length;
 
   return (
     <section
@@ -1437,37 +1516,80 @@ function DriveImportQueue({
                       ? "Indexed"
                       : "Failed"}
               </span>
+              {/* A timeout and a half-finished index say nothing about the file,
+                  only about the run — so the row that reports one also offers
+                  another go, rather than sending the creator back to the link. */}
+              {item.status === "failed" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={retrying.length > 0}
+                  onClick={() => void runRetry([item.id])}
+                >
+                  {retrying.includes(item.id) ? "Retrying…" : "Retry"}
+                </Button>
+              ) : null}
             </div>
             {item.error ? <p className="mt-1 pl-9 text-xs text-destructive">{item.error}</p> : null}
+            {item.status === "failed" && item.sourceLink ? (
+              <p className="mt-1 pl-9 text-xs text-text-muted">
+                <a
+                  href={item.sourceLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-2 hover:text-text-primary"
+                >
+                  Open the Drive link
+                </a>{" "}
+                — Retry re-reads it, and pasting it above again works too.
+              </p>
+            ) : null}
             {item.warning ? (
               <p className="mt-1 pl-9 text-xs text-text-muted">{item.warning}</p>
             ) : null}
           </li>
         ))}
       </ul>
-      {pending ? (
-        <p className="mt-2 text-xs text-text-muted">
-          You can close this dialog — importing continues without it.
-        </p>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-3"
-          onClick={() => {
-            void fetch("/api/teacher/drive-queue", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Accept: "application/json" },
-              body: JSON.stringify({ action: "clear", failed: true }),
-            })
-              .then(() => setItems([]))
-              .catch(() => {});
-          }}
-        >
-          Clear finished
-        </Button>
-      )}
+      {retryError ? <p className="mt-2 text-xs text-destructive">{retryError}</p> : null}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {/* Offered while other files are still importing too: the retried rows
+            simply join the queue behind them. */}
+        {failed > 1 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={retrying.length > 0}
+            onClick={() => void runRetry(failedIds)}
+          >
+            {retrying.length > 1 ? "Retrying…" : `Retry all ${failed} failed`}
+          </Button>
+        ) : null}
+        {pending ? (
+          <p className="text-xs text-text-muted">
+            You can close this dialog — importing continues without it.
+          </p>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void fetch("/api/teacher/drive-queue", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ action: "clear", failed: true }),
+              })
+                .then(() => setItems([]))
+                .catch(() => {});
+            }}
+          >
+            Clear finished
+          </Button>
+        )}
+      </div>
     </section>
   );
 }
@@ -1528,14 +1650,24 @@ function Dialog({
 }
 
 function StatusChip({ status }: { status: TeacherDocument["status"] }) {
+  // "Indexed", not "Ready": the number beside it counts indexed sections, and the
+  // state a creator is waiting to see is the one the rest of this screen calls
+  // indexing.
   const label =
-    status === "ready" ? "Ready" : status === "processing" ? "Indexing" : "Needs attention";
+    status === "ready"
+      ? "Indexed"
+      : status === "processing"
+        ? "Indexing"
+        : status === "unindexed"
+          ? "Not indexed"
+          : "Needs attention";
   return (
     <span
       className={cn(
         "inline-flex min-h-8 items-center rounded-full border px-3 text-xs font-medium",
         status === "ready" && "border-success/30 text-success",
         status === "processing" && "border-warning/30 text-warning",
+        status === "unindexed" && "border-border-strong text-text-secondary",
         status === "error" && "border-destructive/30 text-destructive",
       )}
     >
@@ -1674,6 +1806,9 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
   const [requestedPaperId, setRequestedPaperId] = useState("");
   const [indexingJobs, setIndexingJobs] = useState<Record<string, string>>({});
+  /** The file names this session has an indexing job running for — what keeps a
+   *  card that was just queued from reading "Not indexed". */
+  const indexingNames = useMemo(() => new Set(Object.values(indexingJobs)), [indexingJobs]);
   const [communityReturnTo, setCommunityReturnTo] = useState("");
 
   const loadWorkspace = useCallback(async () => {
@@ -1779,6 +1914,36 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       setToast(`${fileName} is still processing. Its status will update on the next refresh.`);
     },
     [loadWorkspace],
+  );
+
+  /**
+   * Queue one file for indexing and watch it through.
+   *
+   * By PATH, not by document id. A file that has never been indexed has no row
+   * in the collection index, and the id the source tree shows for it is derived
+   * from its path rather than stored — so `/v1/collection/documents/<id>` and an
+   * index request keyed by that id both 404. The path is what the tenant API can
+   * still resolve, and it is the one thing that works for both a file that was
+   * never indexed and one whose indexing failed.
+   */
+  const indexDocument = useCallback(
+    async (document: TeacherDocument) => {
+      const payload = await responsePayload(
+        await fetch(`/api/teacher/documents/${encodeURIComponent(document.id)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ path: document.path }),
+        }),
+      );
+      const id = text(payload.jobId);
+      if (id) {
+        void pollIndexingJob(id, document.name);
+        setToast(`${document.name} queued for indexing`);
+        return;
+      }
+      await loadWorkspace();
+    },
+    [loadWorkspace, pollIndexingJob],
   );
 
   const recoverWorkspace = useCallback(
@@ -2477,6 +2642,8 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
                 onUpload={(shelf) => setDialog({ type: "upload", shelf })}
                 onCreateFolder={(shelf) => setDialog({ type: "create-folder", shelf })}
                 onDocument={(document) => setDialog({ type: "document", document })}
+                onIndexDocument={indexDocument}
+                indexingNames={indexingNames}
                 syllabus={
                   syllabi[selectedSubject.slug] || {
                     state: "idle",
@@ -8814,6 +8981,8 @@ function SubjectView({
   onUpload,
   onCreateFolder,
   onDocument,
+  onIndexDocument,
+  indexingNames,
   syllabus,
   setSyllabus,
   chat,
@@ -8829,6 +8998,8 @@ function SubjectView({
   onUpload: (shelf: Shelf) => void;
   onCreateFolder: (shelf: Shelf) => void;
   onDocument: (document: TeacherDocument) => void;
+  onIndexDocument: (document: TeacherDocument) => Promise<void>;
+  indexingNames: Set<string>;
   syllabus: SyllabusState;
   setSyllabus: (next: SyllabusState) => void;
   chat: ChatMessage[];
@@ -8929,6 +9100,8 @@ function SubjectView({
           ) : null}
           <DocumentList
             documents={documents.filter((document) => document.shelf === shelf)}
+            onIndex={onIndexDocument}
+            indexingNames={indexingNames}
             emptyTitle={
               tab === "syllabus"
                 ? "No syllabus file yet"
@@ -9459,16 +9632,25 @@ function SourceSearch({ subject }: { subject: TeacherSubject }) {
   );
 }
 
-function DocumentList({
+/** Exported for tests: what a shelf says about a file it cannot search yet. */
+export function DocumentList({
   documents,
   emptyTitle,
   onUpload,
   onOpen,
+  onIndex,
+  indexingNames,
 }: {
   documents: TeacherDocument[];
   emptyTitle: string;
   onUpload: () => void;
   onOpen: (document: TeacherDocument) => void;
+  /** Queue this file for indexing and follow the job. */
+  onIndex: (document: TeacherDocument) => Promise<void>;
+  /** Files with an indexing job this session is already watching. The tenant API
+   *  cannot say which documents have work queued, so a job started here is the
+   *  one thing that distinguishes "indexing" from "never indexed". */
+  indexingNames: Set<string>;
 }) {
   if (!documents.length) {
     return (
@@ -9486,20 +9668,84 @@ function DocumentList({
   return (
     <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {documents.map((document) => (
-        <article key={document.id} className="rounded-lg border border-border p-5">
-          <div className="flex items-center gap-2">
-            <StatusChip status={document.status} />
-            <span className="flex-1" />
-            <span className="text-xs text-text-muted">{bytesLabel(document.sizeBytes)}</span>
-          </div>
-          <h2 className="mt-4 break-words font-display text-lg font-semibold">{document.name}</h2>
-          <p className="mt-2 text-sm text-text-muted">{document.chunks} indexed sections</p>
-          <Button className="mt-5" variant="outline" onClick={() => onOpen(document)}>
-            {document.previewAvailable ? "Preview document" : "Document details"}
-          </Button>
-        </article>
+        <DocumentCard
+          key={document.id}
+          document={document}
+          indexing={indexingNames.has(document.name)}
+          onOpen={onOpen}
+          onIndex={onIndex}
+        />
       ))}
     </div>
+  );
+}
+
+function DocumentCard({
+  document,
+  indexing,
+  onOpen,
+  onIndex,
+}: {
+  document: TeacherDocument;
+  indexing: boolean;
+  onOpen: (document: TeacherDocument) => void;
+  onIndex: (document: TeacherDocument) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const status = indexing ? "processing" : document.status;
+  const needsIndexing = status === "unindexed" || status === "error";
+
+  return (
+    <article className="rounded-lg border border-border p-5">
+      <div className="flex items-center gap-2">
+        <StatusChip status={status} />
+        <span className="flex-1" />
+        <span className="text-xs text-text-muted">{bytesLabel(document.sizeBytes)}</span>
+      </div>
+      <h2 className="mt-4 break-words font-display text-lg font-semibold">{document.name}</h2>
+      {/* A section count of zero is not the news on a file that was never
+          indexed — what it is waiting for is. */}
+      <p className="mt-2 text-sm text-text-muted">
+        {status === "unindexed"
+          ? "Stored, but nothing from it is searchable yet"
+          : status === "error"
+            ? "Indexing did not finish — nothing from it is searchable"
+            : `${document.chunks} indexed sections`}
+      </p>
+      {error ? (
+        <p role="alert" className="mt-2 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => onOpen(document)}>
+          {document.previewAvailable ? "Preview document" : "Document details"}
+        </Button>
+        {needsIndexing ? (
+          <Button
+            variant="outline"
+            disabled={busy}
+            aria-busy={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                await onIndex(document);
+              } catch (caught) {
+                setError(
+                  caught instanceof Error ? caught.message : "Could not queue this file for indexing.",
+                );
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Queueing…" : status === "error" ? "Retry indexing" : "Index now"}
+          </Button>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -11435,10 +11681,10 @@ function DocumentDialog({
   const [busyAction, setBusyAction] = useState<"reindex" | "delete" | "">("");
 
   useEffect(() => {
-    void fetch(`/api/teacher/documents/${encodeURIComponent(document.id)}`, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    })
+    void fetch(
+      `/api/teacher/documents/${encodeURIComponent(document.id)}?path=${encodeURIComponent(document.path)}`,
+      { headers: { Accept: "application/json" }, cache: "no-store" },
+    )
       .then(responsePayload)
       .then((payload) => {
         setDetail(asRecord(payload.document));
@@ -11449,7 +11695,7 @@ function DocumentDialog({
         setError(caught instanceof Error ? caught.message : "Could not load the document.");
         setState("error");
       });
-  }, [document.id]);
+  }, [document.id, document.path]);
 
   async function reindex() {
     setBusyAction("reindex");
@@ -11458,10 +11704,15 @@ function DocumentDialog({
       const payload = await responsePayload(
         await fetch(`/api/teacher/documents/${encodeURIComponent(document.id)}`, {
           method: "POST",
-          headers: { Accept: "application/json" },
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ path: document.path }),
         }),
       );
-      onChanged(`${document.name} queued for re-indexing`, text(payload.jobId), document.name);
+      onChanged(
+        `${document.name} queued for ${document.status === "ready" ? "re-indexing" : "indexing"}`,
+        text(payload.jobId),
+        document.name,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not re-index the document.");
       setBusyAction("");
@@ -11576,7 +11827,13 @@ function DocumentDialog({
               disabled={Boolean(busyAction)}
               aria-busy={busyAction === "reindex"}
             >
-              {busyAction === "reindex" ? "Queueing…" : "Re-index"}
+              {busyAction === "reindex"
+                ? "Queueing…"
+                : document.status === "ready"
+                  ? "Re-index"
+                  : document.status === "error"
+                    ? "Retry indexing"
+                    : "Index now"}
             </Button>
             <Button
               variant="danger"

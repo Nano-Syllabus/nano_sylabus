@@ -7,6 +7,7 @@ import {
   TeacherApiError,
 } from "@/lib/teacher-app/client";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { safeUploadPath } from "@/lib/teacher-document-import";
 
 type RouteContext = { params: Promise<{ documentId: string }> };
 type ApiRecord = Record<string, unknown>;
@@ -104,12 +105,41 @@ async function findMirror(teacherId: string, documentId: string, path: string) {
   return byMirrorId.data;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+/**
+ * The document as the collection index describes it — or, when it has no index
+ * row, what is known about the file without one.
+ *
+ * A file the portal stored but never indexed is a 404 on the tenant detail
+ * route, because that route reads the index. Answering the dialog with that 404
+ * says "this document does not exist" about a file that is sitting on the shelf,
+ * and takes the private preview and the Re-index button down with it — the two
+ * things a creator opens that dialog for when a file has not indexed.
+ */
+async function readDocumentOrStub(collectionKey: string, id: string, hintPath: string) {
+  try {
+    return await getTeacherDocument(collectionKey, id);
+  } catch (error) {
+    const missing = error instanceof TeacherApiError && error.status === 404;
+    if (!missing || !hintPath || !safeUploadPath(hintPath)) throw error;
+    return {
+      document_id: id,
+      path: hintPath,
+      name: hintPath.split("/").pop() || "file",
+      status: "",
+      indexed: false,
+      chunk_count: 0,
+      word_count: 0,
+    } satisfies ApiRecord;
+  }
+}
+
+export async function GET(request: Request, context: RouteContext) {
   try {
     const { teacher, id } = await teacherAndDocumentId(context);
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (!id) return NextResponse.json({ error: "Invalid document." }, { status: 400 });
-    const document = await getTeacherDocument(teacher.collection_sk, id);
+    const hintPath = (new URL(request.url).searchParams.get("path") || "").trim();
+    const document = await readDocumentOrStub(teacher.collection_sk, id, hintPath);
     const path = documentPath(document);
     const documentId = backendDocumentId(document) || id;
     const mirror = await findMirror(teacher.id, documentId, path);
@@ -153,13 +183,33 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 }
 
-export async function POST(_request: Request, context: RouteContext) {
+/**
+ * Queue this document for indexing.
+ *
+ * Accepts a collection-relative `path` in the body, and prefers it.
+ *
+ * A file that has never been indexed has no row in the collection index, and the
+ * id the source tree shows for it is derived from its path rather than stored —
+ * so indexing it by that id is a 404, which is precisely the file that most
+ * needs this route. The path resolves either way, and the tenant API confines it
+ * to this creator's own collection before it touches anything.
+ */
+export async function POST(request: Request, context: RouteContext) {
   try {
     const { teacher, id } = await teacherAndDocumentId(context);
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (!id) return NextResponse.json({ error: "Invalid document." }, { status: 400 });
 
-    const result = await indexTeacherDocument(teacher.collection_sk, { documentId: id });
+    const input = (await request.json().catch(() => ({}))) as { path?: unknown };
+    const path = typeof input.path === "string" ? input.path.trim() : "";
+    if (path && !safeUploadPath(path)) {
+      return NextResponse.json({ error: "Invalid document path." }, { status: 400 });
+    }
+
+    const result = await indexTeacherDocument(
+      teacher.collection_sk,
+      path ? { path } : { documentId: id },
+    );
     return NextResponse.json({ result, jobId: resultJobId(result) });
   } catch (error) {
     return apiFailure(error, "Could not re-index the document.");
