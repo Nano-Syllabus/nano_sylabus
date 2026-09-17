@@ -145,20 +145,24 @@ describe("starting a saved syllabus challenge", () => {
     expect(mocks.pastQuestions).toHaveBeenCalledWith("collection", {
       subject: "Nims",
       topics: ["provider-42"],
-      limit: 6,
+      limit: 10,
     });
-    expect(mocks.reading).toHaveBeenCalledWith("collection", {
-      subject: "Nims",
-      topics: ["provider-42"],
-    });
+    // NOT at start: step one is the question list, and the reading it used to
+    // sit under is gone from that screen. It is still written, behind the
+    // response, because Revision Docs is built from it.
+    expect(mocks.reading).not.toHaveBeenCalled();
     expect(result?.topicKey).toBe("provider-42");
     expect(result?.content?.topicKeys).toEqual(["provider-42"]);
 
     await settled();
+    expect(mocks.reading).toHaveBeenCalledWith("collection", {
+      subject: "Nims",
+      topics: ["provider-42"],
+    });
     expect(mocks.solved).toHaveBeenCalledWith("collection", {
       subject: "Nims",
       topics: ["provider-42"],
-      limit: 2,
+      limit: 5,
     });
     expect(mocks.createExam).toHaveBeenCalledWith("collection", {
       subject: "Nims",
@@ -182,7 +186,9 @@ describe("starting a saved syllabus challenge", () => {
     const result = await startStudentChallenge("member", "challenge-1");
 
     expect(result?.content?.contentStatus).toBe("pending");
-    expect(result?.content?.lesson.content).toEqual(["Source material"]);
+    // The questions are what step one renders, and they are on the row already;
+    // the reading is not, and no longer holds the response up.
+    expect(result?.content?.lesson.content).toEqual([]);
     expect(result?.content?.examQuestions).toEqual([]);
     expect(mocks.createExam).not.toHaveBeenCalled();
 
@@ -204,7 +210,6 @@ describe("starting a saved syllabus challenge", () => {
 
     expect(reopened?.content?.contentStatus).toBe("pending");
     expect(mocks.pastQuestions).toHaveBeenCalledTimes(1);
-    expect(mocks.reading).toHaveBeenCalledTimes(1);
 
     releaseSolved();
     await settled();
@@ -250,7 +255,7 @@ describe("starting a saved syllabus challenge", () => {
     expect(mocks.pastQuestions).toHaveBeenCalledWith("collection", {
       subject: "Applied Mechanics",
       topics: [],
-      limit: 6,
+      limit: 10,
     });
     expect(result?.topicKey).toBe("introduction");
     expect(result?.topicTitle).toBe("Introduction");
@@ -368,12 +373,12 @@ describe("starting a saved syllabus challenge", () => {
     expect(mocks.pastQuestions).toHaveBeenNthCalledWith(1, "collection", {
       subject: "Nims",
       topics: ["provider-42"],
-      limit: 6,
+      limit: 10,
     });
     expect(mocks.pastQuestions).toHaveBeenNthCalledWith(2, "collection", {
       subject: "Nims",
       topics: ["Identifiers"],
-      limit: 6,
+      limit: 10,
     });
     // The subtopic was recovered, so the provider is never asked to choose.
     expect(mocks.pastQuestions).toHaveBeenCalledTimes(2);
@@ -389,7 +394,7 @@ describe("starting a saved syllabus challenge", () => {
     expect(mocks.pastQuestions).toHaveBeenNthCalledWith(3, "collection", {
       subject: "Nims",
       topics: [],
-      limit: 6,
+      limit: 10,
     });
   });
 
@@ -427,7 +432,6 @@ describe("starting a saved syllabus challenge", () => {
 
     expect(result?.status).toBe("started");
     expect(mocks.pastQuestions).toHaveBeenCalledTimes(1);
-    expect(mocks.reading).toHaveBeenCalledTimes(1);
 
     await settled();
     expect(mocks.solved).toHaveBeenCalledTimes(1);
@@ -461,7 +465,7 @@ describe("starting a saved syllabus challenge", () => {
 
   it("refetches the READING on a restart, not just the paper", async () => {
     // A restart used to swap only the exam, so a lesson that came out badly the
-    // first time survived every restart the student pressed.
+    // first time survived every restart the student pressed. It is still rebuilt.
     await startStudentChallenge("member", "challenge-1");
     await settled();
     mocks.reading.mockResolvedValue({
@@ -476,10 +480,14 @@ describe("starting a saved syllabus challenge", () => {
       warnings: [],
     });
 
-    const result = await restartStudentChallenge("member", "challenge-1");
+    await restartStudentChallenge("member", "challenge-1");
+    // Behind the response now, with the rest of the tail: a restart clears the
+    // lesson, and the completion pass is what writes the new one.
+    const row = await settled();
 
-    expect(result?.content?.lesson?.title).toBe("Rebuilt");
-    expect(result?.content?.lesson?.content).toEqual(["The rebuilt reading."]);
+    const content = row.content as { lesson?: { title?: string; content?: string[] } };
+    expect(content.lesson?.title).toBe("Rebuilt");
+    expect(content.lesson?.content).toEqual(["The rebuilt reading."]);
   });
 
   it("still hands a plain reopen its stored content without calling out", async () => {

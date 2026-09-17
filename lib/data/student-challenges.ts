@@ -35,7 +35,36 @@ const POSTGREST_MISSING_COLUMN = "PGRST204";
 const POSTGREST_MISSING_TABLE = "PGRST205";
 export const CHALLENGE_PASS_PERCENT = 40;
 export const CHALLENGE_QUESTIONS = 2;
-export const CHALLENGE_PAST_QUESTIONS = 6;
+/**
+ * How many of this subject's own questions step one lists.
+ *
+ * Step one IS the list now, so it is sized to be the list: a topic whose bank
+ * has ten questions on it shows ten rather than the six that fitted when this
+ * was a preamble to a reading. A bank with fewer simply returns fewer.
+ */
+/**
+ * Rebuild a challenge's content on EVERY open, ignoring what is on the row.
+ *
+ * The row is the cache that outlives every other one. A challenge keeps the
+ * lesson, the questions and the solutions it was built with — that is the whole
+ * point of storing them, and it is why a student who opened a topic yesterday
+ * still sees yesterday's questions after the indexer, the prompts and the
+ * catalogue have all been replaced underneath them.
+ *
+ * `CHALLENGE_FRESH_CONTENT=1` turns the short-circuits off so every open is a
+ * full build: past questions and reading fetched again, worked examples and exam
+ * issued again behind them. It costs a model call per open, which is exactly why
+ * it is off by default and belongs in a testing environment rather than in front
+ * of a class.
+ */
+export const CHALLENGE_FRESH_CONTENT =
+  (process.env.CHALLENGE_FRESH_CONTENT || "").trim().toLowerCase() === "1" ||
+  (process.env.CHALLENGE_FRESH_CONTENT || "").trim().toLowerCase() === "true";
+
+export const CHALLENGE_PAST_QUESTIONS = 10;
+/** How many of those come back with a worked solution under them. The provider
+ *  clamps this at five. */
+export const CHALLENGE_SOLVED_QUESTIONS = 5;
 export const CHALLENGE_MARKS_PER_QUESTION = 10;
 
 /**
@@ -113,6 +142,10 @@ export type StudentChallengeSummary = {
   subjectName: string;
   topicKey: string;
   topicTitle: string;
+  /** The syllabus unit this subtopic sits under, "" when the syllabus numbers
+   *  none. Written at assignment, so it survives a re-extraction that renumbers
+   *  topic keys. */
+  unitNumber: string;
   title: string;
   recommendationReason: string;
   status: ChallengeStatus;
@@ -336,6 +369,7 @@ function toSummary(row: ChallengeRow): StudentChallengeSummary {
     subjectName,
     topicKey: String(row.topic_key ?? ""),
     topicTitle,
+    unitNumber: String(row.unit_number ?? ""),
     // The topic, never the stored `title`. Challenges were written to the row as
     // "Master <topic>", which put a word we do not say to students into the page
     // heading, the focus-mode rail, the compact bar and the exam record that
@@ -1285,7 +1319,7 @@ export async function startStudentChallenge(
    * reading, and — behind the response — the worked examples and a fresh paper,
    * every one of them fetched from the course API rather than read off the row.
    */
-  if (!sourceDocumentTopic && !options.restart) {
+  if (!sourceDocumentTopic && !options.restart && !CHALLENGE_FRESH_CONTENT) {
     /**
      * A WARMED ROW IS OPENED, NOT REBUILT — AND NOT MISTAKEN FOR A REOPEN.
      *
@@ -1435,19 +1469,22 @@ async function buildChallengeLesson(
   const selectedTopicKeys = (pastQuestions.topics || [])
     .map((topic) => topic.topic_key)
     .filter(Boolean);
-  // Deliberately AFTER the past questions, not alongside them. Overlapping the two
-  // would halve this wait, but the reading is a model call and `can_start` is not
-  // known until the past questions come back — so a speculative reading is paid
-  // for in full every time a challenge cannot start or the provider is down.
-  // `keeps the assignment intact when the provider is unavailable` pins that: it
-  // asserts the reading is never called when step one fails.
-  const learning = await getTeacherChallengeReading(lane.collectionKey, {
-    subject: lane.subject,
-    topics: selectedTopicKeys,
-  });
+  /**
+   * THE READING IS NOT WAITED FOR HERE ANY MORE.
+   *
+   * Step one is the past questions, and only the past questions — the concepts
+   * section it used to sit under is gone from the challenge screen. Blocking the
+   * student on a model call whose output that screen never renders was the
+   * largest share of the wait on Start, for nothing they were about to read.
+   *
+   * It is still WRITTEN, because Revision Docs is built from it
+   * (`lib/data/student-revision-docs.ts`): the background pass already refetches
+   * a reading whose lesson came through empty, which is exactly the state
+   * `challengeLessonContent(pastQuestions, null)` leaves behind.
+   */
   const title = String(selectedTopic?.title || row.topic_title || lane.subject);
   return {
-    content: challengeLessonContent(pastQuestions, learning),
+    content: challengeLessonContent(pastQuestions, null),
     // `/start` rewrites the row's topic to whatever the provider actually
     // resolved, so a warm-up writes the same correction rather than leaving the
     // row pointing at a key the provider has renumbered.
@@ -1491,6 +1528,9 @@ export async function warmStudentChallenge(
   // completed one has a result on it that a rebuild would silently replace.
   if (String(row.status || "assigned") !== "assigned") return "skipped";
   if (isSourceDocumentChallengeRow(row)) return "skipped";
+  // Nothing to warm when every open rebuilds anyway — warming would spend a
+  // build the open is about to throw away.
+  if (CHALLENGE_FRESH_CONTENT) return "skipped";
   const detail = toDetail(row);
   if (detail.content?.provider === "collection-challenge-v1") return "skipped";
 
@@ -1605,7 +1645,7 @@ async function runChallengeContentCompletion(
       getTeacherChallengeSolvedQuestions(lane.collectionKey, {
         subject: lane.subject,
         topics: topicKeys,
-        limit: 2,
+        limit: CHALLENGE_SOLVED_QUESTIONS,
       }),
     ]);
     if (learning) pending = contentWithReading(pending, learning);

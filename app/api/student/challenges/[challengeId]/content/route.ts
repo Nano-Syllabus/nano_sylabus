@@ -29,6 +29,20 @@ export async function GET(
     const retry = new URL(request.url).searchParams.get("retry") === "1";
     const challenge = await getStudentChallengeContent(user.id, challengeId, { retry });
     if (!challenge) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
+    /**
+     * WHILE IT IS STILL BUILDING, ANSWER IN ONE WORD.
+     *
+     * The screen polls this every couple of seconds, and until the build lands
+     * the answer is always the same: not yet. Serialising the whole challenge to
+     * say so shipped the lesson, every past question and every solution already
+     * on the row — tens of kilobytes — once per poll, to be compared against
+     * what the client already had and thrown away. The client only reads
+     * `content` when it is ready or has failed, so that is the only case that
+     * needs the body.
+     */
+    const pending =
+      challenge.content?.contentStatus === "pending" && !challenge.content?.contentError;
+    if (pending) return NextResponse.json({ status: "pending" });
     return NextResponse.json({ challenge });
   } catch (error) {
     return NextResponse.json(

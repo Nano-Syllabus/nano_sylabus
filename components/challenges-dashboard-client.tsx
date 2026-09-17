@@ -3,9 +3,8 @@
 import {
   AlertTriangle,
   FileCheck2,
+  ChevronDown,
   FileText,
-  Lightbulb,
-  ListChecks,
   LoaderCircle,
   Maximize2,
   Minimize2,
@@ -29,6 +28,7 @@ import {
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
 import { Markdown } from "@/components/markdown";
+import { mergeLearnQuestions } from "@/lib/challenge-learn-questions";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
 import type {
   StudentChallengeDetail,
@@ -87,26 +87,22 @@ type GradeResult = {
  * questions, learn, practise). It is two, and the second of those collapses is
  * the one that matters.
  *
- *   1  Learn    the past questions worked, then the concepts under them
+ *   1  Learn    this topic's past questions, each opening onto its answer
  *   2  Practise, hand in, and read the marking
  *
- * WHY THE PAST QUESTIONS COME FIRST, AND WORKED.
+ * STEP ONE IS THE QUESTION LIST, AND NOTHING ELSE.
  *
- * The three-step version opened on the past questions deliberately UNSOLVED —
- * "you are not meant to be able to answer them yet" — on the theory that a
- * student shown the answer before the reading does not read it. That order is
- * now reversed, because it described the wrong student. The one sitting this
- * exam opens a set paper and works out what is being asked from the questions
- * themselves; the concepts are what they reach for when a question does not
- * give way. Leading with the worked questions puts the reading where a student
- * actually wants it — after the thing that made them want it — rather than
- * ahead of the only evidence that it matters.
+ * It used to be three stacked sections: the worked examples, then the past
+ * questions that were not worked, then a written concept reading. The first two
+ * were the same rows printed twice — a worked example IS a past question with a
+ * solution on it — and the third was a page of prose ahead of the only evidence
+ * that it mattered. What a student sitting this exam wants is the paper's own
+ * questions on this subtopic, with the answer one tap under each; that is now
+ * the whole of step one, collapsed so repeat appearances read as one question
+ * carrying its years rather than as three near-identical rows.
  *
- * So the worked questions lead, the rest of the real past questions are listed
- * under them, and the concept reading closes the step. There is no separate
- * "Solved Example" section: a solved example WAS one of these past questions,
- * and printing it twice, once bare at the top and once worked three screens
- * later, was the redundancy that made the old step one feel like a gate.
+ * The reading did not stop being written — Revision Docs is built from it — it
+ * stopped being on this screen, and stopped being something `/start` waits for.
  *
  * Progress is still recorded at the old granularity — `lessonRead` and
  * `examplesReviewed` are separate columns and separate API calls — because the
@@ -119,24 +115,10 @@ export function initialChallengeStep(challenge: StudentChallengeDetail): Challen
   if (challenge.status === "completed") return 2;
   // `examplesReviewed` is the far edge of the learning step, and it is the only
   // one that moves a student off it. `lessonRead` alone no longer advances
-  // anything: the reading is INSIDE step one now rather than being step two, so
-  // a student who read it and stopped is still in the middle of the same step.
+  // anything: it is one of two rows both written when the question list is left
+  // behind, not a section of its own that a student can stop halfway through.
   if (challenge.examplesReviewed) return 2;
   return 1;
-}
-
-/**
- * Question text reduced to what two sources would agree on: case, whitespace and
- * trailing punctuation all vary between the question bank row and the worked
- * copy of the same question, and none of that variation makes it a different
- * question.
- */
-function normalizeQuestionText(question: string) {
-  return question
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[.?!,;:]+$/g, "")
-    .trim();
 }
 
 function savedResults(challenge: StudentChallengeDetail): GradeResult[] {
@@ -324,29 +306,23 @@ function ChallengeDetail({
   const [retryingContent, setRetryingContent] = useState(false);
   const content = challenge.content;
   /**
-   * `pending` means the worked examples and the exam are still being built. It
-   * is a fact about two SECTIONS, never about the whole screen — the past
-   * questions and the reading the student is looking at are finished.
+   * `pending` means the solutions and the exam are still being built. It is a
+   * fact about what is under the questions, never about the whole screen — the
+   * questions themselves come back with `/start` and are already on it.
    */
   const contentPending = content?.contentStatus;
   const buildingRest = contentPending === "pending" && !content?.contentError;
   const buildFailed = contentPending === "pending" ? content?.contentError || "" : "";
-  /**
-   * The past questions that are NOT already worked above.
-   *
-   * `solvedExamples` are themselves past questions — the same rows, carrying a
-   * solution — so listing `pastQuestions` untouched underneath them printed two
-   * or three of them twice on one screen. Matching on the question text is what
-   * is available: the two lists come from different routes and share no id.
-   */
-  const unworkedPastQuestions = useMemo(() => {
-    const worked = new Set(
-      (content?.solvedExamples ?? []).map((example) => normalizeQuestionText(example.question)),
-    );
-    return (content?.pastQuestions ?? []).filter(
-      (pastQuestion) => !worked.has(normalizeQuestionText(pastQuestion.question)),
-    );
-  }, [content?.solvedExamples, content?.pastQuestions]);
+  /** The single list step one renders — see `mergeLearnQuestions` for why the
+   *  two content fields are one list on screen. */
+  const learnQuestions = useMemo(
+    () =>
+      mergeLearnQuestions({
+        pastQuestions: content?.pastQuestions,
+        solvedExamples: content?.solvedExamples,
+      }),
+    [content?.pastQuestions, content?.solvedExamples],
+  );
 
   useEffect(() => {
     setSidebarSuppressed(focusMode);
@@ -404,14 +380,23 @@ function ChallengeDetail({
     // gives up rather than polling a tab someone left open all afternoon.
     const schedule = () => {
       if (cancelled || attempt >= 40) return;
-      timer = window.setTimeout(() => void tick(), attempt < 10 ? 1_500 : 5_000);
+      // Widening, because the cost of a poll is the same whether or not anything
+      // has changed and the odds of it having changed fall as the wait goes on.
+      // Measured on the dev server, the old 1.5s beat ran eleven ~400ms requests
+      // to catch one build; four spread over the same window catch it just as
+      // well and leave the tab alone afterwards.
+      const delay = attempt < 3 ? 2_000 : attempt < 8 ? 4_000 : 8_000;
+      timer = window.setTimeout(() => void tick(), delay);
     };
     const tick = async () => {
       attempt += 1;
       try {
         const response = await fetch(`/api/student/challenges/${challenge.id}/content`);
+        // `{status: "pending"}` is the whole body while the build is running —
+        // the route does not serialise a challenge to say "not yet".
         const payload = (await response.json().catch(() => ({}))) as {
           challenge?: StudentChallengeDetail;
+          status?: string;
         };
         if (cancelled) return;
         const next = response.ok ? payload.challenge?.content : null;
@@ -646,9 +631,10 @@ function ChallengeDetail({
 
   const activeWarning =
     activeStep === 1
-      ? // The past questions, their worked solutions and the reading are one
-        // step now, so all three sets of warnings are one line rather than one
-        // each on screens the student never sees separately.
+      ? // The questions and their solutions are one step, so their warnings are
+        // one line. The reading's warning is still collected: it is not rendered
+        // as a section any more, but a course whose material could not be read
+        // is the same fact about this topic either way.
         [
           ...(content.pastQuestionBlockers || []),
           ...(content.pastQuestionWarnings || []),
@@ -843,9 +829,13 @@ function ChallengeDetail({
 
               <nav
                 aria-label="Challenge progress"
-                className="mt-6 rounded-2xl border border-border bg-card px-3 py-4 sm:px-6"
+                className="mt-8 rounded-2xl border border-border bg-card px-4 py-7 sm:px-8 sm:py-8"
               >
-                <ol className="grid grid-cols-3">
+                {/* Two columns, because there are two steps. Left at three from
+                    the three-step era, the pair sat in the left two thirds of
+                    the card with an empty column beside them — which reads as
+                    the rail being off-centre, because it is. */}
+                <ol className="mx-auto grid w-full max-w-md grid-cols-2">
                   {steps.map((step, index) => {
                     const isActive = activeStep === step.number;
                     return (
@@ -856,17 +846,17 @@ function ChallengeDetail({
                         {index < steps.length - 1 ? (
                           <span
                             aria-hidden="true"
-                            className={`absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-4 h-px ${step.complete ? "bg-success" : "bg-border"}`}
+                            className={`absolute left-[calc(50%+22px)] right-[calc(-50%+22px)] top-5 h-px ${step.complete ? "bg-success" : "bg-border"}`}
                           />
                         ) : null}
                         <button
                           type="button"
                           aria-current={isActive ? "step" : undefined}
                           onClick={() => selectStep(step.number, step.complete)}
-                          className="relative z-10 flex min-h-10 min-w-10 flex-col items-center gap-1 rounded-lg px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          className="relative z-10 flex min-h-10 min-w-10 flex-col items-center gap-2.5 rounded-lg px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                         >
                           <span
-                            className={`grid size-8 place-items-center rounded-full text-xs font-bold ${
+                            className={`grid size-10 place-items-center rounded-full text-sm font-bold ${
                               step.complete
                                 ? "bg-success text-white"
                                 : isActive
@@ -895,61 +885,131 @@ function ChallengeDetail({
           >
             {activeStep === 1 ? (
               <div>
-                <div className="flex items-start gap-3">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                    <ListChecks className="size-5" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <h2 className="text-xl font-semibold">Past Questions, Worked</h2>
-                    <p className="mt-1 max-w-prose text-sm leading-6 text-text-muted">
-                      What {challenge.subjectName} actually asks on this topic, answered end to
-                      end. Work through these first — the concepts they rest on are underneath.
-                    </p>
-                  </div>
-                </div>
+                {/* The topic, given the room a heading deserves: this screen is
+                    one micro-topic of one unit, and the question list under it
+                    only means something once that is said. */}
+                <header className="rounded-2xl bg-text-primary px-5 py-6 text-text-inverse sm:px-8 sm:py-7">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] opacity-70">
+                    {challenge.unitNumber ? `Unit ${challenge.unitNumber} · ` : ""}
+                    {challenge.subjectName}
+                  </p>
+                  <h2 className="mt-2 font-display text-xl font-semibold sm:text-2xl">
+                    {challenge.topicTitle}
+                  </h2>
+                  <p className="mt-3 max-w-prose text-sm leading-6 opacity-80">
+                    {learnQuestions.length
+                      ? `What ${challenge.subjectName}'s own papers have asked on this, answered. Open a question to read its solution.`
+                      : `What ${challenge.subjectName}'s own papers have asked on this.`}
+                  </p>
+                </header>
 
-                {content.solvedExamples.length ? (
-                  <div className="mt-6 space-y-4">
-                    {content.solvedExamples.map((example, index) => (
-                      <article
-                        key={`${example.question}-${index}`}
-                        className="rounded-xl border border-border bg-bg-secondary p-5"
-                      >
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                          <span className="text-blue-600 dark:text-blue-400">
-                            Question {index + 1}
-                          </span>
-                          {/* Year and marks are printed only when a real paper printed
-                            them. An absent year is not a gap to fill in. */}
-                          {example.year ? <span>· {example.year}</span> : null}
-                          {example.marks ? (
-                            <span>· {displayNumber(example.marks)} marks</span>
-                          ) : null}
-                        </div>
-                        <Markdown
-                          text={example.question}
-                          className="mt-3 max-w-prose text-sm font-semibold leading-6"
-                        />
-                        <div className="mt-4 overflow-x-auto rounded-lg bg-card p-4 text-sm leading-7 text-text-secondary">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                            Solution
-                          </p>
-                          {/* NOT `whitespace-pre-wrap`. A solution is block markdown
-                              now — headed sections, comparison tables, fenced code —
-                              and preserving source newlines on top of that puts a
-                              blank line between every rendered block and stops a
-                              table from collapsing its own row whitespace. */}
-                          <Markdown
-                            text={example.solution}
-                            className="mt-2 text-text-secondary"
-                          />
-                        </div>
-                      </article>
-                    ))}
-                  </div>
+                {learnQuestions.length ? (
+                  <ol className="mt-8 space-y-4">
+                    {learnQuestions.map((item, index) => {
+                      const repeated = item.appearances > 1;
+                      return (
+                        <li
+                          key={item.key}
+                          className="overflow-hidden rounded-xl border border-border bg-bg-secondary"
+                        >
+                          {/* `details`, not a button: the question is block
+                              markdown — headings, math, the occasional table —
+                              and a button may not contain any of it. The native
+                              element also opens without JavaScript and is
+                              already what the rest of the app expands with. */}
+                          <details className="group">
+                            <summary className="flex cursor-pointer list-none items-start gap-4 px-5 py-6 marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:px-6 [&::-webkit-details-marker]:hidden">
+                              <span className="mt-0.5 w-5 shrink-0 text-xs font-semibold text-text-muted">
+                                {index + 1}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <Markdown
+                                  text={item.question}
+                                  className="max-w-prose text-[15px] font-semibold leading-6 text-text-primary"
+                                />
+                                {/* Only what a real paper printed: the sessions
+                                    it was set in, the marks it carried, and how
+                                    often it came back. Nothing is inferred. */}
+                                {repeated || item.years.length || item.marks.length ? (
+                                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                                    {repeated ? (
+                                      <span className="rounded-md bg-success/15 px-2 py-1 text-xs font-semibold text-success">
+                                        ★ Repeated ×{item.appearances}
+                                      </span>
+                                    ) : null}
+                                    {item.years.map((year) => (
+                                      <span
+                                        key={year}
+                                        className="rounded-md bg-card px-2 py-1 font-mono text-xs text-text-secondary"
+                                      >
+                                        {year}
+                                      </span>
+                                    ))}
+                                    {item.marks.length ? (
+                                      <span className="rounded-md bg-card px-2 py-1 font-mono text-xs text-text-secondary">
+                                        [
+                                        {item.marks
+                                          .map((mark) => displayNumber(mark))
+                                          .join("] or [")}
+                                        ]
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <ChevronDown
+                                aria-hidden="true"
+                                className="mt-0.5 size-5 shrink-0 text-text-muted transition-transform group-open:rotate-180"
+                              />
+                            </summary>
+                            <div className="border-t border-border bg-card px-5 py-8 sm:px-8 sm:py-10">
+                              {item.solution ? (
+                                <Markdown
+                                  text={item.solution}
+                                  /* An answer is read, not scanned: the line
+                                     height and the space between its blocks are
+                                     what make a derivation followable. */
+                                  className={[
+                                    "text-[15px] leading-8 text-text-secondary",
+                                    "[&>*+*]:mt-5",
+                                    // Section headings get the rule the
+                                    // reference layout uses: the answer to
+                                    // "define X, then discuss Y" is two things,
+                                    // and the eye should find the seam without
+                                    // reading for it.
+                                    "[&_h2]:mt-9 [&_h2]:border-l-2 [&_h2]:border-blue-500/70 [&_h2]:pl-3 [&_h2]:text-[17px] [&_h2]:font-semibold [&_h2]:text-text-primary",
+                                    "[&_h3]:mt-8 [&_h3]:border-l-2 [&_h3]:border-blue-500/70 [&_h3]:pl-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:text-text-primary",
+                                    // The term being defined, and the marks-
+                                    // carrying words of a step, in the reading
+                                    // colour rather than the body grey.
+                                    "[&_strong]:font-semibold [&_strong]:text-text-primary",
+                                    // Working: one move per line, numbered, with
+                                    // room between the moves.
+                                    "[&_ol]:space-y-4 [&_ul]:space-y-3 [&_li]:leading-8 [&_li]:pl-1 [&_ol]:marker:font-semibold [&_ol]:marker:text-blue-600 dark:[&_ol]:marker:text-blue-400",
+                                    // A relation on its own line is the point of
+                                    // the step it closes.
+                                    "[&_.math-block]:my-6 [&_.math-block]:rounded-xl [&_.math-block]:border-border [&_.math-block]:bg-bg-secondary [&_.math-block]:py-4",
+                                    "[&_table]:my-7 [&_table]:overflow-hidden [&_table]:rounded-xl [&_th]:bg-bg-secondary [&_th]:text-text-primary",
+                                    "[&_code]:text-[13px]",
+                                  ].join(" ")}
+                                />
+                              ) : buildingRest ? (
+                                <ChallengeBuildingNotice label="Working this question…" lines={3} />
+                              ) : (
+                                <p className="max-w-prose text-sm leading-6 text-text-secondary">
+                                  This one is not worked. Try it on paper — step two sets questions
+                                  like it.
+                                </p>
+                              )}
+                            </div>
+                          </details>
+                        </li>
+                      );
+                    })}
+                  </ol>
                 ) : buildingRest ? (
                   <ChallengeBuildingNotice
-                    label="Working the past questions for this topic…"
+                    label="Finding this topic's past questions…"
                     lines={3}
                   />
                 ) : buildFailed ? (
@@ -962,123 +1022,14 @@ function ChallengeDetail({
                   <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5">
                     <p className="inline-flex items-center gap-2 text-sm font-semibold text-text-primary">
                       <AlertTriangle className="size-4 text-warning" aria-hidden="true" />
-                      No past question on this topic is worked yet
+                      No past question on this topic yet
                     </p>
                     <p className="mt-1 max-w-prose text-sm leading-6 text-text-secondary">
-                      Nothing in this course&apos;s question bank has been set on it. Read the
-                      concepts below — the challenge still runs from the course notes.
+                      Nothing in this course&apos;s question bank has been set on it. The exam in
+                      step two still runs from the course notes.
                     </p>
                   </div>
                 )}
-
-                {/* The rest of the real paper. These are deliberately bare: they are
-                    what the student tries once the worked ones and the concepts have
-                    done their job, and a solution here would spend the only unseen
-                    questions this topic has. */}
-                {unworkedPastQuestions.length ? (
-                  <section className="mt-8 border-t border-border pt-8">
-                    <h3 className="text-base font-semibold">Also asked on this topic</h3>
-                    <p className="mt-1 max-w-prose text-sm leading-6 text-text-muted">
-                      The same papers set these too, unworked. Try them once the concepts below
-                      make sense.
-                    </p>
-                    <ol className="mt-4 space-y-3">
-                      {unworkedPastQuestions.map((pastQuestion, index) => (
-                        <li
-                          key={pastQuestion.id}
-                          className="rounded-xl border border-border bg-bg-secondary p-4 sm:p-5"
-                        >
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                            <span>Question {content.solvedExamples.length + index + 1}</span>
-                            {pastQuestion.year ? <span>· {pastQuestion.year}</span> : null}
-                            {pastQuestion.marks ? (
-                              <span>· {displayNumber(pastQuestion.marks)} marks</span>
-                            ) : null}
-                          </div>
-                          <Markdown
-                            text={pastQuestion.question}
-                            className="mt-2 max-w-prose text-sm font-semibold leading-6 text-text-primary"
-                          />
-                        </li>
-                      ))}
-                    </ol>
-                  </section>
-                ) : null}
-
-                <div className="mt-8 border-t border-border pt-8">
-                  {/* Which topic this is, above the section label: the page heading
-                      is a scroll away by the time the reading is open, and "Key
-                      Concepts" alone does not say concepts of WHAT. */}
-                  <p className="text-sm font-semibold text-text-muted">{challenge.topicTitle}</p>
-                  <h2 className="mt-1 text-xl font-semibold">📘 Key Concepts</h2>
-                  <p className="mt-2 text-sm text-text-muted">
-                    What those questions are really testing, and why the solutions go the way they
-                    do.
-                  </p>
-                  {/* The one sentence the topic reduces to, given the weight it deserves:
-                    it is what a student reconstructs the rest from. Absent on a reading
-                    written before the concept-led rewrite, so it is never assumed. */}
-                  {content.lesson.bigIdea ? (
-                    <div className="mt-6 flex items-start gap-3 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 sm:p-5">
-                      <Lightbulb
-                        className="mt-0.5 size-5 shrink-0 text-blue-600 dark:text-blue-400"
-                        aria-hidden="true"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-                          The idea
-                        </p>
-                        <Markdown
-                          text={content.lesson.bigIdea}
-                          className="mt-1 max-w-prose text-sm font-medium leading-6 text-text-primary"
-                        />
-                      </div>
-                    </div>
-                  ) : null}
-                  <h3 className="mt-6 text-base font-semibold">{content.lesson.title}</h3>
-                  <div className="mt-3 space-y-3">
-                    {content.lesson.content.map((paragraph, index) => (
-                      <Markdown
-                        key={`${paragraph}-${index}`}
-                        text={paragraph}
-                        className="max-w-prose text-sm leading-7 text-text-secondary"
-                      />
-                    ))}
-                  </div>
-                  {content.lesson.connections?.length ? (
-                    <section className="mt-5 rounded-xl border border-border bg-bg-secondary p-4 sm:p-5">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                        How this connects
-                      </p>
-                      <ul className="mt-3 space-y-2">
-                        {content.lesson.connections.map((connection, index) => (
-                          <li key={`${connection}-${index}`} className="flex gap-2">
-                            <span aria-hidden="true" className="text-text-muted">
-                              ·
-                            </span>
-                            <Markdown
-                              text={connection}
-                              className="max-w-prose text-sm leading-6 text-text-secondary"
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  ) : null}
-                  <div className="mt-5 rounded-xl bg-blue-500/10 p-4">
-                    <p className="text-sm font-semibold">Core focus</p>
-                    <Markdown
-                      text={content.lesson.focus}
-                      className="mt-1 text-sm leading-6 text-text-secondary"
-                    />
-                  </div>
-                  {content.lesson.sources?.length ? (
-                    <p className="mt-5 text-xs text-text-muted">
-                      Grounded in {content.lesson.sources.length} uploaded course{" "}
-                      {content.lesson.sources.length === 1 ? "source" : "sources"}.
-                    </p>
-                  ) : null}
-                </div>
               </div>
             ) : null}
 
@@ -2044,7 +1995,11 @@ export function ChallengesDashboardClient({
                     </div>
 
                     <div className="flex items-center justify-between sm:justify-end gap-6 shrink-0">
-                      <span className="text-[14px] text-[#6b7280] dark:text-text-muted whitespace-nowrap">
+                      {/* Fixed columns, so "20 min" sits under "20 min" and the
+                          buttons share an edge — "Continue" is wider than
+                          "Start", and a row that sizes to its own button walks
+                          the time left and right down the list. */}
+                      <span className="w-[68px] shrink-0 text-right text-[14px] text-[#6b7280] dark:text-text-muted whitespace-nowrap">
                         {challenge.durationMinutes} min
                       </span>
                       <button
@@ -2052,7 +2007,7 @@ export function ChallengesDashboardClient({
                         onClick={() => void openChallenge(challenge)}
                         disabled={openingId === challenge.id}
                         aria-busy={openingId === challenge.id}
-                        className={`inline-flex min-h-9 min-w-[76px] items-center justify-center rounded-[10px] px-5 text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60 ${
+                        className={`inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center rounded-[10px] px-4 text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60 ${
                           completed
                             ? "border border-border bg-bg-primary text-text-primary hover:bg-bg-secondary"
                             : "bg-[#2563eb] text-white hover:bg-[#1d4ed8] shadow-[0_1px_2px_rgba(37,99,235,0.2)]"
