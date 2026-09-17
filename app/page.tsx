@@ -76,7 +76,7 @@ function Cta({
 const problems = [
   [
     "“I spent so long learning. I barely had time to practise.”",
-    "Reading another chapter feels productive. But the past questions keep getting pushed to tomorrow.",
+    "Tabs, PDFs, shared folders. Everything is somewhere, but nothing gives you a clear way to study.",
     "The practice gap",
   ],
   [
@@ -86,7 +86,7 @@ const problems = [
   ],
   [
     "“I know the concept. Why am I stuck?”",
-    "Following the solution and finding the next step yourself can feel like two completely different skills.",
+    "A whole semester feels overwhelming. Without a manageable daily routine, it’s easy to stop before you build momentum.",
     "The understanding gap",
   ],
 ];
@@ -94,12 +94,12 @@ const problems = [
 const steps = [
   [
     "Learn one thing.",
-    "A focused topic from your community’s syllabus and learning material.",
+    "Study one focused topic, guided by your official syllabus and question bank.",
     "Less ‘where do I start?’",
   ],
   [
     "See the working.",
-    "Follow a solved question. Understand the steps, not just the final answer.",
+    "Work through a past-question solution. Understand how the answer comes together.",
     "More ‘oh, that’s why.’",
   ],
   [
@@ -109,7 +109,7 @@ const steps = [
   ],
   [
     "Find your next step.",
-    "Upload your answer. Use detailed feedback to see what needs another try.",
+    "Get your handwritten answer checked. Use detailed feedback to see what needs another try.",
     "A small win to build on.",
   ],
 ];
@@ -117,22 +117,22 @@ const steps = [
 const testimonials = [
   [
     "NanoSyllabus made my preparation so organized. The mock tests and feedback helped me improve every week.",
-    "Aarushi Sharma",
-    "CSE, 3rd Year",
+    "Simrika Duwal",
+    "CSIT, 3rd Year",
     "54%",
     "/landing-new/avatar-1.png",
   ],
   [
     "The chapter-wise practice and instant feedback helped me clear concepts I always found difficult.",
-    "Rohan Verma",
-    "ECE, 2nd Year",
+    "Rohit Paudel",
+    "BCT, 4th Year",
     "62%",
     "/landing-new/avatar-2.png",
   ],
   [
     "Unlimited mock tests and smart analytics show exactly where I stand. It's like having a personal coach.",
-    "Megha Patel",
-    "IT, 3rd Year",
+    "Suman Giri",
+    "CSIT, 4rd Year",
     "41%",
     "/landing-new/avatar-3.png",
   ],
@@ -144,20 +144,20 @@ const questions = [
     "NanoSyllabus turns your syllabus into focused learning challenges with practice, feedback, and a clearer next step.",
   ],
   [
-    "Is NanoSyllabus just another AI tutor?",
-    "It brings your course material, practice, and progress together so you can work through your own syllabus.",
+    "Where does the learning content come from?",
+    "Learning content and past-question solutions are guided by official syllabuses and question banks.",
   ],
   [
     "What do I actually do on NanoSyllabus?",
     "Choose your subjects, learn one topic, work through an example, attempt a question, and use feedback to decide what to practise next.",
   ],
   [
-    "Is NanoSyllabus only for students with backlogs?",
-    "No. It is for anyone who wants a clearer study plan and more confidence in what they can actually do.",
+    "Can I start for free?",
+    "Yes. You get 3 free learning challenges every day. Start with a topic and build your routine at your own pace.",
   ],
   [
-    "What makes NanoSyllabus different from YouTube, books, or ChatGPT?",
-    "It connects learning to your syllabus, your written attempts, and your progress instead of leaving those pieces scattered.",
+    "What do I get for Rs.450 Plus Subscription?",
+    "Paid access gives you unlimited challenges and all semesters, subjects, and study material available on NanoSyllabus including unlimited handwritten exam grading.",
   ],
 ];
 
@@ -215,18 +215,17 @@ export default function LandingPage() {
             <div className="max-w-[620px]">
               <div className="mb-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
                 <span className="text-[#3049ed]">✳</span>
-                <span>FOR THE “I STUDIED THIS” MOMENTS</span>
+                <span>FOR BACHELOR’S STUDENTS IN NEPAL</span>
               </div>
               <h1
                 className={`${manrope.className} text-[clamp(2.9rem,5.3vw,5.5rem)] font-extrabold leading-[1.04] tracking-[-0.055em] text-[#1c1e1a]`}
               >
-                You know it.
+                Less searching
                 <br />
-                Until you have
-                <br />
-                to{" "}
+           
+                More{" "}
                 <span className="relative isolate inline-block px-1">
-                  solve it.
+                  learning.
                   <span
                     aria-hidden="true"
                     className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[#dcfa72]"
@@ -234,13 +233,13 @@ export default function LandingPage() {
                 </span>
               </h1>
               <p className="mt-6 text-[18px] leading-[1.55] text-[#5b5e55]">
-                Notes make sense. Videos make sense.
+                Scattered notes. No study routine.
+
                 <br />
-                Then the question paper has other plans.
+                Let’s give your preparation a clear next step.
               </p>
               <p className="mt-3 text-[18px] leading-[1.55] text-[#5b5e55]">
-                Turn your syllabus into small learning challenges. Practise on paper, find your
-                gaps, and study with people who get it.
+                Learn a topic, practise past questions, and get your handwritten answers checked. Build a daily study habit around your official syllabus.
               </p>
               <div className="mt-9 flex flex-wrap items-center gap-6">
                 <LandingPrimaryCta blue size="hero" communityOnly>
@@ -394,11 +393,11 @@ export default function LandingPage() {
             <h2
               className={`${manrope.className} max-w-[820px] text-[clamp(2.4rem,4.2vw,3.65rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
             >
-              More Pressure isn’t The Plan.
-              <br />A Clearer Next Step is.
+              More notes aren’t a study plan.
+              <br />A clear next step is.
             </h2>
             <p className="max-w-[320px] text-base leading-relaxed text-[#5b5e55]">
-              “Just study harder” isn’t much help when you don’t know what’s going wrong.
+            When your material is scattered and exams are getting closer, starting can feel like the hardest part.
             </p>
           </div>
 
@@ -449,8 +448,7 @@ export default function LandingPage() {
                 <em className="font-serif font-normal italic">Little victories.</em>
               </h2>
               <p className="max-w-[340px] text-base leading-relaxed text-[#5b5e55]">
-                Not another pile of content to finish. A way to learn something—and see if you can
-                actually use it.
+                A personal learning system that takes you from studying a topic to writing an answer and understanding what to improve.
               </p>
             </div>
 
@@ -512,9 +510,7 @@ export default function LandingPage() {
                   to Study.
                 </h2>
                 <p className="mt-5 max-w-[480px] text-base leading-relaxed text-[#5b5e55]">
-                  Unlock the potential of structural learning. Discover how dissecting your
-                  curriculum systematically can completely revolutionize your retention and
-                  performance.
+                 A syllabus tells you what to cover. A study routine helps you actually cover it. Learn how focused topics, past questions, and written practice fit together.
                 </p>
               </div>
 
@@ -621,162 +617,283 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ── Section 04 / Community (Discord) ── */}
-        <section
-          id="discord-community"
-          className="relative scroll-mt-24 overflow-hidden bg-[#3049ed] text-white"
+
+{/* ── Section 04 / Community (Discord) ── */}
+<section
+  id="discord-community"
+  className="relative scroll-mt-24 overflow-hidden bg-[#3049ed] text-white"
+>
+  <div className="relative mx-auto flex min-h-[780px] max-w-[1460px] flex-col gap-12 px-6 py-20 sm:px-10 lg:block lg:min-h-[780px] lg:px-12 lg:py-0 2xl:min-h-[690px] 2xl:px-0">
+    {/* Discord watermark */}
+    <div
+      className="pointer-events-none absolute left-[31%] top-[-12px] hidden opacity-[0.15] lg:block 2xl:left-[29%]"
+      aria-hidden="true"
+    >
+      <svg width="244" height="244" viewBox="0 0 127.14 96.36" fill="currentColor">
+        <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z" />
+      </svg>
+    </div>
+
+    {/* Left copy */}
+    <div className="relative z-10 max-w-[375px] lg:absolute lg:left-12 lg:top-[126px] 2xl:left-0">
+      <p className="text-xs font-bold uppercase tracking-[0.12em] text-white/85">
+        04 / Same syllabus. Your people.
+      </p>
+
+      <h2
+        className={`${manrope.className} mt-6 text-[clamp(3rem,4vw,4rem)] font-extrabold leading-[1.01] tracking-[-0.065em] text-white`}
+      >
+        Study alone.
+        <br />
+        <em className="font-serif font-normal italic text-[#dcfa72]">
+          Just not on your own.
+        </em>
+      </h2>
+
+      <p className="mt-7 max-w-[345px] text-[15px] leading-[1.8] text-white/85">
+        You don’t always need someone to explain the chapter. Sometimes, you need people
+        who’ll sit down and study alongside you.
+      </p>
+
+      <Cta
+        href={DISCORD_STUDY_ROOM_URL}
+        lime
+        size="hero"
+        className="mt-8 w-full sm:w-[304px] lg:min-h-[62px]"
+      >
+        Join Discord Community
+      </Cta>
+    </div>
+
+    {/* Community visual */}
+    <div className="relative order-last mx-auto w-full max-w-[600px] lg:absolute lg:bottom-[190px] lg:left-[24%] lg:order-none lg:w-[500px] lg:max-w-none 2xl:bottom-[48px] 2xl:left-[27%] 2xl:w-[590px]">
+      <div className="absolute right-[19%] top-[5%] z-10 inline-flex items-center gap-2 rounded-full border border-white/20 bg-[#1830a4]/80 px-3 py-1.5 text-[11px] font-medium text-white shadow-[0_8px_20px_rgba(13,25,110,0.32)] backdrop-blur-sm">
+        <span className="size-2 rounded-full bg-[#55dd9b]" />
+        <span>12 students studying now</span>
+      </div>
+
+      <Image
+        src="/landing-new/community-visual.png"
+        alt="Students sharing notes and studying together in a NanoSyllabus community chat"
+        width={568}
+        height={439}
+        className="w-full object-contain drop-shadow-[0_24px_22px_rgba(13,25,110,0.28)]"
+      />
+    </div>
+
+    {/* Feature list */}
+    <div className="relative z-10 w-full max-w-[560px] space-y-0 lg:absolute lg:right-12 lg:top-[118px] lg:max-w-[480px] 2xl:right-0 2xl:max-w-[560px]">
+      {[
+        [
+          "A community around your course.",
+          "Create or join a space with students studying the same subjects. Keep shared notes, past questions and learning material together.",
+          null,
+        ],
+        [
+          "Quiet company. Real studying.",
+          "Join a silent Discord study session. Open your material and get to work, with others doing the same.",
+          "Session and camera rules vary by community.",
+        ],
+        [
+          "Your pace still belongs to you.",
+          "A shared syllabus doesn’t mean an identical starting point. Work on the topic you need, one challenge at a time.",
+          null,
+        ],
+      ].map(([title, detail, extra], index) => (
+        <article
+          key={title}
+          className="grid grid-cols-[26px_minmax(0,1fr)] gap-4 border-t border-white/30 py-6 first:pt-6"
         >
-          <div className="relative mx-auto flex min-h-[780px] max-w-[1460px] flex-col gap-12 px-6 py-20 sm:px-10 lg:block lg:min-h-[780px] lg:px-12 lg:py-0 2xl:min-h-[690px] 2xl:px-0">
-            {/* The reference deliberately lets the community visual sit between the copy and the detail list. */}
-            <div
-              className="pointer-events-none absolute left-[31%] top-[-12px] hidden opacity-[0.15] lg:block 2xl:left-[29%]"
-              aria-hidden="true"
-            >
-              <svg width="244" height="244" viewBox="0 0 127.14 96.36" fill="currentColor">
-                <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z" />
-              </svg>
-            </div>
+          <span className="pt-0.5 text-[13px] font-medium text-[#dcfa72]">
+            0{index + 1}
+          </span>
 
-            <div className="relative z-10 max-w-[375px] lg:absolute lg:left-12 lg:top-[126px] 2xl:left-0">
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-white/85">
-                04 / Same syllabus. Your people.
-              </p>
-              <h2
-                className={`${manrope.className} mt-6 text-[clamp(3rem,4vw,4rem)] font-extrabold leading-[1.01] tracking-[-0.065em] text-white`}
-              >
-                Study alone.
-                <br />
-                <em className="font-serif font-normal italic text-[#dcfa72]">
-                  Just not on your own.
-                </em>
-              </h2>
-              <p className="mt-7 max-w-[345px] text-[15px] leading-[1.8] text-white/85">
-                You don’t always need someone to explain the chapter. Sometimes, you need people
-                who’ll sit down and study alongside you.
-              </p>
-              <Cta
-                href={DISCORD_STUDY_ROOM_URL}
-                lime
-                size="hero"
-                className="mt-8 w-full sm:w-[304px] lg:min-h-[62px]"
-              >
-                Join Discord Community
-              </Cta>
-            </div>
-
-            <div className="relative order-last mx-auto w-full max-w-[600px] lg:absolute lg:bottom-[190px] lg:left-[24%] lg:order-none lg:w-[500px] lg:max-w-none 2xl:bottom-[48px] 2xl:left-[27%] 2xl:w-[590px]">
-              <div className="absolute right-[19%] top-[5%] z-10 inline-flex items-center gap-2 rounded-full border border-white/20 bg-[#1830a4]/80 px-3 py-1.5 text-[11px] font-medium text-white shadow-[0_8px_20px_rgba(13,25,110,0.32)] backdrop-blur-sm">
-                <span className="size-2 rounded-full bg-[#55dd9b]" />
-                <span>12 students studying now</span>
-              </div>
-              <Image
-                src="/landing-new/community-visual.png"
-                alt="Students sharing notes and studying together in a NanoSyllabus community chat"
-                width={568}
-                height={439}
-                className="w-full object-contain drop-shadow-[0_24px_22px_rgba(13,25,110,0.28)]"
-              />
-            </div>
-
-            <div className="relative z-10 w-full max-w-[560px] space-y-0 lg:absolute lg:right-12 lg:top-[118px] lg:max-w-[480px] 2xl:right-0 2xl:max-w-[560px]">
-              {[
-                [
-                  "A community around your course.",
-                  "Create or join a space with students studying the same subjects. Keep shared notes, past questions and learning material together.",
-                  null,
-                ],
-                [
-                  "Quiet company. Real studying.",
-                  "Join a silent Discord study session. Open your material and get to work, with others doing the same.",
-                  "Session and camera rules vary by community.",
-                ],
-                [
-                  "Your pace still belongs to you.",
-                  "A shared syllabus doesn’t mean an identical starting point. Work on the topic you need, one challenge at a time.",
-                  null,
-                ],
-              ].map(([title, detail, extra], index) => (
-                <article
-                  key={title}
-                  className="grid grid-cols-[26px_minmax(0,1fr)] gap-4 border-t border-white/30 py-6 first:pt-6"
-                >
-                  <span className="pt-0.5 text-[13px] font-medium text-[#dcfa72]">
-                    0{index + 1}
-                  </span>
-                  <div>
-                    <h3
-                      className={`${manrope.className} text-[19px] font-bold tracking-[-0.035em] text-white`}
-                    >
-                      {title}
-                    </h3>
-                    <p className="mt-3 text-[15px] leading-[1.72] text-white/85">{detail}</p>
-                    {extra ? <p className="mt-3 text-[13px] text-white/70">{extra}</p> : null}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── Section 05 / Fair Questions (FAQ) ── */}
-        <section
-          id="questions"
-          className="mx-auto grid max-w-[1320px] gap-12 px-5 py-24 lg:grid-cols-[0.75fr_1.25fr] lg:py-28 2xl:px-0"
-        >
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-              05 / Fair questions
-            </div>
-            <h2
-              className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.2vw,4.1rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
+            <h3
+              className={`${manrope.className} text-[19px] font-bold tracking-[-0.035em] text-white`}
             >
-              Before you
-              <br />
-              <em className="font-serif font-normal italic">jump in.</em>
-            </h2>
-            <p className="mt-5 text-base leading-relaxed text-[#5b5e55]">
-              No big promises.
-              <br />
-              Just a better way to practise.
+              {title}
+            </h3>
+
+            <p className="mt-3 text-[15px] leading-[1.72] text-white/85">
+              {detail}
             </p>
+
+            {extra ? (
+              <p className="mt-3 text-[13px] text-white/70">
+                {extra}
+              </p>
+            ) : null}
+          </div>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+
+{/* ── Section 05 / Daily Prize ── */}
+<section
+  id="daily-prize"
+  aria-labelledby="prize-title"
+  className="relative overflow-hidden bg-[#eff1e9] text-[#1c1e1a]"
+>
+  <div className="mx-auto grid max-w-[1320px] items-center gap-12 px-5 py-24 sm:px-10 lg:grid-cols-2 lg:gap-[70px] lg:py-28 2xl:px-0">
+    {/* Left copy */}
+    <div>
+      <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
+        05 / A little extra motivation
+      </p>
+
+      <h2
+        id="prize-title"
+        className={`${manrope.className} mt-6 text-[clamp(3rem,4.2vw,3.75rem)] font-extrabold leading-[1.06] tracking-[-0.055em] text-[#1c1e1a]`}
+      >
+        Make progress.
+        <br />
+        <em className="font-serif font-normal italic">
+          Get a chance to win.
+        </em>
+      </h2>
+
+      <p className="mt-6 max-w-[500px] text-[16px] leading-[1.7] text-[#5b5e55]">
+        Complete at least <strong className="font-semibold text-[#1c1e1a]">1 learning challenge</strong>{" "}
+        to qualify to participate in the daily prize draw. Three lucky students win every day.
+      </p>
+
+      <a
+        href="https://www.nanosyllabus.com/communities"
+        className="mt-7 inline-flex items-center gap-6 rounded-lg bg-[#3049ed] px-6 py-[18px] font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5"
+      >
+        Start a free challenge
+        <span aria-hidden="true">↗</span>
+      </a>
+
+      <p className="mt-1 max-w-[430px] text-xs leading-[1.6] text-[#5b5e55]">
+        Winners are selected by lucky draw.
+      </p>
+    </div>
+
+    {/* Prize board */}
+    <div className="relative">
+      <div className="rounded-[20px] border border-[#c6dd76] bg-[#dcfa72] p-6 shadow-[8px_9px_0_#1c1e1a] transition-transform duration-300 hover:rotate-0 sm:p-8 lg:rotate-[1deg]">
+        <div className="flex items-center justify-between gap-3 text-[11px] font-bold uppercase tracking-[0.05em] text-[#1c1e1a]">
+          <span>Daily prize pool</span>
+          <span>3 lucky winners</span>
+        </div>
+
+        <div className={`${manrope.className} my-6 text-[clamp(3rem,5vw,4.5rem)] font-extrabold leading-none tracking-[-0.06em] text-[#1c1e1a]`}>
+          Rs. 1,000
+
+          <span className="mt-2 block text-sm font-medium tracking-normal">
+            Every day. A new chance.
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="rounded-[10px] border border-[#c6dd76] bg-[#f8ffe6] px-3 py-[17px]">
+            <span className="block text-[9px] tracking-[0.04em]">
+              01 / FIRST PRIZE
+            </span>
+            <strong className={`${manrope.className} mt-2.5 block whitespace-nowrap text-[20px] font-extrabold sm:text-[23px]`}>
+              Rs. 500
+            </strong>
           </div>
 
-          <div className="divide-y divide-[#d9ddd3] border-t border-[#d9ddd3]">
-            {questions.map(([question, answer]) => (
-              <details key={question} className="group py-6">
-                <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-4 text-[16px] font-semibold text-[#1c1e1a] transition-colors hover:text-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]">
-                  <span>{question}</span>
-                  <span
-                    className="flex size-7 items-center justify-center rounded-full border border-[#d9ddd3] text-lg font-bold text-[#1c1e1a] transition-transform duration-200 group-open:rotate-45"
-                    aria-hidden="true"
-                  >
-                    +
-                  </span>
-                </summary>
-                <p className="max-w-[700px] pt-3 text-[15px] leading-relaxed text-[#5b5e55]">
-                  {answer}
-                </p>
-              </details>
-            ))}
+          <div className="rounded-[10px] border border-[#c6dd76] bg-[#f8ffe6] px-3 py-[17px]">
+            <span className="block text-[9px] tracking-[0.04em]">
+              02 / SECOND PRIZE
+            </span>
+            <strong className={`${manrope.className} mt-2.5 block whitespace-nowrap text-[20px] font-extrabold sm:text-[23px]`}>
+              Rs. 300
+            </strong>
           </div>
-        </section>
+
+          <div className="rounded-[10px] border border-[#c6dd76] bg-[#f8ffe6] px-3 py-[17px]">
+            <span className="block text-[9px] tracking-[0.04em]">
+              03 / THIRD PRIZE
+            </span>
+            <strong className={`${manrope.className} mt-2.5 block whitespace-nowrap text-[20px] font-extrabold sm:text-[23px]`}>
+              Rs. 200
+            </strong>
+          </div>
+        </div>
+
+        <div className="mt-6 border-t border-[#b3ca64] pt-[18px] text-[13px]">
+          Your first win? Showing up to learn.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+{/* ── Section 06 / Fair Questions (FAQ) ── */}
+<section
+  id="questions"
+  className="mx-auto grid max-w-[1320px] gap-12 px-5 py-24 lg:grid-cols-[0.75fr_1.25fr] lg:py-28 2xl:px-0"
+>
+  <div>
+    <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
+      06 / Fair questions
+    </div>
+
+    <h2
+      className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.2vw,4.1rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
+    >
+      Before you
+      <br />
+      <em className="font-serif font-normal italic">
+        jump in.
+      </em>
+    </h2>
+
+    <p className="mt-5 text-base leading-relaxed text-[#5b5e55]">
+      No big promises.
+      <br />
+      Just a better way to practise.
+    </p>
+  </div>
+
+  <div className="divide-y divide-[#d9ddd3] border-t border-[#d9ddd3]">
+    {questions.map(([question, answer]) => (
+      <details key={question} className="group py-6">
+        <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-4 text-[16px] font-semibold text-[#1c1e1a] transition-colors hover:text-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]">
+          <span>{question}</span>
+
+          <span
+            className="flex size-7 items-center justify-center rounded-full border border-[#d9ddd3] text-lg font-bold text-[#1c1e1a] transition-transform duration-200 group-open:rotate-45"
+            aria-hidden="true"
+          >
+            +
+          </span>
+        </summary>
+
+        <p className="max-w-[700px] pt-3 text-[15px] leading-relaxed text-[#5b5e55]">
+          {answer}
+        </p>
+      </details>
+    ))}
+  </div>
+</section>
+
 
         {/* ── Final Call To Action Banner ── */}
         <section className="mx-auto max-w-[1320px] px-5 pb-16 2xl:px-0">
           <div className="relative overflow-hidden rounded-[28px] bg-[#dcfa72] p-8 sm:p-14 lg:p-16 shadow-sm">
             <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#1c1e1a]/80">
-              Not the whole semester. Just the next step.
+              3 free learning challenges a day. Your next step starts here.
             </div>
             <h2
               className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.5vw,4.6rem)] font-extrabold leading-[1.05] tracking-[-0.055em] text-[#1c1e1a]`}
             >
-              A little less stuck.
+              One topic today.
               <br />
-              <em className="font-serif font-normal italic">A lot more learning.</em>
+              <em className="font-serif font-normal italic">A habit for the semester.</em>
             </h2>
             <div className="mt-9">
               <LandingPrimaryCta size="hero">
-                Let’s find my starting point
+                Start my first learning challenges
               </LandingPrimaryCta>
             </div>
 
