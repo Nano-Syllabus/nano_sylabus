@@ -489,10 +489,10 @@ export function CommunityHubClient({
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1480px] px-4 pb-20 pt-2 sm:px-6 md:px-8 lg:px-10">
+    <main className="student-page-frame">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
+          <h1 className="type-student-page-title text-text-primary">
             Community Hub
           </h1>
         </div>

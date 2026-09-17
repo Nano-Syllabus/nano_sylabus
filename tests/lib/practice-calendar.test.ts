@@ -89,8 +89,8 @@ describe("practice calendar exam planning", () => {
     const calendarSource = readFileSync("components/practice-calendar.tsx", "utf8");
     const dashboardSource = readFileSync("components/student-daily-dashboard.tsx", "utf8");
 
-    expect(calendarSource).toContain('className="font-display text-xl font-semibold"');
-    expect(dashboardSource).toContain('className="font-display text-xl font-semibold"');
+    expect(calendarSource).toContain('className="type-student-section-title"');
+    expect(dashboardSource).toContain('className="type-student-section-title"');
   });
 
   it("uses the requested dashboard greeting without an upgrade button", () => {

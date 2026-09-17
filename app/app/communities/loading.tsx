@@ -1,7 +1,7 @@
 export default function SubjectExplorerLoading() {
   return (
     <main
-      className="w-full max-w-[1240px] animate-pulse px-4 py-5 lg:p-7"
+      className="student-page-frame animate-pulse"
       aria-label="Loading Subject Explorer"
     >
       <div className="h-5 w-36 rounded bg-bg-tertiary" />

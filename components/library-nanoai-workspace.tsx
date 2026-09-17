@@ -328,7 +328,7 @@ export function LibraryNanoAiWorkspace({
       <div className="flex min-h-full items-center justify-center p-6">
         <div className="max-w-lg rounded-xl border border-border bg-bg-primary p-8 text-center">
           <LibraryBig className="mx-auto size-9 text-text-muted" aria-hidden="true" />
-          <h1 className="mt-4 font-display text-2xl font-semibold">
+          <h1 className="type-student-page-title mt-4">
             Join a community to open your library
           </h1>
           <p className="mt-3 text-sm leading-6 text-text-secondary">
@@ -350,11 +350,11 @@ export function LibraryNanoAiWorkspace({
   }
 
   return (
-    <main className="font-figma-library mx-auto min-h-full w-full max-w-[1240px] flex-1 bg-bg-primary px-5 pb-12 pt-9 text-text-primary sm:px-8 lg:px-10">
+    <main className="student-page-frame min-h-full flex-1 bg-bg-primary text-text-primary">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-[32px] font-semibold leading-tight text-text-primary">Library</h1>
+            <h1 className="type-student-page-title text-text-primary">Library</h1>
             <Image
               src="/figma/library/book-open.svg"
               alt=""
@@ -370,7 +370,7 @@ export function LibraryNanoAiWorkspace({
         <div className="flex min-w-[220px] flex-col gap-1.5 sm:items-end">
           <label
             htmlFor="current-semester-selector"
-            className="text-xs font-semibold uppercase tracking-[0.14em] text-text-secondary"
+            className="type-student-eyebrow text-text-secondary"
           >
             Choose running semester
           </label>
@@ -383,7 +383,7 @@ export function LibraryNanoAiWorkspace({
                 if (term) void saveRunningSemester(term);
               }}
               disabled={savingSemester || orderedTerms.length === 0}
-              className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-text-primary outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-w-0 flex-1 bg-transparent text-sm font-medium text-text-primary outline-none disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Choose running semester"
             >
               {orderedTerms.map((term) => (
@@ -402,7 +402,7 @@ export function LibraryNanoAiWorkspace({
       </header>
 
       <section className="mt-7" aria-labelledby="library-semesters-heading">
-        <h2 id="library-semesters-heading" className="text-[17px] font-semibold text-text-primary">
+        <h2 id="library-semesters-heading" className="type-student-section-title text-text-primary">
           1. Choose Semester
         </h2>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
@@ -414,7 +414,7 @@ export function LibraryNanoAiWorkspace({
                 type="button"
                 onClick={() => browseTerm(term)}
                 className={cn(
-                  "h-10 shrink-0 rounded-full border px-[18px] text-[13px] font-medium transition-colors",
+                  "h-10 shrink-0 rounded-full border px-[18px] text-sm font-medium transition-colors",
                   active
                     ? "border-[#1d57fd] bg-card text-[#1d57fd]"
                     : "border-border bg-card text-text-secondary hover:border-border-strong",
@@ -430,7 +430,7 @@ export function LibraryNanoAiWorkspace({
 
       <section className="mt-7" aria-labelledby="library-subjects-heading">
         <div>
-          <h2 id="library-subjects-heading" className="text-[17px] font-semibold text-text-primary">
+          <h2 id="library-subjects-heading" className="type-student-section-title text-text-primary">
             2. Choose Subject
           </h2>
         </div>
@@ -475,7 +475,7 @@ export function LibraryNanoAiWorkspace({
         >
           <h2
             id="library-resources-heading"
-            className="text-[17px] font-semibold text-text-primary"
+            className="type-student-section-title text-text-primary"
           >
             Study Resources
           </h2>
@@ -488,7 +488,7 @@ export function LibraryNanoAiWorkspace({
             {loadState === "loading" ? <ExplorerSkeleton /> : null}
             {loadState === "error" ? (
               <div className="rounded-xl border border-destructive/30 bg-bg-primary p-6">
-                <h3 className="font-display text-lg font-semibold">
+                <h3 className="type-student-card-title">
                   Couldn&apos;t load these resources
                 </h3>
                 <p className="mt-2 text-sm text-text-secondary">{loadError}</p>
@@ -508,7 +508,7 @@ export function LibraryNanoAiWorkspace({
             {loadState === "ready" && materials.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-bg-secondary p-8 text-center">
                 <FileText className="mx-auto size-8 text-text-muted" aria-hidden="true" />
-                <h3 className="mt-4 font-display text-lg font-semibold">No resources yet</h3>
+                <h3 className="type-student-card-title mt-4">No resources yet</h3>
                 <p className="mt-2 text-sm text-text-secondary">
                   The community creator has not uploaded material for this subject yet.
                 </p>
@@ -729,7 +729,7 @@ export function LibraryDocumentViewer({
           <div className="flex h-full items-center justify-center">
             <div className="max-w-md rounded-xl border border-border bg-bg-primary p-6 text-center">
               <FileText className="mx-auto size-9 text-text-muted" aria-hidden="true" />
-              <h2 className="mt-4 font-display text-xl font-semibold">
+              <h2 className="type-student-section-title mt-4">
                 Couldn&apos;t open this resource
               </h2>
               <p className="mt-2 text-sm leading-6 text-text-secondary">{readerError}</p>

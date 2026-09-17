@@ -577,8 +577,9 @@ export function CommunityCatalogClient({
           gap: 12px;
           color: #101114;
           text-decoration: none;
-          font-size: 23px;
-          font-weight: 750;
+          font-family: var(--font-display);
+          font-size: 1.375rem;
+          font-weight: 600;
           letter-spacing: -0.04em;
         }
 
@@ -610,17 +611,27 @@ export function CommunityCatalogClient({
         .ns-top-cta:hover,
         .ns-hero-cta:hover { background: #26282d; transform: translateY(-1px); }
 
+        .ns-top-cta:focus-visible,
+        .ns-hero-cta:focus-visible,
+        .ns-hero-how:focus-visible,
+        .ns-clear-button:focus-visible,
+        .ns-card-arrow:focus-visible,
+        .ns-page-button:focus-visible {
+          outline: 2px solid #3049ed;
+          outline-offset: 3px;
+        }
+
         .ns-hero-cta--blue {
           background: #3049ed !important;
-          min-height: 54px !important;
-          padding: 0 30px !important;
-          font-size: 16px !important;
-          border-radius: 14px !important;
+          min-height: 48px !important;
+          padding: 0 24px !important;
+          font-size: 14px !important;
+          border-radius: 10px !important;
         }
         .ns-hero-cta--blue:hover { background: #2439d0 !important; }
 
         .ns-hero-how {
-          font-size: 15px;
+          font-size: 14px;
           font-weight: 600;
           color: #101114;
           text-decoration: none;
@@ -642,26 +653,27 @@ export function CommunityCatalogClient({
           gap: 32px;
           overflow: hidden;
           border-radius: 15px;
-          background: #c8ff28;
+          background: #dcfa72;
         }
 
         .ns-hero h1 {
           margin: 0;
           max-width: 800px;
-          font-size: clamp(44px, 4.2vw, 64px);
-          line-height: .98;
-          letter-spacing: -0.055em;
-          font-weight: 800;
+          font-family: var(--font-display);
+          font-size: clamp(2.5rem, 3.2vw, 3.25rem);
+          line-height: 1;
+          letter-spacing: -0.045em;
+          font-weight: 600;
           color: #101114;
         }
 
         .ns-hero p {
           margin: 14px 0 24px;
           color: #313329;
-          font-size: clamp(18px, 1.65vw, 24px);
-          line-height: 1.35;
-          font-weight: 500;
-          letter-spacing: -0.02em;
+          font-size: 1.125rem;
+          line-height: 1.5;
+          font-weight: 400;
+          letter-spacing: -0.01em;
         }
 
         .ns-hero-art {
@@ -687,9 +699,9 @@ export function CommunityCatalogClient({
         /* Sleek Sidebar Filters */
         .ns-filters {
           padding: 20px;
-          border: 1px solid #d6dbe3;
+          border: 1px solid #e5e8df;
           border-radius: 15px;
-          background: #ffffff;
+          background: #f5f7f1;
         }
 
         .ns-filters-header {
@@ -703,33 +715,46 @@ export function CommunityCatalogClient({
 
         .ns-filters h2 {
           margin: 0;
-          font-size: 21px;
-          letter-spacing: -0.035em;
-          font-weight: 750;
+          font-family: var(--font-display);
+          font-size: 1.125rem;
+          letter-spacing: -0.025em;
+          font-weight: 600;
           color: #101114;
+        }
+
+        .ns-filters h2::before {
+          content: "";
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          margin-right: 8px;
+          border-radius: 999px;
+          background: #3049ed;
+          vertical-align: 2px;
         }
 
         .ns-clear-button {
-          padding: 3px 8px;
+          min-height: 40px;
+          padding: 0 10px;
           border: 0;
           border-radius: 6px;
-          color: #606774;
-          background: #f6f7f9;
-          font-size: 13px;
+          color: #0a2ec3;
+          background: #ebf1ff;
+          font-size: 0.875rem;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: background 0.15s ease, color 0.15s ease;
         }
 
         .ns-clear-button:hover {
-          color: #101114;
-          background: #e9ecef;
+          color: #0a2ec3;
+          background: #dce5ff;
         }
 
         .ns-filter-group {
           margin: 0;
           padding: 18px 0;
-          border-bottom: 1px solid #d6dbe3;
+          border-bottom: 1px solid #e5e8df;
         }
 
         .ns-filter-group:last-child {
@@ -750,7 +775,7 @@ export function CommunityCatalogClient({
           width: 100%;
           height: 42px;
           padding: 0 34px 0 38px;
-          border: 1px solid #d6dbe3;
+          border: 1px solid #d7ddd0;
           border-radius: 10px;
           color: #101114;
           background-color: white;
@@ -767,8 +792,8 @@ export function CommunityCatalogClient({
         }
 
         .ns-location-select:focus {
-          border-color: #7f8792;
-          box-shadow: 0 0 0 3px rgba(16, 17, 20, 0.06);
+          border-color: #3049ed;
+          box-shadow: 0 0 0 3px rgba(48, 73, 237, 0.14);
         }
 
         .ns-check-list {
@@ -777,6 +802,8 @@ export function CommunityCatalogClient({
         }
 
         .ns-check-row {
+          position: relative;
+          min-height: 40px;
           display: flex;
           align-items: center;
           gap: 10px;
@@ -784,14 +811,27 @@ export function CommunityCatalogClient({
           margin: 0 -8px;
           border-radius: 8px;
           color: #343940;
-          font-size: 14px;
+          font-size: 0.875rem;
           line-height: 1.35;
           cursor: pointer;
           transition: background 0.15s ease;
         }
 
+        .ns-filter-checkbox {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .ns-filter-checkbox:focus-visible + .ns-custom-checkbox {
+          outline: 2px solid #3049ed;
+          outline-offset: 2px;
+        }
+
         .ns-check-row:hover {
-          background: #f6f7f9;
+          background: #ebf1ff;
           color: #101114;
         }
 
@@ -799,23 +839,23 @@ export function CommunityCatalogClient({
           width: 18px;
           height: 18px;
           border-radius: 5px;
-          border: 1.5px solid #d0d5dd;
+          border: 1.5px solid #c7d3fb;
           background: #ffffff;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          transition: all 0.15s ease;
+          transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
         }
 
         .ns-custom-checkbox.is-checked {
-          border-color: #101114;
-          background: #101114;
+          border-color: #3049ed;
+          background: #3049ed;
           color: #ffffff;
         }
 
         .ns-check-row:hover .ns-custom-checkbox:not(.is-checked) {
-          border-color: #98a2b3;
+          border-color: #3049ed;
         }
 
         .ns-results { min-width: 0; }
@@ -838,14 +878,25 @@ export function CommunityCatalogClient({
 
         .ns-results-heading h2 {
           margin: 0;
-          font-size: clamp(28px, 2.6vw, 38px);
-          line-height: 1;
-          letter-spacing: -0.05em;
-          font-weight: 750;
+          font-family: var(--font-display);
+          font-size: clamp(1.625rem, 2vw, 2rem);
+          line-height: 1.15;
+          letter-spacing: -0.035em;
+          font-weight: 600;
           color: #101114;
         }
 
-        .ns-result-count { color: #606774; font-size: 15px; font-weight: 400; }
+        .ns-result-count {
+          display: inline-flex;
+          min-height: 28px;
+          align-items: center;
+          border-radius: 999px;
+          padding: 0 10px;
+          color: #0a2ec3;
+          background: #ebf1ff;
+          font-size: 0.8125rem;
+          font-weight: 600;
+        }
 
         .ns-search {
           position: relative;
@@ -894,15 +945,15 @@ export function CommunityCatalogClient({
           grid-template-columns: 84px minmax(0, 1fr);
           gap: 16px;
           overflow: hidden;
-          border: 1px solid #d6dbe3;
+          border: 1px solid #e5e8df;
           border-radius: 15px;
           background: white;
           transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
         }
 
         .ns-community-card:hover {
-          border-color: #9ba2ad;
-          box-shadow: 0 10px 24px rgba(20, 24, 32, .06);
+          border-color: #9eb0fb;
+          box-shadow: 0 10px 24px rgba(48, 73, 237, .09);
           transform: translateY(-2px);
         }
 
@@ -911,20 +962,21 @@ export function CommunityCatalogClient({
           top: 16px;
           right: 16px;
           z-index: 2;
-          width: 38px;
-          height: 38px;
+          width: 40px;
+          height: 40px;
           display: grid;
           place-items: center;
-          border: 1px solid #e4e7ec;
+          border: 1px solid #c9d5ff;
           border-radius: 50%;
-          color: #101114;
-          background: #f6f7f9;
+          color: #0a2ec3;
+          background: #ebf1ff;
           text-decoration: none;
           transition: background .18s ease, transform .18s ease;
           cursor: pointer;
         }
 
-        .ns-card-arrow:hover { background: #c8ff28; transform: translateX(2px); }
+        .ns-card-arrow:hover { color: #ffffff; background: #3049ed; transform: translateX(2px); }
+        .ns-card-arrow:disabled { cursor: wait; opacity: 0.7; }
         .ns-card-arrow svg { width: 18px; height: 18px; }
 
         .ns-community-emblem {
@@ -943,10 +995,11 @@ export function CommunityCatalogClient({
 
         .ns-community-name {
           margin: 2px 48px 2px 0;
-          font-size: 20px;
-          line-height: 1.2;
-          letter-spacing: -0.035em;
-          font-weight: 750;
+          font-family: var(--font-display);
+          font-size: 1.125rem;
+          line-height: 1.25;
+          letter-spacing: -0.025em;
+          font-weight: 600;
           color: #101114;
         }
 
@@ -973,13 +1026,13 @@ export function CommunityCatalogClient({
           gap: 9px;
           border-radius: 10px;
           color: #3f454e;
-          background: #f6f7f9;
-          font-size: 12.5px;
-          line-height: 1.25;
-          font-weight: 450;
+          background: #f5f7f1;
+          font-size: 0.8125rem;
+          line-height: 1.35;
+          font-weight: 400;
         }
 
-        .ns-meta-item svg { width: 18px; height: 18px; flex: 0 0 auto; color: #101114; }
+        .ns-meta-item svg { width: 18px; height: 18px; flex: 0 0 auto; color: #3049ed; }
 
         .ns-joined {
           display: inline-flex;
@@ -1011,8 +1064,9 @@ export function CommunityCatalogClient({
           display: block;
           margin-bottom: 6px;
           color: #101114;
-          font-size: 19px;
-          font-weight: 750;
+          font-family: var(--font-display);
+          font-size: 1.125rem;
+          font-weight: 600;
         }
 
         .ns-pagination-wrap {
@@ -1061,13 +1115,27 @@ export function CommunityCatalogClient({
         }
 
         .ns-page-button[aria-current="page"] {
-          border-color: #101114;
+          border-color: #3049ed;
           color: white;
-          background: #101114;
+          background: #3049ed;
         }
 
         .ns-page-button:disabled { opacity: .38; cursor: not-allowed; }
         .ns-page-button svg { width: 16px; height: 16px; }
+
+        @media (prefers-reduced-motion: reduce) {
+          .ns-top-cta,
+          .ns-hero-cta,
+          .ns-hero-how,
+          .ns-clear-button,
+          .ns-check-row,
+          .ns-custom-checkbox,
+          .ns-community-card,
+          .ns-card-arrow,
+          .ns-page-button {
+            transition: none;
+          }
+        }
 
         @media (max-width: 1120px) {
           .ns-communities-page { width: min(100% - 40px, 1120px); }
@@ -1084,7 +1152,7 @@ export function CommunityCatalogClient({
           .ns-brand-mark { width: 32px; height: 32px; }
           .ns-top-cta { min-height: 40px; padding-inline: 17px; font-size: 14px; }
           .ns-hero { min-height: auto; grid-template-columns: 1fr; padding: 31px 28px; }
-          .ns-hero h1 { font-size: clamp(38px, 10vw, 52px); }
+          .ns-hero h1 { font-size: clamp(2.25rem, 9vw, 3rem); }
           .ns-hero p { margin-bottom: 20px; }
           .ns-hero-art { display: none; }
           .ns-discovery { grid-template-columns: 1fr; }
@@ -1099,16 +1167,16 @@ export function CommunityCatalogClient({
           .ns-communities-page { width: min(100% - 20px, 520px); }
           .ns-top-cta span { display: none; }
           .ns-hero { padding: 28px 22px; }
-          .ns-hero h1 { font-size: 39px; }
-          .ns-hero p { font-size: 18px; }
+          .ns-hero h1 { font-size: 2.25rem; }
+          .ns-hero p { font-size: 1rem; }
           .ns-results-heading { display: block; }
           .ns-result-count { display: block; margin-top: 8px; }
           .ns-community-card { grid-template-columns: 60px minmax(0, 1fr); gap: 12px; padding: 15px; }
           .ns-community-emblem { width: 54px; height: 54px; font-size: 14px; }
-          .ns-community-name { font-size: 18px; }
-          .ns-card-arrow { top: 13px; right: 13px; width: 34px; height: 34px; }
+          .ns-community-name { font-size: 1rem; }
+          .ns-card-arrow { top: 13px; right: 13px; width: 40px; height: 40px; }
           .ns-meta-grid { grid-column: 1 / -1; margin-left: -72px; }
-          .ns-meta-item { min-height: 40px; font-size: 12px; }
+          .ns-meta-item { min-height: 40px; font-size: 0.75rem; }
           .ns-pagination { width: 100%; justify-content: space-between; }
           .ns-page-button span { display: none; }
         }
@@ -1155,7 +1223,10 @@ export function CommunityCatalogClient({
               className="ns-hero-cta ns-hero-cta--blue"
               onClick={(e) => {
                 e.preventDefault();
-                document.getElementById("communities")?.scrollIntoView({ behavior: "smooth" });
+                const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                document
+                  .getElementById("communities")
+                  ?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
               }}
             >
               Find your program
@@ -1525,7 +1596,13 @@ export function CommunityCatalogClient({
                 {availableUniversities.map((uni) => {
                   const checked = selectedUniversities.includes(uni);
                   return (
-                    <label key={uni} className="ns-check-row" onClick={() => toggleUniversity(uni)}>
+                    <label key={uni} className="ns-check-row">
+                      <input
+                        className="ns-filter-checkbox"
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleUniversity(uni)}
+                      />
                       <div className={`ns-custom-checkbox ${checked ? "is-checked" : ""}`}>
                         {checked ? (
                           <svg
@@ -1541,7 +1618,7 @@ export function CommunityCatalogClient({
                           </svg>
                         ) : null}
                       </div>
-                      <span style={{ fontSize: "14px" }}>{uni}</span>
+                      <span>{uni}</span>
                     </label>
                   );
                 })}
@@ -1555,7 +1632,13 @@ export function CommunityCatalogClient({
                 {availableInstitutes.map((inst) => {
                   const checked = selectedInstitutes.includes(inst);
                   return (
-                    <label key={inst} className="ns-check-row" onClick={() => toggleInstitute(inst)}>
+                    <label key={inst} className="ns-check-row">
+                      <input
+                        className="ns-filter-checkbox"
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleInstitute(inst)}
+                      />
                       <div className={`ns-custom-checkbox ${checked ? "is-checked" : ""}`}>
                         {checked ? (
                           <svg
@@ -1571,7 +1654,7 @@ export function CommunityCatalogClient({
                           </svg>
                         ) : null}
                       </div>
-                      <span style={{ fontSize: "14px" }}>{inst}</span>
+                      <span>{inst}</span>
                     </label>
                   );
                 })}
@@ -1585,7 +1668,13 @@ export function CommunityCatalogClient({
                 {availableLevels.map((lvl) => {
                   const checked = selectedLevels.includes(lvl);
                   return (
-                    <label key={lvl} className="ns-check-row" onClick={() => toggleLevel(lvl)}>
+                    <label key={lvl} className="ns-check-row">
+                      <input
+                        className="ns-filter-checkbox"
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleLevel(lvl)}
+                      />
                       <div className={`ns-custom-checkbox ${checked ? "is-checked" : ""}`}>
                         {checked ? (
                           <svg
@@ -1601,7 +1690,7 @@ export function CommunityCatalogClient({
                           </svg>
                         ) : null}
                       </div>
-                      <span style={{ fontSize: "14px" }}>{lvl}</span>
+                      <span>{lvl}</span>
                     </label>
                   );
                 })}

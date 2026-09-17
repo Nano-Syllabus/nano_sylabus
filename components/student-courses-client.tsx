@@ -57,11 +57,11 @@ export function StudentCoursesClient({
   courses: StudentCourse[];
 }) {
   return (
-    <main className="w-full max-w-[1240px] px-[14px] pb-24 pt-[18px] lg:p-[26px]">
+    <main className="student-page-frame">
       <div className="flex flex-wrap items-start gap-4 border-b border-border pb-6">
         <div>
           <p className="text-sm text-text-secondary">Courses</p>
-          <h1 className="mt-2 font-display text-[28px] font-semibold">My courses</h1>
+          <h1 className="type-student-page-title mt-2">My courses</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
             Each course keeps its subjects, practice, exams, and progress together.
           </p>
@@ -89,7 +89,7 @@ export function StudentCoursesClient({
       {!courses.length ? (
         <section className="flex min-h-80 flex-col items-center justify-center border-b border-border py-16 text-center">
           <CheckCircle2 className="h-9 w-9 text-text-muted" aria-hidden="true" />
-          <h2 className="mt-4 font-display text-xl font-semibold">Choose your first course</h2>
+          <h2 className="type-student-section-title mt-4">Choose your first course</h2>
           <p className="mt-2 max-w-lg text-sm leading-6 text-text-secondary">
             Enroll from the public course catalog. Courses you leave can be added again from there.
           </p>

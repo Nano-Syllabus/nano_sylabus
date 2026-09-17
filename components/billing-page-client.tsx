@@ -1,10 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
-  BookOpen,
+  ArrowRight,
   Check,
   CheckCircle2,
   CreditCard,
@@ -27,7 +28,7 @@ import type {
 } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
 
-type CheckoutInvoice = Pick<
+export type CheckoutInvoice = Pick<
   BillingInvoiceSummary,
   "id" | "status" | "amount" | "currency" | "invoiceCode" | "subtotal" | "paymentSubmission"
 > & { plan: SubscriptionPlan };
@@ -91,7 +92,7 @@ function formatPlanPrice(plan: SubscriptionPlan | null, months: 1 | 3, fallback:
 
 function FeatureList({ features }: { features: string[] }) {
   return (
-    <ul className="m-0 mt-4 list-none space-y-2.5 p-0 text-[12.5px] font-medium leading-[1.4] text-[#293044]">
+    <ul className="type-student-body m-0 mt-4 list-none space-y-3 p-0 font-medium text-[#293044]">
       {features.map((feature) => (
         <li key={feature} className="flex items-start gap-2.5">
           <Check
@@ -281,11 +282,11 @@ export function BillingPageClient({
   return (
     <>
       {/* This route intentionally keeps the Figma light-artboard palette in both app themes. */}
-      <main className="min-h-full bg-[#fbfcfe] px-4 pb-16 pt-7 text-[#111827] sm:px-6 lg:px-8 lg:pb-20 lg:pt-9">
+      <main className="min-h-full bg-[#fbfcfe] pb-20 pt-6 text-[#111827]">
         {error ? (
           <div
             role="alert"
-            className="mx-auto mb-5 flex max-w-[1000px] items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 py-2 pl-4 pr-2 text-sm text-red-700"
+            className="student-page-width mb-5 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 py-2 pl-4 pr-2 text-sm text-red-700"
           >
             <span>{error}</span>
             <button
@@ -301,7 +302,7 @@ export function BillingPageClient({
         {success ? (
           <div
             role="status"
-            className="mx-auto mb-5 flex max-w-[1000px] items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 py-2 pl-4 pr-2 text-sm text-emerald-800"
+            className="student-page-width mb-5 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 py-2 pl-4 pr-2 text-sm text-emerald-800"
           >
             <span>{success}</span>
             <button
@@ -315,8 +316,8 @@ export function BillingPageClient({
           </div>
         ) : null}
 
-        <header className="mx-auto flex max-w-[1000px] flex-col items-center text-center font-[family-name:var(--font-poppins)]">
-          <h1 className="text-[28px] font-bold leading-tight tracking-[-0.04em] text-[#111827] sm:text-[34px]">
+        <header className="student-page-width flex flex-col items-center text-center">
+          <h1 className="type-student-page-title text-[#111827]">
             Simple plans. Bigger dreams.
           </h1>
           <div
@@ -328,7 +329,7 @@ export function BillingPageClient({
               aria-pressed={billingMonths === 1}
               onClick={() => setBillingMonths(1)}
               className={cn(
-                "h-10 rounded-full px-6 text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
+                "h-10 rounded-full px-6 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
                 billingMonths === 1 ? "bg-[#111827] text-white" : "text-[#7b8498]",
               )}
             >
@@ -339,23 +340,30 @@ export function BillingPageClient({
               aria-pressed={billingMonths === 3}
               onClick={() => setBillingMonths(3)}
               className={cn(
-                "h-10 rounded-full px-6 text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
+                "h-10 rounded-full px-6 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
                 billingMonths === 3 ? "bg-[#111827] text-white" : "text-[#7b8498]",
               )}
             >
               3 months
             </button>
           </div>
+          <Link
+            href="/app/invoices"
+            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-[#5064da] hover:text-[#3049ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2"
+          >
+            View payment activity <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
         </header>
 
         <section
           aria-label="Subscription plans"
-          className="mx-auto mt-8 grid max-w-[1000px] grid-cols-[minmax(0,320px)] items-stretch justify-center gap-4 lg:grid-cols-3 lg:gap-5"
+          className="student-page-width mt-8 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3 lg:gap-5"
         >
           <PricingCard
             title="Free"
             eyebrow={activePlan ? "Base plan" : "Current Plan"}
             price="Rs. 0"
+            includes="Everything in Free"
             features={FREE_FEATURES}
             actionLabel={activePlan ? "Included in your plan" : "Current plan"}
             onAction={() => router.push("/app/today")}
@@ -398,21 +406,21 @@ export function BillingPageClient({
           />
         </section>
 
-        <section className="mx-auto mt-10 max-w-[1000px] font-[family-name:var(--font-poppins)]">
+        <section className="student-page-width mt-10">
           <div className="text-center">
-            <h2 className="text-[24px] font-bold tracking-[-0.035em] text-[#111827] sm:text-[28px]">
+            <h2 className="type-student-section-title text-[#111827]">
               You don’t have to prepare alone.
             </h2>
-            <p className="mt-1.5 text-[11px] font-medium text-[#8a93a5]">
+            <p className="type-student-body mt-1.5 font-medium text-[#697387]">
               See the work happening across NanoSyllabus.
             </p>
           </div>
 
           <div className="mt-5 grid overflow-hidden rounded-xl border border-[#e1e6ee] bg-white sm:grid-cols-3">
             {[
-              [1_248, "Challenges completed this week"],
-              [386, "Handwritten answers reviewed"],
-              [72, "Students joined study sessions"],
+              [overview.socialProof.challengesCompletedThisWeek, "Challenges completed this week"],
+              [overview.socialProof.handwrittenAnswersReviewed, "Handwritten answers reviewed"],
+              [overview.socialProof.activeStudyCommunityMembers, "Students active in study communities"],
             ].map(([value, label], index) => (
               <div
                 key={label}
@@ -421,15 +429,15 @@ export function BillingPageClient({
                   index > 0 && "border-t border-[#e1e6ee] sm:border-l sm:border-t-0",
                 )}
               >
-                <p className="text-[24px] font-bold leading-none tracking-[-0.04em] text-[#111827]">
+                <p className="type-student-metric text-[#111827]">
                   {Number(value).toLocaleString("en-NP")}
                 </p>
-                <p className="mt-1.5 text-[10px] font-medium text-[#7b8498]">{label}</p>
+                <p className="type-student-body mt-1.5 font-medium text-[#697387]">{label}</p>
               </div>
             ))}
           </div>
 
-          <h2 className="mt-7 text-center text-[22px] font-bold tracking-[-0.03em] text-[#111827] sm:text-[25px]">
+          <h2 className="type-student-section-title mt-7 text-center text-[#111827]">
             Real Stories, Real Growth
           </h2>
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -447,18 +455,18 @@ export function BillingPageClient({
                     className="size-[34px] rounded-full object-cover"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[11px] font-semibold text-[#111827]">
+                    <p className="type-student-card-title truncate text-[#111827]">
                       {testimonial.name}
                     </p>
-                    <p className="truncate text-[8px] font-medium text-[#929bad]">
+                    <p className="type-student-body truncate font-medium text-[#697387]">
                       {testimonial.course}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-[#d9ff69] px-2 py-1 text-[7px] font-semibold text-[#28320e]">
+                  <span className="type-student-body shrink-0 rounded-full bg-[#d9ff69] px-2 py-1 font-semibold text-[#28320e]">
                     {testimonial.badge}
                   </span>
                 </div>
-                <p className="mt-4 text-[10px] font-medium leading-[1.55] text-[#697387]">
+                <p className="type-student-body mt-4 font-medium text-[#697387]">
                   <span className="mr-2 text-base font-bold leading-none text-[#c9ee47]">“</span>
                   {testimonial.quote}
                 </p>
@@ -472,36 +480,44 @@ export function BillingPageClient({
           </div>
 
           {!activePlan ? (
-            <div className="mt-6 grid items-center gap-5 rounded-xl bg-[linear-gradient(105deg,#3047ef_0%,#3b58f7_55%,#397be8_100%)] px-6 py-5 text-white lg:grid-cols-[72px_1fr_auto] lg:px-8">
-              <BookOpen className="size-12 stroke-[1.4]" aria-hidden="true" />
-              <div>
-                <h2 className="text-[16px] font-semibold">Ready for more than 3 challenges a day?</h2>
-                <p className="mt-1 text-[10px] text-white/80">
+            <div className="relative mt-6 overflow-hidden rounded-[20px] bg-[#3049ed] px-6 py-6 text-white sm:px-8 sm:py-7">
+              <Image
+                src="/figma-pricing-book-open.svg"
+                alt=""
+                width={85}
+                height={85}
+                className="mx-auto mb-4 size-14 lg:absolute lg:left-8 lg:top-1/2 lg:mb-0 lg:size-16 lg:-translate-y-1/2"
+              />
+              <div className="relative mx-auto flex max-w-[560px] flex-col items-center text-center">
+                <h2 className="type-student-card-title text-white">
+                  Ready for more than 3 challenges a day?
+                </h2>
+                <p className="type-student-body mt-1.5 font-medium text-[#c7d2fe]">
                   Get unlimited practice and a study plan built around your exam dates.
                 </p>
-              </div>
-              <div className="flex flex-col items-center gap-2 sm:items-end">
-                <button
-                  type="button"
-                  onClick={() => startPlan(plans.plus)}
-                  disabled={creatingPlanId === plans.plus?.id}
-                  className="min-h-9 rounded-md bg-white px-4 text-[10px] font-semibold text-[#111827] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {billingMonths === 1
-                    ? `Choose Plus - ${formatPlanPrice(plans.plus, 1, 450)}/month ↗`
-                    : `Choose Plus - ${formatPlanPrice(plans.plus, 3, 450)}/3 months ↗`}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push("/app/today")}
-                  className="min-h-10 rounded-md px-2 text-[9px] font-medium text-white underline decoration-white/60 underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
-                >
-                  Keep using Free
-                </button>
+                <div className="mt-3 flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPlan(plans.plus)}
+                    disabled={creatingPlanId === plans.plus?.id}
+                    className="min-h-10 rounded-md bg-white px-5 text-sm font-semibold text-[#111827] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#3049ed] disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {billingMonths === 1
+                      ? `Choose Plus - ${formatPlanPrice(plans.plus, 1, 450)}/month ↗`
+                      : `Choose Plus - ${formatPlanPrice(plans.plus, 3, 450)}/3 months ↗`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/app/today")}
+                    className="min-h-10 rounded-md px-3 text-sm font-medium text-[#e0e7ff] underline decoration-[#e0e7ff] underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#3049ed]"
+                  >
+                    Keep using Free
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}
-          <p className="mt-5 text-center text-[9px] font-medium text-[#a0a8b7]">
+          <p className="type-student-body mt-5 text-center font-medium text-[#697387]">
             NanoSyllabus · Learn. Practise. Get feedback. Study together.
           </p>
         </section>
@@ -509,13 +525,13 @@ export function BillingPageClient({
         {activeSubscription && activePlan ? (
           <section
             aria-label="Manage subscription"
-            className="mx-auto mt-10 flex max-w-[1000px] flex-col gap-5 rounded-xl border border-[#e1e6ee] bg-white p-5 sm:flex-row sm:items-center sm:justify-between"
+            className="student-page-width mt-10 flex flex-col gap-5 rounded-xl border border-[#e1e6ee] bg-white p-5 sm:flex-row sm:items-center sm:justify-between"
           >
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
                 Your subscription
               </p>
-              <h2 className="mt-2 font-[family-name:var(--font-poppins)] text-xl font-semibold text-text-primary">
+              <h2 className="type-student-section-title mt-2 text-text-primary">
                 {activePlanLabel}
               </h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
@@ -539,55 +555,6 @@ export function BillingPageClient({
           </section>
         ) : null}
 
-        <section className="mx-auto mt-12 max-w-[1000px] border-t border-[#e1e6ee] pt-8">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
-                Payment activity
-              </p>
-              <h2 className="mt-2 font-[family-name:var(--font-poppins)] text-3xl font-semibold">
-                Your invoices
-              </h2>
-            </div>
-            <p className="text-sm text-text-secondary">
-              {activePlan
-                ? `${activePlanLabel} plan active`
-                : hasUnlimitedAccess
-                  ? "Unlimited plan active"
-                  : `${overview.balance} messages available`}
-            </p>
-          </div>
-          {overview.invoices.length ? (
-            <div className="mt-6 space-y-3">
-              {overview.invoices.map((invoice) => (
-                <article
-                  key={invoice.id}
-                  className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-bg-primary p-5"
-                >
-                  <div>
-                    <p className="font-semibold">{invoice.plan.name}</p>
-                    <p className="mt-1 text-sm text-text-secondary">
-                      {invoice.currency} {invoice.amount.toLocaleString()} ·{" "}
-                      {formatDate(invoice.createdAt)}
-                    </p>
-                    <p className="mt-2 text-xs uppercase tracking-wider text-text-muted">
-                      {invoice.status.replaceAll("_", " ")}
-                    </p>
-                  </div>
-                  {!["paid", "rejected", "cancelled"].includes(invoice.status) ? (
-                    <Button size="sm" onClick={() => setSelectedInvoice(invoice)}>
-                      {invoice.paymentSubmission ? "Edit payment" : "Open payment QR"}
-                    </Button>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-6 rounded-2xl border border-dashed border-border p-8 text-center text-sm text-text-secondary">
-              No invoices yet. Choose a paid plan above when you are ready.
-            </div>
-          )}
-        </section>
       </main>
 
       {selectedInvoice ? (
@@ -650,32 +617,34 @@ function PricingCard({
   return (
     <article
       className={cn(
-        "relative mx-auto flex min-h-[400px] w-full max-w-[320px] flex-col rounded-xl border border-[#dfe4ed] bg-white p-5 font-[family-name:var(--font-poppins)] shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
+        "relative flex min-h-[400px] w-full flex-col rounded-xl border border-[#dfe4ed] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
         featured && "border-[#aab7e7] shadow-[0_4px_14px_rgba(39,64,190,0.08)]",
       )}
     >
       {featured ? (
-        <h2 className="mb-2.5 w-fit rounded-md bg-[#d9ff69] px-2 py-1 text-[9px] font-semibold leading-none text-[#24300e]">
+        <h2 className="type-student-meta mb-2.5 w-fit rounded-md bg-[#d9ff69] px-2 py-1 font-semibold text-[#24300e]">
           {title}
         </h2>
       ) : null}
       {!featured ? (
-        <h2 className="text-[22px] font-semibold leading-tight tracking-[-0.025em] text-[#111827]">
+        <h2 className="type-student-card-title text-[#111827]">
           {title}
         </h2>
       ) : null}
-      <p className="mt-1 text-[28px] font-bold leading-tight tracking-[-0.025em] text-[#111827]">
+      <p className="type-student-metric mt-1 text-[#111827]">
         {price}
       </p>
-      <p className="mt-1 min-h-4 text-[9px] font-medium text-[#8992a3]">{eyebrow}</p>
+      <p className="type-student-body mt-1 min-h-4 font-medium text-[#697387]">{eyebrow}</p>
       <div className="mt-4 h-px w-full bg-[#d8dee8]" />
-      {includes ? <p className="mt-4 text-[9px] font-semibold text-[#222a3a]">{includes}</p> : null}
+      {includes ? (
+        <h3 className="type-student-card-title mt-4 text-[#222a3a]">{includes}</h3>
+      ) : null}
       <FeatureList features={features} />
       <div className="mt-auto pt-7">
         <button
           type="button"
           className={cn(
-            "flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[#111827] px-4 py-2 text-[10px] font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-[#e4e6e9] disabled:text-[#747c8d] disabled:opacity-100",
+            "flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[#111827] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-[#e4e6e9] disabled:text-[#747c8d] disabled:opacity-100",
             featured && !current && "bg-[#3548f5]",
             current && "bg-[#e8f6ee] text-[#187a42]",
           )}
@@ -688,7 +657,7 @@ function PricingCard({
           {!loading && !disabled ? <span aria-hidden="true">→</span> : null}
         </button>
         {current ? (
-          <p className="mt-2 text-center text-[10px] font-medium text-[#697387]">
+          <p className="type-student-body mt-2 text-center font-medium text-[#697387]">
             {accessEndsAt
               ? `Active until ${formatDate(accessEndsAt)}`
               : "Active with no expiry date"}
@@ -699,7 +668,7 @@ function PricingCard({
   );
 }
 
-function PaymentSubmissionModal({
+export function PaymentSubmissionModal({
   invoice,
   paymentConfig,
   onClose,
@@ -988,7 +957,7 @@ function PaymentSubmissionModal({
                   <div className="relative flex items-center justify-center my-1 sm:my-0 sm:flex-col">
                     <div className="hidden sm:block absolute inset-y-0 w-px bg-gray-200" />
                     <div className="sm:hidden absolute inset-x-0 h-px bg-gray-200" />
-                    <span className="relative z-10 flex size-7 items-center justify-center rounded-full border border-gray-200 bg-white text-[11px] font-bold text-gray-400 shadow-2xs">
+                    <span className="relative z-10 flex size-7 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-400 shadow-2xs">
                       OR
                     </span>
                   </div>
@@ -1050,7 +1019,7 @@ function PaymentSubmissionModal({
   );
 }
 
-function PaymentActivationConfirmation({
+export function PaymentActivationConfirmation({
   invoiceCode,
   onClose,
 }: {

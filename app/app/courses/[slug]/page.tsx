@@ -32,7 +32,7 @@ export default async function CourseStudySpacePage({ params }: PageProps) {
   return (
     <>
       <SetAppShell title="Courses" />
-      <main className="w-full max-w-[1240px] px-[14px] pb-24 pt-[18px] lg:p-[26px]">
+      <main className="student-page-frame">
         <Link
           href="/app/courses"
           className="inline-flex min-h-10 items-center gap-2 text-sm text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
@@ -44,7 +44,7 @@ export default async function CourseStudySpacePage({ params }: PageProps) {
           <div className="flex flex-wrap items-start gap-6">
             <div className="min-w-0 flex-1">
               <p className="text-sm text-text-secondary">{course.category} · {course.authority}</p>
-              <h1 className="mt-2 max-w-3xl font-display text-3xl font-semibold">{titleCase(course.name)}</h1>
+              <h1 className="type-student-page-title mt-2 max-w-3xl">{titleCase(course.name)}</h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
                 {course.description}
               </p>

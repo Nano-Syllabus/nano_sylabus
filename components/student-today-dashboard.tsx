@@ -312,12 +312,12 @@ export function StudentTodayDashboard({
       : 68;
 
   return (
-    <div className="w-full max-w-[1240px] px-4 pb-10 pt-6 sm:px-[26px]">
+    <div className="student-page-frame">
       {/* Unified Hero Card matching reference */}
       <section className="flex flex-col justify-between gap-6 rounded-[24px] border border-border bg-bg-surface p-6 shadow-xs sm:p-8 md:flex-row md:items-center">
         {/* Left Side: Greeting, Subtitle, CTA Button */}
         <div className="flex flex-col items-start">
-          <h1 className="font-display text-2xl font-semibold tracking-[-0.03em] text-text-primary sm:text-[28px]">
+          <h1 className="type-student-page-title text-text-primary">
             Good morning, {firstName(fullName)}
           </h1>
           <p className="mt-1.5 text-sm text-text-secondary sm:text-[15px]">
@@ -423,7 +423,7 @@ export function StudentTodayDashboard({
         <article className="flex flex-col justify-between rounded-[16px] border border-border bg-bg-surface p-5 shadow-xs transition hover:border-border-strong">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Global rank</p>
-            <p className="mt-2 font-display text-[28px] font-semibold tracking-tight text-text-primary">
+            <p className="type-student-metric mt-2 text-text-primary">
               #1,284
             </p>
           </div>
@@ -435,7 +435,7 @@ export function StudentTodayDashboard({
         <article className="flex flex-col justify-between rounded-[16px] border border-border bg-bg-surface p-5 shadow-xs transition hover:border-border-strong">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Study time</p>
-            <p className="mt-2 font-display text-[28px] font-semibold tracking-tight text-text-primary">
+            <p className="type-student-metric mt-2 text-text-primary">
               18h 40m
             </p>
           </div>
@@ -447,7 +447,7 @@ export function StudentTodayDashboard({
         <article className="flex flex-col justify-between rounded-[16px] border border-border bg-bg-surface p-5 shadow-xs transition hover:border-border-strong">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Practice score</p>
-            <p className="mt-2 font-display text-[28px] font-semibold tracking-tight text-text-primary">
+            <p className="type-student-metric mt-2 text-text-primary">
               {today.averagePercentage !== null ? `${Math.round(today.averagePercentage * 100)}%` : "74%"}
             </p>
           </div>
@@ -461,7 +461,7 @@ export function StudentTodayDashboard({
         <article className="flex flex-col justify-between rounded-[16px] border border-border bg-bg-surface p-5 shadow-xs transition hover:border-border-strong">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-text-muted">Study pace</p>
-            <p className="mt-2 font-display text-[28px] font-semibold tracking-tight text-text-primary">
+            <p className="type-student-metric mt-2 text-text-primary">
               1h 12m<span className="text-sm font-normal text-text-muted">/day</span>
             </p>
           </div>

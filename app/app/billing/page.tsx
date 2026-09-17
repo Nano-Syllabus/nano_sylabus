@@ -5,6 +5,7 @@ import { DEV_AUTH_BYPASS, DEV_BYPASS_USER_ID } from "@/lib/dev-auth-bypass";
 import type { StudentBillingOverview, SubscriptionPlan } from "@/lib/types";
 import {
   getActiveManualPaymentConfig,
+  getBillingSocialProof,
   getStudentBillingOverview,
 } from "@/lib/data/billing";
 
@@ -35,6 +36,7 @@ export default async function BillingPage() {
       plans: [previewPlan("plus-monthly", "Plus", 450, false), previewPlan("individual-unlimited", "Pro", 1500, true)],
       invoices: [],
       subscriptions: [],
+      socialProof: await getBillingSocialProof(),
     };
     return (
       <>

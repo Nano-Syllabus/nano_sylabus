@@ -76,7 +76,7 @@ export function JoinClassroomClient({ code }: { code: string }) {
   }
 
   return (
-    <main className="mx-auto w-full max-w-[580px] px-4 py-14">
+    <main className="student-reading-frame max-w-[580px] py-14">
       <div className="rounded-2xl border border-border bg-bg-primary p-6 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           <span className="rounded-full border border-border px-2.5 py-1 text-xs text-text-secondary">
@@ -92,7 +92,7 @@ export function JoinClassroomClient({ code }: { code: string }) {
 
         {state === "error" ? (
           <>
-            <h1 className="mt-4 font-display text-2xl font-semibold">That code does not work</h1>
+            <h1 className="type-student-page-title mt-4">That code does not work</h1>
             <p className="mt-2 text-sm text-text-secondary">{error}</p>
             <div className="mt-6 flex gap-2">
               <Link href="/app/explore">
@@ -104,7 +104,7 @@ export function JoinClassroomClient({ code }: { code: string }) {
 
         {state === "ready" && preview ? (
           <>
-            <h1 className="mt-4 font-display text-2xl font-semibold">{preview.name}</h1>
+            <h1 className="type-student-page-title mt-4">{preview.name}</h1>
             <p className="mt-2 text-sm text-text-secondary">
               {preview.teacherHandle ? `${preview.teacherHandle} · ` : ""}
               {preview.memberCount} student{preview.memberCount === 1 ? "" : "s"} already in

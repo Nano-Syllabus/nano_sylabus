@@ -282,11 +282,18 @@ export interface BillingInvoiceSummary extends Invoice {
   paymentSubmission: PaymentSubmission | null;
 }
 
+export interface BillingSocialProof {
+  challengesCompletedThisWeek: number;
+  handwrittenAnswersReviewed: number;
+  activeStudyCommunityMembers: number;
+}
+
 export interface StudentBillingOverview {
   balance: number;
   plans: SubscriptionPlan[];
   invoices: BillingInvoiceSummary[];
   subscriptions: UserSubscription[];
+  socialProof: BillingSocialProof;
 }
 
 export interface AdminPaymentSubmissionSummary {

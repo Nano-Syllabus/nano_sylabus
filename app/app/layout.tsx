@@ -11,7 +11,7 @@ export default async function AppLayout({
   const { user } = await requireOnboardedUser();
 
   return (
-    <AppShell user={user} title="">
+    <AppShell user={user} title="Student Portal">
       {/* Clears the query cache if a different account signs in on this
           browser. See components/query-identity.tsx — the cache is keyed by
           endpoint, and the endpoint does not change when the cookie does. */}

@@ -86,9 +86,9 @@ export function StudentClassroomsClient() {
   const earlier = classrooms.filter((classroom) => classroom.archived);
 
   return (
-    <main className="w-full max-w-[1240px] px-[14px] pb-24 pt-[18px] lg:p-[26px]">
+    <main className="student-page-frame">
       <div className="mb-5 flex flex-wrap items-start gap-4">
-        <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">Classrooms</h1>
+        <h1 className="type-student-page-title">Classrooms</h1>
         <span className="flex-1" />
         {/* <Link href="/app/explore" className={`${button} border-border-strong bg-text-primary text-text-inverse`}>
           Join with a code
@@ -108,7 +108,7 @@ export function StudentClassroomsClient() {
 
       {state === "ready" && !classrooms.length ? (
         <section className="rounded-[18px] border border-dashed border-border px-6 py-16 text-center">
-          <h2 className="font-display text-xl font-semibold">No classrooms yet</h2>
+          <h2 className="type-student-section-title">No classrooms yet</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm text-text-secondary">
             When your teacher adds you to a classroom, it will appear here.
           </p>

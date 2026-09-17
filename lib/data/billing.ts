@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   AdminPaymentSubmissionDetail,
   AdminPaymentSubmissionSummary,
+  BillingSocialProof,
   BillingInvoiceSummary,
   CreditsLedgerEntry,
   Invoice,
@@ -197,7 +198,7 @@ export async function listSubscriptionPlans() {
   return (data ?? []).map(normalizePlan);
 }
 
-export async function getBillingSocialProof() {
+export async function getBillingSocialProof(): Promise<BillingSocialProof> {
   const admin = createSupabaseAdminClient();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const [challenges, handwrittenAnswers, memberships] = await Promise.all([
@@ -207,18 +208,23 @@ export async function getBillingSocialProof() {
       .eq("status", "completed")
       .gte("completed_at", sevenDaysAgo),
     admin
-      .from("student_practice_answer_sheets")
-      .select("attempt_id", { count: "exact", head: true }),
+      .from("teacher_exam_submissions")
+      .select("id", { count: "exact", head: true })
+      .in("source", ["upload", "file"]),
     admin
       .from("community_memberships")
       .select("community_id", { count: "exact", head: true })
       .eq("status", "active"),
   ]);
 
+  for (const result of [challenges, handwrittenAnswers, memberships]) {
+    if (result.error) throw result.error;
+  }
+
   return {
-    challengesCompletedThisWeek: challenges.error ? 0 : (challenges.count ?? 0),
-    handwrittenAnswersReviewed: handwrittenAnswers.error ? 0 : (handwrittenAnswers.count ?? 0),
-    activeStudyMemberships: memberships.error ? 0 : (memberships.count ?? 0),
+    challengesCompletedThisWeek: challenges.count ?? 0,
+    handwrittenAnswersReviewed: handwrittenAnswers.count ?? 0,
+    activeStudyCommunityMembers: memberships.count ?? 0,
   };
 }
 
@@ -308,11 +314,12 @@ export async function listInvoicesForUser(userId: string) {
 }
 
 export async function getStudentBillingOverview(userId: string): Promise<StudentBillingOverview> {
-  const [balance, plans, invoices, subscriptions] = await Promise.all([
+  const [balance, plans, invoices, subscriptions, socialProof] = await Promise.all([
     ensureStarterCreditsForUser(userId),
     listSubscriptionPlans(),
     listInvoicesForUser(userId),
     listUserSubscriptions(userId),
+    getBillingSocialProof(),
   ]);
 
   return {
@@ -320,6 +327,7 @@ export async function getStudentBillingOverview(userId: string): Promise<Student
     plans,
     invoices,
     subscriptions,
+    socialProof,
   };
 }
 

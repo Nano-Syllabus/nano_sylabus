@@ -2473,11 +2473,11 @@ export function StudentExamsClient({
   }
 
   return (
-    <div className="w-full max-w-[1240px] px-4 pb-10 pt-6 sm:px-6">
+    <div className="student-page-frame">
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <p className="text-sm font-medium text-text-secondary">Exams</p>
-          <h1 className="mt-3 font-display text-[28px] font-semibold tracking-[-0.04em]">
+          <h1 className="type-student-page-title mt-3">
             Practice
           </h1>
           <p className="mt-2 max-w-xl text-sm text-text-secondary">
@@ -2526,7 +2526,7 @@ export function StudentExamsClient({
 
       <section className="mt-8" aria-labelledby="practice-history-title">
         <div className="flex items-baseline gap-3">
-          <h2 id="practice-history-title" className="font-display text-xl font-semibold">
+          <h2 id="practice-history-title" className="type-student-section-title">
             Your practice
           </h2>
           {attemptsState === "ready" && practiceAttempts.length ? (
@@ -2929,7 +2929,7 @@ function ExamOverview({
     (topic) => (statusByChapter[topic.toLowerCase()] ?? "not_attempted") !== "strong",
   ).length;
   return (
-    <div className="w-full max-w-[1240px] px-4 pb-10 pt-6 sm:px-6">
+    <div className="student-page-frame">
       <nav className="text-sm text-text-muted">
         <Link href="/app/exams" className="hover:text-text-primary">
           Exams
@@ -2944,7 +2944,7 @@ function ExamOverview({
               {exam.counts ? "counts towards your record" : "practice only"}
             </Chip>
           </div>
-          <h1 className="mt-4 font-display text-[28px] font-semibold tracking-[-0.04em]">
+          <h1 className="type-student-page-title mt-4">
             {exam.title}
           </h1>
           <p className="mt-3 text-[15px] text-text-secondary">
@@ -2963,7 +2963,7 @@ function ExamOverview({
       </div>
       <section className="mt-9">
         <div className="flex items-baseline gap-3">
-          <h2 className="font-display text-xl font-semibold">What it covers</h2>
+          <h2 className="type-student-section-title">What it covers</h2>
           <span className="text-sm text-text-muted">{notSolid} not solid yet</span>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -3040,7 +3040,7 @@ function HandwrittenAttemptView({
   const seconds = String(secondsLeft % 60).padStart(2, "0");
 
   return (
-    <div className="w-full max-w-[1240px] px-4 pb-10 pt-6 sm:px-6">
+    <div className="student-page-frame">
       <nav className="text-sm text-text-muted">
         <Link href={`/app/exams?exam=${exam.id}`}>{exam.title}</Link> /{" "}
         <b className="text-text-secondary">In progress</b>
@@ -3048,7 +3048,7 @@ function HandwrittenAttemptView({
 
       <header className="mt-5 flex flex-wrap items-start gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-semibold">{exam.title}</h1>
+          <h1 className="type-student-page-title">{exam.title}</h1>
           <p className="mt-2 text-sm text-text-secondary">
             {exam.questions.length} questions, {exam.marks} marks. Write on paper and number every
             answer clearly.
@@ -3229,14 +3229,14 @@ function AttemptView({
   const minutes = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
   const seconds = String(secondsLeft % 60).padStart(2, "0");
   return (
-    <div className="w-full max-w-[1240px] px-4 pb-10 pt-6 sm:px-6">
+    <div className="student-page-frame">
       <nav className="text-sm text-text-muted">
         <Link href={`/app/exams?exam=${exam.id}`}>{exam.title}</Link> /{" "}
         <b className="text-text-secondary">In progress</b>
       </nav>
       <div className="mt-5 flex flex-wrap items-start gap-4">
         <div>
-          <h1 className="font-display text-[28px] font-semibold">{exam.title}</h1>
+          <h1 className="type-student-page-title">{exam.title}</h1>
           <p className="mt-2 text-sm text-text-secondary">
             {exam.questions.length} questions, {exam.marks} marks. Your answers save as you go.
           </p>
@@ -3412,7 +3412,7 @@ function MarkingView({ exam }: { exam: StudentExam }) {
   const isMcq = exam.kind === "practice-mcq";
   return (
     <div className="w-full max-w-[900px] px-4 pb-10 pt-10 sm:px-6">
-      <h1 className="font-display text-[28px] font-semibold">
+      <h1 className="type-student-page-title">
         {isMcq ? "Checking your quiz" : "Marking your paper"}
       </h1>
       <p className="mt-2 text-text-secondary">
@@ -3445,7 +3445,7 @@ function ResultView({
 }) {
   const percent = Math.round((result.score / Math.max(1, result.outOf)) * 100);
   return (
-    <div className="w-full max-w-[1240px] px-4 pb-10 pt-6 sm:px-6">
+    <div className="student-page-frame">
       <nav className="text-sm text-text-muted">
         <Link href="/app/exams">Exams</Link> /{" "}
         <b className="text-text-secondary">{result.exam.title}</b>
@@ -3459,7 +3459,7 @@ function ResultView({
             <Chip>published</Chip>
             {result.penalty ? <Chip>−{result.penalty} penalty</Chip> : null}
           </div>
-          <h1 className="mt-4 font-display text-[28px] font-semibold">{result.exam.title}</h1>
+          <h1 className="type-student-page-title mt-4">{result.exam.title}</h1>
           <p className="mt-2 text-sm text-text-secondary">
             {[
               result.exam.subject,

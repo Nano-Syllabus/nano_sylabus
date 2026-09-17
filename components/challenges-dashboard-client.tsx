@@ -1819,7 +1819,7 @@ export function ChallengesDashboardClient({
   return (
     <main className="min-h-screen w-full bg-[#f8f9fa] dark:bg-bg-secondary text-text-primary">
       <div className="mx-auto max-w-[1060px] px-4 sm:px-6 md:px-8 py-8 pb-24">
-        <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-text-primary mb-6">
+        <h1 className="type-student-page-title mb-6 text-text-primary">
           Challenge Hub
         </h1>
 
@@ -1832,12 +1832,12 @@ export function ChallengesDashboardClient({
           />
           {/* Top right badge text */}
           <div className="pointer-events-none absolute top-4 sm:top-5 right-4 sm:right-5 z-10 select-none">
-            <span className="font-display text-[11px] sm:text-[12px] font-bold tracking-tight text-[#0a0a0a]">
+            <span className="type-student-meta font-semibold text-[#0a0a0a]">
               1 topic · 1 result
             </span>
           </div>
 
-          <h2 className="font-display text-[22px] font-bold tracking-[-0.01em] text-text-primary">
+          <h2 className="type-student-section-title text-text-primary">
             Challenge loop
           </h2>
 
@@ -1867,8 +1867,8 @@ export function ChallengesDashboardClient({
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                   </svg>
                 </div>
-                <h3 className="mt-3 text-[14px] font-bold text-text-primary">Learn</h3>
-                <p className="mt-0.5 text-[12px] text-[#6b7280] dark:text-text-muted leading-relaxed max-w-[170px]">
+                <h3 className="type-student-card-title mt-3 text-text-primary">Learn</h3>
+                <p className="type-student-meta mt-0.5 max-w-[170px] text-[#6b7280] dark:text-text-muted">
                   Past questions worked, then the concepts under them.
                 </p>
               </div>
@@ -1890,8 +1890,8 @@ export function ChallengesDashboardClient({
                     <path d="m15 5 4 4" />
                   </svg>
                 </div>
-                <h3 className="mt-3 text-[14px] font-bold text-text-primary">Handwritten exam</h3>
-                <p className="mt-0.5 text-[12px] text-[#6b7280] dark:text-text-muted leading-relaxed max-w-[170px]">
+                <h3 className="type-student-card-title mt-3 text-text-primary">Handwritten exam</h3>
+                <p className="type-student-meta mt-0.5 max-w-[170px] text-[#6b7280] dark:text-text-muted">
                   Attempt it on your own paper.
                 </p>
               </div>
@@ -1907,8 +1907,8 @@ export function ChallengesDashboardClient({
                     <path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" />
                   </svg>
                 </div>
-                <h3 className="mt-3 text-[14px] font-bold text-text-primary">AI grade</h3>
-                <p className="mt-0.5 text-[12px] text-[#6b7280] dark:text-text-muted leading-relaxed max-w-[170px]">
+                <h3 className="type-student-card-title mt-3 text-text-primary">AI grade</h3>
+                <p className="type-student-meta mt-0.5 max-w-[170px] text-[#6b7280] dark:text-text-muted">
                   Upload for marks and feedback.
                 </p>
               </div>
@@ -1920,14 +1920,14 @@ export function ChallengesDashboardClient({
         <section className="mt-6 grid gap-4 md:grid-cols-3" aria-label="Challenge summary metrics">
           {/* Card 1: Today's Quota */}
           <article className="rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b7280] dark:text-text-muted">
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               TODAY&apos;S QUOTA
             </p>
             <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-[32px] font-extrabold tracking-tight text-text-primary">
+              <span className="type-student-metric text-text-primary">
                 {dashboard.todayCompletedCount ?? (dashboard.passedThisWeek > 0 ? dashboard.passedThisWeek : 0)}
               </span>
-              <span className="text-[32px] font-extrabold tracking-tight text-[#84cc16]">
+              <span className="type-student-metric text-[#84cc16]">
                 / 5
               </span>
             </div>
@@ -1952,20 +1952,20 @@ export function ChallengesDashboardClient({
 
           {/* Card 2: Daily Target */}
           <article className="rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b7280] dark:text-text-muted">
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               DAILY TARGET
             </p>
-            <p className="mt-2 text-[32px] font-extrabold tracking-tight text-text-primary">
+            <p className="type-student-metric mt-2 text-text-primary">
               5
             </p>
           </article>
 
           {/* Card 3: 7-Day Average */}
           <article className="rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b7280] dark:text-text-muted">
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               7-DAY AVERAGE
             </p>
-            <p className="mt-2 text-[32px] font-extrabold tracking-tight text-text-primary">
+            <p className="type-student-metric mt-2 text-text-primary">
               {dashboard.practicePerDay > 0
                 ? dashboard.practicePerDay.toFixed(1)
                 : dashboard.averageTestScore !== null
@@ -1979,7 +1979,7 @@ export function ChallengesDashboardClient({
         <section className="mt-6 rounded-[24px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#f1f3f5] dark:border-border/60">
             <div>
-              <h2 className="text-[19px] font-bold tracking-tight text-text-primary">
+              <h2 className="type-student-section-title text-text-primary">
                 Available challenges
               </h2>
               {dashboard.scope ? (
@@ -1992,7 +1992,7 @@ export function ChallengesDashboardClient({
             <div className="flex items-center gap-3">
               <label
                 htmlFor="priority-subject"
-                className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6b7280] dark:text-text-muted whitespace-nowrap"
+                className="type-student-eyebrow whitespace-nowrap text-[#6b7280] dark:text-text-muted"
               >
                 PRIORITY SUBJECT
               </label>
@@ -2136,7 +2136,7 @@ export function ChallengesDashboardClient({
           >
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border px-5 py-5 md:px-6">
               <div>
-                <h2 className="text-xl font-semibold">Completed Challenges</h2>
+                <h2 className="type-student-section-title">Completed Challenges</h2>
                 <p className="mt-1 text-sm text-text-muted">
                   {dashboard.completedChallengeTotal} passed, newest first.
                 </p>

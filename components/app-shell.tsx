@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
-import { Badge } from "@/components/ui/badge";
 import type { AppUser } from "@/lib/types";
-import { getActivePlanTierLabel } from "@/lib/billing";
 import { AppShellContext } from "@/components/app-shell-context";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
  * WHY THERE IS NO ROUTE-LOADING OVERLAY HERE ANY MORE
@@ -40,12 +38,10 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [dynamicTitle, setDynamicTitle] = useState<ReactNode>(null);
   const [dynamicActions, setDynamicActions] = useState<ReactNode>(null);
-  const [topbarSuppressed, setTopbarSuppressed] = useState(false);
   const [sidebarSuppressed, setSidebarSuppressed] = useState(false);
   const [sidebarCollapsedOverride, setSidebarCollapsedOverride] = useState(false);
   const [rightRailWidth, setRightRailWidth] = useState(0);
@@ -67,7 +63,6 @@ export function AppShell({
     () => ({
       setTitle: setDynamicTitle,
       setActions: setDynamicActions,
-      setTopbarSuppressed,
       setSidebarSuppressed,
       setSidebarCollapsed: setSidebarCollapsedOverride,
       setRightRailWidth,
@@ -88,7 +83,7 @@ export function AppShell({
               : (open ? "translate-x-0 " : "-translate-x-full ") +
                 (sidebarCollapsedOverride || isCollapsed
                   ? "w-[68px] border-border opacity-100"
-                  : "w-[min(86vw,320px)] border-border opacity-100 md:w-[260px]"))
+                  : "w-[min(86vw,320px)] border-border opacity-100 md:w-[250px]"))
           }
         >
           <AppSidebar 
@@ -111,36 +106,25 @@ export function AppShell({
           className="flex min-w-0 flex-1 flex-col overflow-hidden"
           style={{ paddingRight: rightRailWidth > 0 ? `${rightRailWidth}px` : undefined }}
         >
-          <header
-            aria-hidden={topbarSuppressed}
-            className={
-              topbarSuppressed
-                ? "hidden"
-                : "flex min-h-12 items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4 md:px-8"
-            }
-          >
+          <header className="flex min-h-[53px] shrink-0 items-center justify-between gap-3 border-b border-border bg-bg-secondary px-4 md:px-6">
             <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
               {!sidebarSuppressed ? (
                 <button
                   type="button"
-                  className="-ml-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors duration-100 hover:bg-bg-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none md:hidden"
+                  className="-ml-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors duration-100 hover:bg-bg-primary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none md:hidden"
                   onClick={() => setOpen(true)}
                   aria-label="Open sidebar"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
                 </button>
               ) : null}
-              <div className="min-w-0 flex-1 truncate font-sans text-[14px] font-semibold text-text-primary sm:text-[15px]">
+              <div className="min-w-0 flex-1 truncate font-sans text-sm font-medium text-text-primary">
                 {dynamicTitle ?? title}
               </div>
             </div>
-            <div className="flex min-w-0 shrink-0 items-center gap-1.5 md:gap-2">
-              {!dynamicActions && pathname !== "/app/challenges" && (
-                <Badge variant={user.hasUnlimitedAccess || user.creditBalance > 0 ? "success" : "warning"} className="hidden sm:inline-flex">
-                  {getActivePlanTierLabel(user) ?? `${user.creditBalance} messages`}
-                </Badge>
-              )}
+            <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
               {dynamicActions ?? actions}
+              <ThemeToggle className="h-10 w-10 shrink-0 bg-bg-primary" />
             </div>
           </header>
           <div className="flex-1 overflow-y-auto">

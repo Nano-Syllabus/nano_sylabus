@@ -2333,11 +2333,6 @@ export function ChatPageClient({
   }, [initialPrompt, setInput]);
 
   useEffect(() => {
-    shell.setTopbarSuppressed(showLibraryLanding);
-    return () => shell.setTopbarSuppressed(false);
-  }, [shell, showLibraryLanding]);
-
-  useEffect(() => {
     shell.setTitle(
       <TopHeaderTitle 
         activeSessionTitle={activeSessionTitle}

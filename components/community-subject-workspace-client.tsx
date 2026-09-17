@@ -187,7 +187,7 @@ export function CommunitySubjectWorkspaceClient({
             <p className="text-xs font-medium uppercase tracking-widest text-text-muted">
               Learning map
             </p>
-            <h2 id="topics-heading" className="mt-2 font-display text-2xl font-semibold">
+            <h2 id="topics-heading" className="type-student-section-title mt-2">
               Extracted topics
             </h2>
           </div>
@@ -260,7 +260,7 @@ export function CommunitySubjectWorkspaceClient({
               <FileText className="size-4" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 id="materials-heading" className="font-display text-xl font-semibold">
+            <h2 id="materials-heading" className="type-student-section-title">
                 Creator controls
               </h2>
               <p className="mt-1 text-sm leading-6 text-text-secondary">
@@ -314,7 +314,7 @@ export function CommunitySubjectWorkspaceClient({
         <div className="flex items-start gap-3">
           <MessageSquareText className="mt-1 size-5 text-text-muted" aria-hidden="true" />
           <div>
-            <h2 id="forum-heading" className="font-display text-2xl font-semibold">
+            <h2 id="forum-heading" className="type-student-section-title">
               Subject forum
             </h2>
             <p className="mt-1 text-sm text-text-secondary">

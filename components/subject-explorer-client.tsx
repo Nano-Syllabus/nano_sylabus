@@ -390,9 +390,9 @@ export function SubjectExplorerClient({
   }, [courses]);
 
   return (
-    <main className="w-full max-w-[1240px] px-[14px] pb-24 pt-[18px] lg:p-[26px]">
+    <main className="student-page-frame">
       <div className="mb-5 flex flex-wrap items-start gap-4">
-        <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">My Subjects</h1>
+        <h1 className="type-student-page-title">My Subjects</h1>
         <span className="flex-1" />
         <button
           type="button"
