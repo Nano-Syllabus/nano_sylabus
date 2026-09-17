@@ -770,7 +770,7 @@ export default function LandingPage() {
       </a>
 
       <p className="mt-1 max-w-[430px] text-xs leading-[1.6] text-[#5b5e55]">
-        Winners are selected by chance. Completing a challenge does not guarantee a prize.
+        Winners are selected by lucky draw.
       </p>
     </div>
 
