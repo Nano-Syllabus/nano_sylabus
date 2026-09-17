@@ -62,6 +62,8 @@ export type StudentDailyDashboard = {
   community: null | {
     name: string;
     slug: string;
+    university?: string;
+    faculty?: string;
     memberCount: number;
     contentReadiness: number | null;
     materialCount: number;
@@ -350,6 +352,8 @@ export async function getStudentDailyDashboard(
       ? {
           name: community.community.name,
           slug: community.community.slug,
+          university: community.community.university,
+          faculty: community.community.faculty,
           memberCount: community.memberCount,
           contentReadiness: community.contentReadiness,
           materialCount: community.materialCount,

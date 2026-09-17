@@ -18,7 +18,7 @@ describe("study flow server entry", () => {
   });
   it("skips all questions for a completed account joining a new community", async () => {
     await expect(FlowPage({ searchParams: Promise.resolve({ community: "henglish" }) }))
-      .rejects.toThrow("redirect:/app/communities/henglish");
+      .rejects.toThrow("redirect:/app/today?community=henglish");
   });
   it("skips questions on subsequent generic visits too", async () => {
     await expect(FlowPage({ searchParams: Promise.resolve({}) }))
@@ -28,7 +28,7 @@ describe("study flow server entry", () => {
     mocks.auth.mockResolvedValue({ user: { id: "new-student" }, studyDiagnosticCompleted: false });
     const html = renderToStaticMarkup(await FlowPage({ searchParams: Promise.resolve({ community: "henglish" }) }));
     expect(html).toContain("Study questions");
-    expect(html).toContain('data-destination="/app/communities/henglish"');
+    expect(html).toContain('data-destination="/app/today?community=henglish"');
     expect(mocks.redirect).not.toHaveBeenCalled();
   });
   it("does not bypass first-time onboarding for a signed-out visitor", async () => {

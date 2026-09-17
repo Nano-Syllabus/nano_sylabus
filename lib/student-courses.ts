@@ -29,6 +29,8 @@ export type StudentCommunityLearningScope = {
   communityId: string;
   communitySlug: string;
   communityName: string;
+  university?: string;
+  faculty?: string;
   courseId: string | null;
   /** The semester this student says they are in, off their own membership row.
    *  Null when they have not picked one, which is the whole-course view. */
@@ -60,7 +62,7 @@ export async function getStudentCommunityLearningScope(
 
   const communityResult = await admin
     .from("communities")
-    .select("id,slug,name,study_course_id")
+    .select("id,slug,name,university,faculty,study_course_id")
     .in("id", communityIds)
     .eq("status", "active");
   if (communityResult.error) throw communityResult.error;
@@ -90,6 +92,8 @@ export async function getStudentCommunityLearningScope(
     communityId: String(community.id),
     communitySlug: String(community.slug || ""),
     communityName: String(community.name || "Community"),
+    university: community.university ? String(community.university) : undefined,
+    faculty: community.faculty ? String(community.faculty) : undefined,
     courseId: community.study_course_id ? String(community.study_course_id) : null,
     currentTermId: membership?.current_term_id ? String(membership.current_term_id) : null,
   };

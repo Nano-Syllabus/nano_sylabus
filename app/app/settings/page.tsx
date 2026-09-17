@@ -58,6 +58,8 @@ export default async function SettingsPage() {
           profile={profile!}
           examsSat={examsSat}
           runningSemester={runningSemester}
+          communityOptions={activeCommunity.options}
+          selectedCommunitySlug={activeCommunity.selected?.slug ?? ""}
         />
       </HydrationBoundary>
     </>

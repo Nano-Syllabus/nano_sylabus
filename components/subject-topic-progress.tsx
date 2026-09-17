@@ -44,16 +44,6 @@ function TopicProgressRing({ percentage }: { percentage: number | null }) {
   );
 }
 
-function topicStatus(status: CommunitySubjectExplorerInsight["topics"][number]["status"]) {
-  if (status === "strong") return { label: "Mastered", className: "bg-success/10 text-success" };
-  if (status === "developing")
-    return { label: "In progress", className: "bg-warning/10 text-warning" };
-  if (status === "weak")
-    return { label: "Needs work", className: "bg-destructive/10 text-destructive" };
-  if (status === "unavailable")
-    return { label: "Unavailable", className: "bg-bg-tertiary text-text-muted" };
-  return { label: "Not started", className: "bg-bg-tertiary text-text-secondary" };
-}
 
 export function SubjectTopicProgress({ insight }: { insight?: CommunitySubjectExplorerInsight }) {
   return (
@@ -71,30 +61,21 @@ export function SubjectTopicProgress({ insight }: { insight?: CommunitySubjectEx
 
       {insight?.topics.length ? (
         <div className="mt-3 divide-y divide-border border-y border-border">
-          {insight.topics.map((topic, index) => {
-            const status = topicStatus(topic.status);
-            return (
-              <div key={topic.key} className="flex min-h-20 items-center gap-3 py-3">
-                <TopicProgressRing percentage={topic.percentage} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-text-primary">
-                    {index + 1}. {topic.title}
+          {insight.topics.map((topic, index) => (
+            <div key={topic.key} className="flex min-h-16 items-center gap-3 py-3">
+              <TopicProgressRing percentage={topic.percentage} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-text-primary">
+                  {index + 1}. {topic.title}
+                </p>
+                {topic.unitNumber ? (
+                  <p className="mt-0.5 text-xs text-text-secondary">
+                    Unit {topic.unitNumber}
                   </p>
-                  <p className="mt-1 text-xs text-text-secondary">
-                    {topic.unitNumber ? `Unit ${topic.unitNumber} · ` : ""}
-                    {topic.attempts === null
-                      ? "Attempts unavailable"
-                      : `${topic.attempts} ${topic.attempts === 1 ? "attempt" : "attempts"}`}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${status.className}`}
-                >
-                  {status.label}
-                </span>
+                ) : null}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       ) : (
         <div className="mt-3 rounded-xl border border-dashed border-border bg-bg-secondary p-8 text-center">

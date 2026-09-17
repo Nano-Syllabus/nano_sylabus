@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BookOpen, Download, FileText, LibraryBig, RefreshCw } from "lucide-react";
+import { ArrowLeft, BookOpen, Download, FileText, GraduationCap, LibraryBig, RefreshCw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -102,6 +102,52 @@ function readableMaterialName(name: string) {
     .replace(/\.(pdf|docx?|pptx?|txt)$/i, "")
     .replace(/[_-]+/g, " ")
     .trim();
+}
+
+function getMaterialShelfConfig(shelfRaw?: string, name?: string) {
+  const shelf = (shelfRaw || "").trim().toLowerCase();
+  const lowerName = (name || "").toLowerCase();
+
+  if (shelf.includes("syllabus") || lowerName.includes("syllabus")) {
+    return {
+      label: "Syllabus",
+      icon: BookOpen,
+      tile: "bg-[#f3e8ff] text-[#7e22ce] dark:bg-purple-950/50 dark:text-purple-300",
+    };
+  }
+  if (
+    shelf.includes("question") ||
+    shelf.includes("bank") ||
+    shelf.includes("past") ||
+    shelf.includes("exam") ||
+    shelf.includes("old") ||
+    lowerName.includes("question") ||
+    lowerName.includes("past question")
+  ) {
+    return {
+      label: "Question Bank",
+      icon: GraduationCap,
+      tile: "bg-[#ecfdf5] text-[#059669] dark:bg-emerald-950/50 dark:text-emerald-300",
+    };
+  }
+  if (
+    shelf.includes("note") ||
+    shelf.includes("book") ||
+    shelf.includes("textbook") ||
+    lowerName.includes("note") ||
+    lowerName.includes("textbook")
+  ) {
+    return {
+      label: "Notes",
+      icon: FileText,
+      tile: "bg-[#dbeafe] text-[#1d4ed8] dark:bg-blue-950/50 dark:text-blue-300",
+    };
+  }
+  return {
+    label: shelfRaw || "Document",
+    icon: FileText,
+    tile: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  };
 }
 
 const SUBJECT_ACCENTS = [
@@ -383,7 +429,7 @@ export function LibraryNanoAiWorkspace({
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="type-student-page-title text-text-primary">Library</h1>
+            <h1 className="type-student-page-title text-text-primary">Community Library</h1>
             <Image
               src="/figma/library/book-open.svg"
               alt=""
@@ -434,7 +480,7 @@ export function LibraryNanoAiWorkspace({
         <h2 id="library-semesters-heading" className="type-student-section-title text-text-primary">
           1. Choose Semester
         </h2>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        <div className="mt-3 flex flex-wrap gap-2 sm:gap-2.5">
           {orderedTerms.map((term) => {
             const active = selectedTerm?.id === term.id;
             return (
@@ -443,14 +489,14 @@ export function LibraryNanoAiWorkspace({
                 type="button"
                 onClick={() => browseTerm(term)}
                 className={cn(
-                  "h-10 shrink-0 rounded-full border px-[18px] text-sm font-medium transition-colors",
+                  "h-10 shrink-0 rounded-full border px-4 text-sm font-medium transition-colors",
                   active
                     ? "border-[#1d57fd] bg-card text-[#1d57fd]"
                     : "border-border bg-card text-text-secondary hover:border-border-strong",
                   focusRing,
                 )}
               >
-                {academicLabel(term.semesterNumber, "Semester")}
+                {academicLabel(term.semesterNumber, "Sem")}
               </button>
             );
           })}
@@ -464,7 +510,7 @@ export function LibraryNanoAiWorkspace({
           </h2>
         </div>
         {selectedTerm && visibleSubjects.length ? (
-          <div className="mt-3 flex flex-wrap gap-1">
+          <div className="mt-3 flex flex-wrap gap-3 sm:gap-3.5">
             {visibleSubjects.map((subject, index) => {
               const active = selectedSubject?.id === subject.id;
               return (
@@ -506,7 +552,7 @@ export function LibraryNanoAiWorkspace({
             id="library-resources-heading"
             className="type-student-section-title text-text-primary"
           >
-            Study Resources
+            Learning Resources
           </h2>
           <div className="mt-4">
             {!selectedSubject ? (
@@ -556,6 +602,8 @@ export function LibraryNanoAiWorkspace({
                   .map((material, index) => {
                     const canOpen =
                       Boolean(material.documentId) && material.previewAvailable !== false;
+                    const shelfConfig = getMaterialShelfConfig(material.shelf, material.name);
+                    const ShelfIcon = shelfConfig.icon;
                     return (
                       <li key={`${material.documentId}:${material.path}`}>
                         <button
@@ -572,12 +620,11 @@ export function LibraryNanoAiWorkspace({
                         >
                           <span
                             className={cn(
-                              "flex size-10 shrink-0 items-center justify-center rounded-[10px] text-xs font-semibold",
-                              SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length].tile,
-                              SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length].text,
+                              "flex size-10 shrink-0 items-center justify-center rounded-[10px]",
+                              shelfConfig.tile,
                             )}
                           >
-                            {String(index + 1).padStart(2, "0")}
+                            <ShelfIcon className="size-5" aria-hidden="true" />
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-[15px] font-semibold text-text-primary">

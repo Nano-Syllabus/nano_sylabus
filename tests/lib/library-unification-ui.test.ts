@@ -122,7 +122,7 @@ describe("unified Figma library", () => {
 
     expect(html).toContain("1. Choose Semester");
     expect(html).toContain("2. Choose Subject");
-    expect(html).toContain("Study Resources");
+    expect(html).toContain("Learning Resources");
     expect(html).not.toContain("3. Choose Chapter");
     expect(html).toContain("1st Semester");
     expect(html).toContain("Applied Mechanics");
@@ -135,8 +135,9 @@ describe("unified Figma library", () => {
     expect(html).toContain("Choose running semester");
     expect(html).toContain("lg:grid-cols-2");
     expect(html).toContain("Forces and equilibrium");
-    expect(html).toContain("2 attempts");
-    expect(html).toContain("In progress");
+    expect(html).toContain("Unit 1");
+    expect(html).not.toContain("2 attempts");
+    expect(html).not.toContain("In progress");
     expect(html).not.toContain("Your learning progress");
     expect(html).toContain('<option value="term-1" selected="">1st Semester</option>');
     expect(html).not.toContain("Search subjects and chapters");
@@ -175,6 +176,6 @@ describe("unified Figma library", () => {
     expect(mobileNav).toContain('label: "Challenges"');
     expect(mobileNav).toContain('label: "Library"');
     expect(mobileNav).toContain('label: "Revision"');
-    expect(oldRoute).toContain("redirect(`/app/chat");
+    expect(oldRoute).toContain("redirect(`/app/today");
   });
 });

@@ -65,6 +65,8 @@ export type StudentChallengeDashboard = {
     id: string;
     slug: string;
     name: string;
+    university?: string;
+    faculty?: string;
     courseId: string | null;
   } | null;
   scope: {
@@ -791,6 +793,8 @@ export async function getStudentChallengeDashboard(
           id: communityScope.communityId,
           slug: communityScope.communitySlug,
           name: communityScope.communityName,
+          university: communityScope.university,
+          faculty: communityScope.faculty,
           courseId: communityScope.courseId,
         }
       : null,
