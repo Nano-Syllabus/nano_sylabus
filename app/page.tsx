@@ -156,7 +156,7 @@ const questions = [
     "Yes. You get 3 free learning challenges every day. Start with a topic and build your routine at your own pace.",
   ],
   [
-    "What do I get for Rs. 450?",
+    "What do I get for Rs.450 Plus Subscription?",
     "Paid access gives you unlimited challenges and all semesters, subjects, and study material available on NanoSyllabus including unlimited handwritten exam grading.",
   ],
 ];
