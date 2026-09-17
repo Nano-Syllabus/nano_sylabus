@@ -92,6 +92,16 @@ export type EnsureDailyChallengeOptions = {
    * general queue already contains assignments from other subjects.
    */
   minimumRecommendationCount?: number;
+  /**
+   * How many challenges may be open at once.
+   *
+   * Three was a flat number, and a student taking four subjects this semester
+   * therefore saw three of them. The queue is meant to read as "the subjects I
+   * am studying, one challenge each" before it reads as a daily quota, so the
+   * caller raises this to the number of subjects in the running semester and
+   * nobody's fourth subject waits for somebody else's topic to be finished.
+   */
+  concurrentChallengeLimit?: number;
 };
 
 export type StudentChallengeSummary = {
@@ -571,6 +581,7 @@ export function dailyChallengeAssignmentCount({
   minimumRecommendationCount = 0,
   dailyCount = 0,
   maximumDailyCount = Infinity,
+  concurrentChallengeLimit = 3,
 }: {
   activeCount: number;
   activeRecommendationCount: number;
@@ -578,8 +589,11 @@ export function dailyChallengeAssignmentCount({
   minimumRecommendationCount?: number;
   dailyCount?: number;
   maximumDailyCount?: number;
+  /** How many may be open at once. The caller raises it to cover every subject
+   *  in the running semester; below three it stays three. */
+  concurrentChallengeLimit?: number;
 }) {
-  const openSlots = Math.max(0, 3 - activeCount);
+  const openSlots = Math.max(0, Math.max(3, concurrentChallengeLimit) - activeCount);
   const scopedSlots = Math.max(0, minimumRecommendationCount - activeRecommendationCount);
   /**
    * TWO CEILINGS, BECAUSE A FILTERED SUBJECT IS A DIFFERENT QUESTION.
@@ -681,7 +695,10 @@ export async function ensureDailyChallenges(
       // plate", so solving one lets the next arrive — which is what the queue
       // was always described as doing.
       dailyCount: active.length,
-      maximumDailyCount: unlimitedConcurrentChallenges ? Infinity : 3,
+      maximumDailyCount: unlimitedConcurrentChallenges
+        ? Infinity
+        : Math.max(3, options.concurrentChallengeLimit ?? 3),
+      concurrentChallengeLimit: options.concurrentChallengeLimit,
     }),
   );
 
@@ -1269,6 +1286,33 @@ export async function startStudentChallenge(
    * every one of them fetched from the course API rather than read off the row.
    */
   if (!sourceDocumentTopic && !options.restart) {
+    /**
+     * A WARMED ROW IS OPENED, NOT REBUILT — AND NOT MISTAKEN FOR A REOPEN.
+     *
+     * `warmStudentChallenge` writes the lesson onto a row that is still
+     * `assigned`, and that lesson carries `contentStatus: "pending"` like every
+     * freshly built one. Without this branch the next check would read that as
+     * "a build is still running, hand back what is there" and return — leaving a
+     * challenge the student has just pressed Start on sitting at `assigned`,
+     * with no clock and no paper on its way.
+     *
+     * Opening a warmed row is therefore the ownership transition on its own: the
+     * lesson is already what they are about to read, so all that is missing is
+     * the status, the start time, and the exam behind them.
+     */
+    if (current.status === "assigned" && current.content?.provider === "collection-challenge-v1") {
+      const startedAt = new Date().toISOString();
+      const { data, error } = await admin
+        .from("student_challenges")
+        .update({ status: "started", started_at: startedAt, updated_at: startedAt })
+        .eq("id", challengeId)
+        .eq("user_id", userId)
+        .select("*")
+        .single();
+      if (error) throw error;
+      scheduleChallengeContentCompletion(userId, challengeId);
+      return toDetail(data as ChallengeRow);
+    }
     // A build that has not finished is not a stale paper. Reopening a challenge
     // whose tail is still running must hand back the lesson that is already
     // there — never fall through and issue a second exam alongside the one the
@@ -1286,6 +1330,46 @@ export async function startStudentChallenge(
     }
   }
 
+  const built = await buildChallengeLesson(userId, row, access, sourceDocumentTopic);
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from("student_challenges")
+    .update({
+      status: "started",
+      // The previous sitting's paper is gone the moment its lesson is rebuilt;
+      // leaving the id behind would let `hasLiveExam` claim a live exam that no
+      // longer has questions on the row.
+      external_paper_id: null,
+      content: built.content,
+      ...built.topicFields,
+      started_at: now,
+      updated_at: now,
+    })
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  scheduleChallengeContentCompletion(userId, challengeId);
+  return toDetail(data as ChallengeRow);
+}
+
+/**
+ * The half of the build a student waits in front of: the topic's past questions
+ * and the reading written from them.
+ *
+ * Split out of `startStudentChallenge` so the identical build can run BEFORE the
+ * student presses Start — see `warmStudentChallenge`. Nothing in here depends on
+ * the student: both calls are keyed by the creator's collection and the topic,
+ * which is what makes warming it in advance the same content they would have
+ * waited for.
+ */
+async function buildChallengeLesson(
+  userId: string,
+  row: ChallengeRow,
+  access: ChallengeAccess,
+  sourceDocumentTopic: boolean,
+) {
   const lane = await resolveChallengeLane(userId, row, access);
   const topicRequest = {
     subject: lane.subject,
@@ -1362,34 +1446,110 @@ export async function startStudentChallenge(
     topics: selectedTopicKeys,
   });
   const title = String(selectedTopic?.title || row.topic_title || lane.subject);
-  const content = challengeLessonContent(pastQuestions, learning);
-  const now = new Date().toISOString();
-  const { data, error } = await admin
+  return {
+    content: challengeLessonContent(pastQuestions, learning),
+    // `/start` rewrites the row's topic to whatever the provider actually
+    // resolved, so a warm-up writes the same correction rather than leaving the
+    // row pointing at a key the provider has renumbered.
+    topicFields: selectedTopic
+      ? { topic_key: selectedTopic.topic_key, topic_title: selectedTopic.title, title }
+      : {},
+  };
+}
+
+/**
+ * Build a challenge's lesson BEFORE the student asks for it.
+ *
+ * Pressing Start used to be the first moment anything was built, and the build
+ * is two upstream calls — the topic's past questions, then a written reading —
+ * so the first challenge of every subject opened on a spinner that had nothing
+ * to do with the student. The content is the same for whoever is assigned that
+ * subtopic, so there is no reason for it to be built in front of them.
+ *
+ * This writes ONLY the lesson. Status stays `assigned` and `started_at` stays
+ * empty, because those two are the student's own clock: the hub must still say
+ * Start rather than Continue, and the twenty minutes must not begin while the
+ * page is being looked at. When Start is finally pressed, `startStudentChallenge`
+ * sees `provider === "collection-challenge-v1"` on the row, hands the lesson
+ * straight back and issues the paper behind it.
+ */
+export async function warmStudentChallenge(
+  userId: string,
+  challengeId: string,
+): Promise<"warmed" | "skipped" | "failed"> {
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error } = await admin
     .from("student_challenges")
-    .update({
-      status: "started",
-      // The previous sitting's paper is gone the moment its lesson is rebuilt;
-      // leaving the id behind would let `hasLiveExam` claim a live exam that no
-      // longer has questions on the row.
-      external_paper_id: null,
-      content,
-      ...(selectedTopic
-        ? {
-            topic_key: selectedTopic.topic_key,
-            topic_title: selectedTopic.title,
-            title,
-          }
-        : {}),
-      started_at: now,
-      updated_at: now,
-    })
+    .select("*")
     .eq("id", challengeId)
     .eq("user_id", userId)
-    .select("*")
-    .single();
+    .maybeSingle();
   if (error) throw error;
-  scheduleChallengeContentCompletion(userId, challengeId);
-  return toDetail(data as ChallengeRow);
+  if (!raw) return "skipped";
+  const row = raw as ChallengeRow;
+  // Only an untouched row. A started challenge is already the student's, and a
+  // completed one has a result on it that a rebuild would silently replace.
+  if (String(row.status || "assigned") !== "assigned") return "skipped";
+  if (isSourceDocumentChallengeRow(row)) return "skipped";
+  const detail = toDetail(row);
+  if (detail.content?.provider === "collection-challenge-v1") return "skipped";
+
+  try {
+    const access = await requireChallengeAccess(userId, row);
+    const built = await buildChallengeLesson(userId, row, access, false);
+    const { error: writeError } = await admin
+      .from("student_challenges")
+      .update({
+        content: built.content,
+        ...built.topicFields,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", challengeId)
+      .eq("user_id", userId)
+      // Nothing may be overwritten if the student got there first: between the
+      // read above and this write they may have pressed Start, and that row is
+      // now a started challenge with its own clock running.
+      .eq("status", "assigned");
+    if (writeError) throw writeError;
+    return "warmed";
+  } catch {
+    // A warm-up that fails costs nothing: Start builds the lesson the old way.
+    // It is deliberately not recorded on the row — a student must never be shown
+    // an error for work they did not ask for.
+    return "failed";
+  }
+}
+
+const warmupsInFlight = new Map<string, Promise<unknown>>();
+
+/**
+ * Warm the first open challenge of each subject, behind the response.
+ *
+ * One per subject, not the whole queue: the first card of each subject is what a
+ * student opens, and every warm-up is two upstream calls that are wasted if the
+ * challenge is never started. `after()` keeps the work alive past the response
+ * without holding it open; outside a request scope it throws and the promise is
+ * already running anyway.
+ */
+export function scheduleChallengeWarmups(userId: string, challenges: StudentChallengeSummary[]) {
+  const firstPerSubject = new Map<string, StudentChallengeSummary>();
+  for (const challenge of challenges) {
+    if (challenge.status !== "assigned") continue;
+    const key = `${challenge.courseId || ""}:${challenge.subjectSlug}`;
+    if (!firstPerSubject.has(key)) firstPerSubject.set(key, challenge);
+  }
+  for (const challenge of firstPerSubject.values()) {
+    if (warmupsInFlight.has(challenge.id)) continue;
+    const task = warmStudentChallenge(userId, challenge.id)
+      .catch(() => null)
+      .finally(() => warmupsInFlight.delete(challenge.id));
+    warmupsInFlight.set(challenge.id, task);
+    try {
+      after(() => task);
+    } catch {
+      // Not in a request scope. The work is under way regardless.
+    }
+  }
 }
 
 /**

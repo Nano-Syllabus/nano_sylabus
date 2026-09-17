@@ -74,6 +74,33 @@ describe("how many challenges the queue hands out", () => {
     ).toBe(0);
   });
 
+  it("opens one per subject when the semester has more subjects than the flat three", () => {
+    // Four subjects this semester: a flat ceiling of three showed three cards
+    // and left the fourth subject looking like it had nothing to study.
+    expect(
+      dailyChallengeAssignmentCount({
+        availableCount: 50,
+        activeCount: 0,
+        activeRecommendationCount: 0,
+        dailyCount: 0,
+        concurrentChallengeLimit: 4,
+        maximumDailyCount: 4,
+      }),
+    ).toBe(4);
+  });
+
+  it("keeps three as the floor for a one-subject semester", () => {
+    expect(
+      dailyChallengeAssignmentCount({
+        ...free,
+        activeCount: 0,
+        activeRecommendationCount: 0,
+        dailyCount: 0,
+        concurrentChallengeLimit: 1,
+      }),
+    ).toBe(3);
+  });
+
   it("never offers more than the catalogue has", () => {
     expect(
       dailyChallengeAssignmentCount({

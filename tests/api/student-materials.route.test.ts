@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   createSupabaseAdminClient: vi.fn(),
-  getStudentCourseSubjectAccess: vi.fn(),
+  getStudentCourseSubjectAccessCached: vi.fn(),
   getStudentCourseSubjectAccessForCourse: vi.fn(),
   listCreatorPrivateSubjectAccess: vi.fn(),
   listStudentCommunitySubjectAccess: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: mocks.createSupabaseAdminClient,
 }));
 vi.mock("@/lib/student-courses", () => ({
-  getStudentCourseSubjectAccess: mocks.getStudentCourseSubjectAccess,
+  getStudentCourseSubjectAccessCached: mocks.getStudentCourseSubjectAccessCached,
   getStudentCourseSubjectAccessForCourse: mocks.getStudentCourseSubjectAccessForCourse,
   listCreatorPrivateSubjectAccess: mocks.listCreatorPrivateSubjectAccess,
   listStudentCommunitySubjectAccess: mocks.listStudentCommunitySubjectAccess,
@@ -49,7 +49,7 @@ describe("GET /api/student/materials", () => {
     mocks.createSupabaseServerClient.mockResolvedValue({
       auth: { getUser: vi.fn(async () => ({ data: { user: { id: "student-1" } } })) },
     });
-    mocks.getStudentCourseSubjectAccess.mockResolvedValue({
+    mocks.getStudentCourseSubjectAccessCached.mockResolvedValue({
       courseId: "course-1",
       teacherId: "teacher-1",
       subjectSlug: "control-systems",
@@ -101,10 +101,18 @@ describe("GET /api/student/materials", () => {
       }),
     ]);
     expect(mocks.getTenantSourceTree).not.toHaveBeenCalled();
+    // Through the 30-second memo, not the raw resolver: the entitlement is three
+    // sequential Supabase round trips and the library asks for it again on every
+    // subject the student clicks, including ones already opened.
+    expect(mocks.getStudentCourseSubjectAccessCached).toHaveBeenCalledWith(
+      "student-1",
+      null,
+      "control-systems",
+    );
   });
 
   it("requires enrollment in the requested subject", async () => {
-    mocks.getStudentCourseSubjectAccess.mockResolvedValueOnce(null);
+    mocks.getStudentCourseSubjectAccessCached.mockResolvedValueOnce(null);
     mocks.createSupabaseAdminClient.mockReturnValue({ from: vi.fn() });
 
     const response = await GET(

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
-  getStudentCourseSubjectAccess,
+  getStudentCourseSubjectAccessCached,
   getStudentCourseSubjectAccessForCourse,
   listCreatorPrivateSubjectAccess,
   listStudentCommunitySubjectAccess,
@@ -278,14 +278,22 @@ export async function GET(request: Request) {
       );
     }
 
-    const access = requestedCourseId
-      ? await getStudentCourseSubjectAccessForCourse(
-          user.id,
-          requestedCourseId,
-          requested,
-          admin,
-        )
-      : await getStudentCourseSubjectAccess(user.id, requested, admin);
+    /**
+     * The entitlement goes through the 30-second memo.
+     *
+     * Resolving it is three sequential Supabase round trips — communities, then
+     * membership and subject, then the course rows — and the library asks it
+     * again for every subject the student clicks, including ones they have
+     * already opened. Measured from here, a round trip is ~140ms warm, so the
+     * check was most of a ~600ms response that returns a list which had not
+     * changed. `getStudentCourseSubjectAccessCached` is the same read, and is
+     * documented for exactly this: the decision is cached, never the rows.
+     */
+    const access = await getStudentCourseSubjectAccessCached(
+      user.id,
+      requestedCourseId || null,
+      requested,
+    );
     if (!access) {
       return NextResponse.json(
         { error: "Join the subject's community or enroll in its course first." },

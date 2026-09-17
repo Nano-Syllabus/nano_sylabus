@@ -7,6 +7,7 @@ import {
   ensureDailyChallenges,
   isMissingChallengeTable,
   listCompletedStudentChallenges,
+  scheduleChallengeWarmups,
   type ChallengeRecommendation,
   type StudentChallengeSummary,
 } from "@/lib/data/student-challenges";
@@ -716,13 +717,35 @@ export async function getStudentChallengeDashboard(
         .map((result) => result.recommendations[position])
         .filter((value): value is ChallengeRecommendation => Boolean(value)),
     ),
-    // Assign the joined community its own three-card queue even when stale,
-    // unfinished rows from a previously joined community still exist.
-    { minimumRecommendationCount: currentCourseId ? 3 : 0 },
+    {
+      // Assign the joined community its own three-card queue even when stale,
+      // unfinished rows from a previously joined community still exist.
+      minimumRecommendationCount: currentCourseId ? 3 : 0,
+      /**
+       * ONE OPEN CHALLENGE PER SUBJECT OF THE RUNNING SEMESTER.
+       *
+       * Counted over `accessibleSubjects`, not `subjects`: the latter is
+       * narrowed to one subject when the student has filtered the hub, and a
+       * ceiling that shrank with the filter would take the other subjects'
+       * cards away for as long as the filter was on. Four subjects this
+       * semester therefore means four cards, where a flat three showed three
+       * and left the fourth subject looking like it had nothing to study.
+       */
+      concurrentChallengeLimit: accessibleSubjects.length,
+    },
   ));
   const accessibleChallenges = dailyChallenges.filter((challenge) =>
     accessibleScopeKeys.has(subjectScopeKey(challenge.courseId, challenge.subjectSlug)),
   );
+  /**
+   * The first card of each subject is built behind this response.
+   *
+   * Loading the hub is the reliable signal that a student is about to press one
+   * of these, and the build takes two upstream calls they would otherwise watch
+   * a spinner for. Fire-and-forget: nothing here waits for it, and a challenge
+   * that is started before the warm-up lands simply builds the old way.
+   */
+  scheduleChallengeWarmups(userId, accessibleChallenges);
   const challenges = activeRequestedScope
     ? accessibleChallenges.filter((challenge) =>
         challengeBelongsToScope(challenge, activeRequestedScope),

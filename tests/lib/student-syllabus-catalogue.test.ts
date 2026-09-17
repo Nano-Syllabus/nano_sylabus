@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   communityScope: vi.fn(),
   private: vi.fn(),
   ensure: vi.fn(),
+  warmups: vi.fn(),
   history: vi.fn(),
   topics: vi.fn(),
 }));
@@ -26,6 +27,7 @@ vi.mock("@/lib/data/student-challenges", () => ({
   ensureDailyChallenges: mocks.ensure,
   listCompletedStudentChallenges: mocks.history,
   isMissingChallengeTable: () => false,
+  scheduleChallengeWarmups: mocks.warmups,
 }));
 vi.mock("@/lib/teacher-app/client", () => ({ getTeacherPracticeTopics: mocks.topics }));
 import { getStudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
@@ -82,7 +84,9 @@ describe("student challenge dashboard uses the community learning map", () => {
     expect(mocks.ensure).toHaveBeenCalledWith(
       "member",
       [expect.objectContaining({ topicTitle: "Identifiers", topicKey: "provider-identifiers" })],
-      { minimumRecommendationCount: 3 },
+      // One open challenge per subject of the running semester — one subject
+      // here, so the flat floor of three still applies inside the queue.
+      { minimumRecommendationCount: 3, concurrentChallengeLimit: 1 },
     );
     expect(mocks.topics).toHaveBeenCalledExactlyOnceWith("collection", "Nims");
   });
@@ -174,6 +178,7 @@ describe("student challenge dashboard uses the community learning map", () => {
     expect(result.passRateLast30Days).toBe(100);
     expect(mocks.ensure).toHaveBeenCalledWith("member", expect.any(Array), {
       minimumRecommendationCount: 3,
+      concurrentChallengeLimit: expect.any(Number),
     });
   });
 

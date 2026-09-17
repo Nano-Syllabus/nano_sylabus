@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   communities: vi.fn(),
   communityScope: vi.fn(),
   ensure: vi.fn(),
+  warmups: vi.fn(),
   history: vi.fn(),
   topics: vi.fn(),
   learningTopics: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock("@/lib/data/student-challenges", () => ({
   ensureDailyChallenges: mocks.ensure,
   listCompletedStudentChallenges: mocks.history,
   isMissingChallengeTable: () => false,
+  scheduleChallengeWarmups: mocks.warmups,
 }));
 vi.mock("@/lib/teacher-app/client", () => ({ getTeacherPracticeTopics: mocks.topics }));
 vi.mock("@/lib/data/community-learning-topics", () => ({

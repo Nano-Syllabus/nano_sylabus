@@ -175,6 +175,17 @@ export function LibraryNanoAiWorkspace({
     initialSubject ? { ...initialSubject, progress: insights[initialSubject.id] } : null,
   );
   const [materials, setMaterials] = useState<LibraryNanoAiMaterial[]>([]);
+  /**
+   * What each subject's shelf held, kept for the session.
+   *
+   * Every click on a subject chip was a fresh `no-store` request, and going back
+   * to a subject already opened paid for it again: measured on the dev server,
+   * nine requests for four subjects at 550–950ms each, most of them repeats.
+   * A material list changes when a creator uploads, not while a student is
+   * reading, so the second visit is painted from what the first one fetched and
+   * the reload button (`reloadKey`) stays the way to ask again.
+   */
+  const materialsCache = useRef(new Map<string, LibraryNanoAiMaterial[]>());
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -191,10 +202,25 @@ export function LibraryNanoAiWorkspace({
     });
   }, [savedSemesterSelection.currentTermId]);
 
+  // The subject's identity, not the object's. `setSelectedSubject` rebuilds the
+  // object to attach progress, so depending on the object refetched the same
+  // shelf on renders that had changed nothing about which subject is open.
+  const materialsKey = selectedSubject
+    ? `${materialApiSubject(selectedSubject)}|${community?.studyCourseId || ""}`
+    : "";
+
   useEffect(() => {
-    if (!selectedSubject) {
+    if (!selectedSubject || !materialsKey) {
       setMaterials([]);
       setLoadState("idle");
+      return;
+    }
+
+    const cached = materialsCache.current.get(materialsKey);
+    if (cached) {
+      setMaterials(cached);
+      setLoadState("ready");
+      setLoadError("");
       return;
     }
 
@@ -215,7 +241,9 @@ export function LibraryNanoAiWorkspace({
         if (!response.ok) {
           throw new Error(payload?.error || "Could not load this subject's materials.");
         }
-        setMaterials(Array.isArray(payload?.materials) ? payload.materials : []);
+        const next = Array.isArray(payload?.materials) ? payload.materials : [];
+        materialsCache.current.set(materialsKey, next);
+        setMaterials(next);
         setLoadState("ready");
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -228,7 +256,8 @@ export function LibraryNanoAiWorkspace({
 
     void loadMaterials();
     return () => controller.abort();
-  }, [community?.studyCourseId, reloadKey, selectedSubject]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [community?.studyCourseId, materialsKey, reloadKey]);
 
   useEffect(() => {
     if (
@@ -494,7 +523,12 @@ export function LibraryNanoAiWorkspace({
                 <p className="mt-2 text-sm text-text-secondary">{loadError}</p>
                 <button
                   type="button"
-                  onClick={() => setReloadKey((current) => current + 1)}
+                  onClick={() => {
+                    // Try again means ask again, so whatever this subject has in
+                    // the session cache goes first.
+                    materialsCache.current.delete(materialsKey);
+                    setReloadKey((current) => current + 1);
+                  }}
                   className={cn(
                     "mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse",
                     focusRing,

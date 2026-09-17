@@ -2022,11 +2022,23 @@ export function ChallengesDashboardClient({
                     key={challenge.id}
                     className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-6 py-5 hover:bg-bg-secondary/40 rounded-xl px-2 -mx-2 transition-colors"
                   >
-                    <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-6">
-                      <p className="font-bold text-[15px] sm:text-[16px] text-text-primary w-full sm:w-[240px] md:w-[280px] shrink-0 truncate">
-                        {challenge.subjectName}
-                      </p>
-                      <p className="text-[14px] sm:text-[15px] text-[#6b7280] dark:text-text-secondary flex-1 min-w-0 truncate pr-2">
+                    <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-6">
+                      <div className="w-full sm:w-[240px] md:w-[280px] shrink-0 min-w-0">
+                        <p className="font-bold text-[15px] sm:text-[16px] text-text-primary truncate">
+                          {challenge.subjectName}
+                        </p>
+                        {/* The two ids this row is, so a challenge on screen can
+                            be matched to its row and its subject without
+                            guessing from the titles. */}
+                        <p className="mt-0.5 font-mono text-[11px] leading-4 text-[#9ca3af] dark:text-text-muted break-all">
+                          <span className="sr-only">Challenge id </span>
+                          {challenge.id}
+                          <br />
+                          <span className="sr-only">Subject id </span>
+                          {challenge.subjectSlug}
+                        </p>
+                      </div>
+                      <p className="text-[14px] sm:text-[15px] text-[#6b7280] dark:text-text-secondary flex-1 min-w-0 truncate pr-2 sm:pt-0.5">
                         {challenge.topicTitle}
                       </p>
                     </div>
