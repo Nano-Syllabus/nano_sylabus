@@ -129,7 +129,12 @@ describe("unified Figma library", () => {
     const appliedMechanicsCard =
       html.match(/<button[^>]*>.*?Applied Mechanics.*?<\/button>/)?.[0] ?? "";
     expect(appliedMechanicsCard).not.toContain("3 chapters");
-    expect(appliedMechanicsCard).not.toContain("64%");
+    expect(appliedMechanicsCard).toContain("64%");
+    expect(appliedMechanicsCard).toContain(
+      "Applied Mechanics: 64% progress across 1 indexed topic",
+    );
+    expect(appliedMechanicsCard).toContain('data-progress-level="low"');
+    expect(appliedMechanicsCard).toContain("text-[var(--community-accent)]");
     expect(html).toContain("type-student-page-title");
     expect(html).toContain("/figma/library/book-open.svg");
     expect(html).toContain("Choose running semester");

@@ -150,27 +150,66 @@ function getMaterialShelfConfig(shelfRaw?: string, name?: string) {
   };
 }
 
-const SUBJECT_ACCENTS = [
-  { tile: "bg-[#eef2ff]", text: "text-[#1d57fd]" },
-  { tile: "bg-[#ecfdf3]", text: "text-[#159447]" },
-  { tile: "bg-[#f7edff]", text: "text-[#8b3fc7]" },
-  { tile: "bg-[#fff4dc]", text: "text-[#ce7a00]" },
-  { tile: "bg-[#fff0f0]", text: "text-[#df4242]" },
-  { tile: "bg-[#eaf8ff]", text: "text-[#1879a7]" },
-] as const;
+function SubjectProgressRing({
+  subjectName,
+  percentage,
+  topicCount,
+}: {
+  subjectName: string;
+  percentage: number | null;
+  topicCount: number | null;
+}) {
+  const value = percentage === null ? 0 : Math.max(0, Math.min(100, percentage));
+  const circumference = 2 * Math.PI * 20;
+  const roundedValue = Math.round(value);
+  const hasProgress = percentage !== null;
+  const topicLabel = topicCount === 1 ? "1 indexed topic" : `${topicCount ?? 0} indexed topics`;
 
-function SubjectIcon({ index }: { index: number }) {
-  const accent = SUBJECT_ACCENTS[index % SUBJECT_ACCENTS.length];
-  const glyphs = ["∿", "%", "ⓘ", "‹›", "ϟ", "▧"];
   return (
     <span
+      role="img"
+      aria-label={
+        hasProgress
+          ? `${subjectName}: ${roundedValue}% progress across ${topicLabel}`
+          : `${subjectName}: progress unavailable`
+      }
       className={cn(
-        "flex size-10 shrink-0 items-center justify-center rounded-xl text-xl font-semibold",
-        accent.tile,
-        accent.text,
+        "relative size-14 shrink-0",
+        !hasProgress
+          ? "text-text-muted"
+          : value >= 70
+            ? "text-success"
+            : "text-[var(--community-accent)]",
       )}
+      data-progress-level={!hasProgress ? "unavailable" : value >= 70 ? "high" : "low"}
     >
-      {glyphs[index % glyphs.length]}
+      <svg viewBox="0 0 56 56" className="size-14 -rotate-90" aria-hidden="true">
+        <circle
+          cx="28"
+          cy="28"
+          r="20"
+          fill="none"
+          stroke="currentColor"
+          strokeOpacity="0.16"
+          strokeWidth="5"
+        />
+        {hasProgress ? (
+          <circle
+            cx="28"
+            cy="28"
+            r="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference - (circumference * value) / 100}
+          />
+        ) : null}
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold tabular-nums">
+        {hasProgress ? `${roundedValue}%` : "—"}
+      </span>
     </span>
   );
 }
@@ -511,13 +550,14 @@ export function LibraryNanoAiWorkspace({
         </div>
         {selectedTerm && visibleSubjects.length ? (
           <div className="mt-3 flex flex-wrap gap-3 sm:gap-3.5">
-            {visibleSubjects.map((subject, index) => {
+            {visibleSubjects.map((subject) => {
               const active = selectedSubject?.id === subject.id;
               return (
                 <button
                   key={subject.id}
                   type="button"
                   onClick={() => selectSubject(subject)}
+                  aria-pressed={active}
                   className={cn(
                     "group flex min-h-[96px] w-full items-center rounded-2xl border bg-card p-4 text-left transition-colors sm:w-52",
                     active
@@ -527,7 +567,11 @@ export function LibraryNanoAiWorkspace({
                   )}
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <SubjectIcon index={index} />
+                    <SubjectProgressRing
+                      subjectName={titleCase(subject.name)}
+                      percentage={insights[subject.id]?.readiness ?? null}
+                      topicCount={insights[subject.id]?.topicCount ?? null}
+                    />
                     <span className="line-clamp-2 text-sm font-semibold leading-5 text-text-primary">
                       {titleCase(subject.name)}
                     </span>
