@@ -76,7 +76,7 @@ function Cta({
 const problems = [
   [
     "“I spent so long learning. I barely had time to practise.”",
-    "Reading another chapter feels productive. But the past questions keep getting pushed to tomorrow.",
+    "Tabs, PDFs, shared folders. Everything is somewhere, but nothing gives you a clear way to study.",
     "The practice gap",
   ],
   [
@@ -86,7 +86,7 @@ const problems = [
   ],
   [
     "“I know the concept. Why am I stuck?”",
-    "Following the solution and finding the next step yourself can feel like two completely different skills.",
+    "A whole semester feels overwhelming. Without a manageable daily routine, it’s easy to stop before you build momentum.",
     "The understanding gap",
   ],
 ];
@@ -94,12 +94,12 @@ const problems = [
 const steps = [
   [
     "Learn one thing.",
-    "A focused topic from your community’s syllabus and learning material.",
+    "Study one focused topic, guided by your official syllabus and question bank.",
     "Less ‘where do I start?’",
   ],
   [
     "See the working.",
-    "Follow a solved question. Understand the steps, not just the final answer.",
+    "Work through a past-question solution. Understand how the answer comes together.",
     "More ‘oh, that’s why.’",
   ],
   [
@@ -109,7 +109,7 @@ const steps = [
   ],
   [
     "Find your next step.",
-    "Upload your answer. Use detailed feedback to see what needs another try.",
+    "Get your handwritten answer checked. Use detailed feedback to see what needs another try.",
     "A small win to build on.",
   ],
 ];
@@ -117,22 +117,22 @@ const steps = [
 const testimonials = [
   [
     "NanoSyllabus made my preparation so organized. The mock tests and feedback helped me improve every week.",
-    "Aarushi Sharma",
-    "CSE, 3rd Year",
+    "Simrika Duwal",
+    "CSIT, 3rd Year",
     "54%",
     "/landing-new/avatar-1.png",
   ],
   [
     "The chapter-wise practice and instant feedback helped me clear concepts I always found difficult.",
-    "Rohan Verma",
-    "ECE, 2nd Year",
+    "Rohit Paudel",
+    "BCT, 4th Year",
     "62%",
     "/landing-new/avatar-2.png",
   ],
   [
     "Unlimited mock tests and smart analytics show exactly where I stand. It's like having a personal coach.",
-    "Megha Patel",
-    "IT, 3rd Year",
+    "Suman Giri",
+    "CSIT, 4rd Year",
     "41%",
     "/landing-new/avatar-3.png",
   ],
@@ -144,20 +144,20 @@ const questions = [
     "NanoSyllabus turns your syllabus into focused learning challenges with practice, feedback, and a clearer next step.",
   ],
   [
-    "Is NanoSyllabus just another AI tutor?",
-    "It brings your course material, practice, and progress together so you can work through your own syllabus.",
+    "Where does the learning content come from?",
+    "Learning content and past-question solutions are guided by official syllabuses and question banks.",
   ],
   [
     "What do I actually do on NanoSyllabus?",
     "Choose your subjects, learn one topic, work through an example, attempt a question, and use feedback to decide what to practise next.",
   ],
   [
-    "Is NanoSyllabus only for students with backlogs?",
-    "No. It is for anyone who wants a clearer study plan and more confidence in what they can actually do.",
+    "Can I start for free?",
+    "Yes. You get 3 free learning challenges every day. Start with a topic and build your routine at your own pace.",
   ],
   [
-    "What makes NanoSyllabus different from YouTube, books, or ChatGPT?",
-    "It connects learning to your syllabus, your written attempts, and your progress instead of leaving those pieces scattered.",
+    "What do I get for Rs. 450?",
+    "Paid access gives you unlimited challenges and all semesters, subjects, and study material available on NanoSyllabus including unlimited handwritten exam grading.",
   ],
 ];
 
@@ -215,18 +215,17 @@ export default function LandingPage() {
             <div className="max-w-[620px]">
               <div className="mb-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
                 <span className="text-[#3049ed]">✳</span>
-                <span>FOR THE “I STUDIED THIS” MOMENTS</span>
+                <span>FOR BACHELOR’S STUDENTS IN NEPAL</span>
               </div>
               <h1
                 className={`${manrope.className} text-[clamp(2.9rem,5.3vw,5.5rem)] font-extrabold leading-[1.04] tracking-[-0.055em] text-[#1c1e1a]`}
               >
-                You know it.
+                Less searching
                 <br />
-                Until you have
-                <br />
-                to{" "}
+           
+                More{" "}
                 <span className="relative isolate inline-block px-1">
-                  solve it.
+                  learning.
                   <span
                     aria-hidden="true"
                     className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[#dcfa72]"
@@ -234,13 +233,13 @@ export default function LandingPage() {
                 </span>
               </h1>
               <p className="mt-6 text-[18px] leading-[1.55] text-[#5b5e55]">
-                Notes make sense. Videos make sense.
+                Scattered notes. No study routine.
+
                 <br />
-                Then the question paper has other plans.
+                Let’s give your preparation a clear next step.
               </p>
               <p className="mt-3 text-[18px] leading-[1.55] text-[#5b5e55]">
-                Turn your syllabus into small learning challenges. Practise on paper, find your
-                gaps, and study with people who get it.
+                Learn a topic, practise past questions, and get your handwritten answers checked. Build a daily study habit around your official syllabus.
               </p>
               <div className="mt-9 flex flex-wrap items-center gap-6">
                 <LandingPrimaryCta blue size="hero" communityOnly>
@@ -394,11 +393,11 @@ export default function LandingPage() {
             <h2
               className={`${manrope.className} max-w-[820px] text-[clamp(2.4rem,4.2vw,3.65rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
             >
-              More Pressure isn’t The Plan.
-              <br />A Clearer Next Step is.
+              More notes aren’t a study plan.
+              <br />A clear next step is.
             </h2>
             <p className="max-w-[320px] text-base leading-relaxed text-[#5b5e55]">
-              “Just study harder” isn’t much help when you don’t know what’s going wrong.
+            When your material is scattered and exams are getting closer, starting can feel like the hardest part.
             </p>
           </div>
 
@@ -449,8 +448,7 @@ export default function LandingPage() {
                 <em className="font-serif font-normal italic">Little victories.</em>
               </h2>
               <p className="max-w-[340px] text-base leading-relaxed text-[#5b5e55]">
-                Not another pile of content to finish. A way to learn something—and see if you can
-                actually use it.
+                A personal learning system that takes you from studying a topic to writing an answer and understanding what to improve.
               </p>
             </div>
 
@@ -512,9 +510,7 @@ export default function LandingPage() {
                   to Study.
                 </h2>
                 <p className="mt-5 max-w-[480px] text-base leading-relaxed text-[#5b5e55]">
-                  Unlock the potential of structural learning. Discover how dissecting your
-                  curriculum systematically can completely revolutionize your retention and
-                  performance.
+                 A syllabus tells you what to cover. A study routine helps you actually cover it. Learn how focused topics, past questions, and written practice fit together.
                 </p>
               </div>
 
@@ -765,18 +761,18 @@ export default function LandingPage() {
         <section className="mx-auto max-w-[1320px] px-5 pb-16 2xl:px-0">
           <div className="relative overflow-hidden rounded-[28px] bg-[#dcfa72] p-8 sm:p-14 lg:p-16 shadow-sm">
             <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#1c1e1a]/80">
-              Not the whole semester. Just the next step.
+              3 free learning challenges a day. Your next step starts here.
             </div>
             <h2
               className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.5vw,4.6rem)] font-extrabold leading-[1.05] tracking-[-0.055em] text-[#1c1e1a]`}
             >
-              A little less stuck.
+              One topic today.
               <br />
-              <em className="font-serif font-normal italic">A lot more learning.</em>
+              <em className="font-serif font-normal italic">A habit for the semester.</em>
             </h2>
             <div className="mt-9">
               <LandingPrimaryCta size="hero">
-                Let’s find my starting point
+                Start my first learning challenges
               </LandingPrimaryCta>
             </div>
 
