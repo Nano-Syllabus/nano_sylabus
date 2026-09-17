@@ -971,25 +971,39 @@ function ChallengeDetail({
                                      what make a derivation followable. */
                                   className={[
                                     "text-[15px] leading-8 text-text-secondary",
-                                    "[&>*+*]:mt-5",
-                                    // Section headings get the rule the
-                                    // reference layout uses: the answer to
-                                    // "define X, then discuss Y" is two things,
-                                    // and the eye should find the seam without
-                                    // reading for it.
-                                    "[&_h2]:mt-9 [&_h2]:border-l-2 [&_h2]:border-blue-500/70 [&_h2]:pl-3 [&_h2]:text-[17px] [&_h2]:font-semibold [&_h2]:text-text-primary",
-                                    "[&_h3]:mt-8 [&_h3]:border-l-2 [&_h3]:border-blue-500/70 [&_h3]:pl-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:text-text-primary",
-                                    // The term being defined, and the marks-
-                                    // carrying words of a step, in the reading
-                                    // colour rather than the body grey.
+                                    // `:not(:first-child)` throughout, and not
+                                    // for elegance: the shared MARKDOWN_CLASS
+                                    // sets `[&_p]:mt-2`, whose `.root p`
+                                    // outranks a `.root > * + *` rule whatever
+                                    // order they are written in. An answer read
+                                    // at 8px between paragraphs is the "a bit
+                                    // congested" this is fixing.
+                                    "[&_p:not(:first-child)]:mt-5",
+                                    "[&>*:first-child]:mt-0",
+                                    // Section headings: room above, and the
+                                    // body pulled up under its own heading so
+                                    // the two read as one block.
+                                    "[&_h2]:mt-10 [&_h2]:border-l-2 [&_h2]:border-blue-500/70 [&_h2]:pl-3 [&_h2]:text-[17px] [&_h2]:font-semibold [&_h2]:text-text-primary",
+                                    "[&_h3]:mt-9 [&_h3]:border-l-2 [&_h3]:border-blue-500/70 [&_h3]:pl-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:text-text-primary",
+                                    "[&_h2+p]:mt-3 [&_h3+p]:mt-3",
                                     "[&_strong]:font-semibold [&_strong]:text-text-primary",
                                     // Working: one move per line, numbered, with
                                     // room between the moves.
-                                    "[&_ol]:space-y-4 [&_ul]:space-y-3 [&_li]:leading-8 [&_li]:pl-1 [&_ol]:marker:font-semibold [&_ol]:marker:text-blue-600 dark:[&_ol]:marker:text-blue-400",
-                                    // A relation on its own line is the point of
-                                    // the step it closes.
-                                    "[&_.math-block]:my-6 [&_.math-block]:rounded-xl [&_.math-block]:border-border [&_.math-block]:bg-bg-secondary [&_.math-block]:py-4",
-                                    "[&_table]:my-7 [&_table]:overflow-hidden [&_table]:rounded-xl [&_th]:bg-bg-secondary [&_th]:text-text-primary",
+                                    "[&_ol]:mt-5 [&_ul]:mt-5 [&_ol>li:not(:first-child)]:mt-4 [&_ul>li:not(:first-child)]:mt-3",
+                                    "[&_li]:leading-8 [&_li]:pl-1 [&_ol]:marker:font-semibold [&_ol]:marker:text-blue-600 dark:[&_ol]:marker:text-blue-400",
+                                    // An equation on its own line, whether the
+                                    // writer sent it as display maths or as a
+                                    // plain line inside a paragraph.
+                                    // A set equation is given the room a set
+                                    // equation gets on paper: clear of the
+                                    // sentence above it and the one below.
+                                    "[&_.math-block]:!my-8 [&_.math-block]:rounded-xl [&_.math-block]:border [&_.math-block]:border-border [&_.math-block]:bg-bg-secondary [&_.math-block]:px-5 [&_.math-block]:py-6",
+                                    "[&_.math-block_.katex-display]:!my-0 [&_.math-block_.katex]:text-[16px]",
+                                    // A step's own relation sits under it rather
+                                    // than beside it, so it keeps the indent.
+                                    "[&_li_.math-block]:!my-5",
+                                    "[&_br]:leading-[3]",
+                                    "[&_table]:my-8 [&_table]:overflow-hidden [&_table]:rounded-xl [&_th]:bg-bg-secondary [&_th]:text-text-primary",
                                     "[&_code]:text-[13px]",
                                   ].join(" ")}
                                 />
