@@ -9,6 +9,12 @@ export type StudyAnswer = {
 
 export type StudyAnswers = Record<number, StudyAnswer>;
 export const PENDING_STUDY_ANSWERS_KEY = "nano-pending-study-answers";
+export const STUDY_DIAGNOSTIC_STARTED_KEY = "nano-study-diagnostic-started";
+
+/** A one-time funnel marker. Once set, incomplete answers must not gate the app. */
+export function hasStartedStudyDiagnostic(value: unknown) {
+  return value === true;
+}
 
 /** Recognizes the existing signup metadata, not a browser-only completion flag. */
 export function hasCompletedStudyDiagnostic(value: unknown): value is StudyAnswers {
@@ -45,7 +51,30 @@ export async function saveStudyDiagnostic(
   if (hasCompletedStudyDiagnostic(user.user_metadata?.study_answers)) return true;
   if (!hasCompletedStudyDiagnostic(answers)) return false;
 
-  const { error } = await supabase.auth.updateUser({ data: { study_answers: answers } });
+  const { error } = await supabase.auth.updateUser({
+    data: { study_answers: answers, study_diagnostic_started: true },
+  });
+  if (error) throw error;
+  return true;
+}
+
+/** Persist the first answer immediately so closing the app cannot restart the funnel. */
+export async function markStudyDiagnosticStarted(
+  supabase: Pick<SupabaseClient, "auth">,
+) {
+  const { data: { user }, error: authError } = await getVerifiedUser(supabase);
+  if (authError) throw authError;
+  if (!user) return false;
+  if (
+    hasStartedStudyDiagnostic(user.user_metadata?.study_diagnostic_started) ||
+    hasCompletedStudyDiagnostic(user.user_metadata?.study_answers)
+  ) {
+    return true;
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    data: { study_diagnostic_started: true },
+  });
   if (error) throw error;
   return true;
 }

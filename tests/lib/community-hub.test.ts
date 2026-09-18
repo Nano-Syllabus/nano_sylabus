@@ -5,6 +5,7 @@ import {
   communityDateKey,
   documentBelongsToSubject,
   rankCommunityMembersByStreak,
+  summarizeCommunityTerm,
 } from "@/lib/data/community-hub";
 
 describe("community hub calculations", () => {
@@ -107,5 +108,53 @@ describe("community hub calculations", () => {
         subject,
       ),
     ).toBe(false);
+  });
+
+  it("derives every current-semester metric from one subject snapshot", () => {
+    const subjects = [
+      {
+        id: "subject-1",
+        slug: "math",
+        name: "Mathematics",
+        code: "MTH101",
+        termId: "term-1",
+        termLabel: "Year 1 · Semester 1",
+        topicCount: 40,
+        materialCount: 3,
+        progress: null,
+        contentReady: true,
+      },
+      {
+        id: "subject-2",
+        slug: "physics",
+        name: "Physics",
+        code: "PHY101",
+        termId: "term-1",
+        termLabel: "Year 1 · Semester 1",
+        topicCount: 30,
+        materialCount: 2,
+        progress: null,
+        contentReady: false,
+      },
+      {
+        id: "subject-3",
+        slug: "later",
+        name: "Later semester",
+        code: "LATER",
+        termId: "term-2",
+        termLabel: "Year 1 · Semester 2",
+        topicCount: 99,
+        materialCount: 10,
+        progress: null,
+        contentReady: true,
+      },
+    ];
+
+    expect(summarizeCommunityTerm(subjects, "term-1")).toEqual({
+      subjectCount: 2,
+      materialCount: 5,
+      topicCount: 70,
+      contentReadiness: 50,
+    });
   });
 });

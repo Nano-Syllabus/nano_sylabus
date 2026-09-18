@@ -29,4 +29,10 @@ describe("student portal navigation chrome", () => {
     expect(appSidebar).toContain('bg-text-primary text-text-inverse');
     expect(appSidebar).toContain('flex min-h-10 items-center text-sm leading-5');
   });
+
+  it("removes the learning profile menu item and labels the ambassador entry", () => {
+    expect(appSidebar).not.toContain("Learning profile");
+    expect(appSidebar).toContain("Student Ambassador");
+    expect(appSidebar).toContain('href="/teachers"');
+  });
 });

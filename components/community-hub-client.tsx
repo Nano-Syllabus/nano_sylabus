@@ -258,9 +258,6 @@ export function CommunityHubClient({
   const selectedSubjects = initialData.subjects.filter(
     (subject) => subject.termId === selectedTerm.id,
   );
-  const currentSubjects = initialData.subjects.filter(
-    (subject) => subject.termId === currentTerm.id,
-  );
   const groupedYears = useMemo(
     () =>
       Array.from(new Set(community.terms.map((term) => term.yearNumber))).map((year) => ({
@@ -275,14 +272,7 @@ export function CommunityHubClient({
     [community],
   );
 
-  const currentSemesterProgress = useMemo(() => {
-    if (initialData.contentReadiness !== null && initialData.contentReadiness !== undefined) {
-      return initialData.contentReadiness;
-    }
-    if (!currentSubjects.length) return 0;
-    const total = currentSubjects.reduce((sum, s) => sum + (s.progress || 0), 0);
-    return Math.round(total / currentSubjects.length);
-  }, [initialData.contentReadiness, currentSubjects]);
+  const currentSemesterSummary = initialData.currentTermSummary;
 
   async function generateInvite() {
     setInviteLoading(true);
@@ -552,20 +542,20 @@ export function CommunityHubClient({
               Year {currentTerm.yearNumber} · Semester {currentTerm.semesterNumber}
             </p>
             <p className="mt-1 text-xs text-white/80 sm:text-sm">
-              {currentSubjects.length} subject{currentSubjects.length === 1 ? "" : "s"} ·{" "}
-              {currentSubjects.reduce((sum, subject) => sum + Number(subject.topicCount || 0), 0)}{" "}
-              topics ready
+              {currentSemesterSummary.subjectCount} subject
+              {currentSemesterSummary.subjectCount === 1 ? "" : "s"} ·{" "}
+              {currentSemesterSummary.topicCount} topics ready
             </p>
 
             <div className="mt-4 flex items-center gap-3">
               <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/25">
                 <div
                   className="h-full rounded-full bg-[#d4ff36] transition-all duration-500"
-                  style={{ width: `${currentSemesterProgress}%` }}
+                  style={{ width: `${currentSemesterSummary.contentReadiness ?? 0}%` }}
                 />
               </div>
               <span className="text-xs font-bold tabular-nums text-[#d4ff36]">
-                {currentSemesterProgress}%
+                {currentSemesterSummary.contentReadiness ?? 0}%
               </span>
             </div>
 
@@ -943,20 +933,24 @@ function CommunityOverview({
           <MetricCard
             icon={<BookOpen className="size-5" aria-hidden="true" />}
             label="Total subjects"
-            value={formatNumber(data.subjects.length)}
-            detail={`Across ${data.community.totalSemesters} generated semesters`}
+            value={formatNumber(data.currentTermSummary.subjectCount)}
+            detail={`Year ${data.currentTerm.yearNumber} · Semester ${data.currentTerm.semesterNumber}`}
           />
           <MetricCard
             icon={<FileText className="size-5" aria-hidden="true" />}
             label="Total materials"
-            value={formatNumber(data.materialCount)}
-            detail="Files in linked subject repositories"
+            value={formatNumber(data.currentTermSummary.materialCount)}
+            detail="Files in current-semester subject repositories"
           />
           <MetricCard
             icon={<ClipboardCheck className="size-5" aria-hidden="true" />}
             label="Content readiness"
-            value={data.contentReadiness === null ? "—" : `${data.contentReadiness}%`}
-            detail="Subjects containing both a syllabus and Question Bank"
+            value={
+              data.currentTermSummary.contentReadiness === null
+                ? "—"
+                : `${data.currentTermSummary.contentReadiness}%`
+            }
+            detail="Current-semester subjects with a syllabus and Question Bank"
           />
         </section>
 

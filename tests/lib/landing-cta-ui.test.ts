@@ -26,4 +26,9 @@ describe("landing page calls to action", () => {
     expect(landingSource).not.toContain('<Cta href="/flow"');
     expect(primaryCtaSource).toContain('isLoggedIn ? "/app" : "/communities"');
   });
+
+  it("routes the footer app link to the community page", () => {
+    expect(landingSource).toContain('href="/app/community"');
+    expect(landingSource).not.toContain('href="/app/today"');
+  });
 });

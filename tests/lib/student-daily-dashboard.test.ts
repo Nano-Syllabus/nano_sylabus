@@ -159,6 +159,7 @@ describe("student Daily Dashboard calculations", () => {
           topicCount: 12,
           materialCount: 3,
           progress: null,
+          contentReady: false,
         },
       ],
     } as CommunityHubData;

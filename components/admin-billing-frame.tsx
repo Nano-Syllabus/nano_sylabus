@@ -1,10 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowLeft, BarChart3, CreditCard, ShieldCheck, UserCog } from "lucide-react";
+import { ArrowLeft, BarChart3, CreditCard, ShieldCheck, Trophy, UserCog } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-type AdminSection = "billing" | "users";
+type AdminSection = "billing" | "cash-prize" | "users";
 
 export function AdminBillingFrame({
   children,
@@ -52,6 +52,14 @@ export function AdminBillingFrame({
           >
             <CreditCard size={17} strokeWidth={1.7} />
             Payment reviews
+          </Link>
+          <Link
+            href="/admin/cash-prize"
+            aria-current={active === "cash-prize" ? "page" : undefined}
+            className={navClass("cash-prize")}
+          >
+            <Trophy size={17} strokeWidth={1.7} />
+            Prize entries
           </Link>
           <Link
             href="/admin/users"
@@ -104,6 +112,9 @@ export function AdminBillingFrame({
           </Link>
           <Link href="/admin/billing" className={`${navClass("billing")} min-h-9 shrink-0 text-xs`}>
             <CreditCard size={15} /> Payments
+          </Link>
+          <Link href="/admin/cash-prize" className={`${navClass("cash-prize")} min-h-9 shrink-0 text-xs`}>
+            <Trophy size={15} /> Prize entries
           </Link>
           <Link href="/admin/users" className={`${navClass("users")} min-h-9 shrink-0 text-xs`}>
             <UserCog size={15} /> User access

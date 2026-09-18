@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   hasCompletedStudyDiagnostic,
+  hasStartedStudyDiagnostic,
+  markStudyDiagnosticStarted,
   readPendingStudyAnswers,
   saveStudyDiagnostic,
   studyFlowDestination,
@@ -11,9 +13,23 @@ const answers = Object.fromEntries([1, 2, 3, 4, 5, 6].map((questionIndex) => [
   questionIndex, { questionIndex, optionIndex: 0, text: "Yes" },
 ]));
 
-function client(saved: unknown = {}, signedIn = true) {
+function client(
+  saved: unknown = {},
+  signedIn = true,
+  studyDiagnosticStarted: unknown = false,
+) {
   const getUser = vi.fn().mockResolvedValue({
-    data: { user: signedIn ? { id: "account-1", user_metadata: { study_answers: saved } } : null },
+    data: {
+      user: signedIn
+        ? {
+            id: "account-1",
+            user_metadata: {
+              study_answers: saved,
+              study_diagnostic_started: studyDiagnosticStarted,
+            },
+          }
+        : null,
+    },
     error: null,
   });
   const updateUser = vi.fn().mockResolvedValue({ error: null });
@@ -23,6 +39,23 @@ function client(saved: unknown = {}, signedIn = true) {
 describe("account-wide study diagnostic", () => {
   it("recognizes the existing signup answer format without a migration", () => {
     expect(hasCompletedStudyDiagnostic(JSON.parse(JSON.stringify(answers)))).toBe(true);
+  });
+  it("only recognizes the explicit persisted started marker", () => {
+    expect(hasStartedStudyDiagnostic(true)).toBe(true);
+    expect(hasStartedStudyDiagnostic(false)).toBe(false);
+    expect(hasStartedStudyDiagnostic("true")).toBe(false);
+  });
+  it("persists the one-time funnel marker after the first answer", async () => {
+    const { supabase, updateUser } = client();
+    expect(await markStudyDiagnosticStarted(supabase)).toBe(true);
+    expect(updateUser).toHaveBeenCalledExactlyOnceWith({
+      data: { study_diagnostic_started: true },
+    });
+  });
+  it("does not rewrite an existing started marker", async () => {
+    const { supabase, updateUser } = client({}, true, true);
+    expect(await markStudyDiagnosticStarted(supabase)).toBe(true);
+    expect(updateUser).not.toHaveBeenCalled();
   });
   it.each([null, undefined, false, "complete", [], {}, { ...answers, 6: undefined },
     { ...answers, 6: { questionIndex: 5, optionIndex: 0, text: "Yes" } },
@@ -35,7 +68,9 @@ describe("account-wide study diagnostic", () => {
   it("saves answers on the authenticated account for subsequent community joins", async () => {
     const { supabase, updateUser } = client();
     expect(await saveStudyDiagnostic(supabase, answers)).toBe(true);
-    expect(updateUser).toHaveBeenCalledExactlyOnceWith({ data: { study_answers: answers } });
+    expect(updateUser).toHaveBeenCalledExactlyOnceWith({
+      data: { study_answers: answers, study_diagnostic_started: true },
+    });
   });
   it("preserves answers already saved at signup, even if the local draft is different", async () => {
     const { supabase, updateUser } = client(answers);
