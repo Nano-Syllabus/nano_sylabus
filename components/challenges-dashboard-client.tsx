@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   FileCheck2,
+  Check,
   ChevronDown,
   FileText,
   LoaderCircle,
@@ -2052,7 +2053,9 @@ export function ChallengesDashboardClient({
                 return (
                   <div
                     key={challenge.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-6 py-5 hover:bg-bg-secondary/40 rounded-xl px-2 -mx-2 transition-colors"
+                    className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-6 py-5 rounded-xl px-2 -mx-2 transition-colors ${
+                      completed ? "bg-success/5" : "hover:bg-bg-secondary/40"
+                    }`}
                   >
                     <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-8">
                       {/* The subject, and under it the subtopic this challenge
@@ -2083,7 +2086,7 @@ export function ChallengesDashboardClient({
                             : undefined
                         }
                       >
-                        {challenge.estimatedMinutes ? (
+                        {challenge.estimatedMinutes && !completed ? (
                           <>
                             <span className="block text-[14px] text-[#6b7280] dark:text-text-muted">
                               ~{challenge.estimatedMinutes} min
@@ -2095,25 +2098,25 @@ export function ChallengesDashboardClient({
                           </>
                         ) : null}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => void openChallenge(challenge)}
-                        disabled={openingId === challenge.id}
-                        aria-busy={openingId === challenge.id}
-                        className={`inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center rounded-[10px] px-4 text-[14px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60 ${
-                          completed
-                            ? "border border-border bg-bg-primary text-text-primary hover:bg-bg-secondary"
-                            : "bg-[#2563eb] text-white hover:bg-[#1d4ed8] shadow-[0_1px_2px_rgba(37,99,235,0.2)]"
-                        }`}
-                      >
-                        {openingId === challenge.id
-                          ? "Opening…"
-                          : completed
-                            ? "View Details"
-                            : started
-                              ? "Continue"
-                              : "Start"}
-                      </button>
+                      {completed ? (
+                        // Done for today, and stays on the list so the day's work
+                        // is visible — but it is a record here, not something to
+                        // open again. The result is in Completed Challenges below.
+                        <span className="inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center gap-1.5 rounded-[10px] bg-success/15 px-3 text-[14px] font-semibold text-success">
+                          <Check className="size-4" aria-hidden="true" />
+                          Completed
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void openChallenge(challenge)}
+                          disabled={openingId === challenge.id}
+                          aria-busy={openingId === challenge.id}
+                          className="inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center rounded-[10px] bg-[#2563eb] px-4 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(37,99,235,0.2)] transition-colors hover:bg-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60"
+                        >
+                          {openingId === challenge.id ? "Opening…" : started ? "Continue" : "Start"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

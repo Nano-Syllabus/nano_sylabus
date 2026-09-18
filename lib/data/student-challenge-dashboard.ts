@@ -834,6 +834,7 @@ export async function getStudentChallengeDashboard(
        * and left the fourth subject looking like it had nothing to study.
        */
       concurrentChallengeLimit: accessibleSubjects.length,
+      includeCompleted: true,
     },
   ));
   const accessibleChallenges = dailyChallenges.filter((challenge) =>

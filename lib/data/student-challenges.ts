@@ -136,6 +136,13 @@ export type EnsureDailyChallengeOptions = {
    * nobody's fourth subject waits for somebody else's topic to be finished.
    */
   concurrentChallengeLimit?: number;
+  /**
+   * Also return today's COMPLETED challenges, after the open ones. The Challenge
+   * Hub keeps a finished challenge on its list — green, and not openable from
+   * there — so today's work stays visible instead of vanishing when it is done.
+   * Every other caller wants only what can still be started.
+   */
+  includeCompleted?: boolean;
 };
 
 export type StudentChallengeSummary = {
@@ -812,14 +819,7 @@ export async function ensureDailyChallenges(
     }),
   );
 
-  if (!selected.length) {
-    return active
-      .sort((left, right) => {
-        const created = String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""));
-        return created || number(left.position) - number(right.position);
-      })
-      .map(toSummary);
-  }
+  if (!selected.length) return listedToday(existing);
 
   const admin = createSupabaseAdminClient();
   const nextPosition = existing.reduce(
@@ -867,24 +867,31 @@ export async function ensureDailyChallenges(
       .insert(rows.map(({ unit_number: _unitNumber, ...row }) => row)));
   }
   if (error?.code === "23505") {
-    const concurrent = (await listDailyRows(userId, date)) ?? [];
-    return concurrent
+    return listedToday((await listDailyRows(userId, date)) ?? []);
+  }
+  if (error) throw error;
+
+  return listedToday(((await listDailyRows(userId, date)) ?? []) as ChallengeRow[]);
+
+  /** Open challenges newest first; then, when asked, today's completed ones. */
+  function listedToday(rows: ChallengeRow[]) {
+    const open = rows
       .filter((row) => row.status !== "completed" && offerableRow(row))
       .sort((left, right) => {
         const created = String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""));
         return created || number(left.position) - number(right.position);
-      })
-      .map(toSummary);
+      });
+    // A finished challenge is shown even if its topic has since been retired:
+    // it is today's record, not an offer.
+    const done = options.includeCompleted
+      ? rows
+          .filter((row) => row.status === "completed" && !isSourceDocumentChallengeRow(row))
+          .sort((left, right) =>
+            String(left.completed_at ?? "").localeCompare(String(right.completed_at ?? "")),
+          )
+      : [];
+    return [...open, ...done].map(toSummary);
   }
-  if (error) throw error;
-
-  return (((await listDailyRows(userId, date)) ?? []) as ChallengeRow[])
-    .filter((row) => row.status !== "completed" && offerableRow(row))
-    .sort((left, right) => {
-      const created = String(right.created_at ?? "").localeCompare(String(left.created_at ?? ""));
-      return created || number(left.position) - number(right.position);
-    })
-    .map(toSummary);
 }
 
 export async function listCompletedStudentChallenges(

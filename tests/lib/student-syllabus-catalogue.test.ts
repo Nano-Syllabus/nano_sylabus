@@ -86,7 +86,8 @@ describe("student challenge dashboard uses the community learning map", () => {
       [expect.objectContaining({ topicTitle: "Identifiers", topicKey: "provider-identifiers" })],
       // One open challenge per subject of the running semester — one subject
       // here, so the flat floor of three still applies inside the queue.
-      { minimumRecommendationCount: 3, concurrentChallengeLimit: 1 },
+      // And today's finished ones, which the hub keeps on its list.
+      { minimumRecommendationCount: 3, concurrentChallengeLimit: 1, includeCompleted: true },
     );
     expect(mocks.topics).toHaveBeenCalledExactlyOnceWith("collection", "Nims");
   });
@@ -179,6 +180,7 @@ describe("student challenge dashboard uses the community learning map", () => {
     expect(mocks.ensure).toHaveBeenCalledWith("member", expect.any(Array), {
       minimumRecommendationCount: 3,
       concurrentChallengeLimit: expect.any(Number),
+      includeCompleted: true,
     });
   });
 
