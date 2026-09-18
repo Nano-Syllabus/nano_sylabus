@@ -33,7 +33,7 @@ export default async function CommunityPage({
       <SetAppShell title="Community Hub" />
       {data ? (
         <CommunityHubClient
-          key={data.community.id}
+          key={`${data.community.id}:${initialSection}:${memberRanking}`}
           communityOptions={active.options}
           initialData={data}
           initialSection={initialSection}

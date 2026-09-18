@@ -933,8 +933,8 @@ function CommunityOverview({
           <MetricCard
             icon={<BookOpen className="size-5" aria-hidden="true" />}
             label="Total subjects"
-            value={formatNumber(data.currentTermSummary.subjectCount)}
-            detail={`Year ${data.currentTerm.yearNumber} · Semester ${data.currentTerm.semesterNumber}`}
+            value={formatNumber(data.subjects.length)}
+            detail="Across the full programme"
           />
           <MetricCard
             icon={<FileText className="size-5" aria-hidden="true" />}
@@ -1095,7 +1095,7 @@ function CommunityTodayLeaderboard({ data }: { data: CommunityHubData }) {
 
       <div className="mt-3 border-t border-border pt-3 text-center">
         <Link
-          href={`/app/community?community=${encodeURIComponent(data.community.slug)}&tab=members&sort=today`}
+          href={`/app/community?community=${encodeURIComponent(data.community.slug)}&tab=members&sort=today#community-members-heading`}
           className={`inline-flex min-h-10 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--community-accent)] hover:underline ${focusRing}`}
         >
           View full leaderboard <ArrowRight className="size-4" aria-hidden="true" />

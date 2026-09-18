@@ -23,10 +23,11 @@ const LABELS = [
 /**
  * `bg-border`, not `bg-bg-secondary`.
  *
- * In the dark theme `--bg-secondary` and `--card` are the SAME value (#101010),
+ * In the dark theme `--bg-secondary` and `--card` intentionally share the
+ * same near-black surface,
  * so a placeholder filled with `bg-bg-secondary` inside a card is exactly the
  * colour of the card — invisible. It only ever looked like a skeleton because
- * the old full-page version sat on `--bg-primary` (#000000) instead.
+ * while the old full-page version sat on the lower page surface instead.
  *
  * `--border` is a translucent white in dark and a translucent black in light,
  * so it reads against a card and a page in both themes. It is the same token

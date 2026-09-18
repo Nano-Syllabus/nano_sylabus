@@ -82,7 +82,7 @@ export function MobileReceiptUpload({ token }: { token: string }) {
       <section className="w-full max-w-md rounded-3xl border border-border bg-bg-primary p-6 shadow-xl sm:p-8">
         <div className="flex items-center gap-3 border-b border-border pb-5">
           <Image
-            src="/nano_logo.png"
+            src="/nanologo.png"
             alt="Nano Syllabus"
             width={42}
             height={42}

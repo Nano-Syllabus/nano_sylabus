@@ -74,16 +74,16 @@ describe("unified Figma library", () => {
   it("browses a deep-linked semester without offering to change the running one", () => {
     const secondTerm = { ...generateCommunityTerms(1, 2)[1], id: "term-2", subjects: [] };
     const html = renderWorkspace({
-        community: {
-          ...community,
-          membership: { ...community.membership!, currentTermId: "term-2" },
-          terms: [...community.terms, secondTerm],
-        },
-        insights: {},
-        initialSelection: { termId: "term-1", subjectSlug: "applied-mechanics", documentId: null },
-        onSubjectSelect: vi.fn(),
-        onMaterialOpen: vi.fn(),
-      });
+      community: {
+        ...community,
+        membership: { ...community.membership!, currentTermId: "term-2" },
+        terms: [...community.terms, secondTerm],
+      },
+      insights: {},
+      initialSelection: { termId: "term-1", subjectSlug: "applied-mechanics", documentId: null },
+      onSubjectSelect: vi.fn(),
+      onMaterialOpen: vi.fn(),
+    });
 
     // The running semester moved to the Challenge Hub, beside the queue it
     // scopes; the Library only BROWSES semesters now, so no picker renders here.
@@ -93,34 +93,34 @@ describe("unified Figma library", () => {
 
   it("renders real community semesters, subjects, and progress in the three-step design", () => {
     const html = renderWorkspace({
-        community,
-        insights: {
-          "subject-1": {
-            subjectId: "subject-1",
-            readiness: 64,
-            materialCount: 3,
-            topicCount: 1,
-            practicedTopicCount: 1,
-            masteredTopicCount: 0,
-            examsTaken: 1,
-            averageScore: 64,
-            topics: [
-              {
-                key: "forces",
-                title: "Forces and equilibrium",
-                blurb: "",
-                unitNumber: "1",
-                percentage: 64,
-                attempts: 2,
-                status: "developing",
-              },
-            ],
-          },
+      community,
+      insights: {
+        "subject-1": {
+          subjectId: "subject-1",
+          readiness: 64,
+          materialCount: 3,
+          topicCount: 1,
+          practicedTopicCount: 1,
+          masteredTopicCount: 0,
+          examsTaken: 1,
+          averageScore: 64,
+          topics: [
+            {
+              key: "forces",
+              title: "Forces and equilibrium",
+              blurb: "",
+              unitNumber: "1",
+              percentage: 64,
+              attempts: 2,
+              status: "developing",
+            },
+          ],
         },
-        initialSelection: { termId: null, subjectSlug: null, documentId: null },
-        onSubjectSelect: vi.fn(),
-        onMaterialOpen: vi.fn(),
-      });
+      },
+      initialSelection: { termId: null, subjectSlug: null, documentId: null },
+      onSubjectSelect: vi.fn(),
+      onMaterialOpen: vi.fn(),
+    });
 
     expect(html).toContain("1. Choose Semester");
     expect(html).toContain("2. Choose Subject");
@@ -136,8 +136,10 @@ describe("unified Figma library", () => {
     );
     expect(appliedMechanicsCard).toContain('data-progress-level="low"');
     expect(appliedMechanicsCard).toContain("text-[var(--community-accent)]");
+    expect(html).toContain("Community Managed Library");
+    expect(html).not.toContain(">Community Library</h1>");
     expect(html).toContain("type-student-page-title");
-    expect(html).toContain("/figma/library/book-open.svg");
+    expect(html).toContain('class="lucide lucide-book-open');
     expect(html).not.toContain("Choose running semester");
     expect(html).toContain("lg:grid-cols-2");
     expect(html).toContain("Forces and equilibrium");
@@ -162,6 +164,15 @@ describe("unified Figma library", () => {
 
     expect(library).toContain("/api/student/materials?subject=");
     expect(library).toContain("courseId=");
+    expect(library).toContain("/figma/library/pdf-document.svg");
+    expect(library).toContain('<BookOpen className="size-7 text-text-primary"');
+    expect(library).toContain("<LockKeyhole");
+    expect(library).toContain("<ChevronRight");
+    expect(library).not.toContain("/figma/library/book-open.svg");
+    expect(library).not.toContain("/figma/library/lock.svg");
+    expect(library).not.toContain("/figma/library/chevron-right.svg");
+    expect(library).not.toContain("GraduationCap");
+    expect(library).toContain('return `${baseName || "Document"}.pdf`');
     // The running-semester WRITE moved to the Challenge Hub with its picker.
     expect(library).not.toContain("/membership");
     expect(library).not.toContain("saveRunningSemester");

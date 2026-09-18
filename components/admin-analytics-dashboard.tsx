@@ -273,7 +273,7 @@ export function AdminAnalyticsDashboard() {
           className="flex h-[73px] items-center gap-2.5 border-b border-border px-5 focus-visible:outline-2 focus-visible:outline-ring"
         >
           <Image
-            src="/nano_logo.png"
+            src="/nanologo.png"
             alt=""
             width={32}
             height={32}

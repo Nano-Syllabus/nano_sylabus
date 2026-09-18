@@ -56,11 +56,7 @@ const PLAN_COPY = {
   pro: {
     title: "Pro",
     description: "Everything in Plus",
-    fallbackFeatures: [
-      "AI tutor",
-      "AI concept videos & animations",
-      "English & Nepali",
-    ],
+    fallbackFeatures: ["AI tutor", "AI concept videos & animations", "English & Nepali"],
   },
 } as const;
 
@@ -97,7 +93,7 @@ function formatPlanPrice(plan: SubscriptionPlan | null, months: 1 | 3, fallback:
 
 function FeatureList({ features }: { features: string[] }) {
   return (
-    <ul className="type-student-body m-0 mt-4 list-none space-y-3 p-0 font-medium text-[#293044]">
+    <ul className="type-student-body m-0 mt-4 list-none space-y-3 p-0 font-medium text-text-secondary">
       {features.map((feature) => (
         <li key={feature} className="flex items-start gap-2.5">
           <Check
@@ -165,35 +161,32 @@ export function BillingPageClient({
     );
   }, [activeSubscription, overview.invoices, overview.plans]);
 
-  const activePlanLabel = activePlan?.slug === "plus-monthly"
-    ? "Plus"
-    : activePlan?.productType === "group"
-      ? "Group"
-      : "Pro";
+  const activePlanLabel =
+    activePlan?.slug === "plus-monthly"
+      ? "Plus"
+      : activePlan?.productType === "group"
+        ? "Group"
+        : "Pro";
   const plusIsCurrent = Boolean(activePlan && plans.plus && activePlan.id === plans.plus.id);
   const proIsCurrent = Boolean(activePlan && plans.pro && activePlan.id === plans.pro.id);
 
-  const hasUnlimitedAccess = cancelledSubscriptionIds.length > 0
-    ? overview.subscriptions.some((subscription) => {
-        if (
-          cancelledSubscriptionIds.includes(subscription.id) ||
-          subscription.status !== "active"
-        ) {
-          return false;
-        }
-        if (subscription.endsAt && new Date(subscription.endsAt).getTime() <= Date.now()) {
-          return false;
-        }
-        return overview.plans.some(
-          (plan) => plan.id === subscription.planId && plan.isUnlimited,
-        );
-      })
-    : user.hasUnlimitedAccess;
+  const hasUnlimitedAccess =
+    cancelledSubscriptionIds.length > 0
+      ? overview.subscriptions.some((subscription) => {
+          if (
+            cancelledSubscriptionIds.includes(subscription.id) ||
+            subscription.status !== "active"
+          ) {
+            return false;
+          }
+          if (subscription.endsAt && new Date(subscription.endsAt).getTime() <= Date.now()) {
+            return false;
+          }
+          return overview.plans.some((plan) => plan.id === subscription.planId && plan.isUnlimited);
+        })
+      : user.hasUnlimitedAccess;
 
-  async function requestInvoice(
-    plan: SubscriptionPlan,
-    months: 1 | 3,
-  ): Promise<CheckoutInvoice> {
+  async function requestInvoice(plan: SubscriptionPlan, months: 1 | 3): Promise<CheckoutInvoice> {
     const response = await fetch("/api/billing/invoices", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -216,9 +209,7 @@ export function BillingPageClient({
     return { ...payload.invoice, plan, paymentSubmission: null };
   }
 
-  async function createInvoice(
-    plan: SubscriptionPlan,
-  ) {
+  async function createInvoice(plan: SubscriptionPlan) {
     setCreatingPlanId(plan.id);
     setError("");
     setSuccess("");
@@ -286,12 +277,12 @@ export function BillingPageClient({
 
   return (
     <>
-      {/* This route intentionally keeps the Figma light-artboard palette in both app themes. */}
-      <main className="min-h-full bg-[#fbfcfe] pb-20 pt-6 text-[#111827]">
+      {/* Neutral surfaces follow the app theme; plan and payment accents retain their meaning. */}
+      <main className="min-h-full bg-bg-primary pb-20 pt-6 text-text-primary">
         {error ? (
           <div
             role="alert"
-            className="student-page-width mb-5 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 py-2 pl-4 pr-2 text-sm text-red-700"
+            className="student-page-width mb-5 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 py-2 pl-4 pr-2 text-sm text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200"
           >
             <span>{error}</span>
             <button
@@ -307,7 +298,7 @@ export function BillingPageClient({
         {success ? (
           <div
             role="status"
-            className="student-page-width mb-5 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 py-2 pl-4 pr-2 text-sm text-emerald-800"
+            className="student-page-width mb-5 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 py-2 pl-4 pr-2 text-sm text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200"
           >
             <span>{success}</span>
             <button
@@ -322,11 +313,11 @@ export function BillingPageClient({
         ) : null}
 
         <header className="student-page-width flex flex-col items-center text-center">
-          <h1 className="type-student-page-title text-[#111827]">
+          <h1 className="type-student-page-title text-text-primary">
             Simple plans. Bigger dreams.
           </h1>
           <div
-            className="mt-5 inline-flex h-11 items-center rounded-full border border-[#dfe4ed] bg-white p-[2px]"
+            className="mt-5 inline-flex h-11 items-center rounded-full border border-border bg-card p-[2px]"
             aria-label="Billing period"
           >
             <button
@@ -335,7 +326,7 @@ export function BillingPageClient({
               onClick={() => setBillingMonths(1)}
               className={cn(
                 "h-10 rounded-full px-6 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
-                billingMonths === 1 ? "bg-[#111827] text-white" : "text-[#7b8498]",
+                billingMonths === 1 ? "bg-text-primary text-text-inverse" : "text-text-muted",
               )}
             >
               1 month
@@ -346,7 +337,7 @@ export function BillingPageClient({
               onClick={() => setBillingMonths(3)}
               className={cn(
                 "h-10 rounded-full px-6 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
-                billingMonths === 3 ? "bg-[#111827] text-white" : "text-[#7b8498]",
+                billingMonths === 3 ? "bg-text-primary text-text-inverse" : "text-text-muted",
               )}
             >
               3 months
@@ -408,31 +399,36 @@ export function BillingPageClient({
         {/* Social Proof / Stats Section */}
         <section aria-label="Community activity" className="student-page-width mt-16 sm:mt-20">
           <div className="text-center">
-            <h2 className="type-student-section-title text-[#111827]">
+            <h2 className="type-student-section-title text-text-primary">
               You don’t have to prepare alone.
             </h2>
-            <p className="type-student-body mt-1.5 font-medium text-[#697387]">
+            <p className="type-student-body mt-1.5 font-medium text-text-secondary">
               See the work happening across NanoSyllabus.
             </p>
           </div>
 
-          <div className="mt-8 grid overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-xs sm:grid-cols-3">
+          <div className="mt-8 grid overflow-hidden rounded-2xl border border-border bg-card shadow-xs sm:grid-cols-3">
             {[
               [overview.socialProof.challengesCompletedThisWeek, "Challenges completed this week"],
               [overview.socialProof.handwrittenAnswersReviewed, "Handwritten answers reviewed"],
-              [overview.socialProof.activeStudyCommunityMembers, "Students active in study communities"],
+              [
+                overview.socialProof.activeStudyCommunityMembers,
+                "Students active in study communities",
+              ],
             ].map(([value, label], index) => (
               <div
                 key={label}
                 className={cn(
                   "px-7 py-6 sm:px-9 sm:py-7",
-                  index > 0 && "border-t border-[#e1e6ee] sm:border-l sm:border-t-0",
+                  index > 0 && "border-t border-border sm:border-l sm:border-t-0",
                 )}
               >
-                <p className="type-student-metric text-3xl sm:text-4xl text-[#111827]">
+                <p className="type-student-metric text-3xl sm:text-4xl text-text-primary">
                   {Number(value).toLocaleString("en-NP")}
                 </p>
-                <p className="type-student-body mt-2 text-[14px] font-medium text-[#697387]">{label}</p>
+                <p className="type-student-body mt-2 text-[14px] font-medium text-text-secondary">
+                  {label}
+                </p>
               </div>
             ))}
           </div>
@@ -440,14 +436,14 @@ export function BillingPageClient({
 
         {/* Real Stories / Testimonials Section */}
         <section aria-label="Student testimonials" className="student-page-width mt-16 sm:mt-20">
-          <h2 className="type-student-section-title text-center text-[#111827]">
+          <h2 className="type-student-section-title text-center text-text-primary">
             Real Stories, Real Growth
           </h2>
           <div className="mt-8 grid gap-6 lg:grid-cols-3">
             {TESTIMONIALS.map((testimonial) => (
               <article
                 key={testimonial.name}
-                className="rounded-2xl border border-[#e1e6ee] bg-white p-7 shadow-xs flex flex-col justify-between"
+                className="rounded-2xl border border-border bg-card p-7 shadow-xs flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center gap-3.5">
@@ -459,10 +455,10 @@ export function BillingPageClient({
                       className="size-[42px] rounded-full object-cover"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="type-student-card-title text-[16px] truncate text-[#111827]">
+                      <p className="type-student-card-title text-[16px] truncate text-text-primary">
                         {testimonial.name}
                       </p>
-                      <p className="type-student-body text-[13.5px] truncate font-medium text-[#697387]">
+                      <p className="type-student-body text-[13.5px] truncate font-medium text-text-secondary">
                         {testimonial.course}
                       </p>
                     </div>
@@ -470,7 +466,7 @@ export function BillingPageClient({
                       {testimonial.badge}
                     </span>
                   </div>
-                  <p className="type-student-body mt-4 text-[14.5px] sm:text-[15px] font-medium text-[#697387] leading-relaxed">
+                  <p className="type-student-body mt-4 text-[14.5px] sm:text-[15px] font-medium text-text-secondary leading-relaxed">
                     <span className="mr-2 text-base font-bold leading-none text-[#c9ee47]">“</span>
                     {testimonial.quote}
                   </p>
@@ -530,7 +526,7 @@ export function BillingPageClient({
         {activeSubscription && activePlan ? (
           <section
             aria-label="Manage subscription"
-            className="student-page-width mt-14 sm:mt-16 flex flex-col gap-5 rounded-xl border border-[#e1e6ee] bg-white p-6 sm:flex-row sm:items-center sm:justify-between shadow-xs"
+            className="student-page-width mt-14 sm:mt-16 flex flex-col gap-5 rounded-xl border border-border bg-card p-6 sm:flex-row sm:items-center sm:justify-between shadow-xs"
           >
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
@@ -541,9 +537,7 @@ export function BillingPageClient({
               </h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
                 Your paid access is active
-                {activeSubscription.endsAt
-                  ? ` until ${formatDate(activeSubscription.endsAt)}`
-                  : ""}
+                {activeSubscription.endsAt ? ` until ${formatDate(activeSubscription.endsAt)}` : ""}
                 . Cancelling ends access immediately, after which you can choose this plan or a
                 different plan again.
               </p>
@@ -563,11 +557,11 @@ export function BillingPageClient({
         {/* Invoices & Payment Activity */}
         <section
           aria-label="Payment activity"
-          className="student-page-width mt-16 sm:mt-20 border-t border-[#e1e6ee] pt-12"
+          className="student-page-width mt-16 sm:mt-20 border-t border-border pt-12"
         >
           <div>
             <p className="type-student-eyebrow text-text-muted">PAYMENT ACTIVITY</p>
-            <h2 className="type-student-page-title mt-1.5 text-[#111827]">Your invoices</h2>
+            <h2 className="type-student-page-title mt-1.5 text-text-primary">Your invoices</h2>
             <p className="type-student-body mt-1 text-text-secondary">
               Review your payment status or complete a pending payment.
             </p>
@@ -578,12 +572,13 @@ export function BillingPageClient({
               {overview.invoices.map((invoice) => (
                 <article
                   key={invoice.id}
-                  className="flex flex-col gap-4 rounded-xl border border-[#e1e6ee] bg-white p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
-                    <p className="type-student-card-title text-[#111827]">{invoice.plan.name}</p>
+                    <p className="type-student-card-title text-text-primary">{invoice.plan.name}</p>
                     <p className="type-student-body mt-1 text-text-secondary">
-                      {invoice.currency} {invoice.amount.toLocaleString()} · {formatDate(invoice.createdAt)}
+                      {invoice.currency} {invoice.amount.toLocaleString()} ·{" "}
+                      {formatDate(invoice.createdAt)}
                     </p>
                     <p className="type-student-eyebrow mt-3 font-semibold uppercase text-text-muted">
                       {invoice.status.replaceAll("_", " ")}
@@ -593,7 +588,7 @@ export function BillingPageClient({
                     <button
                       type="button"
                       onClick={() => setSelectedInvoice(invoice)}
-                      className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md bg-[#111827] px-4 text-sm font-semibold text-white hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2"
+                      className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md bg-text-primary px-4 text-sm font-semibold text-text-inverse hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2"
                     >
                       {invoice.paymentSubmission ? "Edit payment" : "Open payment QR"}
                     </button>
@@ -602,18 +597,17 @@ export function BillingPageClient({
               ))}
             </div>
           ) : (
-            <div className="mt-8 flex min-h-60 flex-col items-center justify-center rounded-2xl border border-[#e1e6ee] bg-white px-6 py-12 text-center shadow-xs">
-              <span className="flex size-12 items-center justify-center rounded-xl bg-[#f3f4f6] text-[#6b7280]">
+            <div className="mt-8 flex min-h-60 flex-col items-center justify-center rounded-2xl border border-border bg-card px-6 py-12 text-center shadow-xs">
+              <span className="flex size-12 items-center justify-center rounded-xl bg-bg-tertiary text-text-muted">
                 <FileText className="size-6" aria-hidden="true" />
               </span>
-              <h3 className="type-student-section-title mt-4 text-[#111827]">No invoices yet</h3>
+              <h3 className="type-student-section-title mt-4 text-text-primary">No invoices yet</h3>
               <p className="type-student-body mt-2 max-w-sm text-text-secondary">
                 Your invoices will appear here after you choose a paid plan.
               </p>
             </div>
           )}
         </section>
-
       </main>
 
       {selectedInvoice ? (
@@ -676,7 +670,7 @@ function PricingCard({
   return (
     <article
       className={cn(
-        "relative flex min-h-[400px] w-full flex-col rounded-xl border border-[#dfe4ed] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
+        "relative flex min-h-[400px] w-full flex-col rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
         featured && "border-[#aab7e7] shadow-[0_4px_14px_rgba(39,64,190,0.08)]",
       )}
     >
@@ -685,27 +679,21 @@ function PricingCard({
           {title}
         </h2>
       ) : null}
-      {!featured ? (
-        <h2 className="type-student-card-title text-[#111827]">
-          {title}
-        </h2>
-      ) : null}
-      <p className="type-student-metric mt-1 text-[#111827]">
-        {price}
-      </p>
-      <p className="type-student-body mt-1 min-h-4 font-medium text-[#697387]">{eyebrow}</p>
-      <div className="mt-4 h-px w-full bg-[#d8dee8]" />
+      {!featured ? <h2 className="type-student-card-title text-text-primary">{title}</h2> : null}
+      <p className="type-student-metric mt-1 text-text-primary">{price}</p>
+      <p className="type-student-body mt-1 min-h-4 font-medium text-text-secondary">{eyebrow}</p>
+      <div className="mt-4 h-px w-full bg-border" />
       {includes ? (
-        <h3 className="type-student-card-title mt-4 text-[#222a3a]">{includes}</h3>
+        <h3 className="type-student-card-title mt-4 text-text-primary">{includes}</h3>
       ) : null}
       <FeatureList features={features} />
       <div className="mt-auto pt-7">
         <button
           type="button"
           className={cn(
-            "flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[#111827] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-[#e4e6e9] disabled:text-[#747c8d] disabled:opacity-100",
-            featured && !current && "bg-[#3548f5]",
-            current && "bg-[#e8f6ee] text-[#187a42]",
+            "flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-text-primary px-4 py-2 text-sm font-semibold text-text-inverse transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-bg-tertiary disabled:text-text-muted disabled:opacity-100",
+            featured && !current && "bg-[#3548f5] !text-white",
+            current && "bg-[#e8f6ee] text-[#187a42] dark:bg-emerald-500/15 dark:text-emerald-300",
           )}
           onClick={onAction}
           disabled={loading || disabled}
@@ -716,7 +704,7 @@ function PricingCard({
           {!loading && !disabled ? <span aria-hidden="true">→</span> : null}
         </button>
         {current ? (
-          <p className="type-student-body mt-1.5 text-center font-medium text-[#697387]">
+          <p className="type-student-body mt-1.5 text-center font-medium text-text-secondary">
             {accessEndsAt
               ? `Active until ${formatDate(accessEndsAt)}`
               : "Active with no expiry date"}
@@ -839,7 +827,7 @@ export function PaymentSubmissionModal({
         aria-modal="true"
         aria-labelledby="billing-dialog-title"
         tabIndex={-1}
-        className="max-h-[min(94dvh,850px)] w-full max-w-[1040px] overflow-y-auto rounded-[32px] bg-white p-7 text-[#111827] shadow-2xl focus:outline-none sm:p-9 md:p-10"
+        className="max-h-[min(94dvh,850px)] w-full max-w-[1040px] overflow-y-auto rounded-[32px] bg-card p-7 text-text-primary shadow-2xl focus:outline-none sm:p-9 md:p-10"
       >
         {/* Modal Header */}
         <div className="flex items-start justify-between gap-4">
@@ -850,11 +838,11 @@ export function PaymentSubmissionModal({
             <div>
               <h2
                 id="billing-dialog-title"
-                className="font-display text-2xl font-bold tracking-tight text-gray-950 sm:text-[28px]"
+                className="font-display text-2xl font-bold tracking-tight text-text-primary sm:text-[28px]"
               >
                 Verify your payment
               </h2>
-              <p className="mt-0.5 text-sm font-medium text-gray-500 sm:text-base">
+              <p className="mt-0.5 text-sm font-medium text-text-muted sm:text-base">
                 Complete these 2 steps to activate your access.
               </p>
             </div>
@@ -865,7 +853,7 @@ export function PaymentSubmissionModal({
             onClick={onClose}
             disabled={saving}
             aria-label="Close payment dialog"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-400 transition hover:bg-gray-200 hover:text-gray-700 disabled:opacity-50 sm:size-10"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-text-muted transition hover:bg-bg-tertiary hover:text-text-secondary disabled:opacity-50 sm:size-10"
           >
             <X className="size-4 sm:size-5" aria-hidden="true" />
           </button>
@@ -875,15 +863,13 @@ export function PaymentSubmissionModal({
           {/* Two Steps Grid */}
           <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
             {/* Step 1: Pay via QR */}
-            <div className="flex flex-col justify-between rounded-[22px] border border-[#e4f5e0] bg-[#f8fdf9] p-6 sm:p-7">
+            <div className="flex flex-col justify-between rounded-[22px] border border-[#e4f5e0] bg-[#f8fdf9] p-6 dark:border-emerald-500/20 dark:bg-emerald-500/5 sm:p-7">
               <div>
-                <h3 className="text-base font-bold text-gray-900 sm:text-lg">
-                  1. Pay via QR
-                </h3>
+                <h3 className="text-base font-bold text-text-primary sm:text-lg">1. Pay via QR</h3>
 
                 <div className="mt-5 flex items-center gap-4 sm:gap-6">
                   {/* QR Code Container */}
-                  <div className="flex size-[160px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-gray-200/80 bg-white p-2.5 shadow-xs sm:size-[180px]">
+                  <div className="flex size-[160px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-white p-2.5 shadow-xs sm:size-[180px]">
                     {paymentConfig ? (
                       <Image
                         src={paymentConfig.qrImageUrl}
@@ -894,7 +880,7 @@ export function PaymentSubmissionModal({
                         className="size-full rounded-xl object-contain"
                       />
                     ) : (
-                      <div className="flex size-full flex-col items-center justify-center p-2 text-center text-xs text-gray-400">
+                      <div className="flex size-full flex-col items-center justify-center p-2 text-center text-xs text-text-muted">
                         Payment QR not configured yet
                       </div>
                     )}
@@ -905,14 +891,16 @@ export function PaymentSubmissionModal({
                     <div className="flex size-7 items-center justify-center rounded-lg bg-[#e3f7d4] text-[#24591e]">
                       <Wallet className="size-4" aria-hidden="true" />
                     </div>
-                    <p className="mt-1.5 text-xs font-semibold text-gray-500 sm:text-sm">Payment amount</p>
-                    <p className="font-display text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
+                    <p className="mt-1.5 text-xs font-semibold text-text-muted sm:text-sm">
+                      Payment amount
+                    </p>
+                    <p className="font-display text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
                       {invoice.currency} {invoice.amount.toLocaleString()}
                     </p>
 
-                    <div className="my-3.5 w-full border-t border-gray-200/70" />
+                    <div className="my-3.5 w-full border-t border-border" />
 
-                    <p className="text-xs font-semibold text-gray-500 sm:text-sm">Remarks</p>
+                    <p className="text-xs font-semibold text-text-muted sm:text-sm">Remarks</p>
                     <div className="mt-1.5 inline-flex items-center rounded-lg bg-[#e3f7d4] px-3 py-1.5 text-xs font-bold text-[#24591e] sm:text-sm">
                       Invoice ID: {invoice.invoiceCode}
                     </div>
@@ -921,7 +909,7 @@ export function PaymentSubmissionModal({
               </div>
 
               {/* Step 1 Bottom Notice */}
-              <div className="mt-6 flex items-start gap-3 rounded-xl border border-[#d6f2ca] bg-[#eefae8] p-3.5 text-xs sm:text-[13px] leading-relaxed text-gray-700">
+              <div className="mt-6 flex items-start gap-3 rounded-xl border border-[#d6f2ca] bg-[#eefae8] p-3.5 text-xs leading-relaxed text-text-secondary dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-text-secondary sm:text-[13px]">
                 <Smartphone className="mt-0.5 size-4 shrink-0 text-[#24591e]" aria-hidden="true" />
                 <p>
                   Make sure the screenshot clearly shows the invoice ID ({invoice.invoiceCode}) in
@@ -931,9 +919,9 @@ export function PaymentSubmissionModal({
             </div>
 
             {/* Step 2: Upload payment screenshot */}
-            <div className="flex flex-col justify-between rounded-[22px] border border-gray-200/90 bg-white p-6 sm:p-7">
+            <div className="flex flex-col justify-between rounded-[22px] border border-border bg-card p-6 sm:p-7">
               <div>
-                <h3 className="text-base font-bold text-gray-900 sm:text-lg">
+                <h3 className="text-base font-bold text-text-primary sm:text-lg">
                   2. Upload payment screenshot
                 </h3>
 
@@ -958,16 +946,16 @@ export function PaymentSubmissionModal({
                         ? "border-emerald-500 bg-emerald-50/50"
                         : receipt
                           ? "border-emerald-400 bg-emerald-50/30"
-                          : "border-gray-200 bg-gray-50/40 hover:border-gray-300",
+                          : "border-border bg-bg-secondary hover:border-border-strong",
                     )}
                   >
                     {receipt ? (
                       <div className="flex flex-col items-center p-1">
                         <CheckCircle2 className="size-9 text-emerald-600 mb-1" aria-hidden="true" />
-                        <p className="max-w-[150px] truncate text-xs font-bold text-gray-900 sm:text-sm">
+                        <p className="max-w-[150px] truncate text-xs font-bold text-text-primary sm:text-sm">
                           {receipt.name}
                         </p>
-                        <p className="mt-0.5 text-xs text-gray-500">
+                        <p className="mt-0.5 text-xs text-text-muted">
                           {(receipt.size / (1024 * 1024)).toFixed(2)} MB
                         </p>
                         <button
@@ -983,18 +971,22 @@ export function PaymentSubmissionModal({
                       </div>
                     ) : (
                       <>
-                        <UploadCloud className="size-9 text-gray-800" strokeWidth={1.8} aria-hidden="true" />
-                        <p className="mt-2 text-sm font-bold text-gray-900 sm:text-[15px]">
+                        <UploadCloud
+                          className="size-9 text-text-secondary"
+                          strokeWidth={1.8}
+                          aria-hidden="true"
+                        />
+                        <p className="mt-2 text-sm font-bold text-text-primary sm:text-[15px]">
                           Upload screenshot
                         </p>
-                        <p className="mt-0.5 max-w-[150px] text-xs leading-snug text-gray-500">
+                        <p className="mt-0.5 max-w-[150px] text-xs leading-snug text-text-muted">
                           Drag and drop or click to upload from your device.
                         </p>
-                        <span className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[#e3f7d4] px-4 py-2 text-xs font-bold text-gray-900 shadow-xs transition hover:bg-[#d5f3c1] sm:text-sm">
+                        <span className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[#e3f7d4] px-4 py-2 text-xs font-bold text-text-primary shadow-xs transition hover:bg-[#d5f3c1] sm:text-sm">
                           <Upload className="size-4" aria-hidden="true" />
                           Choose file
                         </span>
-                        <p className="mt-2 text-[10.5px] text-gray-400">
+                        <p className="mt-2 text-[10.5px] text-text-muted">
                           JPG, PNG, WebP or PDF · Max 5 MB
                         </p>
                       </>
@@ -1014,9 +1006,9 @@ export function PaymentSubmissionModal({
 
                   {/* Middle OR Divider */}
                   <div className="relative flex items-center justify-center my-1 sm:my-0 sm:flex-col">
-                    <div className="hidden sm:block absolute inset-y-0 w-px bg-gray-200" />
-                    <div className="sm:hidden absolute inset-x-0 h-px bg-gray-200" />
-                    <span className="relative z-10 flex size-7 items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-400 shadow-2xs">
+                    <div className="absolute inset-y-0 hidden w-px bg-border sm:block" />
+                    <div className="absolute inset-x-0 h-px bg-border sm:hidden" />
+                    <span className="relative z-10 flex size-7 items-center justify-center rounded-full border border-border bg-card text-xs font-bold text-text-muted shadow-2xs">
                       OR
                     </span>
                   </div>
@@ -1048,11 +1040,11 @@ export function PaymentSubmissionModal({
           {/* Saving Status Notification */}
           {saving ? (
             <div
-              className="mt-4 flex items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"
+              className="mt-4 flex items-center justify-center gap-2.5 rounded-xl border border-border bg-bg-secondary p-3 text-sm text-text-secondary"
               role="status"
               aria-live="polite"
             >
-              <LoaderCircle className="size-4 animate-spin text-gray-900" />
+              <LoaderCircle className="size-4 animate-spin text-text-primary" />
               <span>Activating your access. Please wait a few seconds...</span>
             </div>
           ) : null}
@@ -1065,8 +1057,8 @@ export function PaymentSubmissionModal({
             className={cn(
               "mt-6 w-full rounded-2xl py-4 text-base font-bold transition-all",
               hasProof && !saving && paymentConfig
-                ? "bg-[#101828] text-white hover:bg-black active:scale-[0.99] shadow-sm cursor-pointer"
-                : "bg-[#d0d7e2] text-white cursor-not-allowed hover:bg-[#d0d7e2]",
+                ? "bg-text-primary text-text-inverse hover:opacity-90 active:scale-[0.99] shadow-sm cursor-pointer"
+                : "bg-bg-tertiary text-text-muted cursor-not-allowed",
             )}
             aria-busy={saving}
           >

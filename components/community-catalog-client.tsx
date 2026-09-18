@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { X, Loader2 } from "lucide-react";
@@ -1185,12 +1186,13 @@ export function CommunityCatalogClient({
       {/* Topbar matching preview (2).html */}
       <header className="ns-topbar">
         <Link className="ns-brand" href="/" aria-label="NanoSyllabus home">
-          <svg className="ns-brand-mark" viewBox="0 0 64 64" aria-hidden="true">
-            <path fill="#1768ff" d="M8 23 32 11l24 12-24 12L8 23Zm5 12 19 9 19-9v8l-19 10-19-10v-8Z"/>
-            <path fill="#0e3ea8" d="m13 27 19 9 19-9v5l-19 9-19-9v-5Z"/>
-            <path fill="#fff" d="m20 23 12-6 12 6-12 6-12-6Z"/>
-            <path fill="#1768ff" d="M31 3h2v8h-2zM18 9l2-1 3 6-2 1zM44 8l2 1-3 6-2-1z"/>
-          </svg>
+          <Image
+            className="ns-brand-mark"
+            src="/nanologo.png"
+            alt=""
+            width={42}
+            height={42}
+          />
           <span>NanoSyllabus</span>
         </Link>
         <Link

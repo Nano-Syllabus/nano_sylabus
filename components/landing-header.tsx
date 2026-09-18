@@ -44,7 +44,7 @@ export function LandingHeader({ dark = false }: { dark?: boolean }) {
           href="/"
         >
           <Image
-            src="/nano_logo.png"
+            src="/nanologo.png"
             alt="Nano Syllabus"
             width={28}
             height={28}

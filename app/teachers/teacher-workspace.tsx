@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
@@ -4569,9 +4570,13 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
             className={cn("flex min-h-12 items-center gap-3 rounded-lg px-2 text-left", focusRing)}
             onClick={() => navigate({ name: "today" })}
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-text-primary font-display font-bold text-text-inverse">
-              n
-            </span>
+            <Image
+              src="/nanologo.png"
+              alt=""
+              width={36}
+              height={36}
+              className="h-9 w-9 rounded-lg object-contain"
+            />
             <span>
               <span className="block font-display font-semibold">Nano Syllabus</span>
               <span className="block text-xs uppercase tracking-[0.14em] text-text-muted">

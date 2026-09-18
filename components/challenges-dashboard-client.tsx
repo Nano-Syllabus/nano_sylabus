@@ -695,7 +695,6 @@ function ChallengeDetail({
     else setPracticeStage("questions");
   };
 
-
   const resultEvaluation = evaluation ?? challenge.latestAttempt?.evaluation ?? null;
   const resultPercentage =
     resultEvaluation?.percentage ??
@@ -752,7 +751,6 @@ function ChallengeDetail({
       {focusMode ? <span>Exit</span> : <span className="hidden md:inline">Focus mode</span>}
     </button>
   );
-
 
   return (
     <main
@@ -822,7 +820,6 @@ function ChallengeDetail({
                   the same markup at every breakpoint and has the full width to use. */}
               <p className="mt-5 text-xs text-text-muted">{challengeEyebrow}</p>
               <h1 className="mt-1 font-display text-xl font-semibold">{challenge.title}</h1>
-
             </>
           ) : null}
 
@@ -952,10 +949,7 @@ function ChallengeDetail({
                     })}
                   </ol>
                 ) : buildingRest ? (
-                  <ChallengeBuildingNotice
-                    label="Finding this topic's past questions…"
-                    lines={3}
-                  />
+                  <ChallengeBuildingNotice label="Finding this topic's past questions…" lines={3} />
                 ) : buildFailed ? (
                   <ChallengeBuildFailure
                     message={buildFailed}
@@ -980,46 +974,46 @@ function ChallengeDetail({
             {activeStep === 2 ? (
               <div>
                 {practiceStage === "questions" ? (
-                <>
-                <h2 className="text-xl font-semibold">📝 Your Turn</h2>
-                <p className="mt-2 text-sm text-text-muted">
-                  {challenge.status === "completed"
-                    ? "Review the questions and feedback from your completed attempt."
-                    : "Write your answers on paper."}
-                </p>
-                {challenge.status === "completed" && !challenge.latestAttempt ? (
-                  <div className="mt-5 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-text-secondary">
-                    This result is saved, but its answer details are unavailable for review.
-                  </div>
-                ) : null}
-                {content.examQuestions.length ? (
-                  <div className="mt-6 space-y-5">
-                    {content.examQuestions.map((question, index) => (
-                      <article key={question.id} className="rounded-xl bg-bg-secondary p-5">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                          Question {index + 1} · {question.marks} marks
-                        </p>
-                        <Markdown
-                          text={question.question}
-                          className="mt-2 text-sm font-semibold leading-6"
-                        />
-                      </article>
-                    ))}
-                  </div>
-                ) : buildingRest ? (
-                  <ChallengeBuildingNotice label="Setting your questions from the course material…" />
-                ) : buildFailed ? (
-                  <ChallengeBuildFailure
-                    message={buildFailed}
-                    retrying={retryingContent}
-                    onRetry={() => void retryContentBuild()}
-                  />
-                ) : (
-                  <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
-                    No practice question is available. Go back and try another challenge.
-                  </div>
-                )}
-                </>
+                  <>
+                    <h2 className="text-xl font-semibold">📝 Your Turn</h2>
+                    <p className="mt-2 text-sm text-text-muted">
+                      {challenge.status === "completed"
+                        ? "Review the questions and feedback from your completed attempt."
+                        : "Write your answers on paper."}
+                    </p>
+                    {challenge.status === "completed" && !challenge.latestAttempt ? (
+                      <div className="mt-5 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-text-secondary">
+                        This result is saved, but its answer details are unavailable for review.
+                      </div>
+                    ) : null}
+                    {content.examQuestions.length ? (
+                      <div className="mt-6 space-y-5">
+                        {content.examQuestions.map((question, index) => (
+                          <article key={question.id} className="rounded-xl bg-bg-secondary p-5">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                              Question {index + 1} · {question.marks} marks
+                            </p>
+                            <Markdown
+                              text={question.question}
+                              className="mt-2 text-sm font-semibold leading-6"
+                            />
+                          </article>
+                        ))}
+                      </div>
+                    ) : buildingRest ? (
+                      <ChallengeBuildingNotice label="Setting your questions from the course material…" />
+                    ) : buildFailed ? (
+                      <ChallengeBuildFailure
+                        message={buildFailed}
+                        retrying={retryingContent}
+                        onRetry={() => void retryContentBuild()}
+                      />
+                    ) : (
+                      <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
+                        No practice question is available. Go back and try another challenge.
+                      </div>
+                    )}
+                  </>
                 ) : null}
 
                 {/* The clock is in the corner; it is not repeated here. */}
@@ -1127,321 +1121,323 @@ function ChallengeDetail({
                 ) : null}
 
                 {practiceStage === "result" ? (
-                <div>
-                  <h2 className="text-xl font-semibold">📊 Challenge Result</h2>
-                  <p className="mt-2 text-sm text-text-muted">
-                    Your handwritten answer sheet has been read and graded against this challenge.
-                  </p>
-                  {score ? (
-                    <div className="mt-6 space-y-6">
-                      <div
-                        className={`rounded-xl border p-5 sm:p-6 ${score.passed ? "border-success/40 bg-success/10" : "border-warning/40 bg-warning/10"}`}
-                      >
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                              Your score
-                            </p>
-                            <p className="mt-1 font-mono text-4xl font-bold tabular-nums text-text-primary">
-                              {displayNumber(score.earned)}{" "}
-                              <span className="text-lg font-semibold text-text-muted">
-                                / {displayNumber(score.total)}
-                              </span>
-                            </p>
-                          </div>
-                          <p
-                            className={`text-sm font-semibold ${score.passed ? "text-success" : "text-warning"}`}
-                          >
-                            {score.passed ? "Challenge passed · +50 XP ✓" : "Not passed yet"}
-                          </p>
-                        </div>
-
-                        <div className="mt-6 grid gap-3 border-t border-border/70 pt-5 sm:grid-cols-3">
-                          <div className="rounded-lg bg-card/80 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                              Percentage
-                            </p>
-                            <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-text-primary">
-                              {displayPercent(resultPercentage)}
-                            </p>
-                          </div>
-                          <div className="rounded-lg bg-card/80 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                              Questions answered
-                            </p>
-                            <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-text-primary">
-                              {resultAnsweredCount}{" "}
-                              <span className="text-sm text-text-muted">
-                                / {resultQuestionCount}
-                              </span>
-                            </p>
-                          </div>
-                          <div className="rounded-lg bg-card/80 p-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                              Marks lost
-                            </p>
-                            <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-text-primary">
-                              {displayNumber(resultMarksLost)}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {resultEvaluation ? (
-                        <>
-                          {resultEvaluation.strong_topics.length ||
-                          resultEvaluation.weak_topics.length ? (
-                            <div className="grid gap-4 md:grid-cols-2">
-                              {resultEvaluation.strong_topics.length ? (
-                                <section className="rounded-xl border border-success/30 bg-success/5 p-5">
-                                  <p className="text-xs font-semibold uppercase tracking-wide text-success">
-                                    What you did well
-                                  </p>
-                                  <ul className="mt-3 space-y-3">
-                                    {resultEvaluation.strong_topics.map((topic) => (
-                                      <li
-                                        key={`strong-${topic.topic_key || topic.chapter}`}
-                                        className="flex items-start justify-between gap-3"
-                                      >
-                                        <span className="text-sm font-semibold text-text-primary">
-                                          {topic.chapter}
-                                        </span>
-                                        <span className="shrink-0 font-mono text-xs font-semibold text-success">
-                                          {displayPercent(topicPercentage(topic))}
-                                        </span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </section>
-                              ) : null}
-
-                              {resultEvaluation.weak_topics.length ? (
-                                <section className="rounded-xl border border-warning/30 bg-warning/5 p-5">
-                                  <p className="text-xs font-semibold uppercase tracking-wide text-warning">
-                                    Focus next
-                                  </p>
-                                  <ul className="mt-3 space-y-3">
-                                    {resultEvaluation.weak_topics.map((topic) => (
-                                      <li
-                                        key={`weak-${topic.topic_key || topic.chapter}`}
-                                        className="flex items-start justify-between gap-3"
-                                      >
-                                        <span className="text-sm font-semibold text-text-primary">
-                                          {topic.chapter}
-                                        </span>
-                                        <span className="shrink-0 text-right font-mono text-xs font-semibold text-warning">
-                                          {displayNumber(topic.marks_lost)} lost
-                                        </span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </section>
-                              ) : null}
-                            </div>
-                          ) : null}
-
-                          {resultEvaluation.chapters.length ? (
-                            <section className="rounded-xl border border-border bg-bg-secondary p-5">
-                              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                                <div>
-                                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                                    Chapter performance
-                                  </p>
-                                  <h3 className="mt-1 text-base font-semibold text-text-primary">
-                                    Where your marks went
-                                  </h3>
-                                </div>
-                                <p className="text-xs text-text-muted">
-                                  {resultEvaluation.chapters.length}{" "}
-                                  {resultEvaluation.chapters.length === 1 ? "chapter" : "chapters"}{" "}
-                                  analysed
-                                </p>
-                              </div>
-                              <div className="mt-4 overflow-x-auto">
-                                <table className="w-full min-w-[820px] text-left text-sm">
-                                  <thead className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
-                                    <tr>
-                                      <th className="px-3 py-3 font-semibold">Chapter</th>
-                                      <th className="px-3 py-3 font-semibold">Score</th>
-                                      <th className="px-3 py-3 font-semibold">Answered</th>
-                                      <th className="px-3 py-3 font-semibold">Lost</th>
-                                      <th className="px-3 py-3 font-semibold">Paper share</th>
-                                      <th className="px-3 py-3 font-semibold">Lost share</th>
-                                      <th className="px-3 py-3 font-semibold">Status</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-border">
-                                    {resultEvaluation.chapters.map((topic) => (
-                                      <tr key={`chapter-${topic.topic_key || topic.chapter}`}>
-                                        <td className="px-3 py-3 font-semibold text-text-primary">
-                                          {topic.chapter}
-                                        </td>
-                                        <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
-                                          {displayNumber(topic.score)} /{" "}
-                                          {displayNumber(topic.marks)}{" "}
-                                          <span className="text-xs text-text-muted">
-                                            ({displayPercent(topicPercentage(topic))})
-                                          </span>
-                                        </td>
-                                        <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
-                                          {topic.questions_answered} / {topic.questions}
-                                        </td>
-                                        <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
-                                          {displayNumber(topic.marks_lost)}
-                                        </td>
-                                        <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
-                                          {displayPercent(topic.weightage)}
-                                        </td>
-                                        <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
-                                          {displayPercent(topic.lost_weightage)}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                          <span
-                                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${topicStatusClass(topic.status)}`}
-                                          >
-                                            {topicStatusLabel(topic.status)}
-                                          </span>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </section>
-                          ) : null}
-
-                          {resultEvaluation.not_attempted.length ? (
-                            <section className="rounded-xl border border-border bg-bg-secondary p-5">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                                Not attempted
-                              </p>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {resultEvaluation.not_attempted.map((topic) => (
-                                  <span
-                                    key={`not-attempted-${topic.topic_key || topic.chapter}`}
-                                    className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-text-secondary"
-                                  >
-                                    {topic.chapter}
-                                  </span>
-                                ))}
-                              </div>
-                            </section>
-                          ) : null}
-
-                          {resultEvaluation.summary ? (
-                            <section className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-5">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
-                                Grader summary
-                              </p>
-                              <Markdown
-                                text={resultEvaluation.summary}
-                                className="mt-2 text-sm leading-7 text-text-secondary"
-                              />
-                            </section>
-                          ) : null}
-                        </>
-                      ) : null}
-
-                      {results.length ? (
-                        <section>
-                          <div className="mb-3 flex items-end justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-semibold">📊 Challenge Result</h2>
+                    <p className="mt-2 text-sm text-text-muted">
+                      Your handwritten answer sheet has been read and graded against this challenge.
+                    </p>
+                    {score ? (
+                      <div className="mt-6 space-y-6">
+                        <div
+                          className={`rounded-xl border p-5 sm:p-6 ${score.passed ? "border-success/40 bg-success/10" : "border-warning/40 bg-warning/10"}`}
+                        >
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                             <div>
                               <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                                Question feedback
+                                Your score
                               </p>
-                              <h3 className="mt-1 text-base font-semibold text-text-primary">
-                                Review every answer
-                              </h3>
+                              <p className="mt-1 font-mono text-4xl font-bold tabular-nums text-text-primary">
+                                {displayNumber(score.earned)}{" "}
+                                <span className="text-lg font-semibold text-text-muted">
+                                  / {displayNumber(score.total)}
+                                </span>
+                              </p>
                             </div>
-                            <p className="text-xs text-text-muted">{results.length} graded</p>
+                            <p
+                              className={`text-sm font-semibold ${score.passed ? "text-success" : "text-warning"}`}
+                            >
+                              {score.passed ? "Challenge passed · +50 XP ✓" : "Not passed yet"}
+                            </p>
                           </div>
-                          <div className="space-y-4">
-                            {results.map((result, index) => {
-                              const question = content.examQuestions.find(
-                                (candidate) => candidate.id === result.question_id,
-                              );
-                              const prompt = result.question || question?.question;
-                              const marks = result.marks || question?.marks || 0;
-                              return (
-                                <article
-                                  key={result.question_id}
-                                  className="rounded-xl border border-border bg-card p-5"
-                                >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                                        Question {index + 1}
-                                        {result.chapter || result.topic
-                                          ? ` · ${result.chapter || result.topic}`
-                                          : ""}
-                                      </p>
-                                      {prompt ? (
-                                        <Markdown
-                                          text={prompt}
-                                          className="mt-2 text-sm font-semibold leading-6 text-text-primary"
-                                        />
-                                      ) : null}
-                                    </div>
-                                    <span className="shrink-0 rounded-lg bg-bg-secondary px-2.5 py-1.5 font-mono text-sm font-semibold tabular-nums text-text-secondary">
-                                      {displayNumber(result.score)} / {displayNumber(marks)}
-                                    </span>
-                                  </div>
-                                  <div className="mt-4 rounded-lg border border-border bg-bg-secondary p-4">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                                      What we read from your sheet
-                                    </p>
-                                    {result.student_answer?.trim() ? (
-                                      <Markdown
-                                        text={result.student_answer.trim()}
-                                        className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-secondary"
-                                      />
-                                    ) : (
-                                      <p className="mt-2 text-sm leading-6 text-text-muted">
-                                        No answer was detected for this question.
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="mt-4 rounded-lg bg-blue-500/10 p-4">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
-                                      Feedback
-                                    </p>
-                                    {result.feedback ? (
-                                      <Markdown
-                                        text={result.feedback}
-                                        className="mt-2 text-sm leading-6 text-text-secondary"
-                                      />
-                                    ) : (
-                                      <p className="mt-2 text-sm leading-6 text-text-muted">
-                                        No feedback was returned for this question.
-                                      </p>
-                                    )}
-                                  </div>
-                                </article>
-                              );
-                            })}
+
+                          <div className="mt-6 grid gap-3 border-t border-border/70 pt-5 sm:grid-cols-3">
+                            <div className="rounded-lg bg-card/80 p-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                Percentage
+                              </p>
+                              <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-text-primary">
+                                {displayPercent(resultPercentage)}
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-card/80 p-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                Questions answered
+                              </p>
+                              <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-text-primary">
+                                {resultAnsweredCount}{" "}
+                                <span className="text-sm text-text-muted">
+                                  / {resultQuestionCount}
+                                </span>
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-card/80 p-3">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                Marks lost
+                              </p>
+                              <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-text-primary">
+                                {displayNumber(resultMarksLost)}
+                              </p>
+                            </div>
                           </div>
-                        </section>
-                      ) : (
-                        <div className="rounded-xl border border-warning/40 bg-warning/10 p-5 text-sm text-text-secondary">
-                          The score was saved, but per-question answer details are unavailable for
-                          this sitting.
                         </div>
-                      )}
-                    </div>
-                  ) : challenge.status === "completed" ? (
-                    <div className="mt-6 rounded-xl border border-success/40 bg-success/10 p-5">
-                      <p className="font-semibold text-success">Challenge completed ✓</p>
-                      <p className="mt-1 text-sm text-text-secondary">
-                        Your result is saved. It is now in your revision docs.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
-                      Your marks, the grader&apos;s feedback and a topic-by-topic reading of where
-                      they went will appear here once the sheet is submitted.
-                    </div>
-                  )}
-                </div>
+
+                        {resultEvaluation ? (
+                          <>
+                            {resultEvaluation.strong_topics.length ||
+                            resultEvaluation.weak_topics.length ? (
+                              <div className="grid gap-4 md:grid-cols-2">
+                                {resultEvaluation.strong_topics.length ? (
+                                  <section className="rounded-xl border border-success/30 bg-success/5 p-5">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-success">
+                                      What you did well
+                                    </p>
+                                    <ul className="mt-3 space-y-3">
+                                      {resultEvaluation.strong_topics.map((topic) => (
+                                        <li
+                                          key={`strong-${topic.topic_key || topic.chapter}`}
+                                          className="flex items-start justify-between gap-3"
+                                        >
+                                          <span className="text-sm font-semibold text-text-primary">
+                                            {topic.chapter}
+                                          </span>
+                                          <span className="shrink-0 font-mono text-xs font-semibold text-success">
+                                            {displayPercent(topicPercentage(topic))}
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </section>
+                                ) : null}
+
+                                {resultEvaluation.weak_topics.length ? (
+                                  <section className="rounded-xl border border-warning/30 bg-warning/5 p-5">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-warning">
+                                      Focus next
+                                    </p>
+                                    <ul className="mt-3 space-y-3">
+                                      {resultEvaluation.weak_topics.map((topic) => (
+                                        <li
+                                          key={`weak-${topic.topic_key || topic.chapter}`}
+                                          className="flex items-start justify-between gap-3"
+                                        >
+                                          <span className="text-sm font-semibold text-text-primary">
+                                            {topic.chapter}
+                                          </span>
+                                          <span className="shrink-0 text-right font-mono text-xs font-semibold text-warning">
+                                            {displayNumber(topic.marks_lost)} lost
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </section>
+                                ) : null}
+                              </div>
+                            ) : null}
+
+                            {resultEvaluation.chapters.length ? (
+                              <section className="rounded-xl border border-border bg-bg-secondary p-5">
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                                  <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                      Chapter performance
+                                    </p>
+                                    <h3 className="mt-1 text-base font-semibold text-text-primary">
+                                      Where your marks went
+                                    </h3>
+                                  </div>
+                                  <p className="text-xs text-text-muted">
+                                    {resultEvaluation.chapters.length}{" "}
+                                    {resultEvaluation.chapters.length === 1
+                                      ? "chapter"
+                                      : "chapters"}{" "}
+                                    analysed
+                                  </p>
+                                </div>
+                                <div className="mt-4 overflow-x-auto">
+                                  <table className="w-full min-w-[820px] text-left text-sm">
+                                    <thead className="border-b border-border text-xs uppercase tracking-wide text-text-muted">
+                                      <tr>
+                                        <th className="px-3 py-3 font-semibold">Chapter</th>
+                                        <th className="px-3 py-3 font-semibold">Score</th>
+                                        <th className="px-3 py-3 font-semibold">Answered</th>
+                                        <th className="px-3 py-3 font-semibold">Lost</th>
+                                        <th className="px-3 py-3 font-semibold">Paper share</th>
+                                        <th className="px-3 py-3 font-semibold">Lost share</th>
+                                        <th className="px-3 py-3 font-semibold">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border">
+                                      {resultEvaluation.chapters.map((topic) => (
+                                        <tr key={`chapter-${topic.topic_key || topic.chapter}`}>
+                                          <td className="px-3 py-3 font-semibold text-text-primary">
+                                            {topic.chapter}
+                                          </td>
+                                          <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
+                                            {displayNumber(topic.score)} /{" "}
+                                            {displayNumber(topic.marks)}{" "}
+                                            <span className="text-xs text-text-muted">
+                                              ({displayPercent(topicPercentage(topic))})
+                                            </span>
+                                          </td>
+                                          <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
+                                            {topic.questions_answered} / {topic.questions}
+                                          </td>
+                                          <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
+                                            {displayNumber(topic.marks_lost)}
+                                          </td>
+                                          <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
+                                            {displayPercent(topic.weightage)}
+                                          </td>
+                                          <td className="px-3 py-3 font-mono tabular-nums text-text-secondary">
+                                            {displayPercent(topic.lost_weightage)}
+                                          </td>
+                                          <td className="px-3 py-3">
+                                            <span
+                                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${topicStatusClass(topic.status)}`}
+                                            >
+                                              {topicStatusLabel(topic.status)}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </section>
+                            ) : null}
+
+                            {resultEvaluation.not_attempted.length ? (
+                              <section className="rounded-xl border border-border bg-bg-secondary p-5">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                  Not attempted
+                                </p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {resultEvaluation.not_attempted.map((topic) => (
+                                    <span
+                                      key={`not-attempted-${topic.topic_key || topic.chapter}`}
+                                      className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-text-secondary"
+                                    >
+                                      {topic.chapter}
+                                    </span>
+                                  ))}
+                                </div>
+                              </section>
+                            ) : null}
+
+                            {resultEvaluation.summary ? (
+                              <section className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-5">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                                  Grader summary
+                                </p>
+                                <Markdown
+                                  text={resultEvaluation.summary}
+                                  className="mt-2 text-sm leading-7 text-text-secondary"
+                                />
+                              </section>
+                            ) : null}
+                          </>
+                        ) : null}
+
+                        {results.length ? (
+                          <section>
+                            <div className="mb-3 flex items-end justify-between gap-3">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                  Question feedback
+                                </p>
+                                <h3 className="mt-1 text-base font-semibold text-text-primary">
+                                  Review every answer
+                                </h3>
+                              </div>
+                              <p className="text-xs text-text-muted">{results.length} graded</p>
+                            </div>
+                            <div className="space-y-4">
+                              {results.map((result, index) => {
+                                const question = content.examQuestions.find(
+                                  (candidate) => candidate.id === result.question_id,
+                                );
+                                const prompt = result.question || question?.question;
+                                const marks = result.marks || question?.marks || 0;
+                                return (
+                                  <article
+                                    key={result.question_id}
+                                    className="rounded-xl border border-border bg-card p-5"
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                          Question {index + 1}
+                                          {result.chapter || result.topic
+                                            ? ` · ${result.chapter || result.topic}`
+                                            : ""}
+                                        </p>
+                                        {prompt ? (
+                                          <Markdown
+                                            text={prompt}
+                                            className="mt-2 text-sm font-semibold leading-6 text-text-primary"
+                                          />
+                                        ) : null}
+                                      </div>
+                                      <span className="shrink-0 rounded-lg bg-bg-secondary px-2.5 py-1.5 font-mono text-sm font-semibold tabular-nums text-text-secondary">
+                                        {displayNumber(result.score)} / {displayNumber(marks)}
+                                      </span>
+                                    </div>
+                                    <div className="mt-4 rounded-lg border border-border bg-bg-secondary p-4">
+                                      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                        What we read from your sheet
+                                      </p>
+                                      {result.student_answer?.trim() ? (
+                                        <Markdown
+                                          text={result.student_answer.trim()}
+                                          className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-secondary"
+                                        />
+                                      ) : (
+                                        <p className="mt-2 text-sm leading-6 text-text-muted">
+                                          No answer was detected for this question.
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="mt-4 rounded-lg bg-blue-500/10 p-4">
+                                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                                        Feedback
+                                      </p>
+                                      {result.feedback ? (
+                                        <Markdown
+                                          text={result.feedback}
+                                          className="mt-2 text-sm leading-6 text-text-secondary"
+                                        />
+                                      ) : (
+                                        <p className="mt-2 text-sm leading-6 text-text-muted">
+                                          No feedback was returned for this question.
+                                        </p>
+                                      )}
+                                    </div>
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          </section>
+                        ) : (
+                          <div className="rounded-xl border border-warning/40 bg-warning/10 p-5 text-sm text-text-secondary">
+                            The score was saved, but per-question answer details are unavailable for
+                            this sitting.
+                          </div>
+                        )}
+                      </div>
+                    ) : challenge.status === "completed" ? (
+                      <div className="mt-6 rounded-xl border border-success/40 bg-success/10 p-5">
+                        <p className="font-semibold text-success">Challenge completed ✓</p>
+                        <p className="mt-1 text-sm text-text-secondary">
+                          Your result is saved. It is now in your revision docs.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="mt-6 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
+                        Your marks, the grader&apos;s feedback and a topic-by-topic reading of where
+                        they went will appear here once the sheet is submitted.
+                      </div>
+                    )}
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -1568,19 +1564,13 @@ function count(value: unknown) {
  * "you have done nothing".
  */
 /** Exported for tests. */
-export function SubjectCoverage({
-  progress,
-}: {
-  progress?: { covered: number; total: number };
-}) {
+export function SubjectCoverage({ progress }: { progress?: { covered: number; total: number } }) {
   // Counts are read defensively: a row from a payload that predates a field — a
   // tab left open across a deploy, a stale server module in dev — arrives with
   // `undefined`, and `Math.min(undefined, 44)` is what printed "NaN of 44".
   const total = count(progress?.total);
   if (!progress || total <= 0) {
-    return (
-      <p className="flex-1 min-w-0 text-[13px] text-text-muted">Topics not mapped yet</p>
-    );
+    return <p className="flex-1 min-w-0 text-[13px] text-text-muted">Topics not mapped yet</p>;
   }
   const covered = Math.min(count(progress.covered), total);
   const percent = Math.round((covered / total) * 100);
@@ -1738,9 +1728,7 @@ export function ChallengesDashboardClient({
     const term = dashboard.community?.terms.find((item) => item.id === termId);
     return term ? academicNumberLabel(term.semesterNumber, "Semester") : "";
   })();
-  const [runningTermId, setRunningTermId] = useState(
-    dashboard.community?.currentTermId ?? "",
-  );
+  const [runningTermId, setRunningTermId] = useState(dashboard.community?.currentTermId ?? "");
   const [savingSemester, setSavingSemester] = useState(false);
   const [semesterError, setSemesterError] = useState("");
   const changeRunningSemester = async (termId: string) => {
@@ -1839,9 +1827,7 @@ export function ChallengesDashboardClient({
   return (
     <main className="min-h-screen w-full bg-[#f8f9fa] dark:bg-bg-secondary text-text-primary">
       <div className="mx-auto max-w-[1060px] px-4 sm:px-6 md:px-8 py-8 pb-24">
-        <h1 className="type-student-page-title mb-6 text-text-primary">
-          Challenge Hub
-        </h1>
+        <h1 className="type-student-page-title mb-6 text-text-primary">Challenge Hub</h1>
 
         {/* Challenge Loop Top Card */}
         <section className="relative overflow-hidden rounded-[24px] border border-black dark:border-white/20 bg-white dark:bg-card p-7 sm:p-9 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
@@ -1857,9 +1843,7 @@ export function ChallengesDashboardClient({
             </span>
           </div>
 
-          <h2 className="type-student-section-title text-text-primary">
-            Challenge loop
-          </h2>
+          <h2 className="type-student-section-title text-text-primary">Challenge loop</h2>
 
           <div className="relative mt-8">
             {/* Connecting line behind step icons on larger screens */}
@@ -1918,7 +1902,7 @@ export function ChallengesDashboardClient({
 
               {/* Step 3: AI grade */}
               <div className="flex flex-col items-start md:items-center text-left md:text-center">
-                <div className="flex size-[60px] items-center justify-center rounded-[18px] bg-[#18181b] dark:bg-black text-[#d7ff3b] shadow-[0_4px_16px_rgba(0,0,0,0.2)] relative z-10">
+                <div className="relative z-10 flex size-[60px] items-center justify-center rounded-[18px] bg-[#18181b] text-[#d7ff3b] shadow-[0_4px_16px_rgba(0,0,0,0.2)] dark:bg-bg-tertiary">
                   <svg
                     className="size-6 text-[#d7ff3b] fill-current"
                     viewBox="0 0 24 24"
@@ -1945,11 +1929,10 @@ export function ChallengesDashboardClient({
             </p>
             <div className="mt-2 flex items-baseline gap-1.5">
               <span className="type-student-metric text-text-primary">
-                {dashboard.todayCompletedCount ?? (dashboard.passedThisWeek > 0 ? dashboard.passedThisWeek : 0)}
+                {dashboard.todayCompletedCount ??
+                  (dashboard.passedThisWeek > 0 ? dashboard.passedThisWeek : 0)}
               </span>
-              <span className="type-student-metric text-[#84cc16]">
-                / 5
-              </span>
+              <span className="type-student-metric text-[#84cc16]">/ 5</span>
             </div>
             <div
               className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
@@ -1961,9 +1944,12 @@ export function ChallengesDashboardClient({
                   width: `${Math.min(
                     100,
                     Math.max(
-                      (((dashboard.todayCompletedCount ?? (dashboard.passedThisWeek > 0 ? dashboard.passedThisWeek : 0)) / 5) * 100),
-                      (dashboard.todayCompletedCount || dashboard.passedThisWeek) ? 14 : 0
-                    )
+                      ((dashboard.todayCompletedCount ??
+                        (dashboard.passedThisWeek > 0 ? dashboard.passedThisWeek : 0)) /
+                        5) *
+                        100,
+                      dashboard.todayCompletedCount || dashboard.passedThisWeek ? 14 : 0,
+                    ),
                   )}%`,
                 }}
               />
@@ -1972,12 +1958,8 @@ export function ChallengesDashboardClient({
 
           {/* Card 2: Daily Target */}
           <article className="rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
-              DAILY TARGET
-            </p>
-            <p className="type-student-metric mt-2 text-text-primary">
-              5
-            </p>
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">DAILY TARGET</p>
+            <p className="type-student-metric mt-2 text-text-primary">5</p>
           </article>
 
           {/* Card 3: 7-Day Average */}
@@ -1999,9 +1981,7 @@ export function ChallengesDashboardClient({
         <section className="mt-6 rounded-[24px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#f1f3f5] dark:border-border/60">
             <div>
-              <h2 className="type-student-section-title text-text-primary">
-                Available challenges
-              </h2>
+              <h2 className="type-student-section-title text-text-primary">Available challenges</h2>
               {dashboard.scope ? (
                 <p className="mt-0.5 text-xs text-text-muted">
                   Showing {dashboard.scope.subjectName} challenges only.

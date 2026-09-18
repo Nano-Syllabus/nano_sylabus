@@ -31,7 +31,13 @@ export function AdminBillingFrame({
           href="/admin"
           className="flex h-[73px] items-center gap-2.5 border-b border-border px-5 focus-visible:outline-2 focus-visible:outline-ring"
         >
-          <Image src="/nano_logo.png" alt="" width={32} height={32} className="h-8 w-8 object-contain" />
+          <Image
+            src="/nanologo.png"
+            alt=""
+            width={32}
+            height={32}
+            className="h-8 w-8 object-contain"
+          />
           <span className="font-display text-lg font-semibold tracking-tight">Nano Syllabus</span>
         </Link>
         <p className="px-6 pb-3 pt-7 text-[11px] font-medium tracking-widest text-muted-foreground uppercase">
@@ -93,7 +99,9 @@ export function AdminBillingFrame({
           <div className="flex h-[72px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-2 text-xs">
               <ShieldCheck size={17} className="lg:hidden" />
-              <Link href="/admin" className="text-muted-foreground hover:text-foreground">Admin</Link>
+              <Link href="/admin" className="text-muted-foreground hover:text-foreground">
+                Admin
+              </Link>
               <span className="text-muted-foreground">/</span>
               <span className="truncate font-medium">{title}</span>
             </div>
@@ -106,14 +114,23 @@ export function AdminBillingFrame({
             </div>
           </div>
         </header>
-        <nav aria-label="Mobile admin navigation" className="flex gap-1 overflow-x-auto border-b border-border bg-card px-4 py-2 lg:hidden">
-          <Link href="/admin" className="flex min-h-9 shrink-0 items-center gap-2 rounded-md px-3 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
+        <nav
+          aria-label="Mobile admin navigation"
+          className="flex gap-1 overflow-x-auto border-b border-border bg-card px-4 py-2 lg:hidden"
+        >
+          <Link
+            href="/admin"
+            className="flex min-h-9 shrink-0 items-center gap-2 rounded-md px-3 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
             <BarChart3 size={15} /> Analytics
           </Link>
           <Link href="/admin/billing" className={`${navClass("billing")} min-h-9 shrink-0 text-xs`}>
             <CreditCard size={15} /> Payments
           </Link>
-          <Link href="/admin/cash-prize" className={`${navClass("cash-prize")} min-h-9 shrink-0 text-xs`}>
+          <Link
+            href="/admin/cash-prize"
+            className={`${navClass("cash-prize")} min-h-9 shrink-0 text-xs`}
+          >
             <Trophy size={15} /> Prize entries
           </Link>
           <Link href="/admin/users" className={`${navClass("users")} min-h-9 shrink-0 text-xs`}>

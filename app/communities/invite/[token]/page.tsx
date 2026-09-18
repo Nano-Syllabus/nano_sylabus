@@ -34,7 +34,7 @@ export default async function CommunityInvitePage({ params }: PageProps) {
       <div className="mx-auto w-full max-w-3xl">
         <Link href="/" className="inline-flex items-center gap-2.5 font-semibold">
           <Image
-            src="/nano_logo.png"
+            src="/nanologo.png"
             alt="Nano Syllabus"
             width={34}
             height={34}

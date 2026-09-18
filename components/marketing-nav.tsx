@@ -4,9 +4,12 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Logo({ className = "" }: { className?: string }) {
   return (
-    <Link href="/" className={`flex min-h-10 items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 ${className}`}>
+    <Link
+      href="/"
+      className={`flex min-h-10 items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 ${className}`}
+    >
       <Image
-        src="/nano_logo.png"
+        src="/nanologo.png"
         alt="Nano Syllabus"
         width={28}
         height={28}

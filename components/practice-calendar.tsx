@@ -569,7 +569,7 @@ export function PracticeCalendar({
 
   return (
     <section
-      className="rounded-[24px] border border-[#e2e8f0] bg-white p-5 sm:p-7 shadow-xs"
+      className="rounded-[24px] border border-border bg-card p-5 shadow-xs sm:p-7"
       aria-labelledby="activity-calendar-heading"
     >
       {/* ── Top Header ── */}
@@ -586,7 +586,7 @@ export function PracticeCalendar({
             onClick={handlePrevMonth}
             aria-label="Previous month"
             className={cn(
-              "flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#1e293b] hover:bg-slate-50 transition cursor-pointer",
+              "flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-[10px] border border-border bg-bg-secondary text-text-primary transition hover:bg-bg-tertiary",
               focusRing,
             )}
           >
@@ -599,13 +599,13 @@ export function PracticeCalendar({
               type="button"
               onClick={() => setMonthDropdownOpen((prev) => !prev)}
               className={cn(
-                "flex h-[42px] flex-col items-center justify-center rounded-[12px] border border-[#e2e8f0] bg-white px-4 text-center hover:bg-slate-50 transition cursor-pointer min-w-[135px]",
+                "flex h-[42px] min-w-[135px] cursor-pointer flex-col items-center justify-center rounded-[12px] border border-border bg-bg-secondary px-4 text-center transition hover:bg-bg-tertiary",
                 focusRing,
               )}
             >
-              <span className="flex items-center gap-1 text-[14px] font-[750] text-[#0f172a] leading-tight">
+              <span className="flex items-center gap-1 text-[14px] font-[750] leading-tight text-text-primary">
                 {NEPALI_MONTH_NAMES[visibleBsMonth - 1]} {toDevanagariDigits(visibleBsYear)}
-                <ChevronDown className="h-3.5 w-3.5 text-[#64748b]" />
+                <ChevronDown className="h-3.5 w-3.5 text-text-muted" />
               </span>
               <span className="text-[10px] font-[600] text-[#0066ff] leading-none mt-0.5">
                 {engMonthRange}
@@ -614,23 +614,23 @@ export function PracticeCalendar({
 
             {/* Dropdown Menu */}
             {monthDropdownOpen && (
-              <div className="absolute top-[calc(100%+6px)] left-0 z-50 w-64 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-xl animate-in fade-in zoom-in-95 duration-100">
-                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 px-1">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-64 animate-in rounded-2xl border border-border bg-bg-tertiary p-2.5 shadow-xl duration-100 fade-in zoom-in-95">
+                <div className="mb-2 flex items-center justify-between border-b border-border px-1 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
                     Year {toDevanagariDigits(visibleBsYear)}
                   </span>
                   <div className="flex gap-1">
                     <button
                       type="button"
                       onClick={() => setVisibleBsYear((y) => y - 1)}
-                      className="h-6 w-6 rounded flex items-center justify-center text-slate-500 hover:bg-slate-100 text-xs font-bold cursor-pointer"
+                      className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-xs font-bold text-text-muted hover:bg-bg-secondary hover:text-text-primary"
                     >
                       −
                     </button>
                     <button
                       type="button"
                       onClick={() => setVisibleBsYear((y) => y + 1)}
-                      className="h-6 w-6 rounded flex items-center justify-center text-slate-500 hover:bg-slate-100 text-xs font-bold cursor-pointer"
+                      className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-xs font-bold text-text-muted hover:bg-bg-secondary hover:text-text-primary"
                     >
                       +
                     </button>
@@ -651,7 +651,7 @@ export function PracticeCalendar({
                           "rounded-lg px-2 py-1.5 text-center text-xs font-medium transition cursor-pointer",
                           visibleBsMonth === monthNum
                             ? "bg-[#0066ff] text-white font-bold"
-                            : "text-slate-700 hover:bg-slate-100",
+                            : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary",
                         )}
                       >
                         {name}
@@ -669,7 +669,7 @@ export function PracticeCalendar({
             onClick={handleNextMonth}
             aria-label="Next month"
             className={cn(
-              "flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white text-[#1e293b] hover:bg-slate-50 transition cursor-pointer",
+              "flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-[10px] border border-border bg-bg-secondary text-text-primary transition hover:bg-bg-tertiary",
               focusRing,
             )}
           >
@@ -681,7 +681,7 @@ export function PracticeCalendar({
             type="button"
             onClick={handleGoToday}
             className={cn(
-              "flex h-[38px] items-center justify-center rounded-[10px] border border-[#e2e8f0] bg-white px-4 text-[13px] font-[700] text-[#0f172a] hover:bg-slate-50 transition cursor-pointer",
+              "flex h-[38px] cursor-pointer items-center justify-center rounded-[10px] border border-border bg-bg-secondary px-4 text-[13px] font-[700] text-text-primary transition hover:bg-bg-tertiary",
               focusRing,
             )}
           >
@@ -709,12 +709,12 @@ export function PracticeCalendar({
         <form
           ref={formRef}
           onSubmit={submitExamDate}
-          className="mt-4 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5 sm:grid-cols-2"
+          className="mt-4 grid gap-4 rounded-2xl border border-border bg-bg-secondary p-4 sm:grid-cols-2 sm:p-5"
           aria-busy={examSaving}
         >
           <label
             htmlFor="exam-date-input"
-            className="grid gap-1.5 text-xs font-semibold text-slate-700"
+            className="grid gap-1.5 text-xs font-semibold text-text-secondary"
           >
             Exam date (AD / Calendar)
             <input
@@ -725,7 +725,7 @@ export function PracticeCalendar({
               autoComplete="off"
               required
               className={cn(
-                "min-h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-normal text-slate-800 shadow-xs",
+                "min-h-11 rounded-xl border border-border bg-bg-tertiary px-3.5 text-sm font-normal text-text-primary shadow-xs",
                 focusRing,
               )}
             />
@@ -738,7 +738,7 @@ export function PracticeCalendar({
 
           <label
             htmlFor="exam-title-input"
-            className="grid gap-1.5 text-xs font-semibold text-slate-700"
+            className="grid gap-1.5 text-xs font-semibold text-text-secondary"
           >
             Subject or exam name
             <input
@@ -752,7 +752,7 @@ export function PracticeCalendar({
               required
               maxLength={120}
               className={cn(
-                "min-h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-normal text-slate-800 placeholder:text-slate-400 shadow-xs",
+                "min-h-11 rounded-xl border border-border bg-bg-tertiary px-3.5 text-sm font-normal text-text-primary shadow-xs placeholder:text-text-muted",
                 focusRing,
               )}
             />
@@ -761,7 +761,7 @@ export function PracticeCalendar({
                 <option key={subject.id} value={subject.name} />
               ))}
             </datalist>
-            <span className="font-normal text-slate-500 text-[11px]">
+            <span className="text-[11px] font-normal text-text-muted">
               Choose a listed subject to show automatic readiness.
             </span>
           </label>
@@ -771,7 +771,7 @@ export function PracticeCalendar({
               type="button"
               onClick={() => setExamFormOpen(false)}
               className={cn(
-                "inline-flex min-h-10 items-center rounded-xl border border-slate-200 px-4 text-xs font-semibold text-slate-700 hover:bg-white transition cursor-pointer",
+                "inline-flex min-h-10 cursor-pointer items-center rounded-xl border border-border px-4 text-xs font-semibold text-text-secondary transition hover:bg-bg-tertiary hover:text-text-primary",
                 focusRing,
               )}
             >
@@ -782,7 +782,7 @@ export function PracticeCalendar({
               disabled={examSaving || !examDate || !examTitle.trim()}
               aria-busy={examSaving}
               className={cn(
-                "inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#0f172a] px-5 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer hover:bg-slate-800",
+                "inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl bg-[#2563eb] px-5 text-xs font-semibold text-white transition hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-60",
                 focusRing,
               )}
             >
@@ -804,7 +804,7 @@ export function PracticeCalendar({
         </p>
       ) : null}
       {storageNotice ? (
-        <p className="mt-3 text-sm text-slate-500" role="status">
+        <p className="mt-3 text-sm text-text-muted" role="status">
           {storageNotice}
         </p>
       ) : null}
@@ -823,7 +823,7 @@ export function PracticeCalendar({
           {Array.from({ length: startWeekday }).map((_, index) => (
             <div
               key={`leading-${index}`}
-              className="h-[52px] sm:h-[58px] w-full rounded-[10px] border border-[#cbd5e1] bg-white overflow-hidden flex items-center justify-center"
+              className="flex h-[52px] w-full items-center justify-center overflow-hidden rounded-[10px] border border-border bg-bg-secondary sm:h-[58px]"
               aria-hidden="true"
             >
               <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -877,7 +877,7 @@ export function PracticeCalendar({
                   onClick={() => setSelectedDate(currentAdDateStr)}
                   title={`${formatNepaliDate(currentBsDate)} (${compactDate(currentAdDateStr)})`}
                   className={cn(
-                    "h-[52px] sm:h-[58px] w-full rounded-[10px] border border-[#cbd5e1] bg-white overflow-hidden flex items-center justify-center cursor-pointer transition hover:border-slate-400",
+                    "flex h-[52px] w-full cursor-pointer items-center justify-center overflow-hidden rounded-[10px] border border-border bg-bg-secondary transition hover:border-border-strong sm:h-[58px]",
                     focusRing,
                     isSelected && "ring-2 ring-[#0066ff] ring-offset-2",
                   )}
@@ -920,7 +920,7 @@ export function PracticeCalendar({
                   onClick={() => setSelectedDate(currentAdDateStr)}
                   title={`Today: ${formatNepaliDate(currentBsDate)} (${compactDate(currentAdDateStr)})`}
                   className={cn(
-                    "h-[52px] sm:h-[58px] w-full rounded-[10px] border-[1.5px] border-[#0066ff] bg-white flex flex-col items-center justify-center shadow-xs transition cursor-pointer relative",
+                    "relative flex h-[52px] w-full cursor-pointer flex-col items-center justify-center rounded-[10px] border-[1.5px] border-[#0066ff] bg-bg-tertiary shadow-xs transition sm:h-[58px]",
                     focusRing,
                   )}
                 >
@@ -944,15 +944,15 @@ export function PracticeCalendar({
                   onClick={() => setSelectedDate(currentAdDateStr)}
                   title={`Exam: ${exam.title} on ${formatNepaliDate(currentBsDate)}`}
                   className={cn(
-                    "h-[52px] sm:h-[58px] w-full rounded-[10px] border border-[#fecdd3] bg-[#fff1f2] flex flex-col items-center justify-center transition cursor-pointer hover:bg-rose-100/60 relative",
+                    "relative flex h-[52px] w-full cursor-pointer flex-col items-center justify-center rounded-[10px] border border-rose-300 bg-rose-50 transition hover:bg-rose-100/60 dark:border-rose-400/35 dark:bg-rose-500/10 dark:hover:bg-rose-500/15 sm:h-[58px]",
                     focusRing,
                     isSelected && "ring-2 ring-rose-500 ring-offset-2",
                   )}
                 >
-                  <span className="text-[17px] sm:text-[19px] font-[800] text-[#e11d48] leading-tight">
+                  <span className="text-[17px] font-[800] leading-tight text-[#e11d48] dark:text-rose-300 sm:text-[19px]">
                     {dayDevanagari}
                   </span>
-                  <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-[#e11d48] leading-none">
+                  <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold leading-none text-[#e11d48] dark:text-rose-300">
                     <GraduationCap className="h-3 w-3" /> Exam
                   </span>
                 </button>
@@ -967,12 +967,12 @@ export function PracticeCalendar({
                 onClick={() => setSelectedDate(currentAdDateStr)}
                 title={`${formatNepaliDate(currentBsDate)} (${compactDate(currentAdDateStr)})`}
                 className={cn(
-                  "h-[52px] sm:h-[58px] w-full rounded-[10px] border border-[#e2e8f0] bg-white flex flex-col items-center justify-center transition cursor-pointer hover:border-slate-300 hover:shadow-xs relative",
+                  "relative flex h-[52px] w-full cursor-pointer flex-col items-center justify-center rounded-[10px] border border-border bg-bg-secondary transition hover:border-border-strong hover:bg-bg-tertiary hover:shadow-xs sm:h-[58px]",
                   focusRing,
                   isSelected && "ring-2 ring-[#0066ff] ring-offset-2",
                 )}
               >
-                <span className="text-[17px] sm:text-[19px] font-[800] text-[#0f172a] leading-tight">
+                <span className="text-[17px] font-[800] leading-tight text-text-primary sm:text-[19px]">
                   {dayDevanagari}
                 </span>
               </button>
@@ -986,7 +986,7 @@ export function PracticeCalendar({
             return Array.from({ length: trailing }).map((_, index) => (
               <div
                 key={`trailing-${index}`}
-                className="h-[52px] sm:h-[58px] w-full rounded-[10px] border border-[#f1f5f9] bg-white flex flex-col items-center justify-center"
+                className="flex h-[52px] w-full flex-col items-center justify-center rounded-[10px] border border-border bg-bg-secondary sm:h-[58px]"
               >
                 <span className="text-[16px] sm:text-[17px] font-[700] text-[#6366f1]/80">
                   {toDevanagariDigits(index + 1)}
@@ -999,7 +999,7 @@ export function PracticeCalendar({
 
       {/* ── Upcoming Exams Section ── */}
       <section
-        className="mt-6 overflow-hidden rounded-[20px] border border-[#e2e8f0] bg-white p-5 sm:p-6 shadow-xs"
+        className="mt-6 overflow-hidden rounded-[20px] border border-border bg-bg-secondary p-5 shadow-xs sm:p-6"
         aria-labelledby="upcoming-exams-heading"
       >
         <div className="mb-4 flex items-center justify-between">
@@ -1009,7 +1009,7 @@ export function PracticeCalendar({
         </div>
 
         {upcomingExams.length ? (
-          <div className="divide-y divide-[#edf2f7]">
+          <div className="divide-y divide-border">
             {upcomingExams.map((exam) => {
               const examBs = adToBs(exam.date);
               const subject = matchExamSubject(exam.title, allSubjects);
@@ -1021,7 +1021,7 @@ export function PracticeCalendar({
                   <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[135px_minmax(0,1fr)_auto] sm:items-center sm:gap-6">
                     {/* 1. Nepali Date & Days Left */}
                     <div className="flex flex-col gap-1.5 sm:w-[135px] shrink-0 self-start">
-                      <span className="font-display text-[14px] sm:text-[15px] font-semibold text-[#0f172a] whitespace-nowrap">
+                      <span className="whitespace-nowrap font-display text-[14px] font-semibold text-text-primary sm:text-[15px]">
                         {formatNepaliDate(examBs)}
                       </span>
                       <span className="inline-flex w-fit items-center justify-center rounded-md bg-[#eef2ff] px-2.5 py-0.5 text-[11px] sm:text-[12px] font-semibold text-[#1e40af] whitespace-nowrap">
@@ -1033,7 +1033,7 @@ export function PracticeCalendar({
 
                     {/* 2. Subject & Readiness Progress Bar */}
                     <div className="min-w-0 flex-1">
-                      <div className="font-display text-[14px] sm:text-[15px] font-semibold text-[#0f172a] capitalize">
+                      <div className="font-display text-[14px] font-semibold capitalize text-text-primary sm:text-[15px]">
                         {exam.title}
                       </div>
                       <div className="mt-2 flex min-w-0 items-center gap-3">
@@ -1047,7 +1047,7 @@ export function PracticeCalendar({
                             />
                           )}
                         </div>
-                        <span className="w-28 shrink-0 text-right whitespace-nowrap text-[12px] font-medium text-slate-500">
+                        <span className="w-28 shrink-0 whitespace-nowrap text-right text-[12px] font-medium text-text-muted">
                           {readiness !== null
                             ? `${Math.round(readiness)}% ready`
                             : "No practice data"}
@@ -1062,7 +1062,7 @@ export function PracticeCalendar({
                         onClick={() => setActiveMenuId(activeMenuId === exam.id ? null : exam.id)}
                         aria-label={`Actions for ${exam.title}`}
                         className={cn(
-                          "flex h-[34px] w-[34px] items-center justify-center rounded-[8px] border border-[#e2e8f0] bg-white text-[#475569] shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-800 cursor-pointer",
+                          "flex h-[34px] w-[34px] cursor-pointer items-center justify-center rounded-[8px] border border-border bg-bg-tertiary text-text-secondary shadow-2xs transition-colors hover:text-text-primary",
                           focusRing,
                         )}
                       >
@@ -1070,11 +1070,11 @@ export function PracticeCalendar({
                       </button>
 
                       {activeMenuId === exam.id && (
-                        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-32 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-32 rounded-xl border border-border bg-bg-tertiary p-1 shadow-lg">
                           <button
                             type="button"
                             onClick={() => openEditExamForm(exam)}
-                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-text-secondary transition hover:bg-bg-secondary hover:text-text-primary"
                           >
                             <Pencil className="h-3.5 w-3.5" /> Edit
                           </button>
@@ -1084,7 +1084,7 @@ export function PracticeCalendar({
                               setDeleteTarget(exam);
                               setActiveMenuId(null);
                             }}
-                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                            className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-rose-600 transition hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/10"
                           >
                             <Trash2 className="h-3.5 w-3.5" /> Delete
                           </button>
@@ -1095,15 +1095,15 @@ export function PracticeCalendar({
 
                   {/* Delete Confirmation Inline */}
                   {deleteTarget?.id === exam.id && (
-                    <div className="w-full mt-2.5 rounded-xl bg-rose-50 p-3 flex items-center justify-between text-xs">
-                      <span className="font-semibold text-rose-800">
+                    <div className="mt-2.5 flex w-full items-center justify-between rounded-xl bg-rose-50 p-3 text-xs dark:bg-rose-500/10">
+                      <span className="font-semibold text-rose-800 dark:text-rose-200">
                         Delete &ldquo;{exam.title}&rdquo;?
                       </span>
                       <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => setDeleteTarget(null)}
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                          className="cursor-pointer rounded-lg border border-border bg-bg-tertiary px-3 py-1 font-semibold text-text-secondary hover:text-text-primary"
                         >
                           Cancel
                         </button>
@@ -1123,17 +1123,17 @@ export function PracticeCalendar({
             })}
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center">
-            <GraduationCap className="mx-auto h-7 w-7 text-slate-300" aria-hidden="true" />
-            <p className="mt-2 text-sm font-bold text-slate-700">No upcoming exams</p>
-            <p className="mt-1 text-xs text-slate-400">
+          <div className="rounded-xl border border-dashed border-border py-8 text-center">
+            <GraduationCap className="mx-auto h-7 w-7 text-text-muted" aria-hidden="true" />
+            <p className="mt-2 text-sm font-bold text-text-primary">No upcoming exams</p>
+            <p className="mt-1 text-xs text-text-muted">
               Add an exam date to track its countdown and your subject readiness.
             </p>
             <button
               type="button"
               onClick={() => openNewExamForm()}
               className={cn(
-                "mt-4 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs transition cursor-pointer",
+                "mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-border bg-bg-tertiary px-4 py-2 text-xs font-semibold text-text-secondary shadow-xs transition hover:text-text-primary",
                 focusRing,
               )}
             >

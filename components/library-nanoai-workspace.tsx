@@ -1,6 +1,15 @@
 "use client";
 
-import { ArrowLeft, BookOpen, Download, FileText, GraduationCap, LibraryBig, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  ChevronRight,
+  Download,
+  FileText,
+  LibraryBig,
+  LockKeyhole,
+  RefreshCw,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -81,10 +90,12 @@ function ExplorerSkeleton() {
 }
 
 function readableMaterialName(name: string) {
-  return name
+  const baseName = name
     .replace(/\.(pdf|docx?|pptx?|txt)$/i, "")
     .replace(/[_-]+/g, " ")
     .trim();
+
+  return `${baseName || "Document"}.pdf`;
 }
 
 function getMaterialShelfConfig(shelfRaw?: string, name?: string) {
@@ -95,6 +106,7 @@ function getMaterialShelfConfig(shelfRaw?: string, name?: string) {
     return {
       label: "Syllabus",
       icon: BookOpen,
+      image: null,
       tile: "bg-[#f3e8ff] text-[#7e22ce] dark:bg-purple-950/50 dark:text-purple-300",
     };
   }
@@ -109,8 +121,9 @@ function getMaterialShelfConfig(shelfRaw?: string, name?: string) {
   ) {
     return {
       label: "Question Bank",
-      icon: GraduationCap,
-      tile: "bg-[#ecfdf5] text-[#059669] dark:bg-emerald-950/50 dark:text-emerald-300",
+      icon: null,
+      image: "/figma/library/pdf-document.svg",
+      tile: "bg-[#fff1f2] dark:bg-red-950/40",
     };
   }
   if (
@@ -123,12 +136,14 @@ function getMaterialShelfConfig(shelfRaw?: string, name?: string) {
     return {
       label: "Notes",
       icon: FileText,
+      image: null,
       tile: "bg-[#dbeafe] text-[#1d4ed8] dark:bg-blue-950/50 dark:text-blue-300",
     };
   }
   return {
     label: shelfRaw || "Document",
     icon: FileText,
+    image: null,
     tile: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   };
 }
@@ -224,13 +239,10 @@ export function LibraryNanoAiWorkspace({
     orderedTerms,
     community?.membership?.currentTermId,
   );
-  const [semesterSelection, dispatchSemesterSelection] = useReducer(
-    semesterSelectionReducer,
-    {
-      ...savedSemesterSelection,
-      viewedTermId: initialTerm?.id ?? savedSemesterSelection.viewedTermId,
-    },
-  );
+  const [semesterSelection, dispatchSemesterSelection] = useReducer(semesterSelectionReducer, {
+    ...savedSemesterSelection,
+    viewedTermId: initialTerm?.id ?? savedSemesterSelection.viewedTermId,
+  });
   const selectedTerm =
     orderedTerms.find((term) => term.id === semesterSelection.viewedTermId) ?? currentTerm;
   const initialSubject =
@@ -378,9 +390,7 @@ export function LibraryNanoAiWorkspace({
       <div className="flex min-h-full items-center justify-center p-6">
         <div className="max-w-lg rounded-xl border border-border bg-bg-primary p-8 text-center">
           <LibraryBig className="mx-auto size-9 text-text-muted" aria-hidden="true" />
-          <h1 className="type-student-page-title mt-4">
-            Join a community to open your library
-          </h1>
+          <h1 className="type-student-page-title mt-4">Join a community to open your library</h1>
           <p className="mt-3 text-sm leading-6 text-text-secondary">
             Library &amp; NanoAI uses the semesters, subjects, and resources from your active
             student community.
@@ -404,14 +414,8 @@ export function LibraryNanoAiWorkspace({
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="type-student-page-title text-text-primary">Community Library</h1>
-            <Image
-              src="/figma/library/book-open.svg"
-              alt=""
-              width={28}
-              height={28}
-              aria-hidden="true"
-            />
+            <h1 className="type-student-page-title text-text-primary">Community Managed Library</h1>
+            <BookOpen className="size-7 text-text-primary" strokeWidth={2} aria-hidden="true" />
           </div>
           <p className="mt-2 text-sm text-text-secondary">
             Choose your semester, subject and chapter to explore resources and study with Nano AI.
@@ -448,7 +452,10 @@ export function LibraryNanoAiWorkspace({
 
       <section className="mt-7" aria-labelledby="library-subjects-heading">
         <div>
-          <h2 id="library-subjects-heading" className="type-student-section-title text-text-primary">
+          <h2
+            id="library-subjects-heading"
+            className="type-student-section-title text-text-primary"
+          >
             2. Choose Subject
           </h2>
         </div>
@@ -511,9 +518,7 @@ export function LibraryNanoAiWorkspace({
             {loadState === "loading" ? <ExplorerSkeleton /> : null}
             {loadState === "error" ? (
               <div className="rounded-xl border border-destructive/30 bg-bg-primary p-6">
-                <h3 className="type-student-card-title">
-                  Couldn&apos;t load these resources
-                </h3>
+                <h3 className="type-student-card-title">Couldn&apos;t load these resources</h3>
                 <p className="mt-2 text-sm text-text-secondary">{loadError}</p>
                 <button
                   type="button"
@@ -572,7 +577,18 @@ export function LibraryNanoAiWorkspace({
                               shelfConfig.tile,
                             )}
                           >
-                            <ShelfIcon className="size-5" aria-hidden="true" />
+                            {shelfConfig.image ? (
+                              <Image
+                                src={shelfConfig.image}
+                                alt=""
+                                width={28}
+                                height={28}
+                                aria-hidden="true"
+                                className="size-7 object-contain"
+                              />
+                            ) : ShelfIcon ? (
+                              <ShelfIcon className="size-5" aria-hidden="true" />
+                            ) : null}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-[15px] font-semibold text-text-primary">
@@ -593,19 +609,15 @@ export function LibraryNanoAiWorkspace({
                             {canOpen ? "Available" : "Locked"}
                           </span>
                           {!canOpen ? (
-                            <Image
-                              src="/figma/library/lock.svg"
-                              alt=""
-                              width={12}
-                              height={12}
+                            <LockKeyhole
+                              className="size-3 text-text-muted"
+                              strokeWidth={2}
                               aria-hidden="true"
                             />
                           ) : null}
-                          <Image
-                            src="/figma/library/chevron-right.svg"
-                            alt=""
-                            width={16}
-                            height={16}
+                          <ChevronRight
+                            className="size-4 text-text-secondary"
+                            strokeWidth={2}
                             aria-hidden="true"
                           />
                         </button>
@@ -758,9 +770,7 @@ export function LibraryDocumentViewer({
           <div className="flex h-full items-center justify-center">
             <div className="max-w-md rounded-xl border border-border bg-bg-primary p-6 text-center">
               <FileText className="mx-auto size-9 text-text-muted" aria-hidden="true" />
-              <h2 className="type-student-section-title mt-4">
-                Couldn&apos;t open this resource
-              </h2>
+              <h2 className="type-student-section-title mt-4">Couldn&apos;t open this resource</h2>
               <p className="mt-2 text-sm leading-6 text-text-secondary">{readerError}</p>
               <button
                 type="button"

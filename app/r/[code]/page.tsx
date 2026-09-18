@@ -25,25 +25,35 @@ export default async function BillingReferralPage({ params }: PageProps) {
     <main className="min-h-screen bg-bg-secondary px-4 py-8 text-text-primary sm:px-6">
       <div className="mx-auto w-full max-w-2xl">
         <Link href="/" className="inline-flex items-center gap-2.5 font-semibold">
-          <Image src="/nano_logo.png" alt="Nano Syllabus" width={34} height={34} className="size-[34px] object-contain" />
+          <Image
+            src="/nanologo.png"
+            alt="Nano Syllabus"
+            width={34}
+            height={34}
+            className="size-[34px] object-contain"
+          />
           <span>nanosyllabus</span>
         </Link>
 
         <section className="mt-12 overflow-hidden rounded-3xl border border-border bg-bg-primary shadow-xl">
           <div className="bg-text-primary px-6 py-9 text-text-inverse sm:px-10 sm:py-11">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">A real student referral</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+              A real student referral
+            </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
               {referral.referrerName} invited you to NanoSyllabus Pro
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">
-              Learn from your course material, practise with real exam questions, and keep your readiness in one place.
+              Learn from your course material, practise with real exam questions, and keep your
+              readiness in one place.
             </p>
           </div>
 
           <div className="p-6 sm:p-10">
             {!referral.active ? (
               <div className="rounded-xl border border-border bg-bg-secondary p-4 text-sm leading-6 text-text-secondary">
-                This referral is currently unavailable. Its owner needs an active paid Pro subscription before it can be claimed.
+                This referral is currently unavailable. Its owner needs an active paid Pro
+                subscription before it can be claimed.
               </div>
             ) : (
               <>
@@ -51,17 +61,24 @@ export default async function BillingReferralPage({ params }: PageProps) {
                   <div className="rounded-2xl border border-border bg-bg-secondary p-4">
                     <Gift className="size-5 text-text-secondary" aria-hidden="true" />
                     <p className="mt-3 text-sm font-semibold">2 months for the price of 1</p>
-                    <p className="mt-1 text-xs leading-5 text-text-muted">Buy one month of Individual Pro and receive one bonus month after approval.</p>
+                    <p className="mt-1 text-xs leading-5 text-text-muted">
+                      Buy one month of Individual Pro and receive one bonus month after approval.
+                    </p>
                   </div>
                   <div className="rounded-2xl border border-border bg-bg-secondary p-4">
                     <ShieldCheck className="size-5 text-text-secondary" aria-hidden="true" />
                     <p className="mt-3 text-sm font-semibold">Automatic and auditable</p>
-                    <p className="mt-1 text-xs leading-5 text-text-muted">Rewards come from the billing database, not a display counter.</p>
+                    <p className="mt-1 text-xs leading-5 text-text-muted">
+                      Rewards come from the billing database, not a display counter.
+                    </p>
                   </div>
                   <div className="rounded-2xl border border-border bg-bg-secondary p-4">
                     <Users className="size-5 text-text-secondary" aria-hidden="true" />
                     <p className="mt-3 text-sm font-semibold">Code {normalizedCode}</p>
-                    <p className="mt-1 text-xs leading-5 text-text-muted">{referral.claimCount} account{referral.claimCount === 1 ? "" : "s"} already joined from this link.</p>
+                    <p className="mt-1 text-xs leading-5 text-text-muted">
+                      {referral.claimCount} account{referral.claimCount === 1 ? "" : "s"} already
+                      joined from this link.
+                    </p>
                   </div>
                 </div>
 
@@ -69,20 +86,30 @@ export default async function BillingReferralPage({ params }: PageProps) {
                   {auth.user ? (
                     <>
                       <p className="mb-4 text-sm leading-6 text-text-secondary">
-                        You are signed in as <strong className="text-text-primary">{auth.user.email}</strong>. Save this referral, then buy one month of Individual Pro. Your approved plan will run for 60 days total.
+                        You are signed in as{" "}
+                        <strong className="text-text-primary">{auth.user.email}</strong>. Save this
+                        referral, then buy one month of Individual Pro. Your approved plan will run
+                        for 60 days total.
                       </p>
                       <BillingReferralClaim code={normalizedCode} />
                     </>
                   ) : (
                     <>
                       <p className="mb-4 text-sm leading-6 text-text-secondary">
-                        Create or sign in, save the referral, then buy one month of Individual Pro to receive one bonus month.
+                        Create or sign in, save the referral, then buy one month of Individual Pro
+                        to receive one bonus month.
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <Link href={`/signup?next=${encodeURIComponent(nextPath)}`} className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-text-primary px-5 text-sm font-semibold text-text-inverse hover:opacity-90 ${focusRing}`}>
+                        <Link
+                          href={`/signup?next=${encodeURIComponent(nextPath)}`}
+                          className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-text-primary px-5 text-sm font-semibold text-text-inverse hover:opacity-90 ${focusRing}`}
+                        >
                           Create account <ArrowRightIcon />
                         </Link>
-                        <Link href={`/login?next=${encodeURIComponent(nextPath)}`} className={`inline-flex min-h-12 items-center justify-center rounded-xl border border-border px-5 text-sm font-semibold hover:bg-bg-secondary ${focusRing}`}>
+                        <Link
+                          href={`/login?next=${encodeURIComponent(nextPath)}`}
+                          className={`inline-flex min-h-12 items-center justify-center rounded-xl border border-border px-5 text-sm font-semibold hover:bg-bg-secondary ${focusRing}`}
+                        >
                           Sign in
                         </Link>
                       </div>

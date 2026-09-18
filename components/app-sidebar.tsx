@@ -400,9 +400,9 @@ export function AppSidebar({
    *
    * The root below was `bg-white text-[#475569]`, which pinned the whole
    * sidebar to a light palette regardless of the theme. In dark mode that
-   * painted a white panel inside a black app — and, worse, made the navigation
+   * painted a white panel inside the dark-gray app — and, worse, made the navigation
    * unreadable: the nav links DO use tokens (`text-sidebar-crisp` resolves to
-   * `--text-primary`, which is #f7f7f8 in dark), so near-white text was being
+   * `--text-primary`, which is near-white in dark), so light text was being
    * drawn onto a hardcoded white background. The links were not faded; they
    * were invisible.
    *
@@ -431,11 +431,11 @@ export function AppSidebar({
             {/* Logo shown by default */}
             <div className="flex items-center justify-center transition-opacity duration-150 group-hover:opacity-0">
               <Image
-                src="/nano_logo.png"
+                src="/nanologo.png"
                 alt="Nano Syllabus"
-                width={24}
-                height={24}
-                className="h-6 w-6 rounded-md object-contain shrink-0"
+                width={34}
+                height={34}
+                className="h-[34px] w-[34px] rounded-lg object-contain shrink-0"
               />
             </div>
             {/* Sidebar toggle icon shown on hover */}
@@ -465,11 +465,11 @@ export function AppSidebar({
               aria-label="Go to Nano Syllabus site"
             >
               <Image
-                src="/nano_logo.png"
+                src="/nanologo.png"
                 alt="Nano Syllabus"
-                width={28}
-                height={28}
-                className="h-7 w-7 rounded-md object-contain shrink-0"
+                width={34}
+                height={34}
+                className="h-[34px] w-[34px] rounded-lg object-contain shrink-0"
               />
               <span>Nano Syllabus</span>
             </Link>

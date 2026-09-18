@@ -86,18 +86,18 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg-primary: #000000;
-  --bg-secondary: #101010;
-  --bg-tertiary: #1c1c1f;
+  --bg-primary: #121214;
+  --bg-secondary: #161618;
+  --bg-tertiary: #222225;
   --text-primary: #f7f7f8;
-  --text-secondary: #c9c9cf;
-  --text-muted: #8f9099;
+  --text-secondary: #d0d0d6;
+  --text-muted: #a6a6af;
   --text-inverse: #000000;
-  --border: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.14);
   --border-strong: #f7f7f8;
-  --surface: #101010;
-  --surface-2: #1c1c1f;
-  --card: #101010;
+  --surface: #18181a;
+  --surface-2: #222225;
+  --card: #18181a;
   --card-foreground: #f7f7f8;
   --primary: #f7f7f8;
   --primary-foreground: #000000;
@@ -150,6 +150,16 @@
   select option {
     background-color: var(--bg-primary);
     color: var(--text-primary);
+  }
+
+  input[type="date"],
+  input[type="datetime-local"] {
+    color-scheme: light;
+  }
+
+  [data-theme="dark"] input[type="date"],
+  [data-theme="dark"] input[type="datetime-local"] {
+    color-scheme: dark;
   }
 }
 

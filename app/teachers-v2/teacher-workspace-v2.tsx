@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import {
@@ -2293,9 +2294,13 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
           aria-label="Go to Nano Syllabus site"
           className="mb-3 flex items-center gap-[10px] rounded-[9px] px-2 pt-0.5 transition hover:opacity-70"
         >
-          <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-text-primary font-display text-sm font-extrabold text-text-inverse">
-            n
-          </span>
+          <Image
+            src="/nanologo.png"
+            alt=""
+            width={34}
+            height={34}
+            className="h-[34px] w-[34px] rounded-lg object-contain"
+          />
           <div>
             <p className="font-display text-[17px] font-semibold tracking-[-0.035em]">
               NanoSyllabus
@@ -2384,9 +2389,15 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             <Link
               href="/"
               aria-label="Go to Nano Syllabus site"
-              className="grid h-10 w-10 place-items-center rounded-full bg-text-primary font-display font-semibold text-text-inverse transition hover:opacity-80"
+              className="grid h-10 w-10 place-items-center rounded-lg transition hover:opacity-80"
             >
-              n
+              <Image
+                src="/nanologo.png"
+                alt="Nano Syllabus"
+                width={34}
+                height={34}
+                className="h-[34px] w-[34px] rounded-lg object-contain"
+              />
             </Link>
           </div>
           <div className="min-w-0">

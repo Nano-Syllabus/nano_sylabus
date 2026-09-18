@@ -34,7 +34,7 @@ h3{font-size:16px}
 .rail{border-right:1px solid var(--rule); background:var(--paper); position:sticky; top:0; height:100vh; overflow:auto; padding:18px 13px 40px;
   display:flex; flex-direction:column}
 .brand{display:flex; gap:10px; align-items:center; padding:2px 8px 18px}
-.brand .glyph{width:30px;height:30px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;font-family:var(--display);font-weight:800}
+.brand .glyph{width:34px;height:34px;border-radius:9px;object-fit:contain;display:block;flex:none}
 .brand b{font-family:var(--display); font-size:17px; letter-spacing:-.035em; font-weight:600}
 .navgroup{margin:16px 0 5px; padding:0 9px; font-family:var(--mono); font-size:9.5px; text-transform:uppercase; letter-spacing:.14em; color:var(--ink-3)}
 .navitem{display:flex; align-items:center; gap:9px; width:100%; padding:8px 11px; border-radius:9px; border:1px solid transparent;
@@ -1661,7 +1661,7 @@ function shell(body, crumbs) {
     ? `<a href="#/" onclick="return leaveTeachersPortal()">Student Portal</a>`
     : `<a href="#/teachers">Teachers Portal</a>`;
   return `<div class="app"><nav class="rail">
-    <div class="brand"><div class="glyph">n</div><b>NanoSyllabus</b></div>
+    <div class="brand"><img class="glyph" src="/nanologo.png" alt="NanoSyllabus"><b>NanoSyllabus</b></div>
     ${inTeachersPortal() ? `<div class="portalmark">Teachers Portal</div>` : ""}
     ${items.map(i => `<a class="navitem big ${navOn(i, h) ? "on" : ""}" href="${portalHref(i.h)}">${i.label}${
       i.n ? `<span class="n">${i.n}</span>` : ""}</a>`).join("")}
@@ -1671,7 +1671,7 @@ function shell(body, crumbs) {
     </nav><div class="main">
       <div class="topbar">
         <span class="only-m" style="align-items:center; gap:8px">
-          <span class="glyph" style="width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:13px">n</span></span>
+          <img class="glyph" src="/nanologo.png" alt="NanoSyllabus" style="width:30px;height:30px;border-radius:8px;object-fit:contain"></span>
         <span class="spacer"></span>
         <div class="persona"><label for="who">${inTeachersPortal() ? "Teacher" : "Viewing as"}</label>
           <select id="who">${people.map(u =>
