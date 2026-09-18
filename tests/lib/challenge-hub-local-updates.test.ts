@@ -18,6 +18,7 @@ function challenge(overrides: Partial<StudentChallengeSummary> = {}): StudentCha
     date: "2026-09-10",
     position: 1,
     subjectSlug: "physics",
+    unitNumber: "",
     subjectName: "Physics",
     topicKey: "newton",
     topicTitle: "Newton's laws",

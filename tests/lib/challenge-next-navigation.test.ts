@@ -19,6 +19,7 @@ function challenge(
     date: "2026-09-06",
     position,
     subjectSlug: "math",
+    unitNumber: "",
     subjectName: "Math",
     topicKey: id,
     topicTitle: id,

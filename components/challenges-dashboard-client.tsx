@@ -29,6 +29,7 @@ import {
 import { AppShellContext } from "@/components/app-shell-context";
 import { Markdown } from "@/components/markdown";
 import { mergeLearnQuestions } from "@/lib/challenge-learn-questions";
+import { academicNumberLabel } from "@/lib/academic";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
 import type {
   StudentChallengeDetail,
@@ -1610,6 +1611,69 @@ function ChallengeDetail({
   );
 }
 
+/** A non-negative whole count, or 0 for anything that is not a finite number. */
+function count(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+}
+
+/**
+ * How much of a subject the student has worked through, as one filling bar.
+ *
+ * Counted in subtopics — the unit a challenge is set on — so "12 of 38" means
+ * twelve subtopics have a COMPLETED challenge, out of everything the
+ * subject's syllabus lists. A subject whose catalogue has not been read yet has
+ * no denominator, and says so rather than drawing an empty bar that reads as
+ * "you have done nothing".
+ */
+/** Exported for tests. */
+export function SubjectCoverage({
+  progress,
+}: {
+  progress?: { covered: number; total: number };
+}) {
+  // Counts are read defensively: a row from a payload that predates a field — a
+  // tab left open across a deploy, a stale server module in dev — arrives with
+  // `undefined`, and `Math.min(undefined, 44)` is what printed "NaN of 44".
+  const total = count(progress?.total);
+  if (!progress || total <= 0) {
+    return (
+      <p className="flex-1 min-w-0 text-[13px] text-text-muted">Topics not mapped yet</p>
+    );
+  }
+  const covered = Math.min(count(progress.covered), total);
+  const percent = Math.round((covered / total) * 100);
+  return (
+    <div className="flex-1 min-w-0 max-w-[340px]">
+      <div className="flex items-baseline justify-between gap-3 text-[12px]">
+        <span className="text-text-muted">
+          {covered} of {total} subtopics completed
+        </span>
+        <span className="font-semibold tabular-nums text-text-secondary">{percent}%</span>
+      </div>
+      {/* An outlined track with the fill inset inside it. The track is tinted
+          from the fill's own blue rather than a surface token: on the dark card
+          `bg-bg-secondary` is the card's own colour, and the bar vanished. */}
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        aria-label={`${percent}% of this subject's challenges completed`}
+        className="mt-2 h-3 w-full overflow-hidden rounded-full border border-[#2563eb]/40 bg-[#2563eb]/[0.08] p-[2px]"
+      >
+        <div
+          className="h-full rounded-full bg-[#2563eb] transition-[width] duration-500 ease-out motion-reduce:transition-none"
+          // A nub even at 0%: a round dot at the start of the track, so it reads
+          // as a bar that has begun and is waiting to fill. In pixels, not
+          // percent — a percent floor is a dot on a phone and a dash on a desktop.
+          style={{ width: `${percent}%`, minWidth: 6 }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function ChallengesDashboardClient({
   dashboard: serverDashboard,
   initialChallengeId,
@@ -1686,12 +1750,20 @@ export function ChallengesDashboardClient({
     setTitle(selected ? selected.title : CHALLENGE_HUB_TITLE);
     return () => setTitle(null);
   }, [selected, setTitle]);
-  const selectedScopeKey = dashboard.scope
-    ? `${dashboard.scope.courseId}:${dashboard.scope.subjectSlug.trim().toLowerCase()}`
-    : "all";
-  const selectedSubject = dashboard.subjectOptions.find(
-    (subject) => subject.scopeKey === selectedScopeKey,
-  );
+  /**
+   * Each subject's own progress, under the key the server already gave it.
+   * `scopeKey` is `${courseId ?? "owner-private"}:${slug}` — the same string a
+   * challenge row resolves to below, so the two cannot drift apart.
+   */
+  const subjectProgress = useMemo(() => {
+    const byKey = new Map<string, { covered: number; total: number }>();
+    for (const subject of dashboard.subjects) {
+      // Completed CHALLENGES only. `practicedTopics` also counts practice sets,
+      // MCQ checks and exams, which is not what this bar says it measures.
+      byKey.set(subject.scopeKey, { covered: subject.completedTopics, total: subject.totalTopics });
+    }
+    return byKey;
+  }, [dashboard.subjects]);
   const weeklyProgress = Math.min(100, (dashboard.passedThisWeek / WEEKLY_CHALLENGE_TARGET) * 100);
   const weeklyLeaderTotal = Math.round((dashboard.leaderboard?.topPracticePerDay ?? 0) * 7);
   const challengesBehind = Math.max(0, weeklyLeaderTotal - dashboard.passedThisWeek);
@@ -1706,22 +1778,53 @@ export function ChallengesDashboardClient({
     return `/app/challenges?${params.toString()}#completed-challenges`;
   };
 
-  const changePrioritySubject = (scopeKey: string) => {
-    if (scopeKey === "all") {
-      const communityQuery = dashboard.community
-        ? `?community=${encodeURIComponent(dashboard.community.slug)}`
-        : "";
-      router.replace(`/app/challenges${communityQuery}`);
-      return;
+  /**
+   * Save the running semester and reload the queue it scopes.
+   *
+   * The same write the Library used to make (`PATCH …/membership`), and a full
+   * refresh after it rather than a patch: which subjects the queue draws from,
+   * which challenges are assigned and every count above them all change with
+   * the semester, so there is no smaller update that would be true.
+   */
+  const [runningTermId, setRunningTermId] = useState(
+    dashboard.community?.currentTermId ?? "",
+  );
+  const [savingSemester, setSavingSemester] = useState(false);
+  const [semesterError, setSemesterError] = useState("");
+  const changeRunningSemester = async (termId: string) => {
+    const community = dashboard.community;
+    if (!community || !termId || termId === runningTermId || savingSemester) return;
+    const previous = runningTermId;
+    setRunningTermId(termId);
+    setSavingSemester(true);
+    setSemesterError("");
+    try {
+      const response = await fetch(
+        `/api/communities/${encodeURIComponent(community.slug)}/membership`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ termId }),
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        currentTermId?: string;
+        error?: string;
+      };
+      if (!response.ok || payload.currentTermId !== termId) {
+        throw new Error(payload.error || "Could not save your running semester.");
+      }
+      // Drop any subject filter: it named a subject of the old semester.
+      router.replace(`/app/challenges?community=${encodeURIComponent(community.slug)}`);
+      router.refresh();
+    } catch (cause) {
+      setRunningTermId(previous);
+      setSemesterError(
+        cause instanceof Error ? cause.message : "Could not save your running semester.",
+      );
+    } finally {
+      setSavingSemester(false);
     }
-    const subject = dashboard.subjectOptions.find((option) => option.scopeKey === scopeKey);
-    if (!subject) return;
-    const params = new URLSearchParams({
-      courseId: subject.courseId,
-      subject: subject.subjectSlug,
-    });
-    if (dashboard.community) params.set("community", dashboard.community.slug);
-    router.replace(`/app/challenges?${params.toString()}`);
   };
 
   const openChallenge = async (challenge: StudentChallengeSummary) => {
@@ -1954,27 +2057,40 @@ export function ChallengesDashboardClient({
               ) : null}
             </div>
 
-            <div className="flex items-center gap-3">
-              <label
-                htmlFor="priority-subject"
-                className="type-student-eyebrow whitespace-nowrap text-[#6b7280] dark:text-text-muted"
-              >
-                PRIORITY SUBJECT
-              </label>
-              <select
-                id="priority-subject"
-                value={selectedScopeKey}
-                onChange={(event) => changePrioritySubject(event.target.value)}
-                className="min-h-9 cursor-pointer rounded-xl border border-[#e5e7eb] dark:border-border bg-white dark:bg-bg-primary px-3.5 py-1 text-[13px] font-medium text-text-primary shadow-2xs transition-colors duration-100 hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              >
-                <option value="all">All subjects</option>
-                {dashboard.subjectOptions.map((subject) => (
-                  <option key={subject.scopeKey} value={subject.scopeKey}>
-                    {subject.subjectName}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* The running semester lives here now, not in the Library: it is the
+                thing that decides which subjects this queue draws from, so it
+                belongs next to the queue it changes. */}
+            {dashboard.community && dashboard.community.terms.length ? (
+              <div className="flex flex-col gap-1.5 sm:items-end">
+                <div className="flex items-center gap-3">
+                  <label
+                    htmlFor="running-semester"
+                    className="type-student-eyebrow whitespace-nowrap text-[#6b7280] dark:text-text-muted"
+                  >
+                    RUNNING SEMESTER
+                  </label>
+                  <select
+                    id="running-semester"
+                    value={runningTermId}
+                    onChange={(event) => void changeRunningSemester(event.target.value)}
+                    disabled={savingSemester}
+                    className="min-h-9 cursor-pointer rounded-xl border border-[#e5e7eb] dark:border-border bg-white dark:bg-bg-primary px-3.5 py-1 text-[13px] font-medium text-text-primary shadow-2xs transition-colors duration-100 hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {runningTermId ? null : <option value="">Choose a semester</option>}
+                    {dashboard.community.terms.map((term) => (
+                      <option key={term.id} value={term.id}>
+                        {academicNumberLabel(term.semesterNumber, "Semester")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {semesterError ? (
+                  <p role="alert" className="text-xs text-destructive">
+                    {semesterError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           {dashboard.challenges.length ? (
@@ -1987,25 +2103,22 @@ export function ChallengesDashboardClient({
                     key={challenge.id}
                     className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-6 py-5 hover:bg-bg-secondary/40 rounded-xl px-2 -mx-2 transition-colors"
                   >
-                    <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-6">
-                      <div className="w-full sm:w-[240px] md:w-[280px] shrink-0 min-w-0">
+                    <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-8">
+                      {/* The subject, and under it the subtopic this challenge
+                          is on — the thing a student actually decides by. */}
+                      <div className="w-full sm:w-[260px] md:w-[300px] shrink-0 min-w-0">
                         <p className="font-bold text-[15px] sm:text-[16px] text-text-primary truncate">
                           {challenge.subjectName}
                         </p>
-                        {/* The two ids this row is, so a challenge on screen can
-                            be matched to its row and its subject without
-                            guessing from the titles. */}
-                        <p className="mt-0.5 font-mono text-[11px] leading-4 text-[#9ca3af] dark:text-text-muted break-all">
-                          <span className="sr-only">Challenge id </span>
-                          {challenge.id}
-                          <br />
-                          <span className="sr-only">Subject id </span>
-                          {challenge.subjectSlug}
+                        <p className="mt-1 text-[14px] sm:text-[15px] leading-6 text-[#4b5563] dark:text-text-secondary line-clamp-2">
+                          {challenge.topicTitle}
                         </p>
                       </div>
-                      <p className="text-[14px] sm:text-[15px] text-[#6b7280] dark:text-text-secondary flex-1 min-w-0 truncate pr-2 sm:pt-0.5">
-                        {challenge.topicTitle}
-                      </p>
+                      <SubjectCoverage
+                        progress={subjectProgress.get(
+                          `${challenge.courseId ?? "owner-private"}:${challenge.subjectSlug.trim().toLowerCase()}`,
+                        )}
+                      />
                     </div>
 
                     <div className="flex items-center justify-between sm:justify-end gap-6 shrink-0">

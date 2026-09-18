@@ -78,6 +78,9 @@ const CONTENT_PENDING_STALE_MS = 90_000;
 /** Challenge ids whose background completion is running in THIS process. */
 const completionsInFlight = new Map<string, Promise<StudentChallengeDetail | null>>();
 
+/** Challenge ids whose reading is being written onto the row after completion. */
+const readingsInFlight = new Map<string, Promise<void>>();
+
 export function isMissingChallengeTable(error: { code?: string } | null) {
   return error?.code === UNDEFINED_TABLE || error?.code === POSTGREST_MISSING_TABLE;
 }
@@ -1618,7 +1621,7 @@ async function runChallengeContentCompletion(
   if (!raw) return null;
   const row = raw as ChallengeRow;
   const detail = toDetail(row);
-  let pending = detail.content;
+  const pending = detail.content;
   // Another process may have finished it between the schedule and this run.
   if (!pending || pending.contentStatus !== "pending") return detail;
 
@@ -1629,26 +1632,27 @@ async function runChallengeContentCompletion(
     : [String(row.topic_key || "")].filter(Boolean);
   const topicTitle = String(row.topic_title || detail.topicTitle || "this topic");
 
+  /**
+   * THE READING IS WRITTEN AFTER THE STUDENT IS SERVED, NEVER BEFORE.
+   *
+   * `/start` no longer fetches it, so this lesson is always empty here — and it
+   * used to be fetched in a `Promise.all` with the worked examples, which made
+   * `contentStatus: "ready"` wait for BOTH. On a cold topic the reading is the
+   * slowest call in the whole build (a long-form write-up, ten to twenty minutes
+   * on the live collection), and the challenge screen does not render it: it is
+   * kept for Revision Docs. So the worked examples and the paper the student
+   * was actually waiting for sat behind a document they would never see there.
+   *
+   * It is now attached by `scheduleChallengeReading` once this pass has written
+   * everything the student needs.
+   */
+  const needsReading = !pending.lesson?.content?.length;
   try {
-    // A row written before `/start` carried the reading (or one whose reading call
-    // failed) still has an empty lesson here. Refetched alongside the worked
-    // examples rather than before them: they share no inputs, and in the normal
-    // case there is nothing to fetch at all.
-    const needsReading = !pending.lesson?.content?.length;
-    const [learning, solved] = await Promise.all([
-      needsReading
-        ? getTeacherChallengeReading(lane.collectionKey, {
-            subject: lane.subject,
-            topics: topicKeys,
-          }).catch(() => null)
-        : Promise.resolve(null),
-      getTeacherChallengeSolvedQuestions(lane.collectionKey, {
-        subject: lane.subject,
-        topics: topicKeys,
-        limit: CHALLENGE_SOLVED_QUESTIONS,
-      }),
-    ]);
-    if (learning) pending = contentWithReading(pending, learning);
+    const solved = await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
+      subject: lane.subject,
+      topics: topicKeys,
+      limit: CHALLENGE_SOLVED_QUESTIONS,
+    });
     // Only fetched when it can change what the student is told. It exists to
     // phrase ONE warning — whether the thin worked examples mean "no past paper
     // covers this topic" or "this course has no question bank at all" — and
@@ -1697,6 +1701,12 @@ async function runChallengeContentCompletion(
       .select("*")
       .single();
     if (error) throw error;
+    if (needsReading) {
+      scheduleChallengeReading(userId, challengeId, lane.collectionKey, {
+        subject: lane.subject,
+        topics: topicKeys,
+      });
+    }
     return toDetail(data as ChallengeRow);
   } catch (cause) {
     const message =
@@ -1740,10 +1750,71 @@ function scheduleChallengeContentCompletion(userId: string, challengeId: string)
   const task = runChallengeContentCompletion(userId, challengeId).catch(() => null);
   completionsInFlight.set(challengeId, task);
   try {
-    after(() => task);
+    // The reading the completion hands off is awaited here too, so a serverless
+    // runtime keeps the process alive until it has landed on the row.
+    after(async () => {
+      await task;
+      await readingsInFlight.get(challengeId);
+    });
   } catch {
     // Not in a request scope. The work is under way regardless.
   }
+}
+
+/**
+ * Write a challenge's reading onto its row once the student already has
+ * everything they are waiting for — see `runChallengeContentCompletion`.
+ *
+ * Fetched outside `completionsInFlight` on purpose: a completion still marked
+ * in flight holds off `scheduleChallengeExamRefresh`, and a reading that takes
+ * twenty minutes must not stop an expired paper being reissued.
+ */
+function scheduleChallengeReading(
+  userId: string,
+  challengeId: string,
+  collectionKey: string,
+  request: { subject: string; topics: string[] },
+) {
+  if (readingsInFlight.has(challengeId)) return;
+  const task = attachChallengeReading(userId, challengeId, collectionKey, request)
+    .catch(() => undefined)
+    .finally(() => {
+      readingsInFlight.delete(challengeId);
+    });
+  readingsInFlight.set(challengeId, task);
+}
+
+async function attachChallengeReading(
+  userId: string,
+  challengeId: string,
+  collectionKey: string,
+  request: { subject: string; topics: string[] },
+) {
+  const learning = await getTeacherChallengeReading(collectionKey, request);
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !raw) return;
+  const row = raw as ChallengeRow;
+  const content = toDetail(row).content;
+  // Something else wrote a lesson while this was being fetched — a restart, or
+  // another process's pass. Theirs is newer; this one is dropped.
+  if (!content || content.lesson?.content?.length) return;
+  let write = admin
+    .from("student_challenges")
+    .update({ content: contentWithReading(content, learning) })
+    .eq("id", challengeId)
+    .eq("user_id", userId);
+  // Only onto the row as it was read: a submit or a restart that lands between
+  // the read and this write carries content this merge has never seen, and the
+  // reading is the one to lose, not their write. `updated_at` is deliberately
+  // not bumped — nothing the student is looking at has changed.
+  if (row.updated_at) write = write.eq("updated_at", String(row.updated_at));
+  await write;
 }
 
 /**

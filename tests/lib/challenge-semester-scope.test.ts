@@ -153,3 +153,90 @@ describe("the daily queue is scoped to the student's own semester", () => {
     expect(dashboard.subjects).toHaveLength(3);
   });
 });
+
+describe("the progress bar counts completed challenges, not every graded attempt", () => {
+  let db: ReturnType<typeof communityLearningFixture>;
+  // The batch reader's key: course, teacher and subject, NUL-separated.
+  const batchKey = (r: { courseId: string; teacherId: string; subjectSlug: string }) =>
+    [r.courseId, r.teacherId, r.subjectSlug].join(String.fromCharCode(0));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = communityLearningFixture();
+    mocks.admin.mockReturnValue({
+      ...db.admin,
+      rpc: () => ({ maybeSingle: async () => ({ data: {}, error: null }) }),
+    });
+    mocks.attempts.mockResolvedValue([]);
+    mocks.ensure.mockResolvedValue([]);
+    mocks.history.mockResolvedValue({ challenges: [], page: 1, total: 0, totalPages: 0 });
+    const topics = [
+      { topic_key: "ohms-law", title: "Ohm's law", unit_number: "1", position: 0, blurb: "" },
+      { topic_key: "kvl", title: "Kirchhoff's voltage law", unit_number: "1", position: 1, blurb: "" },
+      { topic_key: "kcl", title: "Kirchhoff's current law", unit_number: "1", position: 2, blurb: "" },
+    ];
+    mocks.learningTopicsBatch.mockImplementation(async (requests) => {
+      const map = new Map();
+      for (const r of requests) map.set(batchKey(r), topics);
+      return map;
+    });
+    mocks.communities.mockResolvedValue([
+      subject("basic_electrical", "Basic Electrical Engineering", SEM_1),
+    ]);
+    mocks.communityScope.mockResolvedValue({
+      communityId: "community-1",
+      communitySlug: "bct",
+      communityName: "BCT",
+      courseId: "course-1",
+      currentTermId: "term-1",
+    });
+  });
+
+  it("does not fill for a practice set on a topic", async () => {
+    // Mastery is written by every graded activity. Two topics touched by a
+    // practice set or an MCQ check are "practised" — and not completed
+    // challenges, which is what the bar says it counts.
+    mocks.mastery.mockResolvedValue([
+      { courseId: "course-1", subjectSlug: "basic_electrical", topicKey: "ohms-law", attempts: 2, percentage: 70, status: "developing" },
+      { courseId: "course-1", subjectSlug: "basic_electrical", topicKey: "kvl", attempts: 1, percentage: 40, status: "weak" },
+    ]);
+    db.tables.student_challenges = [];
+
+    const [subjectRow] = (await getStudentChallengeDashboard("member")).subjects;
+
+    expect(subjectRow.practicedTopics).toBe(2);
+    expect(subjectRow.completedTopics).toBe(0);
+  });
+
+  it("counts each completed subtopic once, and nothing still open", async () => {
+    mocks.mastery.mockResolvedValue([]);
+    db.tables.student_challenges = [
+      { user_id: "member", course_id: "course-1", subject_slug: "basic_electrical", topic_key: "ohms-law", status: "completed" },
+      // Completed twice: one subtopic, not two.
+      { user_id: "member", course_id: "course-1", subject_slug: "basic_electrical", topic_key: "ohms-law", status: "completed" },
+      { user_id: "member", course_id: "course-1", subject_slug: "basic_electrical", topic_key: "kvl", status: "completed" },
+      // Opened and left: not completed.
+      { user_id: "member", course_id: "course-1", subject_slug: "basic_electrical", topic_key: "kcl", status: "started" },
+      // Another student entirely.
+      { user_id: "someone-else", course_id: "course-1", subject_slug: "basic_electrical", topic_key: "kcl", status: "completed" },
+    ];
+
+    const [subjectRow] = (await getStudentChallengeDashboard("member")).subjects;
+
+    expect(subjectRow.completedTopics).toBe(2);
+    expect(subjectRow.totalTopics).toBe(3);
+  });
+
+  it("ignores a completed challenge on a topic the catalogue no longer lists", async () => {
+    // A unit since re-read into its bullets is not one of these subtopics, and
+    // counting it would push the bar past everything that exists.
+    mocks.mastery.mockResolvedValue([]);
+    db.tables.student_challenges = [
+      { user_id: "member", course_id: "course-1", subject_slug: "basic_electrical", topic_key: "dc-circuits-unit", status: "completed" },
+    ];
+
+    const [subjectRow] = (await getStudentChallengeDashboard("member")).subjects;
+
+    expect(subjectRow.completedTopics).toBe(0);
+  });
+});
