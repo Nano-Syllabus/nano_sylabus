@@ -5,6 +5,9 @@ import {
   isNepalDateKey,
   toDailyCashPrizeProgress,
 } from "@/lib/data/cash-prize";
+import { readFileSync } from "node:fs";
+
+const cashPrizeSource = readFileSync("lib/data/cash-prize.ts", "utf8");
 
 describe("cash-prize daily challenge progress", () => {
   it("uses Nepal midnight boundaries for the completion query", () => {
@@ -46,5 +49,9 @@ describe("cash-prize daily challenge progress", () => {
       progressPercent: 100,
       isEligible: true,
     });
+  });
+
+  it("requires the challenge to belong to the current Nepal day", () => {
+    expect(cashPrizeSource).toContain('.eq("challenge_date", dateKey)');
   });
 });

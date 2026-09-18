@@ -7,6 +7,10 @@ const migrationPath = path.join(
   process.cwd(),
   "supabase/migrations/20260918133000_cash_prize_daily_entries.sql",
 );
+const sameDayMigrationPath = path.join(
+  process.cwd(),
+  "supabase/migrations/20260918213000_cash_prize_same_day_challenge.sql",
+);
 
 describe("cash prize daily entry migration", () => {
   let db: PGlite;
@@ -33,6 +37,7 @@ describe("cash prize daily entry migration", () => {
       create table public.student_challenges (
         id uuid primary key default gen_random_uuid(),
         user_id uuid not null references auth.users(id),
+        challenge_date date not null,
         status text not null default 'assigned',
         completed_at timestamptz
       );
@@ -43,10 +48,11 @@ describe("cash prize daily entry migration", () => {
       insert into public.student_profiles(user_id,full_name) values
         ('11111111-1111-4111-8111-111111111111','Aarav Sharma');
 
-      insert into public.student_challenges(id,user_id,status,completed_at) values
-        ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111111','completed','2026-09-18T18:14:59Z');
+      insert into public.student_challenges(id,user_id,challenge_date,status,completed_at) values
+        ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111111','2026-09-18','completed','2026-09-18T18:14:59Z');
     `);
     await db.exec(await readFile(migrationPath, "utf8"));
+    await db.exec(await readFile(sameDayMigrationPath, "utf8"));
   }, 30_000);
 
   afterEach(async () => db.close());
@@ -72,10 +78,10 @@ describe("cash prize daily entry migration", () => {
 
   it("captures one entry per student per Nepal day when challenges become completed", async () => {
     await db.exec(`
-      insert into public.student_challenges(id,user_id,status) values
-        ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','22222222-2222-4222-8222-222222222222','assigned'),
-        ('cccccccc-cccc-4ccc-8ccc-cccccccccccc','22222222-2222-4222-8222-222222222222','assigned'),
-        ('dddddddd-dddd-4ddd-8ddd-dddddddddddd','22222222-2222-4222-8222-222222222222','assigned');
+      insert into public.student_challenges(id,user_id,challenge_date,status) values
+        ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','22222222-2222-4222-8222-222222222222','2026-09-19','assigned'),
+        ('cccccccc-cccc-4ccc-8ccc-cccccccccccc','22222222-2222-4222-8222-222222222222','2026-09-19','assigned'),
+        ('dddddddd-dddd-4ddd-8ddd-dddddddddddd','22222222-2222-4222-8222-222222222222','2026-09-20','assigned');
 
       update public.student_challenges
       set status='completed', completed_at='2026-09-18T18:15:00Z'
@@ -111,5 +117,24 @@ describe("cash prize daily entry migration", () => {
         student_email: "sita@gmail.com",
       },
     ]);
+  });
+
+  it("does not qualify an older challenge completed on a later Nepal day", async () => {
+    await db.exec(`
+      insert into public.student_challenges(id,user_id,challenge_date,status) values
+        ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','22222222-2222-4222-8222-222222222222','2026-09-18','assigned');
+
+      update public.student_challenges
+      set status='completed', completed_at='2026-09-18T18:15:00Z'
+      where id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    `);
+
+    const result = await db.query<{ total: number }>(`
+      select count(*)::integer as total
+      from public.cash_prize_daily_entries
+      where challenge_id='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+    `);
+
+    expect(result.rows[0]?.total).toBe(0);
   });
 });

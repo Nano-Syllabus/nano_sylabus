@@ -105,12 +105,14 @@ export async function getDailyCashPrizeProgress(
   now = new Date(),
 ): Promise<DailyCashPrizeProgress> {
   const admin = createSupabaseAdminClient();
+  const dateKey = getNepalDateKey(now);
   const { start, end } = getNepalDayUtcRange(now);
   const { count, error } = await admin
     .from("student_challenges")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
     .eq("status", "completed")
+    .eq("challenge_date", dateKey)
     .gte("completed_at", start)
     .lt("completed_at", end);
 
