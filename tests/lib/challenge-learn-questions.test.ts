@@ -17,14 +17,15 @@ const past = (question: string, year = "", marks: number | null = null) => ({
   year,
 });
 
-const solved = (question: string, solution: string, year = "", marks: number | null = null) => ({
+// `marks` is a number on a worked example, never null: 0 means the bank printed none.
+const solved = (question: string, solution: string, year = "", marks = 0) => ({
   question,
   solution,
   year,
   marks,
   topic: "Free oscillation",
   grounded: true,
-  source: "question_bank",
+  source: "question_bank" as const,
 });
 
 describe("the question list step one renders", () => {

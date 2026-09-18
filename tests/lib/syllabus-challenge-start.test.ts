@@ -481,13 +481,64 @@ describe("starting a saved syllabus challenge", () => {
     });
 
     await restartStudentChallenge("member", "challenge-1");
-    // Behind the response now, with the rest of the tail: a restart clears the
-    // lesson, and the completion pass is what writes the new one.
-    const row = await settled();
+    // Behind the response now, and behind the rest of the tail too: a restart
+    // clears the lesson, and the reading is written onto the row once the worked
+    // examples and the paper are already there.
+    await settled();
+    const content = await vi.waitFor(() => {
+      const current = db.tables.student_challenges[0].content as {
+        lesson?: { title?: string; content?: string[] };
+      };
+      expect(current.lesson?.content?.length).toBeTruthy();
+      return current;
+    });
 
-    const content = row.content as { lesson?: { title?: string; content?: string[] } };
     expect(content.lesson?.title).toBe("Rebuilt");
     expect(content.lesson?.content).toEqual(["The rebuilt reading."]);
+  });
+
+  it("serves the worked examples and the paper without waiting for the reading", async () => {
+    // The reading is the slowest call in the build — ten to twenty minutes on a
+    // cold topic — and the challenge screen does not render it. It used to share
+    // a Promise.all with the worked examples, so `ready` waited for both.
+    let releaseReading = () => {};
+    mocks.reading.mockReturnValue(
+      new Promise((resolve) => {
+        releaseReading = () =>
+          resolve({
+            reading: {
+              headline: "Late",
+              content: "The reading that took twenty minutes.",
+              focus: "",
+              big_idea: "",
+              connections: [],
+              sources: [],
+            },
+            warnings: [],
+          });
+      }),
+    );
+
+    await startStudentChallenge("member", "challenge-1");
+    const ready = await settled();
+
+    expect(mocks.createExam).toHaveBeenCalledTimes(1);
+    expect(ready.external_paper_id).toBe("attempt-1");
+    expect((ready.content as { lesson?: { content?: string[] } }).lesson?.content).toEqual([]);
+
+    releaseReading();
+    const landed = await vi.waitFor(() => {
+      const current = db.tables.student_challenges[0].content as {
+        contentStatus?: string;
+        lesson?: { content?: string[] };
+        examQuestions?: unknown[];
+      };
+      expect(current.lesson?.content).toEqual(["The reading that took twenty minutes."]);
+      return current;
+    });
+    // Attached onto the finished row, not over it.
+    expect(landed.contentStatus).toBe("ready");
+    expect(db.tables.student_challenges[0].external_paper_id).toBe("attempt-1");
   });
 
   it("still hands a plain reopen its stored content without calling out", async () => {

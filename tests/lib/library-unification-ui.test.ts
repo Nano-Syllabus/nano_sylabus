@@ -71,7 +71,7 @@ const community: CommunityDetail = {
 };
 
 describe("unified Figma library", () => {
-  it("shows the saved current semester even when a deep link views an older one", () => {
+  it("browses a deep-linked semester without offering to change the running one", () => {
     const secondTerm = { ...generateCommunityTerms(1, 2)[1], id: "term-2", subjects: [] };
     const html = renderWorkspace({
         community: {
@@ -85,8 +85,10 @@ describe("unified Figma library", () => {
         onMaterialOpen: vi.fn(),
       });
 
-    expect(html).toContain('<option value="term-2" selected="">2nd Semester</option>');
-    expect(html).not.toContain('<option value="term-1" selected="">');
+    // The running semester moved to the Challenge Hub, beside the queue it
+    // scopes; the Library only BROWSES semesters now, so no picker renders here.
+    expect(html).not.toContain("Choose running semester");
+    expect(html).not.toContain('id="current-semester-selector"');
   });
 
   it("renders real community semesters, subjects, and progress in the three-step design", () => {
@@ -132,13 +134,14 @@ describe("unified Figma library", () => {
     expect(appliedMechanicsCard).not.toContain("64%");
     expect(html).toContain("type-student-page-title");
     expect(html).toContain("/figma/library/book-open.svg");
-    expect(html).toContain("Choose running semester");
+    expect(html).not.toContain("Choose running semester");
     expect(html).toContain("lg:grid-cols-2");
     expect(html).toContain("Forces and equilibrium");
     expect(html).toContain("2 attempts");
     expect(html).toContain("In progress");
     expect(html).not.toContain("Your learning progress");
-    expect(html).toContain('<option value="term-1" selected="">1st Semester</option>');
+    // The semester chips still say which term is being browsed.
+    expect(html).toContain("1st Semester");
     expect(html).not.toContain("Search subjects and chapters");
   });
 
@@ -152,10 +155,11 @@ describe("unified Figma library", () => {
 
     expect(library).toContain("/api/student/materials?subject=");
     expect(library).toContain("courseId=");
-    expect(library).toContain("/membership");
+    // The running-semester WRITE moved to the Challenge Hub with its picker.
+    expect(library).not.toContain("/membership");
+    expect(library).not.toContain("saveRunningSemester");
     expect(library).toContain("semesterSelectionReducer");
     expect(library).toContain('type: "browse"');
-    expect(library).toContain("void saveRunningSemester(term)");
     expect(library).toContain("onClick={() => browseTerm(term)}");
     expect(library).not.toContain("async function selectTerm");
     expect(settingsPage).toContain("getActiveCommunity(user.id)");

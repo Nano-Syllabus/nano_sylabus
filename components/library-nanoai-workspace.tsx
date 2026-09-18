@@ -3,8 +3,6 @@
 import { ArrowLeft, BookOpen, Download, FileText, LibraryBig, RefreshCw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
@@ -13,8 +11,8 @@ import {
   initialSemesterSelection,
   semesterSelectionReducer,
 } from "@/lib/community-semester-selection";
+import { academicNumberLabel } from "@/lib/academic";
 import { cn, titleCase } from "@/lib/utils";
-import { patchDashboardRunningSemester } from "@/lib/query/dashboard";
 
 export type LibraryNanoAiMaterial = {
   name: string;
@@ -42,21 +40,6 @@ type LoadState = "idle" | "loading" | "ready" | "error";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
-
-function academicLabel(value: number, noun: string) {
-  const mod100 = value % 100;
-  const suffix =
-    mod100 >= 11 && mod100 <= 13
-      ? "th"
-      : value % 10 === 1
-        ? "st"
-        : value % 10 === 2
-          ? "nd"
-          : value % 10 === 3
-            ? "rd"
-            : "th";
-  return `${value}${suffix} ${noun}`;
-}
 
 function formatSize(bytes: number) {
   if (!bytes) return "File";
@@ -142,8 +125,6 @@ export function LibraryNanoAiWorkspace({
   onSubjectSelect: (subject: LibraryNanoAiSubject) => void;
   onMaterialOpen: (material: LibraryNanoAiMaterial, subject: LibraryNanoAiSubject) => void;
 }) {
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const orderedTerms = useMemo(
     () => [...(community?.terms ?? [])].sort((a, b) => a.position - b.position),
     [community?.terms],
@@ -190,9 +171,6 @@ export function LibraryNanoAiWorkspace({
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [restoredDocument, setRestoredDocument] = useState(false);
-  const [savingSemester, setSavingSemester] = useState(false);
-  const [semesterError, setSemesterError] = useState("");
-  const semesterSaveInFlight = useRef(false);
 
   useEffect(() => {
     if (!savedSemesterSelection.currentTermId) return;
@@ -303,48 +281,6 @@ export function LibraryNanoAiWorkspace({
     updateLibraryUrl({});
   }
 
-  async function saveRunningSemester(term: CommunityTerm) {
-    if (semesterSaveInFlight.current) return;
-    if (
-      community?.membership?.status !== "active" ||
-      term.id === semesterSelection.currentTermId
-    ) {
-      return;
-    }
-    dispatchSemesterSelection({ type: "choose-current", termId: term.id });
-    semesterSaveInFlight.current = true;
-    setSavingSemester(true);
-    setSemesterError("");
-    try {
-      const response = await fetch(
-        `/api/communities/${encodeURIComponent(community.slug)}/membership`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ termId: term.id }),
-        },
-      );
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload.currentTermId !== term.id) {
-        throw new Error(payload.error || "Could not save your current semester.");
-      }
-      dispatchSemesterSelection({ type: "current-saved", termId: term.id });
-      patchDashboardRunningSemester(queryClient, community.slug, term.id);
-      router.refresh();
-    } catch (error) {
-      dispatchSemesterSelection({
-        type: "choose-current",
-        termId: semesterSelection.currentTermId,
-      });
-      setSemesterError(
-        error instanceof Error ? error.message : "Could not save your current semester.",
-      );
-    } finally {
-      semesterSaveInFlight.current = false;
-      setSavingSemester(false);
-    }
-  }
-
   function selectSubject(subject: LibraryNanoAiSubject) {
     const subjectWithProgress = { ...subject, progress: insights[subject.id] };
     setSelectedSubject(subjectWithProgress);
@@ -396,38 +332,6 @@ export function LibraryNanoAiWorkspace({
             Choose your semester, subject and chapter to explore resources and study with Nano AI.
           </p>
         </div>
-        <div className="flex min-w-[220px] flex-col gap-1.5 sm:items-end">
-          <label
-            htmlFor="current-semester-selector"
-            className="type-student-eyebrow text-text-secondary"
-          >
-            Choose running semester
-          </label>
-          <div className="flex h-11 w-full items-center rounded-full border border-border bg-card px-4 sm:w-[220px]">
-            <select
-              id="current-semester-selector"
-              value={semesterSelection.draftTermId}
-              onChange={(event) => {
-                const term = orderedTerms.find((item) => item.id === event.target.value);
-                if (term) void saveRunningSemester(term);
-              }}
-              disabled={savingSemester || orderedTerms.length === 0}
-              className="min-w-0 flex-1 bg-transparent text-sm font-medium text-text-primary outline-none disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label="Choose running semester"
-            >
-              {orderedTerms.map((term) => (
-                <option key={term.id} value={term.id}>
-                  {academicLabel(term.semesterNumber, "Semester")}
-                </option>
-              ))}
-            </select>
-          </div>
-          {semesterError ? (
-            <p role="alert" className="max-w-[220px] text-xs text-destructive">
-              {semesterError}
-            </p>
-          ) : null}
-        </div>
       </header>
 
       <section className="mt-7" aria-labelledby="library-semesters-heading">
@@ -450,7 +354,7 @@ export function LibraryNanoAiWorkspace({
                   focusRing,
                 )}
               >
-                {academicLabel(term.semesterNumber, "Semester")}
+                {academicNumberLabel(term.semesterNumber, "Semester")}
               </button>
             );
           })}

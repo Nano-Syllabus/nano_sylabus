@@ -38,7 +38,19 @@ export type ChallengeSubject = {
   name: string;
   readiness: number | null;
   totalTopics: number;
+  /** Topics with ANY graded attempt — a practice set, an MCQ check or an exam
+   *  counts as much as a challenge. Feeds readiness, not the progress bar. */
   practicedTopics: number;
+  /**
+   * Subtopics with a COMPLETED challenge, and nothing else.
+   *
+   * Kept apart from `practicedTopics` because mastery is written by every graded
+   * activity — challenge submits, but also practice sets, MCQ checks and exam
+   * grading — so a bar built on it filled up for a student who had never
+   * finished a single challenge. This is the count the hub's progress bar
+   * shows.
+   */
+  completedTopics: number;
   weakTopics: number;
   nextTopic: { key: string; title: string } | null;
   topicDataAvailable: boolean;
@@ -60,12 +72,45 @@ export type ChallengeLeaderboard = {
   topPracticePerDay: number;
 };
 
+export type ChallengeCommunityTerm = {
+  id: string;
+  yearNumber: number;
+  semesterNumber: number;
+  position: number;
+};
+
+/** The community's semesters, in teaching order. */
+async function communityTerms(
+  communityId: string,
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+): Promise<ChallengeCommunityTerm[]> {
+  const { data, error } = await admin
+    .from("community_terms")
+    .select("id,year_number,semester_number,position")
+    .eq("community_id", communityId)
+    .order("position", { ascending: true });
+  // The picker is a convenience on top of the queue; a failed read hides it
+  // rather than failing the page the student came to study from.
+  if (error) return [];
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    yearNumber: Number(row.year_number) || 0,
+    semesterNumber: Number(row.semester_number) || 0,
+    position: Number(row.position) || 0,
+  }));
+}
+
 export type StudentChallengeDashboard = {
   community: {
     id: string;
     slug: string;
     name: string;
     courseId: string | null;
+    /** The semester the student has said they are in — what scopes this queue. */
+    currentTermId: string | null;
+    /** Every semester of the community, in order, for the running-semester
+     *  picker that sits on this page. */
+    terms: ChallengeCommunityTerm[];
   } | null;
   scope: {
     courseId: string;
@@ -428,11 +473,43 @@ function recommendationReason(mastery: TopicMastery | undefined) {
         : "Recommended as one of your next lowest-readiness topics.";
 }
 
+/**
+ * Which subtopics each subject has a completed challenge on, for one course.
+ *
+ * One read for every subject rather than one per subject, keyed the way the rows
+ * are keyed. Only `status = completed` counts: a challenge opened and left, or a
+ * practice set on the same topic, is not a challenge completed.
+ */
+async function completedChallengeTopics(
+  userId: string,
+  courseId: string,
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+): Promise<Map<string, Set<string>>> {
+  const bySubject = new Map<string, Set<string>>();
+  const { data, error } = await admin
+    .from("student_challenges")
+    .select("subject_slug,topic_key")
+    .eq("user_id", userId)
+    .eq("course_id", courseId)
+    .eq("status", "completed");
+  // A progress bar is not worth failing the page over; an empty map reads as
+  // "nothing completed yet", which is the honest default for a failed read.
+  if (error) return bySubject;
+  for (const row of data ?? []) {
+    const key = subjectScopeKey(courseId, String(row.subject_slug || ""));
+    const topics = bySubject.get(key) ?? new Set<string>();
+    topics.add(String(row.topic_key || "").trim().toLowerCase());
+    bySubject.set(key, topics);
+  }
+  return bySubject;
+}
+
 function localSubjectRow(
   courseSubject: SubjectAccess,
   subjectSlug: string,
   subjectName: string,
   stored: Map<string, TopicMastery>,
+  completed: Set<string> = new Set(),
 ): ChallengeSubject {
   const topics = [...stored.values()];
   const next = [...topics].sort(
@@ -453,6 +530,7 @@ function localSubjectRow(
     readiness: null,
     totalTopics: topics.length,
     practicedTopics: topics.filter((topic) => topic.attempts > 0).length,
+    completedTopics: Math.min(completed.size, topics.length),
     weakTopics: topics.filter((topic) => topic.status === "weak").length,
     nextTopic: next ? { key: next.topicKey, title: next.topicTitle } : null,
     topicDataAvailable: false,
@@ -497,6 +575,9 @@ export async function getStudentChallengeDashboard(
     : [];
   const activeRequestedScope =
     currentCourseId && requestedScope?.courseId === currentCourseId ? requestedScope : undefined;
+  const termsPromise = communityScope
+    ? communityTerms(communityScope.communityId, createSupabaseAdminClient())
+    : Promise.resolve([] as ChallengeCommunityTerm[]);
   const metrics =
     communityScope && currentCourseId
       ? await timed("challenge:loadScopedChallengeMetrics", () =>
@@ -560,6 +641,9 @@ export async function getStudentChallengeDashboard(
   // under `communityIdForCourse`, which was memoised for exactly this reason — so
   // a student with thirty subjects spent sixty-odd round trips on neighbouring
   // rows of the same two tables before the page could render.
+  const completedPromise = currentCourseId
+    ? completedChallengeTopics(userId, currentCourseId, admin)
+    : Promise.resolve(new Map<string, Set<string>>());
   const sharedTopicsByKey = await timed(
     `challenge:shared-topics-batch(${subjects.length})`,
     () =>
@@ -578,6 +662,7 @@ export async function getStudentChallengeDashboard(
       ),
   );
 
+  const completedBySubject = await completedPromise;
   const subjectResults = await timed(`challenge:per-subject-fanout(${subjects.length})`, async () =>
     Promise.all(
     subjects.map(
@@ -675,6 +760,14 @@ export async function getStudentChallengeDashboard(
               practicedTopics: learningTopics.filter(
                 (topic) => (stored.get(topic.topic_key)?.attempts ?? 0) > 0,
               ).length,
+              // Against the CURRENT catalogue: a challenge completed on a unit
+              // that has since been re-read into its bullets is not one of these
+              // subtopics, and counting it would push the bar past what exists.
+              completedTopics: learningTopics.filter((topic) =>
+                completedBySubject
+                  .get(scopeKey)
+                  ?.has(topic.topic_key.trim().toLowerCase()),
+              ).length,
               weakTopics: learningTopics.filter(
                 (topic) => stored.get(topic.topic_key)?.status === "weak",
               ).length,
@@ -696,7 +789,9 @@ export async function getStudentChallengeDashboard(
           };
         } catch {
           return {
-            row: localSubjectRow(courseSubject, subjectSlug, subjectName, stored),
+            row: localSubjectRow(
+              courseSubject, subjectSlug, subjectName, stored, completedBySubject.get(scopeKey),
+            ),
             recommendations: [],
           };
         }
@@ -785,6 +880,8 @@ export async function getStudentChallengeDashboard(
     0,
   );
 
+  const terms = await termsPromise;
+
   return {
     community: communityScope
       ? {
@@ -792,6 +889,8 @@ export async function getStudentChallengeDashboard(
           slug: communityScope.communitySlug,
           name: communityScope.communityName,
           courseId: communityScope.courseId,
+          currentTermId: communityScope.currentTermId ?? null,
+          terms,
         }
       : null,
     scope: activeRequestedScope

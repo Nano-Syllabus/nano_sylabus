@@ -14,6 +14,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+/** Exams `submitStudentChallengeFile` can grade from a scan; see the check below. */
+const FILE_GRADED_EXAMS = new Set(["practice-paper-v1", "challenge-exam-v1"]);
 
 export async function POST(
   request: Request,
@@ -43,7 +45,11 @@ export async function POST(
       return NextResponse.json({ error: "Finish the lesson and worked examples before submitting." }, { status: 409 });
     }
     if (!challenge.content || !externalPaperId) return NextResponse.json({ error: "Start the challenge first." }, { status: 409 });
-    if (challenge.content.examProvider !== "practice-paper-v1") {
+    // Both exams this route knows how to grade from a scan. Checking for the
+    // legacy practice paper alone refused EVERY current challenge — they are all
+    // `challenge-exam-v1` — and each refusal issued a fresh exam, so a student
+    // who pressed Submit was handed a new paper and the same error, forever.
+    if (!FILE_GRADED_EXAMS.has(String(challenge.content.examProvider || ""))) {
       const refreshed = await refreshStudentChallengeExam(user.id, challengeId);
       return NextResponse.json(
         {
