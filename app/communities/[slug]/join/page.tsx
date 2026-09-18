@@ -10,8 +10,7 @@ export default async function JoinCommunityPage({ params }: PageProps) {
   const { slug } = await params;
   const { user } = await getCurrentAuth();
   if (!user) {
-    const returnPath = `/communities/${slug}/join`;
-    redirect(`/login?next=${encodeURIComponent(returnPath)}`);
+    redirect(`/flow?community=${encodeURIComponent(slug)}`);
   }
 
   return <CommunityJoinRedirect slug={slug} />;

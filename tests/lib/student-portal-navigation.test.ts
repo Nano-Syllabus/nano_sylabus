@@ -7,7 +7,7 @@ const appSidebar = readFileSync("components/app-sidebar.tsx", "utf8");
 
 describe("student portal navigation chrome", () => {
   it("uses a shared student-portal title as the layout fallback", () => {
-    expect(appLayout).toContain('<AppShell user={user} title="Student Portal">');
+    expect(appLayout).toContain('<AppShell user={user} title="Dashboard">');
   });
 
   it("keeps the shared top bar visible, aligned, and theme-aware", () => {

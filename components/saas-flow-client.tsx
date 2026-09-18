@@ -84,10 +84,22 @@ function clearPendingStudyAnswers() {
   }
 }
 
+async function joinRequestedCommunity(communitySlug?: string | null) {
+  if (!communitySlug) return;
+  try {
+    await fetch(`/api/communities/${encodeURIComponent(communitySlug)}/join`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    // Non-blocking if already joined or offline
+  }
+}
+
 const QUESTIONS = [
   {
     id: 1,
-    title: "Do you study hard—but still get disappointing marks?",
+    title: "Do you study hard but still get disappointing marks?",
     options: ["Yes", "Sometimes", "No"],
   },
   {
@@ -102,7 +114,7 @@ const QUESTIONS = [
   },
   {
     id: 4,
-    title: "Do unseen questions make you freeze—even when you studied the topic?",
+    title: "Do unseen questions make you freeze even when you studied the topic?",
     options: ["Yes", "Sometimes", "No"],
   },
   {
@@ -157,6 +169,8 @@ export function SaaSFlowClient({
         setAnswers(pending);
         setCurrentStep("solutionSlide");
         await saveStudyDiagnostic(await loadSupabaseBrowserClient(), pending);
+        const community = searchParams.get("community");
+        if (community) await joinRequestedCommunity(community);
         if (cancelled) return;
         clearPendingStudyAnswers();
         router.replace(completionDestination);
@@ -181,6 +195,8 @@ export function SaaSFlowClient({
         return;
       }
       clearPendingStudyAnswers();
+      const community = searchParams.get("community");
+      if (community) await joinRequestedCommunity(community);
       if (PAYMENT_FLOW_ENABLED) {
         setCurrentStep("pricing");
       } else {
@@ -334,6 +350,9 @@ export function SaaSFlowClient({
           }
         }
       }
+
+      const community = searchParams.get("community");
+      if (community) await joinRequestedCommunity(community);
 
       if (PAYMENT_FLOW_ENABLED) {
         setCurrentStep("pricing");
@@ -619,10 +638,6 @@ export function SaaSFlowClient({
                 <>Your answers show a strong foundation. Nano Syllabus can help you keep it consistent and measurable.</>
               )}
             </div>
-
-            <p className="mt-4 text-[17px] leading-[1.7] text-[#575d67]">
-              You do not need to fix everything today. Start with one weak topic, study one clear example, attempt one real question, and improve from the feedback.
-            </p>
 
             <button
               onClick={() => setCurrentStep("solutionSlide")}

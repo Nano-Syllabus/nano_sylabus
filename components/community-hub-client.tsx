@@ -1,5 +1,4 @@
 "use client";
-import { CommunitySwitcher } from "@/components/community-switcher";
 
 import Link from "next/link";
 import {
@@ -490,17 +489,10 @@ export function CommunityHubClient({
 
   return (
     <main className="student-page-frame">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="type-student-page-title text-text-primary">
-            Community Hub
-          </h1>
-        </div>
-        {communityOptions.length > 1 ? (
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-            <CommunitySwitcher options={communityOptions} selectedSlug={community.slug} />
-          </div>
-        ) : null}
+      <div className="mb-6">
+        <h1 className="type-student-page-title text-text-primary">
+          Community Hub
+        </h1>
       </div>
 
       <section className="relative isolate overflow-hidden rounded-[24px] sm:rounded-[28px] bg-[#1242be] px-6 py-7 text-white shadow-lg sm:px-8 sm:py-8 lg:px-9 lg:py-8">
@@ -509,18 +501,12 @@ export function CommunityHubClient({
 
         <div className="relative grid gap-7 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-center">
           <div className="max-w-3xl">
-            <div>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
-                <span className="size-1.5 rounded-full bg-[#4ade80]" />
-                {initialData.canManage ? "Community creator" : "Joined community"}
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-white/80 sm:text-sm">
+              <span>{community.university}</span>
+              <span className="text-white/50" aria-hidden="true">
+                ·
               </span>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium text-white/80 sm:text-sm">
-                <span>{community.university}</span>
-                <span className="text-white/50" aria-hidden="true">
-                  ·
-                </span>
-                <span>{community.faculty}</span>
-              </div>
+              <span>{community.faculty}</span>
             </div>
 
             <h1 className="mt-3.5 font-display text-5xl font-black tracking-tight text-white sm:text-6xl leading-none">

@@ -64,8 +64,8 @@ describe("account-wide study diagnostic", () => {
     expect(updateUser).not.toHaveBeenCalled();
   });
   it("opens the newly joined community, not a different community", () => {
-    expect(studyFlowDestination("henglish")).toBe("/app/communities/henglish");
-    expect(studyFlowDestination("engineering-programming")).toBe("/app/communities/engineering-programming");
+    expect(studyFlowDestination("henglish")).toBe("/app/today?community=henglish");
+    expect(studyFlowDestination("engineering-programming")).toBe("/app/today?community=engineering-programming");
   });
   it.each([undefined, "", "//evil.com", "../admin", "a?next=/admin", "a/b"])(
     "uses a safe default for invalid destinations: %s", (community) => {

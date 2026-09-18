@@ -9,6 +9,7 @@ import {
   Check,
   CheckCircle2,
   CreditCard,
+  FileText,
   LoaderCircle,
   ShieldCheck,
   Smartphone,
@@ -32,6 +33,10 @@ export type CheckoutInvoice = Pick<
   BillingInvoiceSummary,
   "id" | "status" | "amount" | "currency" | "invoiceCode" | "subtotal" | "paymentSubmission"
 > & { plan: SubscriptionPlan };
+
+function canSubmitPayment(invoice: BillingInvoiceSummary) {
+  return !["paid", "rejected", "cancelled"].includes(invoice.status);
+}
 
 const FREE_FEATURES = [
   "3 challenges / day",
@@ -347,12 +352,6 @@ export function BillingPageClient({
               3 months
             </button>
           </div>
-          <Link
-            href="/app/invoices"
-            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-[#5064da] hover:text-[#3049ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2"
-          >
-            View payment activity <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
         </header>
 
         <section
@@ -406,7 +405,8 @@ export function BillingPageClient({
           />
         </section>
 
-        <section className="student-page-width mt-10">
+        {/* Social Proof / Stats Section */}
+        <section aria-label="Community activity" className="student-page-width mt-16 sm:mt-20">
           <div className="text-center">
             <h2 className="type-student-section-title text-[#111827]">
               You don’t have to prepare alone.
@@ -416,7 +416,7 @@ export function BillingPageClient({
             </p>
           </div>
 
-          <div className="mt-5 grid overflow-hidden rounded-xl border border-[#e1e6ee] bg-white sm:grid-cols-3">
+          <div className="mt-8 grid overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-xs sm:grid-cols-3">
             {[
               [overview.socialProof.challengesCompletedThisWeek, "Challenges completed this week"],
               [overview.socialProof.handwrittenAnswersReviewed, "Handwritten answers reviewed"],
@@ -425,62 +425,70 @@ export function BillingPageClient({
               <div
                 key={label}
                 className={cn(
-                  "px-5 py-4",
+                  "px-7 py-6 sm:px-9 sm:py-7",
                   index > 0 && "border-t border-[#e1e6ee] sm:border-l sm:border-t-0",
                 )}
               >
-                <p className="type-student-metric text-[#111827]">
+                <p className="type-student-metric text-3xl sm:text-4xl text-[#111827]">
                   {Number(value).toLocaleString("en-NP")}
                 </p>
-                <p className="type-student-body mt-1.5 font-medium text-[#697387]">{label}</p>
+                <p className="type-student-body mt-2 text-[14px] font-medium text-[#697387]">{label}</p>
               </div>
             ))}
           </div>
+        </section>
 
-          <h2 className="type-student-section-title mt-7 text-center text-[#111827]">
+        {/* Real Stories / Testimonials Section */}
+        <section aria-label="Student testimonials" className="student-page-width mt-16 sm:mt-20">
+          <h2 className="type-student-section-title text-center text-[#111827]">
             Real Stories, Real Growth
           </h2>
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <div className="mt-8 grid gap-6 lg:grid-cols-3">
             {TESTIMONIALS.map((testimonial) => (
               <article
                 key={testimonial.name}
-                className="min-h-[130px] rounded-xl border border-[#e1e6ee] bg-white px-5 py-4"
+                className="rounded-2xl border border-[#e1e6ee] bg-white p-7 shadow-xs flex flex-col justify-between"
               >
-                <div className="flex items-center gap-3">
-                  <Image
-                    src={testimonial.image}
-                    alt=""
-                    width={34}
-                    height={34}
-                    className="size-[34px] rounded-full object-cover"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="type-student-card-title truncate text-[#111827]">
-                      {testimonial.name}
-                    </p>
-                    <p className="type-student-body truncate font-medium text-[#697387]">
-                      {testimonial.course}
-                    </p>
+                <div>
+                  <div className="flex items-center gap-3.5">
+                    <Image
+                      src={testimonial.image}
+                      alt=""
+                      width={42}
+                      height={42}
+                      className="size-[42px] rounded-full object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="type-student-card-title text-[16px] truncate text-[#111827]">
+                        {testimonial.name}
+                      </p>
+                      <p className="type-student-body text-[13.5px] truncate font-medium text-[#697387]">
+                        {testimonial.course}
+                      </p>
+                    </div>
+                    <span className="type-student-body shrink-0 rounded-full bg-[#d9ff69] px-3 py-1 text-xs font-semibold text-[#28320e]">
+                      {testimonial.badge}
+                    </span>
                   </div>
-                  <span className="type-student-body shrink-0 rounded-full bg-[#d9ff69] px-2 py-1 font-semibold text-[#28320e]">
-                    {testimonial.badge}
-                  </span>
+                  <p className="type-student-body mt-4 text-[14.5px] sm:text-[15px] font-medium text-[#697387] leading-relaxed">
+                    <span className="mr-2 text-base font-bold leading-none text-[#c9ee47]">“</span>
+                    {testimonial.quote}
+                  </p>
                 </div>
-                <p className="type-student-body mt-4 font-medium text-[#697387]">
-                  <span className="mr-2 text-base font-bold leading-none text-[#c9ee47]">“</span>
-                  {testimonial.quote}
-                </p>
               </article>
             ))}
           </div>
-          <div className="mt-3 flex justify-center gap-1.5" aria-hidden="true">
-            <span className="size-1.5 rounded-full bg-[#3353f4]" />
-            <span className="size-1.5 rounded-full bg-[#dce1ea]" />
-            <span className="size-1.5 rounded-full bg-[#dce1ea]" />
+          <div className="mt-6 flex justify-center gap-2" aria-hidden="true">
+            <span className="size-2 rounded-full bg-[#3353f4]" />
+            <span className="size-2 rounded-full bg-[#dce1ea]" />
+            <span className="size-2 rounded-full bg-[#dce1ea]" />
           </div>
+        </section>
 
-          {!activePlan ? (
-            <div className="relative mt-6 overflow-hidden rounded-[20px] bg-[#3049ed] px-6 py-6 text-white sm:px-8 sm:py-7">
+        {/* Bottom CTA Card */}
+        {!activePlan ? (
+          <section className="student-page-width mt-14 sm:mt-16">
+            <div className="relative overflow-hidden rounded-[20px] bg-[#3049ed] px-8 py-9 sm:px-12 sm:py-10 text-white shadow-md">
               <Image
                 src="/figma-pricing-book-open.svg"
                 alt=""
@@ -495,7 +503,7 @@ export function BillingPageClient({
                 <p className="type-student-body mt-1.5 font-medium text-[#c7d2fe]">
                   Get unlimited practice and a study plan built around your exam dates.
                 </p>
-                <div className="mt-3 flex flex-col items-center gap-2">
+                <div className="mt-4 flex flex-col items-center gap-2.5">
                   <button
                     type="button"
                     onClick={() => startPlan(plans.plus)}
@@ -516,16 +524,13 @@ export function BillingPageClient({
                 </div>
               </div>
             </div>
-          ) : null}
-          <p className="type-student-body mt-5 text-center font-medium text-[#697387]">
-            NanoSyllabus · Learn. Practise. Get feedback. Study together.
-          </p>
-        </section>
+          </section>
+        ) : null}
 
         {activeSubscription && activePlan ? (
           <section
             aria-label="Manage subscription"
-            className="student-page-width mt-10 flex flex-col gap-5 rounded-xl border border-[#e1e6ee] bg-white p-5 sm:flex-row sm:items-center sm:justify-between"
+            className="student-page-width mt-14 sm:mt-16 flex flex-col gap-5 rounded-xl border border-[#e1e6ee] bg-white p-6 sm:flex-row sm:items-center sm:justify-between shadow-xs"
           >
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
@@ -554,6 +559,60 @@ export function BillingPageClient({
             </Button>
           </section>
         ) : null}
+
+        {/* Invoices & Payment Activity */}
+        <section
+          aria-label="Payment activity"
+          className="student-page-width mt-16 sm:mt-20 border-t border-[#e1e6ee] pt-12"
+        >
+          <div>
+            <p className="type-student-eyebrow text-text-muted">PAYMENT ACTIVITY</p>
+            <h2 className="type-student-page-title mt-1.5 text-[#111827]">Your invoices</h2>
+            <p className="type-student-body mt-1 text-text-secondary">
+              Review your payment status or complete a pending payment.
+            </p>
+          </div>
+
+          {overview.invoices.length ? (
+            <div className="mt-8 space-y-4">
+              {overview.invoices.map((invoice) => (
+                <article
+                  key={invoice.id}
+                  className="flex flex-col gap-4 rounded-xl border border-[#e1e6ee] bg-white p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="type-student-card-title text-[#111827]">{invoice.plan.name}</p>
+                    <p className="type-student-body mt-1 text-text-secondary">
+                      {invoice.currency} {invoice.amount.toLocaleString()} · {formatDate(invoice.createdAt)}
+                    </p>
+                    <p className="type-student-eyebrow mt-3 font-semibold uppercase text-text-muted">
+                      {invoice.status.replaceAll("_", " ")}
+                    </p>
+                  </div>
+                  {canSubmitPayment(invoice) ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedInvoice(invoice)}
+                      className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md bg-[#111827] px-4 text-sm font-semibold text-white hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2"
+                    >
+                      {invoice.paymentSubmission ? "Edit payment" : "Open payment QR"}
+                    </button>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-8 flex min-h-60 flex-col items-center justify-center rounded-2xl border border-[#e1e6ee] bg-white px-6 py-12 text-center shadow-xs">
+              <span className="flex size-12 items-center justify-center rounded-xl bg-[#f3f4f6] text-[#6b7280]">
+                <FileText className="size-6" aria-hidden="true" />
+              </span>
+              <h3 className="type-student-section-title mt-4 text-[#111827]">No invoices yet</h3>
+              <p className="type-student-body mt-2 max-w-sm text-text-secondary">
+                Your invoices will appear here after you choose a paid plan.
+              </p>
+            </div>
+          )}
+        </section>
 
       </main>
 
@@ -657,7 +716,7 @@ function PricingCard({
           {!loading && !disabled ? <span aria-hidden="true">→</span> : null}
         </button>
         {current ? (
-          <p className="type-student-body mt-2 text-center font-medium text-[#697387]">
+          <p className="type-student-body mt-1.5 text-center font-medium text-[#697387]">
             {accessEndsAt
               ? `Active until ${formatDate(accessEndsAt)}`
               : "Active with no expiry date"}

@@ -81,6 +81,29 @@ const NAV = [
     ),
   },
   {
+    href: "/app/cash-prize",
+    label: "Cash Prize",
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M8 21h8" />
+        <path d="M12 17v4" />
+        <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+        <path d="M7 6H4v2a4 4 0 0 0 4 4" />
+        <path d="M17 6h3v2a4 4 0 0 1-4 4" />
+      </svg>
+    ),
+  },
+  {
     href: "/app/billing",
     label: "Pricing",
     icon: (
@@ -397,66 +420,107 @@ export function AppSidebar({
           isCollapsed ? "justify-center px-0" : "justify-between px-3",
         )}
       >
-        <Link
-          href="/"
-          onClick={() => onCloseMobile?.()}
-          className="flex items-center gap-2.5 text-[18px] font-semibold tracking-tight text-text-primary no-underline transition hover:text-text-secondary"
-          aria-label="Go to Nano Syllabus site"
-        >
-          <Image
-            src="/nano_logo.png"
-            alt="Nano Syllabus"
-            width={28}
-            height={28}
-            className="h-7 w-7 rounded-md object-contain shrink-0"
-          />
-          {!isCollapsed && <span>Nano Syllabus</span>}
-        </Link>
-        <div className="flex items-center gap-1">
-          {/* Mobile close button */}
-          <button
-            type="button"
-            onClick={onCloseMobile}
-            className="md:hidden rounded-md p-1.5 text-text-muted transition hover:bg-bg-secondary hover:text-text-primary"
-            aria-label="Close sidebar"
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M18 6 6 18" />
-              <path d="m6 6 12 12" />
-            </svg>
-          </button>
-
-          {/* Desktop toggle button */}
+        {isCollapsed ? (
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="hidden md:block rounded-md p-1.5 text-text-primary transition hover:bg-bg-secondary"
-            aria-label="Toggle sidebar"
+            className="group relative flex h-10 w-10 items-center justify-center rounded-lg text-text-primary transition hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong cursor-pointer"
+            aria-label="Open sidebar"
+            title="Open sidebar"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect width="18" height="18" x="3" y="3" rx="4" ry="4" />
-              <path d="M9 3v18" />
-            </svg>
+            {/* Logo shown by default */}
+            <div className="flex items-center justify-center transition-opacity duration-150 group-hover:opacity-0">
+              <Image
+                src="/nano_logo.png"
+                alt="Nano Syllabus"
+                width={24}
+                height={24}
+                className="h-6 w-6 rounded-md object-contain shrink-0"
+              />
+            </div>
+            {/* Sidebar toggle icon shown on hover */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect width="18" height="18" x="3" y="3" rx="4" ry="4" />
+                <path d="M9 3v18" />
+              </svg>
+            </div>
           </button>
-        </div>
+        ) : (
+          <>
+            <Link
+              href="/"
+              onClick={() => onCloseMobile?.()}
+              className="flex items-center gap-2.5 text-[18px] font-semibold tracking-tight text-text-primary no-underline transition hover:text-text-secondary"
+              aria-label="Go to Nano Syllabus site"
+            >
+              <Image
+                src="/nano_logo.png"
+                alt="Nano Syllabus"
+                width={28}
+                height={28}
+                className="h-7 w-7 rounded-md object-contain shrink-0"
+              />
+              <span>Nano Syllabus</span>
+            </Link>
+            <div className="flex items-center gap-1">
+              {/* Mobile close button */}
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                className="md:hidden rounded-md p-1.5 text-text-muted transition hover:bg-bg-secondary hover:text-text-primary"
+                aria-label="Close sidebar"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+
+              {/* Desktop toggle button */}
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                className="hidden md:block rounded-md p-1.5 text-text-primary transition hover:bg-bg-secondary"
+                aria-label="Close sidebar"
+                title="Close sidebar"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect width="18" height="18" x="3" y="3" rx="4" ry="4" />
+                  <path d="M9 3v18" />
+                </svg>
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Nav Links ── */}

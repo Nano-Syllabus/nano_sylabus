@@ -41,6 +41,26 @@ function normalizedPath(value: string) {
   return value.replace(/^\/+|\/+$/g, "").toLowerCase();
 }
 
+/**
+ * Whole-subject readiness across every indexed topic.
+ *
+ * The denominator is always the complete indexed syllabus. A topic with no
+ * mastery row therefore contributes zero instead of disappearing from the
+ * calculation and making a partially practised subject look complete.
+ */
+export function calculateSubjectReadiness(
+  topicCount: number | null,
+  topicPercentages: readonly number[] | null,
+) {
+  if (topicCount === null || topicCount <= 0 || topicPercentages === null) return null;
+
+  const readinessPoints = topicPercentages
+    .slice(0, topicCount)
+    .reduce((sum, percentage) => sum + Math.max(0, Math.min(100, percentage)), 0);
+
+  return Math.round((readinessPoints / topicCount) * 10) / 10;
+}
+
 /** Real student-facing counts and mastery for the joined community explorer. */
 export async function getCommunitySubjectExplorerInsights(
   userId: string,
@@ -114,14 +134,10 @@ export async function getCommunitySubjectExplorerInsights(
         } as const;
       });
       const topicCount = topics?.length ?? null;
-      const readiness =
-        topicCount === null || mastery === null
-          ? null
-          : topicCount === 0
-            ? null
-            : Math.round(
-                (subjectMastery.reduce((sum, row) => sum + row.percentage, 0) / topicCount) * 10,
-              ) / 10;
+      const readiness = calculateSubjectReadiness(
+        topicCount,
+        mastery === null ? null : topicProgress.map((topic) => topic.percentage ?? 0),
+      );
       const subjectAttempts =
         practiceAttempts?.filter(
           (attempt) =>

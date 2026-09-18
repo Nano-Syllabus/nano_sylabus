@@ -1018,21 +1018,26 @@ export function PracticeCalendar({
 
               return (
                 <div key={exam.id} className="py-4 first:pt-0 last:pb-0">
-                  <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[130px_minmax(0,1fr)_auto_auto] sm:items-center sm:gap-6">
-                    {/* 1. Nepali Date */}
-                    <div className="whitespace-nowrap sm:w-[130px] self-start sm:pt-0.5">
-                      <span className="font-display text-[14px] sm:text-[15px] font-semibold text-[#0f172a]">
+                  <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[135px_minmax(0,1fr)_auto] sm:items-center sm:gap-6">
+                    {/* 1. Nepali Date & Days Left */}
+                    <div className="flex flex-col gap-1.5 sm:w-[135px] shrink-0 self-start">
+                      <span className="font-display text-[14px] sm:text-[15px] font-semibold text-[#0f172a] whitespace-nowrap">
                         {formatNepaliDate(examBs)}
+                      </span>
+                      <span className="inline-flex w-fit items-center justify-center rounded-md bg-[#eef2ff] px-2.5 py-0.5 text-[11px] sm:text-[12px] font-semibold text-[#1e40af] whitespace-nowrap">
+                        {remaining === 0
+                          ? "Today"
+                          : `${remaining} day${remaining === 1 ? "" : "s"} left`}
                       </span>
                     </div>
 
                     {/* 2. Subject & Readiness Progress Bar */}
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-display text-[14px] sm:text-[15px] font-semibold text-[#0f172a] capitalize">
+                      <div className="font-display text-[14px] sm:text-[15px] font-semibold text-[#0f172a] capitalize">
                         {exam.title}
                       </div>
                       <div className="mt-2 flex min-w-0 items-center gap-3">
-                        <div className="h-2 min-w-8 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-2 min-w-8 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                           {readiness !== null && (
                             <div
                               className="h-full rounded-full bg-[#0066ff] transition-[width] duration-300 motion-reduce:transition-none"
@@ -1048,15 +1053,6 @@ export function PracticeCalendar({
                             : "No practice data"}
                         </span>
                       </div>
-                    </div>
-
-                    {/* 3. Days Left Pill */}
-                    <div className="flex items-center sm:w-[105px] sm:justify-end">
-                      <span className="inline-flex items-center justify-center rounded-[8px] sm:rounded-[10px] bg-[#eef2ff] px-3.5 py-1.5 text-[12px] sm:text-[13px] font-semibold text-[#1e40af] whitespace-nowrap">
-                        {remaining === 0
-                          ? "Today"
-                          : `${remaining} day${remaining === 1 ? "" : "s"} left`}
-                      </span>
                     </div>
 
                     {/* 4. Action Menu */}

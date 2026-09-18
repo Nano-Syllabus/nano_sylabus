@@ -8,9 +8,11 @@ import type { CommunitySwitchOption } from "@/lib/community-switch";
 export function CommunitySwitcher({
   options,
   selectedSlug,
+  hideLabel = false,
 }: {
   options: CommunitySwitchOption[];
   selectedSlug: string;
+  hideLabel?: boolean;
 }) {
   const id = useId();
   const router = useRouter();
@@ -44,20 +46,22 @@ export function CommunitySwitcher({
   }
 
   return (
-    <div className="w-full sm:max-w-sm">
-      <label
-        htmlFor={id}
-        className="mb-2 block text-xs font-semibold uppercase tracking-wide text-text-muted"
-      >
-        {canSwitch ? "Switch community" : "Current community"}
-      </label>
+    <div className="w-full">
+      {!hideLabel ? (
+        <label
+          htmlFor={id}
+          className="mb-2 block text-xs font-semibold uppercase tracking-wide text-text-muted"
+        >
+          {canSwitch ? "Switch community" : "Current community"}
+        </label>
+      ) : null}
       <select
         id={id}
         value={selectedSlug}
         disabled={pending || !canSwitch}
         aria-busy={pending}
         onChange={(event) => switchCommunity(event.target.value)}
-        className="min-h-11 w-full rounded-xl border border-border bg-bg-primary px-3 text-sm font-semibold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 disabled:opacity-60"
+        className="min-h-11 w-full rounded-xl border border-border bg-bg-primary px-3.5 text-sm font-semibold text-text-primary shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 disabled:opacity-60"
       >
         {options.map((option) => (
           <option key={option.slug} value={option.slug}>

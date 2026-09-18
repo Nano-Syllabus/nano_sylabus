@@ -124,24 +124,31 @@ describe("unified Figma library", () => {
 
     expect(html).toContain("1. Choose Semester");
     expect(html).toContain("2. Choose Subject");
-    expect(html).toContain("Study Resources");
+    expect(html).toContain("Learning Resources");
     expect(html).not.toContain("3. Choose Chapter");
-    expect(html).toContain("1st Semester");
     expect(html).toContain("Applied Mechanics");
     const appliedMechanicsCard =
       html.match(/<button[^>]*>.*?Applied Mechanics.*?<\/button>/)?.[0] ?? "";
     expect(appliedMechanicsCard).not.toContain("3 chapters");
-    expect(appliedMechanicsCard).not.toContain("64%");
+    expect(appliedMechanicsCard).toContain("64%");
+    expect(appliedMechanicsCard).toContain(
+      "Applied Mechanics: 64% progress across 1 indexed topic",
+    );
+    expect(appliedMechanicsCard).toContain('data-progress-level="low"');
+    expect(appliedMechanicsCard).toContain("text-[var(--community-accent)]");
     expect(html).toContain("type-student-page-title");
     expect(html).toContain("/figma/library/book-open.svg");
     expect(html).not.toContain("Choose running semester");
     expect(html).toContain("lg:grid-cols-2");
     expect(html).toContain("Forces and equilibrium");
-    expect(html).toContain("2 attempts");
-    expect(html).toContain("In progress");
+    expect(html).toContain("Unit 1");
+    expect(html).not.toContain("2 attempts");
+    expect(html).not.toContain("In progress");
     expect(html).not.toContain("Your learning progress");
-    // The semester chips still say which term is being browsed.
-    expect(html).toContain("1st Semester");
+    // The semester chips still say which term is being browsed — in the short
+    // form the chip row uses. The long "1st Semester" was the running-semester
+    // picker's option, and that picker now lives on the Challenges tab.
+    expect(html).toContain(">1st Sem</button>");
     expect(html).not.toContain("Search subjects and chapters");
   });
 
@@ -179,6 +186,6 @@ describe("unified Figma library", () => {
     expect(mobileNav).toContain('label: "Challenges"');
     expect(mobileNav).toContain('label: "Library"');
     expect(mobileNav).toContain('label: "Revision"');
-    expect(oldRoute).toContain("redirect(`/app/chat");
+    expect(oldRoute).toContain("redirect(`/app/today");
   });
 });

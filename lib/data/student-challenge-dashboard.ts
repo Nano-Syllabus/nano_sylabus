@@ -105,6 +105,8 @@ export type StudentChallengeDashboard = {
     id: string;
     slug: string;
     name: string;
+    university?: string;
+    faculty?: string;
     courseId: string | null;
     /** The semester the student has said they are in — what scopes this queue. */
     currentTermId: string | null;
@@ -888,6 +890,8 @@ export async function getStudentChallengeDashboard(
           id: communityScope.communityId,
           slug: communityScope.communitySlug,
           name: communityScope.communityName,
+          university: communityScope.university,
+          faculty: communityScope.faculty,
           courseId: communityScope.courseId,
           currentTermId: communityScope.currentTermId ?? null,
           terms,

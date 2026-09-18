@@ -23,6 +23,8 @@ import {
 import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { AppUser, StudentProfile } from "@/lib/types";
 import { ThemeSetting } from "@/components/theme-setting";
+import { CommunitySwitcher } from "@/components/community-switcher";
+import type { CommunitySwitchOption } from "@/lib/community-switch";
 import { usePublishedCatalog } from "@/lib/query/catalog";
 import { patchDashboardRunningSemester } from "@/lib/query/dashboard";
 
@@ -39,6 +41,8 @@ export function SettingsForm({
   profile,
   examsSat,
   runningSemester,
+  communityOptions = [],
+  selectedCommunitySlug = "",
 }: {
   user: AppUser;
   profile: StudentProfile;
@@ -48,6 +52,8 @@ export function SettingsForm({
     currentTermId?: string | null;
     terms: Array<{ id: string; semesterNumber: number }>;
   } | null;
+  communityOptions?: CommunitySwitchOption[];
+  selectedCommunitySlug?: string;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -276,6 +282,34 @@ export function SettingsForm({
   return (
     <div className="student-reading-frame">
       <ThemeSetting />
+
+      {communityOptions && communityOptions.length > 0 ? (
+        <section
+          aria-labelledby="community-settings-heading"
+          className="mb-6 rounded-lg border border-border bg-bg-primary"
+        >
+          <div className="border-b border-border px-5 py-3">
+            <h2 id="community-settings-heading" className="type-student-section-title font-display text-xl">
+              Community
+            </h2>
+          </div>
+          <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-text-primary">Active community</p>
+              <p className="mt-1 max-w-md text-sm text-text-secondary">
+                Select your active community to browse its curriculum, notes, and study resources across Nano Syllabus.
+              </p>
+            </div>
+            <div className="w-full shrink-0 sm:w-[290px]">
+              <CommunitySwitcher
+                options={communityOptions}
+                selectedSlug={selectedCommunitySlug}
+                hideLabel
+              />
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <div className="rounded-lg border border-border bg-bg-primary">
         <div className="border-b border-border px-5 py-3">

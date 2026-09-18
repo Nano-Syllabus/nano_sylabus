@@ -208,9 +208,9 @@ function CommunityCard({
       ) : (
         <Link
           className="ns-card-arrow"
-          href={`/login?next=${encodeURIComponent(`/communities/${community.slug}/join`)}`}
-          aria-label={`Sign in to join ${community.name}`}
-          title="Sign in to join"
+          href={`/flow?community=${encodeURIComponent(community.slug)}`}
+          aria-label={`Join ${community.name}`}
+          title="Join Community"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <path d="M5 12h14M13 6l6 6-6 6" />
@@ -1218,30 +1218,44 @@ export function CommunityCatalogClient({
           <h1 id="hero-title">Study better together.</h1>
           <p>Join students following your syllabus.</p>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 20 }}>
-            <a
-              href="#communities"
-              className="ns-hero-cta ns-hero-cta--blue"
-              onClick={(e) => {
-                e.preventDefault();
-                const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-                document
-                  .getElementById("communities")
-                  ?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
-              }}
-            >
-              Find your program
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                aria-hidden="true"
+            {signedIn ? (
+              <button
+                type="button"
+                className="ns-hero-cta ns-hero-cta--blue"
+                onClick={openCreate}
               >
-                <path d="M7 17L17 7M17 7H8M17 7v9"/>
-              </svg>
-            </a>
+                Create Community
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  aria-hidden="true"
+                >
+                  <path d="M7 17L17 7M17 7H8M17 7v9"/>
+                </svg>
+              </button>
+            ) : (
+              <Link
+                href="/login?next=%2Fcommunities%3Fcreate%3D1"
+                className="ns-hero-cta ns-hero-cta--blue"
+              >
+                Create Community
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  aria-hidden="true"
+                >
+                  <path d="M7 17L17 7M17 7H8M17 7v9"/>
+                </svg>
+              </Link>
+            )}
             <a
               href="#steps"
               className="ns-hero-how"

@@ -11,5 +11,5 @@ export default async function SubjectExplorerPage({
   const query = params.community
     ? `?community=${encodeURIComponent(params.community)}`
     : "";
-  redirect(`/app/chat${query}`);
+  redirect(`/app/today${query}`);
 }

@@ -1,5 +1,4 @@
 "use client";
-import { CommunitySwitcher } from "@/components/community-switcher";
 
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
@@ -161,12 +160,11 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
         Number(right.status === "started") - Number(left.status === "started") ||
         left.position - right.position,
     )[0];
-  const community = dashboard.challenge.community;
+  const community = dashboard.community ?? dashboard.challenge.community;
   const params = new URLSearchParams();
-  if (community) params.set("community", community.slug);
-  if (challenge) params.set("challenge", challenge.id);
+  if (community?.slug) params.set("community", community.slug);
   const fallbackHref = community
-    ? `/app/challenges?${params.toString()}`
+    ? `/app/challenges${params.toString() ? `?${params.toString()}` : ""}`
     : "/app/community";
   const action = challenge
     ? challenge.status === "started"
@@ -211,7 +209,13 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
           </h2>
 
           <div className="mt-2.5 max-w-md text-xs sm:text-sm font-medium leading-relaxed text-black/80">
-            {challenge ? (
+            {community ? (
+              <p className="font-semibold text-black/95 truncate">
+                {community.university && community.faculty
+                  ? `${community.university} · ${community.faculty}`
+                  : community.university || community.faculty || community.name}
+              </p>
+            ) : challenge ? (
               <p className="font-semibold text-black/95 truncate">
                 {challenge.subjectName}: {challenge.topicTitle}
               </p>
@@ -580,21 +584,11 @@ function DashboardDataSkeleton({
         height the moment the query lands. A skeleton that changes the layout it
         was standing in for has not saved the reader anything.
       */}
-      {communityOptions.length ? (
-        <div className="mb-5 flex justify-end">
-          <CommunitySwitcher
-            options={communityOptions}
-            selectedSlug={selectedCommunitySlug ?? ""}
-          />
-        </div>
-      ) : null}
-      <header className="flex flex-col gap-5 border-b border-border pb-7 pt-3 sm:flex-row sm:items-end sm:justify-between">
+      <header className="pt-2">
         <div>
           <h1 className="type-student-page-title">
             Welcome, {fullName.trim().split(/\s+/)[0] || "there"}.
           </h1>
-          {/* Keep the heading footprint stable while the dashboard data loads. */}
-          <div className={`mt-3 h-4 w-64 ${line}`} aria-hidden="true" />
         </div>
       </header>
 
@@ -690,15 +684,7 @@ function DashboardContent({
   }
   return (
     <main className="student-page-frame">
-      {communityOptions.length ? (
-        <div className="mb-5 flex justify-end">
-          <CommunitySwitcher
-            options={communityOptions}
-            selectedSlug={challenge.community?.slug ?? ""}
-          />
-        </div>
-      ) : null}
-      <header className="flex flex-col gap-5 border-b border-border pb-7 pt-3 sm:flex-row sm:items-end sm:justify-between">
+      <header className="pt-2">
         <div>
           <h1 className="type-student-page-title">
             Welcome, {firstName(fullName)}.

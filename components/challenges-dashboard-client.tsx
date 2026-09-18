@@ -1892,7 +1892,7 @@ export function ChallengesDashboardClient({
         </h1>
 
         {/* Challenge Loop Top Card */}
-        <section className="relative overflow-hidden rounded-[24px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-7 sm:p-9 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+        <section className="relative overflow-hidden rounded-[24px] border border-black dark:border-white/20 bg-white dark:bg-card p-7 sm:p-9 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
           {/* Top right decorative lime accent corner */}
           <div
             className="pointer-events-none absolute top-0 right-0 size-28 sm:size-34 rounded-bl-full bg-[#d7ff3b] select-none z-0"

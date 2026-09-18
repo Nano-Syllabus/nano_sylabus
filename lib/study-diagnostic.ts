@@ -30,7 +30,7 @@ export function hasCompletedStudyDiagnostic(value: unknown): value is StudyAnswe
 
 export function studyFlowDestination(community?: string) {
   return community && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(community)
-    ? `/app/communities/${community}`
+    ? `/app/today?community=${encodeURIComponent(community)}`
     : "/app/today";
 }
 

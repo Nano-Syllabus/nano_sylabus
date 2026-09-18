@@ -58,13 +58,12 @@ const paymentConfig: PaymentMethodConfig = {
 };
 
 describe("invoices page UI", () => {
-  it("moves payment activity out of Pricing and links to the dedicated route", () => {
+  it("renders payment activity and your invoices on the pricing page", () => {
     const billing = readFileSync("components/billing-page-client.tsx", "utf8");
     const route = readFileSync("app/app/invoices/page.tsx", "utf8");
 
-    expect(billing).toContain('href="/app/invoices"');
-    expect(billing).toContain("View payment activity");
-    expect(billing).not.toContain("Your invoices");
+    expect(billing).not.toContain("View payment activity");
+    expect(billing).toContain("Your invoices");
     expect(route).toContain("listInvoicesForUser(user.id)");
     expect(route).toContain("getActiveManualPaymentConfig()");
   });
