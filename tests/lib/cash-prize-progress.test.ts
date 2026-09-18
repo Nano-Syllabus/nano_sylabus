@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getNepalDayUtcRange, toDailyCashPrizeProgress } from "@/lib/data/cash-prize";
+import {
+  getNepalDateKey,
+  getNepalDayUtcRange,
+  isNepalDateKey,
+  toDailyCashPrizeProgress,
+} from "@/lib/data/cash-prize";
 
 describe("cash-prize daily challenge progress", () => {
   it("uses Nepal midnight boundaries for the completion query", () => {
@@ -12,6 +17,14 @@ describe("cash-prize daily challenge progress", () => {
       start: "2026-09-18T18:15:00.000Z",
       end: "2026-09-19T18:15:00.000Z",
     });
+  });
+
+  it("validates and derives Nepal calendar keys", () => {
+    expect(getNepalDateKey(new Date("2026-09-18T18:14:59.000Z"))).toBe("2026-09-18");
+    expect(getNepalDateKey(new Date("2026-09-18T18:15:00.000Z"))).toBe("2026-09-19");
+    expect(isNepalDateKey("2026-09-19")).toBe(true);
+    expect(isNepalDateKey("2026-02-30")).toBe(false);
+    expect(isNepalDateKey("19-09-2026")).toBe(false);
   });
 
   it("grants one daily entry after the first completed challenge", () => {

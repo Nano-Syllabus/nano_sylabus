@@ -11,7 +11,17 @@ export type DailyCashPrizeProgress = {
   isEligible: boolean;
 };
 
-function nepalDateKey(now: Date) {
+export type AdminCashPrizeEntry = {
+  id: string;
+  entryDate: string;
+  userId: string;
+  studentName: string;
+  studentEmail: string;
+  qualifiedAt: string;
+  challengeId: string | null;
+};
+
+export function getNepalDateKey(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: NEPAL_TIME_ZONE,
     year: "numeric",
@@ -32,7 +42,7 @@ function nepalDateKey(now: Date) {
 }
 
 export function getNepalDayUtcRange(now = new Date()) {
-  const dateKey = nepalDateKey(now);
+  const dateKey = getNepalDateKey(now);
   const start = new Date(`${dateKey}T00:00:00${NEPAL_UTC_OFFSET}`);
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
 
@@ -40,6 +50,35 @@ export function getNepalDayUtcRange(now = new Date()) {
     start: start.toISOString(),
     end: end.toISOString(),
   };
+}
+
+export function isNepalDateKey(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+export async function listAdminCashPrizeEntries(
+  entryDate: string,
+): Promise<AdminCashPrizeEntry[]> {
+  if (!isNepalDateKey(entryDate)) throw new Error("Invalid cash-prize entry date.");
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("cash_prize_daily_entries")
+    .select("id,entry_date,user_id,student_name,student_email,qualified_at,challenge_id")
+    .eq("entry_date", entryDate)
+    .order("qualified_at", { ascending: true });
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    entryDate: String(row.entry_date),
+    userId: String(row.user_id),
+    studentName: String(row.student_name || "Student"),
+    studentEmail: String(row.student_email || ""),
+    qualifiedAt: String(row.qualified_at),
+    challengeId: row.challenge_id ? String(row.challenge_id) : null,
+  }));
 }
 
 export function toDailyCashPrizeProgress(completedToday: number): DailyCashPrizeProgress {
