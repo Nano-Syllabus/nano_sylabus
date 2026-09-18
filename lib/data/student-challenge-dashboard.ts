@@ -398,18 +398,23 @@ async function loadScopedChallengeMetrics(
  * set from the Community Hub, so this narrows to what they say they are
  * studying rather than to a date the platform guessed.
  *
- * FALLS BACK RATHER THAN EMPTIES. A student who has never picked a semester, or
- * whose pick names a term with no published subjects yet, keeps the full list —
- * a queue with nothing in it is a worse answer than a queue that is too broad,
- * and it is the answer a silent filter would give.
+ * A student who has never picked a semester keeps the full list: there is no
+ * answer to narrow by. A student who HAS picked one gets that semester, and
+ * nothing else — even when it has no subjects yet.
+ *
+ * It used to fall back to the whole programme for an empty semester, on the
+ * theory that a queue too broad beats an empty one. In practice picking "7th
+ * Semester" before any 7th-semester subject was published filled the hub with
+ * one challenge per subject of every semester — the daily queue is sized one
+ * per subject in scope — which reads as the picker being broken. The hub says
+ * the semester has nothing yet instead (`ChallengesDashboardClient`).
  */
 function subjectsInCurrentTerm<T extends { term?: { id: string } }>(
   subjects: T[],
   currentTermId: string | null,
 ) {
   if (!currentTermId) return subjects;
-  const inTerm = subjects.filter((subject) => subject.term?.id === currentTermId);
-  return inTerm.length ? inTerm : subjects;
+  return subjects.filter((subject) => subject.term?.id === currentTermId);
 }
 
 function subjectScopeKey(courseId: string | null, subjectSlug: string) {

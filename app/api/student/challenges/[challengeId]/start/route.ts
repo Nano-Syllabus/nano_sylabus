@@ -22,6 +22,10 @@ export async function POST(
     if (!challenge) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     return NextResponse.json({ challenge });
   } catch (error) {
+    // A database error is a plain object, not an Error, and used to reach the
+    // student as the generic line below with nothing recorded anywhere. It is
+    // logged whole so the next one can be traced.
+    if (!(error instanceof Error)) console.error("[challenge start]", error);
     return NextResponse.json(
       {
         error:

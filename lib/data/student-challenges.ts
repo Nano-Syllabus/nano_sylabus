@@ -24,6 +24,8 @@ import {
   type TeacherStandaloneGradeResponse,
 } from "@/lib/teacher-app/client";
 import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
+import { normalizeQuestionText } from "@/lib/challenge-learn-questions";
+import { readCourseLearningTopics } from "@/lib/data/community-learning-topics";
 import { memo } from "@/lib/http/memo";
 import { devCollectionKey } from "@/lib/dev-collection-key";
 import type { PracticeEvaluation } from "@/lib/tenant/client";
@@ -160,11 +162,23 @@ export type StudentChallengeSummary = {
   attemptCount: number;
   lastScore: number | null;
   lastTotalMarks: number | null;
+  /** Past questions prepared for this subtopic; null until its content is built. */
+  pastQuestionCount?: number | null;
+  /** Practice questions on the paper — never more than `CHALLENGE_QUESTIONS`. */
+  practiceQuestionCount?: number | null;
+  /** Reading plus answering, in minutes, rounded to 5 and at most 20. Null until
+   *  the content is built — never a guess. See `challengeEstimate`. */
+  estimatedMinutes?: number | null;
 };
 
 export type ChallengeSolvedExample = {
   year: string | null;
   question: string;
+  /** `question` with its mathematics typeset in LaTeX, for display. Absent on
+   *  content built before the solver returned one. */
+  displayQuestion?: string;
+  /** Every session the bank printed it in, oldest first. */
+  years?: string[];
   solution: string;
   topic: string;
   marks: number;
@@ -189,6 +203,11 @@ export type ChallengePastQuestion = {
   marks: number | null;
   /** The session a real paper printed beside it, or "" when it printed none. */
   year: string;
+  /** Typeset for display once the question has been worked; see
+   *  `ChallengeSolvedExample.displayQuestion`. */
+  displayQuestion?: string;
+  /** Every session the bank printed it in, oldest first; `year` is the latest. */
+  years?: string[];
 };
 
 export type ChallengeExamQuestion = {
@@ -359,6 +378,63 @@ export function nepaliChallengeDate(value = new Date()) {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
+/** Minutes to read one worked past question, by what the paper paid for it. */
+function readingMinutes(marks: number | null | undefined) {
+  if (!marks || marks <= 0) return 3;
+  return Math.min(6, Math.max(2, Math.round(marks / 2)));
+}
+
+/** Minutes to write one practice answer on paper, by its marks. */
+function answeringMinutes(marks: number | null | undefined) {
+  if (!marks || marks <= 0) return 5;
+  return Math.min(8, Math.max(3, Math.round(marks * 0.75)));
+}
+
+/** No challenge is estimated at more than this: it is a twenty-minute sitting. */
+export const CHALLENGE_MINUTES_CAP = 20;
+
+/**
+ * How long a challenge takes, from what has actually been prepared for it.
+ *
+ * Reading the subtopic's worked past questions — a 2-mark definition is a
+ * couple of minutes, a 10-mark derivation several — then answering the practice
+ * questions on paper, of which there are never more than `CHALLENGE_QUESTIONS`.
+ * The two are added and held to `CHALLENGE_MINUTES_CAP`, so a heavily examined
+ * topic reads as a full twenty minutes and a light one as less. A challenge
+ * whose content is not built yet has nothing to go on and says nothing, rather
+ * than the same guess on every row.
+ */
+export function challengeEstimate(content: StudentChallengeContent | null): {
+  pastQuestionCount: number | null;
+  practiceQuestionCount: number | null;
+  estimatedMinutes: number | null;
+} {
+  if (!content || content.provider !== "collection-challenge-v1") {
+    return { pastQuestionCount: null, practiceQuestionCount: null, estimatedMinutes: null };
+  }
+  const past = content.pastQuestions ?? [];
+  // A topic no paper examined is studied from its worked examples instead.
+  const reading = past.length
+    ? past.reduce((sum, question) => sum + readingMinutes(question.marks), 0)
+    : (content.solvedExamples ?? []).reduce((sum, example) => sum + readingMinutes(example.marks), 0);
+  const practice = (content.examQuestions ?? []).slice(0, CHALLENGE_QUESTIONS);
+  const answering = practice.length
+    ? practice.reduce((sum, question) => sum + answeringMinutes(question.marks), 0)
+    : CHALLENGE_QUESTIONS * answeringMinutes(null);
+  const total = Math.round((reading + answering) / 5) * 5;
+  return {
+    pastQuestionCount: past.length,
+    practiceQuestionCount: practice.length || CHALLENGE_QUESTIONS,
+    estimatedMinutes: Math.min(CHALLENGE_MINUTES_CAP, Math.max(5, total)),
+  };
+}
+
+function rowContent(row: ChallengeRow): StudentChallengeContent | null {
+  return row.content && typeof row.content === "object" && !Array.isArray(row.content)
+    ? (row.content as StudentChallengeContent)
+    : null;
+}
+
 function toSummary(row: ChallengeRow): StudentChallengeSummary {
   const subjectName = String(row.subject_name ?? "");
   const rawTopicTitle = String(row.topic_title ?? "");
@@ -390,15 +466,12 @@ function toSummary(row: ChallengeRow): StudentChallengeSummary {
     attemptCount: number(row.attempt_count),
     lastScore: nullableNumber(row.last_score),
     lastTotalMarks: nullableNumber(row.last_total_marks),
+    ...challengeEstimate(rowContent(row)),
   };
 }
 
 function toDetail(row: ChallengeRow): StudentChallengeDetail {
-  const content =
-    row.content && typeof row.content === "object" && !Array.isArray(row.content)
-      ? (row.content as StudentChallengeContent)
-      : null;
-  return { ...toSummary(row), content, latestAttempt: null };
+  return { ...toSummary(row), content: rowContent(row), latestAttempt: null };
 }
 
 export function challengeAttemptReviewFromEvaluation(
@@ -886,11 +959,20 @@ export async function getStudentChallengeGradeContext(userId: string, challengeI
   };
 }
 
+/** Distinct, non-empty sessions in the order the API gave them (oldest first). */
+function sessions(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = [...new Set(value.map((item) => String(item ?? "").trim()).filter(Boolean))];
+  return out.length ? out : undefined;
+}
+
 function solvedExample(question: TeacherChallengeSolvedQuestion): ChallengeSolvedExample {
   const source = String(question.source || "").trim();
   return {
     year: question.year?.trim() || null,
     question: question.text,
+    displayQuestion: question.display_text?.trim() || undefined,
+    years: sessions(question.years),
     solution: question.solution?.trim() || "",
     topic: question.topic || "",
     marks: number(question.marks),
@@ -1191,6 +1273,8 @@ function challengeLessonContent(
       marks:
         question.marks === null || question.marks === undefined ? null : number(question.marks),
       year: question.year || "",
+      displayQuestion: question.display_text?.trim() || undefined,
+      years: sessions(question.years),
     })),
     pastQuestionNote: pastQuestions.note || "",
     pastQuestionSource: pastQuestions.topic_source,
@@ -1305,6 +1389,12 @@ export async function startStudentChallenge(
   const current = toDetail(row);
   const externalAttemptId = String(row.external_paper_id || "");
   const sourceDocumentTopic = isSourceDocumentChallengeRow(row);
+  if (!options.restart && current.content?.contentStatus === "ready") {
+    // A challenge built before step one's list and the worked answers were the
+    // same questions has listed questions with no answer. Opening it answers
+    // them behind the response — see `topUpChallengeAnswers`.
+    scheduleChallengeAnswerTopUp(userId, challengeId, access);
+  }
   if (current.status === "completed" && !options.restart) {
     return withLatestAttemptReview(userId, row, current);
   }
@@ -1425,43 +1515,9 @@ async function buildChallengeLesson(
     pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, topicRequest);
   } catch (error) {
     if (!(error instanceof TeacherApiError) || ![404, 422].includes(error.status)) throw error;
-    /**
-     * THE SUBTOPIC IS TRIED TWICE BEFORE IT IS GIVEN UP ON.
-     *
-     * A daily row assigned before this subject's catalogue was re-extracted can
-     * carry a key the provider no longer knows. Sending `topics: []` at that
-     * point does work — the provider picks its most heavily examined chapter —
-     * but that chapter is a UNIT, so the challenge silently stops being about a
-     * subtopic at all, and the student is handed a week of the course with no
-     * sign anything changed.
-     *
-     * The provider resolves a topic by key OR by the title a student sees, so
-     * the title is a second, better shot at the same subtopic: a re-extraction
-     * that renumbers keys almost never renames "Ohm's law". Only when that also
-     * misses is the choice handed over.
-     */
-    const topicTitle = String(row.topic_title || "").trim();
-    if (topicTitle && !sourceDocumentTopic) {
-      try {
-        pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, {
-          ...topicRequest,
-          topics: [topicTitle],
-        });
-      } catch (retryError) {
-        if (!(retryError instanceof TeacherApiError) || ![404, 422].includes(retryError.status)) {
-          throw retryError;
-        }
-        pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, {
-          ...topicRequest,
-          topics: [],
-        });
-      }
-    } else {
-      pastQuestions = await getTeacherChallengePastQuestions(lane.collectionKey, {
-        ...topicRequest,
-        topics: [],
-      });
-    }
+    pastQuestions = await pastQuestionsForReplacedTopic(
+      userId, row, access, lane.collectionKey, topicRequest, sourceDocumentTopic,
+    );
   }
   if (!pastQuestions.can_start) {
     throw new Error(
@@ -1495,6 +1551,108 @@ async function buildChallengeLesson(
       ? { topic_key: selectedTopic.topic_key, topic_title: selectedTopic.title, title }
       : {},
   };
+}
+
+/** A provider miss — the topic it was asked for does not exist (any more). */
+function isTopicMiss(error: unknown) {
+  return error instanceof TeacherApiError && [404, 422].includes(error.status);
+}
+
+/**
+ * Step one for a row whose topic the provider no longer knows.
+ *
+ * A daily row assigned before its subject's catalogue was re-read carries a key
+ * that no longer exists — most often a whole UNIT ("Electro-chemistry and
+ * Buffer") that the re-read split into its bullets. The candidates, in order:
+ *
+ *   1. the title a student sees — a re-extraction that renumbers keys almost
+ *      never renames "Ohm's law";
+ *   2. the unit's own bullets, which its blurb lists — the replaced unit's first
+ *      subtopic is the challenge it meant;
+ *   3. the subject's catalogue, in syllabus order;
+ *   4. the provider's own choice.
+ *
+ * EVERY SUBTOPIC ALREADY IN TODAY'S QUEUE IS SKIPPED. Moving this row onto one
+ * breaks the one-row-per-subtopic-per-day rule
+ * (`student_challenges_course_daily_topic_key`): the provider's choice for a
+ * retired Engineering Chemistry unit was a subtopic the student already had at
+ * position 12, and the write failed with a raw database error the route could
+ * only report as "Could not build this challenge from the course material."
+ */
+async function pastQuestionsForReplacedTopic(
+  userId: string,
+  row: ChallengeRow,
+  access: ChallengeAccess,
+  collectionKey: string,
+  topicRequest: { subject: string; topics: string[]; limit: number },
+  sourceDocumentTopic: boolean,
+): Promise<TeacherChallengePastQuestionsResponse> {
+  const admin = createSupabaseAdminClient();
+  let sameDay = admin
+    .from("student_challenges")
+    .select("id,topic_key")
+    .eq("user_id", userId)
+    .eq("challenge_date", String(row.challenge_date ?? ""));
+  sameDay = row.course_id ? sameDay.eq("course_id", String(row.course_id)) : sameDay.is("course_id", null);
+  const { data: todays } = await sameDay;
+  const taken = new Set(
+    (todays || [])
+      .filter((other) => String(other.id) !== String(row.id))
+      .map((other) => String(other.topic_key || "")),
+  );
+
+  const candidates: string[] = [];
+  if (!sourceDocumentTopic) {
+    const title = String(row.topic_title || "").trim();
+    if (title) candidates.push(title);
+    // "Electro-chemical cells, Electrode Potential and Standard Electrode
+    // Potential, ..." — split on commas that are not inside brackets, so
+    // "(source, load, communication & control)" stays one bullet.
+    const bullets = String(row.topic_blurb || "")
+      .split(/,(?![^()]*\))/)
+      .map((bullet) => bullet.trim())
+      .filter((bullet) => bullet.length > 2);
+    candidates.push(...bullets.slice(0, 8));
+    try {
+      const catalogue = row.course_id
+        ? await readCourseLearningTopics(
+            String(row.course_id), String(access.teacherId), String(row.subject_slug || ""), admin,
+          )
+        : null;
+      candidates.push(
+        ...(catalogue || [])
+          .map((topic) => topic.topic_key)
+          .filter((key) => key && !taken.has(key))
+          .slice(0, 6),
+      );
+    } catch {
+      // The catalogue is a better guess, not a requirement.
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (taken.has(candidate)) continue;
+    try {
+      const response = await getTeacherChallengePastQuestions(collectionKey, {
+        ...topicRequest,
+        topics: [candidate],
+      });
+      const resolved = response.topics?.[0]?.topic_key;
+      if (resolved && taken.has(resolved)) continue;
+      return response;
+    } catch (error) {
+      if (!isTopicMiss(error)) throw error;
+    }
+  }
+
+  const chosen = await getTeacherChallengePastQuestions(collectionKey, { ...topicRequest, topics: [] });
+  const resolved = chosen.topics?.[0]?.topic_key;
+  if (resolved && taken.has(resolved)) {
+    throw new Error(
+      "This challenge's topic was replaced when the course syllabus was re-read, and the subtopic it now maps to is already in today's list. Open that challenge instead.",
+    );
+  }
+  return chosen;
 }
 
 /**
@@ -1648,10 +1806,23 @@ async function runChallengeContentCompletion(
    */
   const needsReading = !pending.lesson?.content?.length;
   try {
+    /**
+     * THE QUESTIONS STEP ONE LISTED ARE THE ONES ANSWERED.
+     *
+     * Step one shows up to ten past questions; this call used to ask for five of
+     * its own, drawn independently, so a listed question could come back "not
+     * worked" while an answer was written for one the student never saw. Naming
+     * the listed texts answers exactly those. A topic with no past questions
+     * still gets its five worked examples from the notes.
+     */
+    const listed = (pending.pastQuestions || [])
+      .map((question) => question.question.trim())
+      .filter(Boolean);
     const solved = await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
       subject: lane.subject,
       topics: topicKeys,
       limit: CHALLENGE_SOLVED_QUESTIONS,
+      ...(listed.length ? { questions: listed } : {}),
     });
     // Only fetched when it can change what the student is told. It exists to
     // phrase ONE warning — whether the thin worked examples mean "no past paper
@@ -1735,6 +1906,93 @@ async function runChallengeContentCompletion(
   } finally {
     completionsInFlight.delete(challengeId);
   }
+}
+
+const answerTopUpsInFlight = new Map<string, Promise<void>>();
+
+function scheduleChallengeAnswerTopUp(userId: string, challengeId: string, access: ChallengeAccess) {
+  if (answerTopUpsInFlight.has(challengeId) || completionsInFlight.has(challengeId)) return;
+  const task = topUpChallengeAnswers(userId, challengeId, access)
+    .catch(() => undefined)
+    .finally(() => {
+      answerTopUpsInFlight.delete(challengeId);
+    });
+  answerTopUpsInFlight.set(challengeId, task);
+  try {
+    after(() => task);
+  } catch {
+    // Not in a request scope. The work is under way regardless.
+  }
+}
+
+/**
+ * Answer the listed past questions a finished challenge left unanswered.
+ *
+ * Step one lists up to ten past questions and the build used to answer an
+ * independent five, so a challenge built before the two were joined shows
+ * listed questions as "not worked" — for good, since a ready row is never
+ * rebuilt on a reopen. Only questions the row itself lists are asked for and
+ * kept; anything the route hands back beyond them is dropped. A question on the
+ * student's own paper is never answered here: the old build excluded only the
+ * five it answered from the exam, so a listed-but-unanswered question can be
+ * one they are about to sit.
+ */
+async function topUpChallengeAnswers(userId: string, challengeId: string, access: ChallengeAccess) {
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !raw) return;
+  const row = raw as ChallengeRow;
+  const content = toDetail(row).content;
+  if (!content || content.contentStatus !== "ready") return;
+
+  const answered = new Set(
+    (content.solvedExamples || [])
+      .filter((example) => example.solution)
+      .map((example) => normalizeQuestionText(example.question)),
+  );
+  const onThePaper = new Set(
+    (content.examQuestions || []).map((question) => normalizeQuestionText(question.question)),
+  );
+  const missing = (content.pastQuestions || [])
+    .map((question) => question.question.trim())
+    .filter((text) => {
+      const key = normalizeQuestionText(text);
+      return text && !answered.has(key) && !onThePaper.has(key);
+    });
+  if (!missing.length) return;
+
+  const lane = await resolveChallengeLane(userId, row, access);
+  const topicKeys = content.topicKeys?.length
+    ? content.topicKeys
+    : [String(row.topic_key || "")].filter(Boolean);
+  const solved = await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
+    subject: lane.subject,
+    topics: topicKeys,
+    limit: CHALLENGE_SOLVED_QUESTIONS,
+    questions: missing,
+  });
+  const wanted = new Set(missing.map(normalizeQuestionText));
+  const fresh = (solved.questions || [])
+    .map(solvedExample)
+    .filter((example) => example.solution && wanted.has(normalizeQuestionText(example.question)));
+  if (!fresh.length) return;
+
+  let write = admin
+    .from("student_challenges")
+    .update({
+      content: { ...content, solvedExamples: [...(content.solvedExamples || []), ...fresh] },
+    })
+    .eq("id", challengeId)
+    .eq("user_id", userId);
+  // Onto the row as it was read, as the reading attach does: a submit that
+  // lands in between wins, and the answers are asked for again next open.
+  if (row.updated_at) write = write.eq("updated_at", String(row.updated_at));
+  await write;
 }
 
 /**

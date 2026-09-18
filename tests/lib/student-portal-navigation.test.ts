@@ -12,7 +12,9 @@ describe("student portal navigation chrome", () => {
 
   it("keeps the shared top bar visible, aligned, and theme-aware", () => {
     expect(appShell).toContain('import { ThemeToggle } from "@/components/theme-toggle";');
-    expect(appShell).toContain('min-h-[53px] shrink-0 items-center justify-between');
+    expect(appShell).toContain('min-h-[53px] shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)]');
+    // The page title is centred in the bar, not pushed left by the menu button.
+    expect(appShell).toContain("truncate text-center font-sans text-sm font-medium");
     expect(appShell).toContain('border-b border-border bg-bg-secondary');
     expect(appShell).toContain('<ThemeToggle className="h-10 w-10 shrink-0 bg-bg-primary" />');
     expect(appShell).not.toContain("topbarSuppressed");

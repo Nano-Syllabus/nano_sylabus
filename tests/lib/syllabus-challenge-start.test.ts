@@ -175,6 +175,90 @@ describe("starting a saved syllabus challenge", () => {
     expect(db.tables.student_challenges[0].external_paper_id).toBe("attempt-1");
   });
 
+  it("answers exactly the past questions step one listed", async () => {
+    // Step one lists up to ten; answering an independent draw of five left
+    // listed questions "not worked" while answering ones nobody was shown.
+    mocks.pastQuestions.mockResolvedValue({
+      can_start: true,
+      topics: [{ topic_key: "provider-42", title: "Identifiers" }],
+      questions: [
+        { id: "p1", text: "Define an identifier.", topic: "Identifiers", topic_key: "provider-42" },
+        { id: "p2", text: "List the rules for naming identifiers.", topic: "Identifiers", topic_key: "provider-42" },
+      ],
+      grounded: true,
+      blockers: [],
+      warnings: [],
+    });
+
+    await startStudentChallenge("member", "challenge-1");
+    await settled();
+
+    expect(mocks.solved).toHaveBeenCalledWith("collection", {
+      subject: "Nims",
+      topics: ["provider-42"],
+      limit: 5,
+      questions: ["Define an identifier.", "List the rules for naming identifiers."],
+    });
+  });
+
+  it("answers a finished challenge's unanswered listed questions when it is reopened", async () => {
+    // Built the old way: ten listed, an independent five answered. A ready row
+    // is never rebuilt on a reopen, so without this the gap is permanent.
+    mocks.pastQuestions.mockResolvedValue({
+      can_start: true,
+      topics: [{ topic_key: "provider-42", title: "Identifiers" }],
+      questions: [
+        { id: "p1", text: "Define an identifier.", topic: "Identifiers", topic_key: "provider-42" },
+        { id: "p2", text: "List the rules for naming identifiers.", topic: "Identifiers", topic_key: "provider-42" },
+        // Also on the student's paper (see the exam mock): never answered here.
+        { id: "p3", text: "Explain identifiers.", topic: "Identifiers", topic_key: "provider-42" },
+      ],
+      grounded: true,
+      blockers: [],
+      warnings: [],
+    });
+    mocks.solved.mockResolvedValueOnce({
+      questions: [{ id: "s1", text: "Define an identifier.", solution: "A name.", topic: "Identifiers", topic_key: "provider-42", source: "question_bank" }],
+      grounded: true,
+      warnings: [],
+    });
+    await startStudentChallenge("member", "challenge-1");
+    await settled();
+    // Let the first build's in-flight marker clear before the reopen.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    mocks.solved.mockResolvedValueOnce({
+      questions: [
+        { id: "s2", text: "List the rules for naming identifiers.", solution: "Letters first.", topic: "Identifiers", topic_key: "provider-42", source: "question_bank" },
+        // Something the route drew on its own: not a listed question, dropped.
+        { id: "s9", text: "An unrelated question?", solution: "No.", topic: "Identifiers", topic_key: "provider-42", source: "question_bank" },
+      ],
+      grounded: true,
+      warnings: [],
+    });
+    await startStudentChallenge("member", "challenge-1");
+
+    // Behind the response: wait for the top-up's own call.
+    await vi.waitFor(() => expect(mocks.solved).toHaveBeenCalledTimes(2));
+    expect(mocks.solved).toHaveBeenLastCalledWith("collection", {
+      subject: "Nims",
+      topics: ["provider-42"],
+      limit: 5,
+      questions: ["List the rules for naming identifiers."],
+    });
+    const examples = await vi.waitFor(() => {
+      const content = db.tables.student_challenges[0].content as {
+        solvedExamples: Array<{ question: string }>;
+      };
+      expect(content.solvedExamples).toHaveLength(2);
+      return content.solvedExamples;
+    });
+    expect(examples.map((example) => example.question)).toEqual([
+      "Define an identifier.",
+      "List the rules for naming identifiers.",
+    ]);
+  });
+
   it("hands back the lesson before the exam has been built", async () => {
     let releaseSolved = () => {};
     mocks.solved.mockReturnValue(
@@ -396,6 +480,61 @@ describe("starting a saved syllabus challenge", () => {
       topics: [],
       limit: 10,
     });
+  });
+
+  it("moves a retired unit onto its own first subtopic, not onto one already in today's queue", async () => {
+    // Seen live: "Electro-chemistry and Buffer" was a whole unit, retired when
+    // the syllabus was re-read into bullets. The provider's own choice was a
+    // subtopic the student already had today, and the row update broke the
+    // one-subtopic-per-day rule — surfaced as "Could not build this challenge".
+    const row = db.tables.student_challenges[0];
+    Object.assign(row, {
+      topic_key: "electro_chemistry_and_buffer",
+      topic_title: "Electro-chemistry and Buffer",
+      topic_blurb: "Electro-chemical cells, Electrode Potential and Standard Electrode Potential",
+      challenge_date: "2026-09-18",
+    });
+    db.tables.student_challenges.push({
+      id: "challenge-2", user_id: "member", course_id: "course-1", challenge_date: "2026-09-18",
+      subject_slug: "teacher_nims", topic_key: "3_d_transition_elements", status: "assigned",
+    });
+    const resolved = (topicKey: string, title: string) => ({
+      can_start: true, topics: [{ topic_key: topicKey, title }], questions: [],
+      grounded: true, blockers: [], warnings: [],
+    });
+    mocks.pastQuestions.mockImplementation(async (_key: string, request: { topics: string[] }) => {
+      const [topic] = request.topics;
+      if (topic === "Electro-chemical cells") return resolved("electro_chemical_cells", "Electro-chemical cells");
+      if (topic === undefined) return resolved("3_d_transition_elements", "3-d transition elements");
+      throw new TeacherApiError("Unknown topic", 404);
+    });
+
+    const result = await startStudentChallenge("member", "challenge-1");
+
+    expect(result?.topicKey).toBe("electro_chemical_cells");
+    expect(mocks.pastQuestions).toHaveBeenNthCalledWith(3, "collection", {
+      subject: "Nims", topics: ["Electro-chemical cells"], limit: 10,
+    });
+  });
+
+  it("says what happened when every replacement is already in today's queue", async () => {
+    const row = db.tables.student_challenges[0];
+    Object.assign(row, { topic_key: "retired_unit", topic_title: "Retired unit", topic_blurb: "", challenge_date: "2026-09-18" });
+    db.tables.student_challenges.push({
+      id: "challenge-2", user_id: "member", course_id: "course-1", challenge_date: "2026-09-18",
+      subject_slug: "teacher_nims", topic_key: "provider-42", status: "assigned",
+    });
+    mocks.pastQuestions.mockImplementation(async (_key: string, request: { topics: string[] }) => {
+      if (request.topics.length) throw new TeacherApiError("Unknown topic", 404);
+      return {
+        can_start: true, topics: [{ topic_key: "provider-42", title: "Identifiers" }], questions: [],
+        grounded: true, blockers: [], warnings: [],
+      };
+    });
+
+    await expect(startStudentChallenge("member", "challenge-1")).rejects.toThrow(
+      /already in today's list/,
+    );
   });
 
   it("does not start a topic when its material cannot support an exam", async () => {

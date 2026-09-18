@@ -106,8 +106,12 @@ export function AppShell({
           className="flex min-w-0 flex-1 flex-col overflow-hidden"
           style={{ paddingRight: rightRailWidth > 0 ? `${rightRailWidth}px` : undefined }}
         >
-          <header className="flex min-h-[53px] shrink-0 items-center justify-between gap-3 border-b border-border bg-bg-secondary px-4 md:px-6">
-            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+          {/* Three columns with EQUAL sides, so the title sits in the true centre
+              of the bar whatever the right-hand side carries — a flex row would
+              centre it in whatever space the actions left over. A long title
+              truncates inside its column rather than running under the buttons. */}
+          <header className="grid min-h-[53px] shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)] items-center gap-3 border-b border-border bg-bg-secondary px-4 md:px-6">
+            <div className="flex min-w-0 items-center">
               {!sidebarSuppressed ? (
                 <button
                   type="button"
@@ -118,11 +122,11 @@ export function AppShell({
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
                 </button>
               ) : null}
-              <div className="min-w-0 flex-1 truncate font-sans text-sm font-medium text-text-primary">
-                {dynamicTitle ?? title}
-              </div>
             </div>
-            <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+            <div className="min-w-0 max-w-[min(56vw,720px)] truncate text-center font-sans text-sm font-medium text-text-primary">
+              {dynamicTitle ?? title}
+            </div>
+            <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
               {dynamicActions ?? actions}
               <ThemeToggle className="h-10 w-10 shrink-0 bg-bg-primary" />
             </div>

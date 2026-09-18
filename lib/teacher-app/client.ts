@@ -22,6 +22,11 @@ export type TeacherChallengePastQuestion = {
   topic_key?: string;
   marks?: number | null;
   year?: string;
+  /** `text` with its mathematics in LaTeX, once the question has been worked.
+   *  Display only — `text` is the question's identity. */
+  display_text?: string;
+  /** Every session the bank printed it in, oldest first; `year` is the latest. */
+  years?: string[];
 };
 
 export type TeacherChallengeReading = {
@@ -62,6 +67,9 @@ export type TeacherChallengeSolvedQuestion = {
   marks?: number | null;
   year?: string | null;
   source?: string;
+  /** `text` typeset for display; `text` is what it is matched to step one by. */
+  display_text?: string;
+  years?: string[];
 };
 
 export type TeacherChallengeExam = {
@@ -1074,7 +1082,8 @@ export const getTeacherChallengeReading = (
 
 export const getTeacherChallengeSolvedQuestions = (
   key: string,
-  input: { subject: string; topics: string[]; limit?: number },
+  /** `questions`: the exact past-question texts to answer — step one's list. */
+  input: { subject: string; topics: string[]; limit?: number; questions?: string[] },
 ) =>
   teacherRequest<TeacherChallengeSolvedResponse>("/v1/collection/challenge/solved-questions", key, {
     method: "POST",

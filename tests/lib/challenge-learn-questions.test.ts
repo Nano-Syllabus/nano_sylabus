@@ -43,6 +43,43 @@ describe("the question list step one renders", () => {
     expect(list[0].question).toBe("What is LC oscillation? Derive its differential equation.");
   });
 
+  it("shows the typeset question but matches the two sources on the bank's wording", () => {
+    const plain = "Solve the equation x(d^2y/dx^2) + (x^2-4)y = 0 in series form.";
+    const typeset = "Solve the equation $x\\frac{d^2y}{dx^2} + (x^2-4)y = 0$ in series form.";
+    const list = mergeLearnQuestions({
+      solvedExamples: [{ ...solved(plain, "### Frobenius method", "2069 Poush"), displayQuestion: typeset }],
+      pastQuestions: [past(plain, "2069 Poush")],
+    });
+
+    expect(list).toHaveLength(1);
+    expect(list[0].question).toBe(plain);
+    expect(list[0].displayQuestion).toBe(typeset);
+    expect(list[0].solution).toBe("### Frobenius method");
+  });
+
+  it("does not call a question repeated because it was also worked", () => {
+    // Seen as "★ Repeated ×2" beside a single "2079 Jestha": the worked copy
+    // was counted as a second printing.
+    const text = "Explain inclusive and exclusive disjunction with truth table and examples.";
+    const [only] = mergeLearnQuestions({
+      solvedExamples: [solved(text, "A table.", "2079 Jestha")],
+      pastQuestions: [past(text, "2079 Jestha")],
+    });
+
+    expect(only.appearances).toBe(1);
+    expect(only.years).toEqual(["2079 Jestha"]);
+  });
+
+  it("shows every session the bank printed a question in", () => {
+    const text = "State and prove De Morgan's laws with a truth table.";
+    const [only] = mergeLearnQuestions({
+      pastQuestions: [{ ...past(text, "2079 Jestha"), years: ["2071 Bhadra", "2075 Ashwin", "2079 Jestha"] }],
+    });
+
+    expect(only.years).toEqual(["2071 Bhadra", "2075 Ashwin", "2079 Jestha"]);
+    expect(only.appearances).toBe(3);
+  });
+
   it("collapses repeat appearances into one question carrying its years", () => {
     const list = mergeLearnQuestions({
       pastQuestions: [

@@ -28,6 +28,10 @@ import {
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
 import { Markdown } from "@/components/markdown";
+import {
+  ChallengeFeedbackModal,
+  type ChallengeFeedbackChoice,
+} from "@/components/challenge-feedback-modal";
 import { mergeLearnQuestions } from "@/lib/challenge-learn-questions";
 import { academicNumberLabel } from "@/lib/academic";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
@@ -111,6 +115,7 @@ type GradeResult = {
  * layout decision.
  */
 type ChallengeStep = 1 | 2;
+type PracticeStage = "questions" | "upload" | "result";
 
 export function initialChallengeStep(challenge: StudentChallengeDetail): ChallengeStep {
   if (challenge.status === "completed") return 2;
@@ -282,10 +287,22 @@ function ChallengeDetail({
   const answerSheetInputRef = useRef<HTMLInputElement>(null);
   const focusModeWasActiveRef = useRef(false);
   const previousChallengeIdRef = useRef(challenge.id);
-  const incomingStep = initialChallengeStep(challenge);
+  // A challenge always OPENS on step one, whatever step it was left on: the
+  // worked past questions are what a student reads before sitting the paper.
+  const incomingStep: ChallengeStep = 1;
   const isCompletedChallenge = challenge.status === "completed";
-  const [focusMode, setFocusMode] = useState(false);
+  // Pressing Start opens the challenge straight into focus mode; the way out is
+  // the Exit button in the top-left corner.
+  const [focusMode, setFocusMode] = useState(true);
   const [activeStep, setActiveStep] = useState<ChallengeStep>(() => incomingStep);
+  /**
+   * Practice is three screens, one at a time: the questions, the upload, the
+   * result. No step indicator — the footer moves between them. A finished
+   * challenge lands on its result.
+   */
+  const [practiceStage, setPracticeStage] = useState<PracticeStage>(() =>
+    challenge.status === "completed" ? "result" : "questions",
+  );
   const [savingStep, setSavingStep] = useState<"lesson" | "examples" | null>(null);
   const [scanFile, setScanFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -305,6 +322,9 @@ function ChallengeDetail({
   );
   const [clock, setClock] = useState(() => Date.now());
   const [retryingContent, setRetryingContent] = useState(false);
+  /** The two questions asked while a sheet is graded — once per sitting. */
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const feedbackAskedRef = useRef(new Set<string>());
   const content = challenge.content;
   /**
    * `pending` means the solutions and the exam are still being built. It is a
@@ -434,6 +454,7 @@ function ChallengeDetail({
     if (previousChallengeIdRef.current === challenge.id) return;
     previousChallengeIdRef.current = challenge.id;
     setActiveStep(incomingStep);
+    setPracticeStage(isCompletedChallenge ? "result" : "questions");
     setScanFile(null);
     setError("");
     setClock(Date.now());
@@ -445,6 +466,30 @@ function ChallengeDetail({
         : null,
     );
   }, [challenge, challenge.id, incomingStep, isCompletedChallenge]);
+
+  // Provenance notes — how much of a reading the notes support, values no source
+  // printed, which examples came from notes rather than the bank. They are for
+  // whoever maintains the course material, not for a student mid-challenge, so
+  // they go to the console instead of the page.
+  const activeWarning = !content
+    ? ""
+    : activeStep === 1
+      ? // The questions and their solutions are one step, so their warnings are
+        // one line. The reading's warning is still collected: it is not rendered
+        // as a section any more, but a course whose material could not be read
+        // is the same fact about this topic either way.
+        [
+          ...(content.pastQuestionBlockers || []),
+          ...(content.pastQuestionWarnings || []),
+          content.learningWarning,
+          content.solvedWarning || content.warning,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : content.examWarning || "";
+  useEffect(() => {
+    if (activeWarning) console.info(`[challenge ${challenge.id}] ${activeWarning}`);
+  }, [activeWarning, challenge.id]);
 
   if (!content) return null;
 
@@ -488,6 +533,14 @@ function ChallengeDetail({
     if (!scanFile) return;
     setSubmitting(true);
     setError("");
+    // Asked while the sheet is read and graded — the minute a student would
+    // otherwise spend on a spinner, and the only time "what do you expect to
+    // score?" comes before they know. One ask per sitting.
+    const sitting = `${challenge.id}:${challenge.attemptCount}`;
+    if (!feedbackAskedRef.current.has(sitting)) {
+      feedbackAskedRef.current.add(sitting);
+      setFeedbackOpen(true);
+    }
     try {
       const form = new FormData();
       form.set("file", scanFile);
@@ -514,6 +567,7 @@ function ChallengeDetail({
       setScanFile(null);
       onChange(payload.challenge);
       setActiveStep(2);
+      setPracticeStage("result");
       /**
        * Move the dashboard's numbers here, in this tick, with no request.
        *
@@ -582,7 +636,8 @@ function ChallengeDetail({
       setEvaluation(null);
       setScore(null);
       setClock(Date.now());
-      setActiveStep(initialChallengeStep(payload.challenge));
+      setActiveStep(1);
+      setPracticeStage("questions");
       onChange(payload.challenge);
       onHubPatch((d) => applyChallengeState(d, payload.challenge));
     } catch (cause) {
@@ -618,33 +673,27 @@ function ChallengeDetail({
       if (!challenge.lessonRead && !(await markStep("lesson"))) return;
       if (!challenge.examplesReviewed && !(await markStep("examples"))) return;
       setActiveStep(2);
+      setPracticeStage(challenge.status === "completed" ? "result" : "questions");
     }
   };
 
-  const steps = [
-    {
-      number: 1,
-      label: "Learn",
-      complete: challenge.lessonRead && challenge.examplesReviewed,
-    },
-    { number: 2, label: "Practice", complete: challenge.status === "completed" },
-  ] as const;
+  const finishFeedback = (choice: ChallengeFeedbackChoice) => {
+    setFeedbackOpen(false);
+    // Behind the student's back and never in their way: a failed save is not
+    // worth an error on the screen where their marks are about to appear.
+    void fetch(`/api/student/challenges/${challenge.id}/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(choice),
+    }).catch(() => undefined);
+  };
 
-  const activeWarning =
-    activeStep === 1
-      ? // The questions and their solutions are one step, so their warnings are
-        // one line. The reading's warning is still collected: it is not rendered
-        // as a section any more, but a course whose material could not be read
-        // is the same fact about this topic either way.
-        [
-          ...(content.pastQuestionBlockers || []),
-          ...(content.pastQuestionWarnings || []),
-          content.learningWarning,
-          content.solvedWarning || content.warning,
-        ]
-          .filter(Boolean)
-          .join(" ")
-      : content.examWarning;
+  const goBack = () => {
+    if (activeStep === 1) return;
+    if (practiceStage === "questions") setActiveStep(1);
+    else setPracticeStage("questions");
+  };
+
 
   const resultEvaluation = evaluation ?? challenge.latestAttempt?.evaluation ?? null;
   const resultPercentage =
@@ -676,6 +725,14 @@ function ChallengeDetail({
     </div>
   );
 
+  /** "Unit 1 · Computer Programming" — where this topic sits in the course. */
+  const challengeEyebrow = [
+    challenge.unitNumber ? `Unit ${challenge.unitNumber}` : "",
+    challenge.subjectName,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   const focusToggle = (
     <button
       ref={focusMode ? exitFocusButtonRef : enterFocusButtonRef}
@@ -691,13 +748,10 @@ function ChallengeDetail({
       ) : (
         <Maximize2 className="size-4" aria-hidden="true" />
       )}
-      <span className="hidden md:inline">{focusMode ? "Exit focus" : "Focus mode"}</span>
+      {focusMode ? <span>Exit</span> : <span className="hidden md:inline">Focus mode</span>}
     </button>
   );
 
-  const selectStep = (step: ChallengeStep, complete: boolean) => {
-    if (step <= activeStep || complete) setActiveStep(step);
-  };
 
   return (
     <main
@@ -708,102 +762,41 @@ function ChallengeDetail({
       }
     >
       {/*
-        FOCUS MODE PUTS NOTHING ABOVE THE READING.
-        ------------------------------------------
-        It used to open with a sticky header carrying the topic, the clock and the
-        exit button — a band across the top of a screen whose entire purpose is to
-        hold one column of text. Both pieces are still reachable, but they are
-        overlaid at the sides now: what you are working on to the LEFT, the clock
-        and the way out to the RIGHT, the reading itself in the middle with the
-        full height of the window to itself.
-
-        The rails are fixed, so they cost the reading no layout space; the content
-        wrapper reserves their width with padding rather than letting them sit on
-        top of the text. Below `lg` there is no room for either, so both collapse
-        to small floating chips and the reading keeps the full width.
+        FOCUS MODE HAS ONE BAR, AND THE PAGE.
+        -------------------------------------
+        A sticky top bar in the app's navbar style carries everything that is
+        not the reading: Exit on the left, the topic in the middle, the clock on
+        the right. Below it is the same centred column the page uses outside
+        focus mode, and the Previous / next bar is sticky at the foot.
       */}
       {focusMode ? (
-        <>
-          <aside
-            aria-label="What you are working on"
-            className="fixed left-0 top-0 z-10 hidden h-full w-60 flex-col gap-3 overflow-y-auto p-4 lg:flex"
-          >
-            <div className="rounded-2xl border border-border bg-card/90 p-4 backdrop-blur">
-              <p className="truncate text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-                {challenge.subjectName}
-              </p>
-              <h1 className="mt-1 font-display text-lg font-semibold leading-6">
-                {challenge.title}
-              </h1>
-            </div>
-            <nav
-              aria-label="Challenge progress"
-              className="rounded-2xl border border-border bg-card/90 p-2 backdrop-blur"
-            >
-              <ol className="space-y-0.5">
-                {steps.map((step) => {
-                  const isActive = activeStep === step.number;
-                  return (
-                    <li key={step.number}>
-                      <button
-                        type="button"
-                        aria-current={isActive ? "step" : undefined}
-                        onClick={() => selectStep(step.number, step.complete)}
-                        className={`flex min-h-10 w-full items-center gap-2.5 rounded-lg px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                          isActive ? "bg-blue-500/10" : "hover:bg-bg-secondary"
-                        }`}
-                      >
-                        <span
-                          className={`grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
-                            step.complete
-                              ? "bg-success text-white"
-                              : isActive
-                                ? "bg-blue-600 text-white"
-                                : "bg-bg-secondary text-text-muted"
-                          }`}
-                        >
-                          {step.complete ? "✓" : step.number}
-                        </span>
-                        <span
-                          className={`truncate text-xs font-semibold ${isActive ? "text-blue-600 dark:text-blue-400" : "text-text-muted"}`}
-                        >
-                          {step.label}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            </nav>
-          </aside>
-
-          <aside
-            aria-label="Timer and focus mode"
-            className="fixed right-0 top-0 z-10 flex flex-col items-end gap-2 p-3 sm:p-4 lg:w-52"
-          >
-            {timerBox}
-            {focusToggle}
-          </aside>
-
-          <div className="pointer-events-none fixed left-0 top-0 z-10 max-w-[52%] p-3 lg:hidden">
-            <div className="pointer-events-auto rounded-xl border border-border bg-card/90 px-3 py-2 backdrop-blur">
-              <p className="truncate text-xs font-semibold text-text-primary">{challenge.title}</p>
-              <p className="mt-0.5 text-[11px] text-text-muted">
-                Step {activeStep} of {steps.length} · {steps[activeStep - 1]?.label}
-              </p>
-            </div>
+        // A top bar in the app's own navbar style — the way out on the left,
+        // what this is in the middle, the clock on the right — sticky, so the
+        // clock and the exit stay in reach however far the answers run.
+        <header
+          aria-label="Challenge"
+          className="sticky top-0 z-30 grid min-h-[53px] grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)] items-center gap-3 border-b border-border bg-bg-secondary/95 px-4 backdrop-blur md:px-6"
+        >
+          <div className="flex min-w-0 items-center">{focusToggle}</div>
+          <div className="min-w-0 max-w-[min(56vw,720px)] text-center">
+            <p className="truncate text-xs text-text-muted">{challengeEyebrow}</p>
+            <p className="truncate font-sans text-sm font-semibold text-text-primary">
+              {challenge.topicTitle || challenge.title}
+            </p>
           </div>
-        </>
+          <div className="flex min-w-0 items-center justify-end">{timerBox}</div>
+        </header>
       ) : null}
 
       <div
         className={
           focusMode
-            ? "px-4 pb-32 pt-24 sm:px-8 lg:pl-64 lg:pr-56 lg:pt-8"
-            : "mx-auto max-w-5xl px-4 py-6 pb-16 sm:px-8"
+            ? // The same column as outside focus mode, under the bar.
+              "mx-auto flex min-h-[calc(100dvh-53px)] max-w-5xl flex-col px-4 pt-6 sm:px-8"
+            : "mx-auto flex min-h-[calc(100dvh-53px)] max-w-5xl flex-col px-4 pt-6 sm:px-8"
         }
       >
-        <div className={focusMode ? "mx-auto w-full max-w-2xl" : ""}>
+        <div className="flex flex-1 flex-col">
           {!focusMode ? (
             <>
               <header className="flex items-start justify-between gap-4">
@@ -826,58 +819,9 @@ function ChallengeDetail({
                   truncated there, and a second mobile-only copy repeated it below
                   with the subject eyebrow above both. One row under the controls is
                   the same markup at every breakpoint and has the full width to use. */}
-              <h1 className="mt-5 font-display text-xl font-semibold">{challenge.title}</h1>
+              <p className="mt-5 text-xs text-text-muted">{challengeEyebrow}</p>
+              <h1 className="mt-1 font-display text-xl font-semibold">{challenge.title}</h1>
 
-              <nav
-                aria-label="Challenge progress"
-                className="mt-8 rounded-2xl border border-border bg-card px-4 py-7 sm:px-8 sm:py-8"
-              >
-                {/* Two columns, because there are two steps. Left at three from
-                    the three-step era, the pair sat in the left two thirds of
-                    the card with an empty column beside them — which reads as
-                    the rail being off-centre, because it is. */}
-                <ol className="mx-auto grid w-full max-w-md grid-cols-2">
-                  {steps.map((step, index) => {
-                    const isActive = activeStep === step.number;
-                    return (
-                      <li
-                        key={step.number}
-                        className="relative flex min-w-0 flex-col items-center text-center"
-                      >
-                        {index < steps.length - 1 ? (
-                          <span
-                            aria-hidden="true"
-                            className={`absolute left-[calc(50%+22px)] right-[calc(-50%+22px)] top-5 h-px ${step.complete ? "bg-success" : "bg-border"}`}
-                          />
-                        ) : null}
-                        <button
-                          type="button"
-                          aria-current={isActive ? "step" : undefined}
-                          onClick={() => selectStep(step.number, step.complete)}
-                          className="relative z-10 flex min-h-10 min-w-10 flex-col items-center gap-2.5 rounded-lg px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        >
-                          <span
-                            className={`grid size-10 place-items-center rounded-full text-sm font-bold ${
-                              step.complete
-                                ? "bg-success text-white"
-                                : isActive
-                                  ? "bg-blue-600 text-white"
-                                  : "bg-bg-secondary text-text-muted"
-                            }`}
-                          >
-                            {step.complete ? "✓" : step.number}
-                          </span>
-                          <span
-                            className={`hidden text-xs font-semibold sm:block ${isActive ? "text-blue-600 dark:text-blue-400" : "text-text-muted"}`}
-                          >
-                            {step.label}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ol>
-              </nav>
             </>
           ) : null}
 
@@ -886,26 +830,8 @@ function ChallengeDetail({
           >
             {activeStep === 1 ? (
               <div>
-                {/* The topic, given the room a heading deserves: this screen is
-                    one micro-topic of one unit, and the question list under it
-                    only means something once that is said. */}
-                <header className="rounded-2xl bg-text-primary px-5 py-6 text-text-inverse sm:px-8 sm:py-7">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] opacity-70">
-                    {challenge.unitNumber ? `Unit ${challenge.unitNumber} · ` : ""}
-                    {challenge.subjectName}
-                  </p>
-                  <h2 className="mt-2 font-display text-xl font-semibold sm:text-2xl">
-                    {challenge.topicTitle}
-                  </h2>
-                  <p className="mt-3 max-w-prose text-sm leading-6 opacity-80">
-                    {learnQuestions.length
-                      ? `What ${challenge.subjectName}'s own papers have asked on this, answered. Open a question to read its solution.`
-                      : `What ${challenge.subjectName}'s own papers have asked on this.`}
-                  </p>
-                </header>
-
                 {learnQuestions.length ? (
-                  <ol className="mt-8 space-y-4">
+                  <ol className="space-y-4">
                     {learnQuestions.map((item, index) => {
                       const repeated = item.appearances > 1;
                       return (
@@ -925,7 +851,9 @@ function ChallengeDetail({
                               </span>
                               <div className="min-w-0 flex-1">
                                 <Markdown
-                                  text={item.question}
+                                  // Typeset when the solver has written it:
+                                  // "$x\frac{d^2y}{dx^2}$", not "x(d^2y/dx^2)".
+                                  text={item.displayQuestion || item.question}
                                   className="max-w-prose text-[15px] font-semibold leading-6 text-text-primary"
                                 />
                                 {/* Only what a real paper printed: the sessions
@@ -1050,11 +978,13 @@ function ChallengeDetail({
 
             {activeStep === 2 ? (
               <div>
+                {practiceStage === "questions" ? (
+                <>
                 <h2 className="text-xl font-semibold">📝 Your Turn</h2>
                 <p className="mt-2 text-sm text-text-muted">
                   {challenge.status === "completed"
                     ? "Review the questions and feedback from your completed attempt."
-                    : "Answer on paper as Q1, Q2, and so on, then upload the sheet below."}
+                    : "Write your answers on paper."}
                 </p>
                 {challenge.status === "completed" && !challenge.latestAttempt ? (
                   <div className="mt-5 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-text-secondary">
@@ -1088,18 +1018,12 @@ function ChallengeDetail({
                     No practice question is available. Go back and try another challenge.
                   </div>
                 )}
-                <p className="mt-5 text-sm text-text-muted">
-                  💡{" "}
-                  {timeRemaining
-                    ? `You have ${timeRemaining} remaining.`
-                    : `This challenge allows ${challenge.durationMinutes} minutes.`}
-                </p>
+                </>
+                ) : null}
 
-                {/* Gone once the sitting is over: with the three sections stacked,
-                    a completed challenge would otherwise carry an upload heading
-                    with nothing underneath it. */}
-                {challenge.status !== "completed" ? (
-                  <div className="mt-8 border-t border-border pt-8">
+                {/* The clock is in the corner; it is not repeated here. */}
+                {practiceStage === "upload" && challenge.status !== "completed" ? (
+                  <div>
                     <h2 className="text-xl font-semibold">📤 Submit Your Answer Sheet</h2>
                     <p className="mt-2 text-sm text-text-muted">
                       Upload one clear PDF or photo containing all numbered answers.
@@ -1126,10 +1050,6 @@ function ChallengeDetail({
                           />
                           <p className="mt-3 text-sm font-semibold">
                             Your complete handwritten answer sheet
-                          </p>
-                          <p className="mt-1 text-xs text-text-muted">
-                            Number answers as Q1, Q2, and so on · PDF, JPG, PNG or WebP · maximum 20
-                            MB
                           </p>
                           <input
                             ref={answerSheetInputRef}
@@ -1205,7 +1125,8 @@ function ChallengeDetail({
                   </div>
                 ) : null}
 
-                <div className="mt-8 border-t border-border pt-8">
+                {practiceStage === "result" ? (
+                <div>
                   <h2 className="text-xl font-semibold">📊 Challenge Result</h2>
                   <p className="mt-2 text-sm text-text-muted">
                     Your handwritten answer sheet has been read and graded against this challenge.
@@ -1520,13 +1441,11 @@ function ChallengeDetail({
                     </div>
                   )}
                 </div>
+                ) : null}
               </div>
             ) : null}
           </section>
 
-          {activeWarning ? (
-            <p className="mt-4 text-xs leading-5 text-warning">{activeWarning}</p>
-          ) : null}
           {error ? (
             <p
               role="alert"
@@ -1536,17 +1455,18 @@ function ChallengeDetail({
             </p>
           ) : null}
 
+          {/* Grows to fill a short page, so the bar sits at the foot of the
+              screen rather than under the last card; never less than a gap. */}
+          <div aria-hidden="true" className="min-h-8 flex-1" />
           <footer
-            className={
-              focusMode
-                ? "sticky bottom-4 z-20 mt-8 flex items-center justify-between gap-4 rounded-2xl border border-border bg-card/95 p-3 backdrop-blur"
-                : "mt-6 flex items-center justify-between gap-4"
-            }
+            className={`sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-4 border-t border-border px-4 py-3 backdrop-blur sm:-mx-8 sm:px-8 ${
+              focusMode ? "bg-bg-primary/95" : "bg-bg-secondary/95"
+            }`}
           >
             <button
               type="button"
               disabled={activeStep === 1 || submitting || savingStep !== null}
-              onClick={() => setActiveStep((current) => Math.max(1, current - 1) as ChallengeStep)}
+              onClick={goBack}
               className={`${focusButtonClass} border border-border bg-card text-text-primary`}
             >
               ← Previous
@@ -1568,7 +1488,24 @@ function ChallengeDetail({
                     ? "Working the past questions…"
                     : "Start practising →"}
               </button>
-            ) : resultReady ? (
+            ) : practiceStage === "questions" && challenge.status !== "completed" ? (
+              <button
+                type="button"
+                disabled={!content.examQuestions.length}
+                onClick={() => setPracticeStage("upload")}
+                className={`${focusButtonClass} bg-blue-600 text-white`}
+              >
+                Upload answers →
+              </button>
+            ) : practiceStage === "questions" && challenge.status === "completed" ? (
+              <button
+                type="button"
+                onClick={() => setPracticeStage("result")}
+                className={`${focusButtonClass} bg-blue-600 text-white`}
+              >
+                See result →
+              </button>
+            ) : resultReady && practiceStage === "result" ? (
               <div className="flex flex-wrap justify-end gap-3">
                 {/* Re-issuing a graded challenge costs a model call and hands out
                     a second attempt at a topic already scored, so it is not a
@@ -1607,6 +1544,9 @@ function ChallengeDetail({
           </footer>
         </div>
       </div>
+      {feedbackOpen ? (
+        <ChallengeFeedbackModal grading={submitting} onDone={finishFeedback} />
+      ) : null}
     </main>
   );
 }
@@ -1786,6 +1726,17 @@ export function ChallengesDashboardClient({
    * which challenges are assigned and every count above them all change with
    * the semester, so there is no smaller update that would be true.
    */
+  /**
+   * The chosen semester, named, when it has nothing in it. A picked semester is
+   * never widened to the rest of the programme (see `subjectsInCurrentTerm`), so
+   * an empty one has to say so rather than look like a broken hub.
+   */
+  const emptySemesterLabel = (() => {
+    const termId = dashboard.community?.currentTermId;
+    if (!termId || dashboard.subjects.length) return "";
+    const term = dashboard.community?.terms.find((item) => item.id === termId);
+    return term ? academicNumberLabel(term.semesterNumber, "Semester") : "";
+  })();
   const [runningTermId, setRunningTermId] = useState(
     dashboard.community?.currentTermId ?? "",
   );
@@ -2065,9 +2016,9 @@ export function ChallengesDashboardClient({
                 <div className="flex items-center gap-3">
                   <label
                     htmlFor="running-semester"
-                    className="type-student-eyebrow whitespace-nowrap text-[#6b7280] dark:text-text-muted"
+                    className="whitespace-nowrap text-[13px] font-medium text-[#6b7280] dark:text-text-muted"
                   >
-                    RUNNING SEMESTER
+                    Running Semester
                   </label>
                   <select
                     id="running-semester"
@@ -2122,12 +2073,27 @@ export function ChallengesDashboardClient({
                     </div>
 
                     <div className="flex items-center justify-between sm:justify-end gap-6 shrink-0">
-                      {/* Fixed columns, so "20 min" sits under "20 min" and the
-                          buttons share an edge — "Continue" is wider than
-                          "Start", and a row that sizes to its own button walks
-                          the time left and right down the list. */}
-                      <span className="w-[68px] shrink-0 text-right text-[14px] text-[#6b7280] dark:text-text-muted whitespace-nowrap">
-                        {challenge.durationMinutes} min
+                      {/* Fixed widths, so the estimates line up and "Continue" and
+                          "Start" share an edge down the list. */}
+                      <span
+                        className="w-[88px] shrink-0 text-right leading-tight"
+                        title={
+                          challenge.estimatedMinutes
+                            ? `Read ${challenge.pastQuestionCount ?? 0} worked past question${challenge.pastQuestionCount === 1 ? "" : "s"}, then answer ${challenge.practiceQuestionCount ?? 2} on paper`
+                            : undefined
+                        }
+                      >
+                        {challenge.estimatedMinutes ? (
+                          <>
+                            <span className="block text-[14px] text-[#6b7280] dark:text-text-muted">
+                              ~{challenge.estimatedMinutes} min
+                            </span>
+                            <span className="block text-[11px] text-text-muted">
+                              {challenge.practiceQuestionCount ?? 2} question
+                              {challenge.practiceQuestionCount === 1 ? "" : "s"}
+                            </span>
+                          </>
+                        ) : null}
                       </span>
                       <button
                         type="button"
@@ -2189,16 +2155,20 @@ export function ChallengesDashboardClient({
           ) : (
             <div className="px-6 py-12 text-center">
               <p className="font-semibold">
-                {dashboard.scope
-                  ? "No challenge is ready for this subject yet"
-                  : "No challenges yet"}
+                {emptySemesterLabel
+                  ? `No ${emptySemesterLabel} subjects yet`
+                  : dashboard.scope
+                    ? "No challenge is ready for this subject yet"
+                    : "No challenges yet"}
               </p>
               <p className="mt-2 text-sm text-text-muted">
-                {dashboard.scope
-                  ? "Ask the community creator to refresh this subject's extracted topics."
-                  : dashboard.community
-                    ? `${dashboard.community.name} has no available challenges yet. Published topics will appear here automatically.`
-                    : "Join a community and its real subtopics will appear here."}
+                {emptySemesterLabel && dashboard.community
+                  ? `${dashboard.community.name} has not published any ${emptySemesterLabel} subjects. If that is not the semester you are in, pick yours above.`
+                  : dashboard.scope
+                    ? "Ask the community creator to refresh this subject's extracted topics."
+                    : dashboard.community
+                      ? `${dashboard.community.name} has no available challenges yet. Published topics will appear here automatically.`
+                      : "Join a community and its real subtopics will appear here."}
               </p>
               <Link
                 href={

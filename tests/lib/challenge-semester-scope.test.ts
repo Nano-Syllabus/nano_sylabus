@@ -137,9 +137,10 @@ describe("the daily queue is scoped to the student's own semester", () => {
     expect(dashboard.subjects).toHaveLength(3);
   });
 
-  it("falls back rather than emptying when the chosen term has no subjects", async () => {
-    // A queue with nothing in it is a worse answer than one that is too broad,
-    // and it is the answer a silent filter would give.
+  it("shows nothing from other semesters when the chosen one has no subjects yet", async () => {
+    // It used to fall back to the whole programme, and the daily queue is sized
+    // one per subject in scope — so picking an unpublished semester filled the
+    // hub with one challenge per subject of every other semester.
     mocks.communityScope.mockResolvedValue({
       communityId: "community-1",
       communitySlug: "bct",
@@ -150,7 +151,10 @@ describe("the daily queue is scoped to the student's own semester", () => {
 
     const dashboard = await getStudentChallengeDashboard("member");
 
-    expect(dashboard.subjects).toHaveLength(3);
+    expect(dashboard.subjects).toHaveLength(0);
+    expect(dashboard.challenges).toHaveLength(0);
+    const recommendations = mocks.ensure.mock.calls[0]?.[1] ?? [];
+    expect(recommendations).toHaveLength(0);
   });
 });
 
