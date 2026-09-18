@@ -15,7 +15,10 @@ import {
 } from "@/lib/profile-normalization";
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { hasCompletedStudyDiagnostic } from "@/lib/study-diagnostic";
+import {
+  hasCompletedStudyDiagnostic,
+  hasStartedStudyDiagnostic,
+} from "@/lib/study-diagnostic";
 import type { AppUser, StudentProfile } from "@/lib/types";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { timed } from "@/lib/dev-timing";
@@ -74,7 +77,14 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
     data: { user },
   } = await getVerifiedUser(supabase);
 
-  if (!user) return { user: null, profile: null, studyDiagnosticCompleted: false };
+  if (!user) {
+    return {
+      user: null,
+      profile: null,
+      studyDiagnosticCompleted: false,
+      studyDiagnosticStarted: false,
+    };
+  }
 
   // The profile decides whether the user is onboarded and the ledger row
   // carries the credit balance. Neither depends on the other, so they go out
@@ -148,6 +158,9 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
     user: toAppUser(user, profile, creditBalance, hasUnlimitedAccess, activePlanTier),
     profile,
     studyDiagnosticCompleted: hasCompletedStudyDiagnostic(user.user_metadata?.study_answers),
+    studyDiagnosticStarted: hasStartedStudyDiagnostic(
+      user.user_metadata?.study_diagnostic_started,
+    ),
   };
 });
 

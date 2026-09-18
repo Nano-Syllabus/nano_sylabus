@@ -13,7 +13,11 @@ import FlowPage from "@/app/flow/page";
 
 describe("study flow server entry", () => {
   beforeEach(() => {
-    mocks.auth.mockResolvedValue({ user: { id: "student-1" }, studyDiagnosticCompleted: true });
+    mocks.auth.mockResolvedValue({
+      user: { id: "student-1" },
+      studyDiagnosticCompleted: true,
+      studyDiagnosticStarted: true,
+    });
     mocks.redirect.mockImplementation((path: string) => { throw new Error(`redirect:${path}`); });
   });
   it("skips all questions for a completed account joining a new community", async () => {
@@ -24,15 +28,32 @@ describe("study flow server entry", () => {
     await expect(FlowPage({ searchParams: Promise.resolve({}) }))
       .rejects.toThrow("redirect:/app/today");
   });
-  it("still shows questions to an account that has not completed them", async () => {
-    mocks.auth.mockResolvedValue({ user: { id: "new-student" }, studyDiagnosticCompleted: false });
+  it("skips questions after an account answered only part of the funnel", async () => {
+    mocks.auth.mockResolvedValue({
+      user: { id: "partial-student" },
+      studyDiagnosticCompleted: false,
+      studyDiagnosticStarted: true,
+    });
+    await expect(FlowPage({ searchParams: Promise.resolve({ community: "henglish" }) }))
+      .rejects.toThrow("redirect:/app/today?community=henglish");
+  });
+  it("still shows questions to an account that has never started them", async () => {
+    mocks.auth.mockResolvedValue({
+      user: { id: "new-student" },
+      studyDiagnosticCompleted: false,
+      studyDiagnosticStarted: false,
+    });
     const html = renderToStaticMarkup(await FlowPage({ searchParams: Promise.resolve({ community: "henglish" }) }));
     expect(html).toContain("Study questions");
     expect(html).toContain('data-destination="/app/today?community=henglish"');
     expect(mocks.redirect).not.toHaveBeenCalled();
   });
   it("does not bypass first-time onboarding for a signed-out visitor", async () => {
-    mocks.auth.mockResolvedValue({ user: null, studyDiagnosticCompleted: false });
+    mocks.auth.mockResolvedValue({
+      user: null,
+      studyDiagnosticCompleted: false,
+      studyDiagnosticStarted: false,
+    });
     expect(renderToStaticMarkup(await FlowPage({ searchParams: Promise.resolve({}) }))).toContain("Study questions");
     expect(mocks.redirect).not.toHaveBeenCalled();
   });

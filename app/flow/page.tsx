@@ -16,15 +16,22 @@ export default async function FlowPage({
 }: {
   searchParams: Promise<{ community?: string | string[] }>;
 }) {
-  const [params, { user, studyDiagnosticCompleted }] = await Promise.all([
+  const [params, { user, studyDiagnosticCompleted, studyDiagnosticStarted }] = await Promise.all([
     searchParams,
-    getCurrentAuth().catch(() => ({ user: null, studyDiagnosticCompleted: false })),
+    getCurrentAuth().catch(() => ({
+      user: null,
+      studyDiagnosticCompleted: false,
+      studyDiagnosticStarted: false,
+    })),
   ]);
   const community = typeof params.community === "string" ? params.community : undefined;
   const completionDestination = studyFlowDestination(community);
 
-  // The account's saved answers apply to every community and every device.
-  if (user && studyDiagnosticCompleted) redirect(completionDestination);
+  // This questionnaire is a one-time acquisition funnel, not an app gate.
+  // A user who answered even one question should never be sent through it again.
+  if (user && (studyDiagnosticStarted || studyDiagnosticCompleted)) {
+    redirect(completionDestination);
+  }
 
   return (
     <Suspense fallback={<div className="min-h-screen bg-bg-primary" />}>

@@ -995,7 +995,7 @@ export default function LandingPage() {
           <Brand />
           <p className="text-xs text-[#5b5e55]">Small challenges. Shared ambition.</p>
           <Link
-            href="/app/today"
+            href="/app/community"
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1c1e1a] hover:text-[#3049ed] transition-colors underline underline-offset-4"
           >
             <span>Go to the app</span>

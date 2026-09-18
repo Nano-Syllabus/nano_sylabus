@@ -18,6 +18,14 @@ export type CommunityHubSubject = {
   topicCount: number | null;
   materialCount: number | null;
   progress: number | null;
+  contentReady: boolean;
+};
+
+export type CommunityTermSummary = {
+  subjectCount: number;
+  materialCount: number;
+  topicCount: number;
+  contentReadiness: number | null;
 };
 
 export type CommunityHubMember = {
@@ -79,6 +87,7 @@ export type CommunityHubData = {
   materialCount: number;
   topicCount: number;
   contentReadiness: number | null;
+  currentTermSummary: CommunityTermSummary;
   subjects: CommunityHubSubject[];
   members: CommunityHubMember[];
   posts: CommunityHubPost[];
@@ -93,6 +102,31 @@ export type CommunityHubData = {
     bestScore: number | null;
   };
 };
+
+/**
+ * Derives every current-semester metric from the same subject snapshot so the
+ * overview cards and semester hero cannot drift onto different scopes.
+ */
+export function summarizeCommunityTerm(
+  subjects: CommunityHubSubject[],
+  termId: string,
+): CommunityTermSummary {
+  const termSubjects = subjects.filter((subject) => subject.termId === termId);
+  return {
+    subjectCount: termSubjects.length,
+    materialCount: termSubjects.reduce(
+      (sum, subject) => sum + Number(subject.materialCount || 0),
+      0,
+    ),
+    topicCount: termSubjects.reduce((sum, subject) => sum + Number(subject.topicCount || 0), 0),
+    contentReadiness: termSubjects.length
+      ? Math.round(
+          (termSubjects.filter((subject) => subject.contentReady).length / termSubjects.length) *
+            100,
+        )
+      : null,
+  };
+}
 
 /**
  * The community leaderboard is a consistency board: current study streak is
@@ -395,6 +429,12 @@ export async function getCommunityHubForUser(
   const subjects = subjectRows.map((subject) => {
     const term = community.terms.find((item) => item.id === subject.termId)!;
     const insight = insights[subject.id];
+    const subjectDocuments = documents.filter((document) =>
+      documentBelongsToSubject(document, subject),
+    );
+    const shelves = new Set(
+      subjectDocuments.map((document) => documentShelf(document.collection_path)),
+    );
     return {
       id: subject.id,
       slug: subject.slug,
@@ -405,18 +445,12 @@ export async function getCommunityHubForUser(
       topicCount: insight?.topicCount ?? null,
       materialCount: insight?.materialCount ?? null,
       progress: insight?.readiness ?? null,
+      contentReady: shelves.has("syllabus") && shelves.has("question-bank"),
     } satisfies CommunityHubSubject;
   });
 
-  const contentReadySubjects = subjectRows.filter((subject) => {
-    const subjectDocuments = documents.filter((document) =>
-      documentBelongsToSubject(document, subject),
-    );
-    const shelves = new Set(
-      subjectDocuments.map((document) => documentShelf(document.collection_path)),
-    );
-    return shelves.has("syllabus") && shelves.has("question-bank");
-  }).length;
+  const contentReadySubjects = subjects.filter((subject) => subject.contentReady).length;
+  const currentTermSummary = summarizeCommunityTerm(subjects, currentTerm.id);
 
   const members = rankCommunityMembersByStreak(
     membershipRows
@@ -537,6 +571,7 @@ export async function getCommunityHubForUser(
     contentReadiness: subjectRows.length
       ? Math.round((contentReadySubjects / subjectRows.length) * 100)
       : null,
+    currentTermSummary,
     subjects,
     members,
     posts,

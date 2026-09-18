@@ -1098,28 +1098,6 @@ export function AppSidebar({
             </div>
 
             <Link
-              href="/app/profile"
-              onClick={() => setIsProfileMenuOpen(false)}
-              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 22a8 8 0 0 1 16 0" />
-              </svg>
-              Learning profile
-            </Link>
-
-            <Link
               href="/teachers"
               onClick={() => setIsProfileMenuOpen(false)}
               className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition"
@@ -1140,7 +1118,7 @@ export function AppSidebar({
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
-              Creator workspace
+              Student Ambassador
             </Link>
 
             {isAdminRole(user.role) && (

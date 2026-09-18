@@ -144,6 +144,12 @@ describe("community leave controls (without browser)", () => {
       materialCount: 0,
       topicCount: 0,
       contentReadiness: null,
+      currentTermSummary: {
+        subjectCount: 0,
+        materialCount: 0,
+        topicCount: 0,
+        contentReadiness: null,
+      },
       subjects: [],
       members: [],
       posts: [],

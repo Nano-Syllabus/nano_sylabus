@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -17,9 +17,11 @@ import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
 import {
   hasCompletedStudyDiagnostic,
+  markStudyDiagnosticStarted,
   PENDING_STUDY_ANSWERS_KEY,
   readPendingStudyAnswers,
   saveStudyDiagnostic,
+  STUDY_DIAGNOSTIC_STARTED_KEY,
   type StudyAnswer,
 } from "@/lib/study-diagnostic";
 import { cn } from "@/lib/utils";
@@ -155,7 +157,42 @@ export function SaaSFlowClient({
   const [resumingDiagnostic, setResumingDiagnostic] = useState(
     Boolean(initialUser && searchParams.get("resumeDiagnostic") === "1"),
   );
+  const [checkingPriorStart, setCheckingPriorStart] = useState(
+    searchParams.get("resumeDiagnostic") !== "1",
+  );
+  const startedAccountSave = useRef<Promise<unknown> | null>(null);
   const googleAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true";
+
+  // Signed-out users have no account metadata yet. Keep a durable browser marker
+  // so returning through another community card does not restart this one-time funnel.
+  useEffect(() => {
+    if (searchParams.get("resumeDiagnostic") === "1") {
+      setCheckingPriorStart(false);
+      return;
+    }
+
+    let previouslyStarted = false;
+    try {
+      previouslyStarted = localStorage.getItem(STUDY_DIAGNOSTIC_STARTED_KEY) === "1";
+    } catch {
+      // Storage may be unavailable in a hardened browser; account metadata still works.
+    }
+
+    if (!previouslyStarted) {
+      setCheckingPriorStart(false);
+      return;
+    }
+
+    if (initialUser) {
+      router.replace(completionDestination);
+    } else {
+      const community = searchParams.get("community");
+      const nextPath = community
+        ? `/communities/${encodeURIComponent(community)}/join`
+        : completionDestination;
+      router.replace(`/login?next=${encodeURIComponent(nextPath)}`);
+    }
+  }, [completionDestination, initialUser, router, searchParams]);
 
   // OAuth leaves the page before an account exists. Recover that one pending
   // submission, save it to the signed-in account, then discard the local copy.
@@ -282,6 +319,21 @@ export function SaaSFlowClient({
   };
 
   const handleSelectAnswer = (qNum: number, optIndex: number, text: string) => {
+    try {
+      localStorage.setItem(STUDY_DIAGNOSTIC_STARTED_KEY, "1");
+    } catch {
+      // The account marker below remains the cross-device source of truth.
+    }
+
+    if (initialUser && !startedAccountSave.current) {
+      startedAccountSave.current = loadSupabaseBrowserClient()
+        .then((supabase) => markStudyDiagnosticStarted(supabase))
+        .catch(() => {
+          // Allow the next answer to retry if this write was interrupted or offline.
+          startedAccountSave.current = null;
+        });
+    }
+
     setAnswers((prev) => ({
       ...prev,
       [qNum]: { questionIndex: qNum, optionIndex: optIndex, text },
@@ -317,7 +369,9 @@ export function SaaSFlowClient({
           options: {
             data: {
               full_name: authName || "Student",
-              ...(hasCompletedStudyDiagnostic(answers) ? { study_answers: answers } : {}),
+              ...(hasCompletedStudyDiagnostic(answers)
+                ? { study_answers: answers, study_diagnostic_started: true }
+                : {}),
             },
           },
         });
@@ -538,10 +592,12 @@ export function SaaSFlowClient({
     </div>
   );
 
-  if (resumingDiagnostic) {
+  if (resumingDiagnostic || checkingPriorStart) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-bg-primary px-6 text-text-primary">
-        <p role="status">Saving your study answers…</p>
+        <p role="status">
+          {resumingDiagnostic ? "Saving your study answers…" : "Opening Nano Syllabus…"}
+        </p>
       </main>
     );
   }
