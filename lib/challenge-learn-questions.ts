@@ -16,6 +16,10 @@ export type LearnQuestion = {
   appearances: number;
   /** "" when this question has not been worked. */
   solution: string;
+  /** The question with its mathematics typeset, when the solver wrote one. The
+   *  row shows this; `question` and `key` stay the bank's own wording, which is
+   *  what the two sources are matched by. */
+  displayQuestion: string;
 };
 
 /**
@@ -102,8 +106,17 @@ export function mergeLearnQuestions(input: {
   solvedExamples?: ChallengeSolvedExample[] | null;
 }): LearnQuestion[] {
   const merged = new Map<string, LearnQuestion>();
+  /** Past-question rows per question — the printings the list itself saw. */
+  const printings = new Map<string, number>();
 
-  const add = (question: string, year: string, marks: number | null, solution: string) => {
+  const add = (
+    question: string,
+    years: string[],
+    marks: number | null,
+    solution: string,
+    displayQuestion = "",
+    printing = false,
+  ) => {
     const key = normalizeQuestionText(question || "");
     if (!key || !looksWhole(question)) return;
     const entry = merged.get(key) ?? {
@@ -113,9 +126,18 @@ export function mergeLearnQuestions(input: {
       marks: [],
       appearances: 0,
       solution: "",
+      displayQuestion: "",
     };
-    entry.appearances += 1;
-    if (year && !entry.years.includes(year)) entry.years.push(year);
+    if (displayQuestion.trim() && !entry.displayQuestion) entry.displayQuestion = displayQuestion.trim();
+    // Only a PAST QUESTION row is a printing. The worked copy of the same
+    // question is not a second sitting — counting it made every answered
+    // question read "Repeated ×2" beside a single year.
+    if (printing) printings.set(key, (printings.get(key) ?? 0) + 1);
+    for (const year of years) {
+      if (year && !entry.years.includes(year)) entry.years.push(year);
+    }
+    // The sessions ARE the printings when the bank recorded them.
+    entry.appearances = Math.max(printings.get(key) ?? 0, entry.years.length, 1);
     if (typeof marks === "number" && marks > 0 && !entry.marks.includes(marks)) {
       entry.marks.push(marks);
     }
@@ -128,10 +150,23 @@ export function mergeLearnQuestions(input: {
   // Worked first, so the copy that carries a solution is the one whose wording
   // is kept when the two sources punctuate the same question differently.
   for (const example of input.solvedExamples ?? []) {
-    add(example.question, example.year || "", example.marks, example.solution);
+    add(
+      example.question,
+      example.years ?? (example.year ? [example.year] : []),
+      example.marks,
+      example.solution,
+      example.displayQuestion,
+    );
   }
   for (const pastQuestion of input.pastQuestions ?? []) {
-    add(pastQuestion.question, pastQuestion.year || "", pastQuestion.marks, "");
+    add(
+      pastQuestion.question,
+      pastQuestion.years ?? (pastQuestion.year ? [pastQuestion.year] : []),
+      pastQuestion.marks,
+      "",
+      pastQuestion.displayQuestion,
+      true,
+    );
   }
 
   return [...merged.values()].sort(
