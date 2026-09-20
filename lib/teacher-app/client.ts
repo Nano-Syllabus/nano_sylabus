@@ -210,6 +210,16 @@ export class TeacherApiError extends Error {
     message: string,
     readonly status: number,
     readonly payload?: unknown,
+    /**
+     * Seconds the API asked us to wait, from its `Retry-After` header.
+     *
+     * Its bounded worker pools refuse a saturated burst immediately rather than
+     * holding the caller past their own timeout, and that refusal carries how
+     * long the queue in front of them is expected to take. Retrying sooner than
+     * it says is not a faster recovery, it is a second rejection — the pool is
+     * still full a quarter of a second later.
+     */
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = "TeacherApiError";
@@ -257,6 +267,19 @@ type TeacherRequestOptions = {
   body?: unknown;
   timeoutMs?: number;
   retries?: number;
+  /**
+   * This POST only reads, so a retry cannot double anything.
+   *
+   * `retries` is ignored on a non-GET by default, and that default is right:
+   * most of this API's POSTs issue a paper, start a clock or record a
+   * submission, and replaying one of those after a timeout is worse than the
+   * failure it was trying to paper over. But the challenge surface deliberately
+   * uses POST for reads too — the four steps share one `{subject, topics}` body
+   * and a `topics` list does not survive a query string — so the shape of the
+   * request stopped predicting whether it is safe to repeat. This says so
+   * explicitly, per call, instead of inferring it from the verb.
+   */
+  idempotent?: boolean;
 };
 
 async function teacherRequestOnce<T>(
@@ -317,7 +340,15 @@ async function teacherRequestOnce<T>(
               const status = response.statusCode ?? 502;
               if (status >= 400) {
                 const detail = formatTeacherApiError(payload, status);
-                reject(new TeacherApiError(detail, status, payload));
+                const retryAfter = Number(response.headers?.["retry-after"]);
+                reject(
+                  new TeacherApiError(
+                    detail,
+                    status,
+                    payload,
+                    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+                  ),
+                );
                 return;
               }
               resolve(payload as T);
@@ -342,7 +373,8 @@ async function teacherRequest<T>(
   collectionSk: string,
   options: TeacherRequestOptions = {},
 ): Promise<T> {
-  const retries = options.method && options.method !== "GET" ? 0 : Math.max(0, options.retries ?? 0);
+  const replayable = !options.method || options.method === "GET" || options.idempotent === true;
+  const retries = replayable ? Math.max(0, options.retries ?? 0) : 0;
 
   let lastError: unknown;
   for (let attemptIndex = 0; attemptIndex <= retries; attemptIndex += 1) {
@@ -359,7 +391,13 @@ async function teacherRequest<T>(
         [408, 429, 500, 502, 503, 504].includes(status) ||
         ["ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT"].includes(code);
       if (!transient || attemptIndex >= retries) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 250 * (attemptIndex + 1)));
+      // The API's own estimate wins over our guess when it gives one, capped so
+      // a header can never hold a request past the caller's timeout budget.
+      const askedFor =
+        error instanceof TeacherApiError && error.retryAfterSeconds
+          ? Math.min(error.retryAfterSeconds, 10) * 1000
+          : 0;
+      await new Promise((resolve) => setTimeout(resolve, Math.max(askedFor, 250 * (attemptIndex + 1))));
     }
   }
   throw lastError;
@@ -1060,6 +1098,19 @@ export const getTeacherCollectionPapers = (key: string, subject?: string) =>
 export const getTeacherCollectionPaper = (key: string, paperId: string) =>
   teacherRequest<ApiRecord>(`/v1/collection/papers/${encodeURIComponent(paperId)}`, key);
 
+/**
+ * Step one of a challenge, and the heaviest thing on the collection API that
+ * does not call a model: it walks the question bank and unit-filters its chunks,
+ * which is CPU-bound on a box whose API runs one uvicorn worker.
+ *
+ * `retries: 1` is new and is what makes the server's pool safe to add. The pool
+ * refuses a saturated burst with a fast 429 rather than holding the caller past
+ * its own timeout, and this route is a read — replaying it issues nothing and
+ * starts no clock — so the honest response to "busy, retry shortly" is to retry
+ * shortly. Without this, `teacherRequest` would hand that 429 straight to a
+ * student pressing Start, because it does not retry a POST unless told the POST
+ * is replayable.
+ */
 export const getTeacherChallengePastQuestions = (
   key: string,
   input: { subject: string; topics: string[]; limit?: number },
@@ -1067,7 +1118,7 @@ export const getTeacherChallengePastQuestions = (
   teacherRequest<TeacherChallengePastQuestionsResponse>(
     "/v1/collection/challenge/past-questions",
     key,
-    { method: "POST", body: input, timeoutMs: 120_000 },
+    { method: "POST", body: input, timeoutMs: 120_000, idempotent: true, retries: 1 },
   );
 
 export const getTeacherChallengeReading = (

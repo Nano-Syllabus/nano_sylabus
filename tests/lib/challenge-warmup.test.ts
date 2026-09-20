@@ -25,7 +25,11 @@ vi.mock("@/lib/teacher-app/client", async (original) => ({
   createTeacherChallengeExam: mocks.createExam,
 }));
 
-import { startStudentChallenge, warmStudentChallenge } from "@/lib/data/student-challenges";
+import {
+  scheduleChallengeWarmups,
+  startStudentChallenge,
+  warmStudentChallenge,
+} from "@/lib/data/student-challenges";
 import { invalidateMemo } from "@/lib/http/memo";
 
 /**
@@ -148,5 +152,73 @@ describe("warming a challenge before it is started", () => {
     // never asked to have built.
     expect(row().content).toBeUndefined();
     expect(row().status).toBe("assigned");
+  });
+});
+
+/**
+ * Warming is speculative work, and speculative work queues.
+ *
+ * `scheduleChallengeWarmups` starts the first card of every subject, and each
+ * one is a `past-questions` call — the heaviest route on the collection API that
+ * calls no model. Started all at once they are a burst, and the tenant API is one
+ * uvicorn worker: on 2026-09-19 eight were in flight together, the process logged
+ * nothing for 4m40s, and the creator's own workspace reads (0.15s of work each)
+ * spent their timeout and their retry queued behind them. The teacher was shown
+ * "The creator service is busy" for a challenge nobody had pressed Start on.
+ */
+describe("warming a queue of subjects", () => {
+  let db: ReturnType<typeof communityLearningFixture>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateMemo("challenge:collection-sk");
+    db = communityLearningFixture();
+    db.tables.student_challenges = Array.from({ length: 6 }, (_, index) => ({
+      id: `queued-${index}`,
+      user_id: "member",
+      course_id: "course-1",
+      subject_slug: `subject_${index}`,
+      subject_name: `Subject ${index}`,
+      topic_key: `provider-${index}`,
+      topic_title: `Topic ${index}`,
+      status: "assigned",
+    }));
+    mocks.admin.mockReturnValue(db.admin);
+    mocks.access.mockResolvedValue({ teacherId: "teacher-1", subjectName: "Nims" });
+  });
+
+  it("never asks the collection API for more than two at once", async () => {
+    let active = 0;
+    let peak = 0;
+    mocks.pastQuestions.mockImplementation(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return {
+        can_start: true,
+        topics: [{ topic_key: "provider-42", title: "Identifiers" }],
+        questions: [],
+        grounded: false,
+        blockers: [],
+        warnings: [],
+      };
+    });
+
+    scheduleChallengeWarmups(
+      "member",
+      db.tables.student_challenges.map((row) => ({
+        id: row.id,
+        status: "assigned",
+        courseId: row.course_id,
+        subjectSlug: row.subject_slug,
+      })) as never,
+    );
+
+    // Every subject is still warmed — the gate spreads the work, it does not
+    // drop any of it. A warm-up that silently skipped subjects would trade this
+    // outage for a slower one: students back to waiting on Start.
+    await vi.waitFor(() => expect(mocks.pastQuestions).toHaveBeenCalledTimes(6));
+    expect(peak).toBeLessThanOrEqual(2);
   });
 });

@@ -157,3 +157,65 @@ describe("readTeacherWorkspace", () => {
     await expect(client.readTeacherWorkspace("second-secret")).rejects.toMatchObject({ status: 503 });
   });
 });
+
+/**
+ * A busy pool's "retry shortly" only works if the caller waits that long.
+ *
+ * The tenant API refuses a saturated burst immediately — the alternative it was
+ * built to avoid is holding the caller for four minutes and then being dropped
+ * by nginx — and says in `Retry-After` how long the queue in front of them is.
+ * The client's own backoff starts at 250ms, which for a pool whose calls run for
+ * tens of seconds is not a recovery, it is a second rejection.
+ */
+describe("a refusal that says how long to wait", () => {
+  let client: typeof import("@/lib/teacher-app/client");
+
+  beforeEach(async () => {
+    vi.resetModules();
+    client = await import("@/lib/teacher-app/client");
+    mocks.request.mockReset();
+  });
+
+  it("waits as long as the API asked before retrying, not its own 250ms", async () => {
+    vi.useFakeTimers();
+    try {
+      // Only this route's attempts: other suites in this file leave workspace
+      // reads retrying in the background, and they share this transport mock.
+      const attempts: number[] = [];
+      mocks.request.mockImplementation(
+        (url: URL, _options: unknown, onResponse: (response: unknown) => void) => {
+          const mine = url.pathname.endsWith("/challenge/past-questions");
+          if (mine) attempts.push(Date.now());
+          const first = mine && attempts.length === 1;
+          queueMicrotask(() => {
+            const handlers: Record<string, (chunk?: unknown) => void> = {};
+            onResponse({
+              statusCode: first ? 429 : 200,
+              headers: first ? { "retry-after": "5" } : {},
+              setEncoding() {},
+              on(event: string, handler: (chunk?: unknown) => void) {
+                handlers[event] = handler;
+              },
+            });
+            handlers.data?.(JSON.stringify(first ? { detail: "busy" } : { can_start: true }));
+            handlers.end?.();
+          });
+          return { setTimeout() {}, on() {}, write() {}, end() {}, destroy() {} };
+        },
+      );
+
+      const pending = client.getTeacherChallengePastQuestions("collection-secret", {
+        subject: "Nims",
+        topics: [],
+      });
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(pending).resolves.toMatchObject({ can_start: true });
+
+      expect(attempts).toHaveLength(2);
+      // Five seconds, because that is what the header said — not 250ms.
+      expect(attempts[1] - attempts[0]).toBeGreaterThanOrEqual(5_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

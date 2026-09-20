@@ -27,6 +27,7 @@ import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
 import { normalizeQuestionText } from "@/lib/challenge-learn-questions";
 import { readCourseLearningTopics } from "@/lib/data/community-learning-topics";
 import { memo } from "@/lib/http/memo";
+import { createLimiter } from "@/lib/http/limit";
 import { devCollectionKey } from "@/lib/dev-collection-key";
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 
@@ -1731,6 +1732,28 @@ export async function warmStudentChallenge(
 const warmupsInFlight = new Map<string, Promise<unknown>>();
 
 /**
+ * Speculative warm-ups queue; a student waiting on Start does not.
+ *
+ * `scheduleChallengeWarmups` used to start one warm-up per subject in the same
+ * instant, and each is a `past-questions` call — the heaviest non-model route on
+ * the collection API. On 2026-09-19 eight of them were in flight together and
+ * the tenant API logged nothing for 4m40s; the creator's own workspace reads
+ * arrived in the middle of it, timed out, and the screen fell back to its
+ * last-good snapshot ("The creator service is busy…"). Several serverless
+ * renders each doing this independently is what turned one page view into a
+ * burst — the same two lambdas were observed asking for identical subjects.
+ *
+ * Two at a time, and deliberately its own gate rather than one shared with the
+ * on-demand path: this is work nobody has asked for yet, so it must never be
+ * the reason a student who DID press Start is waiting. The total still reaching
+ * the API is bounded by the server's `challenge_bank` pool, which is what holds
+ * when several instances warm at once; this keeps a single instance from being
+ * the burst in the first place, and stops it spending its own sockets on
+ * requests the pool would only queue.
+ */
+const warmupGate = createLimiter(2);
+
+/**
  * Warm the first open challenge of each subject, behind the response.
  *
  * One per subject, not the whole queue: the first card of each subject is what a
@@ -1748,7 +1771,7 @@ export function scheduleChallengeWarmups(userId: string, challenges: StudentChal
   }
   for (const challenge of firstPerSubject.values()) {
     if (warmupsInFlight.has(challenge.id)) continue;
-    const task = warmStudentChallenge(userId, challenge.id)
+    const task = warmupGate(() => warmStudentChallenge(userId, challenge.id))
       .catch(() => null)
       .finally(() => warmupsInFlight.delete(challenge.id));
     warmupsInFlight.set(challenge.id, task);
