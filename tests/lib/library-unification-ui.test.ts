@@ -165,6 +165,7 @@ describe("unified Figma library", () => {
     expect(library).toContain("/api/student/materials?subject=");
     expect(library).toContain("courseId=");
     expect(library).toContain("/figma/library/pdf-document.svg");
+    expect(library.match(/image: "\/figma\/library\/pdf-document\.svg"/g)).toHaveLength(4);
     expect(library).toContain('<BookOpen className="size-7 text-text-primary"');
     expect(library).toContain("<LockKeyhole");
     expect(library).toContain("<ChevronRight");

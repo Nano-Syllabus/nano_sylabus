@@ -243,7 +243,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-9 flex flex-wrap items-center gap-6">
                 <LandingPrimaryCta blue size="hero" communityOnly>
-                  Find your program
+                  Find your faculty
                 </LandingPrimaryCta>
                 <a
                   href="#steps"

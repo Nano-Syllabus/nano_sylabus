@@ -105,9 +105,9 @@ function getMaterialShelfConfig(shelfRaw?: string, name?: string) {
   if (shelf.includes("syllabus") || lowerName.includes("syllabus")) {
     return {
       label: "Syllabus",
-      icon: BookOpen,
-      image: null,
-      tile: "bg-[#f3e8ff] text-[#7e22ce] dark:bg-purple-950/50 dark:text-purple-300",
+      icon: null,
+      image: "/figma/library/pdf-document.svg",
+      tile: "bg-[#fff1f2] dark:bg-red-950/40",
     };
   }
   if (
@@ -135,16 +135,16 @@ function getMaterialShelfConfig(shelfRaw?: string, name?: string) {
   ) {
     return {
       label: "Notes",
-      icon: FileText,
-      image: null,
-      tile: "bg-[#dbeafe] text-[#1d4ed8] dark:bg-blue-950/50 dark:text-blue-300",
+      icon: null,
+      image: "/figma/library/pdf-document.svg",
+      tile: "bg-[#fff1f2] dark:bg-red-950/40",
     };
   }
   return {
     label: shelfRaw || "Document",
-    icon: FileText,
-    image: null,
-    tile: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+    icon: null,
+    image: "/figma/library/pdf-document.svg",
+    tile: "bg-[#fff1f2] dark:bg-red-950/40",
   };
 }
 
