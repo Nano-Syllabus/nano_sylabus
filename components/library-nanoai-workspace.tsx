@@ -556,7 +556,6 @@ export function LibraryNanoAiWorkspace({
                     const canOpen =
                       Boolean(material.documentId) && material.previewAvailable !== false;
                     const shelfConfig = getMaterialShelfConfig(material.shelf, material.name);
-                    const ShelfIcon = shelfConfig.icon;
                     return (
                       <li key={`${material.documentId}:${material.path}`}>
                         <button
@@ -577,18 +576,14 @@ export function LibraryNanoAiWorkspace({
                               shelfConfig.tile,
                             )}
                           >
-                            {shelfConfig.image ? (
-                              <Image
-                                src={shelfConfig.image}
-                                alt=""
-                                width={28}
-                                height={28}
-                                aria-hidden="true"
-                                className="size-7 object-contain"
-                              />
-                            ) : ShelfIcon ? (
-                              <ShelfIcon className="size-5" aria-hidden="true" />
-                            ) : null}
+                            <Image
+                              src={shelfConfig.image}
+                              alt=""
+                              width={28}
+                              height={28}
+                              aria-hidden="true"
+                              className="size-7 object-contain"
+                            />
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-[15px] font-semibold text-text-primary">
