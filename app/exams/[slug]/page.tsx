@@ -27,10 +27,29 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
   const course = await getPublishedCourse(slug).catch(() => null);
   if (!course) return { title: "Course not found - nanosyllabus", robots: { index: false } };
+
+  const pageTitle = `${titleCase(course.name)} - NanoSyllabus`;
+  const pageDescription = course.tagline || course.description;
+
   return {
-    title: `${titleCase(course.name)} - nanosyllabus`,
-    description: course.tagline,
-    openGraph: { title: `${titleCase(course.name)} - nanosyllabus`, description: course.tagline },
+    title: pageTitle,
+    description: pageDescription,
+    alternates: {
+      canonical: `/exams/${slug}`,
+    },
+    openGraph: {
+      title: pageTitle,
+      description: pageDescription,
+      url: `/exams/${slug}`,
+      images: [
+        {
+          url: "/icon.png",
+          width: 512,
+          height: 512,
+          alt: `${titleCase(course.name)} course preview`,
+        },
+      ],
+    },
   };
 }
 

@@ -101,9 +101,64 @@ const extensionAttributeStripScript = `
 `;
 
 export const metadata: Metadata = {
-  title: "Nano Syllabus — AI Study Companion for Nepal",
+  metadataBase: new URL("https://nanosyllabus.com"),
+  applicationName: "NanoSyllabus",
+  title: {
+    default: "NanoSyllabus — AI Study Companion for Nepal",
+    template: "%s | NanoSyllabus",
+  },
   description:
-    "Bilingual AI study companion built for Nepal's curriculum. Ask in English or Roman Nepali and get personalized support.",
+    "Bilingual AI study companion for Nepal's curriculum. Prepare for university, licensing, and entrance exams with guided practice, feedback, and personalized study plans.",
+  keywords: [
+    "AI study companion Nepal",
+    "exam preparation Nepal",
+    "university exam prep",
+    "study planner Nepal",
+    "learning platform Nepal",
+    "NanoSyllabus",
+  ],
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://nanosyllabus.com",
+    siteName: "NanoSyllabus",
+    title: "NanoSyllabus — AI Study Companion for Nepal",
+    description:
+      "Bilingual AI study companion for Nepal's curriculum. Prepare for university, licensing, and entrance exams with guided practice, feedback, and personalized study plans.",
+    images: [
+      {
+        url: "/icon.png",
+        width: 512,
+        height: 512,
+        alt: "NanoSyllabus logo",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@nanosyllabus",
+    creator: "@nanosyllabus",
+    title: "NanoSyllabus — AI Study Companion for Nepal",
+    description:
+      "Bilingual AI study companion for Nepal's curriculum. Prepare for university, licensing, and entrance exams with guided practice, feedback, and personalized study plans.",
+    images: ["/icon.png"],
+  },
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 /**

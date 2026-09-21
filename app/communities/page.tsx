@@ -10,6 +10,15 @@ export const metadata: Metadata = {
   title: "Browse communities — NanoSyllabus",
   description:
     "Find and join university, faculty, year, semester, and subject communities on NanoSyllabus.",
+  alternates: {
+    canonical: "/communities",
+  },
+  openGraph: {
+    title: "Browse communities — NanoSyllabus",
+    description:
+      "Find and join university, faculty, year, semester, and subject communities on NanoSyllabus.",
+    url: "/communities",
+  },
 };
 
 export default async function CommunitiesPage({
