@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { after } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getStudentCourseSubjectAccessCached } from "@/lib/student-courses";
@@ -9,6 +10,8 @@ import {
   getTeacherChallengePastQuestions,
   getTeacherChallengeReading,
   getTeacherChallengeSolvedQuestions,
+  requestTeacherMediaImage,
+  translateTeacherChallengeTexts,
   getTeacherPracticeTopics,
   submitTeacherChallengeExam,
   submitTeacherChallengeExamFile,
@@ -25,10 +28,21 @@ import {
 } from "@/lib/teacher-app/client";
 import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
 import { normalizeQuestionText } from "@/lib/challenge-learn-questions";
+import { emptyFigureSection, figureBrief, withFigure } from "@/lib/answer-figures";
 import { readCourseLearningTopics } from "@/lib/data/community-learning-topics";
-import { memo } from "@/lib/http/memo";
 import { createLimiter } from "@/lib/http/limit";
-import { devCollectionKey } from "@/lib/dev-collection-key";
+import { collectionKeyForTeacher } from "@/lib/data/challenge-collection-key";
+import {
+  CHALLENGE_POOL_AHEAD,
+  CHALLENGE_POOL_PRIORITY,
+  challengePoolAvailable,
+  challengePoolRowKey,
+  enqueueChallengeRows,
+  enqueueChallengeTopics,
+  kickChallengePoolSweep,
+  readyPoolSnapshot,
+  type ChallengePoolSnapshot,
+} from "@/lib/data/challenge-pool";
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 
 const UNDEFINED_TABLE = "42P01";
@@ -83,6 +97,12 @@ const completionsInFlight = new Map<string, Promise<StudentChallengeDetail | nul
 
 /** Challenge ids whose reading is being written onto the row after completion. */
 const readingsInFlight = new Map<string, Promise<void>>();
+
+/**
+ * Per finished challenge, the preparation of the one the student reaches next —
+ * kept so the request that owns the completion stays alive until it has landed.
+ */
+const nextPreparationsInFlight = new Map<string, Promise<unknown>>();
 
 export function isMissingChallengeTable(error: { code?: string } | null) {
   return error?.code === UNDEFINED_TABLE || error?.code === POSTGREST_MISSING_TABLE;
@@ -233,6 +253,21 @@ export type ChallengeExamQuestion = {
  */
 export type ChallengeContentStatus = "ready" | "pending";
 
+/**
+ * A challenge's study material in Roman Nepali: its reading and its worked
+ * answers. Past questions and the exam stay as the paper prints them.
+ */
+export type ChallengeRomanNepali = {
+  /** Identity of the English it was translated from. A reading that lands
+   *  later, or answers added since, make it stale and it is translated again. */
+  sourceHash: string;
+  reading: string[];
+  /** Worked answers, keyed by `normalizeQuestionText(question)`. */
+  solutions: Record<string, string>;
+  /** Parts that could not be translated faithfully and are shown in English. */
+  untranslated: number;
+};
+
 export type StudentChallengeContent = {
   provider?: "collection-challenge-v1";
   /**
@@ -250,6 +285,21 @@ export type StudentChallengeContent = {
   contentPendingSince?: string;
   /** Why the background completion last failed, if it did. */
   contentError?: string | null;
+  /**
+   * Why the concepts reading could not be written, the last time it was asked
+   * for. Cleared when one lands. Lets a screen waiting on the reading stop
+   * saying "a moment" about a topic whose material cannot produce one.
+   */
+  readingError?: string | null;
+  /** The reading and the worked answers in Roman Nepali, kept once written —
+   *  see `getStudentChallengeRomanNepali`. */
+  romanNepali?: ChallengeRomanNepali;
+  /**
+   * Set when this content was cut from the global challenge pool
+   * (`lib/data/challenge-pool.ts`) rather than built per student: the worked
+   * answers are already here, and the background pass issues only the paper.
+   */
+  pooledFrom?: { revision: string; preparedAt: string | null };
   upstreamChallengeId?: string;
   topicKeys?: string[];
   canStart?: boolean;
@@ -1069,34 +1119,8 @@ async function requireChallengeAccess(userId: string, row: ChallengeRow) {
 
 type ChallengeAccess = Awaited<ReturnType<typeof requireChallengeAccess>>;
 
-/**
- * A creator's collection key, memoized per teacher.
- *
- * It is one row on `teachers` that effectively never changes, and every single
- * challenge call — start, refresh, each progress tick, submit — was fetching it
- * again. TTL is short because a creator whose collection is provisioned mid-
- * session must not be told for an hour that it is "not ready yet".
- */
-function collectionKeyForTeacher(teacherId: string) {
-  // Local dev against a local api-service: the key in Supabase was issued by
-  // production and means nothing to it. See lib/dev-collection-key.ts — this is
-  // "" in every build that ships, so the memo below is the only real path.
-  const devKey = devCollectionKey();
-  if (devKey) return Promise.resolve(devKey);
-  return memo(
-    `challenge:collection-sk:${teacherId}`,
-    async () => {
-      const { data, error } = await createSupabaseAdminClient()
-        .from("teachers")
-        .select("collection_sk")
-        .eq("id", teacherId)
-        .maybeSingle();
-      if (error) throw error;
-      return String(data?.collection_sk || "").trim();
-    },
-    { ttlSeconds: 60, staleSeconds: 240 },
-  );
-}
+// `collectionKeyForTeacher` lives in lib/data/challenge-collection-key.ts so the
+// global challenge pool shares its memo.
 
 /**
  * `access` is threaded through rather than re-resolved.
@@ -1255,6 +1279,7 @@ function contentWithReading(
     ...content,
     learningWarning: warningText(content.learningWarning, warningText(learning.warnings)),
     lesson: lessonFromReading(learning),
+    readingError: null,
   };
 }
 
@@ -1402,6 +1427,9 @@ export async function startStudentChallenge(
     // same questions has listed questions with no answer. Opening it answers
     // them behind the response — see `topUpChallengeAnswers`.
     scheduleChallengeAnswerTopUp(userId, challengeId, access);
+    scheduleChallengeReadingBackfill(userId, row, access);
+    // Its completion ran on an earlier open; the next one is prepared now.
+    if (current.status !== "completed") scheduleNextChallengePreparation(userId, row);
   }
   if (current.status === "completed" && !options.restart) {
     return withLatestAttemptReview(userId, row, current);
@@ -1446,6 +1474,7 @@ export async function startStudentChallenge(
         .single();
       if (error) throw error;
       scheduleChallengeContentCompletion(userId, challengeId);
+      scheduleChallengePoolAhead(row, access);
       return toDetail(data as ChallengeRow);
     }
     // A build that has not finished is not a stale paper. Reopening a challenge
@@ -1465,7 +1494,16 @@ export async function startStudentChallenge(
     }
   }
 
-  const built = await buildChallengeLesson(userId, row, access, sourceDocumentTopic);
+  // A topic the global pool has ready is cut from it: no past-questions call,
+  // and the worked answers and reading come with it. Anything else is built
+  // per student, as it always was.
+  const pooled =
+    sourceDocumentTopic || CHALLENGE_FRESH_CONTENT
+      ? null
+      : await pooledChallengeContent(userId, row);
+  const built = pooled
+    ? { content: pooled, topicFields: {} }
+    : await buildChallengeLesson(userId, row, access, sourceDocumentTopic);
   const now = new Date().toISOString();
   const { data, error } = await admin
     .from("student_challenges")
@@ -1486,6 +1524,7 @@ export async function startStudentChallenge(
     .single();
   if (error) throw error;
   scheduleChallengeContentCompletion(userId, challengeId);
+  scheduleChallengePoolAhead(row, access);
   return toDetail(data as ChallengeRow);
 }
 
@@ -1682,6 +1721,9 @@ async function pastQuestionsForReplacedTopic(
 export async function warmStudentChallenge(
   userId: string,
   challengeId: string,
+  /** `poolOnly`: fill it from the global pool if its topic is ready there, and
+   *  otherwise leave it — never an upstream call. */
+  options: { poolOnly?: boolean } = {},
 ): Promise<"warmed" | "skipped" | "failed"> {
   const admin = createSupabaseAdminClient();
   const { data: raw, error } = await admin
@@ -1702,6 +1744,21 @@ export async function warmStudentChallenge(
   if (CHALLENGE_FRESH_CONTENT) return "skipped";
   const detail = toDetail(row);
   if (detail.content?.provider === "collection-challenge-v1") return "skipped";
+
+  // A topic the global pool has ready is written straight from it — the whole
+  // of step one, worked answers and reading included, with no upstream call.
+  const pooled = await pooledChallengeContent(userId, row);
+  if (pooled) {
+    const { error: writeError } = await admin
+      .from("student_challenges")
+      .update({ content: pooled, updated_at: new Date().toISOString() })
+      .eq("id", challengeId)
+      .eq("user_id", userId)
+      // As below: a row the student has started since the read is theirs.
+      .eq("status", "assigned");
+    return writeError ? "failed" : "warmed";
+  }
+  if (options.poolOnly) return "skipped";
 
   try {
     const access = await requireChallengeAccess(userId, row);
@@ -1754,15 +1811,47 @@ const warmupsInFlight = new Map<string, Promise<unknown>>();
 const warmupGate = createLimiter(2);
 
 /**
- * Warm the first open challenge of each subject, behind the response.
+ * Warm the first open challenge of each subject, behind the response — and
+ * prepare the very first one completely.
  *
  * One per subject, not the whole queue: the first card of each subject is what a
  * student opens, and every warm-up is two upstream calls that are wasted if the
- * challenge is never started. `after()` keeps the work alive past the response
- * without holding it open; outside a request scope it throws and the promise is
- * already running anyway.
+ * challenge is never started. The first open card of all is the one they are
+ * most likely to press, and nothing before it will prepare it (a challenge
+ * prepares the one AFTER it — `scheduleNextChallengePreparation`), so it gets its
+ * worked answers and reading too (`prepareStudentChallenge`). `after()` keeps
+ * the work alive past the response without holding it open; outside a request
+ * scope it throws and the promise is already running anyway.
  */
 export function scheduleChallengeWarmups(userId: string, challenges: StudentChallengeSummary[]) {
+  if (!challenges.some((challenge) => challenge.status === "assigned")) return;
+  // The global pool first: a card whose topic it holds is filled from it (or
+  // queued there) with no upstream call. Only the cards it cannot take are
+  // warmed per student, exactly as before — which is every card while the pool
+  // table does not exist yet.
+  const task = warmChallengesFromPool(userId, challenges)
+    .catch(() => new Set<string>())
+    .then((pooled) =>
+      scheduleLegacyChallengeWarmups(
+        userId,
+        challenges.filter((challenge) => !pooled.has(challenge.id)),
+      ),
+    );
+  try {
+    after(() => task);
+  } catch {
+    // Not in a request scope. The work is under way regardless.
+  }
+}
+
+/** The per-student warm-up, for cards the global pool does not take. */
+function scheduleLegacyChallengeWarmups(
+  userId: string,
+  challenges: StudentChallengeSummary[],
+): Promise<unknown> {
+  const tasks: Promise<unknown>[] = [];
+  const firstOpen = challenges.find((challenge) => challenge.status === "assigned");
+  if (firstOpen) tasks.push(scheduleChallengePreparation(userId, firstOpen.id));
   const firstPerSubject = new Map<string, StudentChallengeSummary>();
   for (const challenge of challenges) {
     if (challenge.status !== "assigned") continue;
@@ -1770,17 +1859,537 @@ export function scheduleChallengeWarmups(userId: string, challenges: StudentChal
     if (!firstPerSubject.has(key)) firstPerSubject.set(key, challenge);
   }
   for (const challenge of firstPerSubject.values()) {
+    // Being prepared, which warms it first.
+    if (challenge.id === firstOpen?.id) continue;
     if (warmupsInFlight.has(challenge.id)) continue;
     const task = warmupGate(() => warmStudentChallenge(userId, challenge.id))
       .catch(() => null)
       .finally(() => warmupsInFlight.delete(challenge.id));
     warmupsInFlight.set(challenge.id, task);
+    tasks.push(task);
     try {
       after(() => task);
     } catch {
       // Not in a request scope. The work is under way regardless.
     }
   }
+  return Promise.all(tasks);
+}
+
+/**
+ * The Challenge Hub's cards, through the global challenge pool.
+ *
+ * Every open card's topic is queued in the pool at the highest priority — a
+ * student is looking at it — and a card whose topic is already ready there is
+ * filled from it on the spot, which is a Supabase read and a write and nothing
+ * upstream. Cards already built are the pool's too: nothing more is done for
+ * them per student, since starting one takes its worked answers from the pool.
+ *
+ * Returns the ids the pool took. A card whose course no community owns, or whose
+ * topic its catalogue does not list, is left for the per-student warm-up — and
+ * so is every card while the pool does not exist.
+ */
+async function warmChallengesFromPool(
+  userId: string,
+  challenges: StudentChallengeSummary[],
+): Promise<Set<string>> {
+  const taken = new Set<string>();
+  if (CHALLENGE_FRESH_CONTENT) return taken;
+  const open = challenges.filter(
+    (challenge) =>
+      challenge.status === "assigned" &&
+      challenge.courseId &&
+      !isChallengeSourceDocumentTopic({
+        topicKey: challenge.topicKey,
+        title: challenge.topicTitle,
+        subjectName: challenge.subjectName,
+      }),
+  );
+  if (!open.length || !(await challengePoolAvailable())) return taken;
+
+  // `pastQuestionCount` is null exactly while a card has no content yet.
+  const built = (challenge: StudentChallengeSummary) =>
+    challenge.pastQuestionCount !== null && challenge.pastQuestionCount !== undefined;
+  const cold = open.filter((challenge) => !built(challenge));
+  const statuses = cold.length
+    ? await enqueueChallengeRows(
+        cold.map((challenge) => ({
+          courseId: challenge.courseId,
+          subjectSlug: challenge.subjectSlug,
+          topicKey: challenge.topicKey,
+        })),
+        CHALLENGE_POOL_PRIORITY.waiting,
+      )
+    : new Map();
+  if (statuses === null) return taken;
+  for (const challenge of open) if (built(challenge)) taken.add(challenge.id);
+
+  let waiting = false;
+  for (const challenge of cold) {
+    const status = statuses.get(
+      challengePoolRowKey(String(challenge.courseId), challenge.subjectSlug, challenge.topicKey),
+    );
+    if (!status) continue;
+    taken.add(challenge.id);
+    if (status === "ready") {
+      await warmStudentChallenge(userId, challenge.id, { poolOnly: true }).catch(() => null);
+    } else {
+      waiting = true;
+    }
+  }
+  if (waiting) kickChallengePoolSweep();
+  return taken;
+}
+
+/**
+ * THE NEXT CHALLENGE IS PREPARED WHILE THE STUDENT IS ON THIS ONE.
+ *
+ * Everything a challenge shows before its paper — the past questions, their
+ * worked answers, the concepts reading — depends on the course and the topic,
+ * never on the student, and the course API keeps what it writes: worked answers
+ * are pooled per question and the reading is cached per topic's material
+ * (`challenge_store` upstream). So the first student to reach a topic waits on
+ * the model, and everyone after is served from the pool.
+ *
+ * This moves that first wait ahead of the student. The lesson is warmed onto the
+ * row (`warmStudentChallenge`); the worked answers are asked for with exactly the
+ * request the completion will make — the listed past questions — so they are in
+ * the pool when it makes it; and the reading is written onto the row, so step
+ * one's concepts card is there the moment the challenge opens and the completion
+ * does not fetch it again. What is left after Start is pool hits and the paper.
+ *
+ * The paper is NOT issued here. It is the student's own sitting, and its clock
+ * starts when it exists.
+ *
+ * Only an untouched row, and never twice: a row whose reading is already on it
+ * has been prepared. Failure costs nothing — Start builds what is missing, as it
+ * always has — and is never shown to the student, who did not ask for this work.
+ */
+export async function prepareStudentChallenge(
+  userId: string,
+  challengeId: string,
+): Promise<"prepared" | "skipped" | "failed"> {
+  if ((await warmStudentChallenge(userId, challengeId)) === "failed") return "failed";
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !raw) return error ? "failed" : "skipped";
+  const row = raw as ChallengeRow;
+  if (String(row.status || "assigned") !== "assigned") return "skipped";
+  const content = toDetail(row).content;
+  // Not warmed means warming was skipped for a reason (a source-document row,
+  // fresh-content mode) that applies here too.
+  if (content?.provider !== "collection-challenge-v1") return "skipped";
+  if (content.lesson?.content?.length) return "skipped";
+
+  try {
+    const access = await requireChallengeAccess(userId, row);
+    const lane = await resolveChallengeLane(userId, row, access);
+    const topics = content.topicKeys?.length
+      ? content.topicKeys
+      : [String(row.topic_key || "")].filter(Boolean);
+    const listed = (content.pastQuestions || [])
+      .map((question) => question.question.trim())
+      .filter(Boolean);
+    // The completion's own request, so what it asks for after Start is what
+    // this put in the pool. The answers themselves are not kept here: the
+    // completion writes them, with the paper that must exclude them.
+    await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
+      subject: lane.subject,
+      topics,
+      limit: CHALLENGE_SOLVED_QUESTIONS,
+      ...(listed.length ? { questions: listed } : {}),
+    });
+    const learning = await getTeacherChallengeReading(lane.collectionKey, {
+      subject: lane.subject,
+      topics,
+    });
+    let write = admin
+      .from("student_challenges")
+      .update({ content: contentWithReading(content, learning) })
+      .eq("id", challengeId)
+      .eq("user_id", userId)
+      // The student may have pressed Start while this ran; that row is theirs.
+      .eq("status", "assigned");
+    if (row.updated_at) write = write.eq("updated_at", String(row.updated_at));
+    const { error: writeError } = await write;
+    if (writeError) throw writeError;
+    return "prepared";
+  } catch {
+    return "failed";
+  }
+}
+
+const preparationsInFlight = new Map<string, Promise<unknown>>();
+
+/** Prepare one challenge behind the response, through the warm-up gate. */
+function scheduleChallengePreparation(userId: string, challengeId: string): Promise<unknown> {
+  const running = preparationsInFlight.get(challengeId);
+  if (running) return running;
+  // Speculative work, so it queues behind the same gate as the warm-ups and is
+  // never the reason a student who pressed Start is waiting.
+  const task = warmupGate(() => prepareStudentChallenge(userId, challengeId))
+    .catch(() => null)
+    .finally(() => preparationsInFlight.delete(challengeId));
+  preparationsInFlight.set(challengeId, task);
+  try {
+    after(() => task);
+  } catch {
+    // Not in a request scope. The work is under way regardless.
+  }
+  return task;
+}
+
+/**
+ * The open challenge a student reaches after this one: the next in the same
+ * subject, else the next on today's list — the order the hub and `/next` use.
+ */
+export async function nextOpenChallengeId(userId: string, current: ChallengeRow) {
+  const rows = await listDailyRows(userId, nepaliChallengeDate());
+  if (!rows) return null;
+  const open = rows.filter(
+    (row) =>
+      String(row.id) !== String(current.id) &&
+      String(row.status || "assigned") === "assigned" &&
+      !isSourceDocumentChallengeRow(row),
+  );
+  const sameSubject = (row: ChallengeRow) =>
+    String(row.course_id ?? "") === String(current.course_id ?? "") &&
+    String(row.subject_slug ?? "") === String(current.subject_slug ?? "");
+  const later = (row: ChallengeRow) => number(row.position) > number(current.position);
+  const next =
+    open.find((row) => sameSubject(row) && later(row)) ??
+    open.find(sameSubject) ??
+    open.find(later) ??
+    open[0];
+  return next ? String(next.id) : null;
+}
+
+/**
+ * Once `current` has what its student needs, prepare the challenge after it.
+ *
+ * Through the global pool when it can: the next three topics of this subject
+ * are queued there, and the student's next open card is filled from the pool if
+ * its topic is ready (or queued there if not). A card the pool cannot take — no
+ * pool table yet, or a topic outside its course's catalogue — is prepared per
+ * student, as before.
+ */
+function scheduleNextChallengePreparation(userId: string, current: ChallengeRow) {
+  const key = String(current.id);
+  if (nextPreparationsInFlight.has(key)) return;
+  const task = (async () => {
+    const ahead = scheduleChallengePoolAhead(current);
+    const nextId = await nextOpenChallengeId(userId, current);
+    const viaPool = nextId
+      ? await warmChallengeFromPool(userId, nextId).catch(() => "unpooled" as const)
+      : null;
+    if (nextId && viaPool === "unpooled") await scheduleChallengePreparation(userId, nextId);
+    await ahead;
+  })()
+    .catch(() => null)
+    .finally(() => nextPreparationsInFlight.delete(key));
+  nextPreparationsInFlight.set(key, task);
+  try {
+    after(() => task);
+  } catch {
+    // Not in a request scope. The work is under way regardless.
+  }
+}
+
+/**
+ * Queue the topics a student reaches after `row` into the global challenge pool
+ * — the next `CHALLENGE_POOL_AHEAD` of this subject, in syllabus order — and
+ * start preparing them behind the response.
+ *
+ * Enqueueing only: a few Supabase reads and a write, never the course API. A
+ * no-op for a private subject (no course), a source-document row, and while the
+ * pool table does not exist.
+ */
+function scheduleChallengePoolAhead(row: ChallengeRow, access?: ChallengeAccess): Promise<unknown> {
+  if (!row.course_id || isSourceDocumentChallengeRow(row) || CHALLENGE_FRESH_CONTENT) {
+    return Promise.resolve(null);
+  }
+  const task = enqueueChallengeTopics({
+    courseId: String(row.course_id),
+    teacherId: access?.teacherId,
+    subjectSlug: String(row.subject_slug || ""),
+    afterTopicKey: String(row.topic_key || ""),
+    afterTopicTitle: String(row.topic_title || ""),
+    count: CHALLENGE_POOL_AHEAD,
+    priority: CHALLENGE_POOL_PRIORITY.next,
+  })
+    .then((result) => {
+      if (result.pending.length) kickChallengePoolSweep();
+      return result;
+    })
+    .catch(() => null);
+  try {
+    after(() => task);
+  } catch {
+    // Not in a request scope. The work is under way regardless.
+  }
+  return task;
+}
+
+/**
+ * One open card, through the global pool: filled from it when its topic is
+ * ready, queued there when it is not. `unpooled` means the pool cannot take it
+ * and the caller should prepare it per student.
+ */
+async function warmChallengeFromPool(
+  userId: string,
+  challengeId: string,
+): Promise<"warmed" | "pooled" | "skipped" | "unpooled"> {
+  const { data: raw, error } = await createSupabaseAdminClient()
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !raw) return "skipped";
+  const row = raw as ChallengeRow;
+  if (String(row.status || "assigned") !== "assigned" || isSourceDocumentChallengeRow(row)) {
+    return "skipped";
+  }
+  if (CHALLENGE_FRESH_CONTENT || !row.course_id) return "unpooled";
+  const queued = await enqueueChallengeTopics({
+    courseId: String(row.course_id),
+    subjectSlug: String(row.subject_slug || ""),
+    topicKeys: [String(row.topic_key || "")],
+    priority: CHALLENGE_POOL_PRIORITY.waiting,
+  });
+  if (!queued.pooled) return "unpooled";
+  if (queued.topics.get(String(row.topic_key || "")) !== "ready") {
+    kickChallengePoolSweep();
+    return "pooled";
+  }
+  const warmed = await warmStudentChallenge(userId, challengeId, { poolOnly: true });
+  return warmed === "warmed" ? "warmed" : "pooled";
+}
+
+/** The same student always gets the same cut of a topic's bank. */
+function poolSeed(userId: string, row: ChallengeRow) {
+  return [userId, row.course_id, row.subject_slug, row.topic_key].map(String).join(":");
+}
+
+/**
+ * Up to `limit` items, a window that starts at a place fixed by `seed` and wraps,
+ * returned in the bank's own order. A topic with a deep bank therefore shows
+ * different students different questions — and the exam, which excludes what a
+ * student was shown worked, differs with them — while one student reopening it
+ * sees the same list every time.
+ */
+function rotatedSelection<T>(items: T[], seed: string, limit: number): T[] {
+  if (items.length <= limit) return [...items];
+  const offset = createHash("sha1").update(seed).digest().readUInt32BE(0) % items.length;
+  return Array.from({ length: limit }, (_, index) => (offset + index) % items.length)
+    .sort((left, right) => left - right)
+    .map((index) => items[index]);
+}
+
+type ListedQuestion = { id?: string; text: string };
+
+/**
+ * The pooled worked answer for a listed question: joined on normalized question
+ * text, as step one's list and the worked answers always are, then on the bank's
+ * question id.
+ */
+function pooledAnswerFinder(snapshot: ChallengePoolSnapshot) {
+  const answered = (snapshot.content.solved || []).filter(
+    (question) => question.text?.trim() && question.solution?.trim(),
+  );
+  const byText = new Map(
+    answered.map((question) => [normalizeQuestionText(question.text), question]),
+  );
+  const byId = new Map(
+    answered.filter((question) => question.id).map((question) => [String(question.id), question]),
+  );
+  return (question: ListedQuestion) =>
+    byText.get(normalizeQuestionText(question.text)) ??
+    (question.id ? byId.get(String(question.id)) : undefined);
+}
+
+/**
+ * The past questions a student's step one lists from a pooled bank: all of them
+ * when there are ten or fewer, otherwise a per-student window — taken from the
+ * questions that have a worked answer first, so the list a student reads is one
+ * they can open onto its solution.
+ */
+function pooledListedQuestions(snapshot: ChallengePoolSnapshot, seed: string) {
+  const bank = snapshot.content.past_questions || [];
+  if (bank.length <= CHALLENGE_PAST_QUESTIONS) return [...bank];
+  const answerFor = pooledAnswerFinder(snapshot);
+  const indexed = bank.map((question, index) => ({ question, index }));
+  const worked = indexed.filter(({ question }) =>
+    Boolean(answerFor({ id: question.id, text: String(question.text || "") })),
+  );
+  const unworked = indexed.filter((entry) => !worked.includes(entry));
+  const picked = rotatedSelection(worked, seed, CHALLENGE_PAST_QUESTIONS);
+  if (picked.length < CHALLENGE_PAST_QUESTIONS) {
+    picked.push(...rotatedSelection(unworked, seed, CHALLENGE_PAST_QUESTIONS - picked.length));
+  }
+  return picked.sort((left, right) => left.index - right.index).map(({ question }) => question);
+}
+
+/**
+ * The worked answers a student is shown from a pooled bank: exactly the listed
+ * past questions that have one, in the listed order — or, for a topic no paper
+ * examined, the bank's worked examples from the notes.
+ */
+function pooledWorkedExamples(
+  snapshot: ChallengePoolSnapshot,
+  listed: ListedQuestion[],
+  seed: string,
+): ChallengeSolvedExample[] {
+  if (listed.length) {
+    const answerFor = pooledAnswerFinder(snapshot);
+    return listed.flatMap((question) => {
+      const answer = answerFor(question);
+      // Filed under the listed text, so step one shows one row for the question
+      // and its solution even when the join was on the id.
+      return answer ? [{ ...solvedExample(answer), question: question.text }] : [];
+    });
+  }
+  const answered = (snapshot.content.solved || []).filter(
+    (question) => question.text?.trim() && question.solution?.trim(),
+  );
+  return rotatedSelection(answered, seed, CHALLENGE_SOLVED_QUESTIONS).map(solvedExample);
+}
+
+/** A pooled reading in the shape the reading route returns it. */
+function pooledReading(
+  snapshot: ChallengePoolSnapshot,
+  row: ChallengeRow,
+): TeacherChallengeLearnResponse | null {
+  const reading = snapshot.content.reading;
+  if (!reading || !String(reading.content || "").trim()) return null;
+  return {
+    collection: "",
+    subject: String(row.subject_name || ""),
+    subject_slug: String(row.subject_slug || ""),
+    topics: snapshot.content.topics || [],
+    reading,
+    served_from: "pool",
+    warnings: [],
+  };
+}
+
+/**
+ * A student's challenge content, cut from the pooled bank: up to ten past
+ * questions (a per-student window of a deeper bank), the worked answers for
+ * exactly those, and the reading. Everything but the paper — `contentStatus`
+ * stays `pending`, and the background pass issues the exam excluding the worked
+ * questions. Null when the bank has nothing a challenge could be built on.
+ */
+function contentFromPoolSnapshot(
+  userId: string,
+  row: ChallengeRow,
+  snapshot: ChallengePoolSnapshot,
+): StudentChallengeContent | null {
+  const seed = poolSeed(userId, row);
+  const bank = snapshot.content;
+  const listed = pooledListedQuestions(snapshot, seed);
+  const examples = pooledWorkedExamples(
+    snapshot,
+    listed
+      .map((question) => ({ id: question.id, text: String(question.text || "").trim() }))
+      .filter((question) => question.text),
+    seed,
+  );
+  if (!listed.length && !examples.length) return null;
+  const topics = bank.topics?.length
+    ? bank.topics
+    : [
+        {
+          topic_key: String(row.topic_key || ""),
+          title: snapshot.topicTitle || String(row.topic_title || ""),
+          order_index: 0,
+        },
+      ];
+  const topicTitle = topics[0]?.title || String(row.topic_title || "this topic");
+  const lesson = challengeLessonContent(
+    {
+      collection: "",
+      subject: String(row.subject_name || ""),
+      subject_slug: String(row.subject_slug || ""),
+      topics,
+      topic_source: "stored",
+      can_start: true,
+      questions: listed,
+      grounded: listed.length > 0,
+      blockers: [],
+      warnings: [],
+      note: "",
+    },
+    pooledReading(snapshot, row),
+  );
+  return {
+    ...lesson,
+    // Not something the pool records; nothing reads it but the console.
+    pastQuestionSource: undefined,
+    pooledFrom: { revision: snapshot.revision, preparedAt: snapshot.preparedAt },
+    solvedExamples: examples,
+    solvedWarning:
+      !listed.length && examples.length
+        ? `No past question in this course's question bank is matched to ${topicTitle}, so these worked examples were prepared from the course notes.`
+        : null,
+  };
+}
+
+/** The row's topic from the global pool, when it is ready there. Never throws. */
+function poolSnapshotForRow(row: ChallengeRow) {
+  if (!row.course_id || isSourceDocumentChallengeRow(row) || CHALLENGE_FRESH_CONTENT) {
+    return Promise.resolve(null);
+  }
+  return readyPoolSnapshot(
+    String(row.course_id),
+    String(row.subject_slug || ""),
+    String(row.topic_key || ""),
+  );
+}
+
+/** A challenge's content cut from the global pool, or null to build it per student. */
+async function pooledChallengeContent(userId: string, row: ChallengeRow) {
+  const snapshot = await poolSnapshotForRow(row);
+  return snapshot ? contentFromPoolSnapshot(userId, row, snapshot) : null;
+}
+
+/**
+ * The worked answers (and, if missing, the reading) for a completion, from the
+ * global pool — so the background pass issues only the paper.
+ *
+ * A row cut from the pool already carries its answers. A row built per student
+ * whose topic has since become ready in the pool takes the pooled answers for
+ * the questions it lists; if none of them match, null, and the course API is
+ * asked the old way.
+ */
+async function pooledCompletionContent(
+  userId: string,
+  row: ChallengeRow,
+  pending: StudentChallengeContent,
+): Promise<StudentChallengeContent | null> {
+  if (pending.pooledFrom) return pending;
+  const snapshot = await poolSnapshotForRow(row);
+  if (!snapshot) return null;
+  const listed = (pending.pastQuestions || [])
+    .map((question) => ({ id: question.id || undefined, text: question.question.trim() }))
+    .filter((question) => question.text);
+  const examples = pooledWorkedExamples(snapshot, listed, poolSeed(userId, row));
+  if (!examples.length) return null;
+  const withAnswers: StudentChallengeContent = {
+    ...pending,
+    pooledFrom: { revision: snapshot.revision, preparedAt: snapshot.preparedAt },
+    solvedExamples: examples,
+    solvedWarning: null,
+  };
+  const reading = pooledReading(snapshot, row);
+  return !withAnswers.lesson?.content?.length && reading
+    ? contentWithReading(withAnswers, reading)
+    : withAnswers;
 }
 
 /**
@@ -1848,36 +2457,40 @@ async function runChallengeContentCompletion(
     const listed = (pending.pastQuestions || [])
       .map((question) => question.question.trim())
       .filter(Boolean);
-    const solved = await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
-      subject: lane.subject,
-      topics: topicKeys,
-      limit: CHALLENGE_SOLVED_QUESTIONS,
-      ...(listed.length ? { questions: listed } : {}),
-    });
-    // Only fetched when it can change what the student is told. It exists to
-    // phrase ONE warning — whether the thin worked examples mean "no past paper
-    // covers this topic" or "this course has no question bank at all" — and
-    // fetching it for a grounded response bought nothing.
-    const practiceTopics = solved.grounded
-      ? null
-      : await getTeacherPracticeTopics(lane.collectionKey, lane.subject, {
-          totalMarks: CHALLENGE_QUESTIONS * CHALLENGE_MARKS_PER_QUESTION,
-          maxQuestions: CHALLENGE_QUESTIONS,
-        }).catch(() => null);
+    // THE GLOBAL POOL FIRST. A topic it holds ready already has its worked
+    // answers — and usually its reading — so the only call left is the paper.
+    let withSolved = await pooledCompletionContent(userId, row, pending);
+    let worked = (withSolved?.solvedExamples || []).map((example) => example.question);
+    if (!withSolved) {
+      const solved = await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
+        subject: lane.subject,
+        topics: topicKeys,
+        limit: CHALLENGE_SOLVED_QUESTIONS,
+        ...(listed.length ? { questions: listed } : {}),
+      });
+      // Only fetched when it can change what the student is told. It exists to
+      // phrase ONE warning — whether the thin worked examples mean "no past paper
+      // covers this topic" or "this course has no question bank at all" — and
+      // fetching it for a grounded response bought nothing.
+      const practiceTopics = solved.grounded
+        ? null
+        : await getTeacherPracticeTopics(lane.collectionKey, lane.subject, {
+            totalMarks: CHALLENGE_QUESTIONS * CHALLENGE_MARKS_PER_QUESTION,
+            maxQuestions: CHALLENGE_QUESTIONS,
+          }).catch(() => null);
+      withSolved = contentWithSolved(pending, solved, practiceTopics, topicTitle);
+      worked = (solved.questions || []).map((question) => question.text);
+    }
     const exam = await issueChallengeExam({
       collectionKey: lane.collectionKey,
       subject: lane.subject,
       topicKeys,
       questionCount: CHALLENGE_QUESTIONS,
       durationMinutes: number(row.duration_minutes) || 20,
-      exclude: (solved.questions || []).map((question) => question.text),
+      exclude: worked,
     });
     const content: StudentChallengeContent = {
-      ...contentWithExam(
-        contentWithSolved(pending, solved, practiceTopics, topicTitle),
-        exam,
-        number(row.attempt_count) + 1,
-      ),
+      ...contentWithExam(withSolved, exam, number(row.attempt_count) + 1),
       contentStatus: "ready",
       contentPendingSince: undefined,
       contentError: null,
@@ -1902,12 +2515,18 @@ async function runChallengeContentCompletion(
       .select("*")
       .single();
     if (error) throw error;
-    if (needsReading) {
+    // A pooled reading may have arrived with the answers.
+    if (needsReading && !content.lesson?.content?.length) {
       scheduleChallengeReading(userId, challengeId, lane.collectionKey, {
         subject: lane.subject,
         topics: topicKeys,
       });
     }
+    // The student has everything they are waiting for; the next challenge is
+    // prepared behind this one's reading, which their step one is showing.
+    const reading = readingsInFlight.get(challengeId);
+    if (reading) void reading.then(() => scheduleNextChallengePreparation(userId, row));
+    else scheduleNextChallengePreparation(userId, row);
     return toDetail(data as ChallengeRow);
   } catch (cause) {
     const message =
@@ -2043,6 +2662,7 @@ function scheduleChallengeContentCompletion(userId: string, challengeId: string)
     after(async () => {
       await task;
       await readingsInFlight.get(challengeId);
+      await nextPreparationsInFlight.get(challengeId);
     });
   } catch {
     // Not in a request scope. The work is under way regardless.
@@ -2065,11 +2685,104 @@ function scheduleChallengeReading(
 ) {
   if (readingsInFlight.has(challengeId)) return;
   const task = attachChallengeReading(userId, challengeId, collectionKey, request)
+    .catch((cause) => recordReadingError(userId, challengeId, cause))
     .catch(() => undefined)
     .finally(() => {
       readingsInFlight.delete(challengeId);
     });
   readingsInFlight.set(challengeId, task);
+}
+
+/** Park why the reading failed on the row, so a waiting screen can stop waiting. */
+async function recordReadingError(userId: string, challengeId: string, cause: unknown) {
+  const message =
+    cause instanceof Error && cause.message
+      ? cause.message
+      : "The concepts reading could not be written from the course material.";
+  const admin = createSupabaseAdminClient();
+  const { data: raw } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!raw) return;
+  const row = raw as ChallengeRow;
+  const content = toDetail(row).content;
+  if (!content || content.lesson?.content?.length) return;
+  let write = admin
+    .from("student_challenges")
+    .update({ content: { ...content, readingError: message } satisfies StudentChallengeContent })
+    .eq("id", challengeId)
+    .eq("user_id", userId);
+  // As the reading attach does: onto the row as read, `updated_at` untouched.
+  if (row.updated_at) write = write.eq("updated_at", String(row.updated_at));
+  await write;
+}
+
+/**
+ * EVERY CHALLENGE GETS ITS CONCEPTS READING.
+ *
+ * The reading is written after a challenge is `ready`, behind everything the
+ * student waits for — so a pass that died after `ready` (a deploy, a timeout, an
+ * upstream failure) left a challenge that never shows its Concepts card, and a
+ * ready row is never rebuilt on a reopen. Rows built before the reading moved
+ * behind `ready` are the same. Any open, poll or Revision view of such a row asks
+ * for it again here.
+ *
+ * At most once per `READING_RETRY_MS` per challenge in a process: the screen
+ * polls every few seconds, and a topic whose material cannot produce a reading
+ * must not be asked for on every poll. True while a reading is being written or
+ * was asked for recently — what a screen says "a moment" about.
+ */
+const READING_RETRY_MS = 3 * 60_000;
+const readingRequestedAt = new Map<string, number>();
+
+export function readingMissing(row: ChallengeRow) {
+  const content = toDetail(row).content;
+  return Boolean(
+    content &&
+      // Still building: the completion writes the reading itself.
+      content.contentStatus !== "pending" &&
+      !content.lesson?.content?.length &&
+      !isSourceDocumentChallengeRow(row) &&
+      (content.topicKeys?.length || row.topic_key),
+  );
+}
+
+export function scheduleChallengeReadingBackfill(
+  userId: string,
+  row: ChallengeRow,
+  access?: ChallengeAccess,
+): boolean {
+  if (!readingMissing(row)) return false;
+  const challengeId = String(row.id);
+  if (readingsInFlight.has(challengeId)) return true;
+  const now = Date.now();
+  if (now - (readingRequestedAt.get(challengeId) ?? 0) < READING_RETRY_MS) {
+    return !toDetail(row).content?.readingError;
+  }
+  if (readingRequestedAt.size > 2_000) {
+    for (const [id, at] of readingRequestedAt) {
+      if (now - at >= READING_RETRY_MS) readingRequestedAt.delete(id);
+    }
+  }
+  readingRequestedAt.set(challengeId, now);
+  const content = toDetail(row).content as StudentChallengeContent;
+  const task = (async () => {
+    const lane = await resolveChallengeLane(userId, row, access ?? (await requireChallengeAccess(userId, row)));
+    scheduleChallengeReading(userId, challengeId, lane.collectionKey, {
+      subject: lane.subject,
+      topics: content.topicKeys?.length ? content.topicKeys : [String(row.topic_key || "")],
+    });
+    await readingsInFlight.get(challengeId);
+  })().catch(() => undefined);
+  try {
+    after(() => task);
+  } catch {
+    // Not in a request scope. The work is under way regardless.
+  }
+  return true;
 }
 
 async function attachChallengeReading(
@@ -2181,13 +2894,99 @@ export async function getStudentChallengeContent(
   if (error) throw error;
   if (!raw) return null;
   const row = raw as ChallengeRow;
-  await requireChallengeAccess(userId, row);
+  const access = await requireChallengeAccess(userId, row);
   const detail = toDetail(row);
   if (detail.content) {
     restartStaleContentCompletion(userId, challengeId, detail.content, options.retry);
   }
+  scheduleChallengeReadingBackfill(userId, row, access);
   if (detail.status === "completed") return withLatestAttemptReview(userId, row, detail);
   return detail;
+}
+
+/**
+ * The Roman Nepali's own style, in the hash beside the English. Bump it with the
+ * course API's `TRANSLATION_SHAPE` so translations kept on rows under an older
+ * style are written again. v2: casual, English-heavy, no bookish Nepali.
+ */
+const ROMAN_NEPALI_STYLE = "rn-v2";
+
+function romanNepaliSourceHash(reading: string[], solutions: string[]) {
+  return createHash("sha1")
+    .update(JSON.stringify([ROMAN_NEPALI_STYLE, reading, solutions]))
+    .digest("hex");
+}
+
+/**
+ * The challenge's reading and worked answers in Roman Nepali.
+ *
+ * Written from the English already on the row — the course API translates and
+ * does not re-derive, holding the maths, code and tables to come back exactly —
+ * and kept on the row once complete, so switching language again is a read. A
+ * partial translation is served but not kept, so the missing parts are tried
+ * again next time. Every translation is also pooled upstream per text, so a
+ * topic is paid for once across every student who reads it in Roman Nepali.
+ */
+export async function getStudentChallengeRomanNepali(
+  userId: string,
+  challengeId: string,
+): Promise<ChallengeRomanNepali | null> {
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!raw) return null;
+  const row = raw as ChallengeRow;
+  const access = await requireChallengeAccess(userId, row);
+  const content = toDetail(row).content;
+  const reading = content?.lesson?.content ?? [];
+  const worked = (content?.solvedExamples || []).filter((example) => example.solution?.trim());
+  const sourceHash = romanNepaliSourceHash(
+    reading,
+    worked.map((example) => example.solution),
+  );
+  if (content?.romanNepali?.sourceHash === sourceHash) return content.romanNepali;
+  if (!content || (!reading.length && !worked.length)) {
+    return { sourceHash, reading: [], solutions: {}, untranslated: 0 };
+  }
+
+  const lane = await resolveChallengeLane(userId, row, access);
+  const texts = [...reading, ...worked.map((example) => example.solution)];
+  const response = await translateTeacherChallengeTexts(lane.collectionKey, {
+    subject: lane.subject,
+    texts,
+  });
+  // Anything but an aligned answer is not trusted item by item.
+  const aligned = response.texts?.length === texts.length;
+  const out = aligned ? response.texts : texts;
+  const result: ChallengeRomanNepali = {
+    sourceHash,
+    reading: out.slice(0, reading.length),
+    solutions: Object.fromEntries(
+      worked.map((example, index) => [
+        normalizeQuestionText(example.question),
+        out[reading.length + index],
+      ]),
+    ),
+    untranslated: aligned
+      ? (response.translated || []).filter((ok) => !ok).length
+      : texts.length,
+  };
+  if (!result.untranslated) {
+    let write = admin
+      .from("student_challenges")
+      .update({ content: { ...content, romanNepali: result } satisfies StudentChallengeContent })
+      .eq("id", challengeId)
+      .eq("user_id", userId);
+    // Onto the row as read, `updated_at` untouched — as the reading attach does.
+    if (row.updated_at) write = write.eq("updated_at", String(row.updated_at));
+    await write;
+  }
+  return result;
 }
 
 /** Reopens a completed challenge with a fresh sitting; prior attempts remain durable. */
@@ -2526,5 +3325,105 @@ export async function recordStudentChallengeGrade(input: {
   });
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
+  // A finished topic moves the student's frontier: the three after it are
+  // queued in the global pool (a priority bump if starting it already did).
+  if (row && (row as ChallengeRow).status === "completed") {
+    void scheduleChallengePoolAhead(row as ChallengeRow);
+  }
   return row ? toDetail(row as ChallengeRow) : null;
+}
+
+export type ChallengeFigureResult = {
+  challenge: StudentChallengeDetail | null;
+  /** The example's solution as it now stands, for a screen that holds only it. */
+  solution: string | null;
+  /** Why nothing was drawn, when nothing was. */
+  reason?: "not_found" | "nothing_missing" | "unavailable";
+};
+
+/**
+ * Draw the picture a worked solution promised and lost, and file it on the row.
+ *
+ * `lib/answer-figures.ts` explains how solutions came to say "### Diagram" over
+ * nothing. The screen that shows one asks here once; the render service names
+ * the figure straight away and draws it behind the response, and the image
+ * markdown is written into the solution so every later view — the challenge,
+ * its revision doc, another device — already has it and nothing asks again.
+ *
+ * Found by question text rather than position: the screen shows past questions
+ * and worked examples merged into one list (`mergeLearnQuestions`), so it holds
+ * the question, not the example's index.
+ */
+export async function drawMissingChallengeFigure(
+  userId: string,
+  challengeId: string,
+  question: string,
+): Promise<ChallengeFigureResult> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("student_challenges")
+    .select("*")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return { challenge: null, solution: null, reason: "not_found" };
+  const row = data as ChallengeRow;
+  const access = await requireChallengeAccess(userId, row);
+
+  const content = toDetail(row).content;
+  const examples = content?.solvedExamples ?? [];
+  const wanted = normalizeQuestionText(question);
+  const index = examples.findIndex((example) => normalizeQuestionText(example.question) === wanted);
+  const example = examples[index];
+  if (!content || !example) {
+    return { challenge: await withLatestAttemptReview(userId, row), solution: null, reason: "not_found" };
+  }
+  const section = emptyFigureSection(example.solution);
+  if (!section) {
+    // Already drawn — by another tab, or an earlier visit this one's cache missed.
+    return {
+      challenge: await withLatestAttemptReview(userId, row),
+      solution: example.solution,
+      reason: "nothing_missing",
+    };
+  }
+
+  const lane = await resolveChallengeLane(userId, row, access);
+  const reply = await requestTeacherMediaImage(lane.collectionKey, {
+    brief: figureBrief(example.question, section),
+    alt: section.heading,
+  });
+  if (!reply.url) {
+    return {
+      challenge: await withLatestAttemptReview(userId, row),
+      solution: example.solution,
+      reason: "unavailable",
+    };
+  }
+
+  const solution = withFigure(example.solution, section, reply.url);
+  const next: StudentChallengeContent = {
+    ...content,
+    solvedExamples: examples.map((entry, position) =>
+      position === index ? { ...entry, solution } : entry,
+    ),
+  };
+  let write = admin
+    .from("student_challenges")
+    .update({ content: next })
+    .eq("id", challengeId)
+    .eq("user_id", userId);
+  // Only onto the row as it was read, as the reading's late write does: a submit
+  // or a restart that lands in between carries content this merge never saw.
+  // The picture is the one to lose — the next view asks for it again, and the
+  // render service hands back the same figure for the same brief.
+  if (row.updated_at) write = write.eq("updated_at", String(row.updated_at));
+  const { error: writeError } = await write;
+  if (writeError) throw writeError;
+
+  return {
+    challenge: await withLatestAttemptReview(userId, { ...row, content: next }),
+    solution,
+  };
 }

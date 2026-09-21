@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isKatexReady, renderMarkdown, renderMathText } from "@/lib/markdown";
+import {
+  isKatexReady,
+  isWordFormula,
+  normalizeTex,
+  renderMarkdown,
+  renderMathText,
+  proseToText,
+} from "@/lib/markdown";
 
 /**
  * Challenge lessons, worked solutions and exam prompts arrive from the tenant
@@ -139,7 +146,9 @@ describe("a lost delimiter never turns a sentence into an equation", () => {
   });
 
   it("keeps deliberate prose inside \\text{} as maths", () => {
-    const html = renderMathText(String.raw`Then $\text{force} = ma \text{ where } m \text{ is mass}$ holds.`);
+    const html = renderMathText(
+      String.raw`Then $\text{force} = ma \text{ where } m \text{ is mass}$ holds.`,
+    );
     expect(html).toContain("katex");
     expect(html).not.toContain("$");
   });
@@ -160,5 +169,125 @@ describe("a lost delimiter never turns a sentence into an equation", () => {
     const html = renderMarkdown(String.raw`Given $$\frac{d^2x}{dt^2} + \omega^2 x = 0$$ we solve.`);
     expect(html).toContain("katex-display");
     expect(html).not.toContain("$");
+  });
+});
+
+/**
+ * The Concepts reading for a machines topic, as it was reported: a formula
+ * written in words printed with its dollar signs showing and its `*` eaten as
+ * italics, `N_last` subscripted one letter, and a worked line whose two
+ * multiplications became one italic run.
+ */
+describe("model-written maths reads as maths", () => {
+  const visible = (html: string) => html.replace(/<[^>]+>/g, "");
+
+  it("typesets a formula written in words instead of printing it raw", () => {
+    for (const formula of [
+      String.raw`$Efficiency = (W * d_load) / (P * d_effort)$`,
+      String.raw`$e = (Product of radii of drivers) / (Product of radii of followers)$`,
+    ]) {
+      const html = renderMarkdown(`- ${formula}`);
+      expect(html, formula).toContain('class="katex"');
+      expect(html, formula).not.toContain("$");
+      expect(html, formula).not.toContain("<em>");
+    }
+    expect(proseToText("Efficiency = (W * d_load) / (P * d_effort)")).toBe(
+      String.raw`\text{Efficiency} = (W * d_load) / (P * d_effort)`,
+    );
+    expect(proseToText("e = (Product of radii of drivers) / (Product of radii of followers)")).toBe(
+      String.raw`e = (\text{Product of radii of drivers}) / (\text{Product of radii of followers})`,
+    );
+  });
+
+  it("sets words as words in display maths too, with room between two formulas", () => {
+    const html = renderMarkdown(
+      "$$\nEfficiency = (L * d_load) / (P * d_effort), Mechanical Advantage = L / P\n$$",
+    );
+    expect(html).toContain("katex-display");
+    // "Mechanical Advantage" keeps its space; KaTeX would otherwise run it together.
+    expect(proseToText("Mechanical Advantage = L / P")).toBe(
+      String.raw`\text{Mechanical Advantage} = L / P`,
+    );
+    expect(html).not.toContain("MechanicalAdvantage");
+  });
+
+  it("breaks a displayed formula that would run off the page, aligned on its equals", () => {
+    const chain = renderMarkdown(
+      "$$\ne = (N_last) / (N_first) = (Product of radii of drivers) / (Product of radii of followers)\n$$",
+    );
+    expect(chain).toContain("mtable"); // KaTeX's aligned rows
+    const pair = renderMarkdown(
+      "$$\nEfficiency = (L * d_load) / (P * d_effort), Mechanical Advantage = L / P\n$$",
+    );
+    expect(pair).toContain("mtable");
+    // A short formula stays one line, and one already laid out is left alone.
+    expect(renderMarkdown("$$\nP = (1 + e)R/r + P_0\n$$")).not.toContain("mtable");
+    const aligned = String.raw`$$\begin{aligned} a &= b \\ &= c \end{aligned}$$`;
+    expect(renderMarkdown(aligned)).toContain("katex-display");
+  });
+
+  it("subscripts a quantity named in prose without its dollars", () => {
+    expect(renderMarkdown("The constant P_0 is the no-load effort; R_eq and x_1 too.")).toBe(
+      "<p>The constant P<sub>0</sub> is the no-load effort; R<sub>eq</sub> and x<sub>1</sub> too.</p>",
+    );
+    // Identifiers are not quantities.
+    expect(renderMarkdown("Open file_name and my_long_var.")).toBe(
+      "<p>Open file_name and my_long_var.</p>",
+    );
+  });
+
+  it("leaves real maths tokens alone", () => {
+    for (const math of [
+      String.raw`\frac{dx}{dt}`,
+      "9.8 kg",
+      String.raw`\sin\theta + \omega_n t`,
+      "P = (1 + e)R/r + P_0",
+      // Environment, font and colour names are names, not prose.
+      String.raw`\begin{aligned} a &= b \end{aligned}`,
+      String.raw`x \in \mathbb{R}`,
+      String.raw`\color{red}{y}`,
+    ]) {
+      expect(proseToText(math)).toBe(math);
+    }
+  });
+
+  it("still refuses a sentence that lost its delimiter", () => {
+    expect(isWordFormula("F(x) = -kx where k is force constant. or, 0 where")).toBe(false);
+    expect(isWordFormula("5 and ")).toBe(false);
+    expect(isWordFormula("the value we want is large")).toBe(false);
+  });
+
+  it("subscripts the whole word, and multiplies with ×", () => {
+    expect(normalizeTex("e = (N_last)/(N_first)")).toBe(
+      String.raw`e = (N_{\mathrm{last}})/(N_{\mathrm{first}})`,
+    );
+    expect(normalizeTex("P = (1 + e) * (R/r) + P_0")).toBe(
+      String.raw`P = (1 + e) \times  (R/r) + P_0`,
+    );
+    // Already meant: left alone.
+    for (const math of [
+      String.raw`x_1 + V_{in} + \omega_n`,
+      "x^* + z_*",
+      String.raw`\text{d_load}`,
+    ]) {
+      expect(normalizeTex(math)).toBe(math);
+    }
+  });
+
+  it("keeps a worked line's multiplication, and its words upright", () => {
+    const html = renderMarkdown(
+      "**Worked:** P = (1 + 0.2) * (1120 / 25) + 10 = 1.2 * 44.8 + 10 = 63.76 lbs, or (1 + 0.2)*(1120 / 25).",
+    );
+    expect(html).not.toContain("<em>");
+    expect(html).toContain("<strong>Worked:</strong>");
+    expect(visible(html)).toContain("(1 + 0.2) × (1120 / 25) + 10 = 1.2 × 44.8 + 10");
+    expect(visible(html)).toContain("(1 + 0.2)×(1120 / 25)");
+  });
+
+  it("still sets real emphasis", () => {
+    expect(renderMarkdown("An *important* point and a **bold** one.")).toBe(
+      "<p>An <em>important</em> point and a <strong>bold</strong> one.</p>",
+    );
+    expect(renderMarkdown("**Given.** Load 3V.")).toContain("<strong>Given.</strong> Load 3V.");
   });
 });

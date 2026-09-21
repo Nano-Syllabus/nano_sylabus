@@ -1,0 +1,19 @@
+# One sweep of the global challenge pool. Started by challenge-pool-sweep.timer.
+# Install notes: scripts/ops/challenge-pool-sweep.sh. Not installed by this repo.
+[Unit]
+Description=Nano Syllabus challenge pool sweep
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/nano-syllabus/challenge-pool-sweep.env
+ExecStart=/usr/local/bin/challenge-pool-sweep
+# A oneshot that is still running is never started twice by its timer, so a slow
+# sweep simply delays the next one.
+TimeoutStartSec=340
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes

@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CommunityError } from "@/lib/data/communities";
 import { ensureDailyChallenges } from "@/lib/data/student-challenges";
+import {
+  CHALLENGE_POOL_AHEAD,
+  CHALLENGE_POOL_PRIORITY,
+  enqueueChallengeTopics,
+} from "@/lib/data/challenge-pool";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getTeacherPracticeTopics } from "@/lib/teacher-app/client";
 import { ingestTeacherDocument } from "@/lib/teacher-document-ingest";
@@ -354,6 +359,29 @@ export async function syncCommunitySubjectTopics(
         .update({ publication_status: "published", published_at: publishedAt })
         .eq("id", subjectId);
       if (publicationUpdate.error) throw publicationUpdate.error;
+    }
+    if (topics.length && isPublished && communityResult.data.study_course_id) {
+      // The subject's first topics go into the global challenge pool now, so the
+      // first students to open it find them prepared. Queueing only — the pool's
+      // sweep does the work — and never a reason for publishing to fail.
+      await enqueueChallengeTopics({
+        courseId: String(communityResult.data.study_course_id),
+        teacherId: String(subjectResult.data.teacher_id),
+        subjectSlug: String(subjectResult.data.external_subject_slug || ""),
+        subjectName: String(subjectResult.data.name),
+        communitySubjectId: subjectId,
+        topics,
+        fromPosition: 0,
+        count: CHALLENGE_POOL_AHEAD,
+        priority: CHALLENGE_POOL_PRIORITY.publish,
+        admin,
+      }).catch((cause) => {
+        console.warn(
+          `[challenge-pool] could not queue the first topics of ${subjectId}: ${
+            cause instanceof Error ? cause.message : String(cause)
+          }`,
+        );
+      });
     }
     return {
       topics,

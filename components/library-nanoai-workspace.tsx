@@ -50,6 +50,39 @@ type LoadState = "idle" | "loading" | "ready" | "error";
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
 
+/*
+ * The library's frame, shared by the page and its route skeleton
+ * (`LibraryWorkspaceSkeleton`, below). The route used to load under the chat
+ * conversation's skeleton — a message bubble, three lines and a composer — for a
+ * page that has none of those, so a first visit drew one screen and swapped it
+ * for another. Built from the same pieces, the two cannot drift apart.
+ */
+const libraryPageClass = "student-page-frame min-h-full flex-1 bg-bg-primary text-text-primary";
+const libraryPanelClass = "min-w-0 rounded-2xl border border-border bg-card p-5";
+const subjectCardClass =
+  "group flex min-h-[96px] w-full items-center rounded-2xl border bg-card p-4 text-left transition-colors sm:w-52";
+const materialRowClass =
+  "group flex min-h-20 w-full items-center gap-3 rounded-2xl bg-bg-secondary px-4 py-4 text-left transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none";
+/** Placeholder fill is `bg-border`: `bg-bg-secondary` vanishes inside the cards,
+ *  which are that colour in the dark theme — and is the material rows' own fill. */
+const pulse = "animate-pulse bg-border motion-reduce:animate-none";
+
+function LibraryHeader() {
+  return (
+    <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <div className="flex items-center gap-2">
+          <h1 className="type-student-page-title text-text-primary">Community Managed Library</h1>
+          <BookOpen className="size-7 text-text-primary" strokeWidth={2} aria-hidden="true" />
+        </div>
+        <p className="mt-2 text-sm text-text-secondary">
+          Choose your semester, subject and chapter to explore resources and study with Nano AI.
+        </p>
+      </div>
+    </header>
+  );
+}
+
 function formatSize(bytes: number) {
   if (!bytes) return "File";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -76,14 +109,19 @@ function updateLibraryUrl(values: {
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+/** Four material rows, each the size of the row that replaces it: the tile and
+ *  the two lines pulse, the row itself is drawn for real. */
 function ExplorerSkeleton() {
   return (
     <div className="space-y-3" aria-label="Loading chapters">
       {Array.from({ length: 4 }).map((_, index) => (
-        <div
-          key={index}
-          className="h-[72px] animate-pulse rounded-2xl bg-bg-secondary motion-reduce:animate-none"
-        />
+        <div key={index} className={materialRowClass}>
+          <span className={`size-10 shrink-0 rounded-[10px] ${pulse}`} />
+          <span className="min-w-0 flex-1">
+            <span className={`block h-4 rounded ${index % 2 ? "w-3/5" : "w-4/5"} ${pulse}`} />
+            <span className={`mt-2 block h-3 w-20 rounded ${pulse}`} />
+          </span>
+        </div>
       ))}
     </div>
   );
@@ -264,7 +302,10 @@ export function LibraryNanoAiWorkspace({
    * the reload button (`reloadKey`) stays the way to ask again.
    */
   const materialsCache = useRef(new Map<string, LibraryNanoAiMaterial[]>());
-  const [loadState, setLoadState] = useState<LoadState>("idle");
+  // "loading" from the first paint when a subject opens selected: the server's
+  // HTML otherwise showed an empty resources panel until the fetch below began,
+  // between the route skeleton's rows and these same rows.
+  const [loadState, setLoadState] = useState<LoadState>(initialSubject ? "loading" : "idle");
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [restoredDocument, setRestoredDocument] = useState(false);
@@ -410,18 +451,8 @@ export function LibraryNanoAiWorkspace({
   }
 
   return (
-    <main className="student-page-frame min-h-full flex-1 bg-bg-primary text-text-primary">
-      <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="type-student-page-title text-text-primary">Community Managed Library</h1>
-            <BookOpen className="size-7 text-text-primary" strokeWidth={2} aria-hidden="true" />
-          </div>
-          <p className="mt-2 text-sm text-text-secondary">
-            Choose your semester, subject and chapter to explore resources and study with Nano AI.
-          </p>
-        </div>
-      </header>
+    <main className={libraryPageClass}>
+      <LibraryHeader />
 
       <section className="mt-7" aria-labelledby="library-semesters-heading">
         <h2 id="library-semesters-heading" className="type-student-section-title text-text-primary">
@@ -470,7 +501,7 @@ export function LibraryNanoAiWorkspace({
                   onClick={() => selectSubject(subject)}
                   aria-pressed={active}
                   className={cn(
-                    "group flex min-h-[96px] w-full items-center rounded-2xl border bg-card p-4 text-left transition-colors sm:w-52",
+                    subjectCardClass,
                     active
                       ? "border-[1.5px] border-[#1d57fd]"
                       : "border-border hover:border-border-strong",
@@ -499,10 +530,7 @@ export function LibraryNanoAiWorkspace({
       </section>
 
       <div className="mt-7 grid gap-4 lg:grid-cols-2">
-        <section
-          className="min-w-0 rounded-2xl border border-border bg-card p-5"
-          aria-labelledby="library-resources-heading"
-        >
+        <section className={libraryPanelClass} aria-labelledby="library-resources-heading">
           <h2
             id="library-resources-heading"
             className="type-student-section-title text-text-primary"
@@ -565,10 +593,7 @@ export function LibraryNanoAiWorkspace({
                             onMaterialOpen(material, selectedSubject!);
                             updateLibraryUrl({});
                           }}
-                          className={cn(
-                            "group flex min-h-20 w-full items-center gap-3 rounded-2xl bg-bg-secondary px-4 py-4 text-left transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none",
-                            focusRing,
-                          )}
+                          className={cn(materialRowClass, focusRing)}
                         >
                           <span
                             className={cn(
@@ -623,10 +648,7 @@ export function LibraryNanoAiWorkspace({
             ) : null}
           </div>
         </section>
-        <section
-          className="min-w-0 rounded-2xl border border-border bg-card p-5"
-          aria-label="Topic progress for selected subject"
-        >
+        <section className={libraryPanelClass} aria-label="Topic progress for selected subject">
           {selectedSubject ? (
             <SubjectTopicProgress
               insight={insights[selectedSubject.id] ?? selectedSubject.progress}
@@ -641,6 +663,83 @@ export function LibraryNanoAiWorkspace({
               </p>
             </>
           )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+/**
+ * The route skeleton for Library, drawn from the page's own pieces.
+ *
+ * What the page knows before any data — the header, the section titles, the two
+ * panels and the shape of every card and row — renders for real and in place.
+ * What it does not — the community's semesters and subjects, the first
+ * subject's materials and topics — pulses, at the size of what replaces it. The
+ * page opens on the first subject with its materials loading, so the resources
+ * panel shows the same rows `ExplorerSkeleton` does and nothing rearranges.
+ */
+export function LibraryWorkspaceSkeleton() {
+  return (
+    <main className={libraryPageClass} aria-busy="true" aria-label="Loading library">
+      <LibraryHeader />
+
+      <section className="mt-7">
+        <h2 className="type-student-section-title text-text-primary">1. Choose Semester</h2>
+        <div className="mt-3 flex flex-wrap gap-2 sm:gap-2.5">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <span key={index} className={`h-10 w-[84px] shrink-0 rounded-full ${pulse}`} />
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-7">
+        <h2 className="type-student-section-title text-text-primary">2. Choose Subject</h2>
+        <div className="mt-3 flex flex-wrap gap-3 sm:gap-3.5">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className={cn(subjectCardClass, "border-border")}>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <span className={`size-14 shrink-0 rounded-full ${pulse}`} />
+                <span className="min-w-0 flex-1">
+                  <span className={`block h-3.5 w-full rounded ${pulse}`} />
+                  <span
+                    className={`mt-2 block h-3.5 ${index % 2 ? "w-1/2" : "w-2/3"} rounded ${pulse}`}
+                  />
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="mt-7 grid gap-4 lg:grid-cols-2">
+        <section className={libraryPanelClass}>
+          <h2 className="type-student-section-title text-text-primary">Learning Resources</h2>
+          <div className="mt-4">
+            <ExplorerSkeleton />
+          </div>
+        </section>
+        <section className={libraryPanelClass}>
+          {/* SubjectTopicProgress's own frame: its label, its count, its rows. */}
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+              Topic progress
+            </h3>
+            <span className={`h-3 w-16 rounded ${pulse}`} />
+          </div>
+          <div className="mt-3 divide-y divide-border border-y border-border">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="flex min-h-16 items-center gap-3 py-3">
+                <span className={`size-10 shrink-0 rounded-full ${pulse}`} />
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={`block h-3.5 rounded ${index % 2 ? "w-1/2" : "w-3/4"} ${pulse}`}
+                  />
+                  <span className={`mt-2 block h-3 w-14 rounded ${pulse}`} />
+                </span>
+              </div>
+            ))}
+          </div>
         </section>
       </div>
     </main>

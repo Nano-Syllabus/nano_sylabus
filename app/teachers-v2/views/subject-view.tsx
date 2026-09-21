@@ -1,7 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, FormEvent, ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  FormEvent,
+  ReactNode,
+} from "react";
 import { Button } from "@/components/ui/button";
+import {
+  cleanDocumentName,
+  documentExtension,
+  documentStem,
+  TEACHER_DOCUMENT_NAME_MAX,
+} from "@/lib/teacher-document-name";
 import { subjectAccessLabel } from "@/lib/teacher-subject-access";
 import { cn, titleCase } from "@/lib/utils";
 import {
@@ -152,6 +167,7 @@ export function SubjectView({
   onCreateFolder,
   onDocument,
   onIndexDocument,
+  onRenameDocument,
   indexingNames,
   syllabus,
   setSyllabus,
@@ -170,6 +186,7 @@ export function SubjectView({
   onCreateFolder: (shelf: Shelf) => void;
   onDocument: (document: TeacherDocument) => void;
   onIndexDocument: (document: TeacherDocument) => Promise<void>;
+  onRenameDocument: (document: TeacherDocument, name: string) => Promise<void>;
   indexingNames: Set<string>;
   syllabus: SyllabusState;
   setSyllabus: (next: SyllabusState) => void;
@@ -283,6 +300,7 @@ export function SubjectView({
           <DocumentList
             documents={documents.filter((document) => document.shelf === shelf)}
             onIndex={onIndexDocument}
+            onRename={onRenameDocument}
             indexingNames={indexingNames}
             emptyTitle={
               tab === "syllabus"
@@ -804,6 +822,7 @@ export function DocumentList({
   onUpload,
   onOpen,
   onIndex,
+  onRename,
   indexingNames,
 }: {
   documents: TeacherDocument[];
@@ -812,6 +831,8 @@ export function DocumentList({
   onOpen: (document: TeacherDocument) => void;
   /** Queue this file for indexing and follow the job. */
   onIndex: (document: TeacherDocument) => Promise<void>;
+  /** Give this file a new name. Absent, the list is read-only about names. */
+  onRename?: (document: TeacherDocument, name: string) => Promise<void>;
   /** Files with an indexing job this session is already watching. The tenant API
    *  cannot say which documents have work queued, so a job started here is the
    *  one thing that distinguishes "indexing" from "never indexed". */
@@ -839,6 +860,7 @@ export function DocumentList({
           indexing={indexingNames.has(document.name)}
           onOpen={onOpen}
           onIndex={onIndex}
+          onRename={onRename}
         />
       ))}
     </div>
@@ -850,11 +872,13 @@ export function DocumentCard({
   indexing,
   onOpen,
   onIndex,
+  onRename,
 }: {
   document: TeacherDocument;
   indexing: boolean;
   onOpen: (document: TeacherDocument) => void;
   onIndex: (document: TeacherDocument) => Promise<void>;
+  onRename?: (document: TeacherDocument, name: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -868,7 +892,11 @@ export function DocumentCard({
         <span className="flex-1" />
         <span className="text-xs text-text-muted">{bytesLabel(document.sizeBytes)}</span>
       </div>
-      <h2 className="mt-4 break-words font-display text-lg font-semibold">{document.name}</h2>
+      {onRename ? (
+        <DocumentName document={document} onRename={onRename} />
+      ) : (
+        <h2 className="mt-4 break-words font-display text-lg font-semibold">{document.name}</h2>
+      )}
       {/* A section count of zero is not the news on a file that was never
           indexed — what it is waiting for is. */}
       <p className="mt-2 text-sm text-text-muted">
@@ -911,6 +939,158 @@ export function DocumentCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+/**
+ * A file's name, and renaming it in place.
+ *
+ * Only the name changes. The file stays where it is with the same id and the
+ * same indexed sections, so a rename never sends anything back through
+ * indexing. The extension is shown but not editable: the API keeps it whatever
+ * is typed, and a field that let it be edited would promise a name the creator
+ * would not get.
+ *
+ * Saving is optimistic — the new name is on the card the moment Enter is
+ * pressed. A refusal (a name another file in the folder already has, say)
+ * puts the old name back and reopens the field with what was typed and why, so
+ * it can be corrected rather than retyped.
+ */
+function DocumentName({
+  document,
+  onRename,
+}: {
+  document: TeacherDocument;
+  onRename: (document: TeacherDocument, name: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Focus goes back to the Rename button when the field closes — but not when it
+  // closes because the card is re-rendering an optimistic name mid-save.
+  const returnFocus = useRef(false);
+  const fieldId = useId();
+  const extension = documentExtension(document.name);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    } else if (returnFocus.current) {
+      returnFocus.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [editing]);
+
+  function open() {
+    setDraft(documentStem(document.name));
+    setError("");
+    setEditing(true);
+  }
+
+  function close() {
+    returnFocus.current = true;
+    setEditing(false);
+  }
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const result = cleanDocumentName(draft, document.name);
+    if (result.error !== undefined) {
+      setError(result.error);
+      return;
+    }
+    setError("");
+    close();
+    if (result.name === document.name) return;
+    setSaving(true);
+    try {
+      await onRename(document, result.name);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not rename this file.");
+      returnFocus.current = false;
+      setEditing(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (editing) {
+    const hintId = `${fieldId}-hint`;
+    const errorId = `${fieldId}-error`;
+    return (
+      <form onSubmit={save} noValidate className="mt-4">
+        <label htmlFor={fieldId} className="block text-sm font-medium">
+          File name
+        </label>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            ref={inputRef}
+            id={fieldId}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              close();
+            }}
+            maxLength={TEACHER_DOCUMENT_NAME_MAX - extension.length}
+            autoComplete="off"
+            spellCheck={false}
+            aria-invalid={error ? "true" : undefined}
+            aria-describedby={error ? `${hintId} ${errorId}` : hintId}
+            className={cn(inputClass, "min-w-0 flex-1")}
+          />
+          {extension ? (
+            <span className="shrink-0 font-mono text-sm text-text-muted">{extension}</span>
+          ) : null}
+        </div>
+        <p id={hintId} className="mt-2 text-xs text-text-muted">
+          Only the name changes. The file and everything indexed from it stay as they are.
+        </p>
+        {error ? (
+          <p id={errorId} role="alert" className="mt-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button type="submit" size="sm">
+            Save name
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={close}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <div className="mt-4 flex items-start gap-2">
+      <h2 className="min-w-0 flex-1 break-words font-display text-lg font-semibold">
+        {document.name}
+      </h2>
+      {/* aria-disabled, not disabled, while saving: focus comes back here the
+          moment the field closes, and a disabled button would drop it. */}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={saving ? undefined : open}
+        aria-disabled={saving || undefined}
+        aria-busy={saving || undefined}
+        aria-label={saving ? `Saving the name of ${document.name}` : `Rename ${document.name}`}
+        className={cn(
+          "min-h-10 shrink-0 rounded-full px-3 text-sm font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary aria-disabled:cursor-wait aria-disabled:opacity-60",
+          interactive,
+        )}
+      >
+        {saving ? "Saving…" : "Rename"}
+      </button>
+    </div>
   );
 }
 

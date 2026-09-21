@@ -74,11 +74,148 @@ function unescapeHtml(value: string) {
   return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
 
-function renderMath(value: string, displayMode: boolean) {
-  const math = unescapeHtml(value).trim();
-  if (!math) return "";
+/**
+ * Arguments nothing below may rewrite: `\text{…}` and its kin hold prose on
+ * purpose, and `\begin{aligned}`, `\mathbb{R}`, `\color{red}` hold names — an
+ * environment written `\begin{\text{aligned}}` is a KaTeX error.
+ */
+const TEXT_COMMAND =
+  /\\(?:text|textrm|textbf|textit|textsf|texttt|mathrm|mathbf|mathit|mathsf|mathtt|mathbb|mathcal|mathfrak|mathscr|operatorname|begin|end|color|textcolor|label|tag)\s*\{[^}]*\}/g;
 
-  if (!katex) return plainMath(math, displayMode);
+/** Runs `rewrite` over `math` with every `\text{…}` held aside. */
+function outsideTextCommands(math: string, rewrite: (value: string) => string) {
+  const held: string[] = [];
+  const masked = math.replace(TEXT_COMMAND, (match) => {
+    held.push(match);
+    return `\u0000${held.length - 1}\u0000`;
+  });
+  return rewrite(masked).replace(/\u0000(\d+)\u0000/g, (_, index) => held[Number(index)] ?? "");
+}
+
+/**
+ * The two ways model-written maths reads as broken once typeset.
+ *
+ * `N_last` is N-subscript-l followed by "ast": LaTeX subscripts one character
+ * unless told otherwise, and a writer naming a quantity — `d_load`, `R_eq`,
+ * `N_first` — means the whole word. A standalone letter subscripted by a run of
+ * letters, or a run of digits, is braced; `x_1`, `V_{in}` and `\omega_n` are
+ * already what they mean and are left alone.
+ *
+ * `*` is the asterisk operator ∗ in LaTeX, which nobody writing `(1 + e) * (R/r)`
+ * means. It becomes ×, except as a superscript or subscript (`x^*`, `z_*`).
+ */
+export function normalizeTex(math: string) {
+  return outsideTextCommands(math, (value) =>
+    value
+      .replace(
+        /(?<![\\A-Za-z])([A-Za-z])_([A-Za-z]{2,}|\d{2,})(?![A-Za-z0-9{])/g,
+        (_, base: string, sub: string) => `${base}_{\\mathrm{${sub}}}`,
+      )
+      .replace(/(?<![\^_{\\])\*/g, "\\times "),
+  );
+}
+
+/**
+ * A formula written in words, like `$Efficiency = (W * d_load) / (P * d_effort)$`
+ * or `$e = (Product of radii of drivers) / (Product of radii of followers)$`.
+ *
+ * `isInlineMath` refuses these — three real words look like a sentence that lost
+ * a delimiter — and they printed with their dollar signs showing, their `*`
+ * eaten as emphasis. They are not that failure: a lost delimiter swallows a
+ * sentence, with its full stops and commas and "where"s, while a word formula is
+ * short, states an equality, and carries no sentence punctuation. Those three
+ * tests keep the OCR paragraph `isInlineMath` exists for out.
+ */
+export function isWordFormula(candidate: string) {
+  if (!candidate || /^\s|\s$/.test(candidate) || candidate.includes("\n")) return false;
+  if (candidate.length > 160 || !candidate.includes("=")) return false;
+  // Sentence punctuation: a full stop, comma, semicolon, colon, question or
+  // exclamation mark followed by a space or the end — but not a decimal point.
+  if (/[.,;:!?](?:\s|$)/.test(candidate)) return false;
+  return (candidate.match(/[A-Za-z]{2,}/g) ?? []).length <= 14;
+}
+
+/**
+ * Words inside maths, set as words.
+ *
+ * KaTeX sets letters as italic variables and drops the spaces between them, so
+ * `Mechanical Advantage = L / P` prints as "MechanicalAdvantage" and a formula
+ * written in words becomes a row of run-together italics. A run of words that
+ * holds at least one real word (three letters or more) becomes `\text{…}`;
+ * variables stay maths, and so do the short tokens real maths is made of —
+ * `dx`, `dt`, `kg`. Never a subscript (`d_load` is `normalizeTex`'s), never a
+ * command's name, never inside `\text{…}` already.
+ */
+export function proseToText(math: string) {
+  return outsideTextCommands(math, (value) =>
+    value.replace(/(?<![_\\A-Za-z])[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*(?![A-Za-z])/g, (words) =>
+      /[A-Za-z]{3,}/.test(words) ? `\\text{${words}}` : words,
+    ),
+  );
+}
+
+/** Splits `math` at `separator` wherever it stands outside every `{…}` group. */
+function splitOutsideBraces(math: string, separator: RegExp) {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < math.length; index += 1) {
+    const char = math[index];
+    if (char === "{") depth += 1;
+    else if (char === "}") depth = Math.max(0, depth - 1);
+    else if (depth === 0) {
+      const match = separator.exec(math.slice(index));
+      if (match?.index === 0) {
+        parts.push(math.slice(start, index));
+        start = index + match[0].length;
+        index = start - 1;
+      }
+    }
+  }
+  parts.push(math.slice(start));
+  return parts.map((part) => part.trim()).filter(Boolean);
+}
+
+/**
+ * A displayed formula that will not fit, set the way a textbook sets it.
+ *
+ * KaTeX never wraps a displayed line. `A = …, B = …` — two named formulas on one
+ * line — and a chain like `e = (N_last)/(N_first) = (Product of radii of
+ * drivers)/(…)` ran off the right edge of the reading, and off a phone entirely.
+ * So two formulas sharing a line get a line each, and a long chain breaks
+ * before each further `=`, aligned on it. Short formulas are left exactly as
+ * they are; the math block still scrolls for anything that cannot break.
+ */
+function breakDisplayedLines(tex: string, written: string) {
+  // Already laid out by its writer.
+  if (/\\\\|\\begin\{/.test(tex)) return tex;
+  // `(A) / (B)` on its own line is a fraction, and set as one it is half as
+  // wide — which is what keeps `(Product of radii of drivers) / (…)` on a phone.
+  const math = tex.replace(/\(([^()]+)\)\s*\/\s*\(([^()]+)\)/g, "\\dfrac{$1}{$2}");
+  const formulas = splitOutsideBraces(math, /^,\s+(?=\\text\{)/);
+  const long = written.length > 48;
+  if (formulas.length < 2 && !long) return math;
+
+  const rows = formulas.flatMap((formula) => {
+    const sides = long ? splitOutsideBraces(formula, /^\s=\s/) : [formula];
+    if (sides.length < 2)
+      return [formula.includes("=") ? formula.replace("=", "&=") : `&${formula}`];
+    const [lhs, ...rest] = sides;
+    return rest.map((rhs, index) => `${index === 0 ? lhs : ""} &= ${rhs}`);
+  });
+  if (rows.length < 2) return math;
+  return `\\begin{aligned}${rows.join(" \\\\ ")}\\end{aligned}`;
+}
+
+function renderMath(value: string, displayMode: boolean) {
+  const written = unescapeHtml(value).trim();
+  if (!written) return "";
+  // The plain-text fallback shows what was written, never the `\text{…}` and
+  // `\mathrm{…}` added for KaTeX below.
+  if (!katex) return plainMath(written, displayMode);
+
+  let math = normalizeTex(proseToText(written));
+  if (displayMode) math = breakDisplayedLines(math, written);
 
   try {
     return katex.renderToString(math, {
@@ -89,7 +226,7 @@ function renderMath(value: string, displayMode: boolean) {
       trust: false,
     });
   } catch {
-    return plainMath(math, displayMode);
+    return plainMath(written, displayMode);
   }
 }
 
@@ -127,7 +264,7 @@ function escapeAttribute(value: string) {
 function safeUrl(value: string): string | null {
   const url = value.trim().replace(/[\u0000-\u001f\u007f]/g, "");
   if (!url) return null;
-  if (/^\/(?!\/)/.test(url)) return url;          // root-relative, not protocol-relative
+  if (/^\/(?!\/)/.test(url)) return url; // root-relative, not protocol-relative
   if (/^https?:\/\//i.test(url)) return url;
   if (/^mailto:/i.test(url)) return url;
   return null;
@@ -292,6 +429,11 @@ function maskCodeAndMath(value: string, tokens: string[]): string {
           index = close + 1;
           continue;
         }
+        if (isWordFormula(inner)) {
+          out += push(renderMath(inner, false));
+          index = close + 1;
+          continue;
+        }
       }
       // Not maths: the dollar is literal and the scan resumes AFTER it, never
       // after the candidate's closing delimiter.
@@ -315,9 +457,20 @@ function applyInlineStyles(value: string): string {
   // underscore or asterisk in a URL is never read as formatting.
   const withMedia = applyMedia(masked, tokens);
 
+  // Emphasis only where the stars hug their text, as CommonMark has it: `*word*`
+  // is emphasis, `1.2 * 44.8` and `(1 + 0.2)*(1120 / 25)` are arithmetic. The
+  // old `\*([^*]+)\*` took anything between two stars, so a worked line with two
+  // multiplications lost both signs and set the middle in italics.
   const withFormatting = withMedia
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    .replace(/(^|[^\w*])\*\*(?!\s)([^*\n]+?)(?<!\s)\*\*(?![\w*])/g, "$1<strong>$2</strong>")
+    .replace(/(^|[^\w*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w*])/g, "$1<em>$2</em>")
+    // What is left of the stars is multiplication, and reads as ×.
+    .replace(/(?<=[\w)\]]) \* (?=[\w(\[])/g, " × ")
+    .replace(/(?<=[\d)\]])\*(?=[\d(\[])/g, "×")
+    // A quantity named in prose without its dollars — "the constant P_0" — is
+    // subscripted. Narrowly: one standalone letter, then digits or at most three
+    // letters, so `file_name` and `@@TOKEN_3@@` are never touched.
+    .replace(/(?<![\w@])([A-Za-z])_(\d{1,2}|[A-Za-z]{1,3})(?![\w@])/g, "$1<sub>$2</sub>");
 
   return withFormatting.replace(/@@TOKEN_(\d+)@@/g, (_, index) => tokens[Number(index)] ?? "");
 }
@@ -355,7 +508,9 @@ function renderTable(rows: string[]) {
   const headerHtml = headers.map((cell) => `<th>${applyInlineStyles(cell)}</th>`).join("");
   const bodyHtml = bodyRows
     .map((row) => {
-      const cells = headers.map((_, index) => `<td>${applyInlineStyles(row[index] ?? "")}</td>`).join("");
+      const cells = headers
+        .map((_, index) => `<td>${applyInlineStyles(row[index] ?? "")}</td>`)
+        .join("");
       return `<tr>${cells}</tr>`;
     })
     .join("");

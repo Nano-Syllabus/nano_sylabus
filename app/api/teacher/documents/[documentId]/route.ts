@@ -4,10 +4,12 @@ import {
   deleteTeacherDocument,
   getTeacherDocument,
   indexTeacherDocument,
+  renameTeacherDocument,
   TeacherApiError,
 } from "@/lib/teacher-app/client";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { safeUploadPath } from "@/lib/teacher-document-import";
+import { cleanDocumentName } from "@/lib/teacher-document-name";
 
 type RouteContext = { params: Promise<{ documentId: string }> };
 type ApiRecord = Record<string, unknown>;
@@ -213,6 +215,81 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ result, jobId: resultJobId(result) });
   } catch (error) {
     return apiFailure(error, "Could not re-index the document.");
+  }
+}
+
+/**
+ * Rename this document — what it is called, never where it lives.
+ *
+ * The collection API records the new name beside the file, so its path, its
+ * id, its chunks and the collection index stay exactly as they were and nothing
+ * is re-indexed. The private preview mirror holds the name as a snapshot — it
+ * is what the student library lists and what a download is saved as — so it is
+ * brought along; its storage path and collection path, the two things that
+ * FIND it, are not touched.
+ *
+ * The API is the authority on the name: it keeps the file's extension and
+ * refuses a name another file in the same folder already has. The check here
+ * only stops a name that could never be valid from costing a round trip.
+ */
+export async function PATCH(request: Request, context: RouteContext) {
+  try {
+    const { teacher, id } = await teacherAndDocumentId(context);
+    if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!id) return NextResponse.json({ error: "Invalid document." }, { status: 400 });
+
+    const input = (await request.json().catch(() => ({}))) as { name?: unknown; path?: unknown };
+    const typed = cleanDocumentName(input.name, "");
+    if (typed.error !== undefined) {
+      return NextResponse.json({ error: typed.error }, { status: 400 });
+    }
+    const path = typeof input.path === "string" ? input.path.trim() : "";
+    if (path && !safeUploadPath(path)) {
+      return NextResponse.json({ error: "Invalid document path." }, { status: 400 });
+    }
+
+    const result = await renameTeacherDocument(teacher.collection_sk, id, {
+      name: typed.name,
+      ...(path ? { path } : {}),
+    });
+    const name = typeof result.name === "string" ? result.name : typed.name;
+    const renamedPath = typeof result.path === "string" ? result.path : path;
+
+    // The rename has landed; a mirror that could not follow it costs the student
+    // library the new label, not the creator their rename. Say so and carry on.
+    let mirrorSynced = true;
+    try {
+      const mirror = await findMirror(teacher.id, id, renamedPath);
+      if (mirror && mirror.original_name !== name) {
+        const { error } = await createSupabaseAdminClient()
+          .from("teacher_document_files")
+          .update({ original_name: name })
+          .eq("id", mirror.id)
+          .eq("teacher_id", teacher.id);
+        if (error) throw error;
+      }
+    } catch (error) {
+      mirrorSynced = false;
+      console.error("[PATCH /api/teacher/documents/[documentId]] preview name not updated", error);
+    }
+
+    return NextResponse.json({
+      document: { id, path: renamedPath, name },
+      name,
+      renamed: result.renamed === true,
+      mirrorSynced,
+    });
+  } catch (error) {
+    // The API's own reasons — a name it will not take, a name already in use in
+    // that folder — are the creator's to read and fix, so they pass through.
+    if (error instanceof TeacherApiError && (error.status === 400 || error.status === 409)) {
+      const message = error.message.trim() || "Could not rename the document.";
+      return NextResponse.json(
+        { error: `${message.charAt(0).toUpperCase()}${message.slice(1)}` },
+        { status: error.status },
+      );
+    }
+    return apiFailure(error, "Could not rename the document.");
   }
 }
 

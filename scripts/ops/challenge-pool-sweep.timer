@@ -1,0 +1,14 @@
+# Sweep the global challenge pool every ~3 minutes.
+# Install notes: scripts/ops/challenge-pool-sweep.sh. Not installed by this repo.
+[Unit]
+Description=Sweep the Nano Syllabus challenge pool every 3 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=3min
+AccuracySec=15s
+RandomizedDelaySec=10s
+Unit=challenge-pool-sweep.service
+
+[Install]
+WantedBy=timers.target

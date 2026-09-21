@@ -85,6 +85,8 @@ export type RevisionDocTopic = {
    *  never had a reading: one is "come back in a moment", the other is "restart
    *  it", and telling a student the wrong one of those wastes their time. */
   readingPending: boolean;
+  /** Why the reading could not be written, the last time it was asked for. */
+  readingError: string;
   /** The one sentence the topic reduces to. "" on a challenge passed before the
    *  concept-led reading existed. */
   bigIdea: string;
@@ -193,6 +195,7 @@ function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {
     // which also leaves the reading empty, but is not going to fill itself in —
     // is not presented as one still in flight.
     readingPending: !reading.length && content?.contentStatus === "pending",
+    readingError: content?.readingError || "",
     scorePercent: scorePercent(row),
     attempts: Number(row.attempt_count) || 0,
     bigIdea: content?.lesson?.bigIdea || "",

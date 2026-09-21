@@ -107,6 +107,18 @@ export type TeacherChallengePastQuestionsResponse = {
   note: string;
 };
 
+/** A challenge's texts in Roman Nepali, aligned item for item with the request. */
+export type TeacherChallengeTranslateResponse = {
+  collection: string;
+  subject: string;
+  language: "rn";
+  /** An item that could not be translated faithfully comes back as sent. */
+  texts: string[];
+  translated: boolean[];
+  served_from: "cache" | "model" | "mixed" | "none";
+  warnings: string[];
+};
+
 export type TeacherChallengeLearnResponse = {
   collection: string;
   subject: string;
@@ -1131,6 +1143,30 @@ export const getTeacherChallengeReading = (
     timeoutMs: 180_000,
   });
 
+export type TeacherMediaImageResponse = {
+  /** `/api/figure/<id>.png`, served through this app by app/api/figure. */
+  url: string | null;
+  /** `queued` is a success: the URL is valid and fetching it waits for the draw.
+   *  `unavailable` means nothing will come, and `detail` says why. */
+  status: "ready" | "queued" | "unavailable" | string;
+  detail?: string;
+};
+
+/**
+ * Ask the render service to draw a figure from a description.
+ *
+ * Returns as soon as the figure is NAMED — the picture itself is drawn behind
+ * the response, and a request for its URL is where a reader waits. Idempotent:
+ * figures are content-addressed, so the same brief names the same picture.
+ */
+export const requestTeacherMediaImage = (key: string, input: { brief: string; alt?: string }) =>
+  teacherRequest<TeacherMediaImageResponse>("/api/v1/media/image", key, {
+    method: "POST",
+    body: input,
+    timeoutMs: 30_000,
+    idempotent: true,
+  });
+
 export const getTeacherChallengeSolvedQuestions = (
   key: string,
   /** `questions`: the exact past-question texts to answer — step one's list. */
@@ -1140,6 +1176,22 @@ export const getTeacherChallengeSolvedQuestions = (
     method: "POST",
     body: input,
     timeoutMs: 180_000,
+  });
+
+/**
+ * A challenge's reading and worked answers in Roman Nepali. The course API keeps
+ * each translation per text, so a topic is translated once for every student.
+ * Idempotent — the same texts give the same translations — so it may retry.
+ */
+export const translateTeacherChallengeTexts = (
+  key: string,
+  input: { subject: string; texts: string[] },
+) =>
+  teacherRequest<TeacherChallengeTranslateResponse>("/v1/collection/challenge/translate", key, {
+    method: "POST",
+    body: { language: "rn", ...input },
+    timeoutMs: 180_000,
+    idempotent: true,
   });
 
 export const createTeacherChallengeExam = (
@@ -1420,3 +1472,96 @@ export async function gradeTeacherPracticePaperFile(
       }),
   );
 }
+
+/**
+ * Rename one document: what it is CALLED, and nothing else.
+ *
+ * The collection API records the name beside the file rather than moving it, so
+ * the path, the document id, the chunks and the index all stay as they were and
+ * nothing is re-indexed. `path` is the one the creator is looking at; the API
+ * refuses the rename if it no longer matches the id. Safe to retry: the same
+ * name twice is the same result.
+ */
+export const renameTeacherDocument = (
+  key: string,
+  documentId: string,
+  input: { name: string; path?: string },
+) =>
+  teacherRequest<ApiRecord>(
+    `/v1/collection/documents/${encodeURIComponent(documentId)}/rename`,
+    key,
+    {
+      method: "POST",
+      body: { name: input.name, ...(input.path ? { path: input.path } : {}) },
+      idempotent: true,
+      retries: 1,
+    },
+  );
+
+/**
+ * What the course API holds for one topic of the global challenge pool.
+ *
+ * `ready` carries the WHOLE topic bank in `content`; `building` means a job is
+ * queued or running upstream and the caller should poll again later; `failed`
+ * is worth retrying; `unavailable` means the material cannot produce one.
+ */
+export type TeacherChallengePrepareState = "ready" | "building" | "failed" | "unavailable";
+
+export type TeacherChallengePrepareManifest = {
+  past_question_count: number;
+  solved_count: number;
+  unsolved_count: number;
+  has_reading: boolean;
+  exam_pool_depth: number;
+  figure_count: number;
+  figures_ready: boolean;
+};
+
+/** A topic's bank as prepared: every past question, every worked answer the
+ *  pool holds for them (or worked examples from the notes when the topic has no
+ *  bank), the reading, and the topics it resolved to. */
+export type TeacherChallengePrepareContent = {
+  past_questions: TeacherChallengePastQuestion[];
+  solved: TeacherChallengeSolvedQuestion[];
+  reading: TeacherChallengeReading | null;
+  topics: TeacherChallengeTopic[];
+};
+
+export type TeacherChallengePrepareResponse = {
+  state: TeacherChallengePrepareState;
+  subject: string;
+  topic: string;
+  revision: string;
+  collection_revision: string;
+  manifest: TeacherChallengePrepareManifest | null;
+  /** Only when `state` is `ready`. */
+  content: TeacherChallengePrepareContent | null;
+  error: string | null;
+};
+
+/**
+ * Prepare one topic of the global challenge pool — or report how far along it is.
+ *
+ * Called by the pool sweep (lib/data/challenge-pool.ts), never from a student's
+ * request. It never marks questions served, so asking again is free: a poll,
+ * not a second build. `force` asks for a rebuild and is therefore not replayed.
+ */
+export const prepareTeacherChallengeTopic = (
+  key: string,
+  input: { subject: string; topic: string; force?: boolean },
+) =>
+  teacherRequest<TeacherChallengePrepareResponse>("/v1/collection/challenge/prepare", key, {
+    method: "POST",
+    body: input,
+    timeoutMs: 60_000,
+    idempotent: !input.force,
+    retries: input.force ? 0 : 1,
+  });
+
+/** The material revision a subject's pooled topics were built from. */
+export const getTeacherChallengeRevision = (key: string, subject: string) =>
+  teacherRequest<{ collection_revision: string }>(
+    withQuery("/v1/collection/challenge/revision", { subject }),
+    key,
+    { timeoutMs: 30_000, retries: 1 },
+  );

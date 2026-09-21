@@ -6,14 +6,44 @@ type Row = Record<string, unknown>;
 /** Stateful query double: publication and student reads use the same saved rows. */
 export function learningDatabase(tables: Record<string, Row[]>) {
   const failures = new Map<string, string>();
+  /** Tables this database does not have — a migration that has not run yet —
+   *  reported the way PostgREST reports them. */
+  const missing = new Set<string>();
+  /** Postgres functions by name. One that is not registered is reported missing,
+   *  as PostgREST does before its migration has run. */
+  const rpcs: Record<string, (args: Record<string, unknown>) => unknown> = {};
+  const rpc = vi.fn(async (name: string, args?: Record<string, unknown>) => {
+    const handler = rpcs[name];
+    if (!handler) {
+      return {
+        data: null,
+        error: { code: "PGRST202", message: `Could not find the function public.${name}` },
+      };
+    }
+    try {
+      return { data: await handler(args ?? {}), error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  });
   const from = vi.fn((table: string) => {
     const filters: Array<(row: Row) => boolean> = [];
     let operation = "select";
     let values: Row[] = [];
     let conflict = "id";
+    let ignoreDuplicates = false;
     let single = false;
     let limit = Infinity;
     const execute = () => {
+      if (missing.has(table)) {
+        return {
+          data: null,
+          error: {
+            code: "PGRST205",
+            message: `Could not find the table 'public.${table}' in the schema cache`,
+          },
+        };
+      }
       if (failures.has(`${table}:${operation}`))
         return { data: null, error: new Error(failures.get(`${table}:${operation}`)) };
       const rows = (tables[table] ||= []);
@@ -23,8 +53,8 @@ export function learningDatabase(tables: Record<string, Row[]>) {
           const prior =
             operation === "upsert" &&
             rows.find((row) => conflict.split(",").every((key) => row[key] === value[key]));
-          if (prior) Object.assign(prior, value);
-          else rows.push({ id: `${table}-${rows.length}`, ...value });
+          if (prior && !ignoreDuplicates) Object.assign(prior, value);
+          else if (!prior) rows.push({ id: `${table}-${rows.length}`, ...value });
         }
       } else if (operation === "update") {
         for (const row of rows.filter(matches)) Object.assign(row, values[0]);
@@ -44,15 +74,32 @@ export function learningDatabase(tables: Record<string, Row[]>) {
         filters.push((row) => values.includes(row[key]));
         return query;
       },
+      neq: (key: string, value: unknown) => {
+        filters.push((row) => row[key] !== value);
+        return query;
+      },
+      is: (key: string, value: unknown) => {
+        filters.push((row) => (row[key] ?? null) === value);
+        return query;
+      },
+      lt: (key: string, value: unknown) => {
+        filters.push((row) => row[key] != null && String(row[key]) < String(value));
+        return query;
+      },
+      lte: (key: string, value: unknown) => {
+        filters.push((row) => row[key] != null && String(row[key]) <= String(value));
+        return query;
+      },
       limit: (count: number) => {
         limit = count;
         return query;
       },
       order: () => query,
-      upsert: (value: Row | Row[], options: { onConflict: string }) => {
+      upsert: (value: Row | Row[], options: { onConflict: string; ignoreDuplicates?: boolean }) => {
         operation = "upsert";
         values = Array.isArray(value) ? value : [value];
         conflict = options.onConflict;
+        ignoreDuplicates = Boolean(options.ignoreDuplicates);
         return query;
       },
       update: (value: Row) => {
@@ -77,7 +124,15 @@ export function learningDatabase(tables: Record<string, Row[]>) {
     };
     return query;
   });
-  return { admin: { from } as unknown as SupabaseClient, tables, failures, from };
+  return {
+    admin: { from, rpc } as unknown as SupabaseClient,
+    tables,
+    failures,
+    from,
+    missing,
+    rpcs,
+    rpc,
+  };
 }
 
 export function communityLearningFixture() {

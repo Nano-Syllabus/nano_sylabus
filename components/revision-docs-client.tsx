@@ -4,8 +4,16 @@ import { BookOpen, ChevronDown, ChevronRight, Menu, Search, X } from "lucide-rea
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { AnswerFontPicker, answerFontStyle, useAnswerFont } from "@/components/answer-font-picker";
-import { ConceptsCard, conceptsCardClass } from "@/components/concepts-reading";
+import { normalizeQuestionText } from "@/lib/challenge-learn-questions";
+import {
+  StudyLanguageSwitch,
+  inStudyLanguage,
+  useRomanNepali,
+  useStudyLanguage,
+} from "@/components/study-language";
+import { AwaitedConceptsCard, ConceptsCard, conceptsCardClass } from "@/components/concepts-reading";
 import { Markdown } from "@/components/markdown";
+import { WorkedSolution } from "@/components/worked-solution";
 import type {
   RevisionDocSemester,
   RevisionDocTopic,
@@ -150,6 +158,13 @@ function TreeFrame({ search, children }: { search: ReactNode; children: ReactNod
 
 function TopicPage({ topic }: { topic: RevisionDocTopic }) {
   const [answerFont, setAnswerFont] = useAnswerFont();
+  // The same choice, and the same translation, as the challenge's own step 1.
+  const [studyLanguage, setStudyLanguage] = useStudyLanguage();
+  const romanNepali = useRomanNepali(
+    topic.challengeId,
+    `${topic.reading.length}:${topic.solvedExamples.filter((example) => example.solution).length}`,
+    studyLanguage === "rn",
+  );
   const percent = formatPercent(topic.scorePercent);
   const completed = formatDate(topic.completedAt);
   return (
@@ -192,33 +207,38 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
         </code>
       </div>
 
+      <StudyLanguageSwitch
+        className="mt-6"
+        value={studyLanguage}
+        onChange={setStudyLanguage}
+        translation={romanNepali}
+      />
+
       {topic.reading.length ? (
         <ConceptsCard
-          className="mt-8"
+          className="mt-4"
           source={{
             id: topic.challengeId,
             title: topic.title,
             subjectName: topic.subjectName,
-            reading: topic.reading,
+            reading: inStudyLanguage(studyLanguage, romanNepali, (data) => data.reading, topic.reading),
           }}
         />
-      ) : topic.readingPending ? (
-        /* Being written right now, not missing. Telling a student to restart a
-           challenge whose reading is thirty seconds away would throw away the
-           paper they are about to sit. */
-        <p
-          role="status"
-          aria-live="polite"
-          className="mt-8 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted"
-        >
-          The reading for this topic is still being written from your course material. Reload this
-          page in a moment and it will be here.
-        </p>
       ) : (
-        <p className="mt-8 rounded-xl border border-border bg-bg-secondary p-5 text-sm text-text-muted">
-          This challenge has no reading kept for it. Restart it from the Challenge Hub to file a
-          fresh one here.
-        </p>
+        /* Every challenge gets its reading. One still being written, or never
+           written (a build that died after its paper, a challenge older than the
+           reading), is asked for and drawn when it lands — no reload, and no
+           telling a student to restart a challenge to get it. */
+        <AwaitedConceptsCard
+          className="mt-4"
+          readingError={topic.readingError}
+          source={{
+            id: topic.challengeId,
+            title: topic.title,
+            subjectName: topic.subjectName,
+            reading: [],
+          }}
+        />
       )}
 
       {topic.pastQuestions.length ? (
@@ -273,8 +293,16 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
                   <p className="answer-paper-label text-xs font-semibold uppercase tracking-wide text-text-muted">
                     Solution
                   </p>
-                  <Markdown
-                    text={example.solution}
+                  <WorkedSolution
+                    challengeId={topic.challengeId}
+                    question={example.question}
+                    solution={example.solution}
+                    text={inStudyLanguage(
+                      studyLanguage,
+                      romanNepali,
+                      (data) => data.solutions[normalizeQuestionText(example.question)],
+                      example.solution,
+                    )}
                     className="answer-paper-body font-revision-answer whitespace-pre-wrap text-sm text-text-secondary"
                   />
                 </div>

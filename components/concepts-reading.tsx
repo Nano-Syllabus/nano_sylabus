@@ -212,3 +212,107 @@ export function ConceptsCard({
     </section>
   );
 }
+
+/** Widening, as the challenge screen's own poll: tight while the reading is
+ *  plausibly seconds away, slow after, and it gives up on a tab left open. */
+function readingPollDelay(attempt: number) {
+  return attempt < 3 ? 2_000 : attempt < 8 ? 4_000 : 8_000;
+}
+const READING_POLL_LIMIT = 40;
+
+/**
+ * The Concepts card for a challenge whose reading is not on it yet.
+ *
+ * Every challenge gets its reading, but it is written after everything the
+ * student waits for — and a pass that died after that, or a row built before the
+ * reading was, has none. Asking the challenge's row (`/content`) is what has the
+ * server write it (`scheduleChallengeReadingBackfill`), so this says it is being
+ * written, asks until it lands, and then IS the Concepts card — the same card,
+ * without a reload. A topic whose material cannot produce a reading says so and
+ * stops asking.
+ *
+ * `waiting` holds the polling off while the challenge's own build is running:
+ * that build writes the reading itself, and the screen is already polling it.
+ */
+export function AwaitedConceptsCard({
+  source,
+  readingError,
+  waiting = false,
+  onReading,
+  className,
+}: {
+  source: ConceptsSource;
+  readingError?: string | null;
+  waiting?: boolean;
+  /** Told when the reading lands, so a parent can keep it past an unmount. */
+  onReading?: (reading: string[]) => void;
+  className?: string;
+}) {
+  const [reading, setReading] = useState<string[]>(source.reading);
+  const [error, setError] = useState(readingError || "");
+  const [gaveUp, setGaveUp] = useState(false);
+  const onReadingRef = useRef(onReading);
+  useEffect(() => {
+    onReadingRef.current = onReading;
+  }, [onReading]);
+
+  useEffect(() => {
+    if (waiting || reading.length || error) return;
+    let cancelled = false;
+    let attempt = 0;
+    let timer = 0;
+    const tick = async () => {
+      attempt += 1;
+      try {
+        const response = await fetch(`/api/student/challenges/${encodeURIComponent(source.id)}/content`);
+        const payload = (await response.json().catch(() => ({}))) as {
+          challenge?: { content?: { lesson?: { content?: string[] }; readingError?: string | null } | null };
+        };
+        if (cancelled) return;
+        const landed = payload.challenge?.content?.lesson?.content ?? [];
+        if (landed.length) {
+          setReading(landed);
+          onReadingRef.current?.(landed);
+          return;
+        }
+        if (payload.challenge?.content?.readingError) {
+          setError(payload.challenge.content.readingError);
+          return;
+        }
+      } catch {
+        // A dropped poll is not worth surfacing; the next tick asks again.
+      }
+      if (cancelled) return;
+      if (attempt >= READING_POLL_LIMIT) {
+        setGaveUp(true);
+        return;
+      }
+      timer = window.setTimeout(() => void tick(), readingPollDelay(attempt));
+    };
+    // The first ask is immediate: it is what starts the reading being written.
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [source.id, waiting, reading.length, error]);
+
+  if (reading.length) return <ConceptsCard source={{ ...source, reading }} className={className} />;
+  const note = error
+    ? "The concepts reading for this topic couldn't be written from your course material yet. It will be tried again the next time you open it."
+    : gaveUp
+      ? "The concepts reading for this topic is taking longer than usual. Open it again in a little while."
+      : "The concepts reading for this topic is being written from your course material. It will appear here in a moment.";
+  return (
+    <p
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "rounded-xl border border-border bg-bg-secondary p-4 text-sm text-text-muted",
+        className,
+      )}
+    >
+      {note}
+    </p>
+  );
+}

@@ -1,6 +1,20 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { startTransition } from "react";
+
 export default function ChallengesError({ reset }: { reset: () => void }) {
+  const router = useRouter();
+  /**
+   * `reset()` alone re-renders the boundary from what the client already holds,
+   * so a failed server load failed again on every press. Refreshing asks the
+   * server for the page afresh; resetting in the same transition shows it.
+   */
+  const retry = () =>
+    startTransition(() => {
+      router.refresh();
+      reset();
+    });
   return (
     <main className="min-h-screen w-full bg-bg-primary px-4 py-12 text-text-primary sm:px-8">
       <section className="mx-auto max-w-xl rounded-2xl border border-destructive/30 bg-card p-6">
@@ -11,7 +25,7 @@ export default function ChallengesError({ reset }: { reset: () => void }) {
         </p>
         <button
           type="button"
-          onClick={reset}
+          onClick={retry}
           className="mt-5 inline-flex min-h-10 items-center rounded-full bg-text-primary px-4 text-sm font-semibold text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary"
         >
           Try again

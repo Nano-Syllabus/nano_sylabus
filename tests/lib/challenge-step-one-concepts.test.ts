@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ConceptsCard } from "@/components/concepts-reading";
+import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
 
 /**
  * Step 1 of a challenge leads with the concepts card — the same card, and the
@@ -19,17 +19,62 @@ describe("step 1 of a challenge", () => {
     const stepOne = challengeScreen.slice(challengeScreen.indexOf("{activeStep === 1 ? ("));
     expect(stepOne.indexOf("<ConceptsCard")).toBeGreaterThan(-1);
     expect(stepOne.indexOf("<ConceptsCard")).toBeLessThan(stepOne.indexOf("learnQuestions.map"));
-    expect(stepOne).toContain("reading: content?.lesson?.content ?? []");
+    // In the reader's language — see `components/study-language.tsx`.
+    expect(stepOne).toMatch(/reading: inStudyLanguage\([\s\S]*?content\.lesson\.content,\s*\)/);
   });
 
-  it("says the reading is on its way while the background pass is still writing it", () => {
-    expect(challengeScreen).toContain('!content?.lesson?.content?.length && content?.contentStatus === "pending"');
+  it("gives every opened challenge its concepts card: the reading, or the card that waits for it", () => {
+    const stepOne = challengeScreen.slice(challengeScreen.indexOf("{activeStep === 1 ? ("));
+    // No branch where an opened challenge shows neither — that was a challenge
+    // marked ready before its reading landed, and the poll had already stopped.
+    expect(stepOne).toMatch(/\{content\?\.lesson\?\.content\?\.length \? \(\s*<ConceptsCard/);
+    expect(stepOne).toMatch(/\) : content \? \(\s*(\/\*[\s\S]*?\*\/\s*)?<AwaitedConceptsCard/);
+    // While the build runs, the screen's own poll brings the reading in.
+    expect(stepOne).toContain('waiting={content.contentStatus === "pending" && !content.contentError}');
+    expect(stepOne).toContain("readingError={content.readingError}");
+    // Kept on the challenge when it lands, so leaving step 1 does not lose it.
+    expect(stepOne).toContain("content: { ...content, lesson: { ...content.lesson, content: reading } },");
   });
 
   it("is the same component Revision uses, not a second copy", () => {
     expect(revisionPage).toMatch(/import \{[^}]*\bConceptsCard\b[^}]*\} from "@\/components\/concepts-reading";/);
-    expect(challengeScreen).toContain('import { ConceptsCard } from "@/components/concepts-reading";');
+    expect(revisionPage).toMatch(/import \{[^}]*\bAwaitedConceptsCard\b[^}]*\} from "@\/components\/concepts-reading";/);
+    expect(challengeScreen).toContain('import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";');
     expect(revisionPage).not.toContain("function ConceptsDrawer");
+    // Revision no longer tells a student to restart a challenge to get its reading.
+    expect(revisionPage).not.toContain("Restart it from the Challenge Hub to file a");
+  });
+});
+
+describe("the card that waits for a reading", () => {
+  const source = { id: "c", title: "t", subjectName: "s", reading: [] as string[] };
+
+  it("says the reading is on its way", () => {
+    const html = renderToStaticMarkup(createElement(AwaitedConceptsCard, { source }));
+    expect(html).toContain('role="status"');
+    expect(html).toContain("being written from your course material");
+  });
+
+  it("says so, and stops waiting, when the material could not produce one", () => {
+    const html = renderToStaticMarkup(
+      createElement(AwaitedConceptsCard, { source, readingError: "no indexed teaching material" }),
+    );
+    expect(html).toContain("couldn&#x27;t be written from your course material yet");
+    expect(html).not.toContain("being written");
+  });
+
+  it("is the Concepts card itself once there is a reading", () => {
+    const html = renderToStaticMarkup(
+      createElement(AwaitedConceptsCard, { source: { ...source, reading: ["A paragraph."] } }),
+    );
+    expect(html).toContain(">Concepts</h2>");
+    expect(html).toContain("Read concepts");
+  });
+
+  it("asks the challenge's row, which is what has the server write it", () => {
+    const sheet = readFileSync("components/concepts-reading.tsx", "utf8");
+    expect(sheet).toContain("fetch(`/api/student/challenges/${encodeURIComponent(source.id)}/content`)");
+    expect(sheet).toContain("if (waiting || reading.length || error) return;");
   });
 });
 

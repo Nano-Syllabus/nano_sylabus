@@ -102,6 +102,16 @@ function responseHeaders(upstream: IncomingMessage): Headers {
   // Nothing here is per-user, but it is also not the browser's to hand to
   // another origin.
   headers.set("x-content-type-options", "nosniff");
+  // A finished picture is content-addressed, and the backend says so with
+  // `immutable`. That header reaches the browser but not the CDN in front of
+  // this app, which caches a function's response only when told to separately —
+  // so every reader's first view of a figure crossed to the app server and on to
+  // the render box. Only what the backend itself calls immutable is shared: a
+  // figure still being redrawn answers `no-cache`, and a status poll says
+  // nothing, so neither is ever held at the edge.
+  if (/\bimmutable\b/i.test(headers.get("cache-control") ?? "")) {
+    headers.set("cdn-cache-control", "public, max-age=31536000, immutable");
+  }
   return headers;
 }
 

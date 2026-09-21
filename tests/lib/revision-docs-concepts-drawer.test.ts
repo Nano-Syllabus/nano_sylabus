@@ -38,6 +38,7 @@ const topic: RevisionDocTopic = {
   scorePercent: 70,
   attempts: 1,
   readingPending: false,
+  readingError: "",
   bigIdea: "Every machine transforms energy by moving a load with an effort.",
   reading: READING,
   focus: "Calculating the mechanical efficiency of a machine.",

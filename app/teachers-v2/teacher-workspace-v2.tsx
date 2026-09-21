@@ -44,6 +44,7 @@ import { CommunityDeleteControl } from "@/components/community-delete-control";
 import { subjectAccessLabel, type SubjectCommunity } from "@/lib/teacher-subject-access";
 import type { CommunityDetail } from "@/lib/communities";
 import type { CommunitySubjectWorkspace } from "@/lib/data/community-subjects";
+import { withRenamedDocument } from "@/lib/teacher-document-name";
 import { cn, titleCase } from "@/lib/utils";
 
 import {
@@ -676,6 +677,60 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
     },
     [loadWorkspace, pollIndexingJob],
   );
+
+  /**
+   * Rename one file — optimistically, and without reloading anything.
+   *
+   * The card shows the new name the moment the creator presses Enter. The API's
+   * answer then settles it (it may tidy what was typed), and a refusal puts the
+   * old name back and reaches the card as an error. Nothing is refetched either
+   * way: the response already says all there is to know, and a reload of the
+   * workspace would only be told it again (the cache-first rule). The file keeps
+   * its path and id, which is why patching the one entry is the whole update.
+   *
+   * An indexing job this session is following is keyed by file NAME, so a file
+   * renamed mid-index carries its job across rather than dropping back to "Not
+   * indexed" until the job ends.
+   */
+  const renameDocument = useCallback(async (document: TeacherDocument, name: string) => {
+    const show = (from: string, to: string) => {
+      setWorkspace((current) =>
+        // Only if the file still shows the name being replaced — a slower,
+        // earlier rename must not undo a later one.
+        current?.documents.some((item) => item.path === document.path && item.name === from)
+          ? withRenamedDocument(current, document.path, to)
+          : current,
+      );
+      setIndexingJobs((current) =>
+        Object.values(current).includes(from)
+          ? Object.fromEntries(
+              Object.entries(current).map(([jobId, label]) => [jobId, label === from ? to : label]),
+            )
+          : current,
+      );
+    };
+
+    show(document.name, name);
+    try {
+      const payload = await responsePayload(
+        await fetch(`/api/teacher/documents/${encodeURIComponent(document.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ name, path: document.path }),
+        }),
+      );
+      const saved = text(payload.name) || name;
+      if (saved !== name) show(name, saved);
+      setToast(
+        payload.mirrorSynced === false
+          ? `Renamed to ${saved}. Students may still see the old name until you rename it again.`
+          : `Renamed to ${saved}`,
+      );
+    } catch (error) {
+      show(name, document.name);
+      throw error;
+    }
+  }, []);
 
   const recoverWorkspace = useCallback(
     async (recreate = false) => {
@@ -1411,6 +1466,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
                 onCreateFolder={(shelf) => setDialog({ type: "create-folder", shelf })}
                 onDocument={(document) => setDialog({ type: "document", document })}
                 onIndexDocument={indexDocument}
+                onRenameDocument={renameDocument}
                 indexingNames={indexingNames}
                 syllabus={
                   syllabi[selectedSubject.slug] || {

@@ -226,7 +226,7 @@ function attachFigureFrame(img: HTMLImageElement, digest: string, signal: AbortS
       retryImage();
       return;
     }
-    if (!state.working) return stop();   // nothing is coming
+    if (!state.working) return stop(); // nothing is coming
     img.classList.add("answer-figure-pending");
     timer = window.setTimeout(poll, POLL_MS);
   };
@@ -234,6 +234,99 @@ function attachFigureFrame(img: HTMLImageElement, digest: string, signal: AbortS
   // Only worth asking if the image did not simply load. A figure whose render
   // finished before the reader got here is the common case and costs nothing.
   img.addEventListener("error", () => void poll(), { once: true });
+}
+
+const CLOSE_ICON =
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+/**
+ * A figure, as large as the screen allows.
+ *
+ * A diagram in an answer is drawn at 1280px and shown at the width of a
+ * paragraph, so its labels are the first thing to go. This opens it over the
+ * page, and in the browser's own full screen where there is one to ask for — an
+ * iPhone has none for anything but video, and the overlay alone is the view
+ * there. Escape, the close button or a click outside the picture all close it,
+ * and focus goes back to the figure it came from.
+ */
+function openFigureViewer(img: HTMLImageElement) {
+  const opener = img;
+  const overlay = document.createElement("div");
+  overlay.className = "answer-figure-viewer";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", img.alt ? `${img.alt}, full screen` : "Diagram, full screen");
+
+  const picture = document.createElement("img");
+  picture.src = img.currentSrc || img.src;
+  picture.alt = img.alt;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "answer-figure-viewer-close";
+  close.setAttribute("aria-label", "Close full screen");
+  close.innerHTML = CLOSE_ICON;
+  overlay.append(picture, close);
+
+  let wentFullscreen = false;
+  const dismiss = () => {
+    document.removeEventListener("keydown", onKey, true);
+    document.removeEventListener("fullscreenchange", onFullscreenChange);
+    if (document.fullscreenElement === overlay) void document.exitFullscreen().catch(() => {});
+    overlay.remove();
+    opener.focus();
+  };
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      dismiss();
+    } else if (event.key === "Tab") {
+      // The close button is the only thing in here to reach.
+      event.preventDefault();
+      close.focus();
+    }
+  };
+  // Escape in the browser's full screen is the browser's: it leaves full screen
+  // without the key ever reaching the page, so leaving is what closes the view.
+  const onFullscreenChange = () => {
+    if (wentFullscreen && document.fullscreenElement !== overlay) dismiss();
+  };
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target !== picture) dismiss();
+  });
+  document.addEventListener("keydown", onKey, true);
+  document.addEventListener("fullscreenchange", onFullscreenChange);
+  document.body.append(overlay);
+  close.focus();
+  overlay
+    .requestFullscreen?.()
+    .then(() => {
+      wentFullscreen = true;
+    })
+    .catch(() => {
+      // Refused or unsupported: the overlay already fills the window.
+    });
+}
+
+/** Click, Enter or Space on a finished figure opens it full screen. */
+function attachFigureZoom(img: HTMLImageElement) {
+  if (img.dataset.answerZoom) return;
+  img.dataset.answerZoom = "1";
+  img.tabIndex = 0;
+  img.setAttribute("role", "button");
+  img.setAttribute("aria-label", `${img.alt || "Diagram"} — open full screen`);
+  // A frame still waiting for its picture has nothing to show larger.
+  const ready = () =>
+    img.complete && img.naturalWidth > 0 && !img.classList.contains("answer-figure-pending");
+  img.addEventListener("click", () => {
+    if (ready()) openFigureViewer(img);
+  });
+  img.addEventListener("keydown", (event) => {
+    if ((event.key === "Enter" || event.key === " ") && ready()) {
+      event.preventDefault();
+      openFigureViewer(img);
+    }
+  });
 }
 
 /**
@@ -256,6 +349,10 @@ export function enhanceAnswerMedia(root: HTMLElement): () => void {
       attachAnimation(img, hash, controller.signal);
       continue;
     }
+
+    // Every picture that is not an animation — a figure being drawn, one drawn
+    // long ago, an uploaded image — can be opened full screen.
+    attachFigureZoom(img);
 
     const digest = figureDigest(path);
     if (digest) {

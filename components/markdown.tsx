@@ -44,10 +44,32 @@ export const Markdown = React.memo(function Markdown({ text, className = "" }: {
   // figure still being redrawn swaps to the better render when it lands. Runs on
   // every render because streamed answers grow an image at a time; the helper is
   // idempotent per element.
+  //
+  // Also whenever images land in it, not only when `rendered` changes: React can
+  // re-apply this element's HTML without the effect running again — measured on
+  // the revision docs, the first figure was enhanced at 139ms and its markup
+  // replaced at 196ms — and the replacement arrived with no frame, no poller and
+  // no full-screen view. `enhanceAnswerMedia` skips what it has already done, so
+  // asking again costs nothing.
   React.useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    return enhanceAnswerMedia(root);
+    const teardowns = [enhanceAnswerMedia(root)];
+    const observer = new MutationObserver((records) => {
+      const newImage = records.some((record) =>
+        Array.from(record.addedNodes).some(
+          (node) =>
+            node instanceof Element &&
+            (node.matches("img.answer-figure") || node.querySelector("img.answer-figure")),
+        ),
+      );
+      if (newImage) teardowns.push(enhanceAnswerMedia(root));
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      teardowns.forEach((teardown) => teardown());
+    };
   }, [rendered]);
 
   return (

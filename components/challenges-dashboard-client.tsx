@@ -28,7 +28,13 @@ import {
   useTransition,
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
-import { ConceptsCard } from "@/components/concepts-reading";
+import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
+import {
+  StudyLanguageSwitch,
+  inStudyLanguage,
+  useRomanNepali,
+  useStudyLanguage,
+} from "@/components/study-language";
 import {
   ChallengeLoopCard,
   hubContainerClass,
@@ -45,6 +51,7 @@ import {
   hubTitleClass,
 } from "@/components/challenge-hub-frame";
 import { Markdown } from "@/components/markdown";
+import { WorkedSolution } from "@/components/worked-solution";
 import {
   ChallengeFeedbackModal,
   type ChallengeFeedbackChoice,
@@ -351,6 +358,14 @@ function ChallengeDetail({
   const contentPending = content?.contentStatus;
   const buildingRest = contentPending === "pending" && !content?.contentError;
   const buildFailed = contentPending === "pending" ? content?.contentError || "" : "";
+  /** English or Roman Nepali for the reading and the worked answers — see
+   *  `components/study-language.tsx`. Fetched only once Roman Nepali is chosen. */
+  const [studyLanguage, setStudyLanguage] = useStudyLanguage();
+  const romanNepali = useRomanNepali(
+    challenge.id,
+    `${content?.lesson?.content?.length ?? 0}:${(content?.solvedExamples || []).filter((example) => example.solution).length}`,
+    studyLanguage === "rn" && Boolean(content),
+  );
   /** The single list step one renders — see `mergeLearnQuestions` for why the
    *  two content fields are one list on screen. */
   const learnQuestions = useMemo(
@@ -857,30 +872,55 @@ function ChallengeDetail({
           >
             {activeStep === 1 ? (
               <div>
+                {content ? (
+                  <StudyLanguageSwitch
+                    className="mb-4"
+                    value={studyLanguage}
+                    onChange={setStudyLanguage}
+                    translation={romanNepali}
+                  />
+                ) : null}
                 {/* The concepts reading, as a card that opens it in a sheet — the
                     same card Revision shows. It leads step 1 because it is what a
                     student reads before working through the past questions. */}
-                <ConceptsCard
-                  key={challenge.id}
-                  className="mb-6"
-                  source={{
-                    id: challenge.id,
-                    title: challenge.title,
-                    subjectName: challenge.subjectName,
-                    reading: content?.lesson?.content ?? [],
-                  }}
-                />
-                {!content?.lesson?.content?.length && content?.contentStatus === "pending" ? (
-                  /* The background pass writes the reading after /start and the
-                     poll above brings it in, so this is "a moment", not "missing". */
-                  <p
-                    role="status"
-                    aria-live="polite"
-                    className="mb-6 rounded-xl border border-border bg-bg-secondary p-4 text-sm text-text-muted"
-                  >
-                    The concepts reading for this topic is being written from your course material.
-                    It will appear here in a moment.
-                  </p>
+                {content?.lesson?.content?.length ? (
+                  <ConceptsCard
+                    key={challenge.id}
+                    className="mb-6"
+                    source={{
+                      id: challenge.id,
+                      title: challenge.title,
+                      subjectName: challenge.subjectName,
+                      reading: inStudyLanguage(
+                        studyLanguage,
+                        romanNepali,
+                        (data) => data.reading,
+                        content.lesson.content,
+                      ),
+                    }}
+                  />
+                ) : content ? (
+                  /* Every challenge gets its reading; this one's is on its way.
+                     While the build runs, the poll above brings it in; after,
+                     the card asks for it itself — see `AwaitedConceptsCard`. */
+                  <AwaitedConceptsCard
+                    key={challenge.id}
+                    className="mb-6"
+                    waiting={content.contentStatus === "pending" && !content.contentError}
+                    readingError={content.readingError}
+                    source={{
+                      id: challenge.id,
+                      title: challenge.title,
+                      subjectName: challenge.subjectName,
+                      reading: [],
+                    }}
+                    onReading={(reading) =>
+                      onChange({
+                        ...challenge,
+                        content: { ...content, lesson: { ...content.lesson, content: reading } },
+                      })
+                    }
+                  />
                 ) : null}
                 {learnQuestions.length ? (
                   <ol className="space-y-4">
@@ -945,8 +985,20 @@ function ChallengeDetail({
                             </summary>
                             <div className="border-t border-border bg-card px-5 py-8 sm:px-8 sm:py-10">
                               {item.solution ? (
-                                <Markdown
-                                  text={item.solution}
+                                <WorkedSolution
+                                  challengeId={challenge.id}
+                                  question={item.question}
+                                  solution={item.solution}
+                                  // A solution that lost its diagram asks for
+                                  // it once; the drawn one is filed on the
+                                  // challenge, and patched into the cache here.
+                                  onDrawn={(drawn) => onChange(drawn.challenge)}
+                                  text={inStudyLanguage(
+                                    studyLanguage,
+                                    romanNepali,
+                                    (data) => data.solutions[item.key],
+                                    item.solution,
+                                  )}
                                   /* An answer is read, not scanned: the line
                                      height and the space between its blocks are
                                      what make a derivation followable. */

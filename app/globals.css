@@ -368,6 +368,61 @@ body:has(.exam-prep-theme) {
 }
 
 /*
+ * A figure opened full screen (`openFigureViewer` in components/answer-media.ts).
+ * The scrim is dark in both themes, as any picture viewer's is: the figure is
+ * drawn on its own light ground and reads best against black.
+ */
+img.answer-figure[data-answer-zoom] {
+  cursor: zoom-in;
+}
+
+img.answer-figure[data-answer-zoom]:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 3px;
+}
+
+.answer-figure-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  background: rgb(0 0 0 / 0.9);
+  cursor: zoom-out;
+}
+
+.answer-figure-viewer img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  cursor: default;
+}
+
+.answer-figure-viewer-close {
+  position: absolute;
+  top: max(1rem, env(safe-area-inset-top));
+  right: 1rem;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+}
+
+.answer-figure-viewer-close:hover {
+  background: rgb(255 255 255 / 0.24);
+}
+
+.answer-figure-viewer-close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/*
  * Student app type scale
  *
  * The creator workspace uses a deliberately quiet five-step hierarchy. These
