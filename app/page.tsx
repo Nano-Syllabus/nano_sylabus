@@ -156,7 +156,7 @@ const questions = [
     "Yes. You get 3 free learning challenges every day. Start with a topic and build your routine at your own pace.",
   ],
   [
-    "What do I get for Rs.450 Plus Subscription?",
+    "What do I get for Plus Subscription?",
     "Paid access gives you unlimited challenges and all semesters, subjects, and study material available on NanoSyllabus including unlimited handwritten exam grading.",
   ],
 ];
@@ -773,7 +773,7 @@ export default function LandingPage() {
         <ol className="mt-5 space-y-4">
           {[
             "Join NanoSyllabus for free.",
-            "Maintain a 7+ day streak of challenge completion.",
+            "Maintain a 7+ day streak of daily learning challenge.",
             "Refer friends: every 5 referrals adds 1 extra entry with your name on the wheel.",
           ].map((step, index) => (
             <li key={step} className="flex items-start gap-3 text-[15px] leading-[1.5] text-[#353944]">
@@ -838,8 +838,8 @@ export default function LandingPage() {
         </div>
 
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#dcfa72] px-4 py-4 text-[#1c1e1a]">
-          <span className="text-xs font-bold uppercase tracking-[0.1em]">Results announced</span>
-          <strong className={`${manrope.className} text-lg font-extrabold`}>2 October</strong>
+          <span className="text-xs font-bold uppercase tracking-[0.1em]">Results announcemen on</span>
+          <strong className={`${manrope.className} text-lg font-extrabold`}>Discord</strong>
         </div>
 
         <div className="mt-6 border-t border-white/25 pt-5 text-sm leading-relaxed text-white/85">
