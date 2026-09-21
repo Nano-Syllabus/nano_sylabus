@@ -220,7 +220,7 @@ export default function LandingPage() {
               <h1
                 className={`${manrope.className} text-[clamp(2.9rem,5.3vw,5.5rem)] font-extrabold leading-[1.04] tracking-[-0.055em] text-[#1c1e1a]`}
               >
-                Turn Your Syllabus
+                Turn Exam Preparation
                 <br />
            
                 Into a{" "}
