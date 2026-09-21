@@ -16,7 +16,7 @@ describe("landing page calls to action", () => {
 
   it("keeps the blue hero action auth-independent and routes it to communities", () => {
     expect(landingSource).toContain('<LandingPrimaryCta blue size="hero" communityOnly>');
-    expect(landingSource).toContain("Find your program");
+    expect(landingSource).toContain("Find your faculty");
     expect(primaryCtaSource).toContain('communityOnly ? "/communities"');
     expect(landingSource).not.toContain("Get Started");
   });

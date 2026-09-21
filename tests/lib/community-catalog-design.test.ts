@@ -27,4 +27,9 @@ describe("public community catalog design system", () => {
     expect(catalog).toContain("background: #3049ed;");
     expect(catalog).toContain("background: #f5f7f1;");
   });
+
+  it("uses faculty language in the discovery actions", () => {
+    expect(catalog).toContain("Add New Faculty");
+    expect(catalog).toContain("Browse Faculties");
+  });
 });

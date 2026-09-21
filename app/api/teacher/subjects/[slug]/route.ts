@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { clearTeacherSubjectTrails } from "@/lib/data/study-trail-cleanup";
+import { validSubjectName } from "@/lib/teacher-subject-name";
 import {
   deleteTeacherSubject,
   getTeacherSubjects,
@@ -21,6 +22,15 @@ type LocalDocumentMirror = {
 type CommunitySubjectLink = {
   id?: unknown;
   folder_path?: unknown;
+};
+
+type SubjectProfile = {
+  subject_name?: unknown;
+  folder_path?: unknown;
+};
+
+type SubjectRenameBody = {
+  name?: unknown;
 };
 
 async function findCommunitySubjectLinks(
@@ -127,6 +137,97 @@ async function deleteLocalSubjectMetadata(
   }
 
   return mirrorIds.length;
+}
+
+export async function PATCH(request: Request, { params }: RouteContext) {
+  try {
+    const teacher = await getTeacherProfile();
+    if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { slug } = await params;
+    const subjectSlug = slug.trim();
+    if (!subjectSlug || subjectSlug.length > 200) {
+      return NextResponse.json({ error: "Invalid subject." }, { status: 400 });
+    }
+
+    const body = (await request.json().catch(() => null)) as SubjectRenameBody | null;
+    const name = validSubjectName(body?.name);
+    if (!name) {
+      return NextResponse.json(
+        { error: "Enter a subject name up to 120 characters, without slashes." },
+        { status: 400 },
+      );
+    }
+
+    const admin = createSupabaseAdminClient();
+    const profileResult = await admin
+      .from("teacher_subject_profiles")
+      .select("subject_name,folder_path")
+      .eq("teacher_id", teacher.id)
+      .eq("subject_slug", subjectSlug)
+      .maybeSingle();
+    if (profileResult.error) throw profileResult.error;
+    if (!profileResult.data) {
+      return NextResponse.json(
+        { error: "Subject not found in this teacher workspace." },
+        { status: 404 },
+      );
+    }
+
+    // Keep the collection slug and folder path stable. The creator workspace
+    // uses this profile name as its editable display label, so renaming never
+    // moves source files or invalidates existing community links.
+    const now = new Date().toISOString();
+    const profileUpdate = await admin
+      .from("teacher_subject_profiles")
+      .update({ subject_name: name, updated_at: now })
+      .eq("teacher_id", teacher.id)
+      .eq("subject_slug", subjectSlug);
+    if (profileUpdate.error) throw profileUpdate.error;
+
+    // These tables intentionally store subject names as snapshots. Keep the
+    // labels users see in communities, courses, classrooms and exams aligned
+    // with the creator's renamed subject while leaving all stable identifiers
+    // untouched.
+    const referenceUpdates = await Promise.all([
+      admin
+        .from("community_subjects")
+        .update({ name, updated_at: now })
+        .eq("teacher_id", teacher.id)
+        .eq("external_subject_slug", subjectSlug),
+      admin
+        .from("teacher_course_subjects")
+        .update({ subject_name: name })
+        .eq("teacher_id", teacher.id)
+        .eq("subject_slug", subjectSlug),
+      admin
+        .from("teacher_classrooms")
+        .update({ subject_name: name })
+        .eq("teacher_id", teacher.id)
+        .eq("subject_slug", subjectSlug),
+      admin
+        .from("teacher_exam_papers")
+        .update({ subject_name: name })
+        .eq("teacher_id", teacher.id)
+        .eq("subject_slug", subjectSlug),
+    ]);
+    const referenceError = referenceUpdates.find((result) => result.error)?.error;
+    if (referenceError) throw referenceError;
+
+    return NextResponse.json({
+      subject: {
+        slug: subjectSlug,
+        name,
+        folder_path: String((profileResult.data as SubjectProfile).folder_path || ""),
+      },
+      name,
+      renamed: true,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Could not rename the subject.";
+    console.error("[PATCH /api/teacher/subjects/[slug]]", detail, error);
+    return NextResponse.json({ error: detail }, { status: 502 });
+  }
 }
 
 export async function DELETE(request: Request, { params }: RouteContext) {

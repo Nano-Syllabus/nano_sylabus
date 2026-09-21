@@ -220,12 +220,12 @@ export default function LandingPage() {
               <h1
                 className={`${manrope.className} text-[clamp(2.9rem,5.3vw,5.5rem)] font-extrabold leading-[1.04] tracking-[-0.055em] text-[#1c1e1a]`}
               >
-                Less searching
+                Turn Your Syllabus
                 <br />
            
-                More{" "}
+                Into a{" "}
                 <span className="relative isolate inline-block px-1">
-                  learning.
+                  Game.
                   <span
                     aria-hidden="true"
                     className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[#dcfa72]"
@@ -236,14 +236,14 @@ export default function LandingPage() {
                 Scattered notes. No study routine.
 
                 <br />
-                Let’s give your preparation a clear next step.
+                Learn one topic at a time, complete challenges, and get ready to ace your exams.
               </p>
               <p className="mt-3 text-[18px] leading-[1.55] text-[#5b5e55]">
                 Learn a topic, practise past questions, and get your handwritten answers checked. Build a daily study habit around your official syllabus.
               </p>
               <div className="mt-9 flex flex-wrap items-center gap-6">
                 <LandingPrimaryCta blue size="hero" communityOnly>
-                  Find your program
+                  Find your faculty
                 </LandingPrimaryCta>
                 <a
                   href="#steps"

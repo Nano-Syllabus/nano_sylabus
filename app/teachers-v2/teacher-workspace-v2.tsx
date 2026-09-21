@@ -1427,6 +1427,20 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
                 setChat={(next) =>
                   setChatMessages((current) => ({ ...current, [selectedSubject.slug]: next }))
                 }
+                onSubjectRenamed={async (name) => {
+                  setWorkspace((current) =>
+                    current
+                      ? {
+                          ...current,
+                          subjects: current.subjects.map((subject) =>
+                            subject.slug === selectedSubject.slug ? { ...subject, name } : subject,
+                          ),
+                        }
+                      : current,
+                  );
+                  setToast(`${titleCase(name)} renamed`);
+                  await Promise.all([loadWorkspace(), loadDashboard()]);
+                }}
                 onSubjectRemoved={async (message) => {
                   setSelectedSlug("");
                   setToast(message);

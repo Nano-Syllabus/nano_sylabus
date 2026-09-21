@@ -157,6 +157,7 @@ export function SubjectView({
   setSyllabus,
   chat,
   setChat,
+  onSubjectRenamed,
   onSubjectRemoved,
 }: {
   subject: TeacherSubject;
@@ -174,6 +175,7 @@ export function SubjectView({
   setSyllabus: (next: SyllabusState) => void;
   chat: ChatMessage[];
   setChat: (next: ChatMessage[]) => void;
+  onSubjectRenamed: (name: string) => Promise<void> | void;
   onSubjectRemoved: (message: string) => void;
 }) {
   const tabs: [SubjectTab, string, number | null][] = [
@@ -206,6 +208,15 @@ export function SubjectView({
           <h1 className="font-display text-3xl font-semibold">{titleCase(subject.name)}</h1>
           <p className="mt-2 text-text-secondary">{documents.length} source files</p>
         </div>
+        <span className="flex-1" />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onTab("config")}
+          aria-label={`Edit ${titleCase(subject.name)} name`}
+        >
+          Edit name
+        </Button>
       </div>
       <div
         role="tablist"
@@ -243,6 +254,7 @@ export function SubjectView({
         <SubjectConfig
           subject={subject}
           documentCount={documents.length}
+          onRenamed={onSubjectRenamed}
           onRemoved={onSubjectRemoved}
         />
       ) : (
@@ -1338,23 +1350,54 @@ export function TestChat({
 export function SubjectConfig({
   subject,
   documentCount,
+  onRenamed,
   onRemoved,
 }: {
   subject: TeacherSubject;
   documentCount: number;
+  onRenamed: (name: string) => Promise<void> | void;
   onRemoved: (message: string) => void;
 }) {
+  const [name, setName] = useState(subject.name);
   const [confirmation, setConfirmation] = useState("");
-  const [busy, setBusy] = useState<"delete" | "">("");
-  const [error, setError] = useState("");
+  const [busy, setBusy] = useState<"rename" | "delete" | "">("");
+  const [renameError, setRenameError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+
+  async function rename(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextName = name.trim().replace(/\s+/g, " ");
+    if (!nextName || nextName.length > 120 || /[\\/\u0000-\u001f]/.test(nextName)) {
+      setRenameError("Enter a subject name up to 120 characters, without slashes.");
+      return;
+    }
+    setBusy("rename");
+    setRenameError("");
+    try {
+      const payload = await responsePayload(
+        await fetch(`/api/teacher/subjects/${encodeURIComponent(subject.slug)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ name: nextName }),
+        }),
+      );
+      const savedName = text(payload.name) || nextName;
+      setName(savedName);
+      await onRenamed(savedName);
+    } catch (caught) {
+      setRenameError(caught instanceof Error ? caught.message : "Could not rename the subject.");
+    } finally {
+      setBusy("");
+    }
+  }
 
   async function remove() {
     if (confirmation.trim() !== subject.name) {
-      setError("Type the exact subject name before permanent deletion.");
+      setDeleteError("Type the exact subject name before permanent deletion.");
       return;
     }
     setBusy("delete");
-    setError("");
+    setDeleteError("");
     try {
       await responsePayload(
         await fetch(`/api/teacher/subjects/${encodeURIComponent(subject.slug)}?deleteFiles=1`, {
@@ -1364,7 +1407,7 @@ export function SubjectConfig({
       );
       onRemoved(`${titleCase(subject.name)} and its files deleted`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not remove the subject.");
+      setDeleteError(caught instanceof Error ? caught.message : "Could not remove the subject.");
       setBusy("");
     }
   }
@@ -1383,6 +1426,42 @@ export function SubjectConfig({
           {documentCount} files in {subject.folderPath}
         </p>
       </div>
+      <form onSubmit={rename} className="mt-6 rounded-lg border border-border p-5">
+        <h3 className="font-display text-lg font-semibold">Edit subject name</h3>
+        <p className="mt-2 text-sm leading-6 text-text-secondary">
+          This changes the display name only. Your source files, folder and existing links stay
+          where they are.
+        </p>
+        <label htmlFor="subject-name" className="mt-4 block text-sm font-medium">
+          Subject name
+        </label>
+        <input
+          id="subject-name"
+          type="text"
+          className={cn(inputClass, "mt-2")}
+          value={name}
+          maxLength={120}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => setName(event.target.value)}
+          aria-invalid={renameError ? "true" : undefined}
+          aria-describedby={renameError ? "subject-rename-error" : undefined}
+          disabled={Boolean(busy)}
+        />
+        {renameError ? (
+          <p id="subject-rename-error" role="alert" className="mt-3 text-sm text-destructive">
+            {renameError}
+          </p>
+        ) : null}
+        <Button
+          className="mt-4"
+          type="submit"
+          disabled={Boolean(busy) || !name.trim() || name.trim() === subject.name}
+          aria-busy={busy === "rename"}
+        >
+          {busy === "rename" ? "Saving…" : "Save name"}
+        </Button>
+      </form>
       <section className="mt-6">
         <h3 className="font-display text-lg font-semibold text-destructive">
           Delete subject and files
@@ -1400,12 +1479,12 @@ export function SubjectConfig({
           autoComplete="off"
           spellCheck={false}
           onChange={(event) => setConfirmation(event.target.value)}
-          aria-invalid={error ? "true" : undefined}
-          aria-describedby={error ? "subject-config-error" : undefined}
+          aria-invalid={deleteError ? "true" : undefined}
+          aria-describedby={deleteError ? "subject-delete-error" : undefined}
         />
-        {error ? (
-          <p id="subject-config-error" role="alert" className="mt-3 text-sm text-destructive">
-            {error}
+        {deleteError ? (
+          <p id="subject-delete-error" role="alert" className="mt-3 text-sm text-destructive">
+            {deleteError}
           </p>
         ) : null}
         <Button

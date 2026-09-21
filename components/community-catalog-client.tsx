@@ -1226,7 +1226,7 @@ export function CommunityCatalogClient({
                 className="ns-hero-cta ns-hero-cta--blue"
                 onClick={openCreate}
               >
-                Create Community
+                Add New Faculty
                 <svg
                   width="18"
                   height="18"
@@ -1244,7 +1244,7 @@ export function CommunityCatalogClient({
                 href="/login?next=%2Fcommunities%3Fcreate%3D1"
                 className="ns-hero-cta ns-hero-cta--blue"
               >
-                Create Community
+                Add New Faculty
                 <svg
                   width="18"
                   height="18"
@@ -1720,7 +1720,7 @@ export function CommunityCatalogClient({
           {/* Header with Search */}
           <div className="ns-results-header">
             <div className="ns-results-heading">
-              <h2>Browse communities</h2>
+              <h2>Browse Faculties</h2>
               <span className="ns-result-count" aria-live="polite">
                 {totalItems} {totalItems === 1 ? "community" : "communities"}
               </span>

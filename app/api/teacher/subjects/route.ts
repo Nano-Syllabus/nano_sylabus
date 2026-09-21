@@ -3,15 +3,7 @@ import { z } from "zod";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { createTeacherSubject, TeacherApiError } from "@/lib/teacher-app/client";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-
-function validSubjectName(value: unknown) {
-  if (typeof value !== "string") return "";
-  const name = value.trim().replace(/\s+/g, " ");
-  if (!name || name.length > 120) return "";
-  if (name === "." || name === "..") return "";
-  if (/[\\/\u0000-\u001f]/.test(name)) return "";
-  return name;
-}
+import { validSubjectName } from "@/lib/teacher-subject-name";
 
 const subjectSetupSchema = z.object({
   name: z.unknown(),
