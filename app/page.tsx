@@ -732,95 +732,118 @@ export default function LandingPage() {
 </section>
 
 
-{/* ── Section 05 / Daily Prize ── */}
+{/* ── Section 05 / BCT Weekly Cash Prize ── */}
 <section
-  id="daily-prize"
+  id="cash-prize"
   aria-labelledby="prize-title"
-  className="relative overflow-hidden bg-[#eff1e9] text-[#1c1e1a]"
+  className="relative overflow-hidden bg-[#e9edff] text-[#1c1e1a]"
 >
-  <div className="mx-auto grid max-w-[1320px] items-center gap-12 px-5 py-24 sm:px-10 lg:grid-cols-2 lg:gap-[70px] lg:py-28 2xl:px-0">
+  <div className="pointer-events-none absolute -right-24 -top-32 size-[420px] rounded-full bg-[#dcfa72]/50 blur-3xl" aria-hidden="true" />
+  <div className="pointer-events-none absolute -bottom-44 -left-24 size-[420px] rounded-full bg-[#3049ed]/15 blur-3xl" aria-hidden="true" />
+
+  <div className="relative mx-auto grid max-w-[1320px] items-center gap-12 px-5 py-20 sm:px-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-[70px] lg:py-28 2xl:px-0">
     {/* Left copy */}
     <div>
-      <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-        05 / A little extra motivation
+      <p className="inline-flex rounded-full bg-[#3049ed] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
+        BCT students only · Weekly challenge
       </p>
 
       <h2
         id="prize-title"
-        className={`${manrope.className} mt-6 text-[clamp(3rem,4.2vw,3.75rem)] font-extrabold leading-[1.06] tracking-[-0.055em] text-[#1c1e1a]`}
+        className={`${manrope.className} mt-7 text-[clamp(3rem,4.2vw,4.25rem)] font-extrabold leading-[1.03] tracking-[-0.065em] text-[#1c1e1a]`}
       >
-        Make progress.
+        Your exam prep
         <br />
-        <em className="font-serif font-normal italic">
-          Get a chance to win.
+        could pay off,
+        <br />
+        <em className="font-serif font-normal italic text-[#3049ed]">
+          literally.
         </em>
       </h2>
 
       <p className="mt-6 max-w-[500px] text-[16px] leading-[1.7] text-[#5b5e55]">
-        Complete at least <strong className="font-semibold text-[#1c1e1a]">1 learning challenge</strong>{" "}
-        to qualify to participate in the daily prize draw. Three lucky students win every day.
+        NanoSyllabus is turning your study streak into a chance to win cash.
+        Join for free, keep learning, and earn extra entries when your friends join.
       </p>
 
-      <a
-        href="https://www.nanosyllabus.com/communities"
-        className="mt-7 inline-flex items-center gap-6 rounded-lg bg-[#3049ed] px-6 py-[18px] font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5"
-      >
-        Start a free challenge
-        <span aria-hidden="true">↗</span>
-      </a>
+      <div className="mt-8 rounded-[20px] border border-[#cbd2fb] bg-white/80 p-5 sm:p-6">
+        <h3 className={`${manrope.className} text-xl font-extrabold tracking-[-0.035em]`}>
+          How to join
+        </h3>
+        <ol className="mt-5 space-y-4">
+          {[
+            "Join NanoSyllabus for free.",
+            "Maintain a 7+ day streak of challenge completion.",
+            "Refer friends: every 5 referrals adds 1 extra entry with your name on the wheel.",
+          ].map((step, index) => (
+            <li key={step} className="flex items-start gap-3 text-[15px] leading-[1.5] text-[#353944]">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#dcfa72] text-xs font-extrabold text-[#1c1e1a]">
+                {index + 1}
+              </span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
 
-      <p className="mt-1 max-w-[430px] text-xs leading-[1.6] text-[#5b5e55]">
-        Winners are selected by lucky draw.
+      <div className="mt-7 flex flex-wrap gap-3">
+        <a
+          href="https://www.nanosyllabus.com/communities"
+          className="inline-flex min-h-12 items-center justify-center gap-5 rounded-xl bg-[#3049ed] px-6 py-3 font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3049ed]"
+        >
+          Join free & start a challenge <span aria-hidden="true">↗</span>
+        </a>
+        <a
+          href={DISCORD_STUDY_ROOM_URL}
+          className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#3049ed] px-6 py-3 font-semibold text-[#3049ed] transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3049ed]"
+        >
+          Join Discord for updates
+        </a>
+      </div>
+      <p className="mt-5 text-sm text-[#5b5e55]">
+        Tag the study buddy who needs this!
       </p>
     </div>
 
     {/* Prize board */}
     <div className="relative">
-      <div className="rounded-[20px] border border-[#c6dd76] bg-[#dcfa72] p-6 shadow-[8px_9px_0_#1c1e1a] transition-transform duration-300 hover:rotate-0 sm:p-8 lg:rotate-[1deg]">
-        <div className="flex items-center justify-between gap-3 text-[11px] font-bold uppercase tracking-[0.05em] text-[#1c1e1a]">
-          <span>Daily prize pool</span>
-          <span>3 lucky winners</span>
+      <div className="rounded-[28px] border border-[#243bc2] bg-[#3049ed] p-5 text-white shadow-[10px_12px_0_#17236d] sm:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.1em]">
+          <span className="rounded-full border border-white/30 px-3 py-1.5">BCT weekly draw</span>
+          <span className="text-[#dcfa72]">3 winners</span>
         </div>
 
-        <div className={`${manrope.className} my-6 text-[clamp(3rem,5vw,4.5rem)] font-extrabold leading-none tracking-[-0.06em] text-[#1c1e1a]`}>
-          Rs. 1,000
-
-          <span className="mt-2 block text-sm font-medium tracking-normal">
-            Every day. A new chance.
-          </span>
+        <div className="mt-9 text-xs font-bold uppercase tracking-[0.16em] text-white/75">
+          First prize
         </div>
+        <div className={`${manrope.className} mt-2 text-[clamp(3.5rem,6vw,5.5rem)] font-extrabold leading-none tracking-[-0.075em] text-[#dcfa72]`}>
+          Rs. 5,000
+        </div>
+        <p className="mt-3 text-base font-semibold">+ 3 months Unlimited Challenge</p>
 
-        <div className="grid grid-cols-3 gap-2.5">
-          <div className="rounded-[10px] border border-[#c6dd76] bg-[#f8ffe6] px-3 py-[17px]">
-            <span className="block text-[9px] tracking-[0.04em]">
-              01 / FIRST PRIZE
-            </span>
-            <strong className={`${manrope.className} mt-2.5 block whitespace-nowrap text-[20px] font-extrabold sm:text-[23px]`}>
-              Rs. 500
+        <div className="mt-9 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
+            <span className="text-xs font-bold uppercase tracking-[0.1em] text-[#dcfa72]">02 / Second prize</span>
+            <strong className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}>
+              3 months Unlimited Challenge
             </strong>
           </div>
 
-          <div className="rounded-[10px] border border-[#c6dd76] bg-[#f8ffe6] px-3 py-[17px]">
-            <span className="block text-[9px] tracking-[0.04em]">
-              02 / SECOND PRIZE
-            </span>
-            <strong className={`${manrope.className} mt-2.5 block whitespace-nowrap text-[20px] font-extrabold sm:text-[23px]`}>
-              Rs. 300
-            </strong>
-          </div>
-
-          <div className="rounded-[10px] border border-[#c6dd76] bg-[#f8ffe6] px-3 py-[17px]">
-            <span className="block text-[9px] tracking-[0.04em]">
-              03 / THIRD PRIZE
-            </span>
-            <strong className={`${manrope.className} mt-2.5 block whitespace-nowrap text-[20px] font-extrabold sm:text-[23px]`}>
-              Rs. 200
+          <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
+            <span className="text-xs font-bold uppercase tracking-[0.1em] text-[#dcfa72]">03 / Third prize</span>
+            <strong className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}>
+              1 month Unlimited Challenge
             </strong>
           </div>
         </div>
 
-        <div className="mt-6 border-t border-[#b3ca64] pt-[18px] text-[13px]">
-          Your first win? Showing up to learn.
+        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#dcfa72] px-4 py-4 text-[#1c1e1a]">
+          <span className="text-xs font-bold uppercase tracking-[0.1em]">Results announced</span>
+          <strong className={`${manrope.className} text-lg font-extrabold`}>2 October</strong>
+        </div>
+
+        <div className="mt-6 border-t border-white/25 pt-5 text-sm leading-relaxed text-white/85">
+          Stay consistent for 7+ days. Every 5 successful referrals gives you one extra name in the draw.
         </div>
       </div>
     </div>
