@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { referralLinkForCode } from "@/lib/data/billing-referrals";
+import { hasActivePaidProSubscription, referralLinkForCode } from "@/lib/data/billing-referrals";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
@@ -29,11 +30,17 @@ export async function POST(request: Request) {
     const row = Array.isArray(data) ? data[0] : data;
     if (!row?.code) return NextResponse.json({ error: "Referral link could not be created." }, { status: 500 });
 
+    // Any student may hold a link; the Pro bonus is paid only while they hold paid
+    // Pro. The client words its share message by this, so a free student's link
+    // does not promise a bonus the reward trigger would void.
+    const billingReward = await hasActivePaidProSubscription(createSupabaseAdminClient(), user.id);
+
     return NextResponse.json({
       referral: {
         code: String(row.code),
         link: referralLinkForCode(String(row.code), new URL(request.url).origin),
         rewardDays: 30,
+        billingReward,
       },
     });
   } catch (error) {

@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
 
-import { DocumentList } from "@/app/teachers-v2/teacher-workspace-v2";
+import { DocumentList } from "@/app/teachers-v2/views/subject-view";
 
 /**
  * What a shelf says about a file it cannot search yet.

@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Gift, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, BookOpen, Gift, ShieldCheck, Users } from "lucide-react";
 import { BillingReferralClaim } from "@/components/billing-referral-claim";
 import { getCurrentAuth } from "@/lib/auth";
 import { getBillingReferralByCode } from "@/lib/data/billing-referrals";
@@ -20,6 +20,9 @@ export default async function BillingReferralPage({ params }: PageProps) {
 
   const normalizedCode = referral.code;
   const nextPath = `/r/${encodeURIComponent(normalizedCode)}`;
+  // Any student may share a link; only a paid-Pro referrer's carries the Pro bonus.
+  // A free student's link must not promise it: the reward trigger would void it.
+  const proBonus = referral.billingRewardEligible;
 
   return (
     <main className="min-h-screen bg-bg-secondary px-4 py-8 text-text-primary sm:px-6">
@@ -41,7 +44,7 @@ export default async function BillingReferralPage({ params }: PageProps) {
               A real student referral
             </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              {referral.referrerName} invited you to NanoSyllabus Pro
+              {referral.referrerName} invited you to NanoSyllabus{proBonus ? " Pro" : ""}
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">
               Learn from your course material, practise with real exam questions, and keep your
@@ -52,26 +55,47 @@ export default async function BillingReferralPage({ params }: PageProps) {
           <div className="p-6 sm:p-10">
             {!referral.active ? (
               <div className="rounded-xl border border-border bg-bg-secondary p-4 text-sm leading-6 text-text-secondary">
-                This referral is currently unavailable. Its owner needs an active paid Pro
-                subscription before it can be claimed.
+                This referral link is no longer active.
               </div>
             ) : (
               <>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-border bg-bg-secondary p-4">
-                    <Gift className="size-5 text-text-secondary" aria-hidden="true" />
-                    <p className="mt-3 text-sm font-semibold">2 months for the price of 1</p>
-                    <p className="mt-1 text-xs leading-5 text-text-muted">
-                      Buy one month of Individual Pro and receive one bonus month after approval.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-border bg-bg-secondary p-4">
-                    <ShieldCheck className="size-5 text-text-secondary" aria-hidden="true" />
-                    <p className="mt-3 text-sm font-semibold">Automatic and auditable</p>
-                    <p className="mt-1 text-xs leading-5 text-text-muted">
-                      Rewards come from the billing database, not a display counter.
-                    </p>
-                  </div>
+                  {proBonus ? (
+                    <>
+                      <div className="rounded-2xl border border-border bg-bg-secondary p-4">
+                        <Gift className="size-5 text-text-secondary" aria-hidden="true" />
+                        <p className="mt-3 text-sm font-semibold">2 months for the price of 1</p>
+                        <p className="mt-1 text-xs leading-5 text-text-muted">
+                          Buy one month of Individual Pro and receive one bonus month after approval.
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-border bg-bg-secondary p-4">
+                        <ShieldCheck className="size-5 text-text-secondary" aria-hidden="true" />
+                        <p className="mt-3 text-sm font-semibold">Automatic and auditable</p>
+                        <p className="mt-1 text-xs leading-5 text-text-muted">
+                          Rewards come from the billing database, not a display counter.
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="rounded-2xl border border-border bg-bg-secondary p-4">
+                        <BookOpen className="size-5 text-text-secondary" aria-hidden="true" />
+                        <p className="mt-3 text-sm font-semibold">Daily challenges</p>
+                        <p className="mt-1 text-xs leading-5 text-text-muted">
+                          Short challenges built from your own syllabus, one topic at a time.
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-border bg-bg-secondary p-4">
+                        <Gift className="size-5 text-text-secondary" aria-hidden="true" />
+                        <p className="mt-3 text-sm font-semibold">Back your friend</p>
+                        <p className="mt-1 text-xs leading-5 text-text-muted">
+                          Your invite counts toward their weekly Cash Prize draw once you pass your
+                          first challenge.
+                        </p>
+                      </div>
+                    </>
+                  )}
                   <div className="rounded-2xl border border-border bg-bg-secondary p-4">
                     <Users className="size-5 text-text-secondary" aria-hidden="true" />
                     <p className="mt-3 text-sm font-semibold">Code {normalizedCode}</p>
@@ -87,17 +111,19 @@ export default async function BillingReferralPage({ params }: PageProps) {
                     <>
                       <p className="mb-4 text-sm leading-6 text-text-secondary">
                         You are signed in as{" "}
-                        <strong className="text-text-primary">{auth.user.email}</strong>. Save this
-                        referral, then buy one month of Individual Pro. Your approved plan will run
-                        for 60 days total.
+                        <strong className="text-text-primary">{auth.user.email}</strong>.{" "}
+                        {proBonus
+                          ? "Save this referral, then buy one month of Individual Pro. Your approved plan will run for 60 days total."
+                          : "Save this referral, then pass your first challenge."}
                       </p>
-                      <BillingReferralClaim code={normalizedCode} />
+                      <BillingReferralClaim code={normalizedCode} billingReward={proBonus} />
                     </>
                   ) : (
                     <>
                       <p className="mb-4 text-sm leading-6 text-text-secondary">
-                        Create or sign in, save the referral, then buy one month of Individual Pro
-                        to receive one bonus month.
+                        {proBonus
+                          ? "Create or sign in, save the referral, then buy one month of Individual Pro to receive one bonus month."
+                          : "Create or sign in, then save the referral."}
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Link

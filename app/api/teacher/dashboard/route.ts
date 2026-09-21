@@ -305,18 +305,26 @@ export async function GET(request: Request) {
     const selectedCommunityIsManaged = communityData.managedCommunities.some(
       (community) => community.slug === requestedCommunitySlug,
     );
-    const communityWorkspace = selectedCommunityIsManaged
-      ? await getCommunity(requestedCommunitySlug, teacher.user_id, admin)
-      : null;
-    const communitySubjectWorkspace =
+    // The last two reads of the handler, and they do not read each other: one
+    // loads the community being viewed, the other the subject open inside it,
+    // and both are answered from `teacher.user_id` and the slugs already in
+    // hand. Awaited one after the other they were two round trips spent on one
+    // wait — the same ~165ms-a-hop arithmetic the rest of this handler is
+    // already written around, paid at the very end, after everything else had
+    // finished. This is the last waterfall on the creator portal's data path.
+    const [communityWorkspace, communitySubjectWorkspace] = await Promise.all([
+      selectedCommunityIsManaged
+        ? getCommunity(requestedCommunitySlug, teacher.user_id, admin)
+        : Promise.resolve(null),
       selectedCommunityIsManaged && requestedCommunitySubjectSlug
-        ? await getCommunitySubjectWorkspace(
+        ? getCommunitySubjectWorkspace(
             teacher.user_id,
             requestedCommunitySlug,
             requestedCommunitySubjectSlug,
             admin,
           )
-        : null;
+        : Promise.resolve(null),
+    ]);
     return NextResponse.json({
       ...buildTeacherDashboard({
         classrooms,

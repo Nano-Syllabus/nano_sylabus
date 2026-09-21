@@ -365,3 +365,120 @@ describe("revision docs", () => {
     expect(docs.semesters).toEqual([]);
   });
 });
+
+describe("revision docs: one entry per topic, one copy per question", () => {
+  let db: ReturnType<typeof communityLearningFixture>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = communityLearningFixture();
+    mocks.admin.mockReturnValue(db.admin);
+    mocks.access.mockResolvedValue([SUBJECT_ACCESS]);
+    mocks.creatorAccess.mockResolvedValue([]);
+    mocks.topics.mockResolvedValue([
+      { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", position: 4 },
+    ]);
+  });
+
+  const unitTopics = (docs: Awaited<ReturnType<typeof getStudentRevisionDocs>>) =>
+    docs.semesters[0].subjects[0].units[0].topics;
+
+  it("lists a topic sat twice once, and counts it once", async () => {
+    // Passed on the 10th, then assigned again and started on the 12th.
+    db.tables.student_challenges = [
+      completedRow({
+        id: "challenge-again", status: "started", completed_at: null,
+        updated_at: "2026-09-12T10:00:00.000Z", attempt_count: 0,
+      }),
+      completedRow({ updated_at: "2026-09-10T10:00:00.000Z" }),
+    ];
+
+    const docs = await getStudentRevisionDocs("member");
+
+    expect(unitTopics(docs).map((topic) => topic.title)).toEqual(["Laplace Transform"]);
+    expect(docs.topicCount).toBe(1);
+    expect(docs.semesters[0].topicCount).toBe(1);
+    // The passed sitting is the page shown, even though the started one is newer.
+    expect(unitTopics(docs)[0].challengeId).toBe("challenge-a");
+    expect(unitTopics(docs)[0].inProgress).toBe(false);
+  });
+
+  it("keeps the newest of two passed sittings, and counts every attempt", async () => {
+    db.tables.student_challenges = [
+      completedRow({ id: "challenge-new", updated_at: "2026-09-14T10:00:00.000Z", attempt_count: 2 }),
+      completedRow({ id: "challenge-old", updated_at: "2026-09-10T10:00:00.000Z", attempt_count: 1 }),
+    ];
+
+    const [topic] = unitTopics(await getStudentRevisionDocs("member"));
+
+    expect(topic.challengeId).toBe("challenge-new");
+    expect(topic.attempts).toBe(3);
+  });
+
+  it("treats a re-keyed topic with the same title in the same unit as the same topic", async () => {
+    db.tables.student_challenges = [
+      completedRow({ id: "challenge-rekeyed", topic_key: "laplace-transform", updated_at: "2026-09-14T10:00:00.000Z" }),
+      completedRow({ updated_at: "2026-09-10T10:00:00.000Z" }),
+    ];
+
+    expect(unitTopics(await getStudentRevisionDocs("member"))).toHaveLength(1);
+  });
+
+  it("keeps two topics that only share a title across different units", async () => {
+    mocks.topics.mockResolvedValue([
+      { topic_key: "intro-1", title: "Introduction", unit_number: "1", position: 1 },
+      { topic_key: "intro-3", title: "Introduction", unit_number: "3", position: 9 },
+    ]);
+    db.tables.student_challenges = [
+      completedRow({ id: "c1", topic_key: "intro-1", topic_title: "Introduction", title: "Introduction" }),
+      completedRow({ id: "c3", topic_key: "intro-3", topic_title: "Introduction", title: "Introduction" }),
+    ];
+
+    const docs = await getStudentRevisionDocs("member");
+
+    expect(docs.topicCount).toBe(2);
+    expect(docs.semesters[0].subjects[0].units.map((unit) => unit.label)).toEqual(["Unit 1", "Unit 3"]);
+  });
+
+  it("never folds two different topics of one unit into one", async () => {
+    mocks.topics.mockResolvedValue([
+      { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", position: 4 },
+      { topic_key: "inverse", title: "Inverse Laplace Transform", unit_number: "2", position: 5 },
+    ]);
+    db.tables.student_challenges = [
+      completedRow(),
+      completedRow({ id: "challenge-b", topic_key: "inverse", topic_title: "Inverse Laplace Transform" }),
+    ];
+
+    const docs = await getStudentRevisionDocs("member");
+
+    expect(unitTopics(docs).map((topic) => topic.title)).toEqual([
+      "Laplace Transform",
+      "Inverse Laplace Transform",
+    ]);
+    expect(docs.topicCount).toBe(2);
+  });
+
+  it("does not list a past question again when it is also shown worked", async () => {
+    db.tables.student_challenges = [
+      completedRow({
+        content: {
+          lesson: { title: "t", content: ["Reading."] },
+          pastQuestions: [
+            // The same question, differing only in case, spacing and final mark.
+            { id: "p1", question: "What is Mechanics? Define Rigid body and Deform body.", year: "2073 Magh" },
+            { id: "p2", question: "What do you mean by the study of statics.", year: "2071 Bhadra" },
+          ],
+          solvedExamples: [
+            { question: "what is mechanics?  Define rigid body and deform body", solution: "Mechanics is ..." },
+          ],
+        },
+      }),
+    ];
+
+    const [topic] = unitTopics(await getStudentRevisionDocs("member"));
+
+    expect(topic.pastQuestions.map((question) => question.id)).toEqual(["p2"]);
+    expect(topic.solvedExamples).toHaveLength(1);
+  });
+});

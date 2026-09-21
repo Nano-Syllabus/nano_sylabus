@@ -18,6 +18,14 @@ export const ROUTES = [
   { path: "/app/exams", name: "exams", auth: true },
   { path: "/app/billing", name: "billing", auth: true },
   { path: "/app/settings", name: "settings", auth: true },
+  // The creator portal, which was missing from this list while being the
+  // heaviest route in the app — 131 kB of route JavaScript against 25 kB for
+  // the next largest, all of it shipped before the first view could paint.
+  // Nothing here was holding it to a budget, so nothing reported it getting
+  // there. Measuring it needs `PERF_TEST_EMAIL` to be a CREATOR account: a
+  // student signs in fine and is served the onboarding screen instead, which
+  // would report a number for the wrong page.
+  { path: "/teachers", name: "teachers", auth: true },
 ];
 
 export function selectRoutes(only) {

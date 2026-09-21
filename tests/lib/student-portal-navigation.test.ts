@@ -10,14 +10,22 @@ describe("student portal navigation chrome", () => {
     expect(appLayout).toContain('<AppShell user={user} title="Dashboard">');
   });
 
-  it("keeps the shared top bar visible, aligned, and theme-aware", () => {
-    expect(appShell).toContain('import { ThemeToggle } from "@/components/theme-toggle";');
-    expect(appShell).toContain('min-h-[53px] shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)]');
-    // The page title is centred in the bar, not pushed left by the menu button.
-    expect(appShell).toContain("truncate text-center font-sans text-sm font-medium");
-    expect(appShell).toContain('border-b border-border bg-bg-secondary');
-    expect(appShell).toContain('<ThemeToggle className="h-10 w-10 shrink-0 bg-bg-primary" />');
+  it("has no top bar: every page prints its own heading", () => {
+    // The bar repeated each page's title — every tab said its name twice.
+    expect(appShell).not.toContain("truncate text-center font-sans text-sm font-medium");
+    expect(appShell).not.toContain("{dynamicTitle ?? title}");
+    expect(appShell).not.toContain("<ThemeToggle");
     expect(appShell).not.toContain("topbarSuppressed");
+  });
+
+  it("keeps a way to open the sidebar on a phone, and only on a phone", () => {
+    expect(appShell).toMatch(/className="flex h-12 shrink-0 items-center border-b border-border px-3 md:hidden"/);
+    expect(appShell).toContain('aria-label="Open sidebar"');
+  });
+
+  it("keeps the theme toggle, in the sidebar's profile row", () => {
+    expect(appSidebar).toContain('import { ThemeToggle } from "@/components/theme-toggle";');
+    expect(appSidebar).toContain('<ThemeToggle className="h-10 w-10 shrink-0 bg-bg-primary" />');
   });
 
   it("aligns the sidebar brand row to the shared top bar", () => {

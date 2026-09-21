@@ -28,6 +28,22 @@ import {
   useTransition,
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
+import { ConceptsCard } from "@/components/concepts-reading";
+import {
+  ChallengeLoopCard,
+  hubContainerClass,
+  hubListCardClass,
+  hubListHeaderClass,
+  hubMainClass,
+  hubMetricCardClass,
+  hubMetricsClass,
+  hubRowActionsClass,
+  hubRowClass,
+  hubRowMainClass,
+  hubRowSubjectClass,
+  hubRowsClass,
+  hubTitleClass,
+} from "@/components/challenge-hub-frame";
 import { Markdown } from "@/components/markdown";
 import {
   ChallengeFeedbackModal,
@@ -352,14 +368,21 @@ function ChallengeDetail({
   }, [focusMode, setSidebarSuppressed]);
 
   useEffect(() => {
+    if (focusMode) exitFocusButtonRef.current?.focus();
+  }, [focusMode]);
+
+  useEffect(() => {
     if (!focusMode) return;
-    exitFocusButtonRef.current?.focus();
+    // Escape is the Exit button's shortcut, so it leaves the same way: back to
+    // the challenge hub, not into a half-open copy of the challenge.
     const exitOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setFocusMode(false);
+      // An Escape something open on top already used — the concepts sheet
+      // closing — is not also a request to leave the challenge.
+      if (event.key === "Escape" && !event.defaultPrevented) onBack();
     };
     window.addEventListener("keydown", exitOnEscape);
     return () => window.removeEventListener("keydown", exitOnEscape);
-  }, [focusMode]);
+  }, [focusMode, onBack]);
 
   useEffect(() => {
     if (focusMode) {
@@ -737,10 +760,14 @@ function ChallengeDetail({
     <button
       ref={focusMode ? exitFocusButtonRef : enterFocusButtonRef}
       type="button"
-      aria-pressed={focusMode}
-      aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
-      title={focusMode ? "Exit focus mode (Esc)" : "Enter focus mode"}
-      onClick={() => setFocusMode((current) => !current)}
+      // A toggle only on the way IN. In focus mode it is a plain Exit button,
+      // so it carries no pressed state to announce.
+      aria-pressed={focusMode ? undefined : false}
+      aria-label={focusMode ? "Exit the challenge" : "Enter focus mode"}
+      title={focusMode ? "Exit the challenge (Esc)" : "Enter focus mode"}
+      // Exit is the way OUT, not a layout switch: it closes the challenge and
+      // lands the student back on the challenge hub they opened it from.
+      onClick={() => (focusMode ? onBack() : setFocusMode(true))}
       className={`${focusButtonClass} inline-flex items-center justify-center gap-2 border border-border bg-card px-3 text-text-primary hover:bg-bg-secondary`}
     >
       {focusMode ? (
@@ -792,7 +819,9 @@ function ChallengeDetail({
           focusMode
             ? // The same column as outside focus mode, under the bar.
               "mx-auto flex min-h-[calc(100dvh-53px)] max-w-5xl flex-col px-4 pt-6 sm:px-8"
-            : "mx-auto flex min-h-[calc(100dvh-53px)] max-w-5xl flex-col px-4 pt-6 sm:px-8"
+            : // Outside focus mode it fills the app's scroll area, which no longer
+              // has a 53px top bar above it to subtract.
+              "mx-auto flex min-h-full max-w-5xl flex-col px-4 pt-6 sm:px-8"
         }
       >
         <div className="flex flex-1 flex-col">
@@ -828,6 +857,31 @@ function ChallengeDetail({
           >
             {activeStep === 1 ? (
               <div>
+                {/* The concepts reading, as a card that opens it in a sheet — the
+                    same card Revision shows. It leads step 1 because it is what a
+                    student reads before working through the past questions. */}
+                <ConceptsCard
+                  key={challenge.id}
+                  className="mb-6"
+                  source={{
+                    id: challenge.id,
+                    title: challenge.title,
+                    subjectName: challenge.subjectName,
+                    reading: content?.lesson?.content ?? [],
+                  }}
+                />
+                {!content?.lesson?.content?.length && content?.contentStatus === "pending" ? (
+                  /* The background pass writes the reading after /start and the
+                     poll above brings it in, so this is "a moment", not "missing". */
+                  <p
+                    role="status"
+                    aria-live="polite"
+                    className="mb-6 rounded-xl border border-border bg-bg-secondary p-4 text-sm text-text-muted"
+                  >
+                    The concepts reading for this topic is being written from your course material.
+                    It will appear here in a moment.
+                  </p>
+                ) : null}
                 {learnQuestions.length ? (
                   <ol className="space-y-4">
                     {learnQuestions.map((item, index) => {
@@ -975,12 +1029,15 @@ function ChallengeDetail({
               <div>
                 {practiceStage === "questions" ? (
                   <>
-                    <h2 className="text-xl font-semibold">📝 Your Turn</h2>
-                    <p className="mt-2 text-sm text-text-muted">
+                    {/* The instruction IS the heading. "Your Turn" sat above a line
+                        that said the only thing a student needs here, so the section
+                        now leads with that line instead of naming itself. */}
+                    <h2 className="text-xl font-semibold">
+                      📝{" "}
                       {challenge.status === "completed"
                         ? "Review the questions and feedback from your completed attempt."
                         : "Write your answers on paper."}
-                    </p>
+                    </h2>
                     {challenge.status === "completed" && !challenge.latestAttempt ? (
                       <div className="mt-5 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-text-secondary">
                         This result is saved, but its answer details are unavailable for review.
@@ -1794,12 +1851,30 @@ export function ChallengesDashboardClient({
     void openChallenge(initialChallenge);
   }, [dashboard.challenges, initialChallengeId]);
 
+  // Back to the hub — and the hub's URL. A challenge opened from a link keeps
+  // `?challenge=<id>` in the address bar, and left there a refresh reopens the
+  // challenge the student just exited. Dropped with replaceState, not a router
+  // navigation, so leaving does not refetch the page. Stable, because the detail
+  // view registers its Escape handler against it.
+  const closeChallenge = useCallback(() => {
+    setSelected(null);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("challenge")) {
+      url.searchParams.delete("challenge");
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+    }
+  }, []);
+
   if (selected) {
     const nextChallenge = nextAvailableChallenge(dashboard.challenges, selected);
     return (
       <ChallengeDetail
         challenge={selected}
-        onBack={() => setSelected(null)}
+        onBack={closeChallenge}
         onChange={setSelected}
         onHubPatch={patchHub}
         canRestart={canRestartChallenge}
@@ -1825,105 +1900,16 @@ export function ChallengesDashboardClient({
   }
 
   return (
-    <main className="min-h-screen w-full bg-[#f8f9fa] dark:bg-bg-secondary text-text-primary">
-      <div className="mx-auto max-w-[1060px] px-4 sm:px-6 md:px-8 py-8 pb-24">
-        <h1 className="type-student-page-title mb-6 text-text-primary">Challenge Hub</h1>
+    <main className={hubMainClass}>
+      <div className={hubContainerClass}>
+        <h1 className={hubTitleClass}>Challenge Hub</h1>
 
-        {/* Challenge Loop Top Card */}
-        <section className="relative overflow-hidden rounded-[24px] border border-black dark:border-white/20 bg-white dark:bg-card p-7 sm:p-9 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          {/* Top right decorative lime accent corner */}
-          <div
-            className="pointer-events-none absolute top-0 right-0 size-28 sm:size-34 rounded-bl-full bg-[#d7ff3b] select-none z-0"
-            aria-hidden="true"
-          />
-          {/* Top right badge text */}
-          <div className="pointer-events-none absolute top-4 sm:top-5 right-4 sm:right-5 z-10 select-none">
-            <span className="type-student-meta font-semibold text-[#0a0a0a]">
-              1 topic · 1 result
-            </span>
-          </div>
-
-          <h2 className="type-student-section-title text-text-primary">Challenge loop</h2>
-
-          <div className="relative mt-8">
-            {/* Connecting line behind step icons on larger screens */}
-            <div
-              className="hidden md:block absolute top-[29px] left-[10%] right-[10%] h-[1.5px] bg-[#e5e7eb] dark:bg-border/70 -z-0"
-              aria-hidden="true"
-            />
-
-            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8">
-              {/* Step 1: Learn — the past questions worked, then the concepts.
-                  One card, because it is one step on the challenge screen; two
-                  cards here would describe a flow the student never walks. */}
-              <div className="flex flex-col items-start md:items-center text-left md:text-center">
-                <div className="flex size-[58px] items-center justify-center rounded-[16px] border-[1.5px] border-[#18181b] dark:border-white/80 bg-white dark:bg-bg-primary text-black dark:text-white shadow-xs">
-                  <svg
-                    className="size-5 text-black dark:text-white"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                  </svg>
-                </div>
-                <h3 className="type-student-card-title mt-3 text-text-primary">Learn</h3>
-                <p className="type-student-meta mt-0.5 max-w-[170px] text-[#6b7280] dark:text-text-muted">
-                  Past questions worked, then the concepts under them.
-                </p>
-              </div>
-
-              {/* Step 2: Handwritten exam */}
-              <div className="flex flex-col items-start md:items-center text-left md:text-center">
-                <div className="flex size-[58px] items-center justify-center rounded-[16px] border-[1.5px] border-[#18181b] dark:border-white/80 bg-white dark:bg-bg-primary text-black dark:text-white shadow-xs">
-                  <svg
-                    className="size-5 text-black dark:text-white"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                    <path d="m15 5 4 4" />
-                  </svg>
-                </div>
-                <h3 className="type-student-card-title mt-3 text-text-primary">Handwritten exam</h3>
-                <p className="type-student-meta mt-0.5 max-w-[170px] text-[#6b7280] dark:text-text-muted">
-                  Attempt it on your own paper.
-                </p>
-              </div>
-
-              {/* Step 3: AI grade */}
-              <div className="flex flex-col items-start md:items-center text-left md:text-center">
-                <div className="relative z-10 flex size-[60px] items-center justify-center rounded-[18px] bg-[#18181b] text-[#d7ff3b] shadow-[0_4px_16px_rgba(0,0,0,0.2)] dark:bg-bg-tertiary">
-                  <svg
-                    className="size-6 text-[#d7ff3b] fill-current"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" />
-                  </svg>
-                </div>
-                <h3 className="type-student-card-title mt-3 text-text-primary">AI grade</h3>
-                <p className="type-student-meta mt-0.5 max-w-[170px] text-[#6b7280] dark:text-text-muted">
-                  Upload for marks and feedback.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+        <ChallengeLoopCard />
 
         {/* 3 Metrics Cards */}
-        <section className="mt-6 grid gap-4 md:grid-cols-3" aria-label="Challenge summary metrics">
+        <section className={hubMetricsClass} aria-label="Challenge summary metrics">
           {/* Card 1: Today's Quota */}
-          <article className="rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               TODAY&apos;S QUOTA
             </p>
@@ -1957,13 +1943,13 @@ export function ChallengesDashboardClient({
           </article>
 
           {/* Card 2: Daily Target */}
-          <article className="rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">DAILY TARGET</p>
             <p className="type-student-metric mt-2 text-text-primary">5</p>
           </article>
 
           {/* Card 3: 7-Day Average */}
-          <article className="rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+          <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               7-DAY AVERAGE
             </p>
@@ -1978,8 +1964,8 @@ export function ChallengesDashboardClient({
         </section>
 
         {/* Available Challenges Section */}
-        <section className="mt-6 rounded-[24px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#f1f3f5] dark:border-border/60">
+        <section className={hubListCardClass}>
+          <div className={hubListHeaderClass}>
             <div>
               <h2 className="type-student-section-title text-text-primary">Available challenges</h2>
               {dashboard.scope ? (
@@ -2026,21 +2012,21 @@ export function ChallengesDashboardClient({
           </div>
 
           {dashboard.challenges.length ? (
-            <div className="divide-y divide-[#f1f3f5] dark:divide-border/50">
+            <div className={hubRowsClass}>
               {dashboard.challenges.map((challenge) => {
                 const completed = challenge.status === "completed";
                 const started = challenge.status === "started";
                 return (
                   <div
                     key={challenge.id}
-                    className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-6 py-5 rounded-xl px-2 -mx-2 transition-colors ${
+                    className={`${hubRowClass} ${
                       completed ? "bg-success/5" : "hover:bg-bg-secondary/40"
                     }`}
                   >
-                    <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-8">
+                    <div className={hubRowMainClass}>
                       {/* The subject, and under it the subtopic this challenge
                           is on — the thing a student actually decides by. */}
-                      <div className="w-full sm:w-[260px] md:w-[300px] shrink-0 min-w-0">
+                      <div className={hubRowSubjectClass}>
                         <p className="font-bold text-[15px] sm:text-[16px] text-text-primary truncate">
                           {challenge.subjectName}
                         </p>
@@ -2055,7 +2041,7 @@ export function ChallengesDashboardClient({
                       />
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-6 shrink-0">
+                    <div className={hubRowActionsClass}>
                       {/* Fixed widths, so the estimates line up and "Continue" and
                           "Start" share an edge down the list. */}
                       <span

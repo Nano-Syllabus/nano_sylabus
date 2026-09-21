@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import type { AppUser } from "@/lib/types";
 import { AppShellContext } from "@/components/app-shell-context";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
  * WHY THERE IS NO ROUTE-LOADING OVERLAY HERE ANY MORE
@@ -29,19 +28,16 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 export function AppShell({
   user,
-  title,
-  actions,
   children,
 }: {
   user: AppUser;
-  title: ReactNode;
+  /** Accepted and unused since the top bar went; see the note in the render. */
+  title?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [dynamicTitle, setDynamicTitle] = useState<ReactNode>(null);
-  const [dynamicActions, setDynamicActions] = useState<ReactNode>(null);
   const [sidebarSuppressed, setSidebarSuppressed] = useState(false);
   const [sidebarCollapsedOverride, setSidebarCollapsedOverride] = useState(false);
   const [rightRailWidth, setRightRailWidth] = useState(0);
@@ -61,8 +57,10 @@ export function AppShell({
 
   const shellContextValue = useMemo(
     () => ({
-      setTitle: setDynamicTitle,
-      setActions: setDynamicActions,
+      // No bar to put a title or actions in any more. Kept as no-ops so the pages
+      // that still announce a title through `SetAppShell` need no change.
+      setTitle: () => {},
+      setActions: () => {},
       setSidebarSuppressed,
       setSidebarCollapsed: setSidebarCollapsedOverride,
       setRightRailWidth,
@@ -106,31 +104,26 @@ export function AppShell({
           className="flex min-w-0 flex-1 flex-col overflow-hidden"
           style={{ paddingRight: rightRailWidth > 0 ? `${rightRailWidth}px` : undefined }}
         >
-          {/* Three columns with EQUAL sides, so the title sits in the true centre
-              of the bar whatever the right-hand side carries — a flex row would
-              centre it in whatever space the actions left over. A long title
-              truncates inside its column rather than running under the buttons. */}
-          <header className="grid min-h-[53px] shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)] items-center gap-3 border-b border-border bg-bg-secondary px-4 md:px-6">
-            <div className="flex min-w-0 items-center">
-              {!sidebarSuppressed ? (
-                <button
-                  type="button"
-                  className="-ml-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors duration-100 hover:bg-bg-primary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none md:hidden"
-                  onClick={() => setOpen(true)}
-                  aria-label="Open sidebar"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
-                </button>
-              ) : null}
+          {/* NO TOP BAR. It showed each page's title — which every page already
+              prints as its own heading, so every tab said its name twice — plus a
+              theme toggle, which now lives in the sidebar's profile row. The one
+              page that also put controls in it (the Library chat) renders them in
+              its own panel.
+
+              On a phone the sidebar is off-screen and this button is the only way
+              to open it, so a slim row keeps it there, and only there. */}
+          {!sidebarSuppressed ? (
+            <div className="flex h-12 shrink-0 items-center border-b border-border px-3 md:hidden">
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors duration-100 hover:bg-bg-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none"
+                onClick={() => setOpen(true)}
+                aria-label="Open sidebar"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+              </button>
             </div>
-            <div className="min-w-0 max-w-[min(56vw,720px)] truncate text-center font-sans text-sm font-medium text-text-primary">
-              {dynamicTitle ?? title}
-            </div>
-            <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
-              {dynamicActions ?? actions}
-              <ThemeToggle className="h-10 w-10 shrink-0 bg-bg-primary" />
-            </div>
-          </header>
+          ) : null}
           <div className="flex-1 overflow-y-auto">
             {children}
           </div>

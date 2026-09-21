@@ -82,6 +82,11 @@
   --challenge-banner-paper: #faffeb;
   --challenge-banner-shadow: rgba(0, 0, 0, 0.12);
   --challenge-banner-button-text: #ffffff;
+  /* The ruled sheet worked-example answers are written on (`.answer-paper`). */
+  --paper-bg: #fffdf6;
+  --paper-rule: rgba(37, 99, 235, 0.16);
+  --paper-margin: rgba(220, 38, 38, 0.32);
+  --paper-shadow: 0 1px 2px rgba(60, 45, 20, 0.06), 0 4px 12px -6px rgba(60, 45, 20, 0.12);
 }
 
 [data-theme="dark"] {
@@ -119,6 +124,10 @@
   --challenge-banner-paper: #faffeb;
   --challenge-banner-shadow: rgba(0, 0, 0, 0.2);
   --challenge-banner-button-text: #ffffff;
+  --paper-bg: #1d1c1a;
+  --paper-rule: rgba(148, 163, 184, 0.14);
+  --paper-margin: rgba(248, 113, 113, 0.3);
+  --paper-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 @layer base {
@@ -193,6 +202,169 @@ body:has(.exam-prep-theme) {
 
 @utility font-figma-library {
   font-family: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+ * The handwritten faces worked-example answers are written in, in the revision
+ * docs. The reader picks one (`components/answer-font-picker.tsx`), which sets
+ * `--answer-font`; Stay With Me until they do.
+ *
+ * Plain @font-face rather than `next/font/local`: the dev server (Turbopack)
+ * drops next/font's `size-adjust` while the production build keeps it, so the
+ * two drew answers at different sizes. A face downloads only when text set in
+ * it renders, so none of these costs anything on another page, or until picked.
+ *
+ * `size-adjust` gives every face the same lowercase height. These are narrow,
+ * light hands that read small at the answers' 14px: Stay With Me is at 150%,
+ * chosen by eye, and each other face is scaled to match its measured x-height.
+ * Scaling the face rather than the text keeps headings over body, and glyphs a
+ * face lacks (π, θ, √, ≤, ≥; Winkle also lacks brackets and quotes) fall
+ * through to Inter at Inter's own size.
+ *
+ * The metric overrides are identical on every face, so the baseline sits at the
+ * same height in each ruled line of `.answer-paper` whichever face is picked.
+ */
+@font-face {
+  font-family: "Stay With Me";
+  src: url("/fonts/stay_with_me/Stay%20With%20Me.otf") format("opentype");
+  font-display: swap;
+  size-adjust: 150%;
+  ascent-override: 80%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Smile Moon";
+  src: url("/fonts/smile_moon/Smile%20Moon.otf") format("opentype");
+  font-display: swap;
+  /* Under its matched 133%: a round, heavy hand that looked a size up. */
+  size-adjust: 125%;
+  ascent-override: 80%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Chillin on Sunday";
+  src: url("/fonts/chillin_on_sunday/Chillin%20on%20Sunday.ttf") format("truetype");
+  font-display: swap;
+  size-adjust: 143%;
+  ascent-override: 80%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Hello Baby";
+  src: url("/fonts/hello_baby/Hello%20Baby.otf") format("opentype");
+  font-display: swap;
+  size-adjust: 148%;
+  ascent-override: 80%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+}
+
+/* The .ttf: the same 79 glyphs as the .otf in a third of the bytes. */
+@font-face {
+  font-family: "Winkle";
+  src: url("/fonts/winkle/Winkle-Regular.ttf") format("truetype");
+  font-display: swap;
+  size-adjust: 142%;
+  ascent-override: 80%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+}
+
+@utility font-revision-answer {
+  font-family:
+    var(--answer-font, "Stay With Me"), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+ * A worked-example answer, written out on ruled paper.
+ *
+ * Every text block keeps to one line pitch, and each draws its own rules from
+ * its own top edge, so a display equation, table or figure of any height
+ * between two paragraphs cannot push the text after it off its lines. The rule
+ * sits just under the baseline, where handwriting rests on it; `em` puts it
+ * lower under a heading's larger letters. The margin rule runs down the left
+ * and the writing starts right of it.
+ *
+ * Unlayered on purpose: these must beat the Markdown component's own spacing
+ * (`[&_p]:mt-2`, `[&_li]:mt-1`, the line heights `[&_h2]:text-xl` brings),
+ * which lives in Tailwind's utilities layer.
+ */
+.answer-paper {
+  --paper-line: 1.75rem;
+  --paper-inset: 2.75rem;
+  --paper-rule-at: calc(var(--paper-line) / 2 + 0.4em + 1px);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background-color: var(--paper-bg);
+  background-image: linear-gradient(
+    to right,
+    transparent calc(var(--paper-inset) - 0.75rem),
+    var(--paper-margin) 0,
+    var(--paper-margin) calc(var(--paper-inset) - 0.75rem + 1px),
+    transparent 0
+  );
+  box-shadow: var(--paper-shadow);
+  padding-block: 0.5rem var(--paper-line);
+}
+
+@media (max-width: 639px) {
+  .answer-paper {
+    --paper-inset: 2rem;
+  }
+}
+
+.answer-paper-label {
+  padding-inline: var(--paper-inset) 1rem;
+  line-height: var(--paper-line);
+}
+
+.answer-paper-body > :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote) {
+  margin: 0;
+  padding-inline: var(--paper-inset) 1rem;
+  line-height: var(--paper-line);
+  background-image: linear-gradient(
+    to bottom,
+    transparent var(--paper-rule-at),
+    var(--paper-rule) 0,
+    var(--paper-rule) calc(var(--paper-rule-at) + 1px),
+    transparent 0
+  );
+  background-size: 100% var(--paper-line);
+}
+
+.answer-paper-body > :is(ul, ol) {
+  padding-left: calc(var(--paper-inset) + 1.25rem);
+}
+
+/* A skipped line before each heading, ruled like the rest. */
+.answer-paper-body > :is(h1, h2, h3, h4, h5, h6):not(:first-child) {
+  padding-top: var(--paper-line);
+}
+
+.answer-paper-body :is(li, li > p, li > ul, li > ol) {
+  margin-block: 0;
+}
+
+/* Inline code is smaller than the line; at the inherited pitch its box would
+   stand below the line box and push every line after it down. */
+.answer-paper-body :not(pre) > code {
+  line-height: 1;
+}
+
+.answer-paper-body > :is(.math-block, pre, table, img, .answer-animation) {
+  margin: 0.75rem 1rem 0.75rem var(--paper-inset);
+}
+
+/* A display equation is boxed on the sheet, the way a result is on a script,
+   rather than pasted over it in a grey slip. */
+.answer-paper-body > .math-block {
+  background-color: transparent;
 }
 
 /*

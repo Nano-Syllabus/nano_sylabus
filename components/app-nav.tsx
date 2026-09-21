@@ -32,27 +32,6 @@ const NAV = [
     ),
   },
   {
-    href: "/app/community",
-    label: "Community",
-    icon: (
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M3 21h18" />
-        <path d="M6 21V7l6-4 6 4v14" />
-        <path d="M9 10h1M14 10h1M9 14h1M14 14h1" />
-        <path d="M10 21v-3h4v3" />
-      </svg>
-    ),
-  },
-  {
     href: "/app/challenges",
     label: "Challenges",
     icon: (
@@ -136,6 +115,27 @@ const NAV = [
         <line x1="16" x2="8" y1="13" y2="13" />
         <line x1="16" x2="8" y1="17" y2="17" />
         <line x1="10" x2="8" y1="9" y2="9" />
+      </svg>
+    ),
+  },
+  {
+    href: "/app/community",
+    label: "Community",
+    icon: (
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 21h18" />
+        <path d="M6 21V7l6-4 6 4v14" />
+        <path d="M9 10h1M14 10h1M9 14h1M14 14h1" />
+        <path d="M10 21v-3h4v3" />
       </svg>
     ),
   },

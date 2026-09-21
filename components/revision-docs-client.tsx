@@ -2,7 +2,9 @@
 
 import { BookOpen, ChevronDown, ChevronRight, Menu, Search, X } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { AnswerFontPicker, answerFontStyle, useAnswerFont } from "@/components/answer-font-picker";
+import { ConceptsCard, conceptsCardClass } from "@/components/concepts-reading";
 import { Markdown } from "@/components/markdown";
 import type {
   RevisionDocSemester,
@@ -58,7 +60,96 @@ function filterSemesters(semesters: RevisionDocSemester[], needle: string) {
   });
 }
 
+/*
+ * The docs' layout and chrome, shared by the page and its route skeleton
+ * (`RevisionDocsSkeleton`, below). The skeleton used to be the generic notes grid
+ * — nine cards, for a page that is a tree and one document — so a first visit
+ * drew a different page and then swapped it out. Built from the same pieces, it
+ * cannot drift from the page again.
+ */
+const docsRootClass = "flex min-h-full w-full bg-bg-secondary text-text-primary";
+const docsAsideClass =
+  "sticky top-0 hidden h-[100dvh] w-72 shrink-0 border-r border-border bg-bg-primary lg:block";
+const docsMainClass = "min-w-0 flex-1 bg-bg-primary";
+const docsMobileBarClass =
+  "sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg-primary/95 px-4 py-2 backdrop-blur lg:hidden";
+const browseButtonClass =
+  "inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500";
+/** A past question, and a worked example: the same box. */
+const docsItemCardClass = "rounded-xl border border-border bg-bg-secondary p-4 sm:p-5";
+
+function TreeSearch({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: string;
+  onChange?: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="border-b border-border p-3">
+      <label htmlFor="revision-docs-search" className="sr-only">
+        Search your revision docs
+      </label>
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-muted"
+          aria-hidden="true"
+        />
+        <input
+          id="revision-docs-search"
+          type="search"
+          value={value}
+          onChange={(event) => onChange?.(event.target.value)}
+          readOnly={!onChange}
+          disabled={disabled}
+          placeholder="Search topics"
+          className="min-h-10 w-full rounded-lg border border-border bg-bg-primary pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        />
+      </div>
+    </div>
+  );
+}
+
+function TreeFooter() {
+  return (
+    <div className="border-t border-border p-3">
+      {/* The student's OWN corpus, reachable from the tree rather than from a
+          header that made the reader choose a mode before seeing anything. */}
+      <Link
+        href="/app/notes/saved"
+        className="flex min-h-10 items-center justify-between rounded-lg px-2 text-sm font-medium text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      >
+        My saved notes
+        <ChevronRight className="size-4" aria-hidden="true" />
+      </Link>
+      <Link
+        href="/app/notes/revision/cards"
+        className="flex min-h-10 items-center justify-between rounded-lg px-2 text-sm font-medium text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      >
+        Flashcards from your notes
+        <ChevronRight className="size-4" aria-hidden="true" />
+      </Link>
+    </div>
+  );
+}
+
+/** Search on top, the tree in the middle, the corpus links at the foot. */
+function TreeFrame({ search, children }: { search: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex h-full flex-col">
+      {search}
+      <nav aria-label="Revision docs" className="min-h-0 flex-1 overflow-y-auto p-2">
+        {children}
+      </nav>
+      <TreeFooter />
+    </div>
+  );
+}
+
 function TopicPage({ topic }: { topic: RevisionDocTopic }) {
+  const [answerFont, setAnswerFont] = useAnswerFont();
   const percent = formatPercent(topic.scorePercent);
   const completed = formatDate(topic.completedAt);
   return (
@@ -101,31 +192,16 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
         </code>
       </div>
 
-      {topic.bigIdea ? (
-        <div className="mt-6 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 sm:p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-            The idea
-          </p>
-          <Markdown
-            text={topic.bigIdea}
-            className="mt-1 max-w-prose text-sm font-medium leading-6 text-text-primary"
-          />
-        </div>
-      ) : null}
-
       {topic.reading.length ? (
-        <section className="mt-8">
-          <h2 className="type-student-section-title">Concepts</h2>
-          <div className="mt-3 space-y-3">
-            {topic.reading.map((paragraph, index) => (
-              <Markdown
-                key={`${topic.challengeId}-reading-${index}`}
-                text={paragraph}
-                className="max-w-prose text-sm leading-7 text-text-secondary"
-              />
-            ))}
-          </div>
-        </section>
+        <ConceptsCard
+          className="mt-8"
+          source={{
+            id: topic.challengeId,
+            title: topic.title,
+            subjectName: topic.subjectName,
+            reading: topic.reading,
+          }}
+        />
       ) : topic.readingPending ? (
         /* Being written right now, not missing. Telling a student to restart a
            challenge whose reading is thirty seconds away would throw away the
@@ -145,39 +221,6 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
         </p>
       )}
 
-      {topic.focus ? (
-        <section className="mt-6 rounded-xl bg-blue-500/10 p-4 sm:p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-            What it tested
-          </p>
-          <Markdown
-            text={topic.focus}
-            className="mt-1 max-w-prose text-sm leading-6 text-text-secondary"
-          />
-        </section>
-      ) : null}
-
-      {topic.connections.length ? (
-        <section className="mt-6 rounded-xl border border-border bg-bg-secondary p-4 sm:p-5">
-          <h2 className="type-student-eyebrow text-text-muted">
-            How this connects
-          </h2>
-          <ul className="mt-3 space-y-2">
-            {topic.connections.map((connection, index) => (
-              <li key={`${topic.challengeId}-link-${index}`} className="flex gap-2">
-                <span aria-hidden="true" className="text-text-muted">
-                  ·
-                </span>
-                <Markdown
-                  text={connection}
-                  className="max-w-prose text-sm leading-6 text-text-secondary"
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
       {topic.pastQuestions.length ? (
         <section className="mt-8">
           <h2 className="type-student-section-title">Past questions on this topic</h2>
@@ -185,7 +228,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
             {topic.pastQuestions.map((question, index) => (
               <li
                 key={question.id}
-                className="rounded-xl border border-border bg-bg-secondary p-4 sm:p-5"
+                className={docsItemCardClass}
               >
                 <div className="flex flex-wrap items-center gap-x-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
                   <span className="text-blue-600 dark:text-blue-400">Question {index + 1}</span>
@@ -203,13 +246,16 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
       ) : null}
 
       {topic.solvedExamples.length ? (
-        <section className="mt-8">
-          <h2 className="type-student-section-title">Worked examples</h2>
+        <section className="mt-8" style={answerFontStyle(answerFont)}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="type-student-section-title">Worked examples</h2>
+            <AnswerFontPicker value={answerFont} onChange={setAnswerFont} />
+          </div>
           <div className="mt-3 space-y-4">
             {topic.solvedExamples.map((example, index) => (
               <article
                 key={`${topic.challengeId}-solved-${index}`}
-                className="rounded-xl border border-border bg-bg-secondary p-4 sm:p-5"
+                className={docsItemCardClass}
               >
                 <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                   Example {index + 1}
@@ -220,13 +266,16 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
                   text={example.question}
                   className="mt-2 max-w-prose text-sm font-semibold leading-6"
                 />
-                <div className="mt-3 rounded-lg bg-card p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                {/* The answer, and only the answer, handwritten on ruled paper:
+                    it reads as a worked solution, set apart from the question
+                    above it and from the rest of the docs. */}
+                <div className="answer-paper mt-3">
+                  <p className="answer-paper-label text-xs font-semibold uppercase tracking-wide text-text-muted">
                     Solution
                   </p>
                   <Markdown
                     text={example.solution}
-                    className="mt-1 whitespace-pre-wrap text-sm leading-7 text-text-secondary"
+                    className="answer-paper-body font-revision-answer whitespace-pre-wrap text-sm text-text-secondary"
                   />
                 </div>
               </article>
@@ -312,28 +361,7 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
   }
 
   const tree = (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border p-3">
-        <label htmlFor="revision-docs-search" className="sr-only">
-          Search your revision docs
-        </label>
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-muted"
-            aria-hidden="true"
-          />
-          <input
-            id="revision-docs-search"
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search topics"
-            className="min-h-10 w-full rounded-lg border border-border bg-bg-primary pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-          />
-        </div>
-      </div>
-
-      <nav aria-label="Revision docs" className="min-h-0 flex-1 overflow-y-auto p-2">
+    <TreeFrame search={<TreeSearch value={query} onChange={setQuery} />}>
         {semesters.length ? (
           <ul className="space-y-1">
             {semesters.map((semester) => {
@@ -439,33 +467,16 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
         ) : (
           <p className="px-3 py-6 text-sm text-text-muted">Nothing matches “{query.trim()}”.</p>
         )}
-      </nav>
-
-      <div className="border-t border-border p-3">
-        {/* The student's OWN corpus, reachable from the tree rather than from a
-            header that made the reader choose a mode before seeing anything. */}
-        <Link
-          href="/app/notes/saved"
-          className="flex min-h-10 items-center justify-between rounded-lg px-2 text-sm font-medium text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-        >
-          My saved notes
-          <ChevronRight className="size-4" aria-hidden="true" />
-        </Link>
-        <Link
-          href="/app/notes/revision/cards"
-          className="flex min-h-10 items-center justify-between rounded-lg px-2 text-sm font-medium text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-        >
-          Flashcards from your notes
-          <ChevronRight className="size-4" aria-hidden="true" />
-        </Link>
-      </div>
-    </div>
+    </TreeFrame>
   );
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] w-full bg-bg-secondary text-text-primary">
+    // Full height of the scroll area. These heights used to subtract 4rem for the
+    // app's top bar; with the bar gone, that 4rem showed as a grey band under the
+    // tree.
+    <div className={docsRootClass}>
       {/* Desktop: the tree is always there, like any documentation site. */}
-      <aside className="sticky top-0 hidden h-[calc(100vh-4rem)] w-72 shrink-0 border-r border-border bg-bg-primary lg:block">
+      <aside className={docsAsideClass}>
         {tree}
       </aside>
 
@@ -495,12 +506,12 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
         </div>
       ) : null}
 
-      <main className="min-w-0 flex-1 bg-bg-primary">
-        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg-primary/95 px-4 py-2 backdrop-blur lg:hidden">
+      <main className={docsMainClass}>
+        <div className={docsMobileBarClass}>
           <button
             type="button"
             onClick={() => setNavOpen(true)}
-            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className={browseButtonClass}
           >
             <Menu className="size-4" aria-hidden="true" />
             Browse
@@ -509,12 +520,93 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
         </div>
 
         {selected ? (
-          <TopicPage topic={selected} />
+          <TopicPage key={selected.challengeId} topic={selected} />
         ) : (
           <div className="px-5 py-16 text-center text-sm text-text-muted">
             Choose a topic from the list.
           </div>
         )}
+      </main>
+    </div>
+  );
+}
+
+const pulse = "animate-pulse bg-border motion-reduce:animate-none";
+const bar = `${pulse} rounded`;
+
+/**
+ * The route skeleton for Revision, drawn from the page's own pieces.
+ *
+ * What the page knows before the query — the search box, the corpus links at
+ * the foot of the tree, the section headings, the shape of every box — renders
+ * for real and in place. What it does not — the tree's semesters, subjects and
+ * topics, and the open topic's words — pulses, at the size of what replaces it.
+ * Placeholder fill is `bg-border`: `bg-bg-secondary` vanishes inside the cards,
+ * which are that colour in the dark theme.
+ */
+export function RevisionDocsSkeleton() {
+  return (
+    <div className={docsRootClass} aria-busy="true" aria-label="Loading revision docs">
+      <aside className={docsAsideClass}>
+        <TreeFrame search={<TreeSearch value="" disabled />}>
+          <div className="space-y-5 px-2 py-1.5">
+            {[3, 2].map((topics, group) => (
+              <div key={group}>
+                {/* Semester, then a subject under it, then its unit and topics. */}
+                <div className={`h-3 w-32 ${bar}`} />
+                <div className={`ml-3 mt-3 h-4 w-36 ${bar}`} />
+                <div className={`ml-5 mt-3 h-2.5 w-12 ${bar}`} />
+                <div className="ml-5 mt-2 space-y-2.5 border-l border-border pl-3">
+                  {Array.from({ length: topics }).map((_, index) => (
+                    <div key={index} className={`h-4 ${index % 2 ? "w-40" : "w-48"} max-w-full ${bar}`} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </TreeFrame>
+      </aside>
+
+      <main className={docsMainClass}>
+        <div className={docsMobileBarClass}>
+          <span className={`${browseButtonClass} text-text-muted`} aria-hidden="true">
+            <Menu className="size-4" aria-hidden="true" />
+            Browse
+          </span>
+        </div>
+
+        <article className="student-reading-frame">
+          {/* Subject, title, then status · date · id — the page's own header. */}
+          <div className={`h-3 w-28 ${bar}`} />
+          <div className={`mt-2 h-8 w-4/5 max-w-xl ${bar}`} />
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <div className={`h-6 w-24 rounded-full ${pulse}`} />
+            <div className={`h-3.5 w-36 ${bar}`} />
+            <div className={`h-6 w-64 max-w-full ${bar}`} />
+          </div>
+
+          <section className={`mt-8 ${conceptsCardClass}`}>
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="type-student-section-title">Concepts</h2>
+              <div className={`h-3 w-16 ${bar}`} />
+            </div>
+            <div className={`mt-3 h-3.5 w-full max-w-prose ${bar}`} />
+            <div className={`mt-2 h-3.5 w-2/3 ${bar}`} />
+            <div className={`mt-4 h-10 w-40 rounded-lg ${pulse}`} />
+          </section>
+
+          <section className="mt-8">
+            <h2 className="type-student-section-title">Past questions on this topic</h2>
+            <div className="mt-3 space-y-3">
+              {[0, 1, 2].map((index) => (
+                <div key={index} className={docsItemCardClass}>
+                  <div className={`h-3 w-40 ${bar}`} />
+                  <div className={`mt-3 h-4 ${index === 1 ? "w-3/5" : "w-4/5"} ${bar}`} />
+                </div>
+              ))}
+            </div>
+          </section>
+        </article>
       </main>
     </div>
   );

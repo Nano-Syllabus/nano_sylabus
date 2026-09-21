@@ -7,7 +7,14 @@ import { ArrowRight, Check, LoaderCircle } from "lucide-react";
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2";
 
-export function BillingReferralClaim({ code }: { code: string }) {
+export function BillingReferralClaim({
+  code,
+  billingReward = true,
+}: {
+  code: string;
+  /** Whether this referral carries the 2-for-1 Pro bonus; see `billingRewardEligible`. */
+  billingReward?: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [claimed, setClaimed] = useState(false);
@@ -57,7 +64,9 @@ export function BillingReferralClaim({ code }: { code: string }) {
       </button>
       {claimed ? (
         <p className="mt-3 text-center text-sm leading-6 text-text-secondary">
-          Referral saved. Buy one month of Individual Pro; after approval, your subscription will be extended to 60 days total.
+          {billingReward
+            ? "Referral saved. Buy one month of Individual Pro; after approval, your subscription will be extended to 60 days total."
+            : "Referral saved. Start your first challenge — your friend's invite counts once you pass it."}
         </p>
       ) : null}
     </div>

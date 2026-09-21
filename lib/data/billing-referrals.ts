@@ -5,6 +5,13 @@ export type BillingReferralLink = {
   id: string;
   code: string;
   active: boolean;
+  /**
+   * Whether claiming this link can earn the 2-for-1 Pro bonus. Every student may
+   * share a link (the weekly Cash Prize campaign counts referrals for everyone),
+   * but the billing reward is paid only while the referrer holds paid Pro — the
+   * database trigger checks again when the referred account pays.
+   */
+  billingRewardEligible: boolean;
   referrerName: string;
   claimCount: number;
   createdAt: string;
@@ -14,7 +21,7 @@ function normalizeCode(value: string) {
   return value.trim().toUpperCase();
 }
 
-async function hasActivePaidProSubscription(admin: SupabaseClient, userId: string) {
+export async function hasActivePaidProSubscription(admin: SupabaseClient, userId: string) {
   const { data, error } = await admin
     .from("user_subscriptions")
     .select("id,subscription_plans!inner(product_type,is_unlimited,billing_type),invoices!inner(status)")
@@ -65,7 +72,8 @@ export async function getBillingReferralByCode(
   return {
     id: String(link.id),
     code: String(link.code),
-    active: Boolean(link.active) && referrerEligible,
+    active: Boolean(link.active),
+    billingRewardEligible: Boolean(link.active) && referrerEligible,
     referrerName: String(profileResult.data?.full_name || "A NanoSyllabus student"),
     claimCount: countResult.count ?? 0,
     createdAt: String(link.created_at),

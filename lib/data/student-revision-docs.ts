@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { normalizeQuestionText } from "@/lib/challenge-learn-questions";
 import {
   courseLearningTopicsKey,
   readCourseLearningTopicsBatch,
@@ -157,6 +158,25 @@ function scorePercent(row: ChallengeRow) {
   return Math.max(0, Math.min(100, (score / total) * 100));
 }
 
+/**
+ * The past questions a page lists, minus the ones it also shows WORKED.
+ *
+ * The same question comes back from two sources — the bank row, and the worked
+ * copy with its solution — so a page listed "What is Mechanics? Define Rigid
+ * body and Deform body" as Question 1 and again as Example 1. The worked copy is
+ * the same question with more on it, so it is the one kept. Matched the way the
+ * challenge screen matches the two (`normalizeQuestionText`), so both screens
+ * agree on what counts as the same question.
+ */
+function unworkedPastQuestions(content: StudentChallengeContent | null) {
+  const worked = new Set(
+    (content?.solvedExamples ?? []).map((example) => normalizeQuestionText(example.question || "")),
+  );
+  return (content?.pastQuestions ?? []).filter(
+    (question) => !worked.has(normalizeQuestionText(question.question || "")),
+  );
+}
+
 function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {
   const content = (row.content ?? null) as StudentChallengeContent | null;
   const reading = content?.lesson?.content ?? [];
@@ -179,7 +199,7 @@ function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {
     reading,
     focus: content?.lesson?.focus || "",
     connections: content?.lesson?.connections ?? [],
-    pastQuestions: content?.pastQuestions ?? [],
+    pastQuestions: unworkedPastQuestions(content),
     solvedExamples: content?.solvedExamples ?? [],
   };
 }
@@ -370,6 +390,7 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
   const subjectsByKey = new Map<string, RevisionDocSubject>();
   const unitsByKey = new Map<string, RevisionDocUnit>();
   const topicOrder = new Map<string, number>();
+  let topicCount = 0;
 
   for (const row of rows) {
     const subjectAccess = subjectFor(row);
@@ -428,13 +449,38 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       subject.units.push(unit);
     }
 
-    unit.topics.push(docTopic(row, subject.name));
-    topicOrder.set(
-      `${unitKey}:${text(row.topic_key)}`,
-      placement?.position ?? Number.MAX_SAFE_INTEGER,
+    // ONE ENTRY PER TOPIC, not per challenge. A topic is sat more than once —
+    // passed, then assigned again on a later day or restarted — and each sitting
+    // is its own row, so the tree listed "Definitions and scope of Applied
+    // Mechanics" twice under one unit. Same topic means the same key, or the
+    // same title in the same unit (a re-read syllabus can re-key a topic without
+    // renaming it). Two "Introduction"s in DIFFERENT units stay two topics.
+    const topic = docTopic(row, subject.name);
+    const titleKey = matchKey(topic.title);
+    const twin = unit.topics.findIndex(
+      (other) => (topic.topicKey && other.topicKey === topic.topicKey) || matchKey(other.title) === titleKey,
     );
+    const order = placement?.position ?? Number.MAX_SAFE_INTEGER;
+    if (twin >= 0) {
+      const kept = unit.topics[twin];
+      // Every sitting counts toward the attempts the page reports.
+      const attempts = kept.attempts + topic.attempts;
+      // Rows arrive newest first, so the one kept is already the latest — unless
+      // it is still in progress and this one was passed. A passed sitting is the
+      // one the page vouches for, and it carries the full reading.
+      if (kept.inProgress && !topic.inProgress) {
+        unit.topics[twin] = { ...topic, attempts };
+        topicOrder.set(`${unitKey}:${topic.topicKey}`, order);
+      } else {
+        kept.attempts = attempts;
+      }
+      continue;
+    }
+    unit.topics.push(topic);
+    topicOrder.set(`${unitKey}:${text(row.topic_key)}`, order);
     subject.topicCount += 1;
     semester.topicCount += 1;
+    topicCount += 1;
   }
 
   // Curriculum order everywhere it is known: a revision doc that lists Unit 7
@@ -468,7 +514,8 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
 
   return {
     semesters: ordered,
-    topicCount: rows.length,
+    // Topics, not rows: a topic sat twice is one page in these docs.
+    topicCount,
     unavailable: false,
   };
 }

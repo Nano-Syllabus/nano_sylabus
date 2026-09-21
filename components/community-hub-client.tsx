@@ -77,8 +77,15 @@ function relativeTime(value: string) {
   return "just now";
 }
 
-function referralShareMessage(link: string) {
-  return `Get 2 months of NanoSyllabus Pro for the price of 1. Save my referral, buy one month of Pro, and after payment approval your paid month gets a bonus month: ${link}`;
+/** The Pro bonus is only offered while the referrer holds paid Pro (`billingReward`). */
+function referralShareMessage(link: string, proBonus: boolean) {
+  return proBonus
+    ? `Get 2 months of NanoSyllabus Pro for the price of 1. Save my referral, buy one month of Pro, and after payment approval your paid month gets a bonus month: ${link}`
+    : `I'm studying with NanoSyllabus — short daily challenges from our own syllabus. Join me with my link: ${link}`;
+}
+
+function referralShareSubject(proBonus: boolean) {
+  return proBonus ? "Join me on NanoSyllabus Pro" : "Join me on NanoSyllabus";
 }
 
 async function writeClipboardText(value: string) {
@@ -237,6 +244,7 @@ export function CommunityHubClient({
   const [inviteError, setInviteError] = useState("");
   const [referralLink, setReferralLink] = useState("");
   const [referralCode, setReferralCode] = useState("");
+  const [referralProBonus, setReferralProBonus] = useState(false);
   const [referralLoading, setReferralLoading] = useState(false);
   const [referralError, setReferralError] = useState("");
   const [referralCopied, setReferralCopied] = useState(false);
@@ -311,7 +319,7 @@ export function CommunityHubClient({
         body: JSON.stringify({}),
       });
       const payload = (await response.json().catch(() => ({}))) as {
-        referral?: { code: string; link: string };
+        referral?: { code: string; link: string; billingReward?: boolean };
         error?: string;
       };
       if (!response.ok || !payload.referral) {
@@ -319,6 +327,7 @@ export function CommunityHubClient({
         return;
       }
       setReferralCode(payload.referral.code);
+      setReferralProBonus(payload.referral.billingReward === true);
       setReferralLink(payload.referral.link);
     } catch {
       setReferralError("Could not reach NanoSyllabus. Check your connection and try again.");
@@ -352,7 +361,7 @@ export function CommunityHubClient({
 
   async function shareReferral(channel: "whatsapp" | "discord" | "email" | "native") {
     if (!referralLink) return;
-    const message = referralShareMessage(referralLink);
+    const message = referralShareMessage(referralLink, referralProBonus);
     setReferralError("");
     setReferralShareNotice("");
 
@@ -366,7 +375,7 @@ export function CommunityHubClient({
       return;
     }
     if (channel === "email") {
-      window.location.href = `mailto:?subject=${encodeURIComponent("Join me on NanoSyllabus Pro")}&body=${encodeURIComponent(message)}`;
+      window.location.href = `mailto:?subject=${encodeURIComponent(referralShareSubject(referralProBonus))}&body=${encodeURIComponent(message)}`;
       setReferralShareNotice("Opened your email app.");
       return;
     }
@@ -386,7 +395,7 @@ export function CommunityHubClient({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "NanoSyllabus Pro referral",
+          title: referralProBonus ? "NanoSyllabus Pro referral" : "NanoSyllabus invite",
           text: message,
           url: referralLink,
         });
@@ -682,7 +691,7 @@ export function CommunityHubClient({
         {inviteMode === "referral" ? (
           <>
             <p className="mt-5 text-base leading-7 text-text-secondary">
-              Active paid Pro members can refer a friend. When your friend buys
+              Every student can refer a friend. While you hold paid Pro, when your friend buys
               <strong className="text-text-primary"> NanoSyllabus Pro</strong>, they receive
               <strong className="text-success"> 2 months for the price of 1</strong> and you receive
               one free month after payment approval.
@@ -700,8 +709,9 @@ export function CommunityHubClient({
               </div>
               <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-text-primary">
                 <li>
-                  You must have an active paid Pro subscription to create and use your referral
-                  link.
+                  The Pro bonus needs an active paid Pro subscription on your account when your
+                  friend pays. Without one, your link still counts toward the weekly Cash Prize
+                  draw.
                 </li>
                 <li>Your friend saves the referral and buys one month of Individual Pro.</li>
                 <li>
@@ -758,7 +768,7 @@ export function CommunityHubClient({
                   <p className="text-sm font-semibold">Share via</p>
                   <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <a
-                      href={`https://wa.me/?text=${encodeURIComponent(referralShareMessage(referralLink))}`}
+                      href={`https://wa.me/?text=${encodeURIComponent(referralShareMessage(referralLink, referralProBonus))}`}
                       target="_blank"
                       rel="noreferrer"
                       onClick={() => {
@@ -777,7 +787,7 @@ export function CommunityHubClient({
                       <MessageCircle className="size-4" aria-hidden="true" /> Discord
                     </button>
                     <a
-                      href={`mailto:?subject=${encodeURIComponent("Join me on NanoSyllabus Pro")}&body=${encodeURIComponent(referralShareMessage(referralLink))}`}
+                      href={`mailto:?subject=${encodeURIComponent(referralShareSubject(referralProBonus))}&body=${encodeURIComponent(referralShareMessage(referralLink, referralProBonus))}`}
                       onClick={() => {
                         setReferralError("");
                         setReferralShareNotice(

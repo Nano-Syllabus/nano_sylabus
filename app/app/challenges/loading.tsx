@@ -1,77 +1,115 @@
-import { Target } from "lucide-react";
+import {
+  ChallengeLoopCard,
+  hubContainerClass,
+  hubListCardClass,
+  hubListHeaderClass,
+  hubMainClass,
+  hubMetricCardClass,
+  hubMetricsClass,
+  hubRowActionsClass,
+  hubRowClass,
+  hubRowMainClass,
+  hubRowSubjectClass,
+  hubRowsClass,
+  hubTitleClass,
+} from "@/components/challenge-hub-frame";
 
 /**
  * Only the unknown blocks pulse. The page's real text does not: shimmering a
  * label that is already correct is what makes a half-ready screen look broken.
- */
-const skeleton = "animate-pulse rounded bg-border motion-reduce:animate-none";
-
-/**
- * The Challenge Hub's frame, drawn for real.
- *
- * Everything on this screen that does not depend on a query is known before the
- * request starts — the heading, the icon, the three card labels, the section
- * title. Shimmering those throws away information the reader could already be
- * using and makes a half-ready screen look broken.
- *
- * The container must match `ChallengesDashboardClient` exactly (`bg-bg-secondary`,
- * `max-w-7xl`, the same padding and header grid). The previous version used
- * `bg-bg-primary` and `max-w-[1160px]`, so the whole page shifted sideways and
- * changed colour the moment the data landed.
  *
  * Placeholder fill is `bg-border`, never `bg-bg-secondary`: in the dark theme
  * `--bg-secondary` and `--card` are the same colour, so a `bg-bg-secondary`
  * block inside a card is invisible.
  */
+const pulse = "animate-pulse bg-border motion-reduce:animate-none";
+const skeleton = `${pulse} rounded`;
+
+/**
+ * The Challenge Hub as it will look, drawn from the same frame the hub uses.
+ *
+ * Everything here that does not depend on a query is real — the heading, the
+ * whole Challenge loop card, the three metric labels, the daily target of five,
+ * "Available challenges" — and comes from `challenge-hub-frame`, so a redesign of
+ * the hub cannot leave this skeleton describing a page that no longer exists
+ * (it did: "Weekly Target Progress" and "Available Daily Subtopic Challenges"
+ * outlived the hub they belonged to). Only the figures and the rows pulse, and
+ * each placeholder takes the size of what replaces it, so nothing moves when the
+ * data lands.
+ */
 export default function ChallengesLoading() {
   return (
-    <main
-      className="min-h-screen w-full bg-bg-secondary text-text-primary"
-      aria-busy="true"
-      aria-label="Loading challenges"
-    >
-      <div className="mx-auto max-w-7xl px-4 py-8 pb-20 md:px-8">
-        <header className="mb-8 grid gap-5 border-b border-border pb-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-end">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-300">
-              <Target className="size-5" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
-                Challenge Hub
-              </h1>
-              {/* Which community is in effect is the one thing here we cannot know yet. */}
-              <div className={`mt-2 h-4 w-72 max-w-full ${skeleton}`} />
+    <main className={hubMainClass} aria-busy="true" aria-label="Loading challenges">
+      <div className={hubContainerClass}>
+        <h1 className={hubTitleClass}>Challenge Hub</h1>
+
+        <ChallengeLoopCard />
+
+        <section className={hubMetricsClass} aria-label="Challenge summary metrics">
+          <article className={hubMetricCardClass}>
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
+              TODAY&apos;S QUOTA
+            </p>
+            <div className="mt-2 flex items-baseline gap-1.5">
+              {/* Today's count is unknown; the target it is out of is not. */}
+              <span className={`inline-block h-7 w-8 align-middle ${skeleton}`} />
+              <span className="type-student-metric text-[#84cc16]">/ 5</span>
             </div>
-          </div>
+            <div
+              className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
+              aria-hidden="true"
+            />
+          </article>
 
-          <div className="min-w-0">
-            <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-              Priority subject
-            </span>
-            <div className="mt-2 h-11 w-full rounded-lg border border-border bg-card" />
-            <div className={`mt-2 h-3 w-44 max-w-full ${skeleton}`} />
-          </div>
-        </header>
+          <article className={hubMetricCardClass}>
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">DAILY TARGET</p>
+            {/* A constant, not data: drawn for real. */}
+            <p className="type-student-metric mt-2 text-text-primary">5</p>
+          </article>
 
-        <section className="mb-6 grid gap-4 md:grid-cols-3" aria-label="Weekly challenge summary">
-          {["Weekly Target Progress", "Avg. Test Score", "Weekly Peer Leaderboard"].map((label) => (
-            <article key={label} className="rounded-xl border border-border bg-card p-6">
-              <p className="text-sm text-text-muted">{label}</p>
-              {/* Only the figure is unknown. Its real line-height is reserved so
-                  nothing below it moves when the number arrives. */}
-              <div className={`mt-2 h-7 w-32 max-w-full ${skeleton}`} />
-              <div className={`mt-4 h-2 w-full animate-pulse rounded-full bg-border motion-reduce:animate-none`} />
-            </article>
-          ))}
+          <article className={hubMetricCardClass}>
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
+              7-DAY AVERAGE
+            </p>
+            <div className={`mt-2 h-7 w-16 ${skeleton}`} />
+          </article>
         </section>
 
-        <h2 className="text-xl font-semibold">Available Daily Subtopic Challenges</h2>
-        <div className="mt-4 space-y-3">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="h-24 rounded-2xl border border-border bg-card" />
-          ))}
-        </div>
+        <section className={hubListCardClass}>
+          <div className={hubListHeaderClass}>
+            <h2 className="type-student-section-title text-text-primary">Available challenges</h2>
+            {/* Where the Running Semester picker sits for a community with terms. */}
+            <div className={`h-9 w-full max-w-[240px] rounded-xl ${pulse}`} />
+          </div>
+
+          <div className={hubRowsClass}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className={hubRowClass}>
+                <div className={hubRowMainClass}>
+                  <div className={hubRowSubjectClass}>
+                    {/* Subject, then the subtopic under it — the same two lines. */}
+                    <div className={`h-5 w-32 ${skeleton}`} />
+                    <div className={`mt-2 h-4 w-52 max-w-full ${skeleton}`} />
+                  </div>
+                  {/* The coverage bar: its caption line, then its track. */}
+                  <div className="min-w-0 max-w-[340px] flex-1">
+                    <div className={`h-3 w-40 ${skeleton}`} />
+                    <div className={`mt-2 h-3 w-full rounded-full ${pulse}`} />
+                  </div>
+                </div>
+                <div className={hubRowActionsClass}>
+                  <span className="w-[88px] shrink-0 space-y-1.5">
+                    <span className={`ml-auto block h-3.5 w-14 ${skeleton}`} />
+                    <span className={`ml-auto block h-2.5 w-16 ${skeleton}`} />
+                  </span>
+                  <span
+                    className={`inline-block min-h-9 w-[104px] shrink-0 rounded-[10px] ${pulse}`}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </main>
   );

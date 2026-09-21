@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { AppUser, ChatSessionSummary } from "@/lib/types";
 import { getActivePlanTierLabel } from "@/lib/billing";
@@ -23,6 +23,7 @@ import {
   useToggleSessionPin,
 } from "@/lib/query/chat-sessions";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 // Keep the exam experience available by direct URL while it is temporarily
 // removed from primary navigation. Flip this when the product is ready.
@@ -580,44 +581,6 @@ export function AppSidebar({
             route: warming is skipped on a metered or 2g connection, and a hover
             means the student is about to pay for the page anyway. */}
         <Link
-          href="/app/community"
-          onClick={() => onCloseMobile?.()}
-          onPointerEnter={() => router.prefetch("/app/community")}
-          onFocus={() => router.prefetch("/app/community")}
-          className={cn(
-            "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
-            isCollapsed
-              ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
-              : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
-            pathname.startsWith("/app/community")
-              ? "bg-text-primary text-text-inverse"
-              : "hover:bg-bg-secondary hover:text-text-primary",
-          )}
-          title={isCollapsed ? "Community" : undefined}
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M3 21h18" />
-            <path d="M6 21V7l6-4 6 4v14" />
-            <path d="M9 10h1M14 10h1M9 14h1M14 14h1" />
-            <path d="M10 21v-3h4v3" />
-          </svg>
-          {!isCollapsed && "Community"}
-        </Link>
-
-        {/* Intent-based prefetch, kept even though TabWarmer already warms this
-            route: warming is skipped on a metered or 2g connection, and a hover
-            means the student is about to pay for the page anyway. */}
-        <Link
           href="/app/challenges"
           onClick={() => onCloseMobile?.()}
           onPointerEnter={() => router.prefetch("/app/challenges")}
@@ -710,52 +673,92 @@ export function AppSidebar({
           const isPending = pendingRouteHref === item.href;
           const isActive = isPending || pathname.startsWith(item.href);
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              /**
-               * NO `preventDefault`, NO `router.push`, NO loading event.
-               *
-               * All three used to be here and together they were why the app
-               * halted. `<Link>` navigates inside a React transition; the
-               * handler then fired a SYNCHRONOUS `setState` that made AppShell
-               * swap the whole page subtree for a skeleton. A sync update
-               * outranks a transition, so it interrupted the navigation and
-               * restarted it — the first click usually squeaked through and
-               * every one after it starved, leaving the URL unchanged and the
-               * skeleton up forever. That is the "stuck loading" and the
-               * "15 seconds": not slow work, a navigation being cancelled by
-               * its own loading indicator on a loop.
-               *
-               * Next already does this correctly. Every route under /app has a
-               * `loading.tsx`, which is a Suspense boundary the router owns and
-               * schedules WITH the transition instead of against it.
-               *
-               * `pendingRouteHref` stays, but only to tint the clicked item
-               * immediately. It changes a class name and unmounts nothing, so
-               * it cannot interrupt anything.
-               */
-              onClick={() => {
-                setPendingRouteHref(item.href);
-                setPendingSessionId(null);
-                onCloseMobile?.();
-              }}
-              onPointerEnter={() => router.prefetch(item.href)}
-              onFocus={() => router.prefetch(item.href)}
-              className={cn(
-                "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
-                isCollapsed
-                  ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
-                  : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
-                isActive
-                  ? "bg-text-primary text-text-inverse"
-                  : "hover:bg-bg-secondary hover:text-text-primary",
-              )}
-              title={isCollapsed ? item.label : undefined}
-            >
-              {item.icon}
-              {!isCollapsed && item.label}
-            </Link>
+            <Fragment key={item.href}>
+              <Link
+                href={item.href}
+                /**
+                 * NO `preventDefault`, NO `router.push`, NO loading event.
+                 *
+                 * All three used to be here and together they were why the app
+                 * halted. `<Link>` navigates inside a React transition; the
+                 * handler then fired a SYNCHRONOUS `setState` that made AppShell
+                 * swap the whole page subtree for a skeleton. A sync update
+                 * outranks a transition, so it interrupted the navigation and
+                 * restarted it — the first click usually squeaked through and
+                 * every one after it starved, leaving the URL unchanged and the
+                 * skeleton up forever. That is the "stuck loading" and the
+                 * "15 seconds": not slow work, a navigation being cancelled by
+                 * its own loading indicator on a loop.
+                 *
+                 * Next already does this correctly. Every route under /app has a
+                 * `loading.tsx`, which is a Suspense boundary the router owns and
+                 * schedules WITH the transition instead of against it.
+                 *
+                 * `pendingRouteHref` stays, but only to tint the clicked item
+                 * immediately. It changes a class name and unmounts nothing, so
+                 * it cannot interrupt anything.
+                 */
+                onClick={() => {
+                  setPendingRouteHref(item.href);
+                  setPendingSessionId(null);
+                  onCloseMobile?.();
+                }}
+                onPointerEnter={() => router.prefetch(item.href)}
+                onFocus={() => router.prefetch(item.href)}
+                className={cn(
+                  "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+                  isCollapsed
+                    ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
+                    : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
+                  isActive
+                    ? "bg-text-primary text-text-inverse"
+                    : "hover:bg-bg-secondary hover:text-text-primary",
+                )}
+                title={isCollapsed ? item.label : undefined}
+              >
+                {item.icon}
+                {!isCollapsed && item.label}
+              </Link>
+              {/* Community sits between Revision and Cash Prize: the daily study
+                loop (Today, Challenges, Library, Revision) comes first, and the
+                social and reward surfaces after it. */}
+              {item.href === "/app/notes" ? (
+                <Link
+                  href="/app/community"
+                  onClick={() => onCloseMobile?.()}
+                  onPointerEnter={() => router.prefetch("/app/community")}
+                  onFocus={() => router.prefetch("/app/community")}
+                  className={cn(
+                    "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+                    isCollapsed
+                      ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
+                      : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
+                    pathname.startsWith("/app/community")
+                      ? "bg-text-primary text-text-inverse"
+                      : "hover:bg-bg-secondary hover:text-text-primary",
+                  )}
+                  title={isCollapsed ? "Community" : undefined}
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 21h18" />
+                    <path d="M6 21V7l6-4 6 4v14" />
+                    <path d="M9 10h1M14 10h1M9 14h1M14 14h1" />
+                    <path d="M10 21v-3h4v3" />
+                  </svg>
+                  {!isCollapsed && "Community"}
+                </Link>
+              ) : null}
+            </Fragment>
           );
         })}
       </nav>
@@ -1191,46 +1194,52 @@ export function AppSidebar({
           </div>
         )}
 
-        <button
-          onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-          className={cn(
-            "flex items-center transition hover:bg-bg-secondary relative group",
-            isProfileMenuOpen && "bg-bg-secondary",
-            isCollapsed
-              ? "justify-center rounded-full mx-auto w-10 h-10"
-              : "w-full gap-2.5 rounded-xl px-2 py-2",
-          )}
-        >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-bg-primary text-[13px] font-semibold text-text-primary shadow-sm">
-            {(user.fullName?.trim() || user.email?.trim() || "U").charAt(0).toUpperCase()}
-          </div>
-          {!isCollapsed && (
-            <>
-              <div className="min-w-0 flex-1 text-left pl-1">
-                <p className="truncate text-[15px] font-medium leading-[22px] text-text-primary capitalize">
-                  {user.fullName || user.email?.split("@")[0] || "User"}
-                </p>
-                <p className="truncate text-[13px] text-text-muted mt-0.5">
-                  {`${getActivePlanTierLabel(user) ?? "Free"} plan`}
-                </p>
-              </div>
-              <div className="flex items-center pr-1 text-text-muted">
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="m9 18 6-6-6-6" />
-                </svg>
-              </div>
-            </>
-          )}
-        </button>
+        {/* The theme toggle lives here now that the app has no top bar: the
+            profile row is on screen in every tab, collapsed or not, and on a
+            phone it is in the same drawer as the rest of the navigation. */}
+        <div className={cn("flex items-center", isCollapsed ? "flex-col gap-2" : "gap-2")}>
+          <button
+            onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+            className={cn(
+              "flex items-center transition hover:bg-bg-secondary relative group",
+              isProfileMenuOpen && "bg-bg-secondary",
+              isCollapsed
+                ? "justify-center rounded-full mx-auto w-10 h-10"
+                : "min-w-0 flex-1 gap-2.5 rounded-xl px-2 py-2",
+            )}
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-bg-primary text-[13px] font-semibold text-text-primary shadow-sm">
+              {(user.fullName?.trim() || user.email?.trim() || "U").charAt(0).toUpperCase()}
+            </div>
+            {!isCollapsed && (
+              <>
+                <div className="min-w-0 flex-1 text-left pl-1">
+                  <p className="truncate text-[15px] font-medium leading-[22px] text-text-primary capitalize">
+                    {user.fullName || user.email?.split("@")[0] || "User"}
+                  </p>
+                  <p className="truncate text-[13px] text-text-muted mt-0.5">
+                    {`${getActivePlanTierLabel(user) ?? "Free"} plan`}
+                  </p>
+                </div>
+                <div className="flex items-center pr-1 text-text-muted">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                </div>
+              </>
+            )}
+          </button>
+          <ThemeToggle className="h-10 w-10 shrink-0 bg-bg-primary" />
+        </div>
       </div>
 
       {/* Rename Modal */}

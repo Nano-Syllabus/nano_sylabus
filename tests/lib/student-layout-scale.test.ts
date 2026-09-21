@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 
 const styles = readFileSync("app/globals.css", "utf8");
 const dashboard = readFileSync("components/student-daily-dashboard.tsx", "utf8");
-const challenges = readFileSync("components/challenges-dashboard-client.tsx", "utf8");
+// The hub's static frame lives beside it so the route skeleton can draw the same
+// thing; the challenges screen is both files.
+const challenges =
+  readFileSync("components/challenges-dashboard-client.tsx", "utf8") +
+  readFileSync("components/challenge-hub-frame.tsx", "utf8");
 const community = readFileSync("components/community-hub-client.tsx", "utf8");
 const courses = readFileSync("components/student-courses-client.tsx", "utf8");
 const subjects = readFileSync("components/subject-explorer-client.tsx", "utf8");

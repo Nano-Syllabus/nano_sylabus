@@ -423,91 +423,6 @@ function buildMissingSubjectMessage(subjects: string[]) {
   ].join("\n");
 }
 
-function TopHeaderTitle({
-  activeSessionTitle,
-  currentSessionId,
-  onSaveTitle,
-  onShare,
-  shareLoading,
-}: {
-  activeSessionTitle: string;
-  currentSessionId: string | null;
-  onSaveTitle: (title: string) => Promise<void> | void;
-  onShare: () => void;
-  shareLoading: boolean;
-}) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [draftTitle, setDraftTitle] = useState(activeSessionTitle);
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    if (!isEditing) {
-      setDraftTitle(activeSessionTitle);
-    }
-  }, [activeSessionTitle, isEditing]);
-
-  async function saveTitle() {
-    const nextTitle = draftTitle.trim();
-
-    if (!currentSessionId || !nextTitle || nextTitle === activeSessionTitle) {
-      setDraftTitle(activeSessionTitle);
-      setIsEditing(false);
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await onSaveTitle(nextTitle);
-      setIsEditing(false);
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <div className="relative flex min-w-0 items-center gap-2">
-      {isEditing ? (
-        <input
-          autoFocus
-          value={draftTitle}
-          disabled={isSaving}
-          onBlur={() => void saveTitle()}
-          onFocus={(event) => event.currentTarget.select()}
-          onChange={(event) => setDraftTitle(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void saveTitle();
-            }
-
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setDraftTitle(activeSessionTitle);
-              setIsEditing(false);
-            }
-          }}
-          className="h-9 min-w-0 w-[min(58vw,520px)] max-w-[calc(100vw-190px)] rounded-full border border-border bg-bg-secondary px-3 text-sm font-semibold text-text-primary outline-none transition focus:border-text-primary disabled:opacity-60 sm:w-[min(46vw,520px)] sm:text-base"
-          aria-label="Edit chat title"
-        />
-      ) : (
-        <button
-          type="button"
-          disabled={!currentSessionId}
-          onClick={() => {
-            setDraftTitle(activeSessionTitle);
-            setIsEditing(true);
-          }}
-          className="group inline-flex min-w-0 max-w-[min(58vw,520px)] items-center gap-2 rounded-full px-1 py-1 text-left font-semibold transition hover:bg-bg-secondary disabled:cursor-default disabled:hover:bg-transparent sm:max-w-[min(46vw,520px)]"
-          title={currentSessionId ? "Edit chat title" : undefined}
-        >
-          <span className="min-w-0 truncate">{activeSessionTitle}</span>
-        </button>
-      )}
-
-    </div>
-  );
-}
-
 /* ─────────────────────────────────────────────────────────
  * CHAT SESSION SWITCH STORYBOARD
  *
@@ -2332,120 +2247,7 @@ export function ChatPageClient({
     composerRef.current?.focus();
   }, [initialPrompt, setInput]);
 
-  useEffect(() => {
-    shell.setTitle(
-      <TopHeaderTitle 
-        activeSessionTitle={activeSessionTitle}
-        currentSessionId={currentSessionId}
-        onSaveTitle={renameCurrentSession}
-        onShare={() => void shareCurrentSession()}
-        shareLoading={shareLoading}
-      />
-    );
-    return () => shell.setTitle(null);
-  }, [activeSessionTitle, currentSessionId, shell, shareLoading, shareCurrentSession, renameCurrentSession]);
 
-  useEffect(() => {
-    shell.setActions(
-      <div className="flex min-w-0 items-center gap-1.5 select-none sm:gap-2">
-        <Badge variant={creditBalance > 0 ? "success" : "warning"} className="hidden shrink-0 sm:inline-flex">
-          {user.hasUnlimitedAccess ? "UNLIMITED" : `${creditBalance} MESSAGES`}
-        </Badge>
-        <CompactSelect
-          value={composerLanguage}
-          onChange={(v) => updateGlobalLanguage(v as "EN" | "RN")}
-          options={[
-            { label: "English", value: "EN" },
-            { label: "Roman Nepali", value: "RN" }
-          ]}
-        />
-        {!libraryOpen ? (
-          <div className="relative">
-            <Button
-              id="chat-library-trigger"
-              type="button"
-              size="sm"
-              variant="ghost"
-              className={cn(
-                "rounded-full transition-all relative",
-                compactHeaderActions ? "h-10 w-10 px-0" : "h-9 px-3",
-                (!hasOpenedBooks && !libraryOpen) &&
-                  "ring-2 ring-blue-500 ring-offset-2 ring-offset-bg-secondary shadow-[0_0_15px_rgba(59,130,246,0.5)] animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/40",
-              )}
-              onClick={toggleLibrary}
-              aria-expanded={false}
-              aria-controls="chat-course-library"
-              aria-label="Open library"
-            >
-              <LibraryBig className="h-4 w-4" aria-hidden="true" />
-              {!compactHeaderActions ? <span>Library</span> : null}
-            </Button>
-
-            {showBooksSpotlight ? (
-              <div
-                role="tooltip"
-                className="absolute right-0 top-full mt-2.5 z-50 w-72 rounded-2xl border border-blue-500/40 bg-popover text-popover-foreground p-3.5 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-1.5 font-display text-sm font-semibold text-foreground">
-                    <span>📚</span>
-                    <span>Course Library &amp; Syllabus</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={dismissBooksSpotlight}
-                    className="text-muted-foreground hover:text-foreground text-xs p-1 rounded hover:bg-muted"
-                    aria-label="Dismiss spotlight"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-                  Open the <strong>Library</strong> to browse your subject materials, notes, and chapters while chatting.
-                </p>
-                <div className="mt-3 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={dismissBooksSpotlight}
-                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1"
-                  >
-                    Got it
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      toggleLibrary();
-                    }}
-                    className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
-                  >
-                    Open Library →
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {currentSessionId ? (
-          <Button
-            type="button"
-            size="sm"
-            className={cn(
-              "rounded-full text-xs font-medium bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition-opacity motion-reduce:transition-none",
-              compactHeaderActions ? "h-10 w-10 px-0" : "h-8 px-4",
-            )}
-            onClick={() => void shareCurrentSession()}
-            disabled={shareLoading}
-            aria-label={shareLoading ? "Creating share link" : "Share chat"}
-          >
-            {compactHeaderActions ? (
-              <Share2 className="h-4 w-4" aria-hidden="true" />
-            ) : shareLoading ? "Sharing..." : "Share"}
-          </Button>
-        ) : null}
-      </div>
-    );
-    return () => shell.setActions(null);
-  }, [shell, composerLanguage, updateGlobalLanguage, creditBalance, user.hasUnlimitedAccess, currentSessionId, shareCurrentSession, shareLoading, compactHeaderActions, libraryOpen, toggleLibrary, showBooksSpotlight, dismissBooksSpotlight, hasOpenedBooks]);
 
   useEffect(() => {
     stopChatRef.current = stop;
@@ -2703,6 +2505,7 @@ export function ChatPageClient({
         aria-label={workspaceMaterial ? "NanoAI assistant" : undefined}
       >
         {/* matchedScope banner hidden temporarily */}
+
 
 
         <div
