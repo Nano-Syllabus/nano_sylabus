@@ -403,38 +403,43 @@ export function CommunityCatalogClient({
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
 
-    return initialCommunities.filter((community) => {
-      const haystack = [
-        community.name,
-        community.university,
-        community.faculty,
-        community.description,
-        detectLevel(community),
-      ]
-        .join(" ")
-        .toLowerCase();
+    return initialCommunities
+      .filter((community) => {
+        const haystack = [
+          community.name,
+          community.university,
+          community.faculty,
+          community.description,
+          detectLevel(community),
+        ]
+          .join(" ")
+          .toLowerCase();
 
-      const matchesSearch = !needle || haystack.includes(needle);
+        const matchesSearch = !needle || haystack.includes(needle);
 
-      const matchesUniversity =
-        !selectedUniversities.length ||
-        selectedUniversities.some((u) =>
-          community.university.toLowerCase().includes(u.toLowerCase()),
-        );
+        const matchesUniversity =
+          !selectedUniversities.length ||
+          selectedUniversities.some((u) =>
+            community.university.toLowerCase().includes(u.toLowerCase()),
+          );
 
-      const matchesInstitute =
-        !selectedInstitutes.length ||
-        selectedInstitutes.some((inst) =>
-          community.faculty.toLowerCase().includes(inst.toLowerCase()),
-        );
+        const matchesInstitute =
+          !selectedInstitutes.length ||
+          selectedInstitutes.some((inst) =>
+            community.faculty.toLowerCase().includes(inst.toLowerCase()),
+          );
 
-      const level = detectLevel(community);
-      const matchesLevel =
-        !selectedLevels.length ||
-        selectedLevels.some((lvl) => level.toLowerCase() === lvl.toLowerCase());
+        const level = detectLevel(community);
+        const matchesLevel =
+          !selectedLevels.length ||
+          selectedLevels.some((lvl) => level.toLowerCase() === lvl.toLowerCase());
 
-      return matchesSearch && matchesUniversity && matchesInstitute && matchesLevel;
-    });
+        return matchesSearch && matchesUniversity && matchesInstitute && matchesLevel;
+      })
+      .sort(
+        (left, right) =>
+          right.memberCount - left.memberCount || left.name.localeCompare(right.name),
+      );
   }, [initialCommunities, query, selectedUniversities, selectedInstitutes, selectedLevels]);
 
   // Pagination calculation

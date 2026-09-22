@@ -402,6 +402,39 @@ export async function createCommunity(
   return community;
 }
 
+export async function updateOwnedCommunityName(
+  userId: string,
+  slug: string,
+  name: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+) {
+  const result = await admin.rpc("update_owned_community_name", {
+    target_user_id: userId,
+    target_community_slug: slug,
+    target_name: name,
+  });
+  if (result.error) {
+    if (result.error.code === "42501") {
+      throw new CommunityError("Only the community creator can rename this community.", 403);
+    }
+    if (result.error.code === "P0002") throw new CommunityError("Community not found.", 404);
+    if (result.error.code === "22023") {
+      throw new CommunityError("Community name must be between 3 and 120 characters.", 400);
+    }
+    if (result.error.code === "PGRST202" || result.error.code === "42883") {
+      throw new CommunityError(
+        "Community editing is not available yet. The database update must be installed first.",
+        503,
+      );
+    }
+    throw result.error;
+  }
+
+  const community = await getCommunity(slug, userId, admin);
+  if (!community) throw new CommunityError("Community not found.", 404);
+  return community;
+}
+
 export async function joinCommunity(
   userId: string,
   slug: string,

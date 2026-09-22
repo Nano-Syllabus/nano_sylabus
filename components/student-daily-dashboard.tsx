@@ -20,6 +20,7 @@ import type {
   DailyExamDate,
   StudentDailyDashboard,
 } from "@/lib/data/student-daily-dashboard";
+import { rankSemesterSubjects } from "@/lib/data/student-semester-ranking";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "@/lib/query/dashboard";
 import { PracticeCalendar } from "@/components/practice-calendar";
@@ -317,6 +318,10 @@ function SemesterProgress({
     () => community?.semesters.find((item) => item.id === semesterId) ?? community?.semesters[0],
     [community, semesterId],
   );
+  const rankedSubjects = useMemo(
+    () => (semester ? rankSemesterSubjects(semester.subjects) : []),
+    [semester],
+  );
 
   if (!community) {
     return (
@@ -401,34 +406,30 @@ function SemesterProgress({
             </div>
           </div>
 
-          {semester.subjects.length ? (
+          {rankedSubjects.length ? (
             <div className="mt-6 divide-y divide-border border-y border-border">
-              {semester.subjects.map((subject) => (
+              {rankedSubjects.map((subject) => (
                 <article
                   key={subject.id}
-                  className="grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.7fr)_auto] md:items-center"
+                  className="grid gap-4 py-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
                 >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       {subject.code ? (
                         <span className="rounded-md bg-border px-2 py-1 text-[11px] font-semibold text-text-secondary">
                           {subject.code}
                         </span>
                       ) : null}
-                      <h3 className="type-student-card-title truncate">{subject.name}</h3>
+                      <h3 className="type-student-card-title break-words">{subject.name}</h3>
                     </div>
-                    <p className="type-student-meta mt-1 text-text-muted">
-                      {subject.topicCount === null
-                        ? "Topics syncing"
-                        : `${formatNumber(subject.topicCount)} topics`}{" "}
-                      ·{" "}
-                      {subject.materialCount === null
-                        ? "Materials syncing"
-                        : `${formatNumber(subject.materialCount)} materials`}
-                    </p>
-                  </div>
-                  <div>
-                    <div className="h-2 overflow-hidden rounded-full bg-border" aria-hidden="true">
+                    <div
+                      className="mt-3 h-2 overflow-hidden rounded-full bg-border"
+                      role="progressbar"
+                      aria-label={`${subject.name} readiness`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={subject.readiness ?? undefined}
+                    >
                       {subject.readiness !== null ? (
                         <div
                           className="h-full rounded-full bg-[var(--community-accent)]"
@@ -436,11 +437,22 @@ function SemesterProgress({
                         />
                       ) : null}
                     </div>
-                    <p className="type-student-meta mt-1.5 text-text-muted">
-                      {subject.readiness === null
-                        ? "No graded practice yet"
-                        : `${Math.round(subject.readiness)}% ready`}
-                    </p>
+                    <div className="type-student-meta mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-text-muted">
+                      <span>
+                        {subject.topicCount === null
+                          ? "Topics syncing"
+                          : `${formatNumber(subject.topicCount)} topics`}{" "}
+                        ·{" "}
+                        {subject.materialCount === null
+                          ? "Materials syncing"
+                          : `${formatNumber(subject.materialCount)} materials`}
+                      </span>
+                      <span>
+                        {subject.readiness === null
+                          ? "No graded practice yet"
+                          : `${Math.round(subject.readiness)}% ready`}
+                      </span>
+                    </div>
                   </div>
                   <Link
                     href={`/app/chat?community=${encodeURIComponent(community.slug)}&semester=${encodeURIComponent(semester.id)}&librarySubject=${encodeURIComponent(subject.slug)}`}
