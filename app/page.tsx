@@ -8,9 +8,18 @@ const dmSans = DM_Sans({ subsets: ["latin"], display: "swap" });
 const manrope = Manrope({ subsets: ["latin"], display: "swap" });
 
 export const metadata = {
-  title: "NanoSyllabus — A little less stuck. A lot more learning.",
+  title: "NanoSyllabus — AI Study Companion for Nepal",
   description:
-    "Turn your syllabus into small learning challenges. Practise on paper, find your gaps, and study with people who get it.",
+    "Turn your syllabus into focused study challenges. Practice with guided feedback, exam prep, and a supportive community built for Nepal's students.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "NanoSyllabus — AI Study Companion for Nepal",
+    description:
+      "Turn your syllabus into focused study challenges. Practice with guided feedback, exam prep, and a supportive community built for Nepal's students.",
+    url: "/",
+  },
 };
 
 function Brand() {
