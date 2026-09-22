@@ -223,8 +223,7 @@ export default function LandingPage() {
             {/* Left Content */}
             <div className="max-w-[620px]">
               <div className="mb-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-                <span className="text-[#3049ed]">✳</span>
-                <span>FOR BACHELOR’S STUDENTS IN NEPAL</span>
+          
               </div>
               <h1
                 className={`${manrope.className} text-[clamp(2.9rem,5.3vw,5.5rem)] font-extrabold leading-[1.04] tracking-[-0.055em] text-[#1c1e1a]`}
@@ -242,14 +241,9 @@ export default function LandingPage() {
                 </span>
               </h1>
               <p className="mt-6 text-[18px] leading-[1.55] text-[#5b5e55]">
-                Scattered notes. No study routine.
-
-                <br />
-                Learn one topic at a time, complete challenges, and get ready to ace your exams.
+                Scattered notes. No study routine. Learn one topic at a time, complete challenges, and get ready to ace your exams.
               </p>
-              <p className="mt-3 text-[18px] leading-[1.55] text-[#5b5e55]">
-                Learn a topic, practise past questions, and get your handwritten answers checked. Build a daily study habit around your official syllabus.
-              </p>
+ 
               <div className="mt-9 flex flex-wrap items-center gap-6">
                 <LandingPrimaryCta blue size="hero" communityOnly>
                   Find your faculty
@@ -278,7 +272,7 @@ export default function LandingPage() {
                 aria-label="A small learning challenge preview"
               >
                 <p className="mb-6 flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.09em] text-[#1c1e1a]">
-                  <span>A smaller way through a big syllabus</span>
+                  <span></span>
                   <span aria-hidden="true" className="text-xl leading-none">
                     ↙
                   </span>
@@ -287,7 +281,7 @@ export default function LandingPage() {
                 {/* Rotated White Challenge Note Card */}
                 <div className="mx-auto w-full rotate-[-3.5deg] rounded-xl border border-[#23251e]/15 bg-white p-6 sm:p-8 shadow-[12px_12px_0_#bedb62] transition-transform duration-300 hover:rotate-0">
                   <div className="flex items-center justify-between text-[10.5px] font-bold uppercase tracking-widest text-[#5b5e55]">
-                    <span>Nano challenge</span>
+                    <span></span>
                     <span>Challenge no. 01</span>
                   </div>
                   <h2
@@ -307,9 +301,7 @@ export default function LandingPage() {
                         </span>
                         <div>
                           <strong className="block text-sm text-[#1c1e1a]">Learn the idea</strong>
-                          <span className="block text-xs text-[#5b5e55]">
-                            Make sense of the concept.
-                          </span>
+                     
                         </div>
                       </div>
                       <span className="text-sm font-bold text-[#1c1e1a]" aria-hidden="true">
@@ -325,9 +317,7 @@ export default function LandingPage() {
                         </span>
                         <div>
                           <strong className="block text-sm text-[#1c1e1a]">See it in action</strong>
-                          <span className="block text-xs text-[#5b5e55]">
-                            Work through a solved question.
-                          </span>
+                      
                         </div>
                       </div>
                       <span className="text-sm font-bold text-[#1c1e1a]" aria-hidden="true">
@@ -343,9 +333,7 @@ export default function LandingPage() {
                         </span>
                         <div>
                           <strong className="block text-sm">Your turn</strong>
-                          <span className="block text-xs text-white/80">
-                            Close the solution. Give it a go.
-                          </span>
+                  
                         </div>
                       </div>
                       <span className="text-sm font-bold" aria-hidden="true">
@@ -355,7 +343,7 @@ export default function LandingPage() {
                   </div>
 
                   <p className="mt-4 flex items-center justify-between text-xs text-[#5b5e55]">
-                    <span>Learning → practice → feedback</span>
+                    <span></span>
                     <span aria-hidden="true" className="text-lg text-[#3049ed]">
                       ✳
                     </span>
