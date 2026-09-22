@@ -61,6 +61,22 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const phoneNumber =
+    typeof user.user_metadata?.phone_number === "string"
+      ? user.user_metadata.phone_number.trim()
+      : "";
+  if (!phoneNumber) {
+    const phoneNumberUrl = new URL("/signup/phone", origin);
+    if (next) phoneNumberUrl.searchParams.set("next", next);
+
+    const phoneNumberResponse = NextResponse.redirect(phoneNumberUrl);
+    phoneNumberResponse.cookies.set("oauth_next", "", {
+      maxAge: 0,
+      path: "/",
+    });
+    return phoneNumberResponse;
+  }
+
   const role = isAdminRole(profile?.role) ? profile?.role : "student";
   const destination = resolvePostAuthDestination({
     nextPath: next,

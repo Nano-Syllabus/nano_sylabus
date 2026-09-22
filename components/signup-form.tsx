@@ -7,6 +7,7 @@ import { AuthShell, DividerOr } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
+import { getPhoneNumberError, normalizePhoneNumber } from "@/lib/phone-number";
 import { loadSupabaseBrowserClient, warmSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 
 function passwordStrength(password: string) {
@@ -25,9 +26,11 @@ export function SignupForm({ nextPath }: { nextPath?: string }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [error, setError] = useState("");
+  const [phoneNumberError, setPhoneNumberError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -45,6 +48,12 @@ export function SignupForm({ nextPath }: { nextPath?: string }) {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    const nextPhoneNumberError = getPhoneNumberError(phoneNumber);
+    if (nextPhoneNumberError) {
+      setPhoneNumberError(nextPhoneNumberError);
+      return;
+    }
+
     if (password !== password2) {
       setError("Passwords do not match.");
       return;
@@ -52,6 +61,7 @@ export function SignupForm({ nextPath }: { nextPath?: string }) {
 
     setLoading(true);
     setError("");
+    setPhoneNumberError("");
     setNotice("");
 
     const supabase = await loadSupabaseBrowserClient();
@@ -61,6 +71,7 @@ export function SignupForm({ nextPath }: { nextPath?: string }) {
       options: {
         data: {
           full_name: name,
+          phone_number: normalizePhoneNumber(phoneNumber),
         },
       },
     });
@@ -159,6 +170,18 @@ export function SignupForm({ nextPath }: { nextPath?: string }) {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@school.edu.np"
+            required
+          />
+        </Field>
+        <Field label="Phone number" error={phoneNumberError || undefined}>
+          <Input
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={phoneNumber}
+            onChange={(event) => setPhoneNumber(event.target.value)}
+            placeholder="9812345678 or +977 9812345678"
+            invalid={Boolean(phoneNumberError)}
             required
           />
         </Field>
