@@ -304,19 +304,15 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
 
 function SemesterProgress({
   dashboard,
-  compact = false,
 }: {
   dashboard: StudentDailyDashboard;
-  compact?: boolean;
 }) {
   const community = dashboard.community;
-  const [semesterId, setSemesterId] = useState(community?.currentSemesterId ?? "");
-  useEffect(() => {
-    setSemesterId(community?.currentSemesterId ?? "");
-  }, [community?.currentSemesterId, community?.slug]);
   const semester = useMemo(
-    () => community?.semesters.find((item) => item.id === semesterId) ?? community?.semesters[0],
-    [community, semesterId],
+    () =>
+      community?.semesters.find((item) => item.id === community.currentSemesterId) ??
+      community?.semesters[0],
+    [community],
   );
   const rankedSubjects = useMemo(
     () => (semester ? rankSemesterSubjects(semester.subjects) : []),
@@ -341,71 +337,10 @@ function SemesterProgress({
   return (
     <section
       className="overflow-hidden rounded-2xl border border-border bg-card"
-      aria-labelledby="semester-progress-heading"
+      aria-label="Semester subjects"
     >
-      <div
-        className={cn(
-          "flex flex-col gap-4 border-b border-border px-5 py-5",
-          !compact && "sm:flex-row sm:items-end sm:justify-between sm:px-6",
-        )}
-      >
-        <div className="min-w-0">
-          <p className="type-student-eyebrow text-text-muted">
-            Programme map
-          </p>
-          <h2
-            id="semester-progress-heading"
-            className="type-student-section-title mt-2"
-          >
-            Semester progress
-          </h2>
-          <p className="type-student-body mt-1 text-text-secondary">
-            Real topic readiness from your indexed subjects.
-          </p>
-        </div>
-        <label
-          className={cn(
-            "grid gap-1.5 text-xs font-medium text-text-secondary",
-            compact && "w-full",
-          )}
-        >
-          Semester
-          <select
-            value={semester?.id ?? ""}
-            onChange={(event) => setSemesterId(event.target.value)}
-            className={cn(
-              "min-h-11 rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary",
-              compact ? "w-full min-w-0" : "min-w-[220px]",
-              focusRing,
-            )}
-          >
-            {community.semesters.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
       {semester ? (
         <div className="p-5 sm:p-6">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold">{semester.label}</p>
-              <p className="mt-1 text-sm text-text-secondary">
-                {semester.subjects.length} subject{semester.subjects.length === 1 ? "" : "s"} ·{" "}
-                {semester.measuredSubjects} with measurable readiness
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="type-student-metric tabular-nums">
-                {semester.readiness === null ? "—" : `${Math.round(semester.readiness)}%`}
-              </p>
-              <p className="type-student-meta text-text-muted">Average readiness</p>
-            </div>
-          </div>
-
           {rankedSubjects.length ? (
             <div className="mt-6 divide-y divide-border border-y border-border">
               {rankedSubjects.map((subject) => (
@@ -749,7 +684,7 @@ function DashboardContent({
           currentSemesterId={community?.currentSemesterId}
           onExamDatesChange={handleExamDatesChange}
         />
-        <SemesterProgress dashboard={dashboard} compact />
+        <SemesterProgress dashboard={dashboard} />
       </div>
     </main>
   );
