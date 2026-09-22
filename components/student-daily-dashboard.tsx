@@ -629,7 +629,7 @@ function DashboardDataSkeleton({
         <MetricCard pending icon={<Clock3 className="size-4" />} label="Today" value="" />
       </section>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="mt-6">
         <section className="rounded-2xl border border-border bg-card p-5">
           <h2 className="type-student-section-title">Practice calendar</h2>
           <div className={`mt-2 h-3 w-52 ${line}`} aria-hidden="true" />
@@ -639,26 +639,6 @@ function DashboardDataSkeleton({
                 key={index}
                 className="h-12 rounded-lg bg-border animate-pulse motion-reduce:animate-none"
               />
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <div className="flex flex-col gap-4">
-            <div>
-              <div className={`h-3 w-24 ${line}`} aria-hidden="true" />
-              <h2 className="type-student-section-title mt-2">Semester progress</h2>
-              <div className={`mt-2 h-3 w-44 ${line}`} aria-hidden="true" />
-            </div>
-            <div className={`h-11 w-full rounded-xl ${line}`} aria-hidden="true" />
-          </div>
-          <div className="mt-5 space-y-4" aria-hidden="true">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="border-t border-border pt-4">
-                <div className={`h-3 w-40 ${line}`} />
-                <div className={`mt-2 h-3 w-28 ${line}`} />
-                <div className={`mt-3 h-2 w-full ${line}`} />
-              </div>
             ))}
           </div>
         </section>
@@ -739,7 +719,7 @@ function DashboardContent({
         />
       </section>
 
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="mt-6">
         <PracticeCalendar
           initialDays={dashboard.activity}
           examDates={dashboard.examDates ?? []}
@@ -749,7 +729,6 @@ function DashboardContent({
           currentSemesterId={community?.currentSemesterId}
           onExamDatesChange={handleExamDatesChange}
         />
-        <SemesterProgress dashboard={dashboard} compact />
       </div>
     </main>
   );
