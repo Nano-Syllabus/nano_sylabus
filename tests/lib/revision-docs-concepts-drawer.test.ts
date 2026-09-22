@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
 
-import { ConceptsDrawer, readingMinutes, readingPreview } from "@/components/concepts-reading";
+import { ConceptsDrawer, readingBlocks, readingMinutes, readingPreview } from "@/components/concepts-reading";
 import { RevisionDocsClient } from "@/components/revision-docs-client";
 import type { RevisionDocTopic, StudentRevisionDocs } from "@/lib/data/student-revision-docs";
 
@@ -54,7 +54,7 @@ const docs: StudentRevisionDocs = {
     id: "y1s1", label: "Year 1 · Semester 1", yearNumber: 1, semesterNumber: 1, position: 1, topicCount: 1,
     subjects: [{
       courseId: "course-1", subjectSlug: "applied-mechanics", name: "Applied Mechanics", topicCount: 1,
-      units: [{ unitNumber: "1", label: "Unit 1", topics: [topic] }],
+      units: [{ unitNumber: "1", label: "Unit 1", title: "", topics: [topic] }],
     }],
   }],
 };
@@ -103,6 +103,65 @@ describe("revision docs: the concepts reading", () => {
     expect(sheet).toContain("Machine Performance Metrics");
     expect(sheet.indexOf("Applied Mechanics provides")).toBeLessThan(sheet.indexOf("Machine Performance Metrics"));
     expect(sheet).toContain("Close concepts");
+  });
+});
+
+describe("the sheet's worked examples", () => {
+  const reading = [
+    "### 1. Machine Performance Metrics",
+    "Mechanical Advantage is the ratio of the Load (W) moved to the Effort (P) applied.",
+    "**Worked:** A crane lifts 2000 lb with a 50 lb effort, so the mechanical advantage is 2000/50 = 40.",
+    "**In the exam:** Given the load and effort, find the mechanical advantage.",
+    "### 2. Velocity Ratio",
+    "**Worked:** Yadi driver ma 10 teeth ra follower ma 50 teeth chha bhane velocity ratio 1/5 hunchha.",
+  ];
+
+  it("pulls each one out of the reading and numbers them in order", () => {
+    const blocks = readingBlocks(reading);
+    expect(blocks.map((block) => block.kind)).toEqual(["text", "text", "example", "text", "text", "example"]);
+    expect(blocks[2]).toEqual({
+      kind: "example",
+      number: 1,
+      text: "A crane lifts 2000 lb with a 50 lb effort, so the mechanical advantage is 2000/50 = 40.",
+    });
+    // The Roman Nepali translation keeps the label, so it gets its card too.
+    expect(blocks[5]).toMatchObject({ kind: "example", number: 2 });
+    // A bare label with nothing after it stays an ordinary paragraph.
+    expect(readingBlocks(["**Worked:**"])).toEqual([{ kind: "text", text: "**Worked:**" }]);
+  });
+
+  it("writes each one onto the reading's ruled sheet, labelled", () => {
+    const sheet = renderToStaticMarkup(
+      createElement(ConceptsDrawer, {
+        source: { id: topic.challengeId, title: topic.title, subjectName: topic.subjectName, reading },
+        onClose: () => {},
+      }),
+    );
+    expect(sheet).toContain(">Example 1</p>");
+    expect(sheet).toContain(">Example 2</p>");
+    // One sheet for the whole reading: an example is a labelled stretch of it,
+    // not a card laid on top.
+    expect(sheet.match(/class="answer-paper"/g)).toHaveLength(1);
+    expect(sheet).toContain("answer-paper-body font-revision-answer");
+    // The label is the card's now, not the text's.
+    expect(sheet).not.toContain("Worked:");
+    expect(sheet).toContain("the mechanical advantage is 2000/50 = 40.");
+    // The face is the reader's, with the picker to change it.
+    expect(sheet).toContain("--answer-font:");
+    expect(sheet).toContain("Handwriting font");
+  });
+
+  it("writes a reading with no worked example on the sheet too, with the picker", () => {
+    const sheet = renderToStaticMarkup(
+      createElement(ConceptsDrawer, {
+        source: { id: topic.challengeId, title: topic.title, subjectName: topic.subjectName, reading: READING },
+        onClose: () => {},
+      }),
+    );
+    // The whole reading is the note paper, every paragraph in the reader's hand.
+    expect(sheet.match(/class="answer-paper"/g)).toHaveLength(1);
+    expect(sheet.match(/answer-paper-body font-revision-answer/g)).toHaveLength(READING.length);
+    expect(sheet).toContain("Handwriting font");
   });
 });
 

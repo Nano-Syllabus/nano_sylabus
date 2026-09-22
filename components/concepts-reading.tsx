@@ -1,9 +1,11 @@
 "use client";
 
 import { BookOpen, X } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnswerFontPicker, answerFontStyle, useAnswerFont } from "@/components/answer-font-picker";
 import { Markdown } from "@/components/markdown";
+import { paperLabelClass, paperTextClass, workedAnswerClass } from "@/components/worked-example-card";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,6 +49,27 @@ export function readingPreview(reading: string[]) {
     .trim();
 }
 
+/** How the reading marks a step's worked example (`_render_reading` in the API's
+ *  routers/challenge.py). The Roman Nepali translation keeps the label. */
+const WORKED_EXAMPLE = /^\*\*Worked(?: example)?:?\*\*:?\s*/i;
+
+export type ReadingBlock =
+  | { kind: "text"; text: string }
+  | { kind: "example"; number: number; text: string };
+
+/** The reading's paragraphs, with each worked example pulled out to be drawn as
+ *  its own card and numbered in reading order. */
+export function readingBlocks(reading: string[]): ReadingBlock[] {
+  let examples = 0;
+  return reading.map((paragraph) => {
+    const label = paragraph.match(WORKED_EXAMPLE);
+    const text = label ? paragraph.slice(label[0].length).trim() : "";
+    if (!text) return { kind: "text", text: paragraph };
+    examples += 1;
+    return { kind: "example", number: examples, text };
+  });
+}
+
 export function readingMinutes(reading: string[]) {
   const words = reading.join(" ").split(/\s+/).filter(Boolean).length;
   return Math.max(1, Math.round(words / 200));
@@ -73,6 +96,8 @@ export function ConceptsDrawer({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [answerFont, setAnswerFont] = useAnswerFont();
+  const blocks = useMemo(() => readingBlocks(source.reading), [source.reading]);
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -124,10 +149,13 @@ export function ConceptsDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-border bg-bg-primary shadow-2xl animate-in slide-in-from-right duration-200 motion-reduce:animate-none"
+        className="absolute inset-y-0 right-0 flex w-full max-w-[52.5rem] flex-col border-l border-border bg-bg-primary shadow-2xl animate-in slide-in-from-right duration-200 motion-reduce:animate-none"
       >
-        <header className="flex items-start gap-3 border-b border-border px-5 py-4 sm:px-6">
-          <div className="min-w-0 flex-1">
+        {/* The font picker sits beside the close button on a wide sheet and on
+            its own row under the title on a phone, where beside it would
+            squeeze the title. */}
+        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-3 border-b border-border px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:px-6">
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
               Concepts{source.subjectName ? ` · ${source.subjectName}` : ""}
             </p>
@@ -135,26 +163,40 @@ export function ConceptsDrawer({
               {source.title}
             </h2>
           </div>
+          <div className="col-span-2 row-start-2 justify-self-start sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:self-center">
+            <AnswerFontPicker value={answerFont} onChange={setAnswerFont} />
+          </div>
           <button
             ref={closeRef}
             type="button"
             onClick={onClose}
             aria-label="Close concepts"
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="col-start-2 row-start-1 inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:col-start-3"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
-          <div className="space-y-3">
-            {source.reading.map((paragraph, index) => (
-              <Markdown
-                key={`${source.id}-reading-${index}`}
-                text={paragraph}
-                className="max-w-prose text-sm leading-7 text-text-secondary"
-              />
-            ))}
-          </div>
+          {/* The whole reading is written out on one ruled sheet, the way the
+              worked examples are: a page of notes rather than a web page. A
+              worked example is a labelled stretch of the same sheet, not a card
+              laid on top of it. */}
+          <article className="answer-paper" style={answerFontStyle(answerFont)}>
+            {blocks.map((block, index) =>
+              block.kind === "example" ? (
+                <Fragment key={`${source.id}-reading-${index}`}>
+                  <p className={paperLabelClass}>Example {block.number}</p>
+                  <Markdown text={block.text} className={workedAnswerClass} />
+                </Fragment>
+              ) : (
+                <Markdown
+                  key={`${source.id}-reading-${index}`}
+                  text={block.text}
+                  className={paperTextClass}
+                />
+              ),
+            )}
+          </article>
         </div>
       </div>
     </div>

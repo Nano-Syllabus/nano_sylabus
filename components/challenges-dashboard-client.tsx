@@ -53,6 +53,12 @@ import {
 import { Markdown } from "@/components/markdown";
 import { WorkedSolution } from "@/components/worked-solution";
 import {
+  WorkedExampleCard,
+  paperTextClass,
+  workedAnswerClass,
+} from "@/components/worked-example-card";
+import { AnswerFontPicker, answerFontStyle, useAnswerFont } from "@/components/answer-font-picker";
+import {
   ChallengeFeedbackModal,
   type ChallengeFeedbackChoice,
 } from "@/components/challenge-feedback-modal";
@@ -366,6 +372,8 @@ function ChallengeDetail({
     `${content?.lesson?.content?.length ?? 0}:${(content?.solvedExamples || []).filter((example) => example.solution).length}`,
     studyLanguage === "rn" && Boolean(content),
   );
+  /** The face worked answers are written in — the reader's, shared with Revision. */
+  const [answerFont, setAnswerFont] = useAnswerFont();
   /** The single list step one renders — see `mergeLearnQuestions` for why the
    *  two content fields are one list on screen. */
   const learnQuestions = useMemo(
@@ -923,137 +931,72 @@ function ChallengeDetail({
                   />
                 ) : null}
                 {learnQuestions.length ? (
-                  <ol className="space-y-4">
-                    {learnQuestions.map((item, index) => {
-                      const repeated = item.appearances > 1;
-                      return (
-                        <li
-                          key={item.key}
-                          className="overflow-hidden rounded-xl border border-border bg-bg-secondary"
-                        >
-                          {/* `details`, not a button: the question is block
-                              markdown — headings, math, the occasional table —
-                              and a button may not contain any of it. The native
-                              element also opens without JavaScript and is
-                              already what the rest of the app expands with. */}
-                          <details className="group">
-                            <summary className="flex cursor-pointer list-none items-start gap-4 px-5 py-6 marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:px-6 [&::-webkit-details-marker]:hidden">
-                              <span className="mt-0.5 w-5 shrink-0 text-xs font-semibold text-text-muted">
-                                {index + 1}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <Markdown
-                                  // Typeset when the solver has written it:
-                                  // "$x\frac{d^2y}{dx^2}$", not "x(d^2y/dx^2)".
-                                  text={item.displayQuestion || item.question}
-                                  className="max-w-prose text-[15px] font-semibold leading-6 text-text-primary"
-                                />
-                                {/* Only what a real paper printed: the sessions
-                                    it was set in, the marks it carried, and how
-                                    often it came back. Nothing is inferred. */}
-                                {repeated || item.years.length || item.marks.length ? (
-                                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                                    {repeated ? (
-                                      <span className="rounded-md bg-success/15 px-2 py-1 text-xs font-semibold text-success">
-                                        ★ Repeated ×{item.appearances}
-                                      </span>
-                                    ) : null}
-                                    {item.years.map((year) => (
-                                      <span
-                                        key={year}
-                                        className="rounded-md bg-card px-2 py-1 font-mono text-xs text-text-secondary"
-                                      >
-                                        {year}
-                                      </span>
-                                    ))}
-                                    {item.marks.length ? (
-                                      <span className="rounded-md bg-card px-2 py-1 font-mono text-xs text-text-secondary">
-                                        [
-                                        {item.marks
-                                          .map((mark) => displayNumber(mark))
-                                          .join("] or [")}
-                                        ]
-                                      </span>
-                                    ) : null}
-                                  </div>
+                  // The same ruled sheets as Revision's worked examples, and the
+                  // same face picker: a worked answer looks the same wherever it
+                  // is read. Each still opens on the question alone.
+                  <section style={answerFontStyle(answerFont)}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h2 className="type-student-section-title">Worked examples</h2>
+                      <AnswerFontPicker value={answerFont} onChange={setAnswerFont} />
+                    </div>
+                    <ol className="mt-3 space-y-4">
+                      {learnQuestions.map((item, index) => (
+                        <li key={item.key}>
+                          <WorkedExampleCard
+                            collapsible
+                            // Only what a real paper printed: the sessions it
+                            // was set in, the marks it carried, and how often
+                            // it came back. Nothing is inferred.
+                            label={
+                              <>
+                                Example {index + 1}
+                                {item.years.length ? ` · ${item.years.join(", ")}` : ""}
+                                {item.marks.length
+                                  ? ` · ${item.marks.map((mark) => displayNumber(mark)).join(" or ")} marks`
+                                  : ""}
+                                {item.appearances > 1 ? (
+                                  <span className="text-success"> · ★ Repeated ×{item.appearances}</span>
                                 ) : null}
-                              </div>
-                              <ChevronDown
-                                aria-hidden="true"
-                                className="mt-0.5 size-5 shrink-0 text-text-muted transition-transform group-open:rotate-180"
+                              </>
+                            }
+                            // Typeset when the solver has written it:
+                            // "$x\frac{d^2y}{dx^2}$", not "x(d^2y/dx^2)".
+                            question={item.displayQuestion || item.question}
+                          >
+                            {item.solution ? (
+                              <WorkedSolution
+                                challengeId={challenge.id}
+                                question={item.question}
+                                solution={item.solution}
+                                // A solution that lost its diagram asks for
+                                // it once; the drawn one is filed on the
+                                // challenge, and patched into the cache here.
+                                onDrawn={(drawn) => onChange(drawn.challenge)}
+                                text={inStudyLanguage(
+                                  studyLanguage,
+                                  romanNepali,
+                                  (data) => data.solutions[item.key],
+                                  item.solution,
+                                )}
+                                className={workedAnswerClass}
                               />
-                            </summary>
-                            <div className="border-t border-border bg-card px-5 py-8 sm:px-8 sm:py-10">
-                              {item.solution ? (
-                                <WorkedSolution
-                                  challengeId={challenge.id}
-                                  question={item.question}
-                                  solution={item.solution}
-                                  // A solution that lost its diagram asks for
-                                  // it once; the drawn one is filed on the
-                                  // challenge, and patched into the cache here.
-                                  onDrawn={(drawn) => onChange(drawn.challenge)}
-                                  text={inStudyLanguage(
-                                    studyLanguage,
-                                    romanNepali,
-                                    (data) => data.solutions[item.key],
-                                    item.solution,
-                                  )}
-                                  /* An answer is read, not scanned: the line
-                                     height and the space between its blocks are
-                                     what make a derivation followable. */
-                                  className={[
-                                    "text-[15px] leading-8 text-text-secondary",
-                                    // `:not(:first-child)` throughout, and not
-                                    // for elegance: the shared MARKDOWN_CLASS
-                                    // sets `[&_p]:mt-2`, whose `.root p`
-                                    // outranks a `.root > * + *` rule whatever
-                                    // order they are written in. An answer read
-                                    // at 8px between paragraphs is the "a bit
-                                    // congested" this is fixing.
-                                    "[&_p:not(:first-child)]:mt-5",
-                                    "[&>*:first-child]:mt-0",
-                                    // Section headings: room above, and the
-                                    // body pulled up under its own heading so
-                                    // the two read as one block.
-                                    "[&_h2]:mt-10 [&_h2]:border-l-2 [&_h2]:border-blue-500/70 [&_h2]:pl-3 [&_h2]:text-[17px] [&_h2]:font-semibold [&_h2]:text-text-primary",
-                                    "[&_h3]:mt-9 [&_h3]:border-l-2 [&_h3]:border-blue-500/70 [&_h3]:pl-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:text-text-primary",
-                                    "[&_h2+p]:mt-3 [&_h3+p]:mt-3",
-                                    "[&_strong]:font-semibold [&_strong]:text-text-primary",
-                                    // Working: one move per line, numbered, with
-                                    // room between the moves.
-                                    "[&_ol]:mt-5 [&_ul]:mt-5 [&_ol>li:not(:first-child)]:mt-4 [&_ul>li:not(:first-child)]:mt-3",
-                                    "[&_li]:leading-8 [&_li]:pl-1 [&_ol]:marker:font-semibold [&_ol]:marker:text-blue-600 dark:[&_ol]:marker:text-blue-400",
-                                    // An equation on its own line, whether the
-                                    // writer sent it as display maths or as a
-                                    // plain line inside a paragraph.
-                                    // A set equation is given the room a set
-                                    // equation gets on paper: clear of the
-                                    // sentence above it and the one below.
-                                    "[&_.math-block]:!my-8 [&_.math-block]:rounded-xl [&_.math-block]:border [&_.math-block]:border-border [&_.math-block]:bg-bg-secondary [&_.math-block]:px-5 [&_.math-block]:py-6",
-                                    "[&_.math-block_.katex-display]:!my-0 [&_.math-block_.katex]:text-[16px]",
-                                    // A step's own relation sits under it rather
-                                    // than beside it, so it keeps the indent.
-                                    "[&_li_.math-block]:!my-5",
-                                    "[&_br]:leading-[3]",
-                                    "[&_table]:my-8 [&_table]:overflow-hidden [&_table]:rounded-xl [&_th]:bg-bg-secondary [&_th]:text-text-primary",
-                                    "[&_code]:text-[13px]",
-                                  ].join(" ")}
-                                />
-                              ) : buildingRest ? (
+                            ) : buildingRest ? (
+                              <div className="pl-[var(--paper-inset)] pr-4 pt-2">
                                 <ChallengeBuildingNotice label="Working this question…" lines={3} />
-                              ) : (
-                                <p className="max-w-prose text-sm leading-6 text-text-secondary">
+                              </div>
+                            ) : (
+                              <div className={paperTextClass}>
+                                <p>
                                   This one is not worked. Try it on paper — step two sets questions
                                   like it.
                                 </p>
-                              )}
-                            </div>
-                          </details>
+                              </div>
+                            )}
+                          </WorkedExampleCard>
                         </li>
-                      );
-                    })}
-                  </ol>
+                      ))}
+                    </ol>
+                  </section>
                 ) : buildingRest ? (
                   <ChallengeBuildingNotice label="Finding this topic's past questions…" lines={3} />
                 ) : buildFailed ? (

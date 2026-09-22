@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, Type } from "lucide-react";
-import { useCallback, useSyncExternalStore, type CSSProperties } from "react";
+import { useCallback, useId, useSyncExternalStore, type CSSProperties } from "react";
 
 /**
  * The hand worked-example answers are written in, chosen by the reader.
@@ -72,6 +72,9 @@ export function useAnswerFont() {
 /** Sets the face for every `font-revision-answer` element inside. */
 export function answerFontStyle(fontId: AnswerFontId): CSSProperties {
   const font = ANSWER_FONTS.find((entry) => entry.id === fontId) ?? ANSWER_FONTS[0];
+  // The hands are written a little finer on the sheet (`.answer-paper
+  // .font-revision-answer` in globals.css); a printed face is left as it is.
+  if (font.id === "plain") return { "--answer-font": font.family, "--answer-thin": "0px" } as CSSProperties;
   return { "--answer-font": font.family } as CSSProperties;
 }
 
@@ -82,17 +85,20 @@ export function AnswerFontPicker({
   value: AnswerFontId;
   onChange: (next: AnswerFontId) => void;
 }) {
+  // Not a fixed id: Revision shows one picker on the page and another in the
+  // concepts sheet opened over it.
+  const id = useId();
   return (
     <div className="relative">
-      <label htmlFor="answer-font" className="sr-only">
-        Font for worked answers
+      <label htmlFor={id} className="sr-only">
+        Handwriting font
       </label>
       <Type
         className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-text-muted"
         aria-hidden="true"
       />
       <select
-        id="answer-font"
+        id={id}
         value={value}
         onChange={(event) => {
           if (isFontId(event.target.value)) onChange(event.target.value);

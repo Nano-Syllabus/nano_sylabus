@@ -106,13 +106,89 @@ function outsideTextCommands(math: string, rewrite: (value: string) => string) {
  */
 export function normalizeTex(math: string) {
   return outsideTextCommands(math, (value) =>
-    value
-      .replace(
-        /(?<![\\A-Za-z])([A-Za-z])_([A-Za-z]{2,}|\d{2,})(?![A-Za-z0-9{])/g,
-        (_, base: string, sub: string) => `${base}_{\\mathrm{${sub}}}`,
-      )
-      .replace(/(?<![\^_{\\])\*/g, "\\times "),
+    mergeRepeatedScripts(
+      value
+        // `V_logic_0`, `V_transition_region`: one name, underscored — not V
+        // subscripted twice, which KaTeX refuses and prints as red source.
+        .replace(
+          /(?<![\\A-Za-z])([A-Za-z])_([A-Za-z0-9]+(?:_[A-Za-z0-9]+)+)(?![A-Za-z0-9{])/g,
+          (_, base: string, chain: string) => `${base}_{\\mathrm{${chain.split("_").join("\\ ")}}}`,
+        )
+        .replace(
+          /(?<![\\A-Za-z])([A-Za-z])_([A-Za-z]{2,}|\d{2,})(?![A-Za-z0-9{])/g,
+          (_, base: string, sub: string) => `${base}_{\\mathrm{${sub}}}`,
+        )
+        .replace(/(?<![\^_{\\])\*/g, "\\times "),
+    ),
   );
+}
+
+/** Where the argument of a `_` or `^` starting at `start` ends: a braced group,
+ *  a command name, a held-aside `\text{…}`, or one character. -1 if none. */
+function scriptArgumentEnd(tex: string, start: number) {
+  const first = tex[start];
+  if (first === undefined || /[\s_^}]/.test(first)) return -1;
+  if (first === "{") {
+    let depth = 0;
+    for (let index = start; index < tex.length; index += 1) {
+      if (tex[index] === "{") depth += 1;
+      else if (tex[index] === "}" && --depth === 0) return index + 1;
+    }
+    return -1;
+  }
+  if (first === "\u0000") {
+    const close = tex.indexOf("\u0000", start + 1);
+    return close < 0 ? -1 : close + 1;
+  }
+  if (first === "\\") {
+    const command = /^\\(?:[A-Za-z]+|.)/.exec(tex.slice(start));
+    return command ? start + command[0].length : -1;
+  }
+  return start + 1;
+}
+
+/**
+ * `V_{logic}_0` — a subscript on a subscript's heels — is a "double subscript"
+ * to KaTeX, and the whole formula comes out as red source. Its writer means one
+ * subscript, so the two are set as one, a thin space apart. The same for `^`.
+ */
+function mergeRepeatedScripts(tex: string) {
+  let out = "";
+  let index = 0;
+  while (index < tex.length) {
+    const char = tex[index];
+    if ((char !== "_" && char !== "^") || tex[index - 1] === "\\") {
+      out += char;
+      index += 1;
+      continue;
+    }
+    const args: string[] = [];
+    let end = index;
+    while (tex[end] === char) {
+      // A repeat is already past what LaTeX means, so `}_region` is taken as
+      // the word its writer typed, not `_r` followed by "egion".
+      const word = args.length ? /^[A-Za-z0-9]{2,}/.exec(tex.slice(end + 1))?.[0] : undefined;
+      const argumentEnd = word ? end + 1 + word.length : scriptArgumentEnd(tex, end + 1);
+      if (argumentEnd < 0) break;
+      const argument = tex.slice(end + 1, argumentEnd);
+      args.push(
+        word && /[A-Za-z]{2,}/.test(word)
+          ? `\\mathrm{${word}}`
+          : argument.startsWith("{")
+            ? argument.slice(1, -1)
+            : argument,
+      );
+      end = argumentEnd;
+    }
+    if (args.length > 1) {
+      out += `${char}{${args.join("\\,")}}`;
+      index = end;
+    } else {
+      out += char;
+      index += 1;
+    }
+  }
+  return out;
 }
 
 /**
@@ -218,13 +294,18 @@ function renderMath(value: string, displayMode: boolean) {
   if (displayMode) math = breakDisplayedLines(math, written);
 
   try {
-    return katex.renderToString(math, {
+    const html = katex.renderToString(math, {
       displayMode,
       output: "html",
       strict: "ignore",
       throwOnError: false,
       trust: false,
     });
+    // A formula KaTeX could not parse at all comes back as its TeX source in
+    // red — the `\mathrm{…}` added above included. The written text reads
+    // better. (An unknown command alone is only reddened in place, the rest
+    // still typeset, and is kept.)
+    return html.startsWith('<span class="katex-error"') ? plainMath(written, displayMode) : html;
   } catch {
     return plainMath(written, displayMode);
   }

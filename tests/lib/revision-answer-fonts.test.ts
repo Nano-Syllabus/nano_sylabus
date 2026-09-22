@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
-import { createElement } from "react";
+import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { ANSWER_FONTS, AnswerFontPicker, answerFontStyle } from "@/components/answer-font-picker";
+import { WorkedExampleCard, workedAnswerClass } from "@/components/worked-example-card";
 
 /**
  * The handwritten faces a reader can pick for worked-example answers.
@@ -38,7 +39,7 @@ describe("answer fonts", () => {
     );
     for (const font of ANSWER_FONTS) expect(picker).toContain(`>${font.label}</option>`);
     expect(picker).toMatch(/<option value="stay-with-me"[^>]* selected=""/);
-    expect(picker).toContain("Font for worked answers");
+    expect(picker).toContain("Handwriting font");
   });
 
   it("sets the face through one variable the answers read", () => {
@@ -47,9 +48,61 @@ describe("answer fonts", () => {
     expect(revision).toContain("style={answerFontStyle(answerFont)}");
   });
 
-  it("writes only the answer on ruled paper, not the question", () => {
-    expect(revision).toContain('className="answer-paper mt-3"');
-    expect(revision).toContain("answer-paper-body font-revision-answer");
-    expect(revision.match(/font-revision-answer/g)).toHaveLength(1);
+  it("writes the hands a little finer on the sheet, but not the printed face or the maths", () => {
+    // "They are looking bold": a paper-coloured hairline thins each glyph.
+    expect(styles).toContain("-webkit-text-stroke: var(--answer-thin, 0.025em) var(--paper-bg);");
+    expect(answerFontStyle("plain")).toMatchObject({ "--answer-thin": "0px" });
+    // Faux bold goes hollow under the stroke, and KaTeX's hairlines vanish.
+    expect(styles).toContain(".answer-paper .font-revision-answer :is(strong, b, .katex, code, table) {");
+  });
+
+  it("puts the whole example on the ruled sheet, question and answer both handwritten", () => {
+    const card = renderToStaticMarkup(
+      createElement(
+        WorkedExampleCard,
+        { label: "Example 1 · 2072 Ashwin · 3 marks", question: "What is mechanics?" } as ComponentProps<
+          typeof WorkedExampleCard
+        >,
+        createElement("div", { className: workedAnswerClass }, createElement("p", null, "Mechanics is...")),
+      ),
+    );
+    // The card IS the sheet: label, question and answer all on its lines.
+    expect(card).toMatch(/^<article class="answer-paper">/);
+    expect(card).toContain(">Example 1 · 2072 Ashwin · 3 marks</p>");
+    expect(card).toMatch(/ answer-paper-body font-revision-answer text-sm text-text-primary"><p>What is mechanics\?/);
+    expect(card.indexOf("What is mechanics?")).toBeLessThan(card.indexOf(">Solution</p>"));
+    // The question in the same hand as the answer, in darker ink.
+    expect(card.match(/font-revision-answer/g)).toHaveLength(2);
+    expect(workedAnswerClass).toContain("answer-paper-body font-revision-answer");
+    // Revision draws its worked examples with it.
+    expect(revision).toContain("<WorkedExampleCard");
+    expect(revision).toContain("className={workedAnswerClass}");
+    // Labels are ruled like the writing, with a skipped line before the solution.
+    expect(styles).toMatch(/\.answer-paper-label,\s*\.answer-paper-body > :is\(p,/);
+    expect(styles).toContain(".answer-paper-body + .answer-paper-label {");
+  });
+
+  it("folds to the question in a challenge's step 1, on the same sheet", () => {
+    const card = renderToStaticMarkup(
+      createElement(
+        WorkedExampleCard,
+        { label: "Example 1", question: "What is mechanics?", collapsible: true } as ComponentProps<
+          typeof WorkedExampleCard
+        >,
+        createElement("div", { className: workedAnswerClass }, createElement("p", null, "Mechanics is...")),
+      ),
+    );
+    expect(card).toMatch(/^<details class="answer-paper group">/);
+    // Label and question are what shows closed; the solution unfolds under them.
+    const summary = card.slice(card.indexOf("<summary"), card.indexOf("</summary>"));
+    expect(summary).toContain(">Example 1</p>");
+    expect(summary).toContain("What is mechanics?");
+    expect(summary).not.toContain("Solution");
+    expect(card.indexOf("</summary>")).toBeLessThan(card.indexOf("Mechanics is..."));
+    // The challenge draws its worked examples with it, in the reader's face.
+    const challenge = readFileSync("components/challenges-dashboard-client.tsx", "utf8");
+    expect(challenge).toContain("<WorkedExampleCard\n                            collapsible");
+    expect(challenge).toContain("className={workedAnswerClass}");
+    expect(challenge).toContain("style={answerFontStyle(answerFont)}");
   });
 });

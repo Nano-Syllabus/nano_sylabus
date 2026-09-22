@@ -274,6 +274,32 @@ describe("model-written maths reads as maths", () => {
     }
   });
 
+  it("sets an underscored name as one subscript, never a double subscript", () => {
+    // The Roman Nepali reading of Digital Logic printed this in red, as source:
+    // `V_logic` was braced and `_0` left as V's second subscript.
+    expect(normalizeTex("V_logic_0 < V_transition_region < V_logic_1")).toBe(
+      String.raw`V_{\mathrm{logic\ 0}} < V_{\mathrm{transition\ region}} < V_{\mathrm{logic\ 1}}`,
+    );
+    // Written already braced, the two subscripts are merged into one.
+    expect(normalizeTex(String.raw`V_{\mathrm{logic}}_0 < V_{\mathrm{transition}}_region`)).toBe(
+      String.raw`V_{\mathrm{logic}\,0} < V_{\mathrm{transition}\,\mathrm{region}}`,
+    );
+    expect(normalizeTex("V_{logic}_{0}")).toBe(String.raw`V_{logic\,0}`);
+    // Real maths is left alone: a subscript then a superscript, a nested one.
+    for (const math of ["x_1^2 + a_i", String.raw`x_{a_b}`, String.raw`\_x`]) {
+      expect(normalizeTex(math)).toBe(math);
+    }
+    const html = renderMathText("$$V_logic_0 < V_transition_region < V_logic_1$$");
+    expect(html).toContain('class="katex"');
+    expect(html).not.toContain("katex-error");
+  });
+
+  it("shows a formula KaTeX cannot parse as its written text, not red source", () => {
+    const html = renderMathText(String.raw`$$x = \frac{1}{$$`);
+    expect(html).not.toContain("katex-error");
+    expect(html).toContain('<div class="math-block">x = \\frac{1}{</div>');
+  });
+
   it("keeps a worked line's multiplication, and its words upright", () => {
     const html = renderMarkdown(
       "**Worked:** P = (1 + 0.2) * (1120 / 25) + 10 = 1.2 * 44.8 + 10 = 63.76 lbs, or (1 + 0.2)*(1120 / 25).",
