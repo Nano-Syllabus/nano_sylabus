@@ -67,8 +67,15 @@ export async function GET(request: NextRequest) {
     onboarded: true,
     role,
   });
+  const marketingPhone = user.user_metadata?.marketing_phone;
+  const marketingOptIn = user.user_metadata?.marketing_phone_marketing_opt_in;
+  const hasMarketingContact =
+    typeof marketingPhone === "string" && marketingPhone.length > 0 && marketingOptIn === true;
+  const nextDestination = hasMarketingContact
+    ? destination
+    : `/signup/contact?next=${encodeURIComponent(destination)}`;
 
-  const response = NextResponse.redirect(`${origin}${destination}`);
+  const response = NextResponse.redirect(`${origin}${nextDestination}`);
   response.cookies.set("oauth_next", "", {
     maxAge: 0,
     path: "/",

@@ -4,9 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, Copy, CheckCircle2, Lock, Mail, User, ArrowLeft } from "lucide-react";
+import { Check, Copy, CheckCircle2, Lock, Mail, Phone, User, ArrowLeft } from "lucide-react";
 import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
+import { marketingPhoneError, normalizeMarketingPhone } from "@/lib/marketing-phone";
 import {
   hasCompletedStudyDiagnostic,
   markStudyDiagnosticStarted,
@@ -146,6 +147,8 @@ export function SaaSFlowClient({
   const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
+  const [authPhone, setAuthPhone] = useState("");
+  const [authMarketingConsent, setAuthMarketingConsent] = useState(false);
   const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -362,6 +365,19 @@ export function SaaSFlowClient({
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
+
+    if (authMode === "signup") {
+      const phoneError = marketingPhoneError(authPhone);
+      if (phoneError) {
+        setAuthError(phoneError);
+        return;
+      }
+      if (!authMarketingConsent) {
+        setAuthError("Please confirm that we can send updates to this number.");
+        return;
+      }
+    }
+
     setAuthLoading(true);
 
     const supabase = await loadSupabaseBrowserClient();
@@ -374,6 +390,8 @@ export function SaaSFlowClient({
           options: {
             data: {
               full_name: authName || "Student",
+              marketing_phone: normalizeMarketingPhone(authPhone),
+              marketing_phone_marketing_opt_in: true,
               ...(hasCompletedStudyDiagnostic(answers)
                 ? { study_answers: answers, study_diagnostic_started: true }
                 : {}),
@@ -930,22 +948,66 @@ export function SaaSFlowClient({
 
             <form onSubmit={handleAuthSubmit} className="mt-5 space-y-4">
               {authMode === "signup" && (
-                <div>
-                  <label className="block text-[12px] font-[700] text-[#555] mb-1.5">
-                    Your Full Name
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3.5 top-3.5 h-4 w-4 text-[#888]" />
-                    <input
-                      type="text"
-                      required
-                      value={authName}
-                      onChange={(e) => setAuthName(e.target.value)}
-                      placeholder="e.g. Prashant Soni"
-                      className="w-full rounded-[10px] border border-[#ddd] bg-white pl-10 pr-4 py-3 text-[14px] text-[#111] focus:border-[#6195ee] focus:outline-none"
-                    />
+                <>
+                  <div>
+                    <label
+                      htmlFor="flow-signup-name"
+                      className="block text-[12px] font-[700] text-[#555] mb-1.5"
+                    >
+                      Your Full Name
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3.5 top-3.5 h-4 w-4 text-[#888]" />
+                      <input
+                        id="flow-signup-name"
+                        type="text"
+                        autoComplete="name"
+                        required
+                        value={authName}
+                        onChange={(e) => setAuthName(e.target.value)}
+                        placeholder="e.g. Prashant Soni"
+                        className="w-full rounded-[10px] border border-[#ddd] bg-white pl-10 pr-4 py-3 text-[14px] text-[#111] focus:border-[#6195ee] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee]/50"
+                      />
+                    </div>
                   </div>
-                </div>
+                  <div>
+                    <label
+                      htmlFor="flow-signup-phone"
+                      className="block text-[12px] font-[700] text-[#555] mb-1.5"
+                    >
+                      Phone number
+                    </label>
+                    <div className="relative">
+                      <Phone className="absolute left-3.5 top-3.5 h-4 w-4 text-[#888]" />
+                      <input
+                        id="flow-signup-phone"
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        spellCheck={false}
+                        required
+                        value={authPhone}
+                        onChange={(e) => setAuthPhone(e.target.value)}
+                        placeholder="9812345678 or +977 9812345678"
+                        className="w-full rounded-[10px] border border-[#ddd] bg-white pl-10 pr-4 py-3 text-[14px] text-[#111] focus:border-[#6195ee] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee]/50"
+                      />
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-[#777]">
+                      For Nano Syllabus study updates and occasional offers.
+                    </p>
+                  </div>
+                  <label className="flex cursor-pointer items-start gap-2.5 text-[12px] leading-5 text-[#555]">
+                    <input
+                      type="checkbox"
+                      checked={authMarketingConsent}
+                      onChange={(e) => setAuthMarketingConsent(e.target.checked)}
+                      className="mt-0.5 size-4 shrink-0 rounded border-[#bbb] text-[#111] focus-visible:ring-2 focus-visible:ring-[#6195ee]/50"
+                    />
+                    <span>
+                      I agree to receive Nano Syllabus updates and offers by SMS or WhatsApp.
+                    </span>
+                  </label>
+                </>
               )}
 
               <div>
