@@ -12,6 +12,7 @@ import { ingestTeacherDocument } from "@/lib/teacher-document-ingest";
 import { randomUUID } from "node:crypto";
 import {
   extractedLearningTopics,
+  isMissingColumn,
   readCommunityLearningTopics,
 } from "@/lib/data/community-learning-topics";
 
@@ -256,14 +257,22 @@ export async function syncCommunitySubjectTopics(
     }
     const topics = extractedLearningTopics(payload);
     if (topics.length) {
-      const upsert = await admin.from("community_subject_topics").upsert(
-        topics.map((topic) => ({
-          community_subject_id: subjectId,
-          ...topic,
-          updated_at: new Date().toISOString(),
-        })),
-        { onConflict: "community_subject_id,topic_key" },
-      );
+      const rows = topics.map((topic) => ({
+        community_subject_id: subjectId,
+        ...topic,
+        updated_at: new Date().toISOString(),
+      }));
+      let upsert = await admin
+        .from("community_subject_topics")
+        .upsert(rows, { onConflict: "community_subject_id,topic_key" });
+      // Before the unit-title migration there is no column to write the names
+      // to. Refreshing a subject's topics must not fail over them.
+      if (upsert.error && isMissingColumn(upsert.error)) {
+        upsert = await admin.from("community_subject_topics").upsert(
+          rows.map(({ unit_title: _unitTitle, ...row }) => row),
+          { onConflict: "community_subject_id,topic_key" },
+        );
+      }
       if (upsert.error) throw upsert.error;
       const keys = new Set(topics.map((topic) => topic.topic_key));
       const existing = await admin

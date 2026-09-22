@@ -1,8 +1,17 @@
 "use client";
 
-import { BookOpen, ChevronDown, ChevronRight, Menu, Search, X } from "lucide-react";
+import { BookOpen, Check, ChevronRight, ChevronsUpDown, Menu, Search, X } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { AnswerFontPicker, answerFontStyle, useAnswerFont } from "@/components/answer-font-picker";
 import { normalizeQuestionText } from "@/lib/challenge-learn-questions";
 import {
@@ -13,10 +22,13 @@ import {
 } from "@/components/study-language";
 import { AwaitedConceptsCard, ConceptsCard, conceptsCardClass } from "@/components/concepts-reading";
 import { Markdown } from "@/components/markdown";
+import { WorkedExampleCard, workedAnswerClass } from "@/components/worked-example-card";
 import { WorkedSolution } from "@/components/worked-solution";
 import type {
   RevisionDocSemester,
+  RevisionDocSubject,
   RevisionDocTopic,
+  RevisionDocUnit,
   StudentRevisionDocs,
 } from "@/lib/data/student-revision-docs";
 
@@ -26,8 +38,13 @@ import type {
  * Laid out the way an API reference is laid out, because it is the same problem:
  * a body of material with a structure the reader already knows, where the job is
  * to get from "I want the thing about Laplace transforms" to that thing without
- * reading anything else. A tree on the left, one page on the right, and the
- * tree's levels are the course's own — semester, subject, unit, topic.
+ * reading anything else. One page on the left, a navigator on the right.
+ *
+ * The navigator holds ONE subject at a time — its units and topics — and a
+ * "Select subject" button above it opens every subject to choose from. The whole
+ * course in one tree (semester → subject → unit → topic) ran to several screens
+ * of mostly-closed branches for a student several subjects in, and a revision
+ * sitting is one subject anyway.
  *
  * Everything in it has been earned. A topic is here because its challenge was
  * passed, so the page never has to explain what a locked or empty entry means.
@@ -46,26 +63,86 @@ function formatDate(value: string) {
     : parsed.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
+function topicCountLabel(count: number) {
+  return `${count} topic${count === 1 ? "" : "s"}`;
+}
+
+/** Within one subject, so the subject's own name is not in the haystack: it
+ *  would match every topic in the navigator. */
 function matches(topic: RevisionDocTopic, needle: string) {
   if (!needle) return true;
-  const haystack = `${topic.title} ${topic.subjectName} ${topic.bigIdea}`.toLowerCase();
+  const haystack = `${topic.title} ${topic.bigIdea}`.toLowerCase();
   return haystack.includes(needle);
 }
 
-/** The tree, filtered to a search term. Empty branches are dropped rather than
- *  shown empty — a subject with no match is not a subject with no topics. */
-function filterSemesters(semesters: RevisionDocSemester[], needle: string) {
-  if (!needle) return semesters;
-  return semesters.flatMap((semester) => {
-    const subjects = semester.subjects.flatMap((subject) => {
-      const units = subject.units.flatMap((unit) => {
-        const topics = unit.topics.filter((topic) => matches(topic, needle));
-        return topics.length ? [{ ...unit, topics }] : [];
-      });
-      return units.length ? [{ ...subject, units }] : [];
-    });
-    return subjects.length ? [{ ...semester, subjects }] : [];
+/** One subject's units, filtered to a search term. Empty units are dropped
+ *  rather than shown empty — a unit with no match is not a unit with no topics. */
+function filterUnits(units: RevisionDocUnit[], needle: string) {
+  if (!needle) return units;
+  return units.flatMap((unit) => {
+    const topics = unit.topics.filter((topic) => matches(topic, needle));
+    return topics.length ? [{ ...unit, topics }] : [];
   });
+}
+
+type SubjectEntry = {
+  /** Semester, course and slug: two courses can each have a "Year 1 · Semester
+   *  1" and a subject of the same name, and they are different shelves. */
+  key: string;
+  semesterLabel: string;
+  subject: RevisionDocSubject;
+};
+
+function listSubjects(semesters: RevisionDocSemester[]): SubjectEntry[] {
+  return semesters.flatMap((semester) =>
+    semester.subjects.map((subject) => ({
+      key: `${semester.id}:${subject.courseId}:${subject.subjectSlug}`,
+      semesterLabel: semester.label,
+      subject,
+    })),
+  );
+}
+
+/*
+ * The subject last chosen, remembered in this browser so a reload does not throw
+ * the reader back to the first one. A preference, like the answer font — an
+ * opaque key, and one a different account on the same machine simply will not
+ * match, falling back to its own first subject.
+ */
+const SUBJECT_STORAGE_KEY = "ns-revision-subject";
+const subjectListeners = new Set<() => void>();
+let unsavedSubject: string | null = null;
+
+function readRememberedSubject() {
+  if (unsavedSubject !== null) return unsavedSubject;
+  try {
+    return window.localStorage.getItem(SUBJECT_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function subscribeRememberedSubject(onChange: () => void) {
+  subjectListeners.add(onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    subjectListeners.delete(onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function useRememberedSubject() {
+  const key = useSyncExternalStore(subscribeRememberedSubject, readRememberedSubject, () => "");
+  const setKey = useCallback((next: string) => {
+    try {
+      window.localStorage.setItem(SUBJECT_STORAGE_KEY, next);
+      unsavedSubject = null;
+    } catch {
+      unsavedSubject = next;
+    }
+    subjectListeners.forEach((listener) => listener());
+  }, []);
+  return [key, setKey] as const;
 }
 
 /*
@@ -76,8 +153,10 @@ function filterSemesters(semesters: RevisionDocSemester[], needle: string) {
  * cannot drift from the page again.
  */
 const docsRootClass = "flex min-h-full w-full bg-bg-secondary text-text-primary";
+/** The navigator, on the right: the app's own sidebar already holds the left
+ *  edge, and two stacked navigations there read as one confusing column. */
 const docsAsideClass =
-  "sticky top-0 hidden h-[100dvh] w-72 shrink-0 border-r border-border bg-bg-primary lg:block";
+  "sticky top-0 hidden h-[100dvh] w-72 shrink-0 border-l border-border bg-bg-primary lg:block";
 const docsMainClass = "min-w-0 flex-1 bg-bg-primary";
 const docsMobileBarClass =
   "sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg-primary/95 px-4 py-2 backdrop-blur lg:hidden";
@@ -143,10 +222,237 @@ function TreeFooter() {
   );
 }
 
-/** Search on top, the tree in the middle, the corpus links at the foot. */
-function TreeFrame({ search, children }: { search: ReactNode; children: ReactNode }) {
+/** Opens the subject picker. Names the subject the navigator is showing, so the
+ *  button is also the navigator's heading. */
+function SubjectButton({
+  name,
+  meta,
+  onClick,
+  disabled = false,
+}: {
+  name: ReactNode;
+  meta?: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="border-b border-border p-3">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-haspopup="dialog"
+        className="flex min-h-14 w-full items-center gap-3 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-left hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-default disabled:hover:border-border"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+            Select subject
+          </span>
+          <span className="mt-0.5 block truncate text-sm font-semibold text-text-primary">{name}</span>
+          {meta ? <span className="block truncate text-xs text-text-muted">{meta}</span> : null}
+        </span>
+        <ChevronsUpDown className="size-4 shrink-0 text-text-muted" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Every subject with something filed, to choose the one the navigator shows.
+ *
+ * Grouped by semester LABEL rather than by semester: two courses each have their
+ * own "Year 1 · Semester 1", and two headings reading the same, one under the
+ * other, look like a bug. Choosing is a radio group and "Revise" confirms it, so
+ * arrowing through the list never swaps the page underneath.
+ */
+function SubjectPicker({
+  subjects,
+  currentKey,
+  onRevise,
+  onClose,
+}: {
+  subjects: SubjectEntry[];
+  currentKey: string;
+  onRevise: (key: string) => void;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const radioName = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [choice, setChoice] = useState(currentKey);
+  const groups = useMemo(() => {
+    const byLabel = new Map<string, SubjectEntry[]>();
+    for (const entry of subjects) {
+      byLabel.set(entry.semesterLabel, [...(byLabel.get(entry.semesterLabel) ?? []), entry]);
+    }
+    return [...byLabel].map(([label, entries]) => ({ label, entries }));
+  }, [subjects]);
+
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const panel = panelRef.current;
+    (panel?.querySelector<HTMLElement>("input:checked") ?? panel?.querySelector<HTMLElement>("input"))?.focus();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:checked, [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      document.body.style.overflow = overflow;
+      opener?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4">
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Close subject list"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40 animate-in fade-in duration-200 motion-reduce:animate-none"
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col rounded-t-2xl border border-border bg-bg-primary shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none sm:max-h-[min(40rem,calc(100dvh-2rem))] sm:rounded-2xl"
+      >
+        <form
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (choice) onRevise(choice);
+          }}
+        >
+          <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+            <div className="min-w-0">
+              <h2 id={titleId} className="type-student-card-title text-text-primary">
+                Select a subject
+              </h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Its topics fill the navigator. The rest stay filed here.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close subject list"
+              className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          </header>
+
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-4">
+            {groups.map((group) => (
+              <fieldset key={group.label}>
+                <legend className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  {group.label}
+                </legend>
+                <div className="mt-2 space-y-2">
+                  {group.entries.map((entry) => {
+                    const checked = choice === entry.key;
+                    return (
+                      <label
+                        key={entry.key}
+                        className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 ${
+                          checked
+                            ? "border-blue-500 bg-blue-500/10"
+                            : "border-border hover:bg-bg-secondary"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name={radioName}
+                          value={entry.key}
+                          checked={checked}
+                          onChange={() => setChoice(entry.key)}
+                          className="sr-only"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-text-primary">
+                            {entry.subject.name}
+                          </span>
+                          <span className="block text-xs text-text-muted">
+                            {topicCountLabel(entry.subject.topicCount)}
+                          </span>
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className={`grid size-5 shrink-0 place-items-center rounded-full border ${
+                            checked ? "border-blue-600 bg-blue-600 text-white" : "border-border"
+                          }`}
+                        >
+                          {checked ? <Check className="size-3.5" strokeWidth={3} /> : null}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            ))}
+          </div>
+
+          <footer className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex min-h-10 items-center rounded-lg px-4 text-sm font-semibold text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!choice}
+              className="inline-flex min-h-10 items-center rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
+            >
+              Revise
+            </button>
+          </footer>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/** The subject on top, then search, the tree in the middle, the corpus links at
+ *  the foot. */
+function TreeFrame({
+  subject,
+  search,
+  children,
+}: {
+  subject: ReactNode;
+  search: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div className="flex h-full flex-col">
+      {subject}
       {search}
       <nav aria-label="Revision docs" className="min-h-0 flex-1 overflow-y-auto p-2">
         {children}
@@ -273,40 +579,26 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
           </div>
           <div className="mt-3 space-y-4">
             {topic.solvedExamples.map((example, index) => (
-              <article
+              <WorkedExampleCard
                 key={`${topic.challengeId}-solved-${index}`}
-                className={docsItemCardClass}
+                label={`Example ${index + 1}${example.year ? ` · ${example.year}` : ""}${
+                  example.marks ? ` · ${example.marks} marks` : ""
+                }`}
+                question={example.question}
               >
-                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                  Example {index + 1}
-                  {example.year ? ` · ${example.year}` : ""}
-                  {example.marks ? ` · ${example.marks} marks` : ""}
-                </p>
-                <Markdown
-                  text={example.question}
-                  className="mt-2 max-w-prose text-sm font-semibold leading-6"
+                <WorkedSolution
+                  challengeId={topic.challengeId}
+                  question={example.question}
+                  solution={example.solution}
+                  text={inStudyLanguage(
+                    studyLanguage,
+                    romanNepali,
+                    (data) => data.solutions[normalizeQuestionText(example.question)],
+                    example.solution,
+                  )}
+                  className={workedAnswerClass}
                 />
-                {/* The answer, and only the answer, handwritten on ruled paper:
-                    it reads as a worked solution, set apart from the question
-                    above it and from the rest of the docs. */}
-                <div className="answer-paper mt-3">
-                  <p className="answer-paper-label text-xs font-semibold uppercase tracking-wide text-text-muted">
-                    Solution
-                  </p>
-                  <WorkedSolution
-                    challengeId={topic.challengeId}
-                    question={example.question}
-                    solution={example.solution}
-                    text={inStudyLanguage(
-                      studyLanguage,
-                      romanNepali,
-                      (data) => data.solutions[normalizeQuestionText(example.question)],
-                      example.solution,
-                    )}
-                    className="answer-paper-body font-revision-answer whitespace-pre-wrap text-sm text-text-secondary"
-                  />
-                </div>
-              </article>
+              </WorkedExampleCard>
             ))}
           </div>
         </section>
@@ -318,42 +610,42 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
 export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
   const [query, setQuery] = useState("");
   const [navOpen, setNavOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState(
-    () => docs.semesters[0]?.subjects[0]?.units[0]?.topics[0]?.challengeId ?? "",
-  );
-  // Closed branches are the exception, not the rule: a reader who has just
-  // arrived should see the shape of what they have done, not a row of arrows.
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [rememberedSubject, setRememberedSubject] = useRememberedSubject();
+  // "" until a topic is clicked: the open page falls back to the first topic of
+  // whichever subject the navigator is showing.
+  const [selectedId, setSelectedId] = useState("");
+  const closePicker = useCallback(() => setPickerOpen(false), []);
+
+  const subjects = useMemo(() => listSubjects(docs.semesters), [docs.semesters]);
+  // A remembered subject that is gone (left the community, another account on
+  // this browser) falls back to the first one rather than an empty navigator.
+  const active = subjects.find((entry) => entry.key === rememberedSubject) ?? subjects[0] ?? null;
 
   const needle = query.trim().toLowerCase();
-  const semesters = useMemo(
-    () => filterSemesters(docs.semesters, needle),
-    [docs.semesters, needle],
-  );
+  const units = useMemo(() => filterUnits(active?.subject.units ?? [], needle), [active, needle]);
 
-  const allTopics = useMemo(
-    () =>
-      docs.semesters.flatMap((semester) =>
-        semester.subjects.flatMap((subject) => subject.units.flatMap((unit) => unit.topics)),
-      ),
-    [docs.semesters],
+  const subjectTopics = useMemo(
+    () => active?.subject.units.flatMap((unit) => unit.topics) ?? [],
+    [active],
   );
-  const visibleTopics = useMemo(
-    () =>
-      semesters.flatMap((semester) =>
-        semester.subjects.flatMap((subject) => subject.units.flatMap((unit) => unit.topics)),
-      ),
-    [semesters],
-  );
+  const visibleTopics = useMemo(() => units.flatMap((unit) => unit.topics), [units]);
   // A search that hides the open page selects the first thing it did find, so
-  // the reading pane is never showing something the tree no longer lists.
+  // the reading pane is never showing something the navigator no longer lists.
   const selected =
     visibleTopics.find((topic) => topic.challengeId === selectedId) ??
     visibleTopics[0] ??
-    allTopics.find((topic) => topic.challengeId === selectedId) ??
+    subjectTopics.find((topic) => topic.challengeId === selectedId) ??
+    subjectTopics[0] ??
     null;
 
-  const toggle = (key: string) => setCollapsed((current) => ({ ...current, [key]: !current[key] }));
+  const revise = (key: string) => {
+    const entry = subjects.find((candidate) => candidate.key === key);
+    setRememberedSubject(key);
+    setQuery("");
+    setSelectedId(entry?.subject.units[0]?.topics[0]?.challengeId ?? "");
+    setPickerOpen(false);
+  };
 
   if (docs.unavailable) {
     return (
@@ -389,112 +681,65 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
   }
 
   const tree = (
-    <TreeFrame search={<TreeSearch value={query} onChange={setQuery} />}>
-        {semesters.length ? (
-          <ul className="space-y-1">
-            {semesters.map((semester) => {
-              const semesterClosed = collapsed[semester.id];
-              return (
-                <li key={semester.id}>
-                  <button
-                    type="button"
-                    aria-expanded={!semesterClosed}
-                    onClick={() => toggle(semester.id)}
-                    className="flex min-h-10 w-full items-center gap-1.5 rounded-lg px-2 text-left hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  >
-                    {semesterClosed ? (
-                      <ChevronRight
-                        className="size-4 shrink-0 text-text-muted"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <ChevronDown className="size-4 shrink-0 text-text-muted" aria-hidden="true" />
-                    )}
-                    <span className="truncate text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                      {semester.label}
-                    </span>
-                    <span className="ml-auto shrink-0 font-mono text-[11px] text-text-muted">
-                      {semester.topicCount}
-                    </span>
-                  </button>
-
-                  {semesterClosed ? null : (
-                    <ul className="mt-0.5 space-y-0.5 pl-3">
-                      {semester.subjects.map((subject) => {
-                        const subjectKey = `${semester.id}:${subject.courseId}:${subject.subjectSlug}`;
-                        const subjectClosed = collapsed[subjectKey];
-                        return (
-                          <li key={subjectKey}>
-                            <button
-                              type="button"
-                              aria-expanded={!subjectClosed}
-                              onClick={() => toggle(subjectKey)}
-                              className="flex min-h-9 w-full items-center gap-1.5 rounded-lg px-2 text-left hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                            >
-                              {subjectClosed ? (
-                                <ChevronRight
-                                  className="size-3.5 shrink-0 text-text-muted"
-                                  aria-hidden="true"
-                                />
-                              ) : (
-                                <ChevronDown
-                                  className="size-3.5 shrink-0 text-text-muted"
-                                  aria-hidden="true"
-                                />
-                              )}
-                              <span className="truncate text-sm font-semibold text-text-primary">
-                                {subject.name}
-                              </span>
-                            </button>
-
-                            {subjectClosed ? null : (
-                              <ul className="mt-0.5 space-y-1 pl-4">
-                                {subject.units.map((unit) => (
-                                  <li key={`${subjectKey}:${unit.unitNumber}`}>
-                                    <p className="px-2 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                                      {unit.label}
-                                    </p>
-                                    <ul className="space-y-0.5 border-l border-border pl-2">
-                                      {unit.topics.map((topic) => {
-                                        const isActive =
-                                          selected?.challengeId === topic.challengeId;
-                                        return (
-                                          <li key={topic.challengeId}>
-                                            <button
-                                              type="button"
-                                              aria-current={isActive ? "page" : undefined}
-                                              onClick={() => {
-                                                setSelectedId(topic.challengeId);
-                                                setNavOpen(false);
-                                              }}
-                                              className={`flex min-h-9 w-full items-center rounded-lg px-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                                                isActive
-                                                  ? "bg-blue-500/10 font-semibold text-blue-700 dark:text-blue-300"
-                                                  : "text-text-secondary hover:bg-bg-secondary"
-                                              }`}
-                                            >
-                                              <span className="truncate">{topic.title}</span>
-                                            </button>
-                                          </li>
-                                        );
-                                      })}
-                                    </ul>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="px-3 py-6 text-sm text-text-muted">Nothing matches “{query.trim()}”.</p>
-        )}
+    <TreeFrame
+      subject={
+        <SubjectButton
+          name={active?.subject.name ?? "Choose a subject"}
+          meta={
+            active
+              ? `${active.semesterLabel} · ${topicCountLabel(active.subject.topicCount)}`
+              : null
+          }
+          onClick={() => setPickerOpen(true)}
+        />
+      }
+      search={<TreeSearch value={query} onChange={setQuery} />}
+    >
+      {units.length ? (
+        <ul className="space-y-2">
+          {units.map((unit) => (
+            <li key={unit.unitNumber || "unplaced"}>
+              {/* Number and name on one line, cut short like the topics under
+                  it; the whole name is the hover. */}
+              <p
+                title={unit.title ? `${unit.label} · ${unit.title}` : undefined}
+                className="truncate px-2 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted"
+              >
+                {unit.label}
+                {unit.title ? <span className="text-text-secondary"> · {unit.title}</span> : null}
+              </p>
+              <ul className="ml-2 space-y-0.5 border-l border-border pl-2">
+                {unit.topics.map((topic) => {
+                  const isActive = selected?.challengeId === topic.challengeId;
+                  return (
+                    <li key={topic.challengeId}>
+                      <button
+                        type="button"
+                        aria-current={isActive ? "page" : undefined}
+                        onClick={() => {
+                          setSelectedId(topic.challengeId);
+                          setNavOpen(false);
+                        }}
+                        className={`flex min-h-9 w-full items-center rounded-lg px-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                          isActive
+                            ? "bg-blue-500/10 font-semibold text-blue-700 dark:text-blue-300"
+                            : "text-text-secondary hover:bg-bg-secondary"
+                        }`}
+                      >
+                        <span className="truncate">{topic.title}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="px-3 py-6 text-sm text-text-muted">
+          Nothing in {active?.subject.name ?? "this subject"} matches “{query.trim()}”.
+        </p>
+      )}
     </TreeFrame>
   );
 
@@ -503,12 +748,34 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
     // app's top bar; with the bar gone, that 4rem showed as a grey band under the
     // tree.
     <div className={docsRootClass}>
-      {/* Desktop: the tree is always there, like any documentation site. */}
+      <main className={docsMainClass}>
+        <div className={docsMobileBarClass}>
+          <p className="min-w-0 flex-1 truncate text-sm text-text-muted">{selected?.title}</p>
+          <button
+            type="button"
+            onClick={() => setNavOpen(true)}
+            className={browseButtonClass}
+          >
+            <Menu className="size-4" aria-hidden="true" />
+            Browse
+          </button>
+        </div>
+
+        {selected ? (
+          <TopicPage key={selected.challengeId} topic={selected} />
+        ) : (
+          <div className="px-5 py-16 text-center text-sm text-text-muted">
+            Choose a topic from the list.
+          </div>
+        )}
+      </main>
+
+      {/* Desktop: the navigator is always there, like any documentation site. */}
       <aside className={docsAsideClass}>
         {tree}
       </aside>
 
-      {/* Mobile: the same tree, as a sheet over the page it navigates. */}
+      {/* Mobile: the same navigator, as a sheet from the side it sits on. */}
       {navOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
@@ -517,7 +784,7 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
             onClick={() => setNavOpen(false)}
             className="absolute inset-0 bg-black/40"
           />
-          <div className="absolute inset-y-0 left-0 flex w-[min(20rem,85vw)] flex-col bg-bg-primary shadow-xl">
+          <div className="absolute inset-y-0 right-0 flex w-[min(20rem,85vw)] flex-col bg-bg-primary shadow-xl">
             <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <p className="text-sm font-semibold">Revision docs</p>
               <button
@@ -534,27 +801,14 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
         </div>
       ) : null}
 
-      <main className={docsMainClass}>
-        <div className={docsMobileBarClass}>
-          <button
-            type="button"
-            onClick={() => setNavOpen(true)}
-            className={browseButtonClass}
-          >
-            <Menu className="size-4" aria-hidden="true" />
-            Browse
-          </button>
-          <p className="truncate text-sm text-text-muted">{selected?.title}</p>
-        </div>
-
-        {selected ? (
-          <TopicPage key={selected.challengeId} topic={selected} />
-        ) : (
-          <div className="px-5 py-16 text-center text-sm text-text-muted">
-            Choose a topic from the list.
-          </div>
-        )}
-      </main>
+      {pickerOpen ? (
+        <SubjectPicker
+          subjects={subjects}
+          currentKey={active?.key ?? ""}
+          onRevise={revise}
+          onClose={closePicker}
+        />
+      ) : null}
     </div>
   );
 }
@@ -565,38 +819,20 @@ const bar = `${pulse} rounded`;
 /**
  * The route skeleton for Revision, drawn from the page's own pieces.
  *
- * What the page knows before the query — the search box, the corpus links at
- * the foot of the tree, the section headings, the shape of every box — renders
- * for real and in place. What it does not — the tree's semesters, subjects and
- * topics, and the open topic's words — pulses, at the size of what replaces it.
+ * What the page knows before the query — the subject button's label, the search
+ * box, the corpus links at the foot of the navigator, the section headings, the
+ * shape of every box — renders for real and in place. What it does not — which
+ * subject is open, its units and topics, and the open topic's words — pulses, at
+ * the size of what replaces it.
  * Placeholder fill is `bg-border`: `bg-bg-secondary` vanishes inside the cards,
  * which are that colour in the dark theme.
  */
 export function RevisionDocsSkeleton() {
   return (
     <div className={docsRootClass} aria-busy="true" aria-label="Loading revision docs">
-      <aside className={docsAsideClass}>
-        <TreeFrame search={<TreeSearch value="" disabled />}>
-          <div className="space-y-5 px-2 py-1.5">
-            {[3, 2].map((topics, group) => (
-              <div key={group}>
-                {/* Semester, then a subject under it, then its unit and topics. */}
-                <div className={`h-3 w-32 ${bar}`} />
-                <div className={`ml-3 mt-3 h-4 w-36 ${bar}`} />
-                <div className={`ml-5 mt-3 h-2.5 w-12 ${bar}`} />
-                <div className="ml-5 mt-2 space-y-2.5 border-l border-border pl-3">
-                  {Array.from({ length: topics }).map((_, index) => (
-                    <div key={index} className={`h-4 ${index % 2 ? "w-40" : "w-48"} max-w-full ${bar}`} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </TreeFrame>
-      </aside>
-
       <main className={docsMainClass}>
         <div className={docsMobileBarClass}>
+          <div className={`h-3.5 w-40 flex-1 ${bar}`} />
           <span className={`${browseButtonClass} text-text-muted`} aria-hidden="true">
             <Menu className="size-4" aria-hidden="true" />
             Browse
@@ -636,6 +872,33 @@ export function RevisionDocsSkeleton() {
           </section>
         </article>
       </main>
+
+      <aside className={docsAsideClass}>
+        <TreeFrame
+          subject={
+            <SubjectButton
+              disabled
+              name={<span className={`mt-1 block h-4 w-36 ${bar}`} />}
+              meta={<span className={`mt-1.5 block h-3 w-28 ${bar}`} />}
+            />
+          }
+          search={<TreeSearch value="" disabled />}
+        >
+          <div className="space-y-5 px-2 py-1.5">
+            {[3, 2].map((topics, group) => (
+              <div key={group}>
+                {/* A unit and its name, then its topics. */}
+                <div className={`h-2.5 w-40 ${bar}`} />
+                <div className="ml-2 mt-2 space-y-2.5 border-l border-border pl-3">
+                  {Array.from({ length: topics }).map((_, index) => (
+                    <div key={index} className={`h-4 ${index % 2 ? "w-40" : "w-48"} max-w-full ${bar}`} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </TreeFrame>
+      </aside>
     </div>
   );
 }

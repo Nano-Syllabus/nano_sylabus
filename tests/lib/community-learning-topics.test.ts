@@ -35,6 +35,44 @@ describe("canonical community challenge topics", () => {
     ]);
   });
 
+  it("carries each topic's unit name, and '' where the catalogue has none", () => {
+    expect(
+      extractedLearningTopics({
+        topics: [
+          { topic_key: "ohms_law", title: "Ohm's law", unit_number: "1", unit_title: " Basic Circuit Concepts " },
+          { topic_key: "kvl", title: "KVL", unit_number: "2" },
+        ],
+      }).map((topic) => topic.unit_title),
+    ).toEqual(["Basic Circuit Concepts", ""]);
+  });
+
+  it("still reads the catalogue before the unit-name column is migrated", async () => {
+    const asked: string[] = [];
+    const rows = [
+      { id: "t1", community_subject_id: "subject-1", topic_key: "identifiers", title: "Identifiers", position: 0 },
+    ];
+    const admin = {
+      from: () => ({
+        select: (columns: string) => {
+          asked.push(columns);
+          const result = columns.includes("unit_title")
+            ? { data: null, error: { code: "42703", message: "column does not exist" } }
+            : { data: rows, error: null };
+          const query = { in: () => query, order: async () => result };
+          return query;
+        },
+      }),
+    };
+    const topics = await readCommunityLearningTopics(
+      [{ id: "subject-1", name: "C Programming", teacherId: null, externalSubjectSlug: null }],
+      admin as never,
+    );
+    expect(topics.map((topic) => topic.topic_key)).toEqual(["identifiers"]);
+    expect(asked).toHaveLength(2);
+    expect(asked[0]).toContain("unit_title");
+    expect(asked[1]).not.toContain("unit_title");
+  });
+
   it("keeps uploaded source documents out of the student topic catalogue", () => {
     expect(
       extractedLearningTopics({

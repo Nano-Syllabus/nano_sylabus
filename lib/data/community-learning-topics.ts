@@ -8,6 +8,9 @@ export type LearningTopic = {
   title: string;
   blurb: string;
   unit_number: string | null;
+  /** The unit's name from the syllabus ("Basic Circuit Concepts"). Absent on rows
+   *  written before the column existed, and "" where the syllabus gave none. */
+  unit_title?: string;
   position: number;
   source: string;
 };
@@ -23,6 +26,13 @@ export type CommunityLearningTopic = LearningTopic & {
   id: string;
   community_subject_id: string;
 };
+
+/** Postgres's "no such column" and PostgREST's, as `isMissingColumn` in
+ *  student-challenges reads them — not imported, because that module imports
+ *  this one. */
+export function isMissingColumn(error: { code?: string } | null) {
+  return error?.code === "42703" || error?.code === "PGRST204";
+}
 
 export function extractedLearningTopics(payload: ApiRecord): LearningTopic[] {
   if (!Array.isArray(payload?.topics))
@@ -55,6 +65,7 @@ export function extractedLearningTopics(payload: ApiRecord): LearningTopic[] {
         title,
         blurb: typeof row.blurb === "string" ? row.blurb.trim() : "",
         unit_number: row.unit_number == null ? null : String(row.unit_number),
+        unit_title: typeof row.unit_title === "string" ? row.unit_title.trim() : "",
         position: Number.isFinite(position) ? Math.max(0, Math.floor(position)) : index,
         source:
           typeof payload.topic_source === "string" ? payload.topic_source : "indexed_material",
@@ -73,16 +84,22 @@ export async function readCommunityLearningTopics(
   admin: SupabaseClient,
 ): Promise<CommunityLearningTopic[]> {
   if (!subjects.length) return [];
-  const stored = await admin
-    .from("community_subject_topics")
-    .select("id,community_subject_id,topic_key,title,blurb,unit_number,position,source")
-    .in(
-      "community_subject_id",
-      subjects.map((subject) => subject.id),
-    )
-    .order("position", { ascending: true });
+  const read = (columns: string) =>
+    admin
+      .from("community_subject_topics")
+      .select(columns)
+      .in(
+        "community_subject_id",
+        subjects.map((subject) => subject.id),
+      )
+      .order("position", { ascending: true });
+  const columns = "id,community_subject_id,topic_key,title,blurb,unit_number,position,source";
+  let stored = await read(`${columns},unit_title`);
+  // A database the unit-title migration has not reached yet. The names are a
+  // refinement; the catalogue is not, and must not be lost for want of them.
+  if (stored.error && isMissingColumn(stored.error)) stored = await read(columns);
   if (stored.error) throw stored.error;
-  const rows = (stored.data || []) as CommunityLearningTopic[];
+  const rows = (stored.data || []) as unknown as CommunityLearningTopic[];
   const learningRows = rows.filter((row) => {
     const subject = subjects.find((item) => item.id === row.community_subject_id);
     return !isChallengeSourceDocumentTopic({

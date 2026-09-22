@@ -102,6 +102,9 @@ export type RevisionDocUnit = {
   /** The syllabus's own numbering, or "" for topics it does not place. */
   unitNumber: string;
   label: string;
+  /** The unit's name from the syllabus ("Basic Circuit Concepts"), or "" when the
+   *  catalogue does not carry one — a subject synced before names were. */
+  title: string;
   topics: RevisionDocTopic[];
 };
 
@@ -220,6 +223,10 @@ async function unitsByTopicKey(
   admin: ReturnType<typeof createSupabaseAdminClient>,
 ) {
   const placements = new Map<string, { unitNumber: string; position: number }>();
+  // Keyed by scope and unit NUMBER, not by topic: a topic the catalogue has
+  // dropped is still filed under the unit stamped on its row, and that unit's
+  // name is whatever its other topics say it is.
+  const unitTitles = new Map<string, string>();
   // One batch instead of a lookup per subject. Read individually this was a
   // `community_subjects` query and a topics read EACH, and Revision asks about
   // every subject a student has — the same round-trip pile-up the Challenge Hub
@@ -253,6 +260,10 @@ async function unitsByTopicKey(
           position: topic.position,
         };
         placements.set(`${scope}:${topic.topic_key}`, placement);
+        const unitTitle = topic.unit_title?.trim();
+        if (placement.unitNumber && unitTitle && !unitTitles.has(`${scope}:${placement.unitNumber}`)) {
+          unitTitles.set(`${scope}:${placement.unitNumber}`, unitTitle);
+        }
         // AND by title, because the key is not stable and the title is.
         //
         // `/start` overwrites a challenge's `topic_key` with whatever key the
@@ -271,7 +282,7 @@ async function unitsByTopicKey(
       }
     }),
   );
-  return placements;
+  return { placements, unitTitles };
 }
 
 /** Everything the docs read off a challenge row, minus the unit. */
@@ -384,7 +395,7 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       }),
     ).values(),
   ];
-  const placements = await unitsByTopicKey(usedSubjects, admin);
+  const { placements, unitTitles } = await unitsByTopicKey(usedSubjects, admin);
 
   // Semester → subject → unit, built by walking the rows once. Each level keeps
   // an index alongside its list so the walk stays linear rather than searching
@@ -446,6 +457,7 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       unit = {
         unitNumber,
         label: unitNumber ? `Unit ${unitNumber}` : "Other topics",
+        title: (unitNumber && unitTitles.get(`${key}:${unitNumber}`)) || "",
         topics: [],
       };
       unitsByKey.set(unitKey, unit);

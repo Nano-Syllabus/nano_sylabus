@@ -12,7 +12,7 @@ vi.mock("next/navigation", () => ({
 import { RevisionDocsSkeleton } from "@/components/revision-docs-client";
 
 /**
- * Revision loads as what it is: a tree down the left and one document.
+ * Revision loads as what it is: one document and a navigator down the right.
  *
  * Its route skeleton was the generic notes grid — nine cards — so a first visit
  * drew a different page and then swapped it for the docs. It is now built from

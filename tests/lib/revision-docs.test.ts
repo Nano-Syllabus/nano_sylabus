@@ -219,6 +219,29 @@ describe("revision docs", () => {
     expect(byTitle.get("Fourier Series")?.inProgress).toBe(false);
   });
 
+  it("names each unit from the catalogue, beside its number", async () => {
+    mocks.topics.mockResolvedValue([
+      { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", unit_title: "Transforms", position: 4 },
+    ]);
+    const unit = (await getStudentRevisionDocs("member")).semesters[0].subjects[0].units[0];
+    expect([unit.label, unit.title]).toEqual(["Unit 2", "Transforms"]);
+
+    // A topic the catalogue has dropped, filed by the unit on its own row, still
+    // gets that unit's name from the unit's other topics.
+    db.tables.student_challenges = [completedRow({ topic_key: "laplace-v2", topic_title: "Old name", unit_number: "2" })];
+    mocks.topics.mockResolvedValue([
+      { topic_key: "z-transform", title: "Z Transform", unit_number: "2", unit_title: "Transforms", position: 5 },
+    ]);
+    expect((await getStudentRevisionDocs("member")).semesters[0].subjects[0].units[0].title).toBe("Transforms");
+
+    // A catalogue synced before names were: the number alone, as before.
+    mocks.topics.mockResolvedValue([
+      { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", position: 4 },
+    ]);
+    db.tables.student_challenges = [completedRow()];
+    expect((await getStudentRevisionDocs("member")).semesters[0].subjects[0].units[0].title).toBe("");
+  });
+
   it("files the challenge under the unit written on its own row when the catalogue has moved on", async () => {
     // `/start` rewrites `topic_key` to whatever the provider resolved, so the
     // catalogue join misses and the topic used to fall into "Other topics" — the

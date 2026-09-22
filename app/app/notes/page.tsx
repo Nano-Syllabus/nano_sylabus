@@ -15,9 +15,9 @@ export const dynamic = "force-dynamic";
  * between a filing cabinet and the course, every single visit.
  *
  * So the nav destination is the documentation now, and it is navigated the way
- * documentation is: a tree down the left in the course's own shape —
+ * documentation is: a navigator down the right in the course's own shape —
  *
- *     Semester  →  Subject  →  Unit  →  Topic
+ *     Subject (chosen in a picker)  →  Unit  →  Topic
  *
  * — which is the syllabus, so finding last week's topic is the same motion as
  * finding it in the syllabus. Each leaf is a challenge the student has worked
