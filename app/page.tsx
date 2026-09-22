@@ -221,7 +221,7 @@ export default function LandingPage() {
         <section className="mx-auto max-w-[1320px] px-5 py-14 lg:py-24 2xl:px-0">
           <div className="grid items-center gap-12 lg:grid-cols-[1.12fr_0.88fr] lg:gap-14">
             {/* Left Content */}
-            <div className="max-w-[620px]">
+            <div className="max-w-[680px]">
               <div className="mb-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
           
               </div>
