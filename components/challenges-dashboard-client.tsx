@@ -28,6 +28,7 @@ import {
   useTransition,
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
+import { ChallengeFundamentals } from "@/components/challenge-fundamentals";
 import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
 import {
   StudyLanguageSwitch,
@@ -929,6 +930,12 @@ function ChallengeDetail({
                       })
                     }
                   />
+                ) : null}
+                {/* Five MCQs on the basics of this micro-topic, between the reading
+                    and the worked examples that build on it. They need only the
+                    notes, so they load on their own and never wait on the build. */}
+                {content ? (
+                  <ChallengeFundamentals key={challenge.id} challengeId={challenge.id} className="mb-6" />
                 ) : null}
                 {learnQuestions.length ? (
                   // The same ruled sheets as Revision's worked examples, and the

@@ -1140,6 +1140,36 @@ async function resolveChallengeLane(userId: string, row: ChallengeRow, known?: C
 }
 
 /**
+ * What a per-challenge upstream call needs, for callers outside this file (the
+ * fundamentals MCQs): the challenge is this student's, they can still open its
+ * subject, and which collection, subject and topic keys to ask about. `null`
+ * when there is no such challenge for this student.
+ *
+ * Reads `content->topicKeys` alone rather than `content`: the column carries the
+ * whole reading and every worked answer, and this runs on every answer checked.
+ */
+export async function challengeUpstreamScope(userId: string, challengeId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data: raw, error } = await admin
+    .from("student_challenges")
+    .select("id,course_id,subject_slug,subject_name,topic_key,topic_title,topicKeys:content->topicKeys")
+    .eq("id", challengeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!raw) return null;
+  const row = raw as ChallengeRow & { topicKeys?: unknown };
+  const lane = await resolveChallengeLane(userId, row, await requireChallengeAccess(userId, row));
+  const stored = Array.isArray(row.topicKeys) ? row.topicKeys.map(String).filter(Boolean) : [];
+  return {
+    collectionKey: lane.collectionKey,
+    subject: lane.subject,
+    topics: stored.length ? stored : [String(row.topic_key || "")].filter(Boolean),
+    topicTitle: studentFacingTopicTitle(String(row.topic_title ?? ""), String(row.subject_name ?? "")),
+  };
+}
+
+/**
  * Operator-facing text that must never be filed as a student's reading.
  *
  * A reading is stored once, on `/start`, and is then handed back verbatim every

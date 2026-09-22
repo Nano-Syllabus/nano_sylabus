@@ -119,6 +119,35 @@ export type TeacherChallengeTranslateResponse = {
   warnings: string[];
 };
 
+/** A fundamentals MCQ as the backend sends it to THIS server — key included.
+ *  Never forward `correct` or `explanation` to a student before they answer. */
+export type TeacherChallengeMcqQuestion = {
+  id: string;
+  text: string;
+  options: Array<{ key: string; text: string }>;
+  correct: string;
+  explanation?: string;
+};
+
+export type TeacherChallengeMcqResponse = {
+  collection: string;
+  subject: string;
+  subject_slug: string;
+  topics: TeacherChallengeTopic[];
+  questions: TeacherChallengeMcqQuestion[];
+  served_from: "cache" | "lane_notes_llm" | string;
+};
+
+/** Where one render got to: `derivatives` fills in as each file lands. */
+export type TeacherAnimationReply = {
+  spec_hash: string;
+  concept: string;
+  status: string;
+  derivatives: Partial<Record<"poster" | "gif" | "mp4", string>>;
+  error: string;
+  updated_at: string;
+};
+
 export type TeacherChallengeLearnResponse = {
   collection: string;
   subject: string;
@@ -1141,6 +1170,36 @@ export const getTeacherChallengeReading = (
     method: "POST",
     body: input,
     timeoutMs: 180_000,
+  });
+
+/**
+ * The micro-topic's five fundamentals MCQs, answer key included (see
+ * `TeacherChallengeMcqQuestion`). Set once per topic upstream and cached there,
+ * so every call after the first is a read — hence idempotent and retried once
+ * on a busy upstream, like the past questions.
+ */
+export const getTeacherChallengeMcq = (key: string, input: { subject: string; topics: string[] }) =>
+  teacherRequest<TeacherChallengeMcqResponse>("/v1/collection/challenge/mcq", key, {
+    method: "POST",
+    body: input,
+    timeoutMs: 120_000,
+    idempotent: true,
+    retries: 1,
+  });
+
+/**
+ * Queue a short animated explainer. `fresh` makes it a render of its own, never
+ * handed back to a later identical request — for one student's one wrong
+ * answer. NOT idempotent: each call queues (and bills) a render.
+ */
+export const requestTeacherExplainerAnimation = (
+  key: string,
+  input: { concept: string; subject: string; notes: string; seconds: number; style: "card"; fresh: true },
+) =>
+  teacherRequest<TeacherAnimationReply>("/api/v1/media/animations", key, {
+    method: "POST",
+    body: input,
+    timeoutMs: 30_000,
   });
 
 export type TeacherMediaImageResponse = {
