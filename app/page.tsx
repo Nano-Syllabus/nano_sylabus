@@ -229,12 +229,12 @@ export default function LandingPage() {
               <h1
                 className={`${manrope.className} text-[clamp(2.9rem,5.3vw,5.5rem)] font-extrabold leading-[1.04] tracking-[-0.055em] text-[#1c1e1a]`}
               >
-                Turn Exam Preparation
+                The All-In-One Platform
                 <br />
            
-                Into a{" "}
+                For Exam{" "}
                 <span className="relative isolate inline-block px-1">
-                  Game.
+                  Preparation
                   <span
                     aria-hidden="true"
                     className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[#dcfa72]"
