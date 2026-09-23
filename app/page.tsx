@@ -249,10 +249,10 @@ export default function LandingPage() {
       <h1
         className={`${manrope.className} text-[clamp(2.7rem,5.5vw,5.5rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
       >
-        Everything you need to study.
+        
         <br />
         <span className="relative isolate inline-block px-1">
-          One clear way to start.
+          Everything you need to study.
           <span
             aria-hidden="true"
             className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[#dcfa72]"
@@ -261,7 +261,7 @@ export default function LandingPage() {
       </h1>
 
       <p className="mx-auto mt-7 max-w-[690px] text-[17px] leading-relaxed text-[#5b5e55] sm:text-[19px]">
-        Notes, solved past papers, and an AI tutor—organized into a study
+        Notes, solved past papers, and an AI tutor - organized into a study
         routine, one topic at a time.
       </p>
 
@@ -298,75 +298,14 @@ export default function LandingPage() {
           <div className="mx-auto max-w-[1320px]">
             <div className="mb-10 max-w-[710px] lg:mb-12">
               <h2 id="walkthrough-title" className={`${manrope.className} text-[clamp(2.1rem,4vw,3.7rem)] font-extrabold leading-[1.04] tracking-[-0.06em] text-[#1c1e1a]`}>
-                See NanoSyllabus in 60 seconds
+                Core Features
               </h2>
          
             </div>
 
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1.36fr)_minmax(380px,1fr)] lg:gap-7">
-              <Link href="/flow?step=solutionSlide" className="group relative isolate min-h-[365px] overflow-hidden rounded-[22px] border-[8px] border-[#151b1f] bg-[#eef3fa] shadow-[0_22px_60px_rgba(54,69,92,0.1)] transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3049ed] focus-visible:ring-offset-4 motion-reduce:transition-none lg:min-h-[430px] lg:border-[9px]" aria-label="View the NanoSyllabus walkthrough">
-                <span aria-hidden="true" className="absolute inset-0 z-[3] bg-[linear-gradient(180deg,rgba(12,18,23,0.08)_0%,transparent_47%,rgba(8,13,17,0.84)_100%),linear-gradient(120deg,rgba(255,255,255,0.28),transparent_38%)]" />
-                <div aria-hidden="true" className="grid min-h-[349px] grid-cols-[95px_1fr] bg-[linear-gradient(135deg,#f5f8fd,#fff)] lg:min-h-[412px] lg:grid-cols-[142px_1fr]">
-                  <aside className="border-r border-[#e7ebf1] bg-white/75 px-2 pb-3 pt-14 lg:px-3.5 lg:pt-[50px]">
-                    <div className="mb-5 flex items-center gap-1.5 text-[8px] font-extrabold text-[#1c1e1a] lg:text-[10px]">
-                      <span className="grid h-[18px] w-[18px] place-items-center rounded-[5px] bg-[#111] text-[11px] text-[#c9ff38]">n.</span>
-                      <span>NanoSyllabus</span>
-                    </div>
-                    <div className="grid gap-1.5 text-[8px] text-[#71809b] lg:text-[10px]">
-                      {["Home", "Subjects", "Past Questions", "My Uploads", "Progress"].map((label, index) => (
-                        <span key={label} className={`flex items-center gap-1.5 rounded-lg px-2 py-2 lg:gap-2 lg:px-2.5 ${index === 0 ? "bg-[#eaf3ff] font-semibold text-[#1677f0]" : ""}`}>
-                          <span className="h-2 w-2 rounded-[3px] border-2 border-current" />
-                          {label}
-                        </span>
-                      ))}
-                    </div>
-                  </aside>
-                  <div className="px-3.5 pb-20 pt-14 lg:px-7 lg:pb-[72px] lg:pt-[53px]">
-                    <div className="mb-4 flex items-start justify-between gap-2">
-                      <div>
-                        <strong className="block text-[13px] tracking-[-0.025em] text-[#1c1e1a] lg:text-[16px]">Good morning!</strong>
-                        <span className="text-[8px] text-[#8290a5] lg:text-[10px]">3 challenges ready for you today.</span>
-                      </div>
-                      <span className="text-[8px] font-bold text-[#1c1e1a] lg:text-[9px]">☀️ Keep going</span>
-                    </div>
-                    <div className="rounded-[14px] bg-[linear-gradient(120deg,#d7ff66,#edffb8)] p-3.5 lg:p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="text-[9px] font-extrabold text-[#1c1e1a]">◎ Today&apos;s Challenge</span>
-                          <strong className="mt-1 block text-[14px] text-[#1c1e1a] lg:text-[16px]">Laws of Motion</strong>
-                          <span className="text-[9px] text-[#657246]">Physics · Topic 3.2</span>
-                        </div>
-                        <span className="rounded-full bg-white/60 px-2.5 py-1 text-[8px] text-[#1c1e1a]">3 left</span>
-                      </div>
-                      <div className="mt-3 grid grid-cols-3 overflow-hidden rounded-[11px] bg-white/60">
-                        {[["12", "Topics learned"], ["68%", "Overall progress"], ["5", "Day streak"]].map(([value, label]) => (
-                          <div key={label} className="border-r border-[rgba(109,139,63,0.12)] px-1.5 py-2 last:border-r-0 lg:px-2.5">
-                            <strong className="block text-[12px] text-[#1c1e1a]">{value}</strong>
-                            <span className="block text-[7px] text-[#75816a] lg:text-[8px]">{label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="mb-2 mt-5 flex items-center justify-between text-[9px] lg:mt-6 lg:text-[10px]">
-                      <strong className="text-[12px] text-[#1c1e1a] lg:text-[15px]">Your Subjects</strong>
-                      <span className="text-[#748199]">See all →</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5 lg:gap-2.5">
-                      {[["Physics", "67%", "#1677f0"], ["Chemistry", "54%", "#13a076"], ["Mathematics", "41%", "#8f38ec"]].map(([subject, progress, color]) => (
-                        <div key={subject} className="rounded-[9px] border border-[#e4e9f1] bg-white p-2 shadow-[0_8px_18px_rgba(36,53,76,0.05)] lg:p-2.5">
-                          <strong className="block text-[7px] text-[#1c1e1a] lg:text-[8px]">{subject}</strong>
-                          <span className="mt-2 block h-[3px] rounded-full bg-[#edf0f5] lg:mt-3"><span className="block h-full rounded-full" style={{ width: progress, background: color }} /></span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <span className="absolute left-1/2 top-[46%] z-[6] grid h-[68px] w-[68px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#dcfa72] text-[#101214] shadow-[0_16px_30px_rgba(111,143,21,0.32)] transition duration-300 group-hover:scale-105 motion-reduce:transition-none"><Play className="ml-1 h-7 w-7 fill-current" aria-hidden="true" /></span>
-                <span className="absolute bottom-10 left-4 z-[5] text-white"><strong className="block text-[17px] tracking-[-0.03em]">Watch how a challenge works</strong><span className="block text-[11px] text-white/85">Explained in Nepali</span></span>
-                <span aria-hidden="true" className="absolute bottom-3 left-4 right-4 z-[5] grid grid-cols-[auto_auto_1fr_auto] items-center gap-2.5 text-[10px] text-white"><span>▶</span><span>0:00 / 1:00</span><span className="h-[3px] rounded-full bg-white/35"><span className="block h-full w-[7%] rounded-full bg-white" /></span><span>🔊</span></span>
-              </Link>
-
-              <div className="grid gap-4 sm:grid-cols-2 lg:gap-5">
+       
+              <div className="grid gap-4 sm:grid-cols-4 lg:gap-5">
                 {walkthroughFeatures.map(({ title, color, Icon }, index) => (
                   <article key={title} className="flex min-h-[190px] flex-col justify-between rounded-[20px] border border-[#dfe5ee] bg-white p-5 shadow-[0_13px_32px_rgba(62,79,105,0.045)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_42px_rgba(62,79,105,0.085)] motion-reduce:transition-none">
                     <div className="flex items-start justify-between">
@@ -378,7 +317,6 @@ export default function LandingPage() {
                 ))}
               </div>
             </div>
-            <div className="mt-9 flex justify-center lg:mt-10"><LandingPrimaryCta blue size="hero" communityOnly>Start your first challenge</LandingPrimaryCta></div>
           </div>
         </section>
 
