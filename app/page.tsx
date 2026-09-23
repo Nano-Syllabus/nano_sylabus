@@ -866,7 +866,7 @@ export default function LandingPage() {
           First prize
         </div>
         <div className={`${manrope.className} mt-2 text-[clamp(3.5rem,6vw,5.5rem)] font-extrabold leading-none tracking-[-0.075em] text-[#dcfa72]`}>
-          Rs. 5,000
+          Win Rs. 5,000
         </div>
         <p className="mt-3 text-base font-semibold">+ 3 months Pro Subscription</p>
 
