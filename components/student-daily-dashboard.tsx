@@ -8,6 +8,7 @@ import {
   BookOpen,
   Check,
   CircleGauge,
+  CirclePlay,
   Clock3,
   FileText,
   Flame,
@@ -15,11 +16,9 @@ import {
   LockKeyholeOpen,
   Sparkles,
   Star,
+  X,
 } from "lucide-react";
-import type {
-  DailyExamDate,
-  StudentDailyDashboard,
-} from "@/lib/data/student-daily-dashboard";
+import type { DailyExamDate, StudentDailyDashboard } from "@/lib/data/student-daily-dashboard";
 import { rankSemesterSubjects } from "@/lib/data/student-semester-ranking";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "@/lib/query/dashboard";
@@ -103,9 +102,7 @@ function MetricCard({
     return (
       <article className="min-w-0 rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center justify-between gap-3">
-          <span className="type-student-eyebrow text-text-muted">
-            {label}
-          </span>
+          <span className="type-student-eyebrow text-text-muted">{label}</span>
           <span className="text-text-secondary" aria-hidden="true">
             {icon}
           </span>
@@ -129,9 +126,7 @@ function MetricCard({
       )}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="type-student-eyebrow text-text-muted">
-          {label}
-        </span>
+        <span className="type-student-eyebrow text-text-muted">{label}</span>
         <span className="text-text-secondary" aria-hidden="true">
           {icon}
         </span>
@@ -191,19 +186,13 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
         preserveAspectRatio="none"
         aria-hidden="true"
       >
-        <path
-          d="M 0 160 Q 350 30 900 160 Z"
-          fill="rgba(255, 255, 255, 0.4)"
-        />
+        <path d="M 0 160 Q 350 30 900 160 Z" fill="rgba(255, 255, 255, 0.4)" />
       </svg>
 
       <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         {/* Left column: the automatically selected challenge and its CTA. */}
         <div className="max-w-xl">
-          <h2
-            id="starter-challenge-heading"
-            className="type-student-page-title text-black"
-          >
+          <h2 id="starter-challenge-heading" className="type-student-page-title text-black">
             One topic.
             <br />
             One small win.
@@ -238,7 +227,10 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
         </div>
 
         {/* Right Column: Stacked Notebook Graphic & 3-Step Circles */}
-        <div className="relative hidden items-center justify-end gap-5 select-none lg:flex xl:gap-7" aria-hidden="true">
+        <div
+          className="relative hidden items-center justify-end gap-5 select-none lg:flex xl:gap-7"
+          aria-hidden="true"
+        >
           {/* Stacked Notebook Illustration */}
           <div className="relative shrink-0">
             {/* Back page for stacked 3D effect */}
@@ -271,7 +263,9 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
               <div className="grid size-12 sm:size-13 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
                 <BookOpen className="size-5 text-black stroke-[1.8]" />
               </div>
-              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight">Learn</span>
+              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight">
+                Learn
+              </span>
             </div>
 
             {/* Arrow 1 */}
@@ -282,7 +276,9 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
               <div className="grid size-12 sm:size-13 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
                 <FileText className="size-5 text-black stroke-[1.8]" />
               </div>
-              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight">Practice</span>
+              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight">
+                Practice
+              </span>
             </div>
 
             {/* Arrow 2 */}
@@ -293,12 +289,172 @@ function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboar
               <div className="grid size-12 sm:size-13 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
                 <Star className="size-5 text-black stroke-[1.8]" />
               </div>
-              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight whitespace-nowrap">Take the exam</span>
+              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight whitespace-nowrap">
+                Take the exam
+              </span>
             </div>
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function FirstTimeHereBanner({ userId }: { userId: string }) {
+  const storageKey = `nano:today:first-time-banner:${userId}`;
+  // Keep the guide visible on every app launch while onboarding is being tested.
+  // Set this public flag to "true" when the production dismissal should persist again.
+  const persistDismissal = process.env.NEXT_PUBLIC_PERSIST_FIRST_TIME_GUIDE_DISMISSAL === "true";
+  const [visible, setVisible] = useState(true);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const guideDialogRef = useRef<HTMLDialogElement>(null);
+  const closeGuideRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!persistDismissal) return;
+
+    try {
+      if (window.localStorage.getItem(storageKey) === "dismissed") setVisible(false);
+    } catch {
+      // Keep the guide available when browser storage is unavailable.
+    }
+  }, [persistDismissal, storageKey]);
+
+  useEffect(() => {
+    const dialog = guideDialogRef.current;
+    if (!dialog) return;
+
+    if (guideOpen) {
+      if (!dialog.open) dialog.showModal();
+      closeGuideRef.current?.focus();
+    } else if (dialog.open) {
+      dialog.close();
+    }
+  }, [guideOpen]);
+
+  function dismiss() {
+    if (persistDismissal) {
+      try {
+        window.localStorage.setItem(storageKey, "dismissed");
+      } catch {
+        // The current page state still dismisses the banner.
+      }
+    }
+    setGuideOpen(false);
+    setVisible(false);
+  }
+
+  if (!visible) return null;
+
+  return (
+    <>
+      <section
+        className="mt-5 flex flex-col gap-3 rounded-2xl bg-[var(--community-accent)] px-4 py-3 text-[var(--community-accent-foreground)] sm:flex-row sm:items-center sm:px-5"
+        aria-labelledby="first-time-heading"
+      >
+        <CirclePlay className="size-8 shrink-0" aria-hidden="true" />
+        <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-4">
+          <h2 id="first-time-heading" className="text-lg font-semibold sm:text-xl">
+            First time here?
+          </h2>
+          <p className="mt-0.5 text-base leading-6 opacity-90 sm:mt-0 sm:text-lg">
+            See how <span className="font-semibold">NanoSyllabus</span> works in 60 seconds.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setGuideOpen(true)}
+            className={cn(
+              "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-current/25 bg-bg-primary/10 px-4 text-sm font-semibold transition-colors hover:bg-bg-primary/20",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--community-accent)]",
+            )}
+          >
+            <CirclePlay className="size-4" aria-hidden="true" />
+            Watch how it works
+          </button>
+          <button
+            type="button"
+            onClick={dismiss}
+            className={cn(
+              "inline-flex size-11 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-bg-primary/15",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--community-accent)]",
+            )}
+            aria-label="Dismiss first-time guide"
+          >
+            <X className="size-5" aria-hidden="true" />
+          </button>
+        </div>
+      </section>
+
+      <dialog
+        ref={guideDialogRef}
+        onClose={() => setGuideOpen(false)}
+        aria-labelledby="quick-guide-heading"
+        className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-border bg-card p-0 text-text-primary shadow-lg backdrop:bg-black/50"
+      >
+        <div className="p-5 sm:p-6">
+          <section>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="type-student-eyebrow text-text-muted">Quick guide</p>
+                <h2 id="quick-guide-heading" className="type-student-section-title mt-2">
+                  How NanoSyllabus works
+                </h2>
+              </div>
+              <button
+                ref={closeGuideRef}
+                type="button"
+                onClick={() => setGuideOpen(false)}
+                className={cn(
+                  "inline-flex size-11 shrink-0 items-center justify-center rounded-xl hover:bg-bg-secondary",
+                  focusRing,
+                )}
+                aria-label="Close quick guide"
+              >
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </div>
+            <ol className="mt-5 space-y-4">
+              {[
+                [
+                  "Choose your community",
+                  "Your programme keeps subjects and challenges in the right scope.",
+                ],
+                [
+                  "Practice a small topic",
+                  "Start or continue a daily challenge whenever you are ready.",
+                ],
+                [
+                  "Track your readiness",
+                  "Your subject progress updates as you practise, so you can focus next.",
+                ],
+              ].map(([title, description], index) => (
+                <li key={title} className="flex gap-3">
+                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-bg-secondary text-sm font-semibold text-text-secondary">
+                    {index + 1}
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-semibold">{title}</h3>
+                    <p className="mt-0.5 text-sm leading-6 text-text-secondary">{description}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <button
+              type="button"
+              onClick={() => setGuideOpen(false)}
+              className={cn(
+                "mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-text-primary px-4 text-sm font-semibold text-text-inverse hover:opacity-90",
+                focusRing,
+              )}
+            >
+              Got it
+            </button>
+          </section>
+        </div>
+      </dialog>
+    </>
   );
 }
 
@@ -350,13 +506,8 @@ function SemesterProgress({
         )}
       >
         <div className="min-w-0">
-          <p className="type-student-eyebrow text-text-muted">
-            Programme map
-          </p>
-          <h2
-            id="semester-progress-heading"
-            className="type-student-section-title mt-2"
-          >
+          <p className="type-student-eyebrow text-text-muted">Programme map</p>
+          <h2 id="semester-progress-heading" className="type-student-section-title mt-2">
             Semester progress
           </h2>
           <p className="type-student-body mt-1 text-text-secondary">
@@ -585,10 +736,7 @@ function DashboardDataSkeleton({
 }) {
   const line = "animate-pulse rounded-full bg-border motion-reduce:animate-none";
   return (
-    <main
-      className="student-page-frame"
-      aria-busy="true"
-    >
+    <main className="student-page-frame" aria-busy="true">
       {/*
         The real switcher, not a placeholder. Its options come from the page's
         server render, so it is usable before the dashboard data exists — and
@@ -698,12 +846,11 @@ function DashboardContent({
     <main className="student-page-frame">
       <header className="pt-2">
         <div>
-          <h1 className="type-student-page-title">
-            Welcome, {firstName(fullName)}.
-          </h1>
+          <h1 className="type-student-page-title">Welcome, {firstName(fullName)}.</h1>
         </div>
       </header>
 
+      <FirstTimeHereBanner userId={userId} />
       <StarterChallengeBanner dashboard={dashboard} />
 
       <section

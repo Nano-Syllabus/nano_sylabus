@@ -76,6 +76,7 @@
   --note-green: rgba(56, 161, 105, 0.12);
   --community-banner: #0b2859;
   --community-accent: #2f6fed;
+  --community-accent-foreground: #ffffff;
   --challenge-banner: #cbf738;
   --challenge-banner-glow: #e5ff75;
   --challenge-banner-ink: #000000;
@@ -118,6 +119,7 @@
   --note-green: rgba(74, 222, 128, 0.13);
   --community-banner: #0a1e42;
   --community-accent: #6f9cff;
+  --community-accent-foreground: #081225;
   --challenge-banner: #cbf738;
   --challenge-banner-glow: #e5ff75;
   --challenge-banner-ink: #000000;
@@ -380,7 +382,9 @@ summary > .answer-paper-label {
 /* Paragraph after paragraph on one sheet (the concepts reading is a body per
    paragraph): a skipped line between them too, so they do not run together.
    Text blocks only — the padding would sit inside a boxed equation's border. */
-.answer-paper-body + .answer-paper-body > :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote):first-child {
+.answer-paper-body
+  + .answer-paper-body
+  > :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote):first-child {
   padding-top: var(--paper-line);
 }
 

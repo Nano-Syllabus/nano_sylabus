@@ -6,18 +6,17 @@ import {
   markStudyDiagnosticStarted,
   readPendingStudyAnswers,
   saveStudyDiagnostic,
+  STUDY_DIAGNOSTIC_QUESTION_COUNT,
   studyFlowDestination,
 } from "@/lib/study-diagnostic";
 
-const answers = Object.fromEntries([1, 2, 3, 4, 5, 6].map((questionIndex) => [
-  questionIndex, { questionIndex, optionIndex: 0, text: "Yes" },
-]));
+const answers = Object.fromEntries(
+  Array.from({ length: STUDY_DIAGNOSTIC_QUESTION_COUNT }, (_, index) => index + 1).map(
+    (questionIndex) => [questionIndex, { questionIndex, optionIndex: 0, text: "Yes" }],
+  ),
+);
 
-function client(
-  saved: unknown = {},
-  signedIn = true,
-  studyDiagnosticStarted: unknown = false,
-) {
+function client(saved: unknown = {}, signedIn = true, studyDiagnosticStarted: unknown = false) {
   const getUser = vi.fn().mockResolvedValue({
     data: {
       user: signedIn
@@ -33,10 +32,17 @@ function client(
     error: null,
   });
   const updateUser = vi.fn().mockResolvedValue({ error: null });
-  return { supabase: { auth: { getUser, updateUser } } as unknown as SupabaseClient, getUser, updateUser };
+  return {
+    supabase: { auth: { getUser, updateUser } } as unknown as SupabaseClient,
+    getUser,
+    updateUser,
+  };
 }
 
 describe("account-wide study diagnostic", () => {
+  it("uses five balanced onboarding questions", () => {
+    expect(STUDY_DIAGNOSTIC_QUESTION_COUNT).toBe(5);
+  });
   it("recognizes the existing signup answer format without a migration", () => {
     expect(hasCompletedStudyDiagnostic(JSON.parse(JSON.stringify(answers)))).toBe(true);
   });
@@ -57,9 +63,16 @@ describe("account-wide study diagnostic", () => {
     expect(await markStudyDiagnosticStarted(supabase)).toBe(true);
     expect(updateUser).not.toHaveBeenCalled();
   });
-  it.each([null, undefined, false, "complete", [], {}, { ...answers, 6: undefined },
-    { ...answers, 6: { questionIndex: 5, optionIndex: 0, text: "Yes" } },
-    { ...answers, 5: { questionIndex: 5, optionIndex: 2, text: "Invalid" } },
+  it.each([
+    null,
+    undefined,
+    false,
+    "complete",
+    [],
+    {},
+    { ...answers, 5: undefined },
+    { ...answers, 5: { questionIndex: 4, optionIndex: 0, text: "Yes" } },
+    { ...answers, 5: { questionIndex: 5, optionIndex: 3, text: "Invalid" } },
     { ...answers, 1: { questionIndex: 1, optionIndex: 0.5, text: "Yes" } },
     { ...answers, 1: { questionIndex: 1, optionIndex: 0, text: " " } },
   ])("does not treat missing or invalid answers as completed: %j", (value) => {
@@ -100,17 +113,27 @@ describe("account-wide study diagnostic", () => {
   });
   it("opens the newly joined community, not a different community", () => {
     expect(studyFlowDestination("henglish")).toBe("/app/today?community=henglish");
-    expect(studyFlowDestination("engineering-programming")).toBe("/app/today?community=engineering-programming");
+    expect(studyFlowDestination("engineering-programming")).toBe(
+      "/app/today?community=engineering-programming",
+    );
   });
   it.each([undefined, "", "//evil.com", "../admin", "a?next=/admin", "a/b"])(
-    "uses a safe default for invalid destinations: %s", (community) => {
+    "uses a safe default for invalid destinations: %s",
+    (community) => {
       expect(studyFlowDestination(community)).toBe("/app/today");
     },
   );
   it("recovers complete pending answers after OAuth", () => {
-    expect(readPendingStudyAnswers(JSON.stringify({ answers, expiresAt: 2000 }), 1000)).toEqual(answers);
+    expect(readPendingStudyAnswers(JSON.stringify({ answers, expiresAt: 2000 }), 1000)).toEqual(
+      answers,
+    );
   });
-  it.each([null, "bad json", "null", "{}", JSON.stringify({ answers, expiresAt: 500 }),
+  it.each([
+    null,
+    "bad json",
+    "null",
+    "{}",
+    JSON.stringify({ answers, expiresAt: 500 }),
     JSON.stringify({ answers: {}, expiresAt: 2000 }),
   ])("ignores expired or corrupt OAuth drafts: %s", (raw) => {
     expect(readPendingStudyAnswers(raw, 1000)).toBeNull();

@@ -500,9 +500,32 @@ export async function joinCommunity(
       await markCommunityLearningError(admin, joinedCommunityId, error);
     }
   }
-  const community = await getCommunity(slug, userId, admin);
-  if (!community) throw new CommunityError("Community not found.", 404);
-  return community;
+
+  // The membership transaction above is the source of truth for a join.  The
+  // detail read is useful to API consumers, but it must not turn a committed
+  // membership into a failed join when an optional/read-model query is briefly
+  // unavailable (for example while PostgREST reloads a schema migration).
+  try {
+    const community = await getCommunity(slug, userId, admin);
+    if (community) return community;
+  } catch (error) {
+    const source = (error || {}) as CommunityStorageErrorLike;
+    console.error("[community:join] membership saved but detail refresh failed", {
+      slug,
+      code: source.code,
+      message: source.message,
+    });
+  }
+
+  return {
+    id: targetCommunityId,
+    slug,
+    membership: {
+      role: isCreator ? "creator" : "member",
+      status: "active",
+    },
+    needsRefresh: true,
+  };
 }
 
 export async function listCommunityCreatorSubjects(
