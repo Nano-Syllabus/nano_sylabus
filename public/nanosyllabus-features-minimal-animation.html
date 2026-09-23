@@ -13,7 +13,7 @@
 .art{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:top left;overflow:hidden;background:radial-gradient(ellipse at 50% 45%,#efffb3 0%,#dafa77 57%,#c6e960 100%)}
 .art:before{content:"";position:absolute;width:930px;height:600px;left:180px;top:36px;border:1px solid #ffffff90;border-radius:50%;transform:rotate(-15deg)}
 .art:after{content:"";position:absolute;left:250px;right:250px;bottom:29px;height:70px;border-radius:50%;background:#39652445;filter:blur(42px)}
-.brand-top{position:absolute;z-index:5;top:30px;left:81px;font-size:14px;font-weight:850;letter-spacing:-.04em;display:flex;align-items:center;gap:10px}
+.brand-top{position:absolute;z-index:5;top:30px;left:81px;font-size:28px;font-weight:850;letter-spacing:-.04em;display:flex;align-items:center;gap:10px}
 .brand-top b,.app-brand b{display:grid;place-items:center;border-radius:7px;background:#182019;color:#dffa7a;letter-spacing:-.1em;font-weight:900}
 .brand-top b{width:26px;height:26px;font-size:18px}
 .count{position:absolute;top:35px;right:81px;color:#54732e;font-size:12px;font-weight:850;letter-spacing:.12em}
@@ -138,10 +138,10 @@
   const cursor=document.getElementById('cursor'),pulse=document.getElementById('pulse');
   const fill=document.getElementById('fill'),clock=document.getElementById('clock');
   const chapters=[
-    {title:'',note:'',label:'MICRO-TOPICS',pointer:'c1',click:2.1,ring:[950,459]},
-    {title:'',note:'',label:'PAST QUESTION SOLUTIONS',pointer:'c2',click:2.7,ring:[1030,495]},
-    {title:'',note:'',label:'ENGLISH + ROMANIZED NEPALI',pointer:'c3',click:2.5,ring:[742,402]},
-    {title:'',note:'',label:'AI ANSWER FEEDBACK',pointer:'c4',click:2.55,ring:[446,480]}
+    {title:'',note:'',label:'MICRO-TOPICS',pointer:'c1',click:2.1,ring:[990,459]},
+    {title:'',note:'',label:'PAST QUESTION SOLUTIONS',pointer:'c2',click:2.7,ring:[1530,455]},
+    {title:'',note:'',label:'ENGLISH + ROMANIZED NEPALI',pointer:'c3',click:2.5,ring:[702,402]},
+    {title:'',note:'',label:'AI ANSWER FEEDBACK',pointer:'c4',click:2.55,ring:[496,440]}
   ];
   const DURATION=30,STEP=7.5,reduced=matchMedia('(prefers-reduced-motion: reduce)');
   let elapsed=0,last=0,index=-1,paused=false,clicked=false;
