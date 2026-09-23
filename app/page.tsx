@@ -358,19 +358,15 @@ export default function LandingPage() {
         <section id="walkthrough" className="border-y border-[#e5e8df] bg-white/70 px-5 py-16 lg:py-24 2xl:px-0" aria-labelledby="walkthrough-title">
           <div className="mx-auto max-w-[1320px]">
             <div className="mb-10 max-w-[710px] lg:mb-12">
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#3049ed]">See NanoSyllabus in 60 seconds</p>
               <h2 id="walkthrough-title" className={`${manrope.className} text-[clamp(2.1rem,4vw,3.7rem)] font-extrabold leading-[1.04] tracking-[-0.06em] text-[#1c1e1a]`}>
-                From one small topic to exam-ready answers.
+                See NanoSyllabus in 60 seconds
               </h2>
-              <p className="mt-4 max-w-[610px] text-[17px] leading-[1.6] text-[#5b5e55]">
-                One clear system for learning, past-question practice, and feedback that tells you what to do next.
-              </p>
+         
             </div>
 
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1.36fr)_minmax(380px,1fr)] lg:gap-7">
               <Link href="/flow?step=solutionSlide" className="group relative isolate min-h-[365px] overflow-hidden rounded-[22px] border-[8px] border-[#151b1f] bg-[#eef3fa] shadow-[0_22px_60px_rgba(54,69,92,0.1)] transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3049ed] focus-visible:ring-offset-4 motion-reduce:transition-none lg:min-h-[430px] lg:border-[9px]" aria-label="View the NanoSyllabus walkthrough">
                 <span aria-hidden="true" className="absolute inset-0 z-[3] bg-[linear-gradient(180deg,rgba(12,18,23,0.08)_0%,transparent_47%,rgba(8,13,17,0.84)_100%),linear-gradient(120deg,rgba(255,255,255,0.28),transparent_38%)]" />
-                <span className="absolute left-3 top-3 z-[5] rounded-full border border-white/20 bg-[rgba(24,30,36,0.82)] px-3.5 py-2 text-[10px] font-bold tracking-[0.1em] text-white">1 MIN WALKTHROUGH</span>
                 <div aria-hidden="true" className="grid min-h-[349px] grid-cols-[95px_1fr] bg-[linear-gradient(135deg,#f5f8fd,#fff)] lg:min-h-[412px] lg:grid-cols-[142px_1fr]">
                   <aside className="border-r border-[#e7ebf1] bg-white/75 px-2 pb-3 pt-14 lg:px-3.5 lg:pt-[50px]">
                     <div className="mb-5 flex items-center gap-1.5 text-[8px] font-extrabold text-[#1c1e1a] lg:text-[10px]">
@@ -438,7 +434,7 @@ export default function LandingPage() {
                       <span className={`grid h-14 w-14 place-items-center rounded-[15px] ${color}`}><Icon className="h-7 w-7" aria-hidden="true" /></span>
                       <span className={`grid h-9 w-9 place-items-center rounded-[14px] text-sm font-extrabold ${color}`}>{index + 1}</span>
                     </div>
-                    <h3 className="mt-6 max-w-[95%] text-[19px] font-bold leading-[1.16] tracking-[-0.04em] text-[#1c1e1a] lg:text-[21px]">{title}</h3>
+                    <h3 className="mt-6 max-w-[95%] text-[17px] font-bold leading-[1.16] tracking-[-0.04em] text-[#1c1e1a] lg:text-[21px]">{title}</h3>
                   </article>
                 ))}
               </div>
@@ -470,7 +466,6 @@ export default function LandingPage() {
         {/* ── Section 01 / Sound Familiar? ── */}
         <section id="little-steps" className="mx-auto max-w-[1320px] px-5 py-24 lg:py-28 2xl:px-0">
           <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-            01 / Sound familiar?
           </div>
           <div className="mt-6 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
             <h2
@@ -480,7 +475,6 @@ export default function LandingPage() {
               <br />A clear next step is.
             </h2>
             <p className="max-w-[320px] text-base leading-relaxed text-[#5b5e55]">
-            When your material is scattered and exams are getting closer, starting can feel like the hardest part.
             </p>
           </div>
 
@@ -502,7 +496,7 @@ export default function LandingPage() {
                   >
                     {quote}
                   </h3>
-                  <p className="mt-4 flex-1 text-[15px] leading-relaxed text-[#5b5e55]">{detail}</p>
+                  {/* <p className="mt-4 flex-1 text-[15px] leading-relaxed text-[#5b5e55]">{detail}</p> */}
                   <p
                     className={`mt-7 border-t pt-4 text-xs font-semibold uppercase tracking-wider ${
                       isLime ? "border-[#bedb62] text-[#1c1e1a]" : "border-[#e5e8df] text-[#5b5e55]"
@@ -520,7 +514,6 @@ export default function LandingPage() {
         <section id="steps" className="bg-[#eff1e9] py-24 lg:py-28">
           <div className="mx-auto max-w-[1320px] px-5 2xl:px-0">
             <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-              02 / Meet Nano Challenges
             </div>
             <div className="mt-6 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
               <h2
@@ -531,7 +524,6 @@ export default function LandingPage() {
                 <em className="font-serif font-normal italic">Little victories.</em>
               </h2>
               <p className="max-w-[340px] text-base leading-relaxed text-[#5b5e55]">
-                A personal learning system that takes you from studying a topic to writing an answer and understanding what to improve.
               </p>
             </div>
 
@@ -581,8 +573,7 @@ export default function LandingPage() {
                   id="featured-title"
                   className={`${manrope.className} mt-8 text-[clamp(2rem,3.2vw,2.9rem)] font-extrabold leading-[1.18] tracking-[-0.045em] text-[#1c1e1a]`}
                 >
-                  From Syllabus to Success
-                  <br />—{" "}
+    
                   <span className="relative isolate inline-block px-1">
                     A Smarter Way
                     <span
@@ -720,7 +711,6 @@ export default function LandingPage() {
     {/* Left copy */}
     <div className="relative z-10 max-w-[375px] lg:absolute lg:left-12 lg:top-[126px] 2xl:left-0">
       <p className="text-xs font-bold uppercase tracking-[0.12em] text-white/85">
-        04 / Same syllabus. Your people.
       </p>
 
       <h2
@@ -828,7 +818,8 @@ export default function LandingPage() {
     {/* Left copy */}
     <div>
       <p className="inline-flex rounded-full bg-[#3049ed] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
-        BCT students only · Weekly challenge
+       Tag the study buddy who needs this!
+
       </p>
 
       <h2
@@ -884,7 +875,6 @@ export default function LandingPage() {
         </a>
       </div>
       <p className="mt-5 text-sm text-[#5b5e55]">
-        Tag the study buddy who needs this!
       </p>
     </div>
 
@@ -892,7 +882,7 @@ export default function LandingPage() {
     <div className="relative">
       <div className="rounded-[28px] border border-[#243bc2] bg-[#3049ed] p-5 text-white shadow-[10px_12px_0_#17236d] sm:p-8">
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.1em]">
-          <span className="rounded-full border border-white/30 px-3 py-1.5">BCT weekly draw</span>
+          <span className="rounded-full border border-white/30 px-3 py-1.5"> Weekly Lucky draw</span>
           <span className="text-[#dcfa72]">3 winners</span>
         </div>
 
@@ -902,20 +892,20 @@ export default function LandingPage() {
         <div className={`${manrope.className} mt-2 text-[clamp(3.5rem,6vw,5.5rem)] font-extrabold leading-none tracking-[-0.075em] text-[#dcfa72]`}>
           Rs. 5,000
         </div>
-        <p className="mt-3 text-base font-semibold">+ 3 months Unlimited Challenge</p>
+        <p className="mt-3 text-base font-semibold">+ 3 months Pro Subscription</p>
 
         <div className="mt-9 grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
             <span className="text-xs font-bold uppercase tracking-[0.1em] text-[#dcfa72]">02 / Second prize</span>
             <strong className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}>
-              3 months Unlimited Challenge
+              3 months Pro Subscription
             </strong>
           </div>
 
           <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
             <span className="text-xs font-bold uppercase tracking-[0.1em] text-[#dcfa72]">03 / Third prize</span>
             <strong className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}>
-              1 month Unlimited Challenge
+              1 month Pro Subscription
             </strong>
           </div>
         </div>
@@ -941,24 +931,18 @@ export default function LandingPage() {
 >
   <div>
     <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-      06 / Fair questions
     </div>
 
     <h2
       className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.2vw,4.1rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
     >
-      Before you
+      Frequently Asked
       <br />
       <em className="font-serif font-normal italic">
-        jump in.
+        Questions
       </em>
     </h2>
 
-    <p className="mt-5 text-base leading-relaxed text-[#5b5e55]">
-      No big promises.
-      <br />
-      Just a better way to practise.
-    </p>
   </div>
 
   <div className="divide-y divide-[#d9ddd3] border-t border-[#d9ddd3]">
@@ -987,9 +971,7 @@ export default function LandingPage() {
         {/* ── Final Call To Action Banner ── */}
         <section className="mx-auto max-w-[1320px] px-5 pb-16 2xl:px-0">
           <div className="relative overflow-hidden rounded-[28px] bg-[#dcfa72] p-8 sm:p-14 lg:p-16 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#1c1e1a]/80">
-              3 free learning challenges a day. Your next step starts here.
-            </div>
+       
             <h2
               className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.5vw,4.6rem)] font-extrabold leading-[1.05] tracking-[-0.055em] text-[#1c1e1a]`}
             >
