@@ -33,10 +33,10 @@ export const hubRowSubjectClass = "w-full sm:w-[260px] md:w-[300px] shrink-0 min
 /** The estimate and the Start / Continue button, fixed widths so they line up. */
 export const hubRowActionsClass = "flex items-center justify-between sm:justify-end gap-6 shrink-0";
 
-/** How a challenge works, in three steps. Entirely static. */
+/** How a challenge works, in three steps. */
 export function ChallengeLoopCard() {
   return (
-    <section className="relative overflow-hidden rounded-[24px] border border-black dark:border-white/20 bg-white dark:bg-card p-7 sm:p-9 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+    <section className="challenge-hub-reveal relative overflow-hidden rounded-[24px] border border-black dark:border-white/20 bg-white dark:bg-card p-7 sm:p-9 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
       {/* Top right decorative lime accent corner */}
       <div
         className="pointer-events-none absolute top-0 right-0 size-28 sm:size-34 rounded-bl-full bg-[#d7ff3b] select-none z-0"
@@ -60,7 +60,7 @@ export function ChallengeLoopCard() {
           {/* Step 1: Learn — the past questions worked, then the concepts.
                 One card, because it is one step on the challenge screen; two
                 cards here would describe a flow the student never walks. */}
-          <div className="flex flex-col items-start md:items-center text-left md:text-center">
+          <div className="challenge-hub-step flex flex-col items-start md:items-center text-left md:text-center">
             <div className="flex size-[58px] items-center justify-center rounded-[16px] border-[1.5px] border-[#18181b] dark:border-white/80 bg-white dark:bg-bg-primary text-black dark:text-white shadow-xs">
               <svg
                 className="size-5 text-black dark:text-white"
@@ -82,7 +82,7 @@ export function ChallengeLoopCard() {
           </div>
 
           {/* Step 2: Handwritten exam */}
-          <div className="flex flex-col items-start md:items-center text-left md:text-center">
+          <div className="challenge-hub-step flex flex-col items-start md:items-center text-left md:text-center">
             <div className="flex size-[58px] items-center justify-center rounded-[16px] border-[1.5px] border-[#18181b] dark:border-white/80 bg-white dark:bg-bg-primary text-black dark:text-white shadow-xs">
               <svg
                 className="size-5 text-black dark:text-white"
@@ -105,7 +105,7 @@ export function ChallengeLoopCard() {
           </div>
 
           {/* Step 3: AI grade */}
-          <div className="flex flex-col items-start md:items-center text-left md:text-center">
+          <div className="challenge-hub-step flex flex-col items-start md:items-center text-left md:text-center">
             <div className="relative z-10 flex size-[60px] items-center justify-center rounded-[18px] bg-[#18181b] text-[#d7ff3b] shadow-[0_4px_16px_rgba(0,0,0,0.2)] dark:bg-bg-tertiary">
               <svg
                 className="size-6 text-[#d7ff3b] fill-current"

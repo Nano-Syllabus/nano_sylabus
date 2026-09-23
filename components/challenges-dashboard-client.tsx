@@ -1757,7 +1757,6 @@ export function ChallengesDashboardClient({
   const weeklyProgress = Math.min(100, (dashboard.passedThisWeek / WEEKLY_CHALLENGE_TARGET) * 100);
   const weeklyLeaderTotal = Math.round((dashboard.leaderboard?.topPracticePerDay ?? 0) * 7);
   const challengesBehind = Math.max(0, weeklyLeaderTotal - dashboard.passedThisWeek);
-
   const completedPageHref = (page: number) => {
     const params = new URLSearchParams({ completedPage: String(page) });
     if (dashboard.community) params.set("community", dashboard.community.slug);
@@ -1909,7 +1908,10 @@ export function ChallengesDashboardClient({
         <ChallengeLoopCard />
 
         {/* 3 Metrics Cards */}
-        <section className={hubMetricsClass} aria-label="Challenge summary metrics">
+        <section
+          className={`${hubMetricsClass} challenge-hub-reveal challenge-hub-reveal-delay-1`}
+          aria-label="Challenge summary metrics"
+        >
           {/* Card 1: Today's Quota */}
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
@@ -1966,7 +1968,7 @@ export function ChallengesDashboardClient({
         </section>
 
         {/* Available Challenges Section */}
-        <section className={hubListCardClass}>
+        <section className={`${hubListCardClass} challenge-hub-reveal challenge-hub-reveal-delay-2`}>
           <div className={hubListHeaderClass}>
             <div>
               <h2 className="type-student-section-title text-text-primary">Available challenges</h2>
@@ -2080,7 +2082,11 @@ export function ChallengesDashboardClient({
                           onClick={() => void openChallenge(challenge)}
                           disabled={openingId === challenge.id}
                           aria-busy={openingId === challenge.id}
-                          className="inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center rounded-[10px] bg-[#2563eb] px-4 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(37,99,235,0.2)] transition-colors hover:bg-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60"
+                          className={`inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center rounded-[10px] bg-[#2563eb] px-4 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(37,99,235,0.2)] transition-colors hover:bg-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60 ${
+                            !started
+                              ? "challenge-start-attention"
+                              : ""
+                          }`}
                         >
                           {openingId === challenge.id ? "Opening…" : started ? "Continue" : "Start"}
                         </button>

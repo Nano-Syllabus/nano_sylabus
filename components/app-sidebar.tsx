@@ -558,6 +558,7 @@ export function AppSidebar({
               ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
+          aria-current={pathname === "/app/today" ? "page" : undefined}
           title={isCollapsed ? "Today" : undefined}
         >
           <svg
@@ -586,7 +587,8 @@ export function AppSidebar({
           onPointerEnter={() => router.prefetch("/app/challenges")}
           onFocus={() => router.prefetch("/app/challenges")}
           className={cn(
-            "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            "app-nav-challenges flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+            pathname.startsWith("/app/challenges") && "app-nav-challenges-active",
             isCollapsed
               ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
               : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
@@ -594,24 +596,27 @@ export function AppSidebar({
               ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
+          aria-current={pathname.startsWith("/app/challenges") ? "page" : undefined}
           title={isCollapsed ? "Challenges" : undefined}
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <circle cx="12" cy="12" r="8" />
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 2V5M12 19v3M2 12h3M19 12h3" />
-          </svg>
-          {!isCollapsed && "Challenges"}
+          <span className="app-nav-challenges-icon relative flex h-5 w-5 shrink-0 items-center justify-center">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="8" />
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2V5M12 19v3M2 12h3M19 12h3" />
+            </svg>
+          </span>
+          {!isCollapsed && <span className="app-nav-challenges-label">Challenges</span>}
         </Link>
 
         <Link
@@ -631,6 +636,7 @@ export function AppSidebar({
               ? "bg-text-primary text-text-inverse"
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
+          aria-current={pathname.startsWith("/app/chat") ? "page" : undefined}
           title={isCollapsed ? "Library" : undefined}
         >
           {isCollapsed ? (
@@ -714,6 +720,7 @@ export function AppSidebar({
                     ? "bg-text-primary text-text-inverse"
                     : "hover:bg-bg-secondary hover:text-text-primary",
                 )}
+                aria-current={isActive ? "page" : undefined}
                 title={isCollapsed ? item.label : undefined}
               >
                 {item.icon}
@@ -737,6 +744,7 @@ export function AppSidebar({
                       ? "bg-text-primary text-text-inverse"
                       : "hover:bg-bg-secondary hover:text-text-primary",
                   )}
+                  aria-current={pathname.startsWith("/app/community") ? "page" : undefined}
                   title={isCollapsed ? "Community" : undefined}
                 >
                   <svg

@@ -510,9 +510,6 @@ function SemesterProgress({
           <h2 id="semester-progress-heading" className="type-student-section-title mt-2">
             Semester progress
           </h2>
-          <p className="type-student-body mt-1 text-text-secondary">
-            Real topic readiness from your indexed subjects.
-          </p>
         </div>
         <label
           className={cn(
@@ -541,24 +538,8 @@ function SemesterProgress({
 
       {semester ? (
         <div className="p-5 sm:p-6">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold">{semester.label}</p>
-              <p className="mt-1 text-sm text-text-secondary">
-                {semester.subjects.length} subject{semester.subjects.length === 1 ? "" : "s"} ·{" "}
-                {semester.measuredSubjects} with measurable readiness
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="type-student-metric tabular-nums">
-                {semester.readiness === null ? "—" : `${Math.round(semester.readiness)}%`}
-              </p>
-              <p className="type-student-meta text-text-muted">Average readiness</p>
-            </div>
-          </div>
-
           {rankedSubjects.length ? (
-            <div className="mt-6 divide-y divide-border border-y border-border">
+            <div className="divide-y divide-border border-y border-border">
               {rankedSubjects.map((subject) => (
                 <article
                   key={subject.id}
