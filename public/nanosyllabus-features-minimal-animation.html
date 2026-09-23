@@ -103,22 +103,22 @@
       <div class="side-foot">Your learning, in one place.</div>
     </aside><div class="content">
       <section class="scene active" aria-label="Syllabus breaks into micro-topics">
-        <div class="crumb">STUDY / ENGINEERING</div><h2>A course, made manageable.</h2><p class="sub">One concept at a time.</p><span class="pill">Year 1 · Semester 1</span>
+        <div class="crumb"></div><h2>A course, made manageable.</h2><p class="sub"></p><span class="pill">Year 1 · Semester 1</span>
         <div class="source"><div class="book"><svg viewBox="0 0 48 48"><path d="M24 12C18 9 12 10 7 11v26c7-2 12-1 17 2 5-3 10-4 17-2V11c-5-1-11-2-17 1Zm0 0v27"/></svg></div><div><strong>Applied Mechanics</strong><small>Your complete syllabus</small></div><span class="arrow">↗</span></div>
         <div class="topics"><div class="topic"><i>01</i><strong>Forces &amp;<br>equilibrium</strong><small>8 minute lesson</small></div><div class="topic"><i>02</i><strong>Motion &amp;<br>speed</strong><small>6 minute lesson</small></div><div class="topic"><i>03</i><strong>Energy &amp;<br>power</strong><small>9 minute lesson</small></div></div>
         <p class="topic-payoff">Start with one topic. <span>Keep going from there.</span></p>
       </section>
       <section class="scene" aria-label="Past question and worked solution in management">
-        <div class="crumb">PAST PAPERS / MANAGEMENT</div><h2>Past Question Solutions</h2><p class="sub">Real questions. Answers you can learn from.</p><span class="pill">Business Studies</span>
+        <div class="crumb"></div><h2>Past Question Solutions</h2><p class="sub"></p><span class="pill">Business Studies</span>
         <div class="questions"><div class="question"><i>01</i><div><strong>What is delegation? Why is it important?</strong><small>2024 · 5 marks</small></div></div><div class="question"><i>02</i><div><strong>Explain the functions of management.</strong><small>2023 · 8 marks</small></div></div></div>
         <div class="paper"><div class="paper-head">WORKED ANSWER <span>QUESTION 01 · 5 MARKS</span></div><h3>Delegation of authority</h3><p><b>Delegation</b> means assigning responsibility and authority for a task to another person. It develops team skills and gives managers more time for decisions that need their attention.</p><div class="reveal">Reveal solution ↗</div></div>
       </section>
       <section class="scene" aria-label="English text translated into Romanized Nepali">
-        <div class="crumb">STUDY / ENGINEERING PHYSICS</div><h2>Understand it in your language.</h2><p class="sub">Same concept. Familiar words.</p><span class="pill">Language · EN / NP</span>
+        <div class="crumb"></div><h2>Understand it in your language.</h2><p class="sub"></p><span class="pill">Language · EN / NP</span>
         <div class="languages"><div class="language english"><label>ENGLISH</label><p><mark>Power</mark> is the rate at which <mark>energy</mark> is transferred.</p><small>WORKED EXAMPLE 01</small></div><div class="switch">⇄</div><div class="language nepali"><label>ROMANIZED NEPALI</label><p><mark>Power</mark> bhaneko <mark>energy</mark> transfer hune rate ho.</p><small>SAME IDEA · CLEARER LANGUAGE</small></div></div>
       </section>
       <section class="scene" aria-label="Photograph a handwritten answer to get AI feedback">
-        <div class="crumb">CHALLENGE / MANAGEMENT</div><h2>Write it. Snap it. Improve it.</h2><p class="sub">Your own handwriting gets specific feedback.</p><span class="pill">Business Studies · Practice</span>
+        <div class="crumb"></div><h2>Write it. Snap it. Improve it.</h2><p class="sub"></p><span class="pill">Business Studies · Practice</span>
         <div class="answer-sheet"><strong>Explain working capital.</strong><i></i><i></i><i></i><i></i><i></i></div>
         <div class="phone"><div class="view"><i></i><i></i><i></i><i></i></div><div class="shutter"></div><div class="flash"></div></div>
         <div class="scan"><div><b>✦</b>Reviewing<br>your answer</div></div>
@@ -138,10 +138,10 @@
   const cursor=document.getElementById('cursor'),pulse=document.getElementById('pulse');
   const fill=document.getElementById('fill'),clock=document.getElementById('clock');
   const chapters=[
-    {title:'Big syllabus. Small steps.',note:'Turn a course into a clear next step.',label:'MICRO-TOPICS',pointer:'c1',click:2.1,ring:[910,439]},
-    {title:'Past papers, finally explained.',note:'From question to a worked answer.',label:'PAST QUESTION SOLUTIONS',pointer:'c2',click:2.7,ring:[990,525]},
-    {title:'The language that makes sense.',note:'Study in English or Romanized Nepali.',label:'ENGLISH + ROMANIZED NEPALI',pointer:'c3',click:2.5,ring:[782,412]},
-    {title:'Practice on paper. Grow with feedback.',note:'Your handwriting. A clearer next step.',label:'AI ANSWER FEEDBACK',pointer:'c4',click:2.55,ring:[406,510]}
+    {title:'',note:'',label:'MICRO-TOPICS',pointer:'c1',click:2.1,ring:[950,459]},
+    {title:'',note:'',label:'PAST QUESTION SOLUTIONS',pointer:'c2',click:2.7,ring:[1030,495]},
+    {title:'',note:'',label:'ENGLISH + ROMANIZED NEPALI',pointer:'c3',click:2.5,ring:[742,402]},
+    {title:'',note:'',label:'AI ANSWER FEEDBACK',pointer:'c4',click:2.55,ring:[446,480]}
   ];
   const DURATION=30,STEP=7.5,reduced=matchMedia('(prefers-reduced-motion: reduce)');
   let elapsed=0,last=0,index=-1,paused=false,clicked=false;
