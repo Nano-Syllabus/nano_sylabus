@@ -246,7 +246,6 @@ export default function LandingPage() {
                 </span>
               </h1>
               <p className="mt-6 text-[18px] leading-[1.55] text-[#5b5e55]">
-                Scattered notes? No study routine? With NanoSyllabus, learn one topic at a time, complete challenges, and get ready to ace your exams.
               </p>
  
               <div className="mt-9 flex flex-wrap items-center gap-6">
