@@ -1,5 +1,4 @@
 import {
-  ChallengeLoopCard,
   hubContainerClass,
   hubListCardClass,
   hubListHeaderClass,
@@ -13,6 +12,7 @@ import {
   hubRowsClass,
   hubTitleClass,
 } from "@/components/challenge-hub-frame";
+import { StarterChallengeBannerSkeleton } from "@/components/starter-challenge-banner";
 
 /**
  * Only the unknown blocks pulse. The page's real text does not: shimmering a
@@ -43,7 +43,7 @@ export default function ChallengesLoading() {
       <div className={hubContainerClass}>
         <h1 className={hubTitleClass}>Challenge Hub</h1>
 
-        <ChallengeLoopCard />
+        <StarterChallengeBannerSkeleton />
 
         <section className={hubMetricsClass} aria-label="Challenge summary metrics">
           <article className={hubMetricCardClass}>

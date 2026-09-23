@@ -37,7 +37,6 @@ import {
   useStudyLanguage,
 } from "@/components/study-language";
 import {
-  ChallengeLoopCard,
   hubContainerClass,
   hubListCardClass,
   hubListHeaderClass,
@@ -51,6 +50,7 @@ import {
   hubRowsClass,
   hubTitleClass,
 } from "@/components/challenge-hub-frame";
+import { StarterChallengeBanner } from "@/components/starter-challenge-banner";
 import { Markdown } from "@/components/markdown";
 import { WorkedSolution } from "@/components/worked-solution";
 import {
@@ -1905,7 +1905,7 @@ export function ChallengesDashboardClient({
       <div className={hubContainerClass}>
         <h1 className={hubTitleClass}>Challenge Hub</h1>
 
-        <ChallengeLoopCard />
+        <StarterChallengeBanner dashboard={dashboard} />
 
         {/* 3 Metrics Cards */}
         <section

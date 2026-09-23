@@ -526,58 +526,6 @@ export function AppSidebar({
 
       {/* ── Nav Links ── */}
       <nav className={cn("space-y-1", isCollapsed ? "px-2" : "px-3")}>
-        <Link
-          href="/app/today"
-          onClick={() => onCloseMobile?.()}
-          /**
-           * Warm the dashboard on intent, not on arrival.
-           *
-           * `router.prefetch` fetches the ROUTE; `prefetchDashboard` fetches
-           * the DATA, which since the page became a shell is the part that
-           * actually takes time. Firing both on hover means the click usually
-           * lands on a dashboard that is already in the query cache and paints
-           * on the first frame.
-           *
-           * Both are no-ops once warm — `prefetchQuery` returns immediately
-           * for a fresh entry — so this costs nothing on repeat hovers.
-           */
-          onPointerEnter={() => {
-            router.prefetch("/app/today");
-            void prefetchDashboard(queryClient, activeCommunitySlug);
-          }}
-          onFocus={() => {
-            router.prefetch("/app/today");
-            void prefetchDashboard(queryClient, activeCommunitySlug);
-          }}
-          className={cn(
-            "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
-            isCollapsed
-              ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
-              : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
-            pathname === "/app/today"
-              ? "bg-text-primary text-text-inverse"
-              : "hover:bg-bg-secondary hover:text-text-primary",
-          )}
-          aria-current={pathname === "/app/today" ? "page" : undefined}
-          title={isCollapsed ? "Today" : undefined}
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M8.5 14.5c0 2 1.5 3.5 3.5 3.5s3.5-1.5 3.5-3.5c0-1.5-.8-2.5-2-3.5.1 1.3-.5 2.1-1.4 2.6.1-2.7-1.4-4.7-3.1-6.1.2 2.2-.7 3.7-1.9 5-.4.5-.6 1.2-.6 2Z" />
-            <circle cx="12" cy="12" r="9" />
-          </svg>
-          {!isCollapsed && "Today"}
-        </Link>
-
         {/* Intent-based prefetch, kept even though TabWarmer already warms this
             route: warming is skipped on a metered or 2g connection, and a hover
             means the student is about to pay for the page anyway. */}
@@ -597,7 +545,7 @@ export function AppSidebar({
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
           aria-current={pathname.startsWith("/app/challenges") ? "page" : undefined}
-          title={isCollapsed ? "Challenges" : undefined}
+          title={isCollapsed ? "Micro-Topics" : undefined}
         >
           <span className="app-nav-challenges-icon relative flex h-5 w-5 shrink-0 items-center justify-center">
             <svg
@@ -616,7 +564,7 @@ export function AppSidebar({
               <path d="M12 2V5M12 19v3M2 12h3M19 12h3" />
             </svg>
           </span>
-          {!isCollapsed && <span className="app-nav-challenges-label">Challenges</span>}
+          {!isCollapsed && <span className="app-nav-challenges-label">Micro-Topics</span>}
         </Link>
 
         <Link
@@ -726,45 +674,86 @@ export function AppSidebar({
                 {item.icon}
                 {!isCollapsed && item.label}
               </Link>
-              {/* Community sits between Revision and Cash Prize: the daily study
-                loop (Today, Challenges, Library, Revision) comes first, and the
-                social and reward surfaces after it. */}
+              {/* Keep the dashboard after Revision, so the study loop reads
+                Micro-Topics → Library → Revision → Performance. */}
               {item.href === "/app/notes" ? (
-                <Link
-                  href="/app/community"
-                  onClick={() => onCloseMobile?.()}
-                  onPointerEnter={() => router.prefetch("/app/community")}
-                  onFocus={() => router.prefetch("/app/community")}
-                  className={cn(
-                    "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
-                    isCollapsed
-                      ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
-                      : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
-                    pathname.startsWith("/app/community")
-                      ? "bg-text-primary text-text-inverse"
-                      : "hover:bg-bg-secondary hover:text-text-primary",
-                  )}
-                  aria-current={pathname.startsWith("/app/community") ? "page" : undefined}
-                  title={isCollapsed ? "Community" : undefined}
-                >
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
+                <>
+                  <Link
+                    href="/app/today"
+                    onClick={() => onCloseMobile?.()}
+                    onPointerEnter={() => {
+                      router.prefetch("/app/today");
+                      void prefetchDashboard(queryClient, activeCommunitySlug);
+                    }}
+                    onFocus={() => {
+                      router.prefetch("/app/today");
+                      void prefetchDashboard(queryClient, activeCommunitySlug);
+                    }}
+                    className={cn(
+                      "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+                      isCollapsed
+                        ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
+                        : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
+                      pathname === "/app/today"
+                        ? "bg-text-primary text-text-inverse"
+                        : "hover:bg-bg-secondary hover:text-text-primary",
+                    )}
+                    aria-current={pathname === "/app/today" ? "page" : undefined}
+                    title={isCollapsed ? "Performance" : undefined}
                   >
-                    <path d="M3 21h18" />
-                    <path d="M6 21V7l6-4 6 4v14" />
-                    <path d="M9 10h1M14 10h1M9 14h1M14 14h1" />
-                    <path d="M10 21v-3h4v3" />
-                  </svg>
-                  {!isCollapsed && "Community"}
-                </Link>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M8.5 14.5c0 2 1.5 3.5 3.5 3.5s3.5-1.5 3.5-3.5c0-1.5-.8-2.5-2-3.5.1 1.3-.5 2.1-1.4 2.6.1-2.7-1.4-4.7-3.1-6.1.2 2.2-.7 3.7-1.9 5-.4.5-.6 1.2-.6 2Z" />
+                      <circle cx="12" cy="12" r="9" />
+                    </svg>
+                    {!isCollapsed && "Performance"}
+                  </Link>
+
+                  <Link
+                    href="/app/community"
+                    onClick={() => onCloseMobile?.()}
+                    onPointerEnter={() => router.prefetch("/app/community")}
+                    onFocus={() => router.prefetch("/app/community")}
+                    className={cn(
+                      "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
+                      isCollapsed
+                        ? "mx-auto h-10 w-10 justify-center rounded-[9px] p-2.5"
+                        : "text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2",
+                      pathname.startsWith("/app/community")
+                        ? "bg-text-primary text-text-inverse"
+                        : "hover:bg-bg-secondary hover:text-text-primary",
+                    )}
+                    aria-current={pathname.startsWith("/app/community") ? "page" : undefined}
+                    title={isCollapsed ? "Community" : undefined}
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M3 21h18" />
+                      <path d="M6 21V7l6-4 6 4v14" />
+                      <path d="M9 10h1M14 10h1M9 14h1M14 14h1" />
+                      <path d="M10 21v-3h4v3" />
+                    </svg>
+                    {!isCollapsed && "Community"}
+                  </Link>
+                </>
               ) : null}
             </Fragment>
           );

@@ -27,6 +27,8 @@ function normalizeProfile(row: any): StudentProfile {
   return {
     userId: row.user_id,
     fullName: normalizeFullName(row.full_name ?? ""),
+    phoneNumber: typeof row.phone_number === "string" ? row.phone_number : null,
+    studyQuote: typeof row.study_quote === "string" ? row.study_quote.trim().slice(0, 140) : null,
     college: normalizeCollege(row.college ?? ""),
     board: normalizeBoard(row.board ?? ""),
     grade: normalizeGrade(row.grade ?? ""),

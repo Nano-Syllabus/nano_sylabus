@@ -32,7 +32,7 @@ export default async function TodayPage({
 }: {
   searchParams: Promise<{ community?: string }>;
 }) {
-  const { user } = await requireOnboardedUser();
+  const { user, profile } = await requireOnboardedUser();
   const params = await searchParams;
   const active = await getActiveCommunity(
     user.id,
@@ -49,6 +49,7 @@ export default async function TodayPage({
         fullName={user.fullName}
         creditBalance={user.creditBalance}
         hasUnlimitedAccess={user.hasUnlimitedAccess}
+        studyQuote={profile?.studyQuote ?? undefined}
         /**
          * TWO DIFFERENT SLUGS, ON PURPOSE.
          *

@@ -16,7 +16,6 @@ const rendered = skeleton.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/
 const hub = readFileSync("components/challenges-dashboard-client.tsx", "utf8");
 
 const FRAME = [
-  "ChallengeLoopCard",
   "hubMainClass",
   "hubContainerClass",
   "hubTitleClass",
@@ -37,6 +36,8 @@ describe("the challenge hub skeleton", () => {
       expect(skeleton, `skeleton does not use ${piece}`).toContain(piece);
       expect(hub, `hub does not use ${piece}`).toContain(piece);
     }
+    expect(skeleton).toContain("StarterChallengeBannerSkeleton");
+    expect(hub).toContain("StarterChallengeBanner");
   });
 
   it("shows for real only labels the hub itself prints", () => {
