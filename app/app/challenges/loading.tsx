@@ -41,7 +41,7 @@ export default function ChallengesLoading() {
   return (
     <main className={hubMainClass} aria-busy="true" aria-label="Loading challenges">
       <div className={hubContainerClass}>
-        <h1 className={hubTitleClass}>Challenge Hub</h1>
+        <h1 className={hubTitleClass}>Micro-Topics Hub</h1>
 
         <StarterChallengeBannerSkeleton />
 

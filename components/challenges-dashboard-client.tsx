@@ -78,7 +78,7 @@ import { applyChallengePassed, applyChallengeState } from "@/lib/challenges/loca
 const WEEKLY_CHALLENGE_TARGET = 15;
 /** What the shell's top bar says when no challenge is open. Shared with the
  *  server page's own `SetAppShell`, so the two cannot disagree. */
-export const CHALLENGE_HUB_TITLE = "Challenge Hub";
+export const CHALLENGE_HUB_TITLE = "Micro-Topics Hub";
 
 function challengeScore(challenge: StudentChallengeSummary) {
   if (!challenge.lastTotalMarks || challenge.lastScore === null) return null;
@@ -1903,7 +1903,7 @@ export function ChallengesDashboardClient({
   return (
     <main className={hubMainClass}>
       <div className={hubContainerClass}>
-        <h1 className={hubTitleClass}>Challenge Hub</h1>
+        <h1 className={hubTitleClass}>Micro-Topics Hub</h1>
 
         <StarterChallengeBanner dashboard={dashboard} />
 

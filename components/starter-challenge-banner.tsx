@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { ArrowRight, BookOpen, FileText, Star } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 export type StarterChallengeDashboard = {
   community: {
@@ -30,18 +28,6 @@ export function StarterChallengeBanner({
         left.position - right.position,
     )[0];
   const community = dashboard.community;
-  const params = new URLSearchParams();
-  if (community?.slug) params.set("community", community.slug);
-  const fallbackHref = community
-    ? `/app/challenges${params.toString() ? `?${params.toString()}` : ""}`
-    : "/app/community";
-  const action = challenge
-    ? challenge.status === "started"
-      ? "Continue challenge"
-      : "Start a challenge"
-    : community
-      ? "Find a challenge"
-      : "Browse communities";
 
   return (
     <section
@@ -84,17 +70,6 @@ export function StarterChallengeBanner({
               <p>Choose a programme to get your next challenge.</p>
             )}
           </div>
-
-          <Link
-            href={fallbackHref}
-            className={cn(
-              "mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#111215] px-6 text-xs font-semibold text-white shadow-sm transition-all duration-150 hover:scale-[1.02] hover:bg-black active:scale-[0.98] sm:mt-5 sm:text-sm",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 focus-visible:ring-offset-[#cbf738]",
-            )}
-          >
-            {action}
-            <ArrowRight className="size-3.5 sm:size-4" aria-hidden="true" />
-          </Link>
         </div>
 
         <div
@@ -157,13 +132,12 @@ export function StarterChallengeBannerSkeleton() {
       className="relative mt-5 overflow-hidden rounded-[24px] border border-black/10 bg-[#cbf738] px-6 py-5 shadow-sm sm:px-8 sm:py-6 lg:px-9 lg:py-6"
       aria-hidden="true"
     >
-      <div className="relative flex min-h-[150px] flex-col justify-between gap-5 lg:min-h-[164px] lg:max-w-[58%]">
+      <div className="relative min-h-[150px] lg:min-h-[164px] lg:max-w-[58%]">
         <div>
           <div className="h-8 w-40 rounded bg-black/15" />
           <div className="mt-2 h-8 w-36 rounded bg-black/15" />
           <div className="mt-4 h-4 w-64 max-w-full rounded bg-black/10" />
         </div>
-        <div className="h-10 w-40 rounded-full bg-black/80" />
       </div>
     </section>
   );

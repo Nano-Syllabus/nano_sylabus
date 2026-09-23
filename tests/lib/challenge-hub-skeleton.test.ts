@@ -14,6 +14,7 @@ const skeleton = readFileSync("app/app/challenges/loading.tsx", "utf8");
 /** What renders, without the comments that explain what used to. */
 const rendered = skeleton.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 const hub = readFileSync("components/challenges-dashboard-client.tsx", "utf8");
+const starterBanner = readFileSync("components/starter-challenge-banner.tsx", "utf8");
 
 const FRAME = [
   "hubMainClass",
@@ -41,7 +42,7 @@ describe("the challenge hub skeleton", () => {
   });
 
   it("shows for real only labels the hub itself prints", () => {
-    for (const label of ["TODAY&apos;S QUOTA", "DAILY TARGET", "7-DAY AVERAGE", "Available challenges", "Challenge Hub"]) {
+    for (const label of ["TODAY&apos;S QUOTA", "DAILY TARGET", "7-DAY AVERAGE", "Available challenges", "Micro-Topics Hub"]) {
       expect(skeleton).toContain(label);
       expect(hub).toContain(label);
     }
@@ -56,5 +57,11 @@ describe("the challenge hub skeleton", () => {
   it("pulses only with a fill that shows in both themes", () => {
     expect(skeleton).toContain("animate-pulse bg-border");
     expect(skeleton).not.toContain("bg-bg-secondary animate-pulse");
+  });
+
+  it("does not link the challenge page back to itself", () => {
+    expect(starterBanner).not.toContain("Continue challenge");
+    expect(starterBanner).not.toContain("Start a challenge");
+    expect(starterBanner).not.toContain('href="/app/challenges');
   });
 });
