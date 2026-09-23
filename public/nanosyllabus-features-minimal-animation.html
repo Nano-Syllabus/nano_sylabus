@@ -13,7 +13,7 @@
   .art{position:absolute;inset:0 auto auto 0;width:1200px;height:675px;transform-origin:0 0;background:radial-gradient(ellipse 64% 70% at 50% 53%,#f0f7e3,#f9fbf8 72%)}
   .scene{position:absolute;inset:0;opacity:0;transform:translateY(17px) scale(.987);transition:opacity .62s ease,transform .75s cubic-bezier(.18,.8,.22,1);pointer-events:none}
   .scene.active{opacity:1;transform:none}
-  .card{position:absolute;left:111px;top:75px;width:978px;height:524px;border:1.5px solid #e0e6df;border-radius:34px;background:white;box-shadow:0 26px 72px #17281917;overflow:hidden}
+  .card{position:absolute;left:111px;top:75px;width:978px;height:524px;border:1.5px solid #c4e052;border-radius:34px;background:#dcfa72;box-shadow:0 26px 72px #17281917;overflow:hidden}
   .meta{position:absolute;top:28px;left:38px;right:38px;font-size:29px;line-height:1.15;font-weight:780;letter-spacing:-.045em;color:#171b18}
   h1,h2,h3,p{margin:0}
   .controls{display:flex;justify-content:center;align-items:center;gap:12px;padding:17px;color:#647067;font-size:13px}
@@ -22,25 +22,23 @@
   .paused *,.paused *:before,.paused *:after{animation-play-state:paused!important}
   .capture main{width:100vw;padding:0}.capture .stage{border-radius:0;box-shadow:none}.capture .controls{display:none}
   /* 01 — syllabus decomposes into small, actionable topics */
-  .subject{position:absolute;left:270px;top:101px;width:438px;height:151px;border:1.5px solid #c6df61;border-radius:26px;background:#e8fb9d;display:flex;align-items:center;gap:22px;padding:27px 30px;box-shadow:0 16px 32px #abc85323;z-index:2}
-  .book{width:66px;height:66px;flex:none;border:1.5px solid #b4ce52;border-radius:19px;background:#f6ffd6;display:grid;place-items:center}
+  .subject{position:absolute;left:270px;top:101px;width:438px;height:151px;border:1.5px solid #c3dc66;border-radius:26px;background:#fff;display:flex;align-items:center;gap:22px;padding:27px 30px;box-shadow:0 16px 32px #abc85323;z-index:2}
+  .book{width:66px;height:66px;flex:none;border:1.5px solid #b4ce52;border-radius:19px;background:#eaffaa;display:grid;place-items:center}
   .book svg{width:35px;height:35px;stroke:#273118;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
   .subject h1{font-size:33px;font-weight:780;letter-spacing:-.045em;line-height:1.08}
   .subject p{margin-top:9px;color:#56633d;font-size:16px;font-weight:650}
   .branch{position:absolute;inset:0;width:978px;height:524px;z-index:1}
-  .branch path{fill:none;stroke:#b7cba9;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:980;stroke-dashoffset:980}
-  .micro{position:absolute;top:350px;width:282px;height:120px;padding:21px 23px;border:1.5px solid #e2e9e1;border-radius:21px;background:#fff;box-shadow:0 9px 24px #16291a0d;opacity:0;transform:translateY(27px) scale(.95)}
+  .branch path{fill:none;stroke:#72943f;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:980;stroke-dashoffset:980}
+  .micro{position:absolute;top:350px;width:282px;height:120px;padding:21px 20px;border:1.5px solid #e2e9e1;border-radius:21px;background:#fff;box-shadow:0 9px 24px #16291a0d;display:flex;align-items:center;gap:16px;opacity:0;transform:translateY(27px) scale(.95)}
   .micro.a{left:27px;border-color:#adbefb}.micro.b{left:348px}.micro.c{left:669px}
-  .micro i{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#edf2ff;color:#315af3;font-size:14px;font-weight:750;font-style:normal}
+  .micro i{display:grid;place-items:center;width:36px;height:36px;flex:none;border-radius:50%;background:#edf2ff;color:#315af3;font-size:14px;font-weight:750;font-style:normal}
   .micro.a i{background:#315af3;color:#fff}
-  .micro h2{margin-top:13px;font-size:20px;line-height:1.18;font-weight:730;letter-spacing:-.035em}
-  .more{position:absolute;top:486px;left:0;right:0;text-align:center;color:#6c796f;font-size:18px;font-weight:650;opacity:0}
+  .micro h2{margin:0;font-size:20px;line-height:1.18;font-weight:730;letter-spacing:-.035em}
   .active .subject{animation:subject-break 2s .2s cubic-bezier(.2,.78,.2,1) both}
   .active .branch path{animation:branch-draw 1.4s 2.1s cubic-bezier(.19,.75,.2,1) both}
   .active .micro.a{animation:reveal-topic .65s 2.78s cubic-bezier(.2,.85,.25,1) both}
   .active .micro.b{animation:reveal-topic .65s 3.17s cubic-bezier(.2,.85,.25,1) both}
   .active .micro.c{animation:reveal-topic .65s 3.56s cubic-bezier(.2,.85,.25,1) both}
-  .active .more{animation:soft-in .7s 4.08s both}
   @keyframes subject-break{0%{opacity:0;transform:translateY(139px) scale(.89)}25%{opacity:1;transform:translateY(139px) scale(1.06)}58%{transform:translateY(139px) scale(1.06)}100%{transform:none}}
   @keyframes branch-draw{0%{stroke-dashoffset:980;opacity:0}9%{opacity:1}100%{stroke-dashoffset:0;opacity:1}}
   @keyframes reveal-topic{to{opacity:1;transform:none}}
@@ -50,7 +48,7 @@
   .paper{position:absolute;left:117px;top:90px;width:744px;height:391px;padding:27px 48px 32px 63px;border:1.5px solid #e0dfd6;border-radius:18px;background:repeating-linear-gradient(to bottom,#fffef9 0,#fffef9 36px,#d9e6fc 37px,#fffef9 38px);box-shadow:0 22px 48px #1b2b1b16;overflow:hidden}
   .paper:before{content:"";position:absolute;left:47px;top:0;bottom:0;border-left:1px solid #f1c5c4}
   .exam-q{margin-top:16px;font-size:27px;font-weight:740;letter-spacing:-.04em;line-height:1.27}
-  .solution-cover{position:absolute;left:64px;right:55px;top:198px;height:115px;border:1.5px solid #dbe6ff;border-radius:15px;background:#edf3ff;display:grid;place-items:center;color:#315af3;font-size:20px;font-weight:700}
+  .solution-cover{position:absolute;left:636px;top:316px;width:232px;height:65px;border-radius:17px;background:#315af3;display:grid;place-items:center;color:#fff;font-size:18px;font-weight:730;box-shadow:0 17px 30px #193ddb36;z-index:10}
   .solution{position:absolute;left:65px;right:55px;top:190px;height:163px;opacity:0;transform:translateY(20px)}
   .solution p{margin-top:15px;font-size:22px;line-height:1.63;letter-spacing:-.018em;font-weight:580}
   .active .sheet-back{animation:paper-spread 1.5s .15s both}
@@ -70,7 +68,7 @@
   .language-label{font-size:18px;font-weight:750;letter-spacing:-.01em;color:#66786a}
   .language-text{margin-top:13px;font-size:30px;font-weight:720;letter-spacing:-.04em;line-height:1.22}
   .nepali-line .language-label{color:#577631}
-  .translate-path{position:absolute;left:488px;top:286px;width:3px;height:42px;border-radius:5px;background:#315af3;transform-origin:top;opacity:0}
+  .translate-path{position:absolute;left:488px;top:286px;width:3px;height:42px;border-radius:5px;background:#315af3;transform-origin:top;opacity:0;z-index:5}
   .translate-path:after{content:"";position:absolute;bottom:-2px;left:-5px;width:12px;height:12px;border-right:3px solid #315af3;border-bottom:3px solid #315af3;transform:rotate(45deg)}
   .active .english-line{animation:english-enter 1s .3s both,english-settle .6s 2.2s both}
   .active .translate-path{animation:path-enter .75s 2.05s both}
@@ -79,25 +77,38 @@
   @keyframes english-settle{to{border-color:#d5dfd2;background:#fafcf8}}
   @keyframes path-enter{0%{opacity:0;transform:scaleY(.15)}100%{opacity:1;transform:scaleY(1)}}
   @keyframes nepali-enter{to{opacity:1;transform:none}}
-  /* 04 — handwritten work flows into useful feedback */
-  .answer-sheet{position:absolute;left:92px;top:102px;width:335px;height:361px;border:1.5px solid #e5e1d7;border-radius:10px;background:repeating-linear-gradient(to bottom,#fffef8 0,#fffef8 29px,#dbe6f7 30px,#fffef8 31px);box-shadow:9px 14px 0 #eaf0e6,0 17px 36px #20342417;transform:rotate(-7deg);padding:28px 31px}
-  .hand{margin-top:19px;color:#454b56;font-family:"Comic Sans MS",cursive,sans-serif;font-size:18px;line-height:1.8;transform:rotate(-1deg)}
-  .scan{position:absolute;left:92px;top:102px;width:335px;height:361px;border:2px solid #315af3;border-radius:11px;transform:rotate(-7deg);opacity:0;overflow:hidden}
-  .scan:after{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:#315af3;box-shadow:0 0 20px 11px #315af35a;animation:scan-light 1.45s 2.3s both}
-  .feedback-card{position:absolute;left:483px;top:149px;width:419px;height:289px;border:1.5px solid #d7e9d8;border-radius:25px;background:#f8fcf7;box-shadow:0 14px 32px #284a2a10;padding:36px 38px;opacity:0;transform:translateX(35px) scale(.96)}
-  .score{margin-top:17px;font-size:75px;line-height:1;font-weight:800;letter-spacing:-.07em;color:#193421}
-  .score span{font-size:36px;color:#789580}
-  .feedback-line{height:1px;background:#dcebdd;margin:26px 0 20px}
+  /* 04 — capture a handwritten page, then reveal actionable feedback */
+  .phone{position:absolute;left:130px;top:100px;width:251px;height:371px;border:9px solid #202821;border-radius:38px;background:#1b241c;box-shadow:0 19px 39px #1c301d28;overflow:hidden;transform:rotate(-5deg);z-index:2}
+  .phone-screen{position:absolute;inset:0;border-radius:29px;background:#e8eee6;overflow:hidden}
+  .notch{position:absolute;top:0;left:78px;width:77px;height:18px;border-radius:0 0 13px 13px;background:#202821;z-index:2}
+  .viewfinder{position:absolute;left:15px;right:15px;top:29px;height:252px;border-radius:9px;background:#bdc8b9;display:grid;place-items:center;overflow:hidden}
+  .photo-paper{width:153px;height:217px;border-radius:4px;background:repeating-linear-gradient(to bottom,#fffef8 0,#fffef8 20px,#d9e4f6 21px,#fffef8 22px);box-shadow:0 8px 17px #2431213d;transform:rotate(-3deg);padding:23px 17px}
+  .photo-paper b{display:block;height:3px;border-radius:3px;margin:16px 0;background:#535e67;opacity:.7}
+  .photo-paper b:nth-child(2){width:82%}.photo-paper b:nth-child(3){width:95%}.photo-paper b:nth-child(4){width:65%}.photo-paper b:nth-child(5){width:88%}
+  .shutter{position:absolute;left:calc(50% - 27px);bottom:16px;width:54px;height:54px;border:5px solid #fff;border-radius:50%;box-shadow:inset 0 0 0 3px #202821;background:#fff;z-index:3}
+  .phone-flash{position:absolute;inset:0;background:#fff;opacity:0;z-index:4}
+  .tap-cursor{position:absolute;left:322px;top:430px;width:29px;height:39px;filter:drop-shadow(1px 3px 3px #101c2245);z-index:8;opacity:0}
+  .tap-cursor path{fill:#fff;stroke:#131b15;stroke-width:2.7;stroke-linejoin:round}
+  .photo-fly{position:absolute;left:332px;top:284px;width:77px;height:95px;border:5px solid #fff;border-radius:6px;background:repeating-linear-gradient(to bottom,#fffef8 0,#fffef8 15px,#dce6f8 16px,#fffef8 17px);box-shadow:0 7px 15px #22352525;opacity:0;z-index:5}
+  .feedback-card{position:absolute;left:482px;top:146px;width:422px;height:297px;border:1.5px solid #d5e8d4;border-radius:25px;background:#fff;box-shadow:0 17px 34px #284a2a19;padding:33px 37px;opacity:0;transform:translateX(31px) scale(.96)}
+  .feedback-label{font-size:21px;font-weight:760;letter-spacing:-.025em;color:#2e6f48}
+  .score{margin-top:13px;font-size:71px;line-height:1;font-weight:800;letter-spacing:-.07em;color:#193421}
+  .score span{font-size:34px;color:#789580}
+  .feedback-line{height:1px;background:#dcebdd;margin:22px 0 17px}
   .feedback-note{font-size:22px;font-weight:670;letter-spacing:-.025em}
-  .tick{position:absolute;right:27px;top:29px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#e2f7d7;color:#338450;font-size:19px;font-weight:800}
-  .active .answer-sheet{animation:sheet-enter 1.3s .2s both}
-  .active .scan{animation:scan-opacity 4.3s linear both}
-  .active .feedback-card{animation:feedback-enter .95s 3.5s cubic-bezier(.18,.8,.24,1) both}
-  @keyframes sheet-enter{0%{opacity:0;transform:translateY(65px) rotate(-12deg)}100%{opacity:1;transform:rotate(-7deg)}}
-  @keyframes scan-opacity{0%,51%{opacity:0}55%,87%{opacity:1}100%{opacity:0}}
-  @keyframes scan-light{0%{transform:translateY(-10px)}100%{transform:translateY(360px)}}
+  .tick{position:absolute;right:27px;top:31px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#e2f7d7;color:#338450;font-size:19px;font-weight:800}
+  .active .phone{animation:phone-enter 1.1s .25s both}
+  .active .tap-cursor{animation:cursor-tap 1.15s 1.35s both}
+  .active .shutter{animation:shutter-press .3s 2.13s both}
+  .active .phone-flash{animation:camera-flash .47s 2.2s both}
+  .active .photo-fly{animation:photo-travel 1.1s 2.47s both}
+  .active .feedback-card{animation:feedback-enter .85s 3.32s cubic-bezier(.18,.8,.24,1) both}
+  @keyframes phone-enter{0%{opacity:0;transform:translateY(60px) rotate(-12deg)}100%{opacity:1;transform:rotate(-5deg)}}
+  @keyframes cursor-tap{0%{opacity:0;transform:translate(45px,39px)}35%{opacity:1}70%{opacity:1;transform:translate(-80px,-7px) scale(1)}82%{opacity:1;transform:translate(-80px,-7px) scale(.82)}100%{opacity:0;transform:translate(-80px,-7px) scale(.82)}}
+  @keyframes shutter-press{45%{transform:scale(.78)}100%{transform:scale(1)}}
+  @keyframes camera-flash{0%,100%{opacity:0}40%{opacity:.98}}
+  @keyframes photo-travel{0%{opacity:0;transform:translate(0,0) scale(.8)}24%{opacity:1}100%{opacity:0;transform:translate(232px,-43px) scale(.55)}}
   @keyframes feedback-enter{to{opacity:1;transform:none}}
-  @keyframes soft-in{to{opacity:1}}
   @media(max-width:700px){.stage{border-radius:10px}.controls span{display:none}}
 </style>
 </head>
@@ -109,12 +120,12 @@
         <div class="card"><div class="meta">A full syllabus, broken into micro-topics</div>
           <div class="subject"><div class="book" aria-hidden="true"><svg viewBox="0 0 36 36"><path d="M18 10c-4-3-9-3-14-2v19c5-1 10-1 14 2 4-3 9-3 14-2V8c-5-1-10-1-14 2Z"/><path d="M18 10v19"/></svg></div><div><h1>Physics</h1><p>37 micro-topics</p></div></div>
           <svg class="branch" viewBox="0 0 978 524" aria-hidden="true"><path d="M489 252 V300 H169 V350 M489 300 V350 M489 300 H810 V350"/></svg>
-          <div class="micro a"><i>01</i><h2>Energy<br>and work</h2></div><div class="micro b"><i>02</i><h2>Power and<br>efficiency</h2></div><div class="micro c"><i>03</i><h2>Motion<br>and speed</h2></div><div class="more">+ 34 more micro-topics</div>
+          <div class="micro a"><i>01</i><h2>Energy<br>and work</h2></div><div class="micro b"><i>02</i><h2>Power and<br>efficiency</h2></div><div class="micro c"><i>03</i><h2>Motion<br>and speed</h2></div>
         </div>
       </section>
       <section class="scene" aria-label="Solved past questions">
-        <div class="card"><div class="meta">Past questions with worked solutions</div><div class="sheet-back"></div><div class="sheet-back second"></div>
-          <div class="paper"><div class="exam-q">What is delegation?<br>Why is it important?</div><div class="solution-cover">See worked solution &nbsp;↗</div><div class="solution"><p>Delegation gives someone authority for a task.<br>It develops the team and gives managers<br>time for higher-level decisions.</p></div></div>
+        <div class="card"><div class="meta">Past Question Solutions</div><div class="sheet-back"></div><div class="sheet-back second"></div>
+          <div class="paper"><div class="exam-q">What is delegation? Why is it important?</div><div class="solution"><p>Delegation gives someone authority for a task.<br>It develops the team and gives managers<br>time for higher-level decisions.</p></div></div><div class="solution-cover">See solution &nbsp;↗</div>
         </div>
       </section>
       <section class="scene" aria-label="English and Romanized Nepali">
@@ -124,8 +135,9 @@
       </section>
       <section class="scene" aria-label="Handwritten answer feedback">
         <div class="card"><div class="meta">Handwritten answers, graded with feedback</div>
-          <div class="answer-sheet"><div class="hand">Delegation means<br>giving authority<br>for a task. It helps<br>the team learn and<br>share responsibility.</div></div><div class="scan"></div>
-          <div class="feedback-card"><div class="tick">✓</div><div class="score">7 <span>/ 8</span></div><div class="feedback-line"></div><div class="feedback-note">Add one team example.</div></div>
+          <div class="phone"><div class="phone-screen"><div class="notch"></div><div class="viewfinder"><div class="photo-paper"><b></b><b></b><b></b><b></b><b></b></div></div><div class="shutter"></div><div class="phone-flash"></div></div></div>
+          <svg class="tap-cursor" viewBox="0 0 29 39" aria-hidden="true"><path d="M1.5 1.5v29l8-7 5 13 6-3-5-12H27Z"/></svg><div class="photo-fly"></div>
+          <div class="feedback-card"><div class="tick">✓</div><div class="feedback-label">AI feedback:</div><div class="score">7 <span>/ 8</span></div><div class="feedback-line"></div><div class="feedback-note">Add one team example.</div></div>
         </div>
       </section>
     </div>
