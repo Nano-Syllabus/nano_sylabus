@@ -50,7 +50,6 @@ export type FlowStep =
   | "q3"
   | "q4"
   | "q5"
-  | "founderSlide"
   | "solutionSlide"
   | "login"
   | "pricing"
@@ -72,7 +71,6 @@ const FLOW_STEPS = new Set<FlowStep>([
   "q3",
   "q4",
   "q5",
-  "founderSlide",
   "solutionSlide",
   "login",
   ...PAYMENT_FLOW_STEPS,
@@ -80,8 +78,8 @@ const FLOW_STEPS = new Set<FlowStep>([
 
 function resolveInitialStep(value: string | null): FlowStep {
   const requested = value as FlowStep | null;
-  if (!requested || !FLOW_STEPS.has(requested)) return "systemSlide";
-  if (!PAYMENT_FLOW_ENABLED && PAYMENT_FLOW_STEPS.has(requested)) return "systemSlide";
+  if (!requested || !FLOW_STEPS.has(requested)) return "q1";
+  if (!PAYMENT_FLOW_ENABLED && PAYMENT_FLOW_STEPS.has(requested)) return "q1";
   return requested;
 }
 
@@ -346,12 +344,6 @@ export function SaaSFlowClient({
     walkthroughNoticeTimer.current = setTimeout(() => setWalkthroughNotice(false), 3000);
   };
 
-  const isStruggle = (qNum: number) => {
-    const ans = answers[qNum];
-    if (!ans) return false;
-    return qNum === 3 ? ans.text !== "Yes" : ans.text !== "No";
-  };
-
   const handleSelectAnswer = (qNum: number, optIndex: number, text: string) => {
     try {
       localStorage.setItem(STUDY_DIAGNOSTIC_STARTED_KEY, "1");
@@ -377,16 +369,13 @@ export function SaaSFlowClient({
       if (qNum === 3) {
         setCurrentStep("q4");
       } else if (qNum === STUDY_DIAGNOSTIC_QUESTION_COUNT) {
-        setCurrentStep("founderSlide");
+        setCurrentStep("systemSlide");
       } else {
         const nextQ = `q${qNum + 1}` as FlowStep;
         setCurrentStep(nextQ);
       }
     }, 220);
   };
-
-  // Dynamic analysis for Founder slide
-  const totalStruggles = QUESTIONS.map(({ id }) => id).filter(isStruggle).length;
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -570,7 +559,7 @@ export function SaaSFlowClient({
   const handleGoBack = () => {
     switch (currentStep) {
       case "systemSlide":
-        router.push("/");
+        setCurrentStep("q5");
         break;
       case "q1":
         router.push("/");
@@ -587,11 +576,8 @@ export function SaaSFlowClient({
       case "q5":
         setCurrentStep("q4");
         break;
-      case "founderSlide":
-        setCurrentStep("q5");
-        break;
       case "solutionSlide":
-        setCurrentStep("founderSlide");
+        setCurrentStep("systemSlide");
         break;
       case "login":
         setCurrentStep("solutionSlide");
@@ -652,35 +638,35 @@ export function SaaSFlowClient({
           1. STUDY-SYSTEM INTRO (systemSlide)
           ═════════════════════════════════════════════════════════════════════ */}
       {currentStep === "systemSlide" && (
-        <main className="mx-auto w-full max-w-[896px] px-3 py-6 sm:w-[calc(100%_-_36px)] sm:px-0 sm:py-[42px] lg:py-[58px]">
+        <main className="mx-auto w-full max-w-[1120px] px-3 py-6 sm:w-[calc(100%_-_36px)] sm:px-0 sm:py-[42px] lg:py-[64px]">
           {renderFlowHeader()}
 
           <section
             aria-labelledby="study-system-heading"
-            className="grid overflow-hidden rounded-[25px] border border-[#dde2ea] bg-[linear-gradient(125deg,#fbfaf9_0%,#f7f8fa_54%,#f5f4f4_100%)] shadow-[0_22px_64px_rgba(30,34,40,0.09)] lg:min-h-[488px] lg:grid-cols-[minmax(0,0.93fr)_minmax(0,1.07fr)] lg:rounded-[28px]"
+            className="grid overflow-hidden rounded-[25px] border border-[#dde2ea] bg-[linear-gradient(125deg,#fbfaf9_0%,#f7f8fa_54%,#f5f4f4_100%)] shadow-[0_22px_64px_rgba(30,34,40,0.09)] lg:min-h-[590px] lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:rounded-[30px]"
           >
-            <div className="flex flex-col justify-center p-6 sm:p-[38px] lg:p-[46px_40px_46px_43px]">
+            <div className="flex flex-col justify-center p-6 sm:p-[38px] lg:p-[58px_52px]">
               <h1
                 id="study-system-heading"
-                className="max-w-[520px] text-[36px] font-[760] leading-[1.04] tracking-[-0.057em] text-[#0d0d0e] sm:text-[42px] lg:text-[46px]"
+                className="max-w-[540px] text-[36px] font-[760] leading-[1.04] tracking-[-0.057em] text-[#0d0d0e] sm:text-[42px] lg:text-[58px]"
               >
                 Studying without a system has a real cost.
               </h1>
-              <p className="mb-7 mt-[22px] max-w-[510px] text-[16px] leading-[1.48] tracking-[-0.015em] text-[#626a79] sm:text-[18px] lg:text-[16px]">
+              <p className="mb-7 mt-[22px] max-w-[510px] text-[16px] leading-[1.48] tracking-[-0.015em] text-[#626a79] sm:text-[18px] lg:text-[19px]">
                 Poor results can delay graduation and close doors to colleges, scholarships and
                 careers.
               </p>
               <button
                 type="button"
-                onClick={() => setCurrentStep("q1")}
-                className="inline-flex min-h-[52px] w-full items-center justify-center rounded-[11px] bg-[#101011] px-5 py-3 text-[15px] font-[680] text-white shadow-[0_8px_20px_rgba(10,10,12,0.12)] transition hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2 motion-reduce:transition-none lg:mt-auto"
+                onClick={() => setCurrentStep("solutionSlide")}
+                className="inline-flex min-h-[52px] w-full items-center justify-center rounded-[11px] bg-[#101011] px-5 py-3 text-[15px] font-[680] text-white shadow-[0_8px_20px_rgba(10,10,12,0.12)] transition hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2 motion-reduce:transition-none lg:mt-auto lg:min-h-[64px] lg:text-[17px]"
               >
                 Build a better study system →
               </button>
             </div>
 
-            <div className="border-t border-[rgba(215,210,210,0.95)] p-6 sm:p-[38px] lg:border-l lg:border-t-0 lg:p-[46px_43px]">
-              <h2 className="mb-[14px] mt-[3px] text-[12px] font-[800] leading-[1.35] tracking-[0.14em] text-[#6f6767]">
+            <div className="border-t border-[rgba(215,210,210,0.95)] p-6 sm:p-[38px] lg:border-l lg:border-t-0 lg:p-[58px_52px]">
+              <h2 className="mb-[14px] mt-[3px] text-[12px] font-[800] leading-[1.35] tracking-[0.14em] text-[#6f6767] lg:text-[14px]">
                 PASS RATES REPORTED BY UGC NEPAL
               </h2>
 
@@ -688,22 +674,22 @@ export function SaaSFlowClient({
                 {UNIVERSITY_PASS_RATES.map((item) => (
                   <article
                     key={item.university}
-                    className="grid min-h-[62px] grid-cols-[88px_minmax(0,1fr)] items-center rounded-[14px] border border-[#e4dddd] bg-[rgba(251,250,250,0.84)] px-4 py-3 shadow-[0_5px_14px_rgba(54,60,70,0.025)] sm:grid-cols-[90px_minmax(0,1fr)] sm:px-[19px]"
+                    className="grid min-h-[62px] grid-cols-[88px_minmax(0,1fr)] items-center rounded-[14px] border border-[#e4dddd] bg-[rgba(251,250,250,0.84)] px-4 py-3 shadow-[0_5px_14px_rgba(54,60,70,0.025)] sm:grid-cols-[90px_minmax(0,1fr)] sm:px-[19px] lg:min-h-[78px] lg:grid-cols-[110px_minmax(0,1fr)] lg:px-6 lg:py-4"
                   >
-                    <strong className="text-[28px] font-[770] leading-none tracking-[-0.045em] text-[#8f3636]">
+                    <strong className="text-[28px] font-[770] leading-none tracking-[-0.045em] text-[#8f3636] lg:text-[36px]">
                       {item.rate}
                     </strong>
-                    <div className="grid gap-2 sm:grid-cols-[minmax(72px,1fr)_minmax(102px,auto)] sm:items-center sm:gap-[14px]">
+                    <div className="grid gap-2 sm:grid-cols-[minmax(72px,1fr)_minmax(102px,auto)] sm:items-center sm:gap-[14px] lg:gap-5">
                       <div
                         aria-hidden="true"
-                        className="h-2.5 overflow-hidden rounded-full bg-[#eadcdc]"
+                        className="h-2.5 overflow-hidden rounded-full bg-[#eadcdc] lg:h-3"
                       >
                         <span
                           className="block h-full rounded-full bg-[linear-gradient(90deg,#a83f3f,#c95757)]"
                           style={{ width: item.value }}
                         />
                       </div>
-                      <span className="text-left text-[13px] font-[520] leading-[1.25] text-[#686164] sm:text-right">
+                      <span className="text-left text-[13px] font-[520] leading-[1.25] text-[#686164] sm:text-right lg:text-[15px]">
                         {item.university}
                       </span>
                     </div>
@@ -711,14 +697,14 @@ export function SaaSFlowClient({
                 ))}
               </div>
 
-              <aside className="mt-4 grid grid-cols-[46px_minmax(0,1fr)] items-center gap-3 rounded-[15px] border border-[#e2d3d3] bg-[rgba(248,241,241,0.9)] p-4 text-[#7f3f3f] sm:grid-cols-[62px_minmax(0,1fr)] sm:gap-[18px] sm:p-[14px_18px]">
+              <aside className="mt-4 grid grid-cols-[46px_minmax(0,1fr)] items-center gap-3 rounded-[15px] border border-[#e2d3d3] bg-[rgba(248,241,241,0.9)] p-4 text-[#7f3f3f] sm:grid-cols-[62px_minmax(0,1fr)] sm:gap-[18px] sm:p-[14px_18px] lg:mt-5 lg:grid-cols-[68px_minmax(0,1fr)] lg:gap-5 lg:p-[18px_22px]">
                 <span
                   aria-hidden="true"
-                  className="grid h-11 w-11 place-items-center rounded-full bg-[#eedddd] text-[#b54848] sm:h-[42px] sm:w-[42px]"
+                  className="grid h-11 w-11 place-items-center rounded-full bg-[#eedddd] text-[#b54848] sm:h-[42px] sm:w-[42px] lg:h-12 lg:w-12"
                 >
-                  <Lightbulb className="h-6 w-6" strokeWidth={2} />
+                  <Lightbulb className="h-6 w-6 lg:h-7 lg:w-7" strokeWidth={2} />
                 </span>
-                <p className="border-l border-[#dfc8c8] pl-3 text-[14px] font-[720] leading-[1.4] sm:pl-[14px]">
+                <p className="border-l border-[#dfc8c8] pl-3 text-[14px] font-[720] leading-[1.4] sm:pl-[14px] lg:pl-[18px] lg:text-[16px]">
                   This is not a motivation problem.
                   <br />
                   It is a system problem.
@@ -796,88 +782,6 @@ export function SaaSFlowClient({
             </main>
           );
         })()}
-
-      {/* ═════════════════════════════════════════════════════════════════════
-          2. FOUNDER'S MESSAGE SLIDE (founderSlide)
-          ═════════════════════════════════════════════════════════════════════ */}
-      {currentStep === "founderSlide" && (
-        <main className="relative isolate min-h-screen overflow-hidden bg-[linear-gradient(145deg,#fff8e8_0%,#f2f7ff_52%,#f8efff_100%)] px-6 py-12 sm:py-[58px]">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -left-[90px] -top-20 h-60 w-60 rounded-full bg-[#ffdca0] opacity-70 blur-[1px]"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-[110px] -right-[100px] h-[280px] w-[280px] rounded-full bg-[#d7c9ff] opacity-70 blur-[1px]"
-          />
-
-          <div className="relative z-10 mx-auto max-w-[790px]">
-            {renderFlowHeader()}
-
-            <section className="mt-[42px] rounded-[30px] border border-white/95 bg-white/90 p-[28px_22px] shadow-[0_22px_70px_rgba(52,57,92,0.12)] sm:p-[42px]">
-              <div className="flex items-center gap-2.5 text-[11px] font-[850] uppercase tracking-[1.7px] text-[#7d61c8]">
-                <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0be] text-[17px]">
-                  ✦
-                </span>
-                <span>ONE LAST THING</span>
-              </div>
-
-              <h1 className="my-5 text-[34px] font-[760] leading-[1.05] tracking-[-2px] text-[#111111] sm:text-[43px]">
-                You are not bad at studying.
-                <br />
-                You need a better feedback loop.
-              </h1>
-
-              <p className="max-w-[650px] text-[17px] leading-[1.7] text-[#575d67]">
-                I built Nano Syllabus because capable students spend too much energy wondering what
-                to study, whether they remember it, and how to turn what they know into marks.
-              </p>
-
-              <div className="my-6 rounded-[16px] border border-[#d9e7ff] bg-[#eef5ff] p-[17px_19px] text-[14px] font-[700] leading-[1.5] text-[#42628f]">
-                {totalStruggles > 0 ? (
-                  <>
-                    Your answers revealed <b>{totalStruggles} areas</b> where a clearer study system
-                    could reduce stress and improve exam readiness.
-                  </>
-                ) : (
-                  <>
-                    Your answers show a strong foundation. Nano Syllabus can help you keep it
-                    consistent and measurable.
-                  </>
-                )}
-              </div>
-
-              <p className="max-w-[650px] text-[17px] leading-[1.7] text-[#575d67]">
-                You do not need to fix everything today. Start with one weak topic, study one clear
-                example, attempt one real question, and improve from the feedback.
-              </p>
-
-              <div className="my-6 flex items-center gap-3">
-                <span
-                  aria-hidden="true"
-                  className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-[#111] text-[15px] font-[850] text-white"
-                >
-                  P
-                </span>
-                <span>
-                  <b className="block text-[14px] text-[#111]">Prashant Soni</b>
-                  <span className="mt-[3px] block text-[13px] text-[#858a92]">
-                    Founder, Nano Syllabus
-                  </span>
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setCurrentStep("solutionSlide")}
-                className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[14px] font-[700] text-white transition hover:bg-[#202024] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2"
-              >
-                See how NanoSyllabus helps →
-              </button>
-            </section>
-          </div>
-        </main>
-      )}
 
       {/* ═════════════════════════════════════════════════════════════════════
           3. 60-SECOND WALKTHROUGH (solutionSlide)
