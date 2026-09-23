@@ -226,132 +226,72 @@ export default function LandingPage() {
 
       <main id="main-content">
         {/* ── Hero Section ── */}
-        <section className="mx-auto max-w-[1320px] px-5 py-14 lg:py-24 2xl:px-0">
-          <div className="grid items-center gap-12 lg:grid-cols-[1.12fr_0.88fr] lg:gap-14">
-            {/* Left Content */}
-            <div className="max-w-[680px]">
-              <h1
-                className={`${manrope.className} text-[clamp(2.9rem,5.3vw,5.5rem)] font-extrabold leading-[1.04] tracking-[-0.055em] text-[#1c1e1a]`}
-              >
-                Notes. Solved Past Paper. AI Tutor.
-                <br />
-           
-                Study Routine.{" "}
-                <span className="relative isolate inline-block px-1">
-                  At One Place.
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[#dcfa72]"
-                  />
-                </span>
-              </h1>
-              <p className="mt-6 text-[18px] leading-[1.55] text-[#5b5e55]">
-              </p>
- 
-              <div className="mt-9 flex flex-wrap items-center gap-6">
-                <LandingPrimaryCta blue size="hero" communityOnly>
-                  Find your faculty
-                </LandingPrimaryCta>
-                <a
-                  href="#steps"
-                  className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:text-[#3049ed] hover:border-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]"
-                >
-                  How does it work?
-                </a>
-              </div>
-            </div>
+<section className="relative isolate overflow-hidden px-5 pb-20 pt-16 lg:pb-28 lg:pt-24 2xl:px-0">
+  {/* Subtle notebook background */}
+  <div
+    aria-hidden="true"
+    className="pointer-events-none absolute inset-0 -z-10"
+    style={{
+      backgroundImage:
+        "repeating-linear-gradient(to bottom, transparent 0, transparent 47px, #e8ebdf 48px)",
+      maskImage:
+        "radial-gradient(ellipse 70% 65% at 50% 35%, black, transparent)",
+    }}
+  />
 
-            {/* Right Card Mockup */}
-            <div className="relative mx-auto w-full max-w-[540px] lg:max-w-none">
-              {/* Lime decorative rays on top */}
-              <div className="absolute -top-7 left-12 flex gap-1.5" aria-hidden="true">
-                <span className="h-6 w-1.5 -rotate-25 rounded-full bg-[#dcfa72]" />
-                <span className="h-7 w-1.5 -rotate-10 rounded-full bg-[#dcfa72]" />
-                <span className="h-5 w-1.5 rotate-15 rounded-full bg-[#dcfa72]" />
-              </div>
+  <div
+    aria-hidden="true"
+    className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[550px] w-[800px] max-w-full -translate-x-1/2 rounded-full bg-[#dcfa72]/20 blur-[110px]"
+  />
 
-              {/* Main Lime Container */}
-              <div
-                className="relative rounded-[24px] bg-[#dcfa72] p-6 sm:p-8 lg:p-10 shadow-sm"
-                aria-label="A small learning challenge preview"
-              >
-                <p className="mb-6 flex items-center justify-end text-[11px] font-bold uppercase tracking-[0.09em] text-[#1c1e1a]">
-                  <span aria-hidden="true" className="text-xl leading-none">
-                    ↙
-                  </span>
-                </p>
+  <div className="mx-auto max-w-[1200px]">
+    <div className="mx-auto max-w-[1050px] text-center">
+      <h1
+        className={`${manrope.className} text-[clamp(2.7rem,5.5vw,5.5rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
+      >
+        Everything you need to study.
+        <br />
+        <span className="relative isolate inline-block px-1">
+          One clear way to start.
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[#dcfa72]"
+          />
+        </span>
+      </h1>
 
-                {/* Rotated White Challenge Note Card */}
-                <div className="mx-auto w-full rotate-[-3.5deg] rounded-xl border border-[#23251e]/15 bg-white p-6 sm:p-8 shadow-[12px_12px_0_#bedb62] transition-transform duration-300 hover:rotate-0">
-                  <div className="flex items-center justify-end text-[10.5px] font-bold uppercase tracking-widest text-[#5b5e55]">
-                    <span>Challenge no. 01</span>
-                  </div>
-                  <h2
-                    className={`${manrope.className} mt-6 text-[clamp(1.85rem,2.5vw,2.4rem)] font-extrabold leading-[1.08] tracking-[-0.05em] text-[#1c1e1a]`}
-                  >
-                    One topic.
-                    <br />
-                    Actually understood.
-                  </h2>
+      <p className="mx-auto mt-7 max-w-[690px] text-[17px] leading-relaxed text-[#5b5e55] sm:text-[19px]">
+        Notes, solved past papers, and an AI tutor—organized into a study
+        routine, one topic at a time.
+      </p>
 
-                  <div className="mt-6 divide-y divide-[#e3e6db] border-t border-[#e3e6db]">
-                    {/* Step 01 */}
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3.5">
-                        <span className="grid size-7 shrink-0 place-items-center rounded-full border border-[#d9ddd3] text-xs font-bold text-[#1c1e1a]">
-                          01
-                        </span>
-                        <strong className="block text-sm text-[#1c1e1a]">Learn the idea</strong>
-                      </div>
-                      <span className="text-sm font-bold text-[#1c1e1a]" aria-hidden="true">
-                        ✓
-                      </span>
-                    </div>
+      <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-5">
+        <LandingPrimaryCta blue size="hero" communityOnly>
+          Find your faculty
+        </LandingPrimaryCta>
 
-                    {/* Step 02 */}
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3.5">
-                        <span className="grid size-7 shrink-0 place-items-center rounded-full border border-[#d9ddd3] text-xs font-bold text-[#1c1e1a]">
-                          02
-                        </span>
-                        <strong className="block text-sm text-[#1c1e1a]">See it in action</strong>
-                      </div>
-                      <span className="text-sm font-bold text-[#1c1e1a]" aria-hidden="true">
-                        ✓
-                      </span>
-                    </div>
+        <a
+          href="#steps"
+          className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:border-[#3049ed] hover:text-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]"
+        >
+          How does it work?
+        </a>
+      </div>
+    </div>
 
-                    {/* Step 03 - Active / Highlighted */}
-                    <div className="mt-1 flex items-center justify-between rounded-lg bg-[#3049ed] px-3.5 py-3 text-white shadow-xs">
-                      <div className="flex items-center gap-3.5">
-                        <span className="grid size-7 shrink-0 place-items-center rounded-full border border-white/40 text-xs font-bold text-white">
-                          03
-                        </span>
-                        <strong className="block text-sm">Your turn</strong>
-                      </div>
-                      <span className="text-sm font-bold" aria-hidden="true">
-                        ↗
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="mt-4 flex items-center justify-end text-xs text-[#5b5e55]">
-                    <span aria-hidden="true" className="text-lg text-[#3049ed]">
-                      ✳
-                    </span>
-                  </p>
-                </div>
-
-                {/* Hand-written style note */}
-                <p className="mt-6 text-right font-serif text-[17px] italic leading-tight text-[#1c1e1a]">
-                  Less “I think I know it.”
-                  <br />
-                  More “I can do it.”
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+    {/* Animated feature walkthrough */}
+    <div className="mx-auto mt-14 max-w-[1050px] lg:mt-20">
+      <div className="overflow-hidden rounded-[22px] border border-[#dfe4d6] bg-white p-2 shadow-[0_24px_70px_rgba(28,30,26,0.12)] sm:rounded-[30px] sm:p-3">
+        <iframe
+          src="/nanosyllabus-features-minimal-animation.html?capture"
+          title="How NanoSyllabus organizes topics, solves past questions, translates explanations, and grades handwritten answers"
+          className="block aspect-video w-full rounded-[15px] border-0 sm:rounded-[20px]"
+          loading="eager"
+        />
+      </div>
+    </div>
+  </div>
+</section>
 
         {/* ── 60-second walkthrough ── */}
         <section id="walkthrough" className="border-y border-[#e5e8df] bg-white/70 px-5 py-16 lg:py-24 2xl:px-0" aria-labelledby="walkthrough-title">

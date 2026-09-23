@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NanoSyllabus — The study system in motion</title>
+<style>
+  :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#171b18;background:#eef1ed}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center}
+  main{width:min(100vw,1330px);padding:clamp(0px,2.8vw,34px)}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:22px;background:#f9fbf8;box-shadow:0 22px 80px #18271918}
+  .art{position:absolute;inset:0 auto auto 0;width:1200px;height:675px;transform-origin:0 0;background:radial-gradient(ellipse 64% 70% at 50% 53%,#f0f7e3,#f9fbf8 72%)}
+  .scene{position:absolute;inset:0;opacity:0;transform:translateY(17px) scale(.987);transition:opacity .62s ease,transform .75s cubic-bezier(.18,.8,.22,1);pointer-events:none}
+  .scene.active{opacity:1;transform:none}
+  .card{position:absolute;left:111px;top:75px;width:978px;height:524px;border:1.5px solid #e0e6df;border-radius:34px;background:white;box-shadow:0 26px 72px #17281917;overflow:hidden}
+  .meta{position:absolute;top:28px;left:38px;right:38px;font-size:29px;line-height:1.15;font-weight:780;letter-spacing:-.045em;color:#171b18}
+  h1,h2,h3,p{margin:0}
+  .controls{display:flex;justify-content:center;align-items:center;gap:12px;padding:17px;color:#647067;font-size:13px}
+  button{padding:8px 17px;border:1px solid #dce4db;border-radius:999px;background:#fff;color:#1b201a;font:inherit;font-weight:650;cursor:pointer}
+  button:hover{border-color:#9eb29e}button:focus-visible{outline:3px solid #315af3;outline-offset:3px}
+  .paused *,.paused *:before,.paused *:after{animation-play-state:paused!important}
+  .capture main{width:100vw;padding:0}.capture .stage{border-radius:0;box-shadow:none}.capture .controls{display:none}
+  /* 01 — syllabus decomposes into small, actionable topics */
+  .subject{position:absolute;left:270px;top:101px;width:438px;height:151px;border:1.5px solid #c6df61;border-radius:26px;background:#e8fb9d;display:flex;align-items:center;gap:22px;padding:27px 30px;box-shadow:0 16px 32px #abc85323;z-index:2}
+  .book{width:66px;height:66px;flex:none;border:1.5px solid #b4ce52;border-radius:19px;background:#f6ffd6;display:grid;place-items:center}
+  .book svg{width:35px;height:35px;stroke:#273118;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .subject h1{font-size:33px;font-weight:780;letter-spacing:-.045em;line-height:1.08}
+  .subject p{margin-top:9px;color:#56633d;font-size:16px;font-weight:650}
+  .branch{position:absolute;inset:0;width:978px;height:524px;z-index:1}
+  .branch path{fill:none;stroke:#b7cba9;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:980;stroke-dashoffset:980}
+  .micro{position:absolute;top:350px;width:282px;height:120px;padding:21px 23px;border:1.5px solid #e2e9e1;border-radius:21px;background:#fff;box-shadow:0 9px 24px #16291a0d;opacity:0;transform:translateY(27px) scale(.95)}
+  .micro.a{left:27px;border-color:#adbefb}.micro.b{left:348px}.micro.c{left:669px}
+  .micro i{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#edf2ff;color:#315af3;font-size:14px;font-weight:750;font-style:normal}
+  .micro.a i{background:#315af3;color:#fff}
+  .micro h2{margin-top:13px;font-size:20px;line-height:1.18;font-weight:730;letter-spacing:-.035em}
+  .more{position:absolute;top:486px;left:0;right:0;text-align:center;color:#6c796f;font-size:18px;font-weight:650;opacity:0}
+  .active .subject{animation:subject-break 2s .2s cubic-bezier(.2,.78,.2,1) both}
+  .active .branch path{animation:branch-draw 1.4s 2.1s cubic-bezier(.19,.75,.2,1) both}
+  .active .micro.a{animation:reveal-topic .65s 2.78s cubic-bezier(.2,.85,.25,1) both}
+  .active .micro.b{animation:reveal-topic .65s 3.17s cubic-bezier(.2,.85,.25,1) both}
+  .active .micro.c{animation:reveal-topic .65s 3.56s cubic-bezier(.2,.85,.25,1) both}
+  .active .more{animation:soft-in .7s 4.08s both}
+  @keyframes subject-break{0%{opacity:0;transform:translateY(139px) scale(.89)}25%{opacity:1;transform:translateY(139px) scale(1.06)}58%{transform:translateY(139px) scale(1.06)}100%{transform:none}}
+  @keyframes branch-draw{0%{stroke-dashoffset:980;opacity:0}9%{opacity:1}100%{stroke-dashoffset:0;opacity:1}}
+  @keyframes reveal-topic{to{opacity:1;transform:none}}
+  /* 02 — real paper becomes a worked solution */
+  .sheet-back{position:absolute;left:169px;top:100px;width:650px;height:355px;border:1px solid #e5e4dc;border-radius:17px;background:#fffef8;transform:rotate(4deg);box-shadow:0 10px 32px #1c2b1b0d}
+  .sheet-back.second{transform:rotate(-3deg);background:#f9fbfa}
+  .paper{position:absolute;left:117px;top:90px;width:744px;height:391px;padding:27px 48px 32px 63px;border:1.5px solid #e0dfd6;border-radius:18px;background:repeating-linear-gradient(to bottom,#fffef9 0,#fffef9 36px,#d9e6fc 37px,#fffef9 38px);box-shadow:0 22px 48px #1b2b1b16;overflow:hidden}
+  .paper:before{content:"";position:absolute;left:47px;top:0;bottom:0;border-left:1px solid #f1c5c4}
+  .exam-q{margin-top:16px;font-size:27px;font-weight:740;letter-spacing:-.04em;line-height:1.27}
+  .solution-cover{position:absolute;left:64px;right:55px;top:198px;height:115px;border:1.5px solid #dbe6ff;border-radius:15px;background:#edf3ff;display:grid;place-items:center;color:#315af3;font-size:20px;font-weight:700}
+  .solution{position:absolute;left:65px;right:55px;top:190px;height:163px;opacity:0;transform:translateY(20px)}
+  .solution p{margin-top:15px;font-size:22px;line-height:1.63;letter-spacing:-.018em;font-weight:580}
+  .active .sheet-back{animation:paper-spread 1.5s .15s both}
+  .active .sheet-back.second{animation:paper-spread-two 1.5s .15s both}
+  .active .paper{animation:paper-arrive 1.2s .36s both}
+  .active .solution-cover{animation:cover-away .7s 2.5s both}
+  .active .solution{animation:solution-enter .85s 2.72s both}
+  @keyframes paper-spread{0%{opacity:0;transform:translate(30px,30px) rotate(1deg)}100%{opacity:1;transform:rotate(4deg)}}
+  @keyframes paper-spread-two{0%{opacity:0;transform:translate(-25px,25px) rotate(0)}100%{opacity:1;transform:rotate(-3deg)}}
+  @keyframes paper-arrive{0%{opacity:0;transform:translateY(52px) rotate(-2deg)}100%{opacity:1;transform:none}}
+  @keyframes cover-away{0%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-22px) scale(.96)}}
+  @keyframes solution-enter{to{opacity:1;transform:none}}
+  /* 03 — a sentence translates without leaving the page */
+  .english-line,.nepali-line{position:absolute;left:51px;right:51px;border:1.5px solid #e2e9e1;border-radius:23px;padding:30px 37px;background:#fcfdfb}
+  .english-line{top:154px;height:129px}
+  .nepali-line{top:326px;height:129px;background:#f2f8e4;border-color:#dcebb9;opacity:0;transform:translateY(33px)}
+  .language-label{font-size:18px;font-weight:750;letter-spacing:-.01em;color:#66786a}
+  .language-text{margin-top:13px;font-size:30px;font-weight:720;letter-spacing:-.04em;line-height:1.22}
+  .nepali-line .language-label{color:#577631}
+  .translate-path{position:absolute;left:488px;top:286px;width:3px;height:42px;border-radius:5px;background:#315af3;transform-origin:top;opacity:0}
+  .translate-path:after{content:"";position:absolute;bottom:-2px;left:-5px;width:12px;height:12px;border-right:3px solid #315af3;border-bottom:3px solid #315af3;transform:rotate(45deg)}
+  .active .english-line{animation:english-enter 1s .3s both,english-settle .6s 2.2s both}
+  .active .translate-path{animation:path-enter .75s 2.05s both}
+  .active .nepali-line{animation:nepali-enter .9s 2.57s cubic-bezier(.2,.8,.22,1) both}
+  @keyframes english-enter{0%{opacity:0;transform:translateY(46px) scale(.97)}100%{opacity:1;transform:none}}
+  @keyframes english-settle{to{border-color:#d5dfd2;background:#fafcf8}}
+  @keyframes path-enter{0%{opacity:0;transform:scaleY(.15)}100%{opacity:1;transform:scaleY(1)}}
+  @keyframes nepali-enter{to{opacity:1;transform:none}}
+  /* 04 — handwritten work flows into useful feedback */
+  .answer-sheet{position:absolute;left:92px;top:102px;width:335px;height:361px;border:1.5px solid #e5e1d7;border-radius:10px;background:repeating-linear-gradient(to bottom,#fffef8 0,#fffef8 29px,#dbe6f7 30px,#fffef8 31px);box-shadow:9px 14px 0 #eaf0e6,0 17px 36px #20342417;transform:rotate(-7deg);padding:28px 31px}
+  .hand{margin-top:19px;color:#454b56;font-family:"Comic Sans MS",cursive,sans-serif;font-size:18px;line-height:1.8;transform:rotate(-1deg)}
+  .scan{position:absolute;left:92px;top:102px;width:335px;height:361px;border:2px solid #315af3;border-radius:11px;transform:rotate(-7deg);opacity:0;overflow:hidden}
+  .scan:after{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:#315af3;box-shadow:0 0 20px 11px #315af35a;animation:scan-light 1.45s 2.3s both}
+  .feedback-card{position:absolute;left:483px;top:149px;width:419px;height:289px;border:1.5px solid #d7e9d8;border-radius:25px;background:#f8fcf7;box-shadow:0 14px 32px #284a2a10;padding:36px 38px;opacity:0;transform:translateX(35px) scale(.96)}
+  .score{margin-top:17px;font-size:75px;line-height:1;font-weight:800;letter-spacing:-.07em;color:#193421}
+  .score span{font-size:36px;color:#789580}
+  .feedback-line{height:1px;background:#dcebdd;margin:26px 0 20px}
+  .feedback-note{font-size:22px;font-weight:670;letter-spacing:-.025em}
+  .tick{position:absolute;right:27px;top:29px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#e2f7d7;color:#338450;font-size:19px;font-weight:800}
+  .active .answer-sheet{animation:sheet-enter 1.3s .2s both}
+  .active .scan{animation:scan-opacity 4.3s linear both}
+  .active .feedback-card{animation:feedback-enter .95s 3.5s cubic-bezier(.18,.8,.24,1) both}
+  @keyframes sheet-enter{0%{opacity:0;transform:translateY(65px) rotate(-12deg)}100%{opacity:1;transform:rotate(-7deg)}}
+  @keyframes scan-opacity{0%,51%{opacity:0}55%,87%{opacity:1}100%{opacity:0}}
+  @keyframes scan-light{0%{transform:translateY(-10px)}100%{transform:translateY(360px)}}
+  @keyframes feedback-enter{to{opacity:1;transform:none}}
+  @keyframes soft-in{to{opacity:1}}
+  @media(max-width:700px){.stage{border-radius:10px}.controls span{display:none}}
+</style>
+</head>
+<body>
+<main>
+  <div class="stage" id="stage" aria-label="Animated overview of NanoSyllabus features">
+    <div class="art" id="art">
+      <section class="scene active" aria-label="Syllabus into micro-topics">
+        <div class="card"><div class="meta">A full syllabus, broken into micro-topics</div>
+          <div class="subject"><div class="book" aria-hidden="true"><svg viewBox="0 0 36 36"><path d="M18 10c-4-3-9-3-14-2v19c5-1 10-1 14 2 4-3 9-3 14-2V8c-5-1-10-1-14 2Z"/><path d="M18 10v19"/></svg></div><div><h1>Physics</h1><p>37 micro-topics</p></div></div>
+          <svg class="branch" viewBox="0 0 978 524" aria-hidden="true"><path d="M489 252 V300 H169 V350 M489 300 V350 M489 300 H810 V350"/></svg>
+          <div class="micro a"><i>01</i><h2>Energy<br>and work</h2></div><div class="micro b"><i>02</i><h2>Power and<br>efficiency</h2></div><div class="micro c"><i>03</i><h2>Motion<br>and speed</h2></div><div class="more">+ 34 more micro-topics</div>
+        </div>
+      </section>
+      <section class="scene" aria-label="Solved past questions">
+        <div class="card"><div class="meta">Past questions with worked solutions</div><div class="sheet-back"></div><div class="sheet-back second"></div>
+          <div class="paper"><div class="exam-q">What is delegation?<br>Why is it important?</div><div class="solution-cover">See worked solution &nbsp;↗</div><div class="solution"><p>Delegation gives someone authority for a task.<br>It develops the team and gives managers<br>time for higher-level decisions.</p></div></div>
+        </div>
+      </section>
+      <section class="scene" aria-label="English and Romanized Nepali">
+        <div class="card"><div class="meta">English and Romanized Nepali</div>
+          <div class="english-line"><div class="language-label">ENGLISH</div><div class="language-text">Power is the rate at which energy is transferred.</div></div><div class="translate-path" aria-hidden="true"></div><div class="nepali-line"><div class="language-label">ROMANIZED NEPALI</div><div class="language-text">Power bhaneko energy transfer hune rate ho.</div></div>
+        </div>
+      </section>
+      <section class="scene" aria-label="Handwritten answer feedback">
+        <div class="card"><div class="meta">Handwritten answers, graded with feedback</div>
+          <div class="answer-sheet"><div class="hand">Delegation means<br>giving authority<br>for a task. It helps<br>the team learn and<br>share responsibility.</div></div><div class="scan"></div>
+          <div class="feedback-card"><div class="tick">✓</div><div class="score">7 <span>/ 8</span></div><div class="feedback-line"></div><div class="feedback-note">Add one team example.</div></div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <div class="controls"><button type="button" id="toggle">Pause</button><button type="button" id="replay">Replay</button><span>Four scenes · each result holds before the next</span></div>
+</main>
+<script>
+  const stage=document.getElementById('stage'),art=document.getElementById('art');
+  const scenes=[...document.querySelectorAll('.scene')];
+  const STEP=8.5,TOTAL=STEP*scenes.length;
+  let elapsed=0,last=0,index=0,paused=false;
+  function resize(){art.style.transform=`scale(${stage.clientWidth/1200})`}
+  new ResizeObserver(resize).observe(stage);resize();
+  function setScene(next){
+    if(next===index)return;
+    scenes[index].classList.remove('active');
+    index=next;scenes[index].classList.add('active');
+  }
+  function loop(now){
+    if(!last)last=now;
+    if(!paused){elapsed=(elapsed+Math.min((now-last)/1000,.1))%TOTAL;setScene(Math.floor(elapsed/STEP))}
+    last=now;requestAnimationFrame(loop);
+  }
+  const toggle=document.getElementById('toggle');
+  toggle.addEventListener('click',()=>{paused=!paused;art.classList.toggle('paused',paused);toggle.textContent=paused?'Play':'Pause'});
+  document.getElementById('replay').addEventListener('click',()=>{
+    elapsed=0;last=0;paused=false;art.classList.remove('paused');toggle.textContent='Pause';
+    scenes.forEach(scene=>scene.classList.remove('active'));void art.offsetWidth;index=0;scenes[0].classList.add('active');
+  });
+  document.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();toggle.click()}});
+  if(new URLSearchParams(location.search).has('capture'))document.body.classList.add('capture');
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>
