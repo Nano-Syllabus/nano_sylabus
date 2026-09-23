@@ -293,32 +293,244 @@ export default function LandingPage() {
   </div>
 </section>
 
-        {/* ── 60-second walkthrough ── */}
-        <section id="walkthrough" className="border-y border-[#e5e8df] bg-white/70 px-5 py-16 lg:py-24 2xl:px-0" aria-labelledby="walkthrough-title">
-          <div className="mx-auto max-w-[1320px]">
-            <div className="mb-10 max-w-[710px] lg:mb-12">
-              <h2 id="walkthrough-title" className={`${manrope.className} text-[clamp(2.1rem,4vw,3.7rem)] font-extrabold leading-[1.04] tracking-[-0.06em] text-[#1c1e1a]`}>
-                Core Features
-              </h2>
-         
-            </div>
+{/* ── Core features ── */}
+<section
+  id="walkthrough"
+  aria-labelledby="walkthrough-title"
+  className="border-y border-[#e5e8df] bg-white px-5 py-14 lg:py-20 2xl:px-0"
+>
+  <div className="mx-auto max-w-[1320px]">
+    <h2
+      id="walkthrough-title"
+      className={`${manrope.className} mb-9 text-[clamp(2.1rem,4vw,3.7rem)] font-extrabold leading-[1.04] tracking-[-0.06em] text-[#1c1e1a] lg:mb-12`}
+    >
+      Core Features
+    </h2>
 
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.36fr)_minmax(380px,1fr)] lg:gap-7">
-       
-              <div className="grid gap-4 sm:grid-cols-4 lg:gap-5">
-                {walkthroughFeatures.map(({ title, color, Icon }, index) => (
-                  <article key={title} className="flex min-h-[190px] flex-col justify-between rounded-[20px] border border-[#dfe5ee] bg-white p-5 shadow-[0_13px_32px_rgba(62,79,105,0.045)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_42px_rgba(62,79,105,0.085)] motion-reduce:transition-none">
-                    <div className="flex items-start justify-between">
-                      <span className={`grid h-14 w-14 place-items-center rounded-[15px] ${color}`}><Icon className="h-7 w-7" aria-hidden="true" /></span>
-                      <span className={`grid h-9 w-9 place-items-center rounded-[14px] text-sm font-extrabold ${color}`}>{index + 1}</span>
-                    </div>
-                    <h3 className="mt-6 max-w-[95%] text-[17px] font-bold leading-[1.16] tracking-[-0.04em] text-[#1c1e1a] lg:text-[21px]">{title}</h3>
-                  </article>
-                ))}
-              </div>
-            </div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
+      {walkthroughFeatures.map(({ title, color, Icon }, index) => (
+        <article
+          key={title}
+          className="ns-feature flex min-h-[330px] flex-col rounded-[24px] border border-[#dfe5ee] bg-white p-5 shadow-[0_13px_32px_rgba(62,79,105,0.045)] sm:p-6"
+        >
+          <div className="flex items-start justify-between">
+            <span
+              className={`grid h-14 w-14 place-items-center rounded-[16px] ${color}`}
+            >
+              <Icon className="h-7 w-7" aria-hidden="true" />
+            </span>
+
+            <span className="text-sm font-bold tabular-nums text-[#9aa49b]">
+              0{index + 1}
+            </span>
           </div>
-        </section>
+
+          <h3 className="mt-5 min-h-[54px] text-[20px] font-extrabold leading-[1.15] tracking-[-0.045em] text-[#1c1e1a]">
+            {title}
+          </h3>
+
+          <div className="relative mt-auto h-[158px] overflow-hidden rounded-[18px] border border-[#e5eae2] bg-[#fafbf8]">
+            {index === 0 && (
+              <div className="p-3">
+                <div className="flex items-center justify-between rounded-xl bg-[#e6f99c] px-3 py-2">
+                  <span className="text-sm font-bold text-[#263018]">
+                    Physics
+                  </span>
+                  <span className="text-xs font-semibold text-[#53683b]">
+                    37 topics
+                  </span>
+                </div>
+
+                <div className="ns-trace mx-auto h-3 w-px bg-[#8eaa6d]" />
+
+                <div className="space-y-1.5">
+                  {["Energy and work", "Power and efficiency", "Motion and speed"].map(
+                    (topic, topicIndex) => (
+                      <div
+                        key={topic}
+                        className="ns-reveal flex items-center gap-2 rounded-lg border border-[#e5eae2] bg-white px-2.5 py-1.5"
+                      >
+                        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#eaf0ff] text-[11px] font-bold text-[#3049ed]">
+                          {topicIndex + 1}
+                        </span>
+                        <span className="text-xs font-semibold text-[#273029]">
+                          {topic}
+                        </span>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+            {index === 1 && (
+              <div className="p-3">
+                <div className="rounded-xl border border-[#e5e3dc] bg-[#fffefa] p-3">
+                  <span className="text-xs font-semibold text-[#778078]">
+                    Past question
+                  </span>
+
+                  <p className="mt-2 text-sm font-bold leading-snug text-[#20251f]">
+                    What is delegation?
+                  </p>
+
+                  <div className="mt-3 h-px bg-[#dce6fb]" />
+
+                  <div className="ns-reveal mt-2 rounded-lg bg-[#edf3ff] p-2.5">
+                    <span className="text-xs font-bold text-[#3049ed]">
+                      Solution ↗
+                    </span>
+                    <p className="mt-1 text-xs leading-snug text-[#303c35]">
+                      Assign authority to a team member for a task.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {index === 2 && (
+              <div className="p-3">
+                <div className="ns-english rounded-xl border border-[#e4e9e1] bg-white px-3 py-2.5">
+                  <span className="text-xs font-bold text-[#78847b]">
+                    English
+                  </span>
+                  <p className="mt-1 text-sm font-semibold text-[#252c27]">
+                    Power is the rate of energy transfer.
+                  </p>
+                </div>
+
+                <div className="ns-reveal my-1 text-center text-sm font-bold text-[#3049ed]">
+                  ↓
+                </div>
+
+                <div className="ns-reveal rounded-xl border border-[#d9e9bc] bg-[#f2f9e5] px-3 py-2">
+                  <span className="text-xs font-bold text-[#5d774b]">
+                    Romanized Nepali
+                  </span>
+                  <p className="mt-1 text-sm font-semibold leading-snug text-[#252c27]">
+                    Power bhaneko energy transfer hune rate ho.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {index === 3 && (
+              <div className="flex h-full items-center gap-3 px-4">
+                <div className="relative h-[119px] w-[78px] shrink-0 rounded-[17px] border-[5px] border-[#242b25] bg-[#edf1e9] p-2">
+                  <div className="h-[76px] rounded bg-[repeating-linear-gradient(to_bottom,#fffefa_0px,#fffefa_11px,#dce6f8_12px)] p-2">
+                    <div className="mt-2 h-0.5 w-9 rounded bg-[#778276]" />
+                    <div className="mt-2 h-0.5 w-8 rounded bg-[#778276]" />
+                    <div className="mt-2 h-0.5 w-10 rounded bg-[#778276]" />
+                  </div>
+
+                  <div className="ns-shutter absolute bottom-1 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full border-[3px] border-white bg-[#242b25] ring-1 ring-[#242b25]" />
+                  <div className="ns-flash pointer-events-none absolute inset-0 rounded-[12px] bg-white opacity-0" />
+                </div>
+
+                <div className="ns-reveal min-w-0 flex-1 rounded-xl border border-[#d9ead8] bg-white p-2.5">
+                  <span className="text-xs font-bold text-[#368255]">
+                    AI feedback:
+                  </span>
+                  <div className="mt-1 text-xl font-extrabold text-[#193421]">
+                    7 / 8
+                  </div>
+                  <p className="mt-1 text-xs leading-snug text-[#526157]">
+                    Add one team example.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </article>
+      ))}
+    </div>
+  </div>
+
+  <style>{`
+    .ns-feature:nth-child(1) { --ns-offset: 0s; }
+    .ns-feature:nth-child(2) { --ns-offset: -13.5s; }
+    .ns-feature:nth-child(3) { --ns-offset: -9s; }
+    .ns-feature:nth-child(4) { --ns-offset: -4.5s; }
+
+    .ns-feature {
+      animation: ns-focus 18s linear infinite;
+      animation-delay: var(--ns-offset);
+    }
+
+    .ns-reveal,
+    .ns-trace,
+    .ns-english,
+    .ns-shutter,
+    .ns-flash {
+      animation-duration: 18s;
+      animation-timing-function: ease-in-out;
+      animation-iteration-count: infinite;
+      animation-delay: var(--ns-offset);
+    }
+
+    .ns-reveal { animation-name: ns-reveal; }
+    .ns-trace { animation-name: ns-trace; transform-origin: top; }
+    .ns-english { animation-name: ns-english; }
+    .ns-shutter { animation-name: ns-shutter; }
+    .ns-flash { animation-name: ns-flash; }
+
+    @keyframes ns-focus {
+      0%, 22% {
+        border-color: #b6c8ff;
+        box-shadow: 0 16px 38px rgba(48, 73, 237, .12);
+      }
+      25%, 100% {
+        border-color: #dfe5ee;
+        box-shadow: 0 13px 32px rgba(62, 79, 105, .045);
+      }
+    }
+
+    @keyframes ns-reveal {
+      0%, 5% { opacity: 0; transform: translateY(8px); }
+      10%, 22% { opacity: 1; transform: translateY(0); }
+      25%, 100% { opacity: 0; transform: translateY(8px); }
+    }
+
+    @keyframes ns-trace {
+      0%, 3% { opacity: 0; transform: scaleY(0); }
+      8%, 22% { opacity: 1; transform: scaleY(1); }
+      25%, 100% { opacity: 0; transform: scaleY(0); }
+    }
+
+    @keyframes ns-english {
+      0%, 5% { opacity: 1; }
+      10%, 22% { opacity: .55; }
+      25%, 100% { opacity: 1; }
+    }
+
+    @keyframes ns-shutter {
+      0%, 5% { scale: 1; }
+      7% { scale: .7; }
+      10%, 100% { scale: 1; }
+    }
+
+    @keyframes ns-flash {
+      0%, 5%, 9%, 100% { opacity: 0; }
+      7% { opacity: .9; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .ns-feature,
+      .ns-reveal,
+      .ns-trace,
+      .ns-english,
+      .ns-shutter,
+      .ns-flash {
+        animation: none !important;
+      }
+
+      .ns-reveal,
+      .ns-trace {
+        opacity: 1;
+      }
+    }
+  `}</style>
+</section>
 
         {/* ── Marquee Ribbon 1 ── */}
         <div className="overflow-hidden bg-[#3049ed] py-4 text-white">
