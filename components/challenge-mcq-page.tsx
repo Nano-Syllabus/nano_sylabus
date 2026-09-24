@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Explainer } from "@/components/challenge-fundamentals";
 import { Markdown } from "@/components/markdown";
 import type { ExamChoiceResult } from "@/lib/data/challenge-exam-picks";
-import type { StudentChallengeDetail } from "@/lib/data/student-challenges";
+import type { StudentChallengeDetail, StudentChallengeSummary } from "@/lib/data/student-challenges";
 import { cn } from "@/lib/utils";
 
 /**
@@ -45,6 +45,7 @@ type Graded = {
   tally: McqResult["tally"];
   review: McqReview[];
   error?: string;
+  nextInSubject?: StudentChallengeSummary | null;
 };
 
 function formatMarks(value: number) {
@@ -91,6 +92,7 @@ export function ChallengeMcqPage({
   buildFailed,
   onGraded,
   onRetake,
+  onStalePaper,
   onNext,
   nextLabel,
   nextDisabled,
@@ -99,9 +101,15 @@ export function ChallengeMcqPage({
   /** The questions are still being set behind the concepts. */
   building: boolean;
   buildFailed: string;
-  onGraded: (graded: { challenge: StudentChallengeDetail; passed: boolean }) => void;
+  onGraded: (graded: {
+    challenge: StudentChallengeDetail;
+    passed: boolean;
+    nextInSubject?: StudentChallengeSummary | null;
+  }) => void;
   /** Swaps in the fresh paper a failed attempt was handed (see `persistStudentChallengeGrade`). */
   onRetake: () => void;
+  /** The row holds a different paper from the one on screen: load the current one. */
+  onStalePaper: () => Promise<void>;
   onNext: () => void;
   nextLabel: string;
   nextDisabled: boolean;
@@ -149,7 +157,19 @@ export function ChallengeMcqPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ questionId, selected }),
       });
-      const payload = (await response.json().catch(() => ({}))) as { result?: ExamChoiceResult; error?: string };
+      const payload = (await response.json().catch(() => ({}))) as {
+        result?: ExamChoiceResult;
+        error?: string;
+        stale?: boolean;
+      };
+      if (payload.stale) {
+        // This screen was painted from an older paper: swap in the one the row
+        // holds rather than leave every option failing with the same message.
+        setChecked({});
+        setCheckErrors({});
+        await onStalePaper();
+        return;
+      }
       if (!response.ok || !payload.result) throw new Error(payload.error || "That answer could not be checked.");
       setChecked((current) => ({ ...current, [questionId]: payload.result! }));
     } catch (cause) {
@@ -204,7 +224,7 @@ export function ChallengeMcqPage({
         tally: payload.tally,
         review: payload.review,
       });
-      onGraded({ challenge: payload.challenge, passed: payload.passed });
+      onGraded({ challenge: payload.challenge, passed: payload.passed, nextInSubject: payload.nextInSubject });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not mark your answers.");
     } finally {

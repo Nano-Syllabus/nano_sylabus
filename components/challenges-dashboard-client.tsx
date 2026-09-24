@@ -1,5 +1,6 @@
 "use client";
 
+import { unitShownAlone } from "@/lib/unit-numbering";
 import {
   AlertTriangle,
   FileCheck2,
@@ -28,7 +29,6 @@ import {
   useTransition,
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
-import { ChallengeFundamentals } from "@/components/challenge-fundamentals";
 import { ChallengeMcqPage } from "@/components/challenge-mcq-page";
 import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
 import {
@@ -75,12 +75,51 @@ import type {
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 import { useAppRefresh } from "@/lib/query/refresh";
 import { useDashboardPatch } from "@/lib/query/dashboard";
-import { applyChallengePassed, applyChallengeState } from "@/lib/challenges/local-updates";
+import { applyChallengeAdded, applyChallengePassed, applyChallengeState } from "@/lib/challenges/local-updates";
 
 const WEEKLY_CHALLENGE_TARGET = 15;
 /** What the shell's top bar says when no challenge is open. Shared with the
  *  server page's own `SetAppShell`, so the two cannot disagree. */
 export const CHALLENGE_HUB_TITLE = "Micro-Topics Hub";
+
+/** "18/20", or "" when the challenge carries no mark. */
+function scoreText(challenge: StudentChallengeSummary) {
+  if (challenge.lastScore === null || !challenge.lastTotalMarks) return "";
+  const format = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+  return `${format(challenge.lastScore)}/${format(challenge.lastTotalMarks)}`;
+}
+
+/**
+ * The hub's rows: one per subject. Today's finished challenges ride on the open
+ * card that followed them in the same subject; one stands as its own row only
+ * while its subject has nothing open yet. Exported for tests.
+ */
+export function hubRows(challenges: StudentChallengeSummary[]) {
+  const subjectKey = (challenge: StudentChallengeSummary) =>
+    `${challenge.courseId ?? "owner-private"}:${challenge.subjectSlug.trim().toLowerCase()}`;
+  const open = challenges.filter((challenge) => challenge.status !== "completed");
+  const openSubjects = new Set(open.map(subjectKey));
+  const doneBySubject = new Map<string, StudentChallengeSummary[]>();
+  for (const challenge of challenges) {
+    if (challenge.status !== "completed") continue;
+    const key = subjectKey(challenge);
+    doneBySubject.set(key, [...(doneBySubject.get(key) ?? []), challenge]);
+  }
+  const standing = challenges.filter(
+    (challenge) => challenge.status === "completed" && !openSubjects.has(subjectKey(challenge)),
+  );
+  return [
+    ...open.map((challenge) => ({
+      challenge,
+      // The first open card of a subject carries its wins; any later one does not.
+      doneToday:
+        open.find((item) => subjectKey(item) === subjectKey(challenge)) === challenge
+          ? (doneBySubject.get(subjectKey(challenge)) ?? [])
+          : [],
+    })),
+    ...standing.map((challenge) => ({ challenge, doneToday: [] as StudentChallengeSummary[] })),
+  ];
+}
 
 function challengeScore(challenge: StudentChallengeSummary) {
   if (!challenge.lastTotalMarks || challenge.lastScore === null) return null;
@@ -598,6 +637,7 @@ function ChallengeDetail({
     totalMarks: number;
     passed: boolean;
     error?: string;
+    nextInSubject?: StudentChallengeSummary | null;
   };
   const applyGrade = (payload: GradedPayload) => {
     setResults(payload.results);
@@ -611,7 +651,7 @@ function ChallengeDetail({
     // See the note in `submitScan`: the dashboard's numbers move in this tick.
     if (payload.passed) {
       dashboardPatch.completed({ challengeId: payload.challenge?.id });
-      onHubPatch((d) => applyChallengePassed(d, payload.challenge?.id));
+      onHubPatch((d) => applyChallengePassed(d, payload.challenge?.id, payload.nextInSubject));
     } else {
       dashboardPatch.attempted();
       onHubPatch((d) => applyChallengeState(d, payload.challenge));
@@ -720,6 +760,17 @@ function ChallengeDetail({
       setError(cause instanceof Error ? cause.message : "Could not issue a fresh exam.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /** The row's current paper, for an MCQ screen painted from an older one. */
+  const reloadPaper = async () => {
+    try {
+      const response = await fetch(`/api/student/challenges/${challenge.id}/content`);
+      const payload = (await response.json().catch(() => ({}))) as { challenge?: StudentChallengeDetail };
+      if (response.ok && payload.challenge) onChange(payload.challenge);
+    } catch {
+      // The next open reads the row again.
     }
   };
 
@@ -833,7 +884,7 @@ function ChallengeDetail({
 
   /** "Unit 1 · Computer Programming" — where this topic sits in the course. */
   const challengeEyebrow = [
-    challenge.unitNumber ? `Unit ${challenge.unitNumber}` : "",
+    unitShownAlone(challenge.unitNumber) ? `Unit ${challenge.unitNumber}` : "",
     challenge.subjectName,
   ]
     .filter(Boolean)
@@ -975,17 +1026,18 @@ function ChallengeDetail({
                   challenge={challenge}
                   building={buildingRest}
                   buildFailed={buildFailed}
-                  onGraded={({ challenge: updated, passed }) => {
+                  onGraded={({ challenge: updated, passed, nextInSubject }) => {
                     onChange(updated);
                     if (passed) {
                       dashboardPatch.completed({ challengeId: updated.id });
-                      onHubPatch((d) => applyChallengePassed(d, updated.id));
+                      onHubPatch((d) => applyChallengePassed(d, updated.id, nextInSubject));
                     } else {
                       dashboardPatch.attempted();
                       onHubPatch((d) => applyChallengeState(d, updated));
                     }
                   }}
                   onRetake={() => void refreshExam()}
+                  onStalePaper={reloadPaper}
                   onNext={() => void openNextChallenge()}
                   nextLabel={openingNext ? "Opening…" : noNextAvailable ? "All challenges complete" : "Next challenge →"}
                   nextDisabled={noNextAvailable || openingNext}
@@ -1044,12 +1096,9 @@ function ChallengeDetail({
                     }
                   />
                 ) : null}
-                {/* Five MCQs on the basics of this micro-topic, between the reading
-                    and the worked examples that build on it. They need only the
-                    notes, so they load on their own and never wait on the build. */}
-                {content ? (
-                  <ChallengeFundamentals key={challenge.id} challengeId={challenge.id} className="mb-6" />
-                ) : null}
+                {/* No fundamentals check here (removed, user 2026-09-24): step 1
+                    is the reading and the past questions. The component stays
+                    for its video explainer, which the MCQ paper uses. */}
                 {learnQuestions.length ? (
                   // The same ruled sheets as Revision's worked examples, and the
                   // same face picker: a worked answer looks the same wherever it
@@ -2048,6 +2097,30 @@ export function ChallengesDashboardClient({
     }
   };
 
+  /**
+   * From a finished subject's row to its next topic: the server tops the
+   * subject's queue up (the same path as the in-challenge Next button), the new
+   * card joins the list, and it opens.
+   */
+  const openNextInSubject = async (done: StudentChallengeSummary) => {
+    setOpeningId(done.id);
+    setOpenError("");
+    try {
+      const query = done.courseId
+        ? `?${new URLSearchParams({ courseId: done.courseId, subject: done.subjectSlug })}`
+        : "";
+      const payload = await apiJson<{ challenge: StudentChallengeDetail }>(
+        await fetch(`/api/student/challenges/${done.id}/next${query}`, { method: "POST" }),
+      );
+      patchHub((d) => applyChallengeAdded(d, payload.challenge));
+      setSelected(payload.challenge);
+    } catch (cause) {
+      setOpenError(cause instanceof Error ? cause.message : "Could not open the next topic.");
+    } finally {
+      setOpeningId("");
+    }
+  };
+
   useEffect(() => {
     if (!initialChallengeId || openedInitialChallengeRef.current === initialChallengeId) return;
     const initialChallenge = dashboard.challenges.find(
@@ -2223,16 +2296,61 @@ export function ChallengesDashboardClient({
 
           {dashboard.challenges.length ? (
             <div className={hubRowsClass}>
-              {dashboard.challenges.map((challenge) => {
+              {hubRows(dashboard.challenges).map(({ challenge, doneToday }) => {
                 const completed = challenge.status === "completed";
                 const started = challenge.status === "started";
+                const coverage = (
+                  <SubjectCoverage
+                    progress={subjectProgress.get(
+                      `${challenge.courseId ?? "owner-private"}:${challenge.subjectSlug.trim().toLowerCase()}`,
+                    )}
+                  />
+                );
+                if (completed) {
+                  // A subject whose card is done and has nothing queued after it
+                  // yet: today's win, and the one way on from it.
+                  const score = scoreText(challenge);
+                  return (
+                    // The same row as an open challenge — a passed one is not a
+                    // banner. What changed is said in words: a tick and the score
+                    // where the next step would be, and the way on as a quiet button.
+                    <div key={challenge.id} className={hubRowClass}>
+                      <div className={hubRowMainClass}>
+                        <div className={hubRowSubjectClass}>
+                          <p className="font-bold text-[15px] sm:text-[16px] text-text-primary truncate">
+                            {challenge.subjectName}
+                          </p>
+                          <p className="mt-1 text-[14px] sm:text-[15px] leading-6 text-[#4b5563] dark:text-text-secondary line-clamp-2">
+                            {challenge.topicTitle}
+                          </p>
+                        </div>
+                        {coverage}
+                      </div>
+                      <div className={hubRowActionsClass}>
+                        <span className="w-[88px] shrink-0 text-right leading-tight">
+                          <span className="inline-flex items-center gap-1 text-[14px] font-medium text-success">
+                            <Check className="size-4" strokeWidth={2.5} aria-hidden="true" />
+                            Passed
+                          </span>
+                          {score ? (
+                            <span className="block text-[11px] tabular-nums text-text-muted">{score}</span>
+                          ) : null}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void openNextInSubject(challenge)}
+                          disabled={openingId === challenge.id}
+                          aria-busy={openingId === challenge.id}
+                          className="inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center whitespace-nowrap rounded-[10px] border border-border bg-bg-primary px-3 text-[14px] font-semibold text-text-primary transition-colors hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
+                        >
+                          {openingId === challenge.id ? "Opening…" : "Next topic"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
                 return (
-                  <div
-                    key={challenge.id}
-                    className={`${hubRowClass} ${
-                      completed ? "bg-success/5" : "hover:bg-bg-secondary/40"
-                    }`}
-                  >
+                  <div key={challenge.id} className={`${hubRowClass} hover:bg-bg-secondary/40`}>
                     <div className={hubRowMainClass}>
                       {/* The subject, and under it the subtopic this challenge
                           is on — the thing a student actually decides by. */}
@@ -2243,12 +2361,28 @@ export function ChallengesDashboardClient({
                         <p className="mt-1 text-[14px] sm:text-[15px] leading-6 text-[#4b5563] dark:text-text-secondary line-clamp-2">
                           {challenge.topicTitle}
                         </p>
+                        {doneToday.length ? (
+                          // What the student finished in this subject today, kept
+                          // on the card that replaced it rather than as a row of
+                          // its own: the subject reads "done that, doing this".
+                          <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            {doneToday.map((done) => {
+                              const score = scoreText(done);
+                              return (
+                                <span
+                                  key={done.id}
+                                  className="inline-flex items-center gap-1 rounded-full bg-success/12 px-2 py-0.5 text-[12px] font-medium text-success"
+                                >
+                                  <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />
+                                  {done.topicTitle}
+                                  {score ? ` · ${score}` : ""}
+                                </span>
+                              );
+                            })}
+                          </p>
+                        ) : null}
                       </div>
-                      <SubjectCoverage
-                        progress={subjectProgress.get(
-                          `${challenge.courseId ?? "owner-private"}:${challenge.subjectSlug.trim().toLowerCase()}`,
-                        )}
-                      />
+                      {coverage}
                     </div>
 
                     <div className={hubRowActionsClass}>
@@ -2262,7 +2396,7 @@ export function ChallengesDashboardClient({
                             : undefined
                         }
                       >
-                        {challenge.estimatedMinutes && !completed ? (
+                        {challenge.estimatedMinutes ? (
                           <>
                             <span className="block text-[14px] text-[#6b7280] dark:text-text-muted">
                               ~{challenge.estimatedMinutes} min
@@ -2274,29 +2408,17 @@ export function ChallengesDashboardClient({
                           </>
                         ) : null}
                       </span>
-                      {completed ? (
-                        // Done for today, and stays on the list so the day's work
-                        // is visible — but it is a record here, not something to
-                        // open again. The result is in Completed Challenges below.
-                        <span className="inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center gap-1.5 rounded-[10px] bg-success/15 px-3 text-[14px] font-semibold text-success">
-                          <Check className="size-4" aria-hidden="true" />
-                          Completed
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void openChallenge(challenge)}
-                          disabled={openingId === challenge.id}
-                          aria-busy={openingId === challenge.id}
-                          className={`inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center rounded-[10px] bg-[#2563eb] px-4 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(37,99,235,0.2)] transition-colors hover:bg-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60 ${
-                            !started
-                              ? "challenge-start-attention"
-                              : ""
-                          }`}
-                        >
-                          {openingId === challenge.id ? "Opening…" : started ? "Continue" : "Start"}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => void openChallenge(challenge)}
+                        disabled={openingId === challenge.id}
+                        aria-busy={openingId === challenge.id}
+                        className={`inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center rounded-[10px] bg-[#2563eb] px-4 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(37,99,235,0.2)] transition-colors hover:bg-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60 ${
+                          !started ? "challenge-start-attention" : ""
+                        }`}
+                      >
+                        {openingId === challenge.id ? "Opening…" : started ? "Continue" : "Start"}
+                      </button>
                     </div>
                   </div>
                 );

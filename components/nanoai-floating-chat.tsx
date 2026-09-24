@@ -14,10 +14,11 @@ import {
 } from "react";
 import type { AppUser, Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useNanoAiTopic } from "@/lib/nanoai-topic";
 
 /*
  * The NanoAI bubble: the full Library chat (ChatPageClient in its "floating"
- * variant) behind a draggable button on every /app page except the chat itself.
+ * variant) behind a draggable button in the Revision section (/app/notes).
  *
  *   - The chat's code is only fetched the first time the bubble opens, so pages
  *     that never use it pay for a small "Ask AI" pill and nothing else.
@@ -149,7 +150,9 @@ function PanelLoading() {
 
 export function NanoAiFloatingChat({ user }: { user: AppUser }) {
   const pathname = usePathname();
-  const onChatPage = pathname?.startsWith("/app/chat") ?? false;
+  // Only in the Revision section (user, 2026-09-24): `/app/notes` and the pages
+  // under it. Everywhere else — the chat page included — the bubble steps aside.
+  const offRevision = !(pathname === "/app/notes" || pathname?.startsWith("/app/notes/"));
 
   const [button, setButton] = useState<Point | null>(null);
   const [panel, setPanel] = useState<Point | null>(null);
@@ -159,6 +162,22 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [bootstrapError, setBootstrapError] = useState("");
   const [draggingButton, setDraggingButton] = useState(false);
+  /** "Stuck on …?" beside the pill, for a few seconds when a topic first opens. */
+  const topic = useNanoAiTopic();
+  const [nudge, setNudge] = useState("");
+  const nudgedTopics = useRef(new Set<string>());
+  const everOpened = useRef(false);
+  useEffect(() => {
+    const title = topic?.topicTitle;
+    if (!title || open || everOpened.current || nudgedTopics.current.has(title)) return;
+    nudgedTopics.current.add(title);
+    const show = window.setTimeout(() => setNudge(title), 1200);
+    const hide = window.setTimeout(() => setNudge(""), 7200);
+    return () => {
+      window.clearTimeout(show);
+      window.clearTimeout(hide);
+    };
+  }, [topic?.topicTitle, open]);
 
   const dragRef = useRef<{
     target: "button" | "panel";
@@ -210,6 +229,8 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
     setPanel(panelFromButton(button));
     setMounted(true);
     setOpen(true);
+    setNudge("");
+    everOpened.current = true;
     void loadBootstrap();
   }, [button, loadBootstrap]);
 
@@ -230,10 +251,10 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, closePanel]);
 
-  // The full chat page is the same conversation surface; the bubble steps aside.
+  // Outside the Revision section the bubble steps aside.
   useEffect(() => {
-    if (onChatPage) setOpen(false);
-  }, [onChatPage]);
+    if (offRevision) setOpen(false);
+  }, [offRevision]);
 
   function startDrag(
     target: "button" | "panel",
@@ -300,7 +321,7 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
 
   return (
     <>
-      {!open && !onChatPage ? (
+      {!open && !offRevision ? (
         <button
           ref={buttonRef}
           type="button"
@@ -323,21 +344,38 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
           style={{ left: button.x, top: button.y, width: BUTTON_WIDTH, height: BUTTON_HEIGHT }}
           className={cn(
             "fixed z-40 flex touch-none select-none items-center justify-center gap-2 rounded-full border border-border bg-bg-primary pl-1.5 pr-3.5 text-sm font-semibold text-text-primary shadow-[0_8px_24px_rgba(0,0,0,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary",
+            !draggingButton && "nanoai-pill",
             draggingButton
               ? "cursor-grabbing scale-105"
               : "cursor-pointer transition-[left,top,transform] duration-200 ease-out hover:scale-105 motion-reduce:transition-none",
           )}
         >
-          <Image
-            src="/nanologo.png"
-            alt=""
-            width={34}
-            height={34}
-            draggable={false}
-            className="size-[34px] shrink-0 rounded-full object-contain"
-          />
-          <span className="whitespace-nowrap">Ask AI</span>
+          <span className="nanoai-pill-icon shrink-0 rounded-full">
+            <Image
+              src="/nanologo.png"
+              alt=""
+              width={34}
+              height={34}
+              draggable={false}
+              className="size-[34px] rounded-full object-contain"
+            />
+          </span>
+          <span className="nanoai-pill-label whitespace-nowrap">Ask AI</span>
           <Sparkles className="size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+        </button>
+      ) : null}
+      {nudge && !open && !offRevision && !draggingButton ? (
+        <button
+          type="button"
+          onClick={openPanel}
+          style={
+            button.x + BUTTON_WIDTH / 2 >= window.innerWidth / 2
+              ? { right: window.innerWidth - button.x + 10, top: button.y + 4 }
+              : { left: button.x + BUTTON_WIDTH + 10, top: button.y + 4 }
+          }
+          className="nanoai-intro fixed z-40 max-w-[240px] truncate rounded-full border border-border bg-bg-primary px-3.5 py-2 text-sm text-text-primary shadow-[0_8px_24px_rgba(0,0,0,0.16)] hover:bg-bg-secondary"
+        >
+          Stuck on <span className="font-semibold">{nudge}</span>?
         </button>
       ) : null}
 
@@ -347,7 +385,7 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
           role="dialog"
           aria-label="NanoAI chat"
           aria-modal="false"
-          aria-hidden={!open || onChatPage}
+          aria-hidden={!open || offRevision}
           style={panelStyle}
           onPointerDown={(event) => {
             if (isSheet || !panel) return;
@@ -364,7 +402,7 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
             // No transform on this box: the chat's own modals and selection
             // popover are `position: fixed` and must stay viewport-relative.
             "fixed z-40 flex flex-col overflow-hidden bg-bg-primary text-text-primary",
-            (!open || onChatPage) && "hidden",
+            (!open || offRevision) && "hidden",
             isSheet
               ? "inset-0"
               : "rounded-2xl border border-border shadow-[0_24px_64px_rgba(0,0,0,0.28)]",

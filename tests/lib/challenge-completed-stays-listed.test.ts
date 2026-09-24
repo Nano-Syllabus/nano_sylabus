@@ -46,12 +46,14 @@ describe("today's finished challenges on the hub", () => {
     expect(listed.map((challenge) => challenge.id)).toEqual(["open"]);
   });
 
-  it("shows a finished row as a green Completed mark with nothing to click", () => {
+  it("shows a finished subject as today's win, with the way on to its next topic", () => {
+    // Superseding "a green Completed mark with nothing to click" (user,
+    // 2026-09-24): a finished card must lead to the subject's next topic.
     const hub = readFileSync("components/challenges-dashboard-client.tsx", "utf8");
-    const row = hub.slice(hub.indexOf("{completed ? ("), hub.indexOf("Completed\n                        </span>"));
-
-    expect(row).toContain("bg-success/15");
-    expect(row).not.toContain("<button");
+    const row = hub.slice(hub.indexOf("if (completed) {"), hub.indexOf('"Next topic"'));
+    expect(row).toContain("Passed");
+    expect(row).toContain("{score}");
+    expect(row).toContain("openNextInSubject(challenge)");
     expect(hub).not.toContain('"View Details"');
   });
 });

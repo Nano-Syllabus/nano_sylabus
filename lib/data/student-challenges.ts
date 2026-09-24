@@ -2848,9 +2848,15 @@ async function runChallengeContentCompletion(
       })
       .eq("id", challengeId)
       .eq("user_id", userId)
+      // ONLY OVER A ROW STILL WAITING FOR ITS PAPER. Two runs of this build (the
+      // stale re-kick on another worker, a retry) each issue a paper; the second
+      // one landing used to swap the questions out from under a student already
+      // answering the first, and every pick then failed "not on your paper".
+      .eq("content->>contentStatus", "pending")
       .select("*")
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    if (!data) return (await getStudentChallenge(userId, challengeId)) ?? detail;
     // A pooled reading may have arrived with the answers.
     if (needsReading && !content.lesson?.content?.length) {
       scheduleChallengeReading(userId, challengeId, lane.collectionKey, {
@@ -2885,9 +2891,11 @@ async function runChallengeContentCompletion(
       })
       .eq("id", challengeId)
       .eq("user_id", userId)
+      // A run that did finish must not be knocked back to pending by this one.
+      .eq("content->>contentStatus", "pending")
       .select("*")
       .maybeSingle();
-    return data ? toDetail(data as ChallengeRow) : detail;
+    return data ? toDetail(data as ChallengeRow) : ((await getStudentChallenge(userId, challengeId)) ?? detail);
   } finally {
     completionsInFlight.delete(challengeId);
   }

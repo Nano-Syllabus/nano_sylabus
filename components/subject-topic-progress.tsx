@@ -1,5 +1,6 @@
 import { Target } from "lucide-react";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
+import { unitsStartAtOne } from "@/lib/unit-numbering";
 
 function progressColor(percentage: number | null) {
   if (percentage === null) return "text-text-muted";
@@ -46,6 +47,7 @@ function TopicProgressRing({ percentage }: { percentage: number | null }) {
 
 
 export function SubjectTopicProgress({ insight }: { insight?: CommunitySubjectExplorerInsight }) {
+  const showUnits = unitsStartAtOne((insight?.topics ?? []).map((topic) => topic.unitNumber));
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
@@ -68,7 +70,7 @@ export function SubjectTopicProgress({ insight }: { insight?: CommunitySubjectEx
                 <p className="text-sm font-medium text-text-primary">
                   {index + 1}. {topic.title}
                 </p>
-                {topic.unitNumber ? (
+                {showUnits && topic.unitNumber ? (
                   <p className="mt-0.5 text-xs text-text-secondary">
                     Unit {topic.unitNumber}
                   </p>

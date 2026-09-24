@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nextChallengeInSubject } from "@/lib/data/challenge-next-in-subject";
 import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import {
   challengeExamExpired,
@@ -90,6 +91,9 @@ export async function POST(
         answerText: item.student_answer || "[Not answered]",
       })),
     });
+    // A pass frees the subject's card: its next topic is assigned now and handed
+    // back, so the hub shows the way on without a reload.
+    const nextInSubject = graded.passed ? await nextChallengeInSubject(user.id, challenge) : null;
     return NextResponse.json({
       challenge: updated,
       results: graded.results,
@@ -98,6 +102,7 @@ export async function POST(
       totalMarks: graded.total_marks,
       passed: graded.passed,
       xpAwarded: graded.passed ? 50 : 0,
+      nextInSubject,
       // What the result screen leads with, and each question's verdict.
       tally: { ...choiceTally(choices), negativePercent: challenge.content.examNegativePercent ?? 0 },
       review: choices.map((item) => ({

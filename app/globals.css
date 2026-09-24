@@ -1277,3 +1277,80 @@ img.answer-figure.answer-figure-failed {
     animation: none;
   }
 }
+
+/* Ask AI: the intro and its starters rise in, one after another; the pill
+   breathes a soft ring while idle so it reads as there to be used. */
+@keyframes nanoai-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* The same invitation as the Micro-Topics nav item (app-nav-challenges): a
+   2s beat of glow, a wiggle on the label and a ring off the icon — so the two
+   things asking to be used move alike. The pill keeps its drop shadow. */
+@keyframes nanoai-pill-attention {
+  0%,
+  48%,
+  100% {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  }
+
+  19% {
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.22),
+      inset 0 0 0 1px color-mix(in srgb, var(--challenge-banner) 56%, transparent),
+      0 0 22px color-mix(in srgb, var(--challenge-banner) 36%, transparent);
+  }
+}
+
+.nanoai-intro {
+  animation: nanoai-rise 320ms ease-out both;
+}
+
+.nanoai-pill {
+  animation: nanoai-pill-attention 2s ease-in-out infinite;
+}
+
+.nanoai-pill-label {
+  display: inline-block;
+  animation: app-nav-challenges-label 2s linear infinite;
+}
+
+.nanoai-pill-icon {
+  position: relative;
+}
+
+.nanoai-pill-icon::after {
+  position: absolute;
+  inset: -5px;
+  border: 2px solid var(--challenge-banner);
+  border-radius: 9999px;
+  content: "";
+  opacity: 0;
+  animation: app-nav-challenges-icon-pulse 2s ease-out infinite;
+  pointer-events: none;
+}
+
+.nanoai-pill:hover,
+.nanoai-pill:focus-visible,
+.nanoai-pill:hover .nanoai-pill-label,
+.nanoai-pill:focus-visible .nanoai-pill-label,
+.nanoai-pill:hover .nanoai-pill-icon::after,
+.nanoai-pill:focus-visible .nanoai-pill-icon::after {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nanoai-intro,
+  .nanoai-pill,
+  .nanoai-pill-label,
+  .nanoai-pill-icon::after {
+    animation: none;
+  }
+}

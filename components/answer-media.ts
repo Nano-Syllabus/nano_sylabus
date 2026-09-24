@@ -30,6 +30,10 @@ const POLL_MS = 4_000;
 /** Consecutive failures before a poller gives up. A renderer that has gone away
  *  should not be retried forever behind a tab somebody left open. */
 const MAX_FAILURES = 5;
+/** How long a figure's own GET may hang before the status is asked instead. */
+const LOAD_WATCHDOG_MS = 35_000;
+/** A render still "working" after this is treated as stuck, and redrawn. */
+const MAX_DRAW_MS = 180_000;
 /** How long a poster may keep saying "generating" before it says so honestly. */
 const MAX_WAIT_MS = 30 * 60 * 1000;
 
@@ -197,12 +201,18 @@ function attachFigureFrame(img: HTMLImageElement, digest: string, signal: AbortS
   let timer: number | null = null;
   let placeholder: HTMLElement | null = null;
   let settled = false;
+  const drawStartedAt = Date.now();
   const stop = () => {
     if (timer !== null) window.clearTimeout(timer);
     timer = null;
   };
 
   const showPending = (text: string) => {
+    // EAGER BEFORE HIDDEN. The figure is `loading="lazy"`, and a browser never
+    // fetches a lazy image that is `display: none` — so hiding it behind the
+    // placeholder stopped the very load being waited on, and "Loading the
+    // diagram…" stood there for good over a figure the server had ready.
+    img.loading = "eager";
     img.classList.add("answer-figure-pending");
     if (!img.isConnected) return;
     if (!placeholder) {
@@ -238,6 +248,10 @@ function attachFigureFrame(img: HTMLImageElement, digest: string, signal: AbortS
       img.src = next.src;
       clearPending();
     };
+    // Said to be drawn but will not load: have it drawn again.
+    next.onerror = () => {
+      if (!signal.aborted && !settled) giveUp();
+    };
     next.src = `${FIGURE_PREFIX}${digest}.png?r=${Date.now()}`;
   };
 
@@ -272,8 +286,9 @@ function attachFigureFrame(img: HTMLImageElement, digest: string, signal: AbortS
       // cost the reader a figure that is on its way. It costs a poll, not the poll.
       failures += 1;
       if (failures >= MAX_FAILURES) {
+        // The status cannot be read; the picture itself may still come.
         stop();
-        clearPending();
+        retryImage();
         return;
       }
       timer = window.setTimeout(poll, POLL_MS);
@@ -287,6 +302,7 @@ function attachFigureFrame(img: HTMLImageElement, digest: string, signal: AbortS
       return;
     }
     if (!state.working) return giveUp(); // nothing is coming
+    if (Date.now() - drawStartedAt > MAX_DRAW_MS) return giveUp(); // stuck: draw it anew
     showPending("Drawing the diagram…");
     timer = window.setTimeout(poll, POLL_MS);
   };
@@ -311,7 +327,14 @@ function attachFigureFrame(img: HTMLImageElement, digest: string, signal: AbortS
   // progress (up to ~25s). Say so now rather than leaving a blank gap until then.
   if (!img.complete) {
     timer = window.setTimeout(() => {
-      if (!img.complete) showPending("Loading the diagram…");
+      if (img.complete) return;
+      showPending("Loading the diagram…");
+      // A load that neither lands nor errors (a stalled connection, a request
+      // the proxy never answered) must not hold the frame open forever: after
+      // the server's own wait has certainly passed, ask what is happening.
+      timer = window.setTimeout(() => {
+        if (!img.complete || img.naturalWidth === 0) void poll();
+      }, LOAD_WATCHDOG_MS);
     }, 600);
   } else if (img.naturalWidth === 0) {
     void poll();

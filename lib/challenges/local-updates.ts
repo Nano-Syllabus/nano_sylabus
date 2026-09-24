@@ -42,6 +42,9 @@ import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-das
 export function applyChallengePassed(
   dashboard: StudentChallengeDashboard,
   challengeId: string | undefined,
+  /** The subject's next card, assigned by the server on the pass — see
+   *  `lib/data/challenge-next-in-subject.ts`. Joins the list at once. */
+  nextInSubject?: StudentChallengeDashboard["challenges"][number] | null,
 ): StudentChallengeDashboard {
   const firstToday = !dashboard.todayCompleted;
 
@@ -51,8 +54,11 @@ export function applyChallengePassed(
 
   return {
     ...dashboard,
-    challenges: dashboard.challenges.map((challenge) =>
-      challenge.id === challengeId ? { ...challenge, status: "completed" as const } : challenge,
+    challenges: withNext(
+      dashboard.challenges.map((challenge) =>
+        challenge.id === challengeId ? { ...challenge, status: "completed" as const } : challenge,
+      ),
+      nextInSubject,
     ),
     /**
      * A newly passed challenge belongs at the front of the completed list,
@@ -117,4 +123,23 @@ export function applyChallengeState(
     challenges: sync(dashboard.challenges),
     completedChallenges: sync(dashboard.completedChallenges),
   };
+}
+
+/** The new card goes in once, ahead of the finished ones — open work first. */
+function withNext(
+  challenges: StudentChallengeDashboard["challenges"],
+  next: StudentChallengeDashboard["challenges"][number] | null | undefined,
+) {
+  if (!next || challenges.some((challenge) => challenge.id === next.id)) return challenges;
+  const firstDone = challenges.findIndex((challenge) => challenge.status === "completed");
+  if (firstDone < 0) return [...challenges, next];
+  return [...challenges.slice(0, firstDone), next, ...challenges.slice(firstDone)];
+}
+
+/** A card the server just assigned (a finished subject's next topic). */
+export function applyChallengeAdded(
+  dashboard: StudentChallengeDashboard,
+  challenge: StudentChallengeDashboard["challenges"][number],
+): StudentChallengeDashboard {
+  return { ...dashboard, challenges: withNext(dashboard.challenges, challenge) };
 }

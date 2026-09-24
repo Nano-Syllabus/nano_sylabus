@@ -23,6 +23,8 @@ import {
 } from "@/components/study-language";
 import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
 import { Markdown } from "@/components/markdown";
+import { cn } from "@/lib/utils";
+import { publishNanoAiTopic } from "@/lib/nanoai-topic";
 import { WorkedExampleCard, workedAnswerClass } from "@/components/worked-example-card";
 import { WorkedSolution } from "@/components/worked-solution";
 import type {
@@ -433,6 +435,72 @@ function askedIn(example: RevisionDocTopic["solvedExamples"][number]) {
   return years.join(", ");
 }
 
+/**
+ * The paper's MCQs, answer open: the right option ticked, a wrong pick struck
+ * through beside it, and the one-line reason under the options.
+ */
+function McqReview({ mcqs }: { mcqs: RevisionDocTopic["mcqs"] }) {
+  const right = mcqs.filter((item) => item.picked === item.correct).length;
+  const answered = mcqs.filter((item) => item.picked).length;
+  return (
+    <section className="mt-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="type-student-section-title">MCQs from your paper</h2>
+        {answered ? (
+          <p className="text-sm text-text-muted">
+            {right} of {mcqs.length} right
+          </p>
+        ) : null}
+      </div>
+      <ol className="mt-3 divide-y divide-border border-y border-border">
+        {mcqs.map((item, index) => {
+          const missed = item.picked && item.picked !== item.correct;
+          return (
+            <li key={item.id} className="py-5">
+              <div className="flex gap-3">
+                <span className="w-6 shrink-0 pt-0.5 text-sm tabular-nums text-text-muted">{index + 1}.</span>
+                <div className="min-w-0 flex-1">
+                  <Markdown text={item.question} className="text-sm font-semibold leading-6 text-text-primary" />
+                  <ul className="mt-2 space-y-1">
+                    {item.options.map((option) => {
+                      const correct = option.key === item.correct;
+                      const wrongPick = missed && option.key === item.picked;
+                      return (
+                        <li
+                          key={option.key}
+                          className={cn(
+                            "flex items-start gap-2 text-sm leading-6",
+                            correct
+                              ? "font-medium text-emerald-700 dark:text-emerald-400"
+                              : wrongPick
+                                ? "text-red-600 line-through decoration-1 dark:text-red-400"
+                                : "text-text-secondary",
+                          )}
+                        >
+                          <span className="w-4 shrink-0 font-mono text-xs leading-6">{option.key}</span>
+                          <span className="min-w-0 flex-1">{option.text}</span>
+                          {correct ? <Check className="mt-1 h-4 w-4 shrink-0" aria-label="Correct answer" /> : null}
+                          {wrongPick ? <span className="shrink-0 text-xs no-underline">your pick</span> : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {item.explanation ? (
+                    <Markdown
+                      text={item.explanation}
+                      className="mt-2 max-w-prose text-sm leading-6 text-text-muted"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 function TopicPage({ topic }: { topic: RevisionDocTopic }) {
   const [answerFont, setAnswerFont] = useAnswerFont();
   // The same choice, and the same translation, as the challenge's own step 1.
@@ -511,6 +579,8 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
         </section>
       ) : null}
 
+      {topic.mcqs.length ? <McqReview mcqs={topic.mcqs} /> : null}
+
       {topic.solvedExamples.length ? (
         <section className="mt-8" style={answerFontStyle(answerFont)}>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -587,6 +657,14 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
     subjectTopics[0] ??
     null;
 
+  // Ask AI reads the open topic, so it can start from it.
+  const openSubject = selected?.subjectName ?? "";
+  const openTopic = selected?.title ?? "";
+  useEffect(() => {
+    publishNanoAiTopic(openTopic ? { subjectName: openSubject, topicTitle: openTopic } : null);
+  }, [openSubject, openTopic]);
+  useEffect(() => () => publishNanoAiTopic(null), []);
+
   const revise = (key: string) => {
     const entry = subjects.find((candidate) => candidate.key === key);
     setRememberedSubject(key);
@@ -649,14 +727,17 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
             <li key={unit.unitNumber || "unplaced"}>
               {/* Number and name on one line, cut short like the topics under
                   it; the whole name is the hover. */}
-              <p
-                title={unit.title ? `${unit.label} · ${unit.title}` : undefined}
-                className="truncate px-2 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted"
-              >
-                {unit.label}
-                {unit.title ? <span className="text-text-secondary"> · {unit.title}</span> : null}
-              </p>
-              <ul className="ml-2 space-y-0.5 border-l border-border pl-2">
+              {/* A subject that names no units is one plain list. */}
+              {unit.label ? (
+                <p
+                  title={unit.title ? `${unit.label} · ${unit.title}` : undefined}
+                  className="truncate px-2 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted"
+                >
+                  {unit.label}
+                  {unit.title ? <span className="text-text-secondary"> · {unit.title}</span> : null}
+                </p>
+              ) : null}
+              <ul className={unit.label ? "ml-2 space-y-0.5 border-l border-border pl-2" : "space-y-0.5"}>
                 {unit.topics.map((topic) => {
                   const isActive = selected?.challengeId === topic.challengeId;
                   return (

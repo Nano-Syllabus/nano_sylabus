@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { checkExamChoice } from "@/lib/data/challenge-exam-picks";
+import { checkExamChoice, StalePaperError } from "@/lib/data/challenge-exam-picks";
 import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
@@ -30,6 +30,9 @@ export async function POST(
     if (!result) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     return NextResponse.json({ result });
   } catch (error) {
+    if (error instanceof StalePaperError) {
+      return NextResponse.json({ error: error.message, stale: true }, { status: 409 });
+    }
     if (error instanceof RangeError) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json(
       { error: error instanceof Error ? studentFacingBuildError(error.message) : "Could not check this answer." },

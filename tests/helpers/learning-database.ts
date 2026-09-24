@@ -57,7 +57,11 @@ export function learningDatabase(tables: Record<string, Row[]>) {
           else if (!prior) rows.push({ id: `${table}-${rows.length}`, ...value });
         }
       } else if (operation === "update") {
-        for (const row of rows.filter(matches)) Object.assign(row, values[0]);
+        // The rows the filters matched BEFORE the write, as PostgREST returns them.
+        const updated = rows.filter(matches);
+        for (const row of updated) Object.assign(row, values[0]);
+        const returned = updated.slice(0, limit);
+        return { data: single ? returned[0] || null : returned, error: null };
       } else if (operation === "delete") {
         tables[table] = rows.filter((row) => !matches(row));
       }
@@ -67,7 +71,13 @@ export function learningDatabase(tables: Record<string, Row[]>) {
     const query = {
       select: () => query,
       eq: (key: string, value: unknown) => {
-        filters.push((row) => row[key] === value);
+        // `content->>field`: a JSON column's text field, as PostgREST reads it.
+        const [column, field] = key.split("->>");
+        filters.push((row) =>
+          field === undefined
+            ? row[key] === value
+            : String((row[column] as Record<string, unknown> | null)?.[field] ?? "") === value,
+        );
         return query;
       },
       in: (key: string, values: unknown[]) => {

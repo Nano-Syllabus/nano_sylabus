@@ -45,6 +45,7 @@ const topic: RevisionDocTopic = {
   connections: ["Built on the fundamental principles of work and energy."],
   pastQuestions: [],
   solvedExamples: [],
+  mcqs: [],
 };
 
 const docs: StudentRevisionDocs = {

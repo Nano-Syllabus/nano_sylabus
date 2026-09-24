@@ -46,6 +46,7 @@ import { CompactSelect } from "@/components/ui/compact-select";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { dedupeCitationsForDisplay } from "@/lib/citations";
 import { useTenantSubjects } from "@/lib/query/catalog";
+import { topicStarters, useNanoAiTopic } from "@/lib/nanoai-topic";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type {
   AppUser,
@@ -766,13 +767,21 @@ export function ChatPageClient({
     [initialSession, currentSessionId],
   );
   const availableSubjects = useMemo(() => {
-    const all = Object.keys(tenantSubjectsByName)
-      .map((item) => (item ? normalizeSubjectLabel(item) : ""))
-      .filter(Boolean) as string[];
+    // The subjects' own names. The normalised label is only a lookup key: it
+    // upper-cases every short word, so it read "DATA Structures AND Algorithm".
+    const all = Object.values(tenantSubjectsByName)
+      .map((subject) => subject.name.trim())
+      .filter(Boolean);
     return Array.from(new Set(all)).sort((left, right) =>
       left.localeCompare(right, undefined, { sensitivity: "base", numeric: true }),
     );
   }, [tenantSubjectsByName]);
+  /** A stored label (older sessions keep the normalised form) as the subject's own name. */
+  const subjectDisplayName = useCallback(
+    (label: string | null | undefined) =>
+      label ? (tenantSubjectsByName[normalizeSubjectLabel(label)]?.name.trim() || label) : null,
+    [tenantSubjectsByName],
+  );
   const subjectActionOptions = useMemo(
     () => availableSubjects.map((subject) => ({ label: subject, value: subject })),
     [availableSubjects],
@@ -1594,7 +1603,7 @@ export function ChatPageClient({
       (lockedSubjectContext || stripSubjectChapter(subjectContext)),
   );
   const displayedLockedSubjectContext =
-    lockedSubjectContext ?? stripSubjectChapter(subjectContext) ?? "Selected subject";
+    subjectDisplayName(lockedSubjectContext ?? stripSubjectChapter(subjectContext)) ?? "Selected subject";
 
   const addImageFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -2057,7 +2066,9 @@ export function ChatPageClient({
   const updateSessionSubjectContext = useCallback(async (nextSubjectContext: string | null) => {
     if (currentSessionIdRef.current || messages.length > 0 || isLoading) return;
 
-    const normalizedSubjectContext = nextSubjectContext ? normalizeSubjectLabel(nextSubjectContext) : null;
+    // The subject's own name: every lookup normalises it, so nothing needs the
+    // upper-cased form, and it is what the picker and the session show.
+    const normalizedSubjectContext = subjectDisplayName(nextSubjectContext);
     const previousSubjectContext = subjectContext;
     setChatError("");
     setSubjectContext(normalizedSubjectContext);
@@ -2091,7 +2102,7 @@ export function ChatPageClient({
           }
         : prev,
     );
-  }, [activeSessionSummary, isLoading, messages.length, subjectContext]);
+  }, [activeSessionSummary, isLoading, messages.length, subjectContext, subjectDisplayName]);
 
   const handleLibrarySubjectSelect = useCallback(
     (nextSubject: ChatLibrarySubject) => {
@@ -2283,6 +2294,23 @@ export function ChatPageClient({
     }
   }, [shareLoading]);
 
+  /**
+   * The topic open on the Revision page, when this is the floating bubble.
+   * A fresh chat takes its subject from it — no picking before asking — and a
+   * chat already under way keeps the subject it started with.
+   */
+  const screenTopic = useNanoAiTopic();
+  const floatingTopic = isFloating ? screenTopic : null;
+  const topicSubject = floatingTopic
+    ? tenantSubjectsByName[normalizeSubjectLabel(floatingTopic.subjectName)]?.name.trim() ?? null
+    : null;
+  useEffect(() => {
+    if (!topicSubject) return;
+    if (currentSessionIdRef.current || messages.length > 0 || isLoading) return;
+    setSubjectContext(topicSubject);
+  }, [topicSubject, messages.length, isLoading]);
+  const starters = floatingTopic && topicSubject ? topicStarters(floatingTopic) : null;
+
   function applySuggestedPrompt(prompt: string) {
     setInput(prompt);
     composerRef.current?.focus();
@@ -2448,7 +2476,7 @@ export function ChatPageClient({
             </button>
           ) : (
             <CompactSelect
-              value={stripSubjectChapter(subjectContext) ?? ""}
+              value={subjectDisplayName(stripSubjectChapter(subjectContext)) ?? ""}
               onChange={(value) => void updateSessionSubjectContext(value || null)}
               options={subjectActionOptions}
               placeholder={subjectActionOptions.length ? "Subjects" : "No subjects"}
@@ -2699,22 +2727,47 @@ export function ChatPageClient({
             ) : messages.length === 0 ? (
               isFloating ? (
                 <div className="flex w-full flex-1 flex-col justify-end gap-3 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2 text-left">
-                  <div className="rounded-xl border border-border bg-bg-secondary p-4">
-                    <div className="flex items-center gap-3">
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-bg-primary text-text-secondary">
-                        <LibraryBig className="size-5" aria-hidden="true" />
-                      </span>
-                      <div className="min-w-0">
-                        <h2 className="font-display text-base font-semibold">NanoAI Assistant</h2>
-                        <p className="mt-0.5 truncate text-xs text-text-muted">
-                          {subjectContext ?? "Pick a subject to begin"}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-text-secondary">
-                      Stuck on something? Ask NanoAI to explain, summarize, or quiz you. Answers stay grounded in your syllabus.
+                  {/* Starts from what the student is reading: the topic is
+                      named, and each starter is a whole question sent on tap. */}
+                  <div key={floatingTopic?.topicTitle ?? "none"} className="nanoai-intro">
+                    <p className="text-xs font-medium text-text-muted">
+                      {subjectDisplayName(stripSubjectChapter(subjectContext)) ?? "Pick a subject below to begin"}
                     </p>
+                    <h2 className="mt-1 font-display text-lg font-semibold leading-snug">
+                      {floatingTopic ? (
+                        <>
+                          Reading <span className="text-blue-600 dark:text-blue-400">{floatingTopic.topicTitle}</span>?
+                          Ask me anything about it.
+                        </>
+                      ) : (
+                        "What are you stuck on?"
+                      )}
+                    </h2>
                   </div>
+                  {starters ? (
+                    <ul className="flex flex-col items-start gap-2">
+                      {starters.map((prompt, index) => (
+                        <li
+                          key={prompt}
+                          className="nanoai-intro"
+                          style={{ animationDelay: `${80 + index * 60}ms` }}
+                        >
+                          <button
+                            type="button"
+                            disabled={isLoading}
+                            onClick={() => void sendCurrentMessage(prompt)}
+                            className="rounded-2xl border border-border bg-bg-primary px-3.5 py-2 text-left text-sm leading-5 text-text-primary transition-colors hover:border-blue-500/50 hover:bg-blue-500/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
+                          >
+                            {prompt}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="nanoai-intro text-sm leading-6 text-text-secondary" style={{ animationDelay: "80ms" }}>
+                      Ask for an explanation, a summary or a quick quiz. Answers come from your course material.
+                    </p>
+                  )}
                   {chatError ? (
                     <p className="rounded-xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
                       {chatError}

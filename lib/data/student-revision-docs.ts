@@ -5,6 +5,8 @@ import {
   readCourseLearningTopicsBatch,
   type CommunityLearningTopic,
 } from "@/lib/data/community-learning-topics";
+import { unitsStartAtOne } from "@/lib/unit-numbering";
+import { choiceQuestionsOf, openExplanation, unsealAnswer } from "@/lib/data/challenge-exam-format";
 import {
   isMissingChallengeTable,
   isMissingColumn,
@@ -96,6 +98,19 @@ export type RevisionDocTopic = {
   connections: string[];
   pastQuestions: ChallengePastQuestion[];
   solvedExamples: ChallengeSolvedExample[];
+  /** An MCQ community's paper, answers open. */
+  mcqs: RevisionDocMcq[];
+};
+
+/** One MCQ off the topic's paper, with its answer opened for revision. */
+export type RevisionDocMcq = {
+  id: string;
+  question: string;
+  options: { key: string; text: string }[];
+  correct: string;
+  /** What the student chose, or null when they left it. */
+  picked: string | null;
+  explanation: string;
 };
 
 export type RevisionDocUnit = {
@@ -182,6 +197,28 @@ function unworkedPastQuestions(content: StudentChallengeContent | null) {
   );
 }
 
+/**
+ * The paper's MCQs with their keys unsealed. A finished challenge opens them
+ * all; an open one only the questions already answered — the screen showed
+ * those keys the moment they were picked, and the rest are still being sat.
+ */
+function revisionMcqs(row: ChallengeRow, content: StudentChallengeContent | null): RevisionDocMcq[] {
+  const challengeId = text(row.id);
+  const picks = content?.examPicks ?? {};
+  const finished = text(row.status) === "completed";
+  return choiceQuestionsOf(content?.examQuestions ?? [])
+    .filter((question) => finished || Boolean(picks[question.id]))
+    .map((question) => ({
+      id: question.id,
+      question: question.question,
+      options: question.options.map((option) => ({ key: option.key, text: option.text })),
+      correct: unsealAnswer(challengeId, question),
+      picked: picks[question.id] ?? null,
+      explanation: openExplanation(question.explanationSealed),
+    }))
+    .filter((question) => question.correct);
+}
+
 function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {
   const content = (row.content ?? null) as StudentChallengeContent | null;
   const reading = content?.lesson?.content ?? [];
@@ -207,6 +244,7 @@ function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {
     connections: content?.lesson?.connections ?? [],
     pastQuestions: unworkedPastQuestions(content),
     solvedExamples: content?.solvedExamples ?? [],
+    mcqs: revisionMcqs(row, content),
   };
 }
 
@@ -383,6 +421,9 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       // a challenge assigned but never opened, or one whose `/start` has not
       // landed yet — would file an empty page under a real topic title, which
       // reads as "this topic taught you nothing" rather than "not yet".
+      // An MCQ challenge files too — an MCQ-only community otherwise has an
+      // empty Revision however much it has passed (user, 2026-09-24). It has no
+      // solved questions, so its page carries the paper's MCQs, answers open.
       Boolean((row.content ?? null) as StudentChallengeContent | null),
   );
   if (!rows.length) return { semesters: [], topicCount: 0, unavailable: false };
@@ -496,6 +537,33 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
     subject.topicCount += 1;
     semester.topicCount += 1;
     topicCount += 1;
+  }
+
+  // A subject whose syllabus does not count its units from 1 (a licence
+  // subject that is chapter 7 of a larger syllabus) names none of them: one
+  // list, in syllabus order, as the Library shows it. Judged on the whole
+  // catalogue, not the units filed so far, so passing only Unit 3 of an
+  // ordinary subject does not hide its numbering.
+  const catalogueUnits = new Map<string, string[]>();
+  for (const [placementKey, placement] of placements) {
+    // Keys are `${courseId}:${slug}:…` — the scope is their first two parts.
+    const scope = placementKey.split(":").slice(0, 2).join(":");
+    const units = catalogueUnits.get(scope) ?? [];
+    units.push(placement.unitNumber);
+    catalogueUnits.set(scope, units);
+  }
+  for (const [subjectKey, subject] of subjectsByKey) {
+    const scope = scopeKey(subject.courseId, subject.subjectSlug);
+    const numbers = catalogueUnits.get(scope) ?? subject.units.map((unit) => unit.unitNumber);
+    if (unitsStartAtOne(numbers)) continue;
+    const topics = subject.units.flatMap((unit) => unit.topics);
+    for (const unit of subject.units) {
+      for (const topic of unit.topics) {
+        const order = topicOrder.get(`${subjectKey}:${unit.unitNumber}:${topic.topicKey}`);
+        if (order !== undefined) topicOrder.set(`${subjectKey}:${UNPLACED_UNIT}:${topic.topicKey}`, order);
+      }
+    }
+    subject.units = topics.length ? [{ unitNumber: UNPLACED_UNIT, label: "", title: "", topics }] : [];
   }
 
   // Curriculum order everywhere it is known: a revision doc that lists Unit 7

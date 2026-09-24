@@ -39,6 +39,34 @@ function requestFigure(challengeId: string, question: string, deadFigureUrl?: st
   return pending;
 }
 
+/**
+ * A figure is not allowed to fail on the first miss (user, 2026-09-24): the
+ * renderer answers 503 when busy, and its model sometimes writes a scene that
+ * does not compile. Each try is spaced out, and a redraw's retry carries the
+ * dead id, so the server words a fresh brief rather than hitting the cooldown.
+ */
+// About eight minutes of trying, "Drawing the diagram…" throughout, before the
+// page admits it — long enough to outlast a renderer restart or a deploy.
+const FIGURE_RETRY_DELAYS_MS = [0, 5_000, 15_000, 40_000, 60_000, 90_000, 120_000, 180_000];
+/** Redraws of redraws, per answer per view: past this the renderer is not the fix. */
+const MAX_REDRAWS = 4;
+
+async function requestFigureWithRetries(
+  challengeId: string,
+  question: string,
+  accept: (drawn: DrawnFigure) => boolean,
+  isActive: () => boolean,
+  deadFigureUrl?: string,
+) {
+  for (const delay of FIGURE_RETRY_DELAYS_MS) {
+    if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
+    if (!isActive()) return null;
+    const drawn = await requestFigure(challengeId, question, deadFigureUrl);
+    if (drawn && accept(drawn)) return drawn;
+  }
+  return null;
+}
+
 function withNote(solution: string, section: EmptyFigureSection, note: string) {
   const { insertAt } = section;
   // Above a paragraph the note needs its own paragraph; under a heading the
@@ -129,9 +157,14 @@ export function WorkedSolution({
         startedRef.current = true;
         observer.disconnect();
         setState("drawing");
-        void requestFigure(challengeId, question).then((drawn) => {
+        void requestFigureWithRetries(
+          challengeId,
+          question,
+          (drawn) => !emptyFigureSection(drawn.solution, question),
+          () => active,
+        ).then((drawn) => {
           if (!active) return;
-          if (!drawn || emptyFigureSection(drawn.solution, question)) {
+          if (!drawn) {
             setState("failed");
             return;
           }
@@ -166,13 +199,21 @@ export function WorkedSolution({
       const src = (event as CustomEvent<FigureFailedDetail>).detail?.src ?? "";
       if (!drawnFigureDigest(src) || redrawnRef.current.has(src)) return;
       if (!currentRef.current.includes(`](${src})`)) return;
+      if (redrawnRef.current.size >= MAX_REDRAWS) {
+        setRedraw({ dead: src, state: "failed" });
+        return;
+      }
       redrawnRef.current.add(src);
       setRedraw({ dead: src, state: "drawing" });
-      void requestFigure(challengeId, question, src).then((drawn) => {
+      void requestFigureWithRetries(
+        challengeId,
+        question,
+        (drawn) => !drawn.solution.includes(`](${src})`) && !emptyFigureSection(drawn.solution, question),
+        () => active,
+        src,
+      ).then((drawn) => {
         if (!active) return;
-        const replaced =
-          drawn && !drawn.solution.includes(`](${src})`) && !emptyFigureSection(drawn.solution, question);
-        if (!drawn || !replaced) {
+        if (!drawn) {
           setRedraw({ dead: src, state: "failed" });
           return;
         }

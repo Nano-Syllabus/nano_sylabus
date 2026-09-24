@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   access: vi.fn(),
   creatorAccess: vi.fn(),
   topics: vi.fn(),
+  noUnitOne: false,
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.admin }));
 vi.mock("@/lib/student-courses", () => ({
@@ -31,9 +32,14 @@ vi.mock("@/lib/data/community-learning-topics", () => {
     ) => {
       const resolved = new Map<string, unknown>();
       for (const request of requests) {
+        const topics = await mocks.topics(request.courseId, request.teacherId, request.subjectSlug);
+        // Every catalogue counts its units from 1 unless a case says otherwise:
+        // one that does not names no units at all (see `lib/unit-numbering.ts`).
         resolved.set(
           key(request),
-          await mocks.topics(request.courseId, request.teacherId, request.subjectSlug),
+          Array.isArray(topics) && !mocks.noUnitOne
+            ? [{ topic_key: "__unit-one", title: "Unit one opener", unit_number: "1", position: -1 }, ...topics]
+            : topics,
         );
       }
       return resolved;
@@ -98,6 +104,7 @@ describe("revision docs", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.noUnitOne = false;
     db = communityLearningFixture();
     db.tables.student_challenges = [completedRow()];
     mocks.admin.mockReturnValue(db.admin);
@@ -106,6 +113,19 @@ describe("revision docs", () => {
     mocks.topics.mockResolvedValue([
       { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", position: 4 },
     ]);
+  });
+
+  it("names no units in a subject whose syllabus does not count them from 1", async () => {
+    // A licence subject is chapter 7 of a larger syllabus: its units are 7.1,
+    // 7.2 … and read as six missing units (user, 2026-09-24).
+    mocks.noUnitOne = true;
+    mocks.topics.mockResolvedValue([
+      { topic_key: "laplace", title: "Laplace Transform", unit_number: "7.1", position: 4 },
+    ]);
+    const docs = await getStudentRevisionDocs("member");
+    const units = docs.semesters[0].subjects[0].units;
+    expect(units.map((unit) => unit.label)).toEqual([""]);
+    expect(units[0].topics[0].title).toBe("Laplace Transform");
   });
 
   it("files a passed challenge under semester, subject and unit", async () => {
@@ -170,7 +190,7 @@ describe("revision docs", () => {
     const docs = await getStudentRevisionDocs("member");
 
     expect(docs.topicCount).toBe(1);
-    expect(docs.semesters[0].subjects[0].units[0].label).toBe("Other topics");
+    expect(docs.semesters[0].subjects[0].units[0].label).toBe(""); // one plain list: nothing to number it by
     expect(docs.semesters[0].subjects[0].units[0].topics[0].title).toBe("Laplace Transform");
   });
 

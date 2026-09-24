@@ -43,9 +43,12 @@ async function readRow(userId: string, challengeId: string) {
   return data as Row | null;
 }
 
+/** The browser is showing a paper the row no longer holds: it should reload, not retry. */
+export class StalePaperError extends RangeError {}
+
 function paperQuestion(content: StudentChallengeContent | null, questionId: string) {
   const question = choiceQuestionsOf(content?.examQuestions ?? []).find((item) => item.id === questionId);
-  if (!question) throw new RangeError("That question is not on your current paper.");
+  if (!question) throw new StalePaperError("That question is not on your current paper.");
   return question;
 }
 
