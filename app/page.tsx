@@ -249,7 +249,7 @@ export default function LandingPage() {
       <h1
         className={`${manrope.className} text-[clamp(2.7rem,5.5vw,5.5rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
       >
-        Everything you need to 10x your exam {" "}
+        10x your exam {" "}
         <span className="relative isolate inline-block px-1">
           preparation.
           <span
@@ -260,7 +260,7 @@ export default function LandingPage() {
       </h1>
 
       <p className="mx-auto mt-7 max-w-[690px] text-[17px] leading-relaxed text-[#5b5e55] sm:text-[19px]">
-        Notes, solved past papers, and an AI tutor - organized into a study
+        Everything you need from notes, solved past papers, mock exams, AI tutor to real-time progress tracking - organized into a study
         routine, one topic at a time.
       </p>
 
