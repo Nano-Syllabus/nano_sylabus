@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { CANONICAL_BASE_URL } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -17,6 +18,6 @@ export default function robots(): MetadataRoute.Robots {
         "/teachers-v2/",
       ],
     },
-    sitemap: "https://nanosyllabus.com/sitemap.xml",
+    sitemap: `${CANONICAL_BASE_URL}/sitemap.xml`,
   };
 }

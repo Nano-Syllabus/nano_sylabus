@@ -4,6 +4,7 @@ import { DM_Sans, Manrope } from "next/font/google";
 import { BarChart3, BookOpen, CheckCircle2, Lightbulb, Play } from "lucide-react";
 import { LandingPrimaryCta } from "@/components/landing-primary-cta";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
+import { buildCanonicalUrl } from "@/lib/site";
 
 const dmSans = DM_Sans({ subsets: ["latin"], display: "swap" });
 const manrope = Manrope({ subsets: ["latin"], display: "swap" });
@@ -13,13 +14,13 @@ export const metadata = {
   description:
     "Turn your syllabus into focused study challenges. Practice with guided feedback, exam prep, and a supportive community built for Nepal's students.",
   alternates: {
-    canonical: "/",
+    canonical: buildCanonicalUrl("/"),
   },
   openGraph: {
     title: "NanoSyllabus — AI Study Companion for Nepal",
     description:
       "Turn your syllabus into focused study challenges. Practice with guided feedback, exam prep, and a supportive community built for Nepal's students.",
-    url: "/",
+    url: buildCanonicalUrl("/"),
   },
 };
 
