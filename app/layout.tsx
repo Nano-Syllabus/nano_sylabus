@@ -3,6 +3,7 @@ import { DM_Mono, Inter, Outfit, Poppins } from "next/font/google";
 import { ReactNode } from "react";
 import { DevPerfHud } from "@/components/dev-perf-hud";
 import { QueryProvider } from "@/components/query-provider";
+import { CANONICAL_BASE_URL, buildCanonicalUrl } from "@/lib/site";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -101,7 +102,7 @@ const extensionAttributeStripScript = `
 `;
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://nanosyllabus.com"),
+  metadataBase: new URL(CANONICAL_BASE_URL),
   applicationName: "NanoSyllabus",
   title: {
     default: "NanoSyllabus — AI Study Companion for Nepal",
@@ -131,7 +132,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://nanosyllabus.com",
+    url: buildCanonicalUrl("/"),
     siteName: "NanoSyllabus",
     title: "NanoSyllabus — AI Study Companion for Nepal",
     description:

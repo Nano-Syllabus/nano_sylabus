@@ -15,6 +15,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+import { buildCanonicalUrl } from "@/lib/site";
 import { getPublishedCourse, listPublishedCourses } from "@/lib/student-courses";
 import type { TeacherCourse } from "@/lib/teacher-courses";
 import { titleCase } from "@/lib/utils";
@@ -31,16 +32,18 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const pageTitle = `${titleCase(course.name)} - NanoSyllabus`;
   const pageDescription = course.tagline || course.description;
 
+  const canonicalUrl = buildCanonicalUrl(`/exams/${slug}`);
+
   return {
     title: pageTitle,
     description: pageDescription,
     alternates: {
-      canonical: `/exams/${slug}`,
+      canonical: canonicalUrl,
     },
     openGraph: {
       title: pageTitle,
       description: pageDescription,
-      url: `/exams/${slug}`,
+      url: canonicalUrl,
       images: [
         {
           url: "/icon.png",

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PublicExamsClient } from "@/components/public-exams-client";
+import { buildCanonicalUrl } from "@/lib/site";
 import { listPublishedCourses } from "@/lib/student-courses";
 
 const TITLE = "Browse all exams - nanosyllabus";
@@ -10,12 +11,12 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESC,
   alternates: {
-    canonical: "/exams",
+    canonical: buildCanonicalUrl("/exams"),
   },
   openGraph: {
     title: TITLE,
     description: DESC,
-    url: "/exams",
+    url: buildCanonicalUrl("/exams"),
   },
 };
 

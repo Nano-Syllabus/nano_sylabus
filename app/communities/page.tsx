@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CommunityCatalogClient } from "@/components/community-catalog-client";
 import { listPublicCommunities } from "@/lib/data/communities";
+import { buildCanonicalUrl } from "@/lib/site";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
@@ -11,13 +12,13 @@ export const metadata: Metadata = {
   description:
     "Find and join university, faculty, year, semester, and subject communities on NanoSyllabus.",
   alternates: {
-    canonical: "/communities",
+    canonical: buildCanonicalUrl("/communities"),
   },
   openGraph: {
     title: "Browse communities — NanoSyllabus",
     description:
       "Find and join university, faculty, year, semester, and subject communities on NanoSyllabus.",
-    url: "/communities",
+    url: buildCanonicalUrl("/communities"),
   },
 };
 
