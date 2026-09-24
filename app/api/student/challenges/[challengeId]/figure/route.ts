@@ -13,6 +13,9 @@ export const dynamic = "force-dynamic";
  * ask for the one figure that example is missing — and once it is filed on the
  * row, asking again draws nothing. See `drawMissingChallengeFigure`.
  *
+ * `deadFigureUrl` asks for a figure already on the solution to be replaced,
+ * which happens only when the renderer itself reports it will never arrive.
+ *
  * 503 is "the renderer could not take it now": not a fault in the request, and
  * the same call works later.
  */
@@ -28,11 +31,21 @@ export async function POST(
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { challengeId } = await params;
-    const body = (await request.json().catch(() => ({}))) as { question?: unknown };
+    const body = (await request.json().catch(() => ({}))) as {
+      question?: unknown;
+      deadFigureUrl?: unknown;
+    };
     const question = typeof body.question === "string" ? body.question.trim() : "";
+    const deadFigureUrl =
+      typeof body.deadFigureUrl === "string" ? body.deadFigureUrl.trim() : undefined;
     if (!question) return NextResponse.json({ error: "Name the question." }, { status: 400 });
 
-    const result = await drawMissingChallengeFigure(user.id, challengeId, question);
+    const result = await drawMissingChallengeFigure(
+      user.id,
+      challengeId,
+      question,
+      deadFigureUrl,
+    );
     if (!result.challenge) {
       return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     }

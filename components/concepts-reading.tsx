@@ -5,7 +5,6 @@ import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import { AnswerFontPicker, answerFontStyle, useAnswerFont } from "@/components/answer-font-picker";
 import { Markdown } from "@/components/markdown";
-import { TranslatingLines } from "@/components/study-language";
 import { paperLabelClass, paperTextClass, workedAnswerClass } from "@/components/worked-example-card";
 import { cn } from "@/lib/utils";
 
@@ -216,21 +215,23 @@ export function ConceptsCard({
   source,
   className,
   translating = false,
+  bare = false,
 }: {
   source: ConceptsSource;
   className?: string;
   /** Roman Nepali is being written: the preview is held and the sheet waits. */
   translating?: boolean;
+  /** No card surface: a heading and the button, on the page itself. */
+  bare?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   // Stable, so the sheet's focus-and-scroll effect runs once per opening rather
   // than on every render of the screen behind it.
   const close = useCallback(() => setOpen(false), []);
   if (!source.reading.length) return null;
-  const preview = readingPreview(source.reading);
   return (
     <section
-      className={cn(conceptsCardClass, className)}
+      className={cn(!bare && conceptsCardClass, className)}
     >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="type-student-section-title">Concepts</h2>
@@ -238,13 +239,8 @@ export function ConceptsCard({
           {readingMinutes(source.reading)} min read
         </span>
       </div>
-      {translating ? (
-        <TranslatingLines lines={2} className="mt-3 max-w-prose" />
-      ) : preview ? (
-        <p className="mt-2 line-clamp-2 max-w-prose text-sm leading-6 text-text-secondary">
-          {preview}
-        </p>
-      ) : null}
+      {/* No preview line: the card is the way in, and two clipped sentences
+          of the reading only repeated its first paragraph (user, 2026-09-24). */}
       <button
         type="button"
         disabled={translating}
@@ -253,7 +249,7 @@ export function ConceptsCard({
         className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
       >
         <BookOpen className="size-4" aria-hidden="true" />
-        Read concepts
+        {translating ? "Putting it into Roman Nepali…" : "Read concepts"}
       </button>
       {open
         ? createPortal(<ConceptsDrawer source={source} onClose={close} />, document.body)
@@ -289,6 +285,7 @@ export function AwaitedConceptsCard({
   waiting = false,
   onReading,
   className,
+  bare = false,
 }: {
   source: ConceptsSource;
   readingError?: string | null;
@@ -296,6 +293,8 @@ export function AwaitedConceptsCard({
   /** Told when the reading lands, so a parent can keep it past an unmount. */
   onReading?: (reading: string[]) => void;
   className?: string;
+  /** As on `ConceptsCard`: no card surface. */
+  bare?: boolean;
 }) {
   const [reading, setReading] = useState<string[]>(source.reading);
   const [error, setError] = useState(readingError || "");
@@ -346,7 +345,9 @@ export function AwaitedConceptsCard({
     };
   }, [source.id, waiting, reading.length, error]);
 
-  if (reading.length) return <ConceptsCard source={{ ...source, reading }} className={className} />;
+  if (reading.length) {
+    return <ConceptsCard source={{ ...source, reading }} className={className} bare={bare} />;
+  }
   const note = error
     ? "The concepts reading for this topic couldn't be written from your course material yet. It will be tried again the next time you open it."
     : gaveUp
@@ -357,7 +358,7 @@ export function AwaitedConceptsCard({
       role="status"
       aria-live="polite"
       className={cn(
-        "rounded-xl border border-border bg-bg-secondary p-4 text-sm text-text-muted",
+        bare ? "text-sm text-text-muted" : "rounded-xl border border-border bg-bg-secondary p-4 text-sm text-text-muted",
         className,
       )}
     >

@@ -28,7 +28,14 @@ import {
 } from "@/lib/teacher-app/client";
 import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
 import { normalizeQuestionText } from "@/lib/challenge-learn-questions";
-import { emptyFigureSection, figureBrief, withFigure } from "@/lib/answer-figures";
+import {
+  drawnFigureDigest,
+  emptyFigureSection,
+  figureBrief,
+  withFigure,
+  withoutFigure,
+} from "@/lib/answer-figures";
+import { proxyMedia } from "@/lib/tenant/media-proxy";
 import { readCourseLearningTopics } from "@/lib/data/community-learning-topics";
 import { createLimiter } from "@/lib/http/limit";
 import { collectionKeyForTeacher } from "@/lib/data/challenge-collection-key";
@@ -50,7 +57,7 @@ import {
   CHALLENGE_MCQ_EXAM_QUESTIONS,
   type ChallengeQuestionFormat,
 } from "@/lib/challenge-format";
-import { challengeFormatForCourse } from "@/lib/data/community-challenge-format";
+import { challengeFormatForCourse, challengeSettingsForCourse } from "@/lib/data/community-challenge-format";
 import {
   ChallengeMcqUnavailableError,
   issueChallengeChoiceQuestions,
@@ -170,12 +177,29 @@ export type EnsureDailyChallengeOptions = {
    */
   concurrentChallengeLimit?: number;
   /**
+   * The subjects (`${courseId ?? "owner-private"}:${slug}`) whose open
+   * challenges count against `concurrentChallengeLimit`.
+   *
+   * Without it every open row dated today counted, including ones from a
+   * community the student has since left or a semester they have moved off.
+   * Those rows are never shown, yet they spent the allowance: seven open
+   * challenges from the old community left a ten-subject semester three cards.
+   */
+  ceilingScopeKeys?: ReadonlySet<string>;
+  /**
    * Also return today's COMPLETED challenges, after the open ones. The Challenge
    * Hub keeps a finished challenge on its list — green, and not openable from
    * there — so today's work stays visible instead of vanishing when it is done.
    * Every other caller wants only what can still be started.
    */
   includeCompleted?: boolean;
+  /**
+   * Never hand a subject a second open challenge. The hub is one card per
+   * subject of the running semester; without this the slots were filled by
+   * count alone, so a subject whose card had been started was given another
+   * — "Data Structures and Algorithm" twice, one Continue and one Start.
+   */
+  onePerSubject?: boolean;
 };
 
 export type StudentChallengeSummary = {
@@ -260,6 +284,7 @@ export type ChallengeExamQuestion = {
    *  paper. Its key is sealed in `answerCheck` — see `challenge-exam-format.ts`. */
   options?: ChallengeChoiceOption[];
   answerCheck?: string;
+  explanationSealed?: string;
 };
 
 export function isChoiceQuestion(
@@ -309,6 +334,12 @@ export type StudentChallengeContent = {
    * reaches every student. Absent on papers from before formats: those are QnA.
    */
   examFormat?: ChallengeQuestionFormat;
+  /** Negative marking on this paper's MCQs, as the community had it when the
+   *  paper was issued: a creator's later change does not re-mark a sitting. */
+  examNegativePercent?: number;
+  /** Final picks on an MCQ paper, recorded as each is made — see
+   *  `lib/data/challenge-exam-picks.ts`. Cleared with each new paper. */
+  examPicks?: Record<string, string>;
   contentStatus?: ChallengeContentStatus;
   /** When the background completion was handed off; drives the stale re-kick. */
   contentPendingSince?: string;
@@ -526,9 +557,13 @@ export function challengeEstimate(content: StudentChallengeContent | null): {
 }
 
 function rowContent(row: ChallengeRow): StudentChallengeContent | null {
-  return row.content && typeof row.content === "object" && !Array.isArray(row.content)
-    ? (row.content as StudentChallengeContent)
-    : null;
+  if (!row.content || typeof row.content !== "object" || Array.isArray(row.content)) return null;
+  const content = row.content as StudentChallengeContent;
+  // A build error filed before `studentFacingBuildError` existed still carries
+  // the course API's own wording; it is read back in the student's.
+  return content.contentError
+    ? { ...content, contentError: studentFacingBuildError(content.contentError) }
+    : content;
 }
 
 function toSummary(row: ChallengeRow): StudentChallengeSummary {
@@ -708,6 +743,16 @@ function recommendationKey(recommendation: ChallengeRecommendation) {
   ].join(":");
 }
 
+/** The subject a row belongs to, keyed as the dashboard keys subjects. */
+function rowSubjectKey(row: ChallengeRow) {
+  return [
+    row.course_id ? String(row.course_id) : "owner-private",
+    String(row.subject_slug ?? "")
+      .trim()
+      .toLowerCase(),
+  ].join(":");
+}
+
 function rowRecommendationKey(row: ChallengeRow) {
   return [
     row.course_id ? String(row.course_id) : "owner-private",
@@ -873,18 +918,31 @@ export async function ensureDailyChallenges(
   const offerableRow = (row: ChallengeRow) =>
     !isSourceDocumentChallengeRow(row) && !retired.has(String(row.id));
   const active = existing.filter((row) => row.status !== "completed" && offerableRow(row));
+  const ceilingKeys = options.ceilingScopeKeys;
+  const activeInScope = ceilingKeys
+    ? active.filter((row) => ceilingKeys.has(rowSubjectKey(row)))
+    : active;
   const assignedKeys = new Set(existing.map(rowRecommendationKey));
   const recommendationKeys = new Set(recommendations.map(recommendationKey));
   const activeRecommendationCount = active.filter((row) =>
     recommendationKeys.has(rowRecommendationKey(row)),
   ).length;
+  const openSubjects = new Set(active.map(rowSubjectKey));
   const available = recommendations.filter(
     (recommendation) => !assignedKeys.has(recommendationKey(recommendation)),
-  );
+  ).filter((recommendation) => {
+    if (!options.onePerSubject) return true;
+    // One per subject: none for a subject that already has an open card, and
+    // only the first (best-ranked) for one that does not.
+    const subject = `${recommendation.courseId ?? "owner-private"}:${recommendation.subjectSlug.trim().toLowerCase()}`;
+    if (openSubjects.has(subject)) return false;
+    openSubjects.add(subject);
+    return true;
+  });
   const selected = available.slice(
     0,
     dailyChallengeAssignmentCount({
-      activeCount: active.length,
+      activeCount: activeInScope.length,
       activeRecommendationCount,
       availableCount: available.length,
       minimumRecommendationCount: options.minimumRecommendationCount,
@@ -900,7 +958,7 @@ export async function ensureDailyChallenges(
       // Counting only what is still OPEN makes the ceiling mean "three on your
       // plate", so solving one lets the next arrive — which is what the queue
       // was always described as doing.
-      dailyCount: active.length,
+      dailyCount: activeInScope.length,
       maximumDailyCount: unlimitedConcurrentChallenges
         ? Infinity
         : Math.max(3, options.concurrentChallengeLimit ?? 3),
@@ -1149,6 +1207,7 @@ type IssuedChallengePaper = {
   passMarks: number;
   durationMinutes: number;
   warning: string | null;
+  negativePercent: number;
 };
 
 /** How long an MCQ-only paper stays open. Nothing upstream holds it, so this is
@@ -1173,6 +1232,9 @@ function passMarksFor(totalMarks: number) {
  */
 async function issueFormattedChallengeExam(input: {
   format: ChallengeQuestionFormat;
+  /** MCQs on an MCQ paper — the community's count. */
+  mcqCount?: number;
+  negativePercent?: number;
   challengeId: string;
   collectionKey: string;
   subject: string;
@@ -1215,6 +1277,7 @@ async function issueFormattedChallengeExam(input: {
       passMarks: number(exam.pass_marks),
       durationMinutes: number(exam.duration_minutes) || input.durationMinutes,
       warning: warningText(warning, exam.warning),
+      negativePercent: 0,
     };
   };
   const unavailable =
@@ -1222,7 +1285,7 @@ async function issueFormattedChallengeExam(input: {
 
   if (input.format === "mcq") {
     try {
-      const questions = await choices(CHALLENGE_MCQ_EXAM_QUESTIONS);
+      const questions = await choices(input.mcqCount ?? CHALLENGE_MCQ_EXAM_QUESTIONS);
       const totalMarks = questions.reduce((sum, question) => sum + question.marks, 0);
       return {
         externalPaperId: `mcq-${randomUUID()}`,
@@ -1232,8 +1295,10 @@ async function issueFormattedChallengeExam(input: {
         expiresAt: new Date(Date.now() + MCQ_PAPER_TTL_MS).toISOString(),
         totalMarks,
         passMarks: passMarksFor(totalMarks),
-        durationMinutes: input.durationMinutes,
+        // About a minute a question, and never less than the challenge's own.
+        durationMinutes: Math.max(input.durationMinutes, questions.length),
         warning: null,
+        negativePercent: input.negativePercent ?? 0,
       };
     } catch (cause) {
       if (cause instanceof ChallengeMcqUnavailableError) return writtenPaper(unavailable);
@@ -1264,6 +1329,7 @@ async function issueFormattedChallengeExam(input: {
       passMarks: passMarksFor(totalMarks),
       durationMinutes: number(exam.duration_minutes) || input.durationMinutes,
       warning: warningText(exam.warning),
+      negativePercent: input.negativePercent ?? 0,
     };
   }
   return writtenPaper();
@@ -1308,7 +1374,16 @@ async function resolveChallengeLane(userId: string, row: ChallengeRow, known?: C
   if (!collectionKey) {
     throw new Error("This course creator's study collection is not ready yet.");
   }
-  return { collectionKey, subject: access.subjectName || String(row.subject_name || "") };
+  // THE SLUG, NOT THE NAME. The course API resolves a subject by either, but a
+  // community subject's display name can drift from the creator's own ("Computer
+  // Network and Network Security System" against "Concept of Computer Network…"),
+  // and every call then failed with a list of the collection's subjects shown to
+  // the student. The slug is what the community row was attached by; it does not
+  // change when a title does.
+  return {
+    collectionKey,
+    subject: access.subjectSlug || access.subjectName || String(row.subject_name || ""),
+  };
 }
 
 /**
@@ -1375,6 +1450,22 @@ function lessonParagraphs(content: string) {
     .filter((paragraph) => !OPERATOR_DIAGNOSTIC.test(paragraph));
 }
 
+/**
+ * What a student is told when their challenge could not be built. The course
+ * API's own message is for the creator and for logs — "subject 'X' is not
+ * pinned in this collection — one of: …" put the collection's whole subject
+ * list on a student's screen.
+ */
+export function studentFacingBuildError(message: string) {
+  if (/not pinned in this collection|no subjects are pinned|subject is required/i.test(message)) {
+    return "This subject's course material couldn't be found. Your teacher may have renamed or moved it — try again later.";
+  }
+  if (message.length > 240 || /one of: '/.test(message)) {
+    return "This challenge couldn't be prepared right now. Try again in a little while.";
+  }
+  return message;
+}
+
 function warningText(...warnings: Array<string | null | undefined | string[]>) {
   return (
     warnings
@@ -1433,6 +1524,8 @@ function contentWithExam(
     examQuestions: paper.questions,
     examExpiresAt: paper.expiresAt,
     examAttemptNumber: attemptNumber,
+    examNegativePercent: paper.negativePercent,
+    examPicks: {},
     // The previous paper's note is not carried: it described that paper.
     examWarning: paper.warning,
   };
@@ -1575,6 +1668,11 @@ function hasLiveExam(
   // A paper set in another format than the community now asks for is stale:
   // this is how a creator switching QnA → MCQ reaches every student.
   if ((content.examFormat ?? "qna") !== format) return false;
+  // An MCQ community's paper with no choices on it is the written fallback a
+  // course server too old for exam MCQs gave. Its one-page screen cannot sit
+  // it, so it is re-issued on the next open — which is how it heals once the
+  // course server is updated.
+  if (format === "mcq" && !content.examQuestions.some(isChoiceQuestion)) return false;
   const hasCurrentMarkingShape =
     content.examQuestions.length > 0 &&
     (content.examProvider === "challenge-mcq-v1" ||
@@ -1681,7 +1779,12 @@ export async function startStudentChallenge(
       const startedAt = new Date().toISOString();
       const { data, error } = await admin
         .from("student_challenges")
-        .update({ status: "started", started_at: startedAt, updated_at: startedAt })
+        .update({
+          status: "started",
+          started_at: startedAt,
+          updated_at: startedAt,
+          content: { ...current.content, examFormat: await challengeFormatForCourse(current.courseId) },
+        })
         .eq("id", challengeId)
         .eq("user_id", userId)
         .select("*")
@@ -1729,7 +1832,9 @@ export async function startStudentChallenge(
       // leaving the id behind would let `hasLiveExam` claim a live exam that no
       // longer has questions on the row.
       external_paper_id: null,
-      content: built.content,
+      // The format is on the row from the start, so the screen can lay out an
+      // MCQ community's single page before its questions have been set.
+      content: { ...built.content, examFormat: await challengeFormatForCourse(current.courseId) },
       ...built.topicFields,
       started_at: now,
       updated_at: now,
@@ -2213,13 +2318,16 @@ export async function prepareStudentChallenge(
       .filter(Boolean);
     // The completion's own request, so what it asks for after Start is what
     // this put in the pool. The answers themselves are not kept here: the
-    // completion writes them, with the paper that must exclude them.
-    await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
-      subject: lane.subject,
-      topics,
-      limit: CHALLENGE_SOLVED_QUESTIONS,
-      ...(listed.length ? { questions: listed } : {}),
-    });
+    // completion writes them, with the paper that must exclude them. An MCQ
+    // community shows no worked answers, so none are written ahead for it.
+    if ((await challengeFormatForCourse(row.course_id ? String(row.course_id) : null)) !== "mcq") {
+      await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
+        subject: lane.subject,
+        topics,
+        limit: CHALLENGE_SOLVED_QUESTIONS,
+        ...(listed.length ? { questions: listed } : {}),
+      });
+    }
     const learning = await getTeacherChallengeReading(lane.collectionKey, {
       subject: lane.subject,
       topics,
@@ -2660,6 +2768,7 @@ async function runChallengeContentCompletion(
    * everything the student needs.
    */
   const needsReading = !pending.lesson?.content?.length;
+  const settings = await challengeSettingsForCourse(row.course_id ? String(row.course_id) : null);
   try {
     /**
      * THE QUESTIONS STEP ONE LISTED ARE THE ONES ANSWERED.
@@ -2675,7 +2784,13 @@ async function runChallengeContentCompletion(
       .filter(Boolean);
     // THE GLOBAL POOL FIRST. A topic it holds ready already has its worked
     // answers — and usually its reading — so the only call left is the paper.
-    let withSolved = await pooledCompletionContent(userId, row, pending);
+    // AN MCQ COMMUNITY STUDIES FROM THE CONCEPTS AND ANSWERS MCQs — nothing else.
+    // Its screen shows no past questions and no worked answers, so writing them
+    // would be model spend on work nobody reads.
+    const mcqOnly = settings.format === "mcq";
+    let withSolved = mcqOnly
+      ? { ...pending, solvedExamples: [], solvedWarning: null }
+      : await pooledCompletionContent(userId, row, pending);
     let worked = (withSolved?.solvedExamples || []).map((example) => example.question);
     if (!withSolved) {
       const solved = await getTeacherChallengeSolvedQuestions(lane.collectionKey, {
@@ -2698,7 +2813,9 @@ async function runChallengeContentCompletion(
       worked = (solved.questions || []).map((question) => question.text);
     }
     const paper = await issueFormattedChallengeExam({
-      format: await challengeFormatForCourse(row.course_id ? String(row.course_id) : null),
+      format: settings.format,
+      mcqCount: settings.mcqCount,
+      negativePercent: settings.negativePercent,
       challengeId,
       collectionKey: lane.collectionKey,
       subject: lane.subject,
@@ -2762,7 +2879,7 @@ async function runChallengeContentCompletion(
           ...pending,
           contentStatus: "pending",
           contentPendingSince: new Date().toISOString(),
-          contentError: message,
+          contentError: studentFacingBuildError(message),
         } satisfies StudentChallengeContent,
         updated_at: new Date().toISOString(),
       })
@@ -3257,8 +3374,11 @@ export async function refreshStudentChallengeExam(
   }
 
   const lane = await resolveChallengeLane(userId, row, access);
+  const settings = await challengeSettingsForCourse(detail.courseId);
   const paper = await issueFormattedChallengeExam({
-    format: await challengeFormatForCourse(detail.courseId),
+    format: settings.format,
+    mcqCount: settings.mcqCount,
+    negativePercent: settings.negativePercent,
     challengeId,
     collectionKey: lane.collectionKey,
     subject: lane.subject,
@@ -3568,6 +3688,18 @@ export type ChallengeFigureResult = {
   reason?: "not_found" | "nothing_missing" | "unavailable";
 };
 
+/** The renderer's own verdict: not drawn, and nothing drawing or about to. */
+async function figureIsDead(digest: string): Promise<boolean> {
+  try {
+    const response = await proxyMedia(`/api/figure/${digest}/status`);
+    if (!response.ok) return false;
+    const state = (await response.json()) as { ready?: boolean; working?: boolean };
+    return state.ready === false && state.working === false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Draw the picture a worked solution promised and lost, and file it on the row.
  *
@@ -3585,6 +3717,8 @@ export async function drawMissingChallengeFigure(
   userId: string,
   challengeId: string,
   question: string,
+  /** A figure already on this solution that the renderer gave up on: replace it. */
+  deadFigureUrl?: string,
 ): Promise<ChallengeFigureResult> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -3606,7 +3740,17 @@ export async function drawMissingChallengeFigure(
   if (!content || !example) {
     return { challenge: await withLatestAttemptReview(userId, row), solution: null, reason: "not_found" };
   }
-  const section = emptyFigureSection(example.solution, example.question);
+  // A redraw starts from the solution without the dead picture — but only a
+  // picture this solution really holds, and that the renderer itself says is
+  // not coming: a browser cannot talk the server into re-billing a figure that
+  // is merely slow, or into removing one that is fine.
+  const deadDigest = deadFigureUrl ? drawnFigureDigest(deadFigureUrl) : null;
+  let base = example.solution;
+  if (deadFigureUrl && deadDigest && base.includes(`](${deadFigureUrl})`)) {
+    if (await figureIsDead(deadDigest)) base = withoutFigure(base, deadFigureUrl);
+  }
+  const redrawOf = base !== example.solution ? deadDigest ?? undefined : undefined;
+  const section = emptyFigureSection(base, example.question);
   if (!section) {
     // Already drawn — by another tab, or an earlier visit this one's cache missed.
     return {
@@ -3618,7 +3762,7 @@ export async function drawMissingChallengeFigure(
 
   const lane = await resolveChallengeLane(userId, row, access);
   const reply = await requestTeacherMediaImage(lane.collectionKey, {
-    brief: figureBrief(example.question, section),
+    brief: figureBrief(example.question, section, redrawOf),
     alt: section.heading,
   });
   if (!reply.url) {
@@ -3629,7 +3773,7 @@ export async function drawMissingChallengeFigure(
     };
   }
 
-  const solution = withFigure(example.solution, section, reply.url);
+  const solution = withFigure(base, section, reply.url);
   const next: StudentChallengeContent = {
     ...content,
     solvedExamples: examples.map((entry, position) =>

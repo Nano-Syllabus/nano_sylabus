@@ -93,14 +93,43 @@ function emptyFigureHeading(markdown: string): EmptyFigureSection | null {
   return null;
 }
 
-/** What the renderer is asked to draw. */
-export function figureBrief(question: string, section: EmptyFigureSection) {
+/** What the renderer is asked to draw.
+ *
+ * `redrawOf` is the id of an earlier figure for this section that the renderer
+ * gave up on. The renderer names a figure by the hash of its brief and refuses a
+ * failed one for a cooldown, so asking again with the same words would only
+ * hand back the same dead name. A redraw therefore asks for a simpler scene —
+ * the usual failure is the model writing a scene too long to finish — and
+ * carries the dead id, so every retry is a new name while two tabs retrying the
+ * same dead figure still share one render. */
+export function figureBrief(question: string, section: EmptyFigureSection, redrawOf?: string) {
   const parts = [
     "Draw the figure this exam question asks for, as a clean, fully labelled textbook diagram.",
     `Question: ${question.trim()}`,
   ];
   if (section.prose) parts.push(`${section.heading}: ${section.prose.slice(0, 1500)}`);
+  if (redrawOf) {
+    parts.push(
+      `Keep the scene simple and the code short: only the components and labels the question needs, static, no animation. (Redraw of ${redrawOf.slice(0, 12)}.)`,
+    );
+  }
   return parts.join("\n\n");
+}
+
+/** `/api/figure/<sha>.png` — the only figure URL a redraw may replace. */
+const DRAWN_FIGURE = /^\/api\/figure\/([0-9a-f]{1,64})\.png$/;
+
+/** The digest of a server-drawn figure URL, or null for anything else. */
+export function drawnFigureDigest(url: string): string | null {
+  return url.match(DRAWN_FIGURE)?.[1] ?? null;
+}
+
+/** The solution without the image at `url`, and the blank lines around it. */
+export function withoutFigure(markdown: string, url: string) {
+  const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return markdown
+    .replace(new RegExp(`\\n*!\\[[^\\]]*\\]\\(${escaped}\\)\\n*`, "g"), "\n\n")
+    .replace(/^\n+/, "");
 }
 
 /** The solution with the picture under the heading that promised it. */

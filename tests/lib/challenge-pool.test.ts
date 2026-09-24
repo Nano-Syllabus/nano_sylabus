@@ -352,7 +352,7 @@ describe("the global challenge pool", () => {
         "t1",
         "t2",
       ]);
-      expect(mocks.prepare).toHaveBeenCalledWith("collection", { subject: "Nims", topic: "t0" });
+      expect(mocks.prepare).toHaveBeenCalledWith("collection", { subject: "teacher_nims", topic: "t0" });
       expect(pool().every((row) => row.status === "ready")).toBe(true);
 
       // A third sweep finds nothing to do.
@@ -516,7 +516,8 @@ describe("the global challenge pool", () => {
         },
       ];
       mocks.revision.mockImplementation(async (_key: string, subject: string) => ({
-        collection_revision: subject === "Nims" ? "rev-2" : "rev-9",
+        // Asked by slug, as every upstream call is (see tests/lib/subject-rename.test.ts).
+        collection_revision: subject === "teacher_nims" ? "rev-2" : "rev-9",
       }));
 
       const summary = await sweepChallengePool({ limit: 0 });
@@ -766,7 +767,7 @@ describe("the global challenge pool", () => {
       ] as never);
 
       await vi.waitFor(() => expect(topic("t4")?.status).toBe("ready"));
-      expect(mocks.prepare).toHaveBeenCalledWith("collection", { subject: "Nims", topic: "t4" });
+      expect(mocks.prepare).toHaveBeenCalledWith("collection", { subject: "teacher_nims", topic: "t4" });
       expect(mocks.pastQuestions).not.toHaveBeenCalled();
     });
 

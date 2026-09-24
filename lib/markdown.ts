@@ -212,6 +212,30 @@ export function isWordFormula(candidate: string) {
 }
 
 /**
+ * A name written with underscores for spaces: `Number_of_Frames_in_Window`,
+ * `Round\_Trip\_Time`. To LaTeX every `_` is a subscript, so the words came out
+ * chopped into a staircase — "Number" with a subscript "o", then "f", then the
+ * next word subscripted again. A run of words (the first of two letters or more)
+ * joined by underscores is one name, and is set as text with spaces.
+ *
+ * A single letter subscripted by a word — `V_logic`, `d_load`, `R_eq` — is a
+ * symbol with a label, not a name, and stays `normalizeTex`'s. So does anything
+ * after a backslash: `\Delta_x` is a command.
+ */
+export function underscoredNamesToText(math: string) {
+  return outsideTextCommands(math, (value) =>
+    value.replace(
+      /(?<![\\_A-Za-z0-9])([A-Za-z]{2,}(?:\\?_[A-Za-z0-9]+)+)(?![A-Za-z0-9{])/g,
+      (name: string) => {
+        const words = name.split(/\\?_/);
+        // `dx_1`, `ab_c`: short maths tokens, not a name in words.
+        return words.some((word) => /[A-Za-z]{3,}/.test(word)) ? `\\text{${words.join(" ")}}` : name;
+      },
+    ),
+  );
+}
+
+/**
  * Words inside maths, set as words.
  *
  * KaTeX sets letters as italic variables and drops the spaces between them, so
@@ -290,7 +314,7 @@ function renderMath(value: string, displayMode: boolean) {
   // `\mathrm{…}` added for KaTeX below.
   if (!katex) return plainMath(written, displayMode);
 
-  let math = normalizeTex(proseToText(written));
+  let math = normalizeTex(proseToText(underscoredNamesToText(written)));
   if (displayMode) math = breakDisplayedLines(math, written);
 
   try {

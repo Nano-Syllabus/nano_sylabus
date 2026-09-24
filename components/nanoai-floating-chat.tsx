@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import {
@@ -19,7 +20,7 @@ import { cn } from "@/lib/utils";
  * variant) behind a draggable button on every /app page except the chat itself.
  *
  *   - The chat's code is only fetched the first time the bubble opens, so pages
- *     that never use it pay for a 52px button and nothing else.
+ *     that never use it pay for a small "Ask AI" pill and nothing else.
  *   - Once opened it stays mounted, hidden while closed, so a conversation
  *     survives closing the panel and moving between pages (the shell persists).
  *   - The button can be dragged anywhere; on release it snaps to the nearer
@@ -44,7 +45,9 @@ type Bootstrap = {
 
 type Point = { x: number; y: number };
 
-const BUTTON_SIZE = 52;
+/** The "Ask AI" pill: logo, label, sparkle. */
+const BUTTON_WIDTH = 132;
+const BUTTON_HEIGHT = 48;
 const EDGE_GAP = 16;
 const PANEL_WIDTH = 408;
 const PANEL_MAX_HEIGHT = 680;
@@ -60,22 +63,22 @@ function clamp(value: number, min: number, max: number) {
 
 function clampButton(point: Point): Point {
   return {
-    x: clamp(point.x, EDGE_GAP, window.innerWidth - BUTTON_SIZE - EDGE_GAP),
-    y: clamp(point.y, EDGE_GAP, window.innerHeight - BUTTON_SIZE - EDGE_GAP),
+    x: clamp(point.x, EDGE_GAP, window.innerWidth - BUTTON_WIDTH - EDGE_GAP),
+    y: clamp(point.y, EDGE_GAP, window.innerHeight - BUTTON_HEIGHT - EDGE_GAP),
   };
 }
 
 function snapToSide(point: Point): Point {
-  const centre = point.x + BUTTON_SIZE / 2;
+  const centre = point.x + BUTTON_WIDTH / 2;
   const x =
-    centre < window.innerWidth / 2 ? EDGE_GAP : window.innerWidth - BUTTON_SIZE - EDGE_GAP;
+    centre < window.innerWidth / 2 ? EDGE_GAP : window.innerWidth - BUTTON_WIDTH - EDGE_GAP;
   return clampButton({ x, y: point.y });
 }
 
 function defaultButtonPosition(): Point {
   return clampButton({
-    x: window.innerWidth - BUTTON_SIZE - EDGE_GAP - 8,
-    y: window.innerHeight - BUTTON_SIZE - EDGE_GAP - 8,
+    x: window.innerWidth - BUTTON_WIDTH - EDGE_GAP - 8,
+    y: window.innerHeight - BUTTON_HEIGHT - EDGE_GAP - 8,
   });
 }
 
@@ -88,7 +91,7 @@ function readStoredPosition(): Point | null {
     if (typeof parsed.top !== "number") return null;
     const y = parsed.top * window.innerHeight;
     const x =
-      parsed.side === "left" ? EDGE_GAP : window.innerWidth - BUTTON_SIZE - EDGE_GAP;
+      parsed.side === "left" ? EDGE_GAP : window.innerWidth - BUTTON_WIDTH - EDGE_GAP;
     return clampButton({ x, y });
   } catch {
     return null;
@@ -97,7 +100,7 @@ function readStoredPosition(): Point | null {
 
 function storePosition(point: Point) {
   try {
-    const side = point.x + BUTTON_SIZE / 2 < window.innerWidth / 2 ? "left" : "right";
+    const side = point.x + BUTTON_WIDTH / 2 < window.innerWidth / 2 ? "left" : "right";
     window.localStorage.setItem(
       POSITION_KEY,
       JSON.stringify({ side, top: point.y / window.innerHeight }),
@@ -123,10 +126,10 @@ function clampPanel(point: Point): Point {
 /** Open the panel beside the button: same side, bottom edges lined up. */
 function panelFromButton(button: Point): Point {
   const { width, height } = panelSize();
-  const onRight = button.x + BUTTON_SIZE / 2 >= window.innerWidth / 2;
+  const onRight = button.x + BUTTON_WIDTH / 2 >= window.innerWidth / 2;
   return clampPanel({
-    x: onRight ? button.x + BUTTON_SIZE - width : button.x,
-    y: button.y + BUTTON_SIZE - height,
+    x: onRight ? button.x + BUTTON_WIDTH - width : button.x,
+    y: button.y + BUTTON_HEIGHT - height,
   });
 }
 
@@ -301,7 +304,7 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
         <button
           ref={buttonRef}
           type="button"
-          aria-label="Ask NanoAI"
+          aria-label="Ask AI"
           title="Ask NanoAI — drag to move"
           onPointerEnter={prefetch}
           onFocus={prefetch}
@@ -317,15 +320,24 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
               openPanel();
             }
           }}
-          style={{ left: button.x, top: button.y, width: BUTTON_SIZE, height: BUTTON_SIZE }}
+          style={{ left: button.x, top: button.y, width: BUTTON_WIDTH, height: BUTTON_HEIGHT }}
           className={cn(
-            "fixed z-40 flex touch-none select-none items-center justify-center rounded-full bg-text-primary text-bg-primary shadow-[0_8px_24px_rgba(0,0,0,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary",
+            "fixed z-40 flex touch-none select-none items-center justify-center gap-2 rounded-full border border-border bg-bg-primary pl-1.5 pr-3.5 text-sm font-semibold text-text-primary shadow-[0_8px_24px_rgba(0,0,0,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary",
             draggingButton
               ? "cursor-grabbing scale-105"
               : "cursor-pointer transition-[left,top,transform] duration-200 ease-out hover:scale-105 motion-reduce:transition-none",
           )}
         >
-          <Sparkles className="h-[22px] w-[22px]" aria-hidden="true" />
+          <Image
+            src="/nanologo.png"
+            alt=""
+            width={34}
+            height={34}
+            draggable={false}
+            className="size-[34px] shrink-0 rounded-full object-contain"
+          />
+          <span className="whitespace-nowrap">Ask AI</span>
+          <Sparkles className="size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
         </button>
       ) : null}
 

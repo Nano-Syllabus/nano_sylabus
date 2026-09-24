@@ -87,9 +87,10 @@ describe("student challenge dashboard uses the community learning map", () => {
       // One open challenge per subject of the running semester — one subject
       // here, so the flat floor of three still applies inside the queue.
       // And today's finished ones, which the hub keeps on its list.
-      { minimumRecommendationCount: 3, concurrentChallengeLimit: 1, includeCompleted: true },
+      { minimumRecommendationCount: 3, concurrentChallengeLimit: 1, includeCompleted: true,
+        ceilingScopeKeys: new Set(["course-1:teacher_nims"]) },
     );
-    expect(mocks.topics).toHaveBeenCalledExactlyOnceWith("collection", "Nims");
+    expect(mocks.topics).toHaveBeenCalledExactlyOnceWith("collection", "teacher_nims");
   });
 
   it("uses shared provider IDs and saved mastery instead of a stale external catalogue", async () => {
@@ -179,6 +180,7 @@ describe("student challenge dashboard uses the community learning map", () => {
     expect(result.passRateLast30Days).toBe(100);
     expect(mocks.ensure).toHaveBeenCalledWith("member", expect.any(Array), {
       minimumRecommendationCount: 3,
+      ceilingScopeKeys: expect.any(Set),
       concurrentChallengeLimit: expect.any(Number),
       includeCompleted: true,
     });
@@ -208,7 +210,7 @@ describe("student challenge dashboard uses the community learning map", () => {
     db.tables.communities = [];
     const result = await getStudentChallengeDashboard("member");
     expect(result.totalTopics).toBe(1);
-    expect(mocks.topics).toHaveBeenCalledWith("collection", "Nims", {
+    expect(mocks.topics).toHaveBeenCalledWith("collection", "teacher_nims", {
       totalMarks: 20,
       maxQuestions: 5,
     });

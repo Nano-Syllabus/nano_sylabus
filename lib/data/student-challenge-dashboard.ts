@@ -712,7 +712,8 @@ export async function getStudentChallengeDashboard(
             topics = sharedTopics;
           } else {
             if (!collectionKey) throw new Error("Subject collection is unavailable.");
-            const response = await getTeacherPracticeTopics(collectionKey, subjectName, {
+            // By slug: the display name can drift from the creator's own.
+            const response = await getTeacherPracticeTopics(collectionKey, subjectSlug || subjectName, {
               totalMarks: 20,
               maxQuestions: 5,
             });
@@ -834,11 +835,18 @@ export async function getStudentChallengeDashboard(
        * and left the fourth subject looking like it had nothing to study.
        */
       concurrentChallengeLimit: accessibleSubjects.length,
+      // ...and counted over those same subjects: open rows left behind by
+      // another community or semester are hidden below, so they must not
+      // take this semester's cards.
+      ceilingScopeKeys: accessibleScopeKeys,
       includeCompleted: true,
+      onePerSubject: true,
     },
   ));
-  const accessibleChallenges = dailyChallenges.filter((challenge) =>
-    accessibleScopeKeys.has(subjectScopeKey(challenge.courseId, challenge.subjectSlug)),
+  const accessibleChallenges = onePerSubjectOpen(
+    dailyChallenges.filter((challenge) =>
+      accessibleScopeKeys.has(subjectScopeKey(challenge.courseId, challenge.subjectSlug)),
+    ),
   );
   /**
    * The first card of each subject is built behind this response.
@@ -932,4 +940,29 @@ export async function getStudentChallengeDashboard(
     hasPracticeHistory: progress.hasPracticeHistory,
     leaderboard: progress.leaderboard,
   };
+}
+
+/**
+ * One open card per subject, for rows assigned before `onePerSubject` existed.
+ *
+ * Those students already have two open challenges on one subject. The started
+ * one is the card, since it is the one they are part-way through; a second that
+ * was never opened waits in storage and becomes the card once the first is
+ * done. Completed rows are today's record and all stay.
+ */
+export function onePerSubjectOpen<
+  T extends { courseId: string | null; subjectSlug: string; status: string },
+>(challenges: T[]): T[] {
+  const key = (challenge: T) => subjectScopeKey(challenge.courseId, challenge.subjectSlug);
+  const chosen = new Map<string, T>();
+  for (const challenge of challenges) {
+    if (challenge.status === "completed") continue;
+    const current = chosen.get(key(challenge));
+    if (!current || (current.status !== "started" && challenge.status === "started")) {
+      chosen.set(key(challenge), challenge);
+    }
+  }
+  return challenges.filter(
+    (challenge) => challenge.status === "completed" || chosen.get(key(challenge)) === challenge,
+  );
 }

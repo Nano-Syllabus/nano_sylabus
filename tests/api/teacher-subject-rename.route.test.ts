@@ -26,6 +26,7 @@ vi.mock("@/lib/teacher-app/client", () => ({
 }));
 
 import { PATCH } from "@/app/api/teacher/subjects/[slug]/route";
+import { SUBJECT_NAME_SNAPSHOTS } from "@/lib/data/subject-rename";
 
 const context = (slug = "physics") => ({ params: Promise.resolve({ slug }) });
 
@@ -46,15 +47,14 @@ function createQuery<T>(data: T | null = null) {
 describe("PATCH /api/teacher/subjects/[slug]", () => {
   beforeEach(() => {
     mocks.getTeacherProfile.mockResolvedValue({ id: "teacher-1" });
-    const queries = {
-      teacher_subject_profiles: createQuery({ subject_name: "Physics", folder_path: "Physics" }),
-      community_subjects: createQuery(),
-      teacher_course_subjects: createQuery(),
-      teacher_classrooms: createQuery(),
-      teacher_exam_papers: createQuery(),
-    };
+    // Every table the rename reaches (lib/data/subject-rename.ts), plus the
+    // profile the route reads first.
+    const queries: Record<string, ReturnType<typeof createQuery>> = Object.fromEntries(
+      SUBJECT_NAME_SNAPSHOTS.map((snapshot) => [snapshot.table, createQuery()]),
+    );
+    queries.teacher_subject_profiles = createQuery({ subject_name: "Physics", folder_path: "Physics" });
     mocks.createSupabaseAdminClient.mockReturnValue({
-      from: vi.fn((table: keyof typeof queries) => queries[table]),
+      from: vi.fn((table: string) => queries[table]),
     });
   });
 
@@ -69,7 +69,7 @@ describe("PATCH /api/teacher/subjects/[slug]", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       subject: { slug: "physics", name: "Applied Mechanics", folder_path: "Physics" },
       name: "Applied Mechanics",
       renamed: true,
@@ -81,6 +81,14 @@ describe("PATCH /api/teacher/subjects/[slug]", () => {
     expect(admin.from("community_subjects").update).toHaveBeenCalledWith(
       expect.objectContaining({ name: "Applied Mechanics" }),
     );
+    // Every stored copy of the name follows — students' challenges and
+    // mastery included — matched on the slug, which never changes.
+    for (const snapshot of SUBJECT_NAME_SNAPSHOTS) {
+      expect(admin.from(snapshot.table).update, snapshot.table).toHaveBeenCalledWith(
+        expect.objectContaining({ [snapshot.nameColumn]: "Applied Mechanics" }),
+      );
+      expect(admin.from(snapshot.table).eq, snapshot.table).toHaveBeenCalledWith(snapshot.slugColumn, "physics");
+    }
   });
 
   it("rejects an invalid name before touching the database", async () => {

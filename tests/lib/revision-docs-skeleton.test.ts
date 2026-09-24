@@ -23,10 +23,11 @@ const source = readFileSync("components/revision-docs-client.tsx", "utf8");
 describe("the revision skeleton", () => {
   const html = renderToStaticMarkup(createElement(RevisionDocsSkeleton));
 
-  it("draws the tree's real chrome: search on top, the corpus links at the foot", () => {
+  it("draws the tree's real chrome: search on top, and no corpus links at the foot", () => {
     expect(html).toContain('placeholder="Search topics"');
-    expect(html).toContain("My saved notes");
-    expect(html).toContain("Flashcards from your notes");
+    // Removed from the navigator (user, 2026-09-24).
+    expect(html).not.toContain("My saved notes");
+    expect(html).not.toContain("Flashcards from your notes");
   });
 
   it("draws the document's real headings, with only the words pulsing", () => {

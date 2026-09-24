@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, ChevronRight, ChevronsUpDown, Menu, Search, X } from "lucide-react";
+import { BookOpen, Check, ChevronsUpDown, Menu, Search, X } from "lucide-react";
 import Link from "next/link";
 import {
   useCallback,
@@ -21,7 +21,7 @@ import {
   isTranslating,
   useStudyLanguage,
 } from "@/components/study-language";
-import { AwaitedConceptsCard, ConceptsCard, conceptsCardClass } from "@/components/concepts-reading";
+import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
 import { Markdown } from "@/components/markdown";
 import { WorkedExampleCard, workedAnswerClass } from "@/components/worked-example-card";
 import { WorkedSolution } from "@/components/worked-solution";
@@ -50,19 +50,6 @@ import type {
  * Everything in it has been earned. A topic is here because its challenge was
  * passed, so the page never has to explain what a locked or empty entry means.
  */
-
-function formatPercent(value: number | null) {
-  if (value === null) return null;
-  return `${Math.round(value)}%`;
-}
-
-function formatDate(value: string) {
-  if (!value) return "";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? ""
-    : parsed.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-}
 
 function topicCountLabel(count: number) {
   return `${count} topic${count === 1 ? "" : "s"}`;
@@ -196,29 +183,6 @@ function TreeSearch({
           className="min-h-10 w-full rounded-lg border border-border bg-bg-primary pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         />
       </div>
-    </div>
-  );
-}
-
-function TreeFooter() {
-  return (
-    <div className="border-t border-border p-3">
-      {/* The student's OWN corpus, reachable from the tree rather than from a
-          header that made the reader choose a mode before seeing anything. */}
-      <Link
-        href="/app/notes/saved"
-        className="flex min-h-10 items-center justify-between rounded-lg px-2 text-sm font-medium text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-      >
-        My saved notes
-        <ChevronRight className="size-4" aria-hidden="true" />
-      </Link>
-      <Link
-        href="/app/notes/revision/cards"
-        className="flex min-h-10 items-center justify-between rounded-lg px-2 text-sm font-medium text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-      >
-        Flashcards from your notes
-        <ChevronRight className="size-4" aria-hidden="true" />
-      </Link>
     </div>
   );
 }
@@ -458,9 +422,15 @@ function TreeFrame({
       <nav aria-label="Revision docs" className="min-h-0 flex-1 overflow-y-auto p-2">
         {children}
       </nav>
-      <TreeFooter />
     </div>
   );
+}
+
+/** The sittings a solved question was set in — "2072 Ashwin, 2075 Baisakh" —
+ *  or "" for one no paper is known to have asked. */
+function askedIn(example: RevisionDocTopic["solvedExamples"][number]) {
+  const years = [...new Set([...(example.years ?? []), example.year].map((year) => year?.trim()).filter(Boolean))];
+  return years.join(", ");
 }
 
 function TopicPage({ topic }: { topic: RevisionDocTopic }) {
@@ -473,59 +443,25 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
     studyLanguage === "rn",
   );
   const translating = isTranslating(studyLanguage, romanNepali);
-  const percent = formatPercent(topic.scorePercent);
-  const completed = formatDate(topic.completedAt);
+  const languageSwitch = (
+    <StudyLanguageSwitch
+      value={studyLanguage}
+      onChange={setStudyLanguage}
+      translation={romanNepali}
+    />
+  );
   return (
     <article className="student-reading-frame">
-      <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-        {topic.subjectName}
-      </p>
-      <h1 className="type-student-page-title mt-1">
-        {topic.title}
-      </h1>
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-text-muted">
-        {/* Started and passed are both here, and must never look alike: the whole
-            claim of these docs is that a page says what you already worked
-            through, and calling an open challenge "Passed" would be the one lie
-            the page cannot afford. */}
-        {topic.inProgress ? (
-          <span className="inline-flex min-h-6 items-center rounded-full bg-blue-500/10 px-2.5 font-semibold text-blue-700 dark:text-blue-300">
-            In progress
-          </span>
-        ) : percent ? (
-          <span className="inline-flex min-h-6 items-center rounded-full bg-success/15 px-2.5 font-semibold text-success">
-            Passed · {percent}
-          </span>
-        ) : (
-          <span className="inline-flex min-h-6 items-center rounded-full bg-success/15 px-2.5 font-semibold text-success">
-            Passed
-          </span>
-        )}
-        {completed ? (
-          <span>
-            {topic.inProgress ? "Last opened" : "Completed"} {completed}
-          </span>
-        ) : null}
-        {topic.attempts > 1 ? <span>· {topic.attempts} attempts</span> : null}
-        {/* The id support needs when this specific page's material is wrong. On
-            the row it is a hover; here there is room for it, and this is the page
-            a student is actually looking at when they report one. */}
-        <code className="select-all rounded bg-bg-secondary px-2 py-1 font-mono text-[11px] text-text-secondary">
-          {topic.challengeId}
-        </code>
-      </div>
-
-      <StudyLanguageSwitch
-        className="mt-6"
-        value={studyLanguage}
-        onChange={setStudyLanguage}
-        translation={romanNepali}
-      />
-
+      {/* With no solved questions there is no font row to sit beside. */}
+      {topic.solvedExamples.length ? null : <div className="mb-4">{languageSwitch}</div>}
+      {/* No title, status or dates (user, 2026-09-24): the navigator already
+          names the open topic, and the page is for reading, not for its record.
+          The language switch sits beside the answer font, below. */}
       {topic.reading.length ? (
         <ConceptsCard
+          bare
           translating={translating}
-          className="mt-4"
+          className="mt-1"
           source={{
             id: topic.challengeId,
             title: topic.title,
@@ -539,7 +475,8 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
            reading), is asked for and drawn when it lands — no reload, and no
            telling a student to restart a challenge to get it. */
         <AwaitedConceptsCard
-          className="mt-4"
+          bare
+          className="mt-1"
           readingError={topic.readingError}
           source={{
             id: topic.challengeId,
@@ -577,16 +514,23 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
       {topic.solvedExamples.length ? (
         <section className="mt-8" style={answerFontStyle(answerFont)}>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="type-student-section-title">Worked examples</h2>
-            <AnswerFontPicker value={answerFont} onChange={setAnswerFont} />
+            <h2 className="type-student-section-title">Solved Old Questions</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              {languageSwitch}
+              <AnswerFontPicker value={answerFont} onChange={setAnswerFont} />
+            </div>
           </div>
           <div className="mt-3 space-y-4">
             {topic.solvedExamples.map((example, index) => (
               <WorkedExampleCard
                 key={`${topic.challengeId}-solved-${index}`}
-                label={`Example ${index + 1}${example.year ? ` · ${example.year}` : ""}${
-                  example.marks ? ` · ${example.marks} marks` : ""
-                }`}
+                label={[
+                  `Question ${index + 1}`,
+                  askedIn(example),
+                  example.marks ? `${example.marks} marks` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
                 question={example.question}
               >
                 <WorkedSolution
@@ -844,16 +788,8 @@ export function RevisionDocsSkeleton() {
         </div>
 
         <article className="student-reading-frame">
-          {/* Subject, title, then status · date · id — the page's own header. */}
-          <div className={`h-3 w-28 ${bar}`} />
-          <div className={`mt-2 h-8 w-4/5 max-w-xl ${bar}`} />
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <div className={`h-6 w-24 rounded-full ${pulse}`} />
-            <div className={`h-3.5 w-36 ${bar}`} />
-            <div className={`h-6 w-64 max-w-full ${bar}`} />
-          </div>
-
-          <section className={`mt-8 ${conceptsCardClass}`}>
+          {/* No header: the page opens on its concepts (see TopicPage). */}
+          <section className="mt-1">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="type-student-section-title">Concepts</h2>
               <div className={`h-3 w-16 ${bar}`} />

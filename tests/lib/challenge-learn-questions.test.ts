@@ -160,4 +160,31 @@ describe("questions a stored challenge should not show", () => {
     expect(shown("Derive the differential equation of free oscillation.")).toHaveLength(1);
     expect(shown("Design a combinational logic that performs multiplication between two 4 bit numbers")).toHaveLength(1);
   });
+
+  it("marks a question written from the notes as not from a past paper", () => {
+    const text = "Evaluate the performance trade-offs between arrays and linked lists.";
+    const [generated] = mergeLearnQuestions({
+      solvedExamples: [
+        { ...solved(text, "Arrays …"), grounded: false, source: "generated_from_notes" as const },
+      ],
+    });
+    const [printed] = mergeLearnQuestions({
+      solvedExamples: [solved(text, "Arrays …", "IOE 2079 Jestha")],
+    });
+
+    expect(generated).toMatchObject({ fromPastPaper: false, years: [] });
+    expect(printed).toMatchObject({ fromPastPaper: true, years: ["IOE 2079 Jestha"] });
+  });
+
+  it("counts a bank row as a past paper even when its worked copy was generated", () => {
+    const text = "Evaluate the performance trade-offs between arrays and linked lists.";
+    const [item] = mergeLearnQuestions({
+      solvedExamples: [
+        { ...solved(text, "Arrays …"), grounded: false, source: "generated_from_notes" as const },
+      ],
+      pastQuestions: [past(text, "2078 Baisakh")],
+    });
+
+    expect(item).toMatchObject({ fromPastPaper: true, years: ["2078 Baisakh"] });
+  });
 });

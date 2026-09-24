@@ -45,6 +45,28 @@ export const challengeQuestionFormatLabels: Record<
  * whichever the creator picked.
  */
 export const CHALLENGE_MCQ_EXAM_QUESTIONS = 10;
+
+/** How many MCQs an MCQ community's challenge sets — the creator's choice. */
+export const CHALLENGE_MCQ_COUNT_MIN = 5;
+export const CHALLENGE_MCQ_COUNT_MAX = 30;
+
+/**
+ * Negative marking: the share of a question's marks taken off for a WRONG
+ * answer. An unanswered question is never penalised. 0 turns it off; licence
+ * exams commonly take 20%.
+ */
+export const challengeNegativeMarkingOptions = [0, 10, 20, 25, 33, 50] as const;
+
+export function clampMcqCount(value: unknown) {
+  const count = Math.round(Number(value));
+  if (!Number.isFinite(count)) return CHALLENGE_MCQ_EXAM_QUESTIONS;
+  return Math.min(CHALLENGE_MCQ_COUNT_MAX, Math.max(CHALLENGE_MCQ_COUNT_MIN, count));
+}
+
+export function negativeMarkingPercent(value: unknown) {
+  const percent = Math.round(Number(value));
+  return (challengeNegativeMarkingOptions as readonly number[]).includes(percent) ? percent : 0;
+}
 export const CHALLENGE_HYBRID_MCQ_QUESTIONS = 5;
 export const CHALLENGE_HYBRID_WRITTEN_QUESTIONS = 1;
 export const CHALLENGE_MCQ_MARKS = 2;

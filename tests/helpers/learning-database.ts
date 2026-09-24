@@ -102,6 +102,11 @@ export function learningDatabase(tables: Record<string, Row[]>) {
         ignoreDuplicates = Boolean(options.ignoreDuplicates);
         return query;
       },
+      insert: (value: Row | Row[]) => {
+        operation = "insert";
+        values = Array.isArray(value) ? value : [value];
+        return query;
+      },
       update: (value: Row) => {
         operation = "update";
         values = [value];

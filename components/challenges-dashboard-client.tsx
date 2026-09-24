@@ -29,6 +29,7 @@ import {
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
 import { ChallengeFundamentals } from "@/components/challenge-fundamentals";
+import { ChallengeMcqPage } from "@/components/challenge-mcq-page";
 import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
 import {
   StudyLanguageSwitch,
@@ -367,6 +368,8 @@ function ChallengeDetail({
    */
   const contentPending = content?.contentStatus;
   const buildingRest = contentPending === "pending" && !content?.contentError;
+  /** An MCQ community's challenge: concepts and MCQs on one page, no steps. */
+  const mcqPage = content?.examFormat === "mcq";
   const buildFailed = contentPending === "pending" ? content?.contentError || "" : "";
   /** English or Roman Nepali for the reading and the worked answers — see
    *  `components/study-language.tsx`. Fetched only once Roman Nepali is chosen. */
@@ -935,7 +938,60 @@ function ChallengeDetail({
           <section
             className={`mt-6 bg-card p-5 sm:p-8 ${focusMode ? "rounded-xl" : "rounded-2xl border border-border"}`}
           >
-            {activeStep === 1 ? (
+            {mcqPage ? (
+              <div>
+                <StudyLanguageSwitch
+                  className="mb-4"
+                  value={studyLanguage}
+                  onChange={setStudyLanguage}
+                  translation={romanNepali}
+                />
+                {content?.lesson?.content?.length ? (
+                  <ConceptsCard
+                    key={challenge.id}
+                    translating={translating}
+                    source={{
+                      id: challenge.id,
+                      title: challenge.title,
+                      subjectName: challenge.subjectName,
+                      reading: inStudyLanguage(studyLanguage, romanNepali, (data) => data.reading, content.lesson.content),
+                    }}
+                  />
+                ) : content ? (
+                  <AwaitedConceptsCard
+                    key={challenge.id}
+                    waiting={content.contentStatus === "pending" && !content.contentError}
+                    readingError={content.readingError}
+                    source={{ id: challenge.id, title: challenge.title, subjectName: challenge.subjectName, reading: [] }}
+                    onReading={(reading) =>
+                      onChange({
+                        ...challenge,
+                        content: { ...content, lesson: { ...content.lesson, content: reading } },
+                      })
+                    }
+                  />
+                ) : null}
+                <ChallengeMcqPage
+                  challenge={challenge}
+                  building={buildingRest}
+                  buildFailed={buildFailed}
+                  onGraded={({ challenge: updated, passed }) => {
+                    onChange(updated);
+                    if (passed) {
+                      dashboardPatch.completed({ challengeId: updated.id });
+                      onHubPatch((d) => applyChallengePassed(d, updated.id));
+                    } else {
+                      dashboardPatch.attempted();
+                      onHubPatch((d) => applyChallengeState(d, updated));
+                    }
+                  }}
+                  onRetake={() => void refreshExam()}
+                  onNext={() => void openNextChallenge()}
+                  nextLabel={openingNext ? "Opening…" : noNextAvailable ? "All challenges complete" : "Next challenge →"}
+                  nextDisabled={noNextAvailable || openingNext}
+                />
+              </div>
+            ) : activeStep === 1 ? (
               <div>
                 {content ? (
                   <StudyLanguageSwitch
@@ -1014,7 +1070,18 @@ function ChallengeDetail({
                             label={
                               <>
                                 Example {index + 1}
-                                {item.years.length ? ` · ${item.years.join(", ")}` : ""}
+                                {item.years.length ? (
+                                  ` · Asked ${item.years.join(", ")}`
+                                ) : !item.fromPastPaper ? (
+                                  // Written from the notes, so there is no year to
+                                  // give — said plainly rather than left blank,
+                                  // where it read as a past question missing one.
+                                  <span title="Not from a past paper: written from your notes because no past question covers this topic yet.">
+                                    {" · Practice question"}
+                                  </span>
+                                ) : (
+                                  " · Past paper, year not recorded"
+                                )}
                                 {item.marks.length
                                   ? ` · ${item.marks.map((mark) => displayNumber(mark)).join(" or ")} marks`
                                   : ""}
@@ -1637,6 +1704,7 @@ function ChallengeDetail({
           {/* Grows to fill a short page, so the bar sits at the foot of the
               screen rather than under the last card; never less than a gap. */}
           <div aria-hidden="true" className="min-h-8 flex-1" />
+          {mcqPage ? null : (
           <footer
             className={`sticky bottom-0 z-20 -mx-4 flex items-center justify-between gap-4 border-t border-border px-4 py-3 backdrop-blur sm:-mx-8 sm:px-8 ${
               focusMode ? "bg-bg-primary/95" : "bg-bg-secondary/95"
@@ -1735,6 +1803,7 @@ function ChallengeDetail({
               </div>
             ) : null}
           </footer>
+          )}
         </div>
       </div>
       {feedbackOpen ? (

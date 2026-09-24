@@ -171,14 +171,21 @@ function attachAnimation(img: HTMLImageElement, hash: string, signal: AbortSigna
   return figure;
 }
 
+/** Fired (bubbling) on a figure whose render is not coming. `detail.src` is the
+ *  figure's URL as the answer wrote it, so a worked solution can ask for a new
+ *  drawing in its place. See components/worked-solution.tsx. */
+export const FIGURE_FAILED_EVENT = "answer-figure-failed";
+export type FigureFailedDetail = { src: string };
+
 /**
  * Holds a frame open for a figure whose render has not finished.
  *
  * A figure's URL goes into the answer the moment the render is QUEUED, so the
  * `<img>` arrives pointing at something that is not drawn yet — and the browser's
  * default for that is a torn-page icon in the middle of the explanation. This
- * asks the server which of three things is happening and retries the image while
- * a picture is still coming.
+ * asks the server which of three things is happening: drawn (show it), being
+ * drawn (a "Drawing the diagram…" placeholder stands in for the image), or never
+ * coming (the image is hidden and `FIGURE_FAILED_EVENT` goes up the tree).
  *
  * `working` is the state that matters: a render is running, OR a brief is on disk
  * with none against it, which the next request for the file turns back into a
@@ -188,11 +195,39 @@ function attachAnimation(img: HTMLImageElement, hash: string, signal: AbortSigna
 function attachFigureFrame(img: HTMLImageElement, digest: string, signal: AbortSignal) {
   let failures = 0;
   let timer: number | null = null;
+  let placeholder: HTMLElement | null = null;
+  let settled = false;
   const stop = () => {
     if (timer !== null) window.clearTimeout(timer);
     timer = null;
   };
-  signal.addEventListener("abort", stop, { once: true });
+
+  const showPending = (text: string) => {
+    img.classList.add("answer-figure-pending");
+    if (!img.isConnected) return;
+    if (!placeholder) {
+      placeholder = document.createElement("span");
+      placeholder.className = "answer-figure-drawing";
+      placeholder.setAttribute("role", "status");
+      img.before(placeholder);
+    }
+    placeholder.textContent = text;
+  };
+  const clearPending = () => {
+    img.classList.remove("answer-figure-pending");
+    placeholder?.remove();
+    placeholder = null;
+  };
+  // Torn down (the answer re-rendered, or React StrictMode re-ran the effect):
+  // leave the element as it was found, so the next pass can take it over.
+  signal.addEventListener(
+    "abort",
+    () => {
+      stop();
+      clearPending();
+    },
+    { once: true },
+  );
 
   const retryImage = () => {
     // A fresh element rather than reassigning `src`: the browser keeps showing
@@ -201,21 +236,46 @@ function attachFigureFrame(img: HTMLImageElement, digest: string, signal: AbortS
     const next = new Image();
     next.onload = () => {
       img.src = next.src;
-      img.classList.remove("answer-figure-pending");
+      clearPending();
     };
     next.src = `${FIGURE_PREFIX}${digest}.png?r=${Date.now()}`;
   };
 
+  const giveUp = () => {
+    stop();
+    settled = true;
+    clearPending();
+    // Never the torn-page icon: the picture is withdrawn, and whoever owns the
+    // answer decides whether to ask for another.
+    img.classList.add("answer-figure-failed");
+    img.dispatchEvent(
+      new CustomEvent<FigureFailedDetail>(FIGURE_FAILED_EVENT, {
+        bubbles: true,
+        detail: { src: img.getAttribute("src") ?? "" },
+      }),
+    );
+  };
+
   const poll = async () => {
-    if (signal.aborted) return;
+    if (signal.aborted || settled) return;
     const state = await readJson<FigureStatus>(`${FIGURE_PREFIX}${digest}/status`, signal);
-    if (signal.aborted) return;
+    if (signal.aborted || settled) return;
+    // The image may have landed on its own while the status was in flight.
+    if (img.complete && img.naturalWidth > 0) {
+      stop();
+      clearPending();
+      return;
+    }
 
     if (!state) {
       // One request that did not land is not a verdict — a wifi hiccup must not
       // cost the reader a figure that is on its way. It costs a poll, not the poll.
       failures += 1;
-      if (failures >= MAX_FAILURES) return stop();
+      if (failures >= MAX_FAILURES) {
+        stop();
+        clearPending();
+        return;
+      }
       timer = window.setTimeout(poll, POLL_MS);
       return;
     }
@@ -226,14 +286,36 @@ function attachFigureFrame(img: HTMLImageElement, digest: string, signal: AbortS
       retryImage();
       return;
     }
-    if (!state.working) return stop(); // nothing is coming
-    img.classList.add("answer-figure-pending");
+    if (!state.working) return giveUp(); // nothing is coming
+    showPending("Drawing the diagram…");
     timer = window.setTimeout(poll, POLL_MS);
   };
 
-  // Only worth asking if the image did not simply load. A figure whose render
-  // finished before the reader got here is the common case and costs nothing.
-  img.addEventListener("error", () => void poll(), { once: true });
+  img.addEventListener(
+    "load",
+    () => {
+      if (img.naturalWidth > 0) clearPending();
+    },
+    { signal },
+  );
+  img.addEventListener(
+    "error",
+    () => {
+      // The waiting GET gave up: take over with the poller.
+      stop();
+      void poll();
+    },
+    { once: true, signal },
+  );
+  // Still loading means the server is holding the request for a render in
+  // progress (up to ~25s). Say so now rather than leaving a blank gap until then.
+  if (!img.complete) {
+    timer = window.setTimeout(() => {
+      if (!img.complete) showPending("Loading the diagram…");
+    }, 600);
+  } else if (img.naturalWidth === 0) {
+    void poll();
+  }
 }
 
 const CLOSE_ICON =
@@ -337,6 +419,7 @@ function attachFigureZoom(img: HTMLImageElement) {
  */
 export function enhanceAnswerMedia(root: HTMLElement): () => void {
   const controller = new AbortController();
+  const figures: HTMLImageElement[] = [];
 
   for (const img of Array.from(root.querySelectorAll<HTMLImageElement>("img.answer-figure"))) {
     if (img.dataset.answerMedia) continue;
@@ -357,9 +440,19 @@ export function enhanceAnswerMedia(root: HTMLElement): () => void {
     const digest = figureDigest(path);
     if (digest) {
       img.dataset.answerMedia = "figure";
+      figures.push(img);
       attachFigureFrame(img, digest, controller.signal);
     }
   }
 
-  return () => controller.abort();
+  return () => {
+    controller.abort();
+    // A figure's frame dies with this pass. If the element survives it — the
+    // effect re-ran without React replacing the HTML — it must be picked up
+    // again, not skipped as "already enhanced" with nothing watching it. (An
+    // animation keeps its marker: its poster has been rebuilt into a player.)
+    for (const img of figures) {
+      if (img.dataset.answerMedia === "figure") delete img.dataset.answerMedia;
+    }
+  };
 }

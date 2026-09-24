@@ -36,7 +36,8 @@ const upstream = (id: string, correct: string) => ({
 describe("sealed MCQ answers", () => {
   it("keeps the correct option off the stored question and recovers it on the server", () => {
     const question = sealedChoiceQuestion("challenge-1", upstream("q1", "C"), "Mesh analysis", 2);
-    expect(JSON.stringify(question)).not.toMatch(/"correct"|explanation/);
+    // No key, and no explanation text — it names the answer; only its sealed form.
+    expect(JSON.stringify(question)).not.toMatch(/"correct"|"explanation"|because/);
     expect(unsealAnswer("challenge-1", question)).toBe("C");
     // A seal copied onto another challenge's paper opens nothing.
     expect(unsealAnswer("challenge-2", question)).toBe("");
@@ -148,5 +149,45 @@ describe("setting the MCQ part", () => {
     expect(mocks.mcq.mock.calls[0][1]).toMatchObject({ purpose: "exam", count: 10 });
     expect(first).toHaveLength(2);
     expect(first.every((question) => question.marks === 2 && unsealAnswer("c", question))).toBe(true);
+  });
+});
+
+describe("negative marking", () => {
+  const paper = () =>
+    ["A", "B", "C", "D", "A"].map((key, index) => sealedChoiceQuestion("c", upstream(`q${index}`, key), "Topic", 2));
+
+  it("takes the set share off a wrong answer and nothing off a skipped one", async () => {
+    const { choiceTally } = await import("@/lib/data/challenge-exam-format");
+    // Two right, two wrong, one skipped, at 25% of 2 marks = 0.5 per wrong answer.
+    const graded = gradeChallengeChoices("c", paper(), { q0: "A", q1: "B", q2: "A", q3: "A" }, 25);
+    expect(graded.map((item) => item.outcome)).toEqual(["correct", "correct", "wrong", "wrong", "skipped"]);
+    expect(graded.map((item) => item.score)).toEqual([2, 2, -0.5, -0.5, 0]);
+    expect(graded[2]).toMatchObject({ chosen_key: "A", correct_key: "C" });
+    expect(choiceTally(graded)).toEqual({ correct: 2, wrong: 2, skipped: 1, earned: 4, penalty: 1 });
+
+    const grade = combinedChallengeGrade({ attemptId: "mcq-1", subject: "S", passMarks: 4, choices: graded });
+    expect(grade.total_score).toBe(3);
+    expect(grade.total_marks).toBe(10);
+    expect(grade.passed).toBe(false);
+    // The topic breakdown reports marks earned, as the course API's does.
+    expect(grade.evaluation?.total_score).toBe(4);
+  });
+
+  it("never takes the total below zero", () => {
+    const graded = gradeChallengeChoices("c", paper(), { q0: "B", q1: "A" }, 50);
+    expect(combinedChallengeGrade({ attemptId: "m", subject: "S", passMarks: 4, choices: graded }).total_score).toBe(0);
+  });
+
+  it("is off unless the community set it", () => {
+    const graded = gradeChallengeChoices("c", paper(), { q0: "B" });
+    expect(graded[0].score).toBe(0);
+  });
+});
+
+describe("community MCQ settings", () => {
+  it("keeps the count and negative marking inside what the setting allows", async () => {
+    const { clampMcqCount, negativeMarkingPercent } = await import("@/lib/challenge-format");
+    expect([clampMcqCount(2), clampMcqCount(12), clampMcqCount(99), clampMcqCount("x")]).toEqual([5, 12, 30, 10]);
+    expect([negativeMarkingPercent(20), negativeMarkingPercent(17), negativeMarkingPercent(undefined)]).toEqual([20, 0, 0]);
   });
 });

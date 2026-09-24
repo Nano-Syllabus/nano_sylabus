@@ -10,6 +10,10 @@ export type LearnQuestion = {
   question: string;
   /** Sessions this question was printed in, in the order they came back. */
   years: string[];
+  /** Set by a real paper: a question-bank row, or a worked copy the solver
+   *  grounded in one. False when every copy was written from the notes, which
+   *  is why such a question has no year to show. */
+  fromPastPaper: boolean;
   /** Distinct mark values the bank printed for it. */
   marks: number[];
   /** How many rows of the bank this one question accounts for. */
@@ -116,6 +120,7 @@ export function mergeLearnQuestions(input: {
     solution: string,
     displayQuestion = "",
     printing = false,
+    fromPastPaper = printing,
   ) => {
     const key = normalizeQuestionText(question || "");
     if (!key || !looksWhole(question)) return;
@@ -123,6 +128,7 @@ export function mergeLearnQuestions(input: {
       key,
       question,
       years: [],
+      fromPastPaper: false,
       marks: [],
       appearances: 0,
       solution: "",
@@ -133,6 +139,7 @@ export function mergeLearnQuestions(input: {
     // question is not a second sitting — counting it made every answered
     // question read "Repeated ×2" beside a single year.
     if (printing) printings.set(key, (printings.get(key) ?? 0) + 1);
+    if (fromPastPaper) entry.fromPastPaper = true;
     for (const year of years) {
       if (year && !entry.years.includes(year)) entry.years.push(year);
     }
@@ -156,6 +163,8 @@ export function mergeLearnQuestions(input: {
       example.marks,
       example.solution,
       example.displayQuestion,
+      false,
+      example.grounded,
     );
   }
   for (const pastQuestion of input.pastQuestions ?? []) {

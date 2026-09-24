@@ -68,13 +68,12 @@ describe("revision docs: the concepts reading", () => {
     expect(page).not.toContain("Machine Performance Metrics");
   });
 
-  it("is offered as a teaser with a button that opens a dialog", () => {
+  it("is offered as a card with a button that opens a dialog", () => {
     expect(page).toContain(">Concepts</h2>");
     expect(page).toContain("Read concepts");
     expect(page).toContain('aria-haspopup="dialog"');
-    // The first plain paragraph as a preview — not the one-line idea quote the
-    // reading opens with.
-    expect(page).toContain("Applied Mechanics provides the language and tools");
+    // No clipped preview of the reading on the card (user, 2026-09-24).
+    expect(page).not.toContain("Applied Mechanics provides the language and tools");
   });
 
   it("carries no idea, what-it-tested or how-this-connects cards", () => {

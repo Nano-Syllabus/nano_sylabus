@@ -10,6 +10,7 @@ import {
   type ApiRecord,
 } from "@/lib/teacher-app/client";
 import { detachTeacherSubjectFromCourses } from "@/lib/teacher-course-links";
+import { renameCreatorSubject } from "@/lib/data/subject-rename";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
@@ -174,45 +175,15 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       );
     }
 
-    // Keep the collection slug and folder path stable. The creator workspace
-    // uses this profile name as its editable display label, so renaming never
-    // moves source files or invalidates existing community links.
-    const now = new Date().toISOString();
-    const profileUpdate = await admin
-      .from("teacher_subject_profiles")
-      .update({ subject_name: name, updated_at: now })
-      .eq("teacher_id", teacher.id)
-      .eq("subject_slug", subjectSlug);
-    if (profileUpdate.error) throw profileUpdate.error;
-
-    // These tables intentionally store subject names as snapshots. Keep the
-    // labels users see in communities, courses, classrooms and exams aligned
-    // with the creator's renamed subject while leaving all stable identifiers
-    // untouched.
-    const referenceUpdates = await Promise.all([
-      admin
-        .from("community_subjects")
-        .update({ name, updated_at: now })
-        .eq("teacher_id", teacher.id)
-        .eq("external_subject_slug", subjectSlug),
-      admin
-        .from("teacher_course_subjects")
-        .update({ subject_name: name })
-        .eq("teacher_id", teacher.id)
-        .eq("subject_slug", subjectSlug),
-      admin
-        .from("teacher_classrooms")
-        .update({ subject_name: name })
-        .eq("teacher_id", teacher.id)
-        .eq("subject_slug", subjectSlug),
-      admin
-        .from("teacher_exam_papers")
-        .update({ subject_name: name })
-        .eq("teacher_id", teacher.id)
-        .eq("subject_slug", subjectSlug),
-    ]);
-    const referenceError = referenceUpdates.find((result) => result.error)?.error;
-    if (referenceError) throw referenceError;
+    // Keep the collection slug and folder path stable: every copy of the NAME
+    // follows the rename, and nothing that identifies the subject moves. See
+    // lib/data/subject-rename.ts for the tables and why the course API's own
+    // name is left alone.
+    const renamed = await renameCreatorSubject(admin, {
+      teacherId: teacher.id,
+      subjectSlug,
+      name,
+    });
 
     return NextResponse.json({
       subject: {
@@ -222,6 +193,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       },
       name,
       renamed: true,
+      updated: renamed.updated,
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Could not rename the subject.";

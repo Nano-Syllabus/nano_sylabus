@@ -83,7 +83,7 @@ describe("syllabus extraction → publication → student catalogue", () => {
         "Operators",
       ]);
       expect(db.tables.community_subjects[0].topic_sync_status).toBe("ready");
-      expect(mocks.topics).toHaveBeenCalledWith("collection", "Nims", { refresh: true });
+      expect(mocks.topics).toHaveBeenCalledWith("collection", "teacher_nims", { refresh: true });
       expect(mocks.challenges).toHaveBeenCalledExactlyOnceWith(
         "member",
         expect.arrayContaining([
@@ -139,7 +139,7 @@ describe("syllabus extraction → publication → student catalogue", () => {
     ).toHaveLength(2);
     expect(db.tables.community_subject_topics).toEqual([]);
     expect(mocks.ask).not.toHaveBeenCalled();
-    expect(mocks.topics).toHaveBeenCalledExactlyOnceWith("collection", "Nims");
+    expect(mocks.topics).toHaveBeenCalledExactlyOnceWith("collection", "teacher_nims");
   });
 
   it("keeps existing topic keys, rows, and mastery intact on repeat saves/reordering", async () => {

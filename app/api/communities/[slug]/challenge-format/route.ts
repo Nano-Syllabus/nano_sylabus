@@ -32,7 +32,11 @@ export async function PUT(request: Request, context: RouteContext) {
       data: { user },
     } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Sign in to change this community." }, { status: 401 });
-    const body = (await request.json().catch(() => null)) as { format?: unknown } | null;
+    const body = (await request.json().catch(() => null)) as {
+      format?: unknown;
+      mcqCount?: unknown;
+      negativePercent?: unknown;
+    } | null;
     if (!isChallengeQuestionFormat(body?.format)) {
       return NextResponse.json(
         { error: "Choose QnA, MCQ or hybrid challenge questions." },
@@ -40,7 +44,12 @@ export async function PUT(request: Request, context: RouteContext) {
       );
     }
     const { slug } = await context.params;
-    return NextResponse.json(await setCommunityChallengeFormat(user.id, slug, body.format));
+    return NextResponse.json(
+      await setCommunityChallengeFormat(user.id, slug, body.format, {
+        ...(body.mcqCount !== undefined ? { mcqCount: Number(body.mcqCount) } : {}),
+        ...(body.negativePercent !== undefined ? { negativePercent: Number(body.negativePercent) } : {}),
+      }),
+    );
   } catch (error) {
     const mapped = communityStorageError(error);
     return NextResponse.json({ error: mapped.message }, { status: mapped.status });

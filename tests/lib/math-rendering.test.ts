@@ -6,6 +6,8 @@ import {
   renderMarkdown,
   renderMathText,
   proseToText,
+  underscoredNamesToText,
+  loadKatex,
 } from "@/lib/markdown";
 
 /**
@@ -315,5 +317,31 @@ describe("model-written maths reads as maths", () => {
       "<p>An <em>important</em> point and a <strong>bold</strong> one.</p>",
     );
     expect(renderMarkdown("**Given.** Load 3V.")).toContain("<strong>Given.</strong> Load 3V.");
+  });
+});
+
+describe("names written with underscores for spaces", () => {
+  it("sets a multi-word underscored name as one piece of text", () => {
+    expect(underscoredNamesToText("\\frac{Number_of_Frames_in_Window}{Round_Trip_Time}")).toBe(
+      "\\frac{\\text{Number of Frames in Window}}{\\text{Round Trip Time}}",
+    );
+    expect(underscoredNamesToText("Round\\_Trip\\_Time")).toBe("\\text{Round Trip Time}");
+  });
+
+  it("leaves symbols with labels, commands and short tokens alone", () => {
+    expect(underscoredNamesToText("V_logic_0 + d_load")).toBe("V_logic_0 + d_load");
+    expect(underscoredNamesToText("\\Delta_x + dx_1")).toBe("\\Delta_x + dx_1");
+    expect(underscoredNamesToText("\\text{Round_Trip}")).toBe("\\text{Round_Trip}");
+  });
+
+  it("renders the throughput formula without subscripts", async () => {
+    await loadKatex();
+    const html = renderMarkdown(
+      "$$\\text{Throughput} = \\frac{Number\\_of\\_Frames\\_in\\_Window}{Round\\_Trip\\_Time}$$",
+    );
+    expect(html).not.toContain("msupsub");
+    expect(html).not.toContain("katex-error");
+    const text = html.replace(/<annotation[\s\S]*?<\/annotation>/g, "").replace(/<[^>]+>/g, "").replace(/&nbsp;|\u00a0/g, " ");
+    expect(text).toContain("Number of Frames in Window");
   });
 });

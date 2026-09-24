@@ -141,7 +141,11 @@ export async function readCommunityLearningTopics(
     recoverable.map(async (subject) => {
       const teacher = teachers.data?.find((row) => row.id === subject.teacherId);
       if (!teacher?.collection_sk) throw new Error("Subject collection is unavailable.");
-      const payload = await getTeacherPracticeTopics(String(teacher.collection_sk), subject.name);
+      // By slug: the community's display name can drift from the creator's own.
+      const payload = await getTeacherPracticeTopics(
+        String(teacher.collection_sk),
+        subject.externalSubjectSlug || subject.name,
+      );
       return extractedLearningTopics(payload).map((topic) => ({
         ...topic,
         id: topic.topic_key,

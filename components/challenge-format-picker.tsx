@@ -3,20 +3,36 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  CHALLENGE_MCQ_COUNT_MAX,
+  CHALLENGE_MCQ_COUNT_MIN,
+  CHALLENGE_MCQ_EXAM_QUESTIONS,
+  challengeNegativeMarkingOptions,
   challengeQuestionFormatLabels,
   challengeQuestionFormats,
+  clampMcqCount,
   isChallengeQuestionFormat,
+  negativeMarkingPercent,
   type ChallengeQuestionFormat,
 } from "@/lib/challenge-format";
 import { cn } from "@/lib/utils";
 
-type FormatState = { format: ChallengeQuestionFormat; confirmed: boolean; available: boolean };
+type FormatState = {
+  format: ChallengeQuestionFormat;
+  confirmed: boolean;
+  available: boolean;
+  mcqCount: number;
+  negativePercent: number;
+};
 
-async function putFormat(slug: string, format: ChallengeQuestionFormat): Promise<FormatState> {
+async function putFormat(
+  slug: string,
+  format: ChallengeQuestionFormat,
+  marking: { mcqCount: number; negativePercent: number },
+): Promise<FormatState> {
   const response = await fetch(`/api/communities/${encodeURIComponent(slug)}/challenge-format`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ format }),
+    body: JSON.stringify({ format, ...marking }),
   });
   const payload = (await response.json().catch(() => ({}))) as Partial<FormatState> & { error?: string };
   if (!response.ok) throw new Error(payload.error || "Could not save the challenge question type.");
@@ -24,6 +40,8 @@ async function putFormat(slug: string, format: ChallengeQuestionFormat): Promise
     format: isChallengeQuestionFormat(payload.format) ? payload.format : format,
     confirmed: payload.confirmed !== false,
     available: payload.available !== false,
+    mcqCount: clampMcqCount(payload.mcqCount ?? marking.mcqCount),
+    negativePercent: negativeMarkingPercent(payload.negativePercent ?? marking.negativePercent),
   };
 }
 
@@ -87,6 +105,8 @@ export function ChallengeFormatOptions({
 export function CommunityChallengeFormatSettings({ slug }: { slug: string }) {
   const [saved, setSaved] = useState<FormatState | null>(null);
   const [draft, setDraft] = useState<ChallengeQuestionFormat | null>(null);
+  const [mcqCount, setMcqCount] = useState(CHALLENGE_MCQ_EXAM_QUESTIONS);
+  const [negativePercent, setNegativePercent] = useState(0);
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -109,9 +129,13 @@ export function CommunityChallengeFormatSettings({ slug }: { slug: string }) {
           format: isChallengeQuestionFormat(payload.format) ? payload.format : "qna",
           confirmed: Boolean(payload.confirmed),
           available: payload.available !== false,
+          mcqCount: clampMcqCount(payload.mcqCount ?? CHALLENGE_MCQ_EXAM_QUESTIONS),
+          negativePercent: negativeMarkingPercent(payload.negativePercent),
         };
         setSaved(state);
         setDraft(state.confirmed ? state.format : null);
+        setMcqCount(state.mcqCount);
+        setNegativePercent(state.negativePercent);
       })
       .catch((caught) => {
         if (!cancelled) setLoadError(caught instanceof Error ? caught.message : "Could not load this setting.");
@@ -127,7 +151,7 @@ export function CommunityChallengeFormatSettings({ slug }: { slug: string }) {
     setError("");
     setMessage("");
     try {
-      const next = await putFormat(slug, draft);
+      const next = await putFormat(slug, draft, { mcqCount, negativePercent });
       setSaved(next);
       setMessage(
         `Saved. Every student's next challenge exam will be ${challengeQuestionFormatLabels[next.format].title}.`,
@@ -139,7 +163,13 @@ export function CommunityChallengeFormatSettings({ slug }: { slug: string }) {
     }
   }
 
-  const unchanged = Boolean(saved?.confirmed && draft === saved.format);
+  const unchanged = Boolean(
+    saved?.confirmed &&
+      draft === saved.format &&
+      mcqCount === saved.mcqCount &&
+      negativePercent === saved.negativePercent,
+  );
+  const marksMcq = draft === "mcq" || draft === "hybrid";
 
   return (
     <section className="mt-7 rounded-xl border border-border bg-bg-primary p-5 sm:p-6">
@@ -178,6 +208,47 @@ export function CommunityChallengeFormatSettings({ slug }: { slug: string }) {
               setError("");
             }}
           />
+          {marksMcq ? (
+            <div className="mt-4 grid gap-4 rounded-lg border border-border bg-bg-secondary p-4 sm:grid-cols-2">
+              {draft === "mcq" ? (
+                <label className="block text-sm">
+                  <span className="font-medium">Questions per challenge</span>
+                  <span className="mt-0.5 block text-xs text-text-muted">
+                    {CHALLENGE_MCQ_COUNT_MIN}–{CHALLENGE_MCQ_COUNT_MAX}, answered on one page.
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={CHALLENGE_MCQ_COUNT_MIN}
+                    max={CHALLENGE_MCQ_COUNT_MAX}
+                    value={mcqCount}
+                    disabled={saving || !saved.available}
+                    onChange={(event) => setMcqCount(Number(event.target.value))}
+                    onBlur={() => setMcqCount((value) => clampMcqCount(value))}
+                    className="mt-2 h-10 w-28 rounded-lg border border-border bg-bg-primary px-3 text-sm"
+                  />
+                </label>
+              ) : null}
+              <label className="block text-sm">
+                <span className="font-medium">Negative marking</span>
+                <span className="mt-0.5 block text-xs text-text-muted">
+                  Taken off for each wrong answer. Skipped questions lose nothing.
+                </span>
+                <select
+                  value={negativePercent}
+                  disabled={saving || !saved.available}
+                  onChange={(event) => setNegativePercent(Number(event.target.value))}
+                  className="mt-2 h-10 rounded-lg border border-border bg-bg-primary px-3 text-sm"
+                >
+                  {challengeNegativeMarkingOptions.map((percent) => (
+                    <option key={percent} value={percent}>
+                      {percent ? `${percent}% of the question's marks` : "None"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button
               type="button"

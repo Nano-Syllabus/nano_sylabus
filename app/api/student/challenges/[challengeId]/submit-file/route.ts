@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import {
   challengeExamExpired,
   getStudentChallengeGradeContext,
@@ -125,7 +126,7 @@ export async function POST(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not grade this scan." },
+      { error: error instanceof Error ? studentFacingBuildError(error.message) : "Could not grade this scan." },
       { status: 502 },
     );
   }

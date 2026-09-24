@@ -73,7 +73,7 @@ describe("community challenge topic extraction", () => {
   it("refreshes the correct collection, saves shared topics, and assigns challenges to active members", async () => {
     const { admin, tables } = fixture();
     const result = await syncCommunitySubjectTopics("owner", "henglish", "subject-1", admin);
-    expect(mocks.topics).toHaveBeenCalledExactlyOnceWith("subject-collection", "Nims", {
+    expect(mocks.topics).toHaveBeenCalledExactlyOnceWith("subject-collection", "teacher_nims", {
       refresh: true,
     });
     expect(tables.community_subject_topics.chain.upsert).toHaveBeenCalledWith(
@@ -169,7 +169,7 @@ describe("community challenge topic extraction", () => {
       structure: [{ title: "Tokens", topics: [{ name: "Identifiers" }] }],
     };
     const result = await syncCommunitySubjectTopics("owner", "henglish", "subject-1", admin);
-    expect(mocks.topics).toHaveBeenCalledWith("subject-collection", "Nims", { refresh: true });
+    expect(mocks.topics).toHaveBeenCalledWith("subject-collection", "teacher_nims", { refresh: true });
     expect(result.topics).toEqual([
       expect.objectContaining({ topic_key: "grammar", title: "Grammar" }),
     ]);

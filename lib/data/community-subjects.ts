@@ -246,7 +246,8 @@ export async function syncCommunitySubjectTopics(
     // Refresh the executable provider graph in the same action as outline save.
     const payload = await getTeacherPracticeTopics(
       String(teacherResult.data.collection_sk),
-      String(subjectResult.data.name),
+      // By slug: the community's display name can drift from the creator's own.
+      String(subjectResult.data.external_subject_slug),
       { refresh: true },
     );
     if (!Array.isArray(payload.topics)) {

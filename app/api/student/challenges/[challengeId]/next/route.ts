@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import { getStudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
 import { getStudentChallenge, startStudentChallenge } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -55,7 +56,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : "Could not open the next challenge.",
+          error instanceof Error ? studentFacingBuildError(error.message) : "Could not open the next challenge.",
       },
       { status: 502 },
     );

@@ -381,7 +381,22 @@ function LoadingFrame({ poster, title, detail, progress }: { poster?: string; ti
  * actually play, it is a loading state with the step it is on and the seconds
  * it has taken, and the frame is only a faint hint behind it.
  */
-function Explainer({ challengeId, questionId, selected }: { challengeId: string; questionId: string; selected: string }) {
+/**
+ * "Why? Understand it with a video" under a wrong answer. `endpoint` is where the
+ * render is asked for: the fundamentals check's route by default, or an MCQ
+ * community paper's (`/choices/explain`), which reads the recorded pick itself.
+ */
+export function Explainer({
+  challengeId,
+  questionId,
+  selected,
+  endpoint,
+}: {
+  challengeId: string;
+  questionId: string;
+  selected: string;
+  endpoint?: string;
+}) {
   const [video, setVideo] = useState<Video>({ status: "idle" });
   const [specHash, setSpecHash] = useState("");
   const [startedAt, setStartedAt] = useState(0);
@@ -449,7 +464,7 @@ function Explainer({ challengeId, questionId, selected }: { challengeId: string;
     setVideo({ status: "making", stage: "starting" });
     try {
       const response = await fetch(
-        `/api/student/challenges/${encodeURIComponent(challengeId)}/fundamentals/explain`,
+        endpoint ?? `/api/student/challenges/${encodeURIComponent(challengeId)}/fundamentals/explain`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

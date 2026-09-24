@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { emptyFigureSection, figureBrief, withFigure } from "@/lib/answer-figures";
+import {
+  drawnFigureDigest,
+  emptyFigureSection,
+  figureBrief,
+  withFigure,
+  withoutFigure,
+} from "@/lib/answer-figures";
 
 const QUESTION =
   "A digital system defines logic-1 as a nominal 3V signal and logic-0 as a nominal 0V signal. Sketch the voltage signal range diagram for this system.";
@@ -93,5 +99,35 @@ describe("worked solutions that describe a picture without a heading", () => {
     expect(emptyFigureSection(`![Diagram](/api/figure/a.png)\n\n${STORED}`, ASKED)).toBeNull();
     expect(emptyFigureSection("Apply KVL around the loop.", "Find the current in the circuit.")).toBeNull();
     expect(emptyFigureSection("| A | Y |\n|---|---|", "Draw the truth table of an XOR gate.")).toBeNull();
+  });
+});
+
+describe("redrawing a dead figure", () => {
+  const dead = "/api/figure/c65ef4e698d41b0ee0b336daf4be5976.png";
+
+  it("names only server-drawn figure URLs", () => {
+    expect(drawnFigureDigest(dead)).toBe("c65ef4e698d41b0ee0b336daf4be5976");
+    expect(drawnFigureDigest("/api/media/abc/poster.png")).toBeNull();
+    expect(drawnFigureDigest("https://evil.example/api/figure/abc.png")).toBeNull();
+  });
+
+  it("removes the dead image so the section reads as missing again", () => {
+    const question = "Draw the circuit diagrams for both configurations.";
+    const solution = `![Diagram](${dead})\n\n## Source Conversion\nA practical current source…`;
+    const stripped = withoutFigure(solution, dead);
+    expect(stripped).toBe("## Source Conversion\nA practical current source…");
+    expect(emptyFigureSection(stripped, question)).toMatchObject({ insertAt: 0, placement: "before" });
+
+    const headed = `### Diagram\n\n![Diagram](${dead})\n\n### Steps\nOne.`;
+    const section = emptyFigureSection(withoutFigure(headed, dead), question);
+    expect(section?.heading).toBe("Diagram");
+  });
+
+  it("gives a redraw a different brief from the one that failed", () => {
+    const section = { heading: "Diagram", insertAt: 0, prose: "", placement: "before" as const };
+    const first = figureBrief("Draw it.", section);
+    const again = figureBrief("Draw it.", section, "c65ef4e698d41b0ee0b336daf4be5976");
+    expect(again).not.toBe(first);
+    expect(again).toContain("Keep the scene simple");
   });
 });

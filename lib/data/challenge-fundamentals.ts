@@ -136,7 +136,30 @@ export async function explainChallengeFundamental(
   if (!chosen || selected === question.correct) {
     throw new RangeError("An explainer is made for a wrong answer.");
   }
-  const correctText = optionText(question, question.correct);
+  return requestWrongAnswerVideo(scope, {
+    text: question.text,
+    options: question.options,
+    correct: question.correct,
+    explanation: question.explanation || "",
+  }, selected);
+}
+
+/**
+ * A short animated explainer for ONE wrong answer to any challenge MCQ — the
+ * fundamentals check's, or an MCQ community's exam question. `fresh`, so it is
+ * rendered for this request and handed to no other.
+ */
+export async function requestWrongAnswerVideo(
+  scope: { collectionKey: string; subject: string; topicTitle: string },
+  question: { text: string; options: Array<{ key: string; text: string }>; correct: string; explanation: string },
+  selected: string,
+): Promise<FundamentalsExplainer> {
+  const textOf = (key: string) => question.options.find((option) => option.key === key)?.text ?? "";
+  const chosen = textOf(selected);
+  if (!chosen || selected === question.correct) {
+    throw new RangeError("An explainer is made for a wrong answer.");
+  }
+  const correctText = textOf(question.correct);
   const reply = await requestTeacherExplainerAnimation(scope.collectionKey, {
     concept: clip(`Why "${correctText}" and not "${chosen}": ${question.text}`, 200),
     subject: scope.subject,

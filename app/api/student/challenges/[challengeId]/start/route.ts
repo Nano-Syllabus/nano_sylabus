@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { startStudentChallenge } from "@/lib/data/student-challenges";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
@@ -30,7 +31,7 @@ export async function POST(
       {
         error:
           error instanceof Error
-            ? error.message
+            ? studentFacingBuildError(error.message)
             : "Could not build this challenge from the course material.",
       },
       { status: 502 },

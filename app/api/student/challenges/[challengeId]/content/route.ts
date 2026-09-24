@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import { getStudentChallengeContent } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
@@ -46,7 +47,7 @@ export async function GET(
     return NextResponse.json({ challenge });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not load this challenge." },
+      { error: error instanceof Error ? studentFacingBuildError(error.message) : "Could not load this challenge." },
       { status: 502 },
     );
   }

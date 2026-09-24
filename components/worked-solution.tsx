@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "@/components/markdown";
 import { TranslatingLines } from "@/components/study-language";
-import { emptyFigureSection, type EmptyFigureSection } from "@/lib/answer-figures";
+import { FIGURE_FAILED_EVENT, type FigureFailedDetail } from "@/components/answer-media";
+import {
+  drawnFigureDigest,
+  emptyFigureSection,
+  withoutFigure,
+  type EmptyFigureSection,
+} from "@/lib/answer-figures";
 import { normalizeQuestionText } from "@/lib/challenge-learn-questions";
 import type { StudentChallengeDetail } from "@/lib/data/student-challenges";
 
@@ -12,14 +18,14 @@ export type DrawnFigure = { challenge: StudentChallengeDetail; solution: string 
 /** One request per example per page, however many times it mounts. */
 const inFlight = new Map<string, Promise<DrawnFigure | null>>();
 
-function requestFigure(challengeId: string, question: string) {
-  const key = `${challengeId}:${normalizeQuestionText(question)}`;
+function requestFigure(challengeId: string, question: string, deadFigureUrl?: string) {
+  const key = `${challengeId}:${normalizeQuestionText(question)}:${deadFigureUrl ?? ""}`;
   const pending =
     inFlight.get(key) ??
     fetch(`/api/student/challenges/${challengeId}/figure`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, deadFigureUrl }),
     })
       .then(async (response) => {
         const payload = (await response.json().catch(() => ({}))) as Partial<DrawnFigure>;
@@ -53,7 +59,10 @@ const IMAGE = /!\[[^\]]*\]\([^)\s]+\)/;
  */
 function translatedWithFigure(text: string, drawn: string) {
   const image = drawn.match(IMAGE)?.[0];
-  if (!image || IMAGE.test(text)) return text;
+  if (!image) return text;
+  const existing = text.match(IMAGE)?.[0];
+  // A translation written before a redraw carries the dead picture: swap it.
+  if (existing) return existing === image ? text : text.replace(existing, image);
   const section = emptyFigureSection(text);
   if (!section) return `${image}\n\n${text}`;
   return section.placement === "before"
@@ -139,8 +148,62 @@ export function WorkedSolution({
     };
   }, [challengeId, question, missing]);
 
+  // A figure on the solution that the renderer gave up on (answer-media.ts says
+  // so with FIGURE_FAILED_EVENT): withdraw it and ask for a new drawing, once
+  // per figure per view. A redraw that fails too says so and waits for the next
+  // visit, like a first draw.
+  const [redraw, setRedraw] = useState<{ dead: string; state: "drawing" | "failed" } | null>(null);
+  const redrawnRef = useRef(new Set<string>());
+  const currentRef = useRef(current);
+  useEffect(() => {
+    currentRef.current = current;
+  });
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return;
+    let active = true;
+    const onFailed = (event: Event) => {
+      const src = (event as CustomEvent<FigureFailedDetail>).detail?.src ?? "";
+      if (!drawnFigureDigest(src) || redrawnRef.current.has(src)) return;
+      if (!currentRef.current.includes(`](${src})`)) return;
+      redrawnRef.current.add(src);
+      setRedraw({ dead: src, state: "drawing" });
+      void requestFigure(challengeId, question, src).then((drawn) => {
+        if (!active) return;
+        const replaced =
+          drawn && !drawn.solution.includes(`](${src})`) && !emptyFigureSection(drawn.solution, question);
+        if (!drawn || !replaced) {
+          setRedraw({ dead: src, state: "failed" });
+          return;
+        }
+        setRedraw(null);
+        setDrawnSolution(drawn.solution);
+        onDrawnRef.current?.(drawn);
+      });
+    };
+    node.addEventListener(FIGURE_FAILED_EVENT, onFailed);
+    return () => {
+      active = false;
+      node.removeEventListener(FIGURE_FAILED_EVENT, onFailed);
+    };
+  }, [challengeId, question]);
+
   const translated = text !== undefined && text !== solution;
-  const shown = translated
+  const redrawBase = redraw ? withoutFigure(current, redraw.dead) : null;
+  const redrawSection = redrawBase ? emptyFigureSection(redrawBase, question) : null;
+  const shown = translated && redraw
+    ? withoutFigure(drawnSolution ? translatedWithFigure(text, drawnSolution) : text, redraw.dead)
+    : redraw && redrawBase
+      ? redrawSection
+        ? withNote(
+            redrawBase,
+            redrawSection,
+            redraw.state === "drawing"
+              ? "Drawing the diagram…"
+              : "The diagram could not be drawn right now. It will be tried again next time you open this.",
+          )
+        : redrawBase
+    : translated
     ? // A translation carries no note: its offsets are not the English ones.
       drawnSolution
       ? translatedWithFigure(text, drawnSolution)

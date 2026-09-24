@@ -800,7 +800,8 @@ export async function prepareClaimedTopic(
     const key = await collectionKeyForTeacher(row.teacher_id);
     if (!key) return await fail("This course creator's study collection is not ready yet.");
     response = await prepareTeacherChallengeTopic(key, {
-      subject: row.subject_name || row.subject_slug,
+      // The slug: a subject's display name can drift from the creator's own.
+      subject: row.subject_slug || row.subject_name,
       topic: row.topic_key,
       ...(options.force ? { force: true } : {}),
     });
@@ -972,7 +973,8 @@ async function markStaleTopics(
     try {
       const key = await collectionKeyForTeacher(group.teacherId);
       if (key) {
-        const response = await getTeacherChallengeRevision(key, group.subjectName);
+        // By slug: the display name can drift from the creator's own.
+        const response = await getTeacherChallengeRevision(key, group.subjectSlug || group.subjectName);
         current = String(response?.collection_revision || "").trim();
       }
     } catch {

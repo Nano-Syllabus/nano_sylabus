@@ -172,7 +172,7 @@ describe("canonical community challenge topics", () => {
       db.admin,
     );
     expect(topics?.map((row) => row.topic_key)).toEqual(["real-provider-id"]);
-    expect(mocks.topics).toHaveBeenCalledExactlyOnceWith("collection", "Nims");
+    expect(mocks.topics).toHaveBeenCalledExactlyOnceWith("collection", "teacher_nims");
     expect(db.tables.community_subject_topics).toEqual([]);
   });
 

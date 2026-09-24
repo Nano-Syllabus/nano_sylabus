@@ -1238,3 +1238,42 @@ img.answer-figure[data-answer-zoom]:focus-visible {
   outline: 2px solid var(--text-primary);
   outline-offset: 2px;
 }
+
+/*
+ * A figure still being drawn (`attachFigureFrame` in components/answer-media.ts):
+ * the placeholder stands where the picture will go and the <img> is hidden
+ * until its bytes arrive, so the reader sees a promise rather than a blank gap
+ * or a torn-page icon. A figure that will never come is hidden outright.
+ */
+img.answer-figure.answer-figure-pending,
+img.answer-figure.answer-figure-failed {
+  display: none !important;
+}
+
+.answer-figure-drawing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  max-height: 280px;
+  width: 100%;
+  margin: 1rem 0;
+  border: 1px dashed var(--color-border-strong, currentColor);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-style: italic;
+  opacity: 0.75;
+  animation: answer-figure-drawing-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes answer-figure-drawing-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .answer-figure-drawing {
+    animation: none;
+  }
+}

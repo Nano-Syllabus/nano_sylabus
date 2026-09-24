@@ -158,6 +158,18 @@ describe("a challenge in Roman Nepali", () => {
     expect(mocks.translate).not.toHaveBeenCalled();
   });
 
+  it("asks the course API by the subject's slug, whatever it is called now", async () => {
+    // The creator renamed the subject: the community shows the new name, the
+    // course API still knows the old one. Only the slug is the same in both.
+    mocks.access.mockResolvedValue({
+      teacherId: "teacher-1",
+      subjectName: "Renamed by the creator",
+      subjectSlug: "teacher_nims",
+    });
+    await getStudentChallengeRomanNepali("member", "c1");
+    expect(mocks.translate).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ subject: "teacher_nims" }));
+  });
+
   it("is only the student's own challenge", async () => {
     await expect(getStudentChallengeRomanNepali("someone-else", "c1")).resolves.toBeNull();
     expect(mocks.translate).not.toHaveBeenCalled();

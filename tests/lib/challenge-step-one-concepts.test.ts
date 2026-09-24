@@ -16,7 +16,7 @@ const revisionPage = readFileSync("components/revision-docs-client.tsx", "utf8")
 
 describe("step 1 of a challenge", () => {
   it("shows the shared concepts card, above the past questions", () => {
-    const stepOne = challengeScreen.slice(challengeScreen.indexOf("{activeStep === 1 ? ("));
+    const stepOne = challengeScreen.slice(challengeScreen.indexOf(": activeStep === 1 ? ("));
     expect(stepOne.indexOf("<ConceptsCard")).toBeGreaterThan(-1);
     expect(stepOne.indexOf("<ConceptsCard")).toBeLessThan(stepOne.indexOf("learnQuestions.map"));
     // In the reader's language — see `components/study-language.tsx`.
@@ -24,7 +24,7 @@ describe("step 1 of a challenge", () => {
   });
 
   it("gives every opened challenge its concepts card: the reading, or the card that waits for it", () => {
-    const stepOne = challengeScreen.slice(challengeScreen.indexOf("{activeStep === 1 ? ("));
+    const stepOne = challengeScreen.slice(challengeScreen.indexOf(": activeStep === 1 ? ("));
     // No branch where an opened challenge shows neither — that was a challenge
     // marked ready before its reading landed, and the poll had already stopped.
     expect(stepOne).toMatch(/\{content\?\.lesson\?\.content\?\.length \? \(\s*<ConceptsCard/);
@@ -105,7 +105,9 @@ describe("the card", () => {
     );
     expect(html).toContain(">Concepts</h2>");
     expect(html).toContain("1 min read");
-    expect(html).toContain("First paragraph of the reading.");
+    // Only the heading and the button: no clipped preview of the reading
+    // (user, 2026-09-24) — the sheet behind the button holds all of it.
+    expect(html).not.toContain("First paragraph of the reading.");
     expect(html).toContain('aria-haspopup="dialog"');
   });
 });
