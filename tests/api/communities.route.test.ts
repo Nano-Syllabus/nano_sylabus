@@ -24,6 +24,7 @@ const validInput = {
   name: "SEC BEI",
   university: "Pokhara University",
   faculty: "BEI",
+  level: "Bachelor",
   description: "A shared academic community for electronics engineering students.",
   totalYears: 4,
   totalSemesters: 8,
@@ -31,11 +32,16 @@ const validInput = {
   challengeQuestionFormat: "hybrid",
 };
 
+const updateUser = vi.fn(async () => ({ error: null }));
+
 describe("/api/communities", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.createSupabaseServerClient.mockResolvedValue({
-      auth: { getUser: vi.fn(async () => ({ data: { user: { id: "user-1" } } })) },
+      auth: {
+        getUser: vi.fn(async () => ({ data: { user: { id: "user-1", user_metadata: {} } } })),
+        updateUser,
+      },
     });
     mocks.listPublicCommunities.mockResolvedValue([{ id: "community-1", slug: "sec-bei" }]);
     mocks.createCommunity.mockResolvedValue({ id: "community-1", slug: "sec-bei" });
@@ -55,11 +61,25 @@ describe("/api/communities", () => {
       new Request("http://localhost/api/communities", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(validInput),
+        body: JSON.stringify({ ...validInput, phoneNumber: "9812345678" }),
       }),
     );
     expect(response.status).toBe(201);
+    expect(updateUser).toHaveBeenCalledWith({ data: { phone_number: "+9779812345678" } });
     expect(mocks.createCommunity).toHaveBeenCalledWith("user-1", validInput);
+  });
+
+  it("requires the creator's phone number", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/communities", {
+        method: "POST",
+        body: JSON.stringify({ ...validInput, phoneNumber: "12345" }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ field: "phoneNumber" });
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(mocks.createCommunity).not.toHaveBeenCalled();
   });
 
   it("requires authentication before community creation", async () => {

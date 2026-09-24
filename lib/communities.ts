@@ -3,6 +3,46 @@ import { challengeQuestionFormats } from "@/lib/challenge-format";
 
 export const communityVisibility = ["public", "unlisted", "private"] as const;
 
+/** What a faculty prepares students for; chosen by the creator, filtered on in Browse. */
+export const communityLevels = ["+2", "Bachelor", "Master", "Entrance", "License"] as const;
+export type CommunityLevel = (typeof communityLevels)[number];
+
+export function isCommunityLevel(value: unknown): value is CommunityLevel {
+  return typeof value === "string" && (communityLevels as readonly string[]).includes(value);
+}
+
+/**
+ * The stored level, or — for a faculty created before levels were stored, or a
+ * database without the column yet — a guess from its name and programme.
+ */
+export function communityLevel(community: { level?: string | null; name: string; faculty: string }): CommunityLevel {
+  if (isCommunityLevel(community.level)) return community.level;
+  const text = `${community.name} ${community.faculty}`.toLowerCase();
+  if (/licen[cs]e|liscen[cs]e|\blicen/.test(text)) return "License";
+  if (text.includes("entrance")) return "Entrance";
+  if (/\+2|plus two|\bneb\b|\b1[12]\b/.test(text)) return "+2";
+  if (/master|\bmsc\b|\bmba\b|\bm\./.test(text)) return "Master";
+  return "Bachelor";
+}
+
+/**
+ * One spelling per university. Faculties were created as "TU", "Tribhuwan
+ * University" and "Tribhuvan" — the same body three ways — which split the
+ * browse filter; every alias now resolves to the official name.
+ */
+const universityAliases: [RegExp, string][] = [
+  [/^(t\.?\s*u\.?|tribhu[vw]an(\s+university)?)$/i, "Tribhuvan University"],
+  [/^(k\.?\s*u\.?|kathmandu(\s+university)?)$/i, "Kathmandu University"],
+  [/^(p\.?\s*u\.?|pokhara(\s+university)?)$/i, "Pokhara University"],
+  [/^(purbanchal(\s+university)?)$/i, "Purbanchal University"],
+  [/^(n\.?\s*e\.?\s*b\.?|national\s+examinations?\s+board)$/i, "National Examination Board"],
+];
+
+export function canonicalUniversity(value: string) {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  return universityAliases.find(([pattern]) => pattern.test(trimmed))?.[1] ?? trimmed;
+}
+
 export const communityNameSchema = z
   .string()
   .trim()
@@ -12,8 +52,16 @@ export const communityNameSchema = z
 export const communityInputSchema = z
   .object({
     name: communityNameSchema,
-    university: z.string().trim().min(2, "University is required.").max(160),
+    university: z
+      .string()
+      .trim()
+      .min(2, "University is required.")
+      .max(160)
+      .transform(canonicalUniversity),
     faculty: z.string().trim().min(2, "Faculty or programme is required.").max(160),
+    level: z.enum(communityLevels, {
+      errorMap: () => ({ message: "Choose the level this faculty is for." }),
+    }),
     description: z.string().trim().max(1200).default(""),
     totalYears: z.number().int().min(1, "Add at least one year.").max(10),
     totalSemesters: z.number().int().min(1, "Add at least one semester.").max(40),
@@ -104,6 +152,8 @@ export type CommunitySummary = {
   name: string;
   university: string;
   faculty: string;
+  /** Null until the `level` column exists and has been set; use `communityLevel()`. */
+  level: CommunityLevel | null;
   description: string;
   totalYears: number;
   totalSemesters: number;
@@ -192,8 +242,9 @@ export function mapCommunitySummary(
     creatorId: String(row.creator_id || ""),
     slug: String(row.slug || ""),
     name: String(row.name || ""),
-    university: String(row.university || ""),
+    university: canonicalUniversity(String(row.university || "")),
     faculty: String(row.faculty || ""),
+    level: isCommunityLevel(row.level) ? row.level : null,
     description: String(row.description || ""),
     totalYears: Number(row.total_years) || 1,
     totalSemesters: Number(row.total_semesters) || 1,

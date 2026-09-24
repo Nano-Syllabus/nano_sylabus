@@ -19,7 +19,7 @@ export default function AppCommunitiesError({ reset }: { error: Error; reset: ()
             Try again
           </button>
           <Link
-            href="/app/today"
+            href="/app"
             className="inline-flex min-h-10 items-center rounded-full border border-border px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
           >
             Back to dashboard

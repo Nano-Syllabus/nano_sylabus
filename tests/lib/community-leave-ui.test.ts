@@ -92,11 +92,12 @@ describe("community leave controls (without browser)", () => {
     expect(html).not.toContain("Semester 1 · current");
     expect(html).toContain("Tabs below only change what you browse.");
   });
-  it("shows leave on a joined community card", () => {
+  it("opens a joined community from its card; leaving happens inside the community", () => {
     const html = renderToStaticMarkup(
       createElement(CommunityCatalogClient, { initialCommunities: [community], signedIn: true }),
     );
-    expect(html).toContain('aria-label="Leave Henglish community"');
+    expect(html).toContain('aria-label="Open Henglish community"');
+    expect(html).not.toContain("Leave Henglish community");
   });
   it("routes a creator's community card to its admin workspace", () => {
     const html = renderToStaticMarkup(

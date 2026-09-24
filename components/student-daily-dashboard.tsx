@@ -96,7 +96,9 @@ function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
 
   return (
     <section
-      className="relative mt-5 overflow-hidden rounded-[27px] bg-[var(--community-accent)] px-6 py-[22px] text-[var(--community-accent-foreground)] shadow-sm sm:px-10"
+      className={`relative mt-5 overflow-hidden bg-[var(--community-accent)] text-[var(--community-accent-foreground)] shadow-sm ${
+        editing || quote ? "rounded-[27px] px-6 py-[22px] sm:px-10" : "rounded-2xl px-4 py-2.5 sm:px-5"
+      }`}
       aria-labelledby="study-quote-heading"
     >
       <div
@@ -189,21 +191,21 @@ function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
           </button>
         </div>
       ) : (
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-          <div className="flex min-w-0 items-center gap-4 sm:gap-6">
-            <span className="grid size-14 shrink-0 place-items-center rounded-full border-2 border-current/80" aria-hidden="true">
-              <Quote className="size-7" fill="currentColor" />
+        <div className="relative flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full border-[1.5px] border-current/80" aria-hidden="true">
+              <Quote className="size-3.5" fill="currentColor" />
             </span>
-            <h2 id="study-quote-heading" className="min-w-0 text-2xl font-semibold tracking-tight sm:text-3xl">
+            <h2 id="study-quote-heading" className="min-w-0 text-base font-semibold">
               What words help you keep going?
             </h2>
           </div>
           <button
             type="button"
             onClick={startEditing}
-            className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 self-start rounded-full border-2 border-current/45 bg-bg-primary/10 px-5 text-base font-semibold transition-colors hover:bg-bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--community-accent)] sm:self-auto"
+            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border-[1.5px] border-current/45 bg-bg-primary/10 px-4 text-sm font-semibold transition-colors hover:bg-bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--community-accent)]"
           >
-            <Plus className="size-5" aria-hidden="true" />
+            <Plus className="size-4" aria-hidden="true" />
             Add your quote
           </button>
         </div>

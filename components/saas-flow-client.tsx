@@ -7,21 +7,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Check,
   Copy,
-  CheckCircle2,
   Lock,
   Mail,
   User,
   ArrowLeft,
   Lightbulb,
-  Play,
-  BarChart3,
-  BookOpen,
 } from "lucide-react";
 import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
 import {
   hasCompletedStudyDiagnostic,
-  markStudyDiagnosticStarted,
   PENDING_STUDY_ANSWERS_KEY,
   readPendingStudyAnswers,
   saveStudyDiagnostic,
@@ -169,9 +164,6 @@ export function SaaSFlowClient({
   const [checkingPriorStart, setCheckingPriorStart] = useState(
     searchParams.get("resumeDiagnostic") !== "1",
   );
-  const [walkthroughNotice, setWalkthroughNotice] = useState(false);
-  const startedAccountSave = useRef<Promise<unknown> | null>(null);
-  const walkthroughNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const googleAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true";
 
   // Signed-out users have no account metadata yet. Keep a durable browser marker
@@ -332,34 +324,21 @@ export function SaaSFlowClient({
     }
   }, [currentStep, router]);
 
-  useEffect(() => {
-    return () => {
-      if (walkthroughNoticeTimer.current) clearTimeout(walkthroughNoticeTimer.current);
-    };
-  }, []);
-
-  const showWalkthroughNotice = () => {
-    setWalkthroughNotice(true);
-    if (walkthroughNoticeTimer.current) clearTimeout(walkthroughNoticeTimer.current);
-    walkthroughNoticeTimer.current = setTimeout(() => setWalkthroughNotice(false), 3000);
-  };
-
-  const handleSelectAnswer = (qNum: number, optIndex: number, text: string) => {
+  /**
+   * The funnel counts as started only once the student commits with "Start your
+   * first challenge", not on their first answer: someone who answers a question
+   * and leaves can still come back to the questions. Signed-in students also get
+   * `study_diagnostic_started` on their account from `saveStudyDiagnostic`.
+   */
+  const markFunnelStarted = () => {
     try {
       localStorage.setItem(STUDY_DIAGNOSTIC_STARTED_KEY, "1");
     } catch {
-      // The account marker below remains the cross-device source of truth.
+      // Storage may be unavailable in a hardened browser; account metadata still works.
     }
+  };
 
-    if (initialUser && !startedAccountSave.current) {
-      startedAccountSave.current = loadSupabaseBrowserClient()
-        .then((supabase) => markStudyDiagnosticStarted(supabase))
-        .catch(() => {
-          // Allow the next answer to retry if this write was interrupted or offline.
-          startedAccountSave.current = null;
-        });
-    }
-
+  const handleSelectAnswer = (qNum: number, optIndex: number, text: string) => {
     setAnswers((prev) => ({
       ...prev,
       [qNum]: { questionIndex: qNum, optionIndex: optIndex, text },
@@ -787,7 +766,7 @@ export function SaaSFlowClient({
           3. 60-SECOND WALKTHROUGH (solutionSlide)
           ═════════════════════════════════════════════════════════════════════ */}
       {currentStep === "solutionSlide" && (
-        <main className="mx-auto w-full max-w-[1200px] px-3 py-6 sm:w-[calc(100%_-_44px)] sm:px-0 sm:py-10 lg:w-[calc(100%_-_64px)] lg:py-[34px]">
+        <main className="mx-auto w-full max-w-[1440px] px-3 py-6 sm:w-[calc(100%_-_44px)] sm:px-0 sm:py-10 lg:w-[calc(100%_-_64px)] lg:py-[34px]">
           {renderFlowHeader()}
 
           <section className="mb-7 text-center lg:mb-[27px]" aria-labelledby="walkthrough-heading">
@@ -795,198 +774,23 @@ export function SaaSFlowClient({
               id="walkthrough-heading"
               className="text-[39px] font-[790] leading-[1.04] tracking-[-0.052em] text-[#111214] sm:text-[44px] lg:text-[46px]"
             >
-              See NanoSyllabus in 60 seconds
+              How to start the first challenge?
             </h1>
-            <p className="mx-auto mt-3 max-w-[700px] text-[17px] leading-[1.45] tracking-[-0.02em] text-[#778196] lg:mt-[11px] lg:text-[19px]">
-              From one small topic to exam-ready answers in one clear system.
-            </p>
           </section>
 
+          {/* The walkthrough fills the column's width, but never so tall that the
+              heading and the start button leave the screen. */}
           <section
-            className="grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1.36fr)_minmax(384px,1fr)] lg:gap-6"
-            aria-label="NanoSyllabus walkthrough and features"
+            className="mx-auto w-full max-w-[max(560px,calc((100dvh-290px)*16/9))]"
+            aria-label="NanoSyllabus walkthrough"
           >
-            <article className="relative isolate min-h-[355px] overflow-hidden rounded-[18px] border-[8px] border-[#151b1f] bg-[#eef3fa] shadow-[0_22px_60px_rgba(54,69,92,0.08)] lg:min-h-[412px] lg:rounded-[19px] lg:border-[9px]">
-              <div
-                aria-hidden="true"
-                className="absolute inset-0 z-[3] bg-[linear-gradient(180deg,rgba(12,18,23,0.08)_0%,transparent_47%,rgba(8,13,17,0.84)_100%),linear-gradient(120deg,rgba(255,255,255,0.28),transparent_38%)]"
+            <div className="relative isolate overflow-hidden rounded-[18px] border-[8px] border-[#151b1f] bg-[#f6f7f9] shadow-[0_22px_60px_rgba(54,69,92,0.08)] lg:rounded-[22px] lg:border-[10px]">
+              <iframe
+                src="/nanosyllabus-challenge-walkthrough.html"
+                title="A challenge from start to finish: pick a micro-topic, learn it, answer past questions by hand and get graded"
+                className="block aspect-video w-full border-0"
+                loading="eager"
               />
-              <span className="absolute left-[11px] top-2.5 z-[5] rounded-full border border-white/20 bg-[rgba(24,30,36,0.82)] px-3.5 py-[7px] text-[10px] font-[800] tracking-[0.09em] text-white">
-                1 MIN WALKTHROUGH
-              </span>
-
-              <div
-                aria-hidden="true"
-                className="grid min-h-[339px] grid-cols-[92px_1fr] bg-[linear-gradient(135deg,#f5f8fd,#fff)] lg:min-h-[394px] lg:grid-cols-[139px_1fr]"
-              >
-                <aside className="border-r border-[#e7ebf1] bg-white/75 px-[7px] pb-2.5 pt-12 lg:px-[13px] lg:pb-4 lg:pt-[46px]">
-                  <div className="mb-[18px] ml-1 flex items-center gap-1.5 text-[8px] font-[800] lg:text-[10px]">
-                    <span className="grid h-[17px] w-[17px] place-items-center rounded-[5px] bg-[#111] text-[11px] text-[#c9ff38]">
-                      n.
-                    </span>
-                    <span>Nano Syllabus</span>
-                  </div>
-                  <ul className="grid gap-[5px] text-[8px] text-[#71809b] lg:text-[10px]">
-                    {["Home", "Subjects", "Past Questions", "My Uploads", "Progress"].map(
-                      (label, index) => (
-                        <li
-                          key={label}
-                          className={cn(
-                            "flex items-center gap-[5px] rounded-lg px-1.5 py-[7px] lg:gap-2 lg:px-2.5 lg:py-2",
-                            index === 0 && "bg-[#eaf3ff] text-[#1677f0]",
-                          )}
-                        >
-                          <span className="h-[7px] w-[7px] rounded-[3px] border-2 border-current" />
-                          {label}
-                        </li>
-                      ),
-                    )}
-                  </ul>
-                </aside>
-
-                <div className="px-3.5 pb-[74px] pt-[52px] lg:px-[25px] lg:pb-[67px] lg:pt-[49px]">
-                  <div className="mb-3 flex items-start justify-between">
-                    <div>
-                      <strong className="block text-[13px] tracking-[-0.025em] lg:text-[15px]">
-                        Good morning!
-                      </strong>
-                      <span className="text-[8px] text-[#8290a5] lg:text-[9px]">
-                        3 challenges ready for you today.
-                      </span>
-                    </div>
-                    <span className="text-[8px] font-[700] lg:text-[9px]">☀️ Keep going ›</span>
-                  </div>
-                  <div className="rounded-[13px] bg-[linear-gradient(120deg,#d7ff66,#edffb8)] p-3 lg:p-[14px]">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <span className="text-[9px] font-[800]">◎ Today&apos;s Challenge</span>
-                        <strong className="mt-1 block text-[14px] lg:text-[15px]">
-                          Laws of Motion
-                        </strong>
-                        <span className="text-[9px] text-[#657246]">Physics · Topic 3.2</span>
-                      </div>
-                      <span className="rounded-full bg-white/60 px-2.5 py-1 text-[8px]">
-                        3 left ›
-                      </span>
-                    </div>
-                    <div className="mt-3 grid grid-cols-3 overflow-hidden rounded-[11px] bg-white/60">
-                      {[
-                        ["12", "Topics learned"],
-                        ["68%", "Overall progress"],
-                        ["5", "Day streak"],
-                      ].map(([value, label]) => (
-                        <div
-                          key={label}
-                          className="border-r border-[rgba(109,139,63,0.12)] px-1.5 py-2 last:border-r-0 lg:px-2.5"
-                        >
-                          <strong className="block text-[12px]">{value}</strong>
-                          <span className="block text-[7px] text-[#75816a] lg:text-[8px]">
-                            {label}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="mb-2 mt-4 flex justify-between text-[9px] lg:mt-[18px] lg:text-[10px]">
-                    <strong className="text-[12px] lg:text-[15px]">Your Subjects</strong>
-                    <span className="text-[#748199]">See all →</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-[5px] lg:gap-[9px]">
-                    {[
-                      ["Physics", "24 topics", "67%", "#1677f0"],
-                      ["Chemistry", "28 topics", "54%", "#13a076"],
-                      ["Mathematics", "32 topics", "41%", "#1677f0"],
-                    ].map(([subject, topics, progress, color]) => (
-                      <div
-                        key={subject}
-                        className="rounded-[9px] border border-[#e4e9f1] bg-white p-[7px] shadow-[0_8px_18px_rgba(36,53,76,0.05)] lg:p-2.5"
-                      >
-                        <strong className="block text-[7px] lg:text-[8px]">{subject}</strong>
-                        <span className="text-[7px] text-[#8994a6]">{topics}</span>
-                        <span className="mt-2 block h-[3px] rounded-full bg-[#edf0f5] lg:mt-[9px]">
-                          <span
-                            className="block h-full rounded-full"
-                            style={{ width: progress, background: color }}
-                          />
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={showWalkthroughNotice}
-                className="absolute left-[52%] top-[46%] z-[6] grid h-[68px] w-[68px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#c9ff38] text-[#101214] shadow-[0_16px_30px_rgba(111,143,21,0.32)] transition hover:scale-105 hover:brightness-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#151b1f] motion-reduce:transition-none lg:h-[70px] lg:w-[70px]"
-                aria-label="Play the NanoSyllabus walkthrough"
-              >
-                <Play className="ml-1 h-7 w-7 fill-current" aria-hidden="true" />
-              </button>
-              <div className="absolute bottom-[38px] left-[13px] z-[5] text-white">
-                <strong className="block text-[16px] tracking-[-0.03em]">
-                  Watch how a challenge works
-                </strong>
-                <span className="block text-[11px]">Explained in Nepali</span>
-              </div>
-              <div
-                aria-hidden="true"
-                className="absolute bottom-2.5 left-[13px] right-[13px] z-[5] grid grid-cols-[auto_auto_1fr_auto] items-center gap-2.5 text-[10px] text-white"
-              >
-                <span>▶</span>
-                <span>0:00 / 1:00</span>
-                <span className="h-[3px] rounded-full bg-white/35">
-                  <span className="block h-full w-[7%] rounded-full bg-white" />
-                </span>
-                <span>🔊 ▣ ⌗</span>
-              </div>
-            </article>
-
-            <div className="grid grid-cols-1 gap-[14px] sm:grid-cols-2 lg:gap-4">
-              {[
-                {
-                  title: "Complete syllabus divided into micro-topics",
-                  color: "text-[#1677f0] bg-[#e7f2ff]",
-                  Icon: BarChart3,
-                },
-                {
-                  title: "All past questions solved",
-                  color: "text-[#88c900] bg-[#edffd1]",
-                  Icon: BookOpen,
-                },
-                {
-                  title: "English and Romanized Nepali content",
-                  color: "text-[#d38a00] bg-[#fff2d5]",
-                  Icon: CheckCircle2,
-                },
-                {
-                  title: "Handwritten exam practice with AI grader",
-                  color: "text-[#8f38ec] bg-[#f2e6ff]",
-                  Icon: Lightbulb,
-                },
-              ].map(({ title, color, Icon }, index) => (
-                <article
-                  key={title}
-                  className="flex min-h-[190px] flex-col justify-between rounded-[20px] border border-[#dfe5ee] bg-white/90 p-[21px] shadow-[0_13px_32px_rgba(62,79,105,0.045)] transition hover:-translate-y-[3px] hover:shadow-[0_20px_42px_rgba(62,79,105,0.085)] motion-reduce:transition-none lg:min-h-[198px] lg:p-[20px_20px_23px]"
-                >
-                  <div className="flex items-start justify-between">
-                    <span className={cn("grid h-14 w-14 place-items-center rounded-[15px]", color)}>
-                      <Icon className="h-[31px] w-[31px]" aria-hidden="true" />
-                    </span>
-                    <span
-                      className={cn(
-                        "grid h-[35px] w-[35px] place-items-center rounded-[15px] text-[15px] font-[820]",
-                        color,
-                      )}
-                    >
-                      {index + 1}
-                    </span>
-                  </div>
-                  <h2 className="mt-[22px] max-w-[95%] text-[20px] font-[680] leading-[1.13] tracking-[-0.045em] text-[#111214] lg:text-[21px]">
-                    {title}
-                  </h2>
-                </article>
-              ))}
             </div>
           </section>
 
@@ -994,6 +798,7 @@ export function SaaSFlowClient({
             <button
               type="button"
               onClick={() => {
+                markFunnelStarted();
                 if (user) {
                   void finishStudyFlow();
                 } else {
@@ -1010,14 +815,6 @@ export function SaaSFlowClient({
           {authError && (
             <p role="alert" className="mt-3 text-center text-sm text-destructive">
               {authError}
-            </p>
-          )}
-          {walkthroughNotice && (
-            <p
-              role="status"
-              className="fixed bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-xl bg-[#111] px-4 py-3 text-sm text-white shadow-[0_12px_30px_rgba(0,0,0,0.2)]"
-            >
-              The walkthrough video is being prepared.
             </p>
           )}
         </main>

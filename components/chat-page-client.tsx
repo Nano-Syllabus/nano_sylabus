@@ -1703,7 +1703,12 @@ export function ChatPageClient({
       setMessages((previousMessages) => [
         ...(overrideMessages ?? previousMessages),
         { ...createLocalMessage("user", trimmed), attachments: attachmentsForMessage },
-        createLocalMessage("assistant", buildMissingSubjectMessage(availableSubjects)),
+        createLocalMessage(
+          "assistant",
+          isFloating
+            ? "Open a topic in Revision and ask again — I answer from that topic's subject."
+            : buildMissingSubjectMessage(availableSubjects),
+        ),
       ]);
       return;
     }
@@ -2457,7 +2462,9 @@ export function ChatPageClient({
           >
              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
-          {isSubjectLocked ? (
+          {/* The bubble takes its subject from the topic open in Revision: no
+              list to pick from there (user, 2026-09-24). */}
+          {isFloating ? null : isSubjectLocked ? (
             <button
               type="button"
               disabled
@@ -2731,7 +2738,7 @@ export function ChatPageClient({
                       named, and each starter is a whole question sent on tap. */}
                   <div key={floatingTopic?.topicTitle ?? "none"} className="nanoai-intro">
                     <p className="text-xs font-medium text-text-muted">
-                      {subjectDisplayName(stripSubjectChapter(subjectContext)) ?? "Pick a subject below to begin"}
+                      {subjectDisplayName(stripSubjectChapter(subjectContext)) ?? "Open a topic in Revision to ask about it"}
                     </p>
                     <h2 className="mt-1 font-display text-lg font-semibold leading-snug">
                       {floatingTopic ? (

@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import {
@@ -46,8 +45,8 @@ type Bootstrap = {
 
 type Point = { x: number; y: number };
 
-/** The "Ask AI" pill: logo, label, sparkle. */
-const BUTTON_WIDTH = 132;
+/** The "Ask AI" pill: label and sparkle on the Micro-Topics lime. */
+const BUTTON_WIDTH = 112;
 const BUTTON_HEIGHT = 48;
 const EDGE_GAP = 16;
 const PANEL_WIDTH = 408;
@@ -343,25 +342,17 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
           }}
           style={{ left: button.x, top: button.y, width: BUTTON_WIDTH, height: BUTTON_HEIGHT }}
           className={cn(
-            "fixed z-40 flex touch-none select-none items-center justify-center gap-2 rounded-full border border-border bg-bg-primary pl-1.5 pr-3.5 text-sm font-semibold text-text-primary shadow-[0_8px_24px_rgba(0,0,0,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary",
+            "fixed z-40 flex touch-none select-none items-center justify-center gap-2 rounded-full bg-[var(--challenge-banner)] px-4 text-sm font-semibold text-[#111827] shadow-[0_8px_24px_rgba(0,0,0,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary",
             !draggingButton && "nanoai-pill",
             draggingButton
               ? "cursor-grabbing scale-105"
               : "cursor-pointer transition-[left,top,transform] duration-200 ease-out hover:scale-105 motion-reduce:transition-none",
           )}
         >
-          <span className="nanoai-pill-icon shrink-0 rounded-full">
-            <Image
-              src="/nanologo.png"
-              alt=""
-              width={34}
-              height={34}
-              draggable={false}
-              className="size-[34px] rounded-full object-contain"
-            />
-          </span>
           <span className="nanoai-pill-label whitespace-nowrap">Ask AI</span>
-          <Sparkles className="size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+          <span className="nanoai-pill-icon flex shrink-0 rounded-full">
+            <Sparkles className="size-4" aria-hidden="true" />
+          </span>
         </button>
       ) : null}
       {nudge && !open && !offRevision && !draggingButton ? (

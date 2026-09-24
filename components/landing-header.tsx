@@ -104,7 +104,7 @@ export function LandingHeader({ dark = false }: { dark?: boolean }) {
         <div className="flex items-center gap-2.5">
           {isLoggedIn ? (
             <Link
-              href="/app/today"
+              href="/app/challenges"
               className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#2f6fff] px-[17px] py-2 text-[13px] font-[800] text-white shadow-[0_14px_28px_rgba(47,111,255,0.18)] transition-all hover:-translate-y-0.5 hover:bg-[#2057d5]"
             >
               Go to App →

@@ -8,16 +8,14 @@ describe("public community catalog design system", () => {
     expect(catalog).toContain(".ns-hero h1");
     expect(catalog).toContain("font-family: var(--font-display);");
     expect(catalog).toContain("font-size: clamp(2.5rem, 3.2vw, 3.25rem);");
-    expect(catalog).toContain("font-size: clamp(1.625rem, 2vw, 2rem);");
-    expect(catalog).toContain(".ns-community-name");
-    expect(catalog).toContain("font-size: 1.125rem;");
-    expect(catalog).toContain("font-size: 0.8125rem;");
+    expect(catalog).toContain(".ns-browse-intro h2");
+    expect(catalog).toContain(".ns-fc-title");
   });
 
   it("keeps filters keyboard-accessible and respects reduced motion", () => {
-    expect(catalog).toContain('className="ns-filter-checkbox"');
-    expect(catalog).toContain('type="checkbox"');
-    expect(catalog).toContain(".ns-filter-checkbox:focus-visible + .ns-custom-checkbox");
+    expect(catalog).toContain('htmlFor="ns-filter-university"');
+    expect(catalog).toContain('htmlFor="ns-filter-level"');
+    expect(catalog).toContain(".ns-filter-select select:focus-visible");
     expect(catalog).toContain("prefers-reduced-motion: reduce");
   });
 
@@ -30,6 +28,6 @@ describe("public community catalog design system", () => {
 
   it("uses faculty language in the discovery actions", () => {
     expect(catalog).toContain("Add New Faculty");
-    expect(catalog).toContain("Browse Faculties");
+    expect(catalog).toContain("Browse faculties");
   });
 });

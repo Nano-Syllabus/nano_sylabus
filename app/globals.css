@@ -1304,8 +1304,8 @@ img.answer-figure.answer-figure-failed {
   19% {
     box-shadow:
       0 8px 24px rgba(0, 0, 0, 0.22),
-      inset 0 0 0 1px color-mix(in srgb, var(--challenge-banner) 56%, transparent),
-      0 0 22px color-mix(in srgb, var(--challenge-banner) 36%, transparent);
+      0 0 0 3px color-mix(in srgb, var(--challenge-banner) 45%, transparent),
+      0 0 26px color-mix(in srgb, var(--challenge-banner) 60%, transparent);
   }
 }
 
@@ -1329,7 +1329,8 @@ img.answer-figure.answer-figure-failed {
 .nanoai-pill-icon::after {
   position: absolute;
   inset: -5px;
-  border: 2px solid var(--challenge-banner);
+  /* Dark on the lime pill: a lime ring would vanish into it. */
+  border: 2px solid #111827;
   border-radius: 9999px;
   content: "";
   opacity: 0;

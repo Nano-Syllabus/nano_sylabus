@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>NanoSyllabus — a challenge, start to finish</title>
+  <style>
+    @font-face {
+      font-family: "Smile Moon";
+      src: url("/fonts/smile_moon/Smile%20Moon.otf") format("opentype");
+      font-display: swap
+    }
+
+    :root {
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #101114;
+      background: #f6f7f9;
+      font-synthesis: none;
+      --blue: #1f5eff;
+      --lime: #d4f94a;
+      --line: #e6e8ec;
+      --muted: #6b7280;
+      --paper: #fffdf6;
+      --rule: #dfe6f3;
+      --ink: #c0141c
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #f6f7f9
+    }
+
+    p,
+    h1,
+    h2,
+    h3 {
+      margin: 0
+    }
+
+    .art {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1280px;
+      height: 720px;
+      transform-origin: 0 0;
+      overflow: hidden;
+      background: #f6f7f9
+    }
+
+    .scene {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .45s ease
+    }
+
+    .scene.on {
+      opacity: 1
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border-radius: 9px;
+      font-weight: 650;
+      font-size: 14px;
+      transition: transform .12s ease, filter .12s ease
+    }
+
+    .btn.blue {
+      background: var(--blue);
+      color: #fff;
+      height: 38px;
+      padding: 0 20px
+    }
+
+    .pressed {
+      transform: scale(.95);
+      filter: brightness(.92)
+    }
+
+    /* ── Hub ─────────────────────────────── */
+    .side {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 206px;
+      background: #fff;
+      border-right: 1px solid var(--line);
+      padding: 18px 10px
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 750;
+      font-size: 17px;
+      padding: 0 4px 16px
+    }
+
+    .logo {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      background: #101114;
+      color: var(--lime);
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 800
+    }
+
+    .nav {
+      display: grid;
+      gap: 3px;
+      font-size: 13.5px
+    }
+
+    .nav span {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 9px;
+      color: #1d2127
+    }
+
+    .nav span i {
+      width: 14px;
+      height: 14px;
+      border: 2px solid currentColor;
+      border-radius: 4px;
+      opacity: .8
+    }
+
+    .nav span.on {
+      background: #101114;
+      color: #fff
+    }
+
+    .hub {
+      position: absolute;
+      left: 206px;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      padding: 30px 64px
+    }
+
+    .hub h1 {
+      font-size: 24px;
+      letter-spacing: -.03em;
+      margin-bottom: 18px
+    }
+
+    .banner {
+      border-radius: 18px;
+      background: linear-gradient(110deg, #c6f432, #e3fb86);
+      border: 1px solid #b8e02e;
+      padding: 22px 26px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center
+    }
+
+    .banner b {
+      display: block;
+      font-size: 24px;
+      line-height: 1.05;
+      letter-spacing: -.035em
+    }
+
+    .banner small {
+      display: block;
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 600
+    }
+
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11.5px;
+      font-weight: 650;
+      text-align: center
+    }
+
+    .flow .dot {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 2px solid #101114;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 5px;
+      font-size: 17px
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin: 16px 0
+    }
+
+    .stat {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px 20px
+    }
+
+    .stat small {
+      font-size: 10.5px;
+      letter-spacing: .12em;
+      color: #4b5563;
+      font-weight: 600
+    }
+
+    .stat b {
+      display: block;
+      font-size: 24px;
+      margin-top: 4px
+    }
+
+    .stat .bar {
+      height: 5px;
+      border-radius: 5px;
+      background: #eef0f3;
+      margin-top: 8px
+    }
+
+    .stat .bar i {
+      display: block;
+      height: 100%;
+      width: 14%;
+      border-radius: 5px;
+      background: var(--blue)
+    }
+
+    .list {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px 26px
+    }
+
+    .list-h {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f0f1f3
+    }
+
+    .list-h b {
+      font-size: 16px
+    }
+
+    .sem {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .sem span {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 7px 12px;
+      color: #101114;
+      font-weight: 600;
+      margin-left: 8px
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 90px 110px;
+      gap: 22px;
+      align-items: center;
+      padding: 13px 0;
+      border-bottom: 1px solid #f3f4f6
+    }
+
+    .row:last-child {
+      border-bottom: 0
+    }
+
+    .row b {
+      font-size: 14px
+    }
+
+    .row p {
+      font-size: 12.5px;
+      color: #4b5563;
+      margin-top: 3px
+    }
+
+    .prog small {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted)
+    }
+
+    .prog div {
+      height: 8px;
+      border: 1px solid #9db4ff;
+      border-radius: 8px;
+      margin-top: 6px;
+      overflow: hidden
+    }
+
+    .prog div i {
+      display: block;
+      height: 100%;
+      background: var(--blue);
+      border-radius: 8px
+    }
+
+    .eta {
+      text-align: right;
+      font-size: 12.5px;
+      color: #374151
+    }
+
+    .eta small {
+      display: block;
+      font-size: 10.5px;
+      color: var(--muted)
+    }
+
+    /* ── Challenge page ──────────────────── */
+    .topbar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 50px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 2
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 7px 13px;
+      font-size: 13px;
+      font-weight: 600;
+      background: #fff
+    }
+
+    .crumb {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted)
+    }
+
+    .crumb b {
+      display: block;
+      font-size: 13.5px;
+      color: #101114;
+      margin-top: 2px
+    }
+
+    .timer {
+      font-variant-numeric: tabular-nums;
+      font-weight: 700
+    }
+
+    .col {
+      position: absolute;
+      left: 50%;
+      top: 50px;
+      bottom: 0;
+      width: 760px;
+      margin-left: -380px;
+      padding-top: 26px
+    }
+
+    .lang {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 3px;
+      background: #f3f4f6;
+      font-size: 12px;
+      font-weight: 600
+    }
+
+    .lang span {
+      padding: 6px 11px;
+      border-radius: 8px;
+      color: var(--muted);
+      transition: background .2s, color .2s
+    }
+
+    .lang span.on {
+      background: #fff;
+      color: #101114;
+      box-shadow: 0 1px 3px #0001
+    }
+
+    .concepts {
+      margin-top: 12px;
+      border: 1px solid #dcdfe4;
+      background: #f3f3f3;
+      border-radius: 18px;
+      padding: 18px 20px
+    }
+
+    .concepts header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: var(--muted)
+    }
+
+    .concepts header b {
+      font-size: 16px;
+      color: #101114
+    }
+
+    .concepts .btn {
+      margin-top: 12px
+    }
+
+    .we-h {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 20px 0 10px
+    }
+
+    .we-h b {
+      font-size: 16px
+    }
+
+    .paper {
+      position: relative;
+      border: 1px solid #e8dcc0;
+      border-radius: 10px;
+      background: repeating-linear-gradient(to bottom, var(--paper) 0 27px, var(--rule) 27px 28px);
+      padding: 10px 16px 14px 44px;
+      margin-bottom: 12px;
+      overflow: hidden
+    }
+
+    .paper::before {
+      content: "";
+      position: absolute;
+      left: 30px;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: #f2a4a4
+    }
+
+    .paper small {
+      display: block;
+      font-size: 10.5px;
+      letter-spacing: .06em;
+      color: var(--muted);
+      font-weight: 600;
+      line-height: 18px
+    }
+
+    .hand {
+      font-family: "Smile Moon", "Segoe Print", "Comic Sans MS", cursive;
+      color: var(--ink);
+      font-size: 16px;
+      line-height: 28px
+    }
+
+    .foot {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 62px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 30px;
+      background: linear-gradient(to top, #fff 70%, #fff0);
+      border-top: 1px solid var(--line)
+    }
+
+    .scrim {
+      position: absolute;
+      inset: 0;
+      background: #0006;
+      opacity: 0;
+      transition: opacity .35s;
+      z-index: 3
+    }
+
+    .sheet {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 580px;
+      background: #fff;
+      z-index: 4;
+      transform: translateX(100%);
+      transition: transform .5s cubic-bezier(.2, .8, .2, 1)
+    }
+
+    .open .scrim {
+      opacity: 1
+    }
+
+    .open .sheet {
+      transform: none;
+      box-shadow: -20px 0 40px #0002
+    }
+
+    .sheet header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--line)
+    }
+
+    .sheet header small {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      color: var(--blue)
+    }
+
+    .sheet header b {
+      display: block;
+      font-size: 14px;
+      margin-top: 3px
+    }
+
+    .x {
+      font-size: 20px;
+      color: #4b5563;
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px
+    }
+
+    .sheet .paper {
+      margin: 16px 18px;
+      height: 600px;
+      padding-top: 0
+    }
+
+    .scroller {
+      transition: transform 2.4s ease-in-out
+    }
+
+    .hand.ink {
+      color: #1c1d22
+    }
+
+    h3.hand {
+      font-size: 20px;
+      line-height: 28px;
+      margin: 28px 0 0;
+      font-weight: 400
+    }
+
+    /* ── Exam ────────────────────────────── */
+    .q {
+      background: #f3f4f6;
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin-top: 14px
+    }
+
+    .q small {
+      font-size: 10.5px;
+      font-weight: 650;
+      letter-spacing: .06em;
+      color: var(--muted)
+    }
+
+    .q p {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.5;
+      margin-top: 5px
+    }
+
+    .drop {
+      margin-top: 18px;
+      border: 2px dashed #3b82f6;
+      background: #3b82f61a;
+      border-radius: 14px;
+      padding: 22px;
+      text-align: center
+    }
+
+    .drop .ico {
+      font-size: 26px;
+      color: #2563eb
+    }
+
+    .drop p {
+      font-size: 13.5px;
+      font-weight: 650;
+      margin-top: 6px
+    }
+
+    .chip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 380px;
+      margin: 12px auto 0;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 9px 12px;
+      text-align: left;
+      font-size: 13px;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: .3s
+    }
+
+    .chip.on {
+      opacity: 1;
+      transform: none
+    }
+
+    .chip small {
+      display: block;
+      color: var(--muted);
+      font-size: 11px
+    }
+
+    .btn.ghost {
+      height: 36px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+      margin-top: 12px
+    }
+
+    .drop .btn.blue {
+      display: flex;
+      width: max-content;
+      margin: 10px auto 0;
+      opacity: .45;
+      transition: opacity .3s
+    }
+
+    .drop .btn.blue.ready {
+      opacity: 1
+    }
+
+    .result {
+      position: absolute;
+      inset: 50px 0 0;
+      background: #f6f7f9;
+      opacity: 0;
+      transition: opacity .45s
+    }
+
+    .result.on {
+      opacity: 1
+    }
+
+    .score {
+      margin-top: 8px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 26px
+    }
+
+    .ring {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: conic-gradient(#16a34a calc(var(--p) * 1%), #eef0f3 0);
+      display: grid;
+      place-items: center;
+      flex: none
+    }
+
+    .ring b {
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      background: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 22px
+    }
+
+    .score h2 {
+      font-size: 20px;
+      letter-spacing: -.02em
+    }
+
+    .score p {
+      font-size: 13px;
+      color: #4b5563;
+      margin-top: 4px;
+      line-height: 1.5
+    }
+
+    .marks {
+      margin-top: 14px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px 22px
+    }
+
+    .marks b {
+      font-size: 14px
+    }
+
+    .mk {
+      display: grid;
+      grid-template-columns: 1fr 200px 50px;
+      gap: 14px;
+      align-items: center;
+      font-size: 12.5px;
+      margin-top: 11px
+    }
+
+    .mk div {
+      height: 7px;
+      background: #eef0f3;
+      border-radius: 7px;
+      overflow: hidden
+    }
+
+    .mk i {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: #16a34a;
+      border-radius: 7px;
+      transition: width 1s ease
+    }
+
+    .fb {
+      margin-top: 14px;
+      border-radius: 14px;
+      background: #ecfdf3;
+      border: 1px solid #bbf7d0;
+      padding: 14px 18px;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #14532d
+    }
+
+    /* ── Cursor + captions ───────────────── */
+    .cursor {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 26px;
+      height: 26px;
+      z-index: 20;
+      transform: translate(900px, 600px);
+      transition: transform 1s cubic-bezier(.45, .05, .25, 1);
+      filter: drop-shadow(0 3px 5px #0004)
+    }
+
+    .ripple {
+      position: absolute;
+      z-index: 19;
+      width: 44px;
+      height: 44px;
+      margin: -22px 0 0 -22px;
+      border-radius: 50%;
+      border: 3px solid var(--blue);
+      pointer-events: none;
+      animation: ripple .55s ease-out forwards
+    }
+
+    @keyframes ripple {
+      from {
+        transform: scale(.3);
+        opacity: .9
+      }
+
+      to {
+        transform: scale(1.4);
+        opacity: 0
+      }
+    }
+
+    .caption {
+      position: absolute;
+      left: 50%;
+      bottom: 78px;
+      z-index: 18;
+      transform: translate(-50%, 8px);
+      background: #101114;
+      color: #fff;
+      border-radius: 999px;
+      padding: 10px 20px;
+      font-size: 15px;
+      font-weight: 650;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity .3s, transform .3s;
+      box-shadow: 0 10px 28px #0003
+    }
+
+    .caption.on {
+      opacity: 1;
+      transform: translate(-50%, 0)
+    }
+
+    .caption em {
+      font-style: normal;
+      color: var(--lime);
+      margin-right: 8px
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      .cursor,
+      .scroller,
+      .sheet,
+      .scene,
+      .mk i {
+        transition-duration: .01s !important
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="art" id="art" aria-hidden="true">
+
+    <!-- Scene 1: Micro-Topics Hub -->
+    <section class="scene on" id="s-hub">
+      <aside class="side">
+        <div class="brand"><span class="logo">n.</span>Nano Syllabus</div>
+        <div class="nav">
+          <span class="on"><i></i>Micro-Topics</span>
+          <span><i></i>Library</span>
+          <span><i></i>Revision</span>
+          <span><i></i>Performance</span>
+          <span><i></i>Community</span>
+          <span><i></i>Cash Prize</span>
+          <span><i></i>Pricing</span>
+        </div>
+      </aside>
+      <main class="hub">
+        <h1>Micro-Topics Hub</h1>
+        <div class="banner">
+          <div><b>One topic.<br>One small win.</b><small>Tribhuvan University · Bachelor in Computer Engineering</small></div>
+          <div class="flow">
+            <div><span class="dot">📖</span>Learn</div>→
+            <div><span class="dot">📝</span>Practice</div>→
+            <div><span class="dot">☆</span>Take the exam</div>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><small>TODAY'S QUOTA</small><b>0 <span style="color:#84cc16">/ 5</span></b>
+            <div class="bar"><i></i></div>
+          </div>
+          <div class="stat"><small>DAILY TARGET</small><b>5</b></div>
+          <div class="stat"><small>7-DAY AVERAGE</small><b>0.4</b></div>
+        </div>
+        <div class="list">
+          <div class="list-h"><b>Available challenges</b><span class="sem">Running Semester<span>1st Semester ⌄</span></span></div>
+          <div class="row">
+            <div><b>Computer Programming</b>
+              <p>General software features and recent trends</p>
+            </div>
+            <div class="prog"><small><span>2 of 50 subtopics completed</span><span>4%</span></small>
+              <div><i style="width:4%"></i></div>
+            </div>
+            <div class="eta">~20 min<small>2 questions</small></div>
+            <span class="btn blue" id="hub-continue">Continue</span>
+          </div>
+          <div class="row">
+            <div><b>Applied Mechanics</b>
+              <p>Definitions and scope of Applied Mechanics</p>
+            </div>
+            <div class="prog"><small><span>1 of 37 subtopics completed</span><span>3%</span></small>
+              <div><i style="width:3%"></i></div>
+            </div>
+            <div class="eta">~20 min<small>2 questions</small></div>
+            <span class="btn blue">Continue</span>
+          </div>
+          <div class="row">
+            <div><b>Engineering Physics</b>
+              <p>Mechanical Oscillation: Introduction</p>
+            </div>
+            <div class="prog"><small><span>0 of 38 subtopics completed</span><span>0%</span></small>
+              <div><i style="width:1%"></i></div>
+            </div>
+            <div class="eta">~20 min<small>2 questions</small></div>
+            <span class="btn blue">Start</span>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- Scene 2: Learn step -->
+    <section class="scene" id="s-learn">
+      <div class="topbar">
+        <span class="pill">⤡ Exit</span>
+        <div class="crumb">Unit 1 · Computer Programming<b>General software features and recent trends</b></div>
+        <span class="pill timer" data-timer>29:46</span>
+      </div>
+      <div class="col">
+        <div class="lang"><span class="on" id="lang-en">English</span><span id="lang-rn">Roman Nepali</span></div>
+        <div class="concepts">
+          <header><b>Concepts</b><span>4 min read</span></header>
+          <span class="btn blue" id="read-concepts">📖 Read concepts</span>
+        </div>
+        <div class="we-h"><b>Worked examples</b><span class="pill">T&nbsp; Smile Moon ⌄</span></div>
+        <div class="paper"><small>EXAMPLE 1 · PRACTICE QUESTION · 10 MARKS</small>
+          <p class="hand" id="ex1">Compare and contrast the execution models of compiled versus interpreted languages. Using a diagram, illustrate why interpreted languages differ from the compilation lifecycle.</p>
+        </div>
+        <div class="paper"><small>EXAMPLE 2 · PRACTICE QUESTION · 10 MARKS</small>
+          <p class="hand" id="ex2">Explain the decision-making process a compiler follows when translating source code, and how syntactic versus semantic errors send you back to debugging.</p>
+        </div>
+      </div>
+      <div class="foot"><span class="pill">← Previous</span><span class="btn blue" id="start-practising">Start practising →</span></div>
+      <div class="scrim"></div>
+      <aside class="sheet">
+        <header>
+          <div><small>CONCEPTS · COMPUTER PROGRAMMING</small><b>General software features and recent trends</b></div>
+          <span class="x" id="sheet-close">✕</span>
+        </header>
+        <div class="paper">
+          <div class="scroller" id="scroller">
+            <p class="hand ink"><b>› The idea:</b> Software execution is a tradeoff between pre-translating source code for performance and delaying translation for runtime flexibility.</p>
+            <p class="hand ink" style="margin-top:28px">This topic covers how high-level code is prepared for a computer to process — compilation versus interpretation, and the structured path from human-readable code to machine instructions.</p>
+            <h3 class="hand ink">1. Compiled versus Interpreted Execution</h3>
+            <p class="hand ink"><i>Think of a compiled language like a pre-translated book: the work is done once before you pick it up. An interpreted language is a translator sitting next to you, sentence by sentence.</i></p>
+            <p class="hand ink" style="margin-top:28px"><b>Why this step:</b> it decides whether a program favours raw speed or the ability to change and debug on the fly.</p>
+            <p class="hand ink" style="margin-top:28px"><b>In the exam:</b> name the execution model, give one advantage of each, and draw the translate → run pipeline.</p>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- Scene 3: Exam step -->
+    <section class="scene" id="s-exam">
+      <div class="topbar">
+        <span class="pill">⤡ Exit</span>
+        <div class="crumb">Unit 1 · Computer Programming<b>General software features and recent trends</b></div>
+        <span class="pill timer" data-timer>29:46</span>
+      </div>
+      <div class="col">
+        <div class="we-h" style="margin-top:0"><b>Past-paper exam</b><span class="sem">Answer on paper, then upload a photo</span></div>
+        <div class="q"><small>QUESTION 1 · 5 MARKS</small>
+          <p>Differentiate between a compiler and an interpreter with suitable examples. [TU 2079]</p>
+        </div>
+        <div class="q"><small>QUESTION 2 · 5 MARKS</small>
+          <p>What is an IDE? List any four of its features.</p>
+        </div>
+        <div class="drop">
+          <div class="ico">⇪</div>
+          <p>Your complete handwritten answer sheet</p>
+          <div class="chip" id="chip"><span style="color:#16a34a;font-size:18px">✓</span>
+            <div style="flex:1"><b>answer-sheet.jpg</b><small>2.4 MB · ready to submit</small></div>✕
+          </div>
+          <span class="btn ghost" id="choose">⇪ Choose answer sheet</span>
+          <span class="btn blue" id="submit">Submit answer sheet</span>
+        </div>
+      </div>
+      <div class="result" id="result">
+        <div class="col" style="top:0">
+          <div class="we-h" style="margin-top:0"><b>Your result</b><span class="sem">Graded from your handwriting</span></div>
+          <div class="score">
+            <div class="ring" style="--p:80"><b>8/10</b></div>
+            <div>
+              <h2>Nice work — topic cleared</h2>
+              <p>Clear comparison and good examples. One more IDE feature would have taken full marks on question 2.</p>
+            </div>
+          </div>
+          <div class="marks"><b>Where your marks went</b>
+            <div class="mk"><span>Q1 · Compiler vs interpreter</span>
+              <div><i data-w="100%"></i></div><span>5 / 5</span>
+            </div>
+            <div class="mk"><span>Q2 · IDE and its features</span>
+              <div><i data-w="60%" style="background:#f59e0b"></i></div><span>3 / 5</span>
+            </div>
+          </div>
+          <div class="fb"><b>Grader's feedback:</b> You listed editor, debugger and compiler integration — add <i>build automation</i> or <i>version-control support</i> as the fourth feature.</div>
+        </div>
+      </div>
+    </section>
+
+    <svg class="cursor" id="cursor" viewBox="0 0 24 24">
+      <path d="M4 2.5 19.5 12l-6.6 1.6 3.9 7.2-2.9 1.5-3.9-7.3L4 20Z" fill="#101114" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" />
+    </svg>
+    <div class="caption" id="caption"></div>
+  </div>
+
+  <script>
+    const art = document.getElementById('art');
+    const cursor = document.getElementById('cursor');
+    const caption = document.getElementById('caption');
+    const $ = (id) => document.getElementById(id);
+    let scale = 1;
+
+    function fit() {
+      scale = Math.min(innerWidth / 1280, innerHeight / 720);
+      art.style.transform = `scale(${scale})`;
+      art.style.left = `${(innerWidth - 1280 * scale) / 2}px`;
+      art.style.top = `${(innerHeight - 720 * scale) / 2}px`;
+    }
+    addEventListener('resize', fit);
+    fit();
+
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    let cx = 900, cy = 600;
+
+    function pointAt(el) {
+      const a = art.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      return [(r.left + r.width / 2 - a.left) / scale, (r.top + r.height / 2 - a.top) / scale];
+    }
+
+    async function moveTo(el, ms = 1000) {
+      const [x, y] = pointAt(el);
+      cx = x; cy = y;
+      cursor.style.transitionDuration = `${ms}ms`;
+      cursor.style.transform = `translate(${x - 5}px, ${y - 3}px)`;
+      await wait(ms + 120);
+    }
+
+    async function click(el) {
+      await moveTo(el);
+      const ring = document.createElement('span');
+      ring.className = 'ripple';
+      ring.style.left = `${cx}px`;
+      ring.style.top = `${cy}px`;
+      art.appendChild(ring);
+      el.classList.add('pressed');
+      await wait(160);
+      el.classList.remove('pressed');
+      setTimeout(() => ring.remove(), 600);
+      await wait(260);
+    }
+
+    function say(step, text) {
+      caption.classList.remove('on');
+      setTimeout(() => {
+        caption.innerHTML = `<em>${step}</em>${text}`;
+        caption.classList.add('on');
+      }, 250);
+    }
+
+    function show(id) {
+      document.querySelectorAll('.scene').forEach((s) => s.classList.toggle('on', s.id === id));
+    }
+
+    let seconds = 29 * 60 + 46;
+    setInterval(() => {
+      seconds = Math.max(0, seconds - 1);
+      const t = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+      document.querySelectorAll('[data-timer]').forEach((el) => (el.textContent = t));
+    }, 1000);
+
+    const EN = [$('ex1').textContent, $('ex2').textContent];
+    const RN = [
+      'Compiled ra interpreted language ko execution model compare garnuhos. Diagram banayera interpreted language compilation lifecycle bata kasari pharak cha dekhaunuhos.',
+      'Compiler le source code translate garda kasari decision lincha, ra syntax ra semantic error le kasari feri debugging ma pharkauncha, explain garnuhos.',
+    ];
+
+    function reset() {
+      show('s-hub');
+      $('s-learn').classList.remove('open');
+      $('scroller').style.transform = '';
+      $('lang-en').classList.add('on');
+      $('lang-rn').classList.remove('on');
+      $('ex1').textContent = EN[0];
+      $('ex2').textContent = EN[1];
+      $('chip').classList.remove('on');
+      $('submit').classList.remove('ready');
+      $('submit').textContent = 'Submit answer sheet';
+      $('result').classList.remove('on');
+      document.querySelectorAll('.mk i').forEach((i) => (i.style.width = '0'));
+      seconds = 29 * 60 + 46;
+    }
+
+    async function run() {
+      for (;;) {
+        reset();
+        say('1', 'Pick today’s micro-topic');
+        await wait(1400);
+        await click($('hub-continue'));
+
+        show('s-learn');
+        say('2', 'Learn it — worked examples on paper');
+        await wait(1500);
+        await click($('lang-rn'));
+        $('lang-en').classList.remove('on');
+        $('lang-rn').classList.add('on');
+        $('ex1').textContent = RN[0];
+        $('ex2').textContent = RN[1];
+        say('2', 'Switch to Roman Nepali any time');
+        await wait(1800);
+
+        await click($('read-concepts'));
+        $('s-learn').classList.add('open');
+        say('2', 'Read the concepts in a side sheet');
+        await wait(900);
+        $('scroller').style.transform = 'translateY(-84px)';
+        await wait(2600);
+        await click($('sheet-close'));
+        $('s-learn').classList.remove('open');
+        await wait(600);
+
+        await click($('start-practising'));
+        show('s-exam');
+        say('3', 'Answer past questions by hand');
+        await wait(1500);
+        await click($('choose'));
+        $('chip').classList.add('on');
+        $('submit').classList.add('ready');
+        await wait(900);
+        await click($('submit'));
+        $('submit').textContent = 'Reading and grading…';
+        say('4', 'AI grades your handwriting');
+        await wait(1700);
+        $('result').classList.add('on');
+        await wait(300);
+        document.querySelectorAll('.mk i').forEach((i) => (i.style.width = i.dataset.w));
+        say('4', 'See exactly where your marks went');
+        cursor.style.transitionDuration = '1200ms';
+        cursor.style.transform = 'translate(1080px, 560px)';
+        await wait(4200);
+        caption.classList.remove('on');
+      }
+    }
+    run();
+  </script>
+</body>
+
+</html>

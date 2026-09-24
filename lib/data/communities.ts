@@ -18,11 +18,14 @@ const communityColumns =
 
 export class CommunityError extends Error {
   status: number;
+  /** On a join conflict: the faculty the student is already a member of. */
+  current?: { slug: string; name: string };
 
-  constructor(message: string, status = 400) {
+  constructor(message: string, status = 400, current?: { slug: string; name: string }) {
     super(message);
     this.name = "CommunityError";
     this.status = status;
+    this.current = current;
   }
 }
 
@@ -180,16 +183,23 @@ export async function listPublicCommunities(
   viewerId?: string | null,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ) {
-  const result = await admin
-    .from("communities")
-    .select(communityColumns)
-    .eq("status", "active")
-    .eq("visibility", "public")
-    .order("created_at", { ascending: false });
+  const query = (columns: string) =>
+    admin
+      .from("communities")
+      .select(columns)
+      .eq("status", "active")
+      .eq("visibility", "public")
+      .order("created_at", { ascending: false });
+  // `level` arrives with 20260924180000_community_level.sql; until it has run,
+  // Browse falls back to guessing the level from the name.
+  let result = await query(`${communityColumns},level`);
+  if (result.error && ["42703", "PGRST204"].includes(String(result.error.code))) {
+    result = await query(communityColumns);
+  }
   if (result.error) throw result.error;
   return hydrateCommunitySummaries(
     admin,
-    (result.data || []) as Record<string, unknown>[],
+    (result.data || []) as unknown as Record<string, unknown>[],
     viewerId,
   );
 }
@@ -404,6 +414,12 @@ export async function createCommunity(
     if (format.error && !["42703", "PGRST204"].includes(String(format.error.code))) {
       throw format.error;
     }
+    // Same reasoning for the level: without the column the faculty is created
+    // and Browse guesses its level from the name.
+    const level = await admin.from("communities").update({ level: input.level }).eq("id", createdId);
+    if (level.error && !["42703", "PGRST204"].includes(String(level.error.code))) {
+      throw level.error;
+    }
     try {
       await ensureCommunityLearningSpace(admin, createdId);
     } catch (error) {
@@ -474,9 +490,18 @@ export async function joinCommunity(
       .limit(1);
     if (activeMembershipResult.error) throw activeMembershipResult.error;
     if (activeMembershipResult.data?.length) {
+      const currentId = String(activeMembershipResult.data[0].community_id || "");
+      const currentResult = await admin
+        .from("communities")
+        .select("slug,name")
+        .eq("id", currentId)
+        .maybeSingle();
       throw new CommunityError(
         "You can join one community you do not own. Communities you create do not use this slot.",
         409,
+        currentResult.data
+          ? { slug: String(currentResult.data.slug), name: String(currentResult.data.name) }
+          : undefined,
       );
     }
   }

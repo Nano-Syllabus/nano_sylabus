@@ -107,6 +107,8 @@ export type RevisionDocMcq = {
   id: string;
   question: string;
   options: { key: string; text: string }[];
+  /** "" while the paper is still being sat and this one is unanswered: its key
+   *  is not opened until the student has answered it or finished the paper. */
   correct: string;
   /** What the student chose, or null when they left it. */
   picked: string | null;
@@ -198,25 +200,26 @@ function unworkedPastQuestions(content: StudentChallengeContent | null) {
 }
 
 /**
- * The paper's MCQs with their keys unsealed. A finished challenge opens them
- * all; an open one only the questions already answered — the screen showed
- * those keys the moment they were picked, and the rest are still being sat.
+ * The paper's MCQs, every one of them. A finished challenge opens all the keys;
+ * an open one only those of questions already answered — the screen showed
+ * those keys the moment they were picked, and the rest are still being sat, so
+ * they are listed without an answer.
  */
 function revisionMcqs(row: ChallengeRow, content: StudentChallengeContent | null): RevisionDocMcq[] {
   const challengeId = text(row.id);
   const picks = content?.examPicks ?? {};
   const finished = text(row.status) === "completed";
-  return choiceQuestionsOf(content?.examQuestions ?? [])
-    .filter((question) => finished || Boolean(picks[question.id]))
-    .map((question) => ({
+  return choiceQuestionsOf(content?.examQuestions ?? []).map((question) => {
+    const open = finished || Boolean(picks[question.id]);
+    return {
       id: question.id,
       question: question.question,
       options: question.options.map((option) => ({ key: option.key, text: option.text })),
-      correct: unsealAnswer(challengeId, question),
+      correct: open ? unsealAnswer(challengeId, question) : "",
       picked: picks[question.id] ?? null,
-      explanation: openExplanation(question.explanationSealed),
-    }))
-    .filter((question) => question.correct);
+      explanation: open ? openExplanation(question.explanationSealed) : "",
+    };
+  });
 }
 
 function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {

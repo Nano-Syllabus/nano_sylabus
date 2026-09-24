@@ -137,21 +137,18 @@ const testimonials = [
     "NanoSyllabus made my preparation so organized. The mock tests and feedback helped me improve every week.",
     "Simrika Duwal",
     "CSIT, 3rd Year",
-    "54%",
     "/landing-new/avatar-1.png",
   ],
   [
     "The chapter-wise practice and instant feedback helped me clear concepts I always found difficult.",
     "Rohit Paudel",
     "BCT, 4th Year",
-    "62%",
     "/landing-new/avatar-2.png",
   ],
   [
     "Unlimited mock tests and smart analytics show exactly where I stand. It's like having a personal coach.",
     "Suman Giri",
     "CSIT, 4rd Year",
-    "41%",
     "/landing-new/avatar-3.png",
   ],
 ];
@@ -293,17 +290,17 @@ export default function LandingPage() {
   </div>
 </section>
 
-<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
+<div className="mx-auto grid max-w-[1320px] gap-4 px-5 pb-16 sm:grid-cols-2 lg:pb-20 xl:grid-cols-4 xl:gap-5 2xl:px-0">
   {walkthroughFeatures.map(({ title }, index) => (
     <article
       key={title}
-      className="ns-feature flex min-h-[330px] flex-col rounded-[24px] border border-[#dfe5ee] bg-white p-5 shadow-[0_13px_32px_rgba(62,79,105,0.045)] sm:p-6"
+      className="ns-feature flex min-h-[330px] flex-col rounded-[24px] border border-[#e3e7dd] bg-white p-5 shadow-[0_1px_2px_rgba(28,30,26,0.04),0_12px_24px_-8px_rgba(28,30,26,0.10),0_32px_60px_-20px_rgba(28,30,26,0.18)] transition-[translate,box-shadow] duration-300 ease-out hover:-translate-y-1.5 hover:shadow-[0_2px_4px_rgba(28,30,26,0.05),0_18px_32px_-8px_rgba(28,30,26,0.14),0_44px_80px_-24px_rgba(28,30,26,0.24)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-6"
     >
       <h3 className="min-h-[54px] text-[21px] font-extrabold leading-[1.15] tracking-[-0.045em] text-[#1c1e1a]">
         {title}
       </h3>
 
-      <div className="relative mt-5 h-[218px] overflow-hidden rounded-[18px] border border-[#e5eae2] bg-[#fafbf8]">
+      <div className="relative mt-5 h-[238px] overflow-hidden rounded-[18px] border border-[#c5cac2] bg-[#fafbf8] shadow-[inset_0_1px_2px_rgba(28,30,26,0.04),0_10px_22px_-12px_rgba(28,30,26,0.20)]">
         {index === 0 && (
           <div className="p-4">
             <div className="flex items-center justify-between rounded-xl bg-[#e6f99c] px-3 py-2.5">
@@ -339,16 +336,16 @@ export default function LandingPage() {
 
         {index === 1 && (
           <div className="p-4">
-            <div className="rounded-xl border border-[#e5e3dc] bg-[#fffefa] p-4">
+            <div className="rounded-xl border border-[#e5e3dc] bg-[#fffefa] px-4 py-3.5">
               <span className="text-xs font-semibold text-[#778078]">
                 Past question
               </span>
 
-              <p className="mt-3 text-[15px] font-bold leading-snug text-[#20251f]">
+              <p className="mt-2 text-[15px] font-bold leading-snug text-[#20251f]">
                 What is delegation?
               </p>
 
-              <div className="mt-4 h-px bg-[#dce6fb]" />
+              <div className="mt-3 h-px bg-[#dce6fb]" />
 
               <div className="ns-reveal mt-3 rounded-lg bg-[#edf3ff] p-3">
                 <span className="text-xs font-bold text-[#3049ed]">
@@ -364,24 +361,24 @@ export default function LandingPage() {
 
         {index === 2 && (
           <div className="p-4">
-            <div className="ns-english rounded-xl border border-[#e4e9e1] bg-white px-3 py-3">
+            <div className="ns-english rounded-xl border border-[#e4e9e1] bg-white px-3 py-2.5">
               <span className="text-xs font-bold text-[#78847b]">
                 English
               </span>
-              <p className="mt-1.5 text-sm font-semibold leading-snug text-[#252c27]">
+              <p className="mt-1 text-sm font-semibold leading-snug text-[#252c27]">
                 Power is the rate of energy transfer.
               </p>
             </div>
 
-            <div className="ns-reveal my-2 text-center text-sm font-bold text-[#3049ed]">
+            <div className="ns-reveal my-1 text-center text-sm font-bold leading-none text-[#3049ed]">
               ↓
             </div>
 
-            <div className="ns-reveal rounded-xl border border-[#d9e9bc] bg-[#f2f9e5] px-3 py-3">
+            <div className="ns-reveal rounded-xl border border-[#d9e9bc] bg-[#f2f9e5] px-3 py-2.5">
               <span className="text-xs font-bold text-[#5d774b]">
                 Romanized Nepali
               </span>
-              <p className="mt-1.5 text-sm font-semibold leading-snug text-[#252c27]">
+              <p className="mt-1 text-sm font-semibold leading-snug text-[#252c27]">
                 Power bhaneko energy transfer hune rate ho.
               </p>
             </div>
@@ -633,10 +630,10 @@ export default function LandingPage() {
           </p>
 
           <div className="relative mx-auto mt-14 grid max-w-[1180px] gap-6 text-left md:grid-cols-3">
-            {testimonials.map(([quote, name, course, improvement, image], idx) => (
+            {testimonials.map(([quote, name, course, image], idx) => (
               <figure
                 key={name}
-                className={`flex min-h-[320px] flex-col rounded-2xl border border-[#e2e6dc] bg-white p-8 shadow-[0_8px_25px_rgba(28,30,26,0.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                className={`flex min-h-[260px] flex-col rounded-2xl border border-[#e2e6dc] bg-white p-8 shadow-[0_8px_25px_rgba(28,30,26,0.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
                   idx === 1 ? "md:-translate-y-1.5" : ""
                 }`}
               >
@@ -659,10 +656,6 @@ export default function LandingPage() {
                     <span className="text-xs text-[#5b5e55]">{course}</span>
                   </div>
                 </figcaption>
-                <div className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-[#edf2ff] px-3.5 py-2 text-xs font-bold text-[#3049ed]">
-                  <span>📈</span>
-                  <span>{improvement} improvement in exam scores</span>
-                </div>
               </figure>
             ))}
           </div>

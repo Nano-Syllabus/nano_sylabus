@@ -1763,7 +1763,7 @@ export function CommunitiesView({
                 interactive,
               )}
             >
-              Create community
+              Create faculty
             </Link>
           ) : null}
         </header>
@@ -1820,7 +1820,7 @@ export function CommunitiesView({
             </h2>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-text-secondary">
               {subjectsMode
-                ? "Create a community from My Communities, then return here to organise its subjects by semester. Your reusable subject library is still available."
+                ? "Create a faculty from My Communities, then return here to organise its subjects by semester. Your reusable subject library is still available."
                 : "Once created, every community you own will appear here as a separate admin workspace."}
             </p>
             {subjectsMode ? (
@@ -1841,7 +1841,7 @@ export function CommunitiesView({
                   interactive,
                 )}
               >
-                Create community
+                Create faculty
               </Link>
             )}
           </section>

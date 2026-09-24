@@ -13,7 +13,7 @@ The first deliverable intentionally keeps the existing chat, practice, grading, 
 
 ## Confirmed user flow
 
-1. A signed-in user chooses **Create community**.
+1. A signed-in user chooses **Create faculty**.
 2. They enter community name, university, faculty/programme, number of years, and number of semesters.
 3. NanoSyllabus generates every year and semester slot automatically.
 4. The creator opens a semester and attaches an existing Creator Workspace subject. If needed,

@@ -1197,7 +1197,7 @@
 
     /* An explicit cursor travels across the interface and clicks once in every chapter. */
     .cursor.c1 {
-      animation: c1 3s .55s both
+      animation: c1 3s .1s both
     }
 
     .cursor.c2 {
@@ -1209,13 +1209,13 @@
     }
 
     .cursor.c4 {
-      animation: c4 3s 1.15s both
+      animation: c4 3s .5s both
     }
 
     @keyframes c1 {
       0% {
         opacity: 0;
-        transform: translate(940px, 494px)
+        transform: translate(985px, 478px)
       }
 
       20% {
@@ -1224,24 +1224,24 @@
 
       60% {
         opacity: 1;
-        transform: translate(913px, 442px)
+        transform: translate(949px, 416px)
       }
 
       70% {
         opacity: 1;
-        transform: translate(913px, 442px) scale(.82)
+        transform: translate(949px, 416px) scale(.82)
       }
 
       100% {
         opacity: 0;
-        transform: translate(913px, 442px)
+        transform: translate(949px, 416px)
       }
     }
 
     @keyframes c2 {
       0% {
         opacity: 0;
-        transform: translate(1024px, 570px)
+        transform: translate(1098px, 612px)
       }
 
       20% {
@@ -1250,24 +1250,24 @@
 
       59% {
         opacity: 1;
-        transform: translate(993px, 529px)
+        transform: translate(1058px, 563px)
       }
 
       67% {
         opacity: 1;
-        transform: translate(993px, 529px) scale(.82)
+        transform: translate(1058px, 563px) scale(.82)
       }
 
       100% {
         opacity: 0;
-        transform: translate(993px, 529px)
+        transform: translate(1058px, 563px)
       }
     }
 
     @keyframes c3 {
       0% {
         opacity: 0;
-        transform: translate(832px, 509px)
+        transform: translate(772px, 498px)
       }
 
       24% {
@@ -1276,24 +1276,24 @@
 
       63% {
         opacity: 1;
-        transform: translate(784px, 414px)
+        transform: translate(727px, 424px)
       }
 
       70% {
         opacity: 1;
-        transform: translate(784px, 414px) scale(.82)
+        transform: translate(727px, 424px) scale(.82)
       }
 
       100% {
         opacity: 0;
-        transform: translate(784px, 414px)
+        transform: translate(727px, 424px)
       }
     }
 
     @keyframes c4 {
       0% {
         opacity: 0;
-        transform: translate(462px, 556px)
+        transform: translate(505px, 598px)
       }
 
       23% {
@@ -1302,17 +1302,17 @@
 
       64% {
         opacity: 1;
-        transform: translate(410px, 515px)
+        transform: translate(464px, 547px)
       }
 
       72% {
         opacity: 1;
-        transform: translate(410px, 515px) scale(.82)
+        transform: translate(464px, 547px) scale(.82)
       }
 
       100% {
         opacity: 0;
-        transform: translate(410px, 515px)
+        transform: translate(464px, 547px)
       }
     }
 
@@ -1531,10 +1531,10 @@
       const fill = document.getElementById('fill'), clock = document.getElementById('clock');
 
       const chapters = [
-        {title: '', note: '', label: '', pointer: 'c1', click: 2.1, ring: [910, 439]},
-        {title: '', note: '', label: '', pointer: 'c2', click: 2.7, ring: [990, 525]},
-        {title: '', note: '', label: '', pointer: 'c3', click: 2.5, ring: [782, 412]},
-        {title: '', note: '', label: '', pointer: 'c4', click: 2.55, ring: [406, 510]}
+        {title: '', note: '', label: '', pointer: 'c1', click: 2, ring: [932, 400]},
+        {title: '', note: '', label: '', pointer: 'c2', click: 2.7, ring: [1041, 546]},
+        {title: '', note: '', label: '', pointer: 'c3', click: 2.6, ring: [710, 408]},
+        {title: '', note: '', label: '', pointer: 'c4', click: 2.55, ring: [447, 531]}
       ];
       const DURATION = 30, STEP = 7.5, reduced = matchMedia('(prefers-reduced-motion: reduce)');
       let elapsed = 0, last = 0, index = -1, paused = false, clicked = false;

@@ -23,6 +23,7 @@ import {
 } from "@/components/study-language";
 import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
 import { Markdown } from "@/components/markdown";
+import { Explainer } from "@/components/challenge-fundamentals";
 import { cn } from "@/lib/utils";
 import { publishNanoAiTopic } from "@/lib/nanoai-topic";
 import { WorkedExampleCard, workedAnswerClass } from "@/components/worked-example-card";
@@ -52,10 +53,6 @@ import type {
  * Everything in it has been earned. A topic is here because its challenge was
  * passed, so the page never has to explain what a locked or empty entry means.
  */
-
-function topicCountLabel(count: number) {
-  return `${count} topic${count === 1 ? "" : "s"}`;
-}
 
 /** Within one subject, so the subject's own name is not in the haystack: it
  *  would match every topic in the navigator. */
@@ -165,7 +162,7 @@ function TreeSearch({
   disabled?: boolean;
 }) {
   return (
-    <div className="border-b border-border p-3">
+    <div className="border-b border-border px-3 pb-3 pt-2">
       <label htmlFor="revision-docs-search" className="sr-only">
         Search your revision docs
       </label>
@@ -182,7 +179,7 @@ function TreeSearch({
           readOnly={!onChange}
           disabled={disabled}
           placeholder="Search topics"
-          className="min-h-10 w-full rounded-lg border border-border bg-bg-primary pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="min-h-9 w-full rounded-lg border border-transparent bg-bg-secondary pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus-visible:border-blue-500/60 focus-visible:bg-bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30"
         />
       </div>
     </div>
@@ -190,35 +187,37 @@ function TreeSearch({
 }
 
 /** Opens the subject picker. Names the subject the navigator is showing, so the
- *  button is also the navigator's heading. */
+ *  button is also the navigator's heading. Just the name: the year, semester and
+ *  topic count were noise here, and the topics are listed right below it. */
 function SubjectButton({
   name,
-  meta,
   onClick,
   disabled = false,
 }: {
   name: ReactNode;
-  meta?: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
 }) {
   return (
-    <div className="border-b border-border p-3">
+    <div className="px-3 pt-3">
       <button
         type="button"
         onClick={onClick}
         disabled={disabled}
         aria-haspopup="dialog"
-        className="flex min-h-14 w-full items-center gap-3 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-left hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-default disabled:hover:border-border"
+        className="group flex w-full items-center gap-3 rounded-xl border border-border bg-bg-primary p-2.5 text-left shadow-sm transition-colors hover:border-blue-500/50 hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-default disabled:hover:border-border disabled:hover:bg-bg-primary"
       >
-        <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-            Select subject
-          </span>
-          <span className="mt-0.5 block truncate text-sm font-semibold text-text-primary">{name}</span>
-          {meta ? <span className="block truncate text-xs text-text-muted">{meta}</span> : null}
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+          <BookOpen className="size-4" aria-hidden="true" />
         </span>
-        <ChevronsUpDown className="size-4 shrink-0 text-text-muted" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] font-medium text-text-muted">Subject</span>
+          <span className="block truncate text-sm font-semibold text-text-primary">{name}</span>
+        </span>
+        <ChevronsUpDown
+          className="size-4 shrink-0 text-text-muted transition-colors group-hover:text-text-primary"
+          aria-hidden="true"
+        />
       </button>
     </div>
   );
@@ -315,15 +314,10 @@ function SubjectPicker({
             if (choice) onRevise(choice);
           }}
         >
-          <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-            <div className="min-w-0">
-              <h2 id={titleId} className="type-student-card-title text-text-primary">
-                Select a subject
-              </h2>
-              <p className="mt-1 text-sm text-text-secondary">
-                Its topics fill the navigator. The rest stay filed here.
-              </p>
-            </div>
+          <header className="flex items-center justify-between gap-3 px-5 pb-2 pt-4">
+            <h2 id={titleId} className="type-student-card-title text-text-primary">
+              Select a subject
+            </h2>
             <button
               type="button"
               onClick={onClose}
@@ -334,22 +328,18 @@ function SubjectPicker({
             </button>
           </header>
 
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 pb-3 pt-1">
             {groups.map((group) => (
               <fieldset key={group.label}>
-                <legend className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                  {group.label}
-                </legend>
-                <div className="mt-2 space-y-2">
+                <legend className="px-2 text-xs font-medium text-text-muted">{group.label}</legend>
+                <div className="mt-1.5 space-y-0.5">
                   {group.entries.map((entry) => {
                     const checked = choice === entry.key;
                     return (
                       <label
                         key={entry.key}
-                        className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 ${
-                          checked
-                            ? "border-blue-500 bg-blue-500/10"
-                            : "border-border hover:bg-bg-secondary"
+                        className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 ${
+                          checked ? "bg-blue-500/10" : "hover:bg-bg-secondary"
                         }`}
                       >
                         <input
@@ -360,22 +350,16 @@ function SubjectPicker({
                           onChange={() => setChoice(entry.key)}
                           className="sr-only"
                         />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-text-primary">
-                            {entry.subject.name}
-                          </span>
-                          <span className="block text-xs text-text-muted">
-                            {topicCountLabel(entry.subject.topicCount)}
-                          </span>
-                        </span>
                         <span
-                          aria-hidden="true"
-                          className={`grid size-5 shrink-0 place-items-center rounded-full border ${
-                            checked ? "border-blue-600 bg-blue-600 text-white" : "border-border"
+                          className={`min-w-0 flex-1 truncate text-sm ${
+                            checked ? "font-semibold text-blue-700 dark:text-blue-300" : "font-medium text-text-primary"
                           }`}
                         >
-                          {checked ? <Check className="size-3.5" strokeWidth={3} /> : null}
+                          {entry.subject.name}
                         </span>
+                        {checked ? (
+                          <Check className="size-4 shrink-0 text-blue-600 dark:text-blue-400" strokeWidth={2.5} aria-hidden="true" />
+                        ) : null}
                       </label>
                     );
                   })}
@@ -384,18 +368,11 @@ function SubjectPicker({
             ))}
           </div>
 
-          <footer className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex min-h-10 items-center rounded-lg px-4 text-sm font-semibold text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            >
-              Cancel
-            </button>
+          <footer className="border-t border-border px-5 py-3">
             <button
               type="submit"
               disabled={!choice}
-              className="inline-flex min-h-10 items-center rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
             >
               Revise
             </button>
@@ -421,7 +398,7 @@ function TreeFrame({
     <div className="flex h-full flex-col">
       {subject}
       {search}
-      <nav aria-label="Revision docs" className="min-h-0 flex-1 overflow-y-auto p-2">
+      <nav aria-label="Revision docs" className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
         {children}
       </nav>
     </div>
@@ -439,16 +416,18 @@ function askedIn(example: RevisionDocTopic["solvedExamples"][number]) {
  * The paper's MCQs, answer open: the right option ticked, a wrong pick struck
  * through beside it, and the one-line reason under the options.
  */
-function McqReview({ mcqs }: { mcqs: RevisionDocTopic["mcqs"] }) {
-  const right = mcqs.filter((item) => item.picked === item.correct).length;
+function McqReview({ challengeId, mcqs }: { challengeId: string; mcqs: RevisionDocTopic["mcqs"] }) {
+  const right = mcqs.filter((item) => item.picked && item.picked === item.correct).length;
   const answered = mcqs.filter((item) => item.picked).length;
+  const waiting = mcqs.filter((item) => !item.correct).length;
   return (
     <section className="mt-8">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="type-student-section-title">MCQs from your paper</h2>
         {answered ? (
           <p className="text-sm text-text-muted">
-            {right} of {mcqs.length} right
+            {right} of {answered} right
+            {waiting ? ` · ${waiting} still to answer` : ""}
           </p>
         ) : null}
       </div>
@@ -485,10 +464,24 @@ function McqReview({ mcqs }: { mcqs: RevisionDocTopic["mcqs"] }) {
                       );
                     })}
                   </ul>
+                  {!item.correct ? (
+                    <p className="mt-2 text-sm text-text-muted">
+                      Not answered yet — its answer shows here once you answer it in the challenge.
+                    </p>
+                  ) : null}
                   {item.explanation ? (
                     <Markdown
                       text={item.explanation}
                       className="mt-2 max-w-prose text-sm leading-6 text-text-muted"
+                    />
+                  ) : null}
+                  {/* The same short video a wrong pick gets on the paper. */}
+                  {missed && item.picked ? (
+                    <Explainer
+                      challengeId={challengeId}
+                      questionId={item.id}
+                      selected={item.picked}
+                      endpoint={`/api/student/challenges/${encodeURIComponent(challengeId)}/choices/explain`}
                     />
                   ) : null}
                 </div>
@@ -579,7 +572,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
         </section>
       ) : null}
 
-      {topic.mcqs.length ? <McqReview mcqs={topic.mcqs} /> : null}
+      {topic.mcqs.length ? <McqReview challengeId={topic.challengeId} mcqs={topic.mcqs} /> : null}
 
       {topic.solvedExamples.length ? (
         <section className="mt-8" style={answerFontStyle(answerFont)}>
@@ -711,18 +704,13 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
       subject={
         <SubjectButton
           name={active?.subject.name ?? "Choose a subject"}
-          meta={
-            active
-              ? `${active.semesterLabel} · ${topicCountLabel(active.subject.topicCount)}`
-              : null
-          }
           onClick={() => setPickerOpen(true)}
         />
       }
       search={<TreeSearch value={query} onChange={setQuery} />}
     >
       {units.length ? (
-        <ul className="space-y-2">
+        <ul className="space-y-4">
           {units.map((unit) => (
             <li key={unit.unitNumber || "unplaced"}>
               {/* Number and name on one line, cut short like the topics under
@@ -731,13 +719,17 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
               {unit.label ? (
                 <p
                   title={unit.title ? `${unit.label} · ${unit.title}` : undefined}
-                  className="truncate px-2 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted"
+                  className="flex min-w-0 items-center gap-2 px-2 pb-1.5"
                 >
-                  {unit.label}
-                  {unit.title ? <span className="text-text-secondary"> · {unit.title}</span> : null}
+                  <span className="shrink-0 rounded-md bg-bg-secondary px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                    {unit.label}
+                  </span>
+                  {unit.title ? (
+                    <span className="truncate text-xs font-semibold text-text-secondary">{unit.title}</span>
+                  ) : null}
                 </p>
               ) : null}
-              <ul className={unit.label ? "ml-2 space-y-0.5 border-l border-border pl-2" : "space-y-0.5"}>
+              <ul className="space-y-0.5">
                 {unit.topics.map((topic) => {
                   const isActive = selected?.challengeId === topic.challengeId;
                   return (
@@ -749,13 +741,23 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
                           setSelectedId(topic.challengeId);
                           setNavOpen(false);
                         }}
-                        className={`flex min-h-9 w-full items-center rounded-lg px-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                        title={topic.title}
+                        className={`flex min-h-10 w-full items-start gap-2.5 rounded-lg py-2 pl-3 pr-2 text-left text-sm leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                           isActive
-                            ? "bg-blue-500/10 font-semibold text-blue-700 dark:text-blue-300"
-                            : "text-text-secondary hover:bg-bg-secondary"
+                            ? "bg-blue-500/[0.07] font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/25 dark:text-blue-300"
+                            : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
                         }`}
                       >
-                        <span className="truncate">{topic.title}</span>
+                        {/* A quiet dot per topic; the open one glows. */}
+                        <span
+                          className={`mt-[7px] size-1.5 shrink-0 rounded-full transition-shadow ${
+                            isActive
+                              ? "bg-blue-600 ring-4 ring-blue-500/20 dark:bg-blue-400"
+                              : "bg-text-muted/40"
+                          }`}
+                          aria-hidden="true"
+                        />
+                        <span className="line-clamp-2 min-w-0">{topic.title}</span>
                       </button>
                     </li>
                   );
@@ -900,7 +902,6 @@ export function RevisionDocsSkeleton() {
             <SubjectButton
               disabled
               name={<span className={`mt-1 block h-4 w-36 ${bar}`} />}
-              meta={<span className={`mt-1.5 block h-3 w-28 ${bar}`} />}
             />
           }
           search={<TreeSearch value="" disabled />}
@@ -910,7 +911,7 @@ export function RevisionDocsSkeleton() {
               <div key={group}>
                 {/* A unit and its name, then its topics. */}
                 <div className={`h-2.5 w-40 ${bar}`} />
-                <div className="ml-2 mt-2 space-y-2.5 border-l border-border pl-3">
+                <div className="mt-3 space-y-3 pl-3">
                   {Array.from({ length: topics }).map((_, index) => (
                     <div key={index} className={`h-4 ${index % 2 ? "w-40" : "w-48"} max-w-full ${bar}`} />
                   ))}

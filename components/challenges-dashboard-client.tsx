@@ -1919,6 +1919,16 @@ export function SubjectCoverage({ progress }: { progress?: { covered: number; to
   );
 }
 
+/**
+ * Each semester's hub as last seen in this tab, so switching back to one paints
+ * at once and the server's render only reconciles it (see the cache-first rule).
+ * Module scope: it outlives the component across navigations, and a sign-out is
+ * a full page load, which clears it.
+ */
+const hubByTerm = new Map<string, StudentChallengeDashboard>();
+const hubTermKey = (dashboard: StudentChallengeDashboard) =>
+  dashboard.community?.currentTermId ? `${dashboard.community.id}:${dashboard.community.currentTermId}` : "";
+
 export function ChallengesDashboardClient({
   dashboard: serverDashboard,
   initialChallengeId,
@@ -2043,14 +2053,30 @@ export function ChallengesDashboardClient({
   })();
   const [runningTermId, setRunningTermId] = useState(dashboard.community?.currentTermId ?? "");
   const [savingSemester, setSavingSemester] = useState(false);
+  // The semester being switched to, while nothing for it is on screen yet: its
+  // subjects stand in as rows (from `termSubjects`) until its render lands.
+  const [pendingTermId, setPendingTermId] = useState("");
+  useEffect(() => {
+    const key = hubTermKey(dashboard);
+    if (key) hubByTerm.set(key, dashboard);
+  }, [dashboard]);
+  const placeholderSubjects =
+    pendingTermId && dashboard.community && dashboard.community.currentTermId !== pendingTermId
+      ? (dashboard.community.termSubjects ?? []).filter((subject) => subject.termId === pendingTermId)
+      : null;
   const [semesterError, setSemesterError] = useState("");
   const changeRunningSemester = async (termId: string) => {
     const community = dashboard.community;
     if (!community || !termId || termId === runningTermId || savingSemester) return;
     const previous = runningTermId;
+    const previousDashboard = dashboard;
     setRunningTermId(termId);
     setSavingSemester(true);
     setSemesterError("");
+    // Paint first: the semester as last seen here, else its subjects as rows.
+    const cached = hubByTerm.get(`${community.id}:${termId}`);
+    if (cached) setDashboard(cached);
+    setPendingTermId(cached ? "" : termId);
     try {
       const response = await fetch(
         `/api/communities/${encodeURIComponent(community.slug)}/membership`,
@@ -2067,11 +2093,16 @@ export function ChallengesDashboardClient({
       if (!response.ok || payload.currentTermId !== termId) {
         throw new Error(payload.error || "Could not save your running semester.");
       }
-      // Drop any subject filter: it named a subject of the old semester.
-      router.replace(`/app/challenges?community=${encodeURIComponent(community.slug)}`);
-      router.refresh();
+      // Drop any subject filter: it named a subject of the old semester. ONE
+      // server render: `replace` to a new URL already renders it, and following
+      // it with `refresh` rendered the whole hub a second time (2.5–5s each).
+      const target = `/app/challenges?community=${encodeURIComponent(community.slug)}`;
+      if (`${window.location.pathname}${window.location.search}` === target) router.refresh();
+      else router.replace(target);
     } catch (cause) {
       setRunningTermId(previous);
+      setDashboard(previousDashboard);
+      setPendingTermId("");
       setSemesterError(
         cause instanceof Error ? cause.message : "Could not save your running semester.",
       );
@@ -2294,7 +2325,29 @@ export function ChallengesDashboardClient({
             ) : null}
           </div>
 
-          {dashboard.challenges.length ? (
+          {placeholderSubjects?.length ? (
+            // The new semester's subjects at once; each row fills in when its
+            // challenge arrives. Only what is unknown is a placeholder.
+            <div className={hubRowsClass} aria-busy="true">
+              {placeholderSubjects.map((subject) => (
+                <div key={`${subject.termId}:${subject.subjectSlug}`} className={hubRowClass}>
+                  <div className={hubRowMainClass}>
+                    <div className={hubRowSubjectClass}>
+                      <p className="font-bold text-[15px] sm:text-[16px] text-text-primary truncate">
+                        {subject.subjectName}
+                      </p>
+                      <div className="mt-2 h-4 w-3/5 rounded-full bg-border animate-pulse-soft motion-reduce:animate-none" />
+                    </div>
+                    <div className="h-3 max-w-[340px] flex-1 rounded-full bg-border animate-pulse-soft motion-reduce:animate-none" />
+                  </div>
+                  <div className={hubRowActionsClass}>
+                    <span className="w-[88px] shrink-0" />
+                    <div className="h-9 w-[104px] shrink-0 rounded-[10px] bg-border animate-pulse-soft motion-reduce:animate-none" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : dashboard.challenges.length ? (
             <div className={hubRowsClass}>
               {hubRows(dashboard.challenges).map(({ challenge, doneToday }) => {
                 const completed = challenge.status === "completed";

@@ -26,6 +26,9 @@ export async function POST(_request: Request, context: RouteContext) {
       message: source.message,
     });
     const mapped = communityStorageError(error);
-    return NextResponse.json({ error: mapped.message }, { status: mapped.status });
+    return NextResponse.json(
+      { error: mapped.message, ...(mapped.current ? { current: mapped.current } : {}) },
+      { status: mapped.status },
+    );
   }
 }

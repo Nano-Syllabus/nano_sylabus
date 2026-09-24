@@ -113,6 +113,10 @@ export type StudentChallengeDashboard = {
     /** Every semester of the community, in order, for the running-semester
      *  picker that sits on this page. */
     terms: ChallengeCommunityTerm[];
+    /** Every semester's subjects, by term — what a semester switch paints at
+     *  once, before that semester's own challenges have come back. Already read
+     *  for the scope; the Library is fast for the same reason. */
+    termSubjects: Array<{ termId: string; subjectSlug: string; subjectName: string }>;
   } | null;
   scope: {
     courseId: string;
@@ -909,6 +913,13 @@ export async function getStudentChallengeDashboard(
           courseId: communityScope.courseId,
           currentTermId: communityScope.currentTermId ?? null,
           terms,
+          termSubjects: allCommunitySubjects
+            .filter((subject) => subject.courseId === currentCourseId && subject.term?.id)
+            .map((subject) => ({
+              termId: subject.term!.id,
+              subjectSlug: subject.subjectSlug,
+              subjectName: subject.subjectName,
+            })),
         }
       : null,
     scope: activeRequestedScope

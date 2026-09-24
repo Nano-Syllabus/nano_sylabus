@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   communityInputSchema,
+  communityLevel,
   communitySlug,
   generateCommunityTerms,
   mapCommunitySummary,
@@ -33,6 +34,7 @@ describe("communities", () => {
       name: "SEC BEI",
       university: "Pokhara University",
       faculty: "Bachelor in Electronics Engineering",
+      level: "Bachelor",
       description: "Shared notes and practice for SEC BEI students.",
       totalYears: 4,
       totalSemesters: 8,
@@ -42,11 +44,35 @@ describe("communities", () => {
     expect(parsed.success).toBe(true);
   });
 
+  it("requires a known level and falls back to the name for older faculties", () => {
+    const base = {
+      name: "BEI",
+      university: "TU",
+      faculty: "BEI",
+      totalYears: 1,
+      totalSemesters: 1,
+      challengeQuestionFormat: "mcq",
+    };
+    expect(communityInputSchema.safeParse(base).error?.issues[0]?.message).toBe(
+      "Choose the level this faculty is for.",
+    );
+    expect(communityInputSchema.safeParse({ ...base, level: "PhD" }).success).toBe(false);
+    const parsed = communityInputSchema.safeParse({ ...base, level: "License" });
+    expect(parsed.success && parsed.data.university).toBe("Tribhuvan University");
+
+    expect(communityLevel({ level: "Entrance", name: "MBA", faculty: "" })).toBe("Entrance");
+    expect(communityLevel({ level: null, name: "BEI Engineering liscense", faculty: "BEI" })).toBe("License");
+    expect(communityLevel({ name: "IOE Entrance Prep", faculty: "Engineering" })).toBe("Entrance");
+    expect(communityLevel({ name: "MBA", faculty: "Masters in Business Administration" })).toBe("Master");
+    expect(communityLevel({ name: "BCT", faculty: "Bachelor in Computer Engineering" })).toBe("Bachelor");
+  });
+
   it("requires the creator to choose the challenge question type", () => {
     const base = {
       name: "SEC BEI",
       university: "Pokhara University",
       faculty: "BEI",
+      level: "Bachelor",
       totalYears: 4,
       totalSemesters: 8,
     };
