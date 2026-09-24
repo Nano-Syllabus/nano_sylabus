@@ -468,6 +468,21 @@ export function DriveImportQueue({
   ).length;
   const failedIds = items.filter((item) => item.status === "failed").map((item) => item.id);
   const failed = failedIds.length;
+  const indexed = items.filter((item) => item.status === "done").length;
+  /**
+   * The order the rows are drawn in: the one importing now, then the queue in
+   * the order it will run, then failures, then what landed.
+   *
+   * The server lists newest first, which is right for history but puts a fresh
+   * folder's queued rows ABOVE the one being worked on — so progress read
+   * bottom-up, and a failure sat wherever its file happened to be queued. The
+   * queue runs oldest first (see `claim_teacher_drive_import`), hence the reverse.
+   */
+  const rank = { importing: 0, queued: 1, failed: 2, done: 3 } as const;
+  const ordered = [
+    ...items.filter((item) => item.status === "importing" || item.status === "queued").reverse(),
+    ...items.filter((item) => item.status === "failed" || item.status === "done"),
+  ].sort((a, b) => rank[a.status] - rank[b.status]);
 
   return (
     <section
@@ -479,12 +494,12 @@ export function DriveImportQueue({
           {pending ? `Importing in the background · ${pending} left` : "Import queue"}
         </p>
         <p className="text-xs text-text-muted">
-          {items.length - pending} of {items.length} finished
+          {indexed} of {items.length} indexed
           {failed ? ` · ${failed} failed` : ""}
         </p>
       </div>
       <ul className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border">
-        {items.map((item) => (
+        {ordered.map((item) => (
           <li key={item.id} className="bg-bg-primary px-3 py-2">
             <div className="flex min-h-9 items-center gap-3">
               <span
@@ -498,7 +513,15 @@ export function DriveImportQueue({
                       : "bg-border text-text-muted",
                 )}
               >
-                {item.status === "done" ? "✓" : item.status === "failed" ? "!" : "·"}
+                {item.status === "done" ? (
+                  "✓"
+                ) : item.status === "failed" ? (
+                  "!"
+                ) : item.status === "importing" ? (
+                  <span className="size-3.5 animate-spin rounded-full border-2 border-text-muted border-t-transparent motion-reduce:animate-none" />
+                ) : (
+                  <span className="size-2 rounded-full border border-text-muted" />
+                )}
               </span>
               <span className="min-w-0 flex-1 truncate text-sm">{item.fileName}</span>
               <span className="shrink-0 text-xs text-text-muted">

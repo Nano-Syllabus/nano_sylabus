@@ -22,15 +22,62 @@ const FIGURE_WORD = /\b(?:diagram|figure|sketch|schematic|waveforms?)\b/i;
 export type EmptyFigureSection = {
   /** The heading's own text, e.g. "Diagram". */
   heading: string;
-  /** Offset just past the heading line, where the picture belongs. */
+  /** Offset where the picture belongs: just past the heading line, or — for a
+   *  diagram only mentioned in the prose — the start of that paragraph. */
   insertAt: number;
   /** Whatever the section says about the picture it lost, if anything. */
   prose: string;
+  /** `before` when the picture goes above the paragraph at `insertAt`. */
+  placement?: "after-heading" | "before";
 };
 
-/** The first figure heading whose section holds no image and no fenced block. */
-export function emptyFigureSection(markdown: string): EmptyFigureSection | null {
-  if (!markdown || !markdown.includes("#")) return null;
+/**
+ * Prose that points at a picture on the page: "The diagram shows: …", "as the
+ * sketch below illustrates". A solution written that way with no image in it
+ * lost its figure just as surely as one with a bare "### Diagram" heading.
+ */
+const PROSE_FIGURE =
+  /\b(?:the|this|above|below|following|my|our)\s+(?:labelled\s+|labeled\s+|voltage[- ]range\s+|timing\s+|circuit\s+|block\s+|state\s+)?(?:diagram|figure|sketch|schematic|waveforms?|graph|plot)\b/i;
+
+/** A question that asks for a picture: "(a) Sketch the voltage range diagram…". */
+const ASKS_FOR_FIGURE =
+  /\b(?:sketch|draw|plot)\b(?:\W+\w+){0,6}?\W+(?:diagram|figure|graph|waveforms?|circuit|schematic|curve|characteristics?|plot|sketch)\b|\bsketch\b/i;
+
+function hasPicture(markdown: string) {
+  return markdown.includes("![") || markdown.includes("```");
+}
+
+/**
+ * The first figure heading whose section holds no image and no fenced block —
+ * or, failing that, a solution with no picture anywhere that talks about one
+ * (or answers a question that asked for one). `question` enables the second
+ * test; without it only the prose is read.
+ */
+export function emptyFigureSection(markdown: string, question = ""): EmptyFigureSection | null {
+  if (!markdown) return null;
+  return emptyFigureHeading(markdown) ?? unheadedMissingFigure(markdown, question);
+}
+
+function unheadedMissingFigure(markdown: string, question: string): EmptyFigureSection | null {
+  if (hasPicture(markdown)) return null;
+  const paragraphs = [...markdown.matchAll(/[^\n](?:[^\n]|\n(?!\s*\n))*/g)];
+  const mentioning = paragraphs.find((paragraph) => PROSE_FIGURE.test(paragraph[0]));
+  if (mentioning) {
+    return {
+      heading: "Diagram",
+      insertAt: mentioning.index ?? 0,
+      prose: mentioning[0].trim(),
+      placement: "before",
+    };
+  }
+  if (question && ASKS_FOR_FIGURE.test(question)) {
+    return { heading: "Diagram", insertAt: 0, prose: "", placement: "before" };
+  }
+  return null;
+}
+
+function emptyFigureHeading(markdown: string): EmptyFigureSection | null {
+  if (!markdown.includes("#")) return null;
   const headings = [...markdown.matchAll(HEADING)];
   for (const [index, match] of headings.entries()) {
     const level = match[1].length;
@@ -58,6 +105,10 @@ export function figureBrief(question: string, section: EmptyFigureSection) {
 
 /** The solution with the picture under the heading that promised it. */
 export function withFigure(markdown: string, section: EmptyFigureSection, url: string) {
+  if (section.placement === "before") {
+    const before = markdown.slice(0, section.insertAt).trimEnd();
+    return `${before}${before ? "\n\n" : ""}![${section.heading}](${url})\n\n${markdown.slice(section.insertAt)}`;
+  }
   const image = `\n\n![${section.heading}](${url})`;
   return markdown.slice(0, section.insertAt) + image + markdown.slice(section.insertAt);
 }

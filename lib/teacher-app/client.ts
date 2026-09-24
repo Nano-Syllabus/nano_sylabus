@@ -83,6 +83,8 @@ export type TeacherChallengeExam = {
     marks: number;
     question_type: string;
     text: string;
+    /** The question with its maths typeset, when `text` needed it. */
+    display_text?: string;
   }>;
   total_marks: number;
   pass_marks: number;
@@ -136,6 +138,10 @@ export type TeacherChallengeMcqResponse = {
   topics: TeacherChallengeTopic[];
   questions: TeacherChallengeMcqQuestion[];
   served_from: "cache" | "lane_notes_llm" | string;
+  /** Absent from a backend older than exam sets — which then answered an exam
+   *  request with the fundamentals set. Check it before using one as a paper. */
+  purpose?: "fundamentals" | "exam";
+  marks?: number;
 };
 
 /** Where one render got to: `derivatives` fills in as each file lands. */
@@ -1178,7 +1184,18 @@ export const getTeacherChallengeReading = (
  * so every call after the first is a read — hence idempotent and retried once
  * on a busy upstream, like the past questions.
  */
-export const getTeacherChallengeMcq = (key: string, input: { subject: string; topics: string[] }) =>
+export const getTeacherChallengeMcq = (
+  key: string,
+  input: {
+    subject: string;
+    topics: string[];
+    /** `exam` sets the topic's MCQ challenge exam instead of its fundamentals. */
+    purpose?: "fundamentals" | "exam";
+    count?: number;
+    /** Which of the topic's cached exam sets; rotated per attempt. */
+    variant?: number;
+  },
+) =>
   teacherRequest<TeacherChallengeMcqResponse>("/v1/collection/challenge/mcq", key, {
     method: "POST",
     body: input,

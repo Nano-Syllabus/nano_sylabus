@@ -391,6 +391,19 @@ export async function createCommunity(
   }
   const createdId = String(result.data || "");
   if (createdId) {
+    // Written after the RPC rather than through it, so creating a community
+    // keeps working on a database that does not have the column yet — the
+    // community then runs the written exam until the setting is saved again.
+    const format = await admin
+      .from("communities")
+      .update({
+        challenge_question_format: input.challengeQuestionFormat,
+        challenge_question_format_set_at: new Date().toISOString(),
+      })
+      .eq("id", createdId);
+    if (format.error && !["42703", "PGRST204"].includes(String(format.error.code))) {
+      throw format.error;
+    }
     try {
       await ensureCommunityLearningSpace(admin, createdId);
     } catch (error) {

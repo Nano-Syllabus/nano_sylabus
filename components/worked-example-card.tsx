@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils";
  * Shared by the worked examples in Revision and in a challenge's step 1, so a
  * worked example looks the same wherever it is read. The question is written in
  * the same hand as the answer — it is a page of someone's notes, question and
- * all — and is told apart from it by its darker ink and the "Solution" line.
+ * all — and is told apart from it by its red ink, the way a question is copied
+ * out in red above the answer in a student's notebook, and the "Solution" line.
  *
  * The lines are drawn by `.answer-paper*` in app/globals.css.
  */
@@ -27,7 +28,7 @@ export const paperTextClass = "answer-paper-body font-revision-answer text-sm te
 export const paperLabelClass =
   "answer-paper-label text-xs font-semibold uppercase tracking-wide text-text-muted";
 
-const questionClass = "answer-paper-body font-revision-answer text-sm text-text-primary";
+const questionClass = "answer-paper-body answer-paper-question font-revision-answer text-sm";
 
 export function WorkedExampleCard({
   label,

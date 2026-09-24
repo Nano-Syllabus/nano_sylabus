@@ -115,6 +115,9 @@ const SubjectView = dynamic(
 const CreateClassroomDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.CreateClassroomDialog));
 const CreateSubjectDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.CreateSubjectDialog));
 const CreateFolderDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.CreateFolderDialog));
+const CommunityChallengeFormatSettings = dynamic(() =>
+  import("@/components/challenge-format-picker").then((m) => m.CommunityChallengeFormatSettings),
+);
 const UploadDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.UploadDialog));
 const DocumentDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.DocumentDialog));
 const CollectionOverviewDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.CollectionOverviewDialog));
@@ -1954,6 +1957,13 @@ export function CommunitiesView({
           </section>
         </>
       )}
+
+      {/* A community setting, and the first thing its admin page offers: which
+          questions every student's challenge exam asks. Existing communities
+          choose it here too — they run on QnA until they do. */}
+      {!subjectsMode && selected.canManage ? (
+        <CommunityChallengeFormatSettings key={`format-${selected.slug}`} slug={selected.slug} />
+      ) : null}
 
       {subjectsMode ? (
         <section className="mt-7" aria-labelledby="community-curriculum-heading">

@@ -39,11 +39,15 @@ export async function persistStudentChallengeGrade(input: {
     windowLabel: "Daily challenge",
     questions: challenge.content.examQuestions.map((question) => ({
       id: question.id,
-      type: "short",
+      type: question.options?.length ? "choice" : "short",
       questionType: question.questionType,
       marks: question.marks,
       topic: question.topic || challenge.topicTitle,
       prompt: question.question,
+      // The options only, never the key: this history is shown back to the student.
+      ...(question.options?.length
+        ? { options: question.options.map((option) => `${option.key}. ${option.text}`) }
+        : {}),
     })),
   };
   const attemptId = await recordPracticeEvaluation({

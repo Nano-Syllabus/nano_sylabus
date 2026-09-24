@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ChallengeRomanNepali } from "@/lib/data/student-challenges";
 import { cn } from "@/lib/utils";
 
@@ -71,15 +71,31 @@ const translations = new Map<string, ChallengeRomanNepali>();
  * reading paragraphs and worked answers is enough — so a reading that lands
  * after the translation was fetched asks again, and the rest is kept.
  */
-export function useRomanNepali(challengeId: string, version: string, wanted: boolean): Translation {
+export function useRomanNepali(
+  challengeId: string,
+  version: string,
+  wanted: boolean,
+  /** The translation already filed on the challenge row, when there is one. It
+   *  arrives with the challenge, so a translated challenge opens translated with
+   *  no request at all. Used only when it covers the English now on screen. */
+  stored?: ChallengeRomanNepali | null,
+  /** Hands a freshly written translation to a screen that caches the challenge. */
+  onLoaded?: (data: ChallengeRomanNepali) => void,
+): Translation {
   const key = `${challengeId}:${version}`;
+  const covering =
+    stored && `${stored.reading.length}:${Object.keys(stored.solutions).length}` === version ? stored : null;
   const [state, setState] = useState<Translation>(() => {
-    const held = translations.get(key);
+    const held = translations.get(key) ?? covering;
     return held ? { status: "ready", data: held } : { status: "idle" };
+  });
+  const onLoadedRef = useRef(onLoaded);
+  useEffect(() => {
+    onLoadedRef.current = onLoaded;
   });
 
   useEffect(() => {
-    const held = translations.get(key);
+    const held = translations.get(key) ?? covering;
     if (held) {
       setState({ status: "ready", data: held });
       return;
@@ -105,9 +121,16 @@ export function useRomanNepali(challengeId: string, version: string, wanted: boo
           });
           return;
         }
-        // A partial translation is shown but not kept: the next open tries the rest.
-        if (!payload.romanNepali.untranslated) translations.set(key, payload.romanNepali);
-        setState({ status: "ready", data: payload.romanNepali });
+        // Kept partial or whole: the server files it on the row either way, and
+        // the parts left in English are ones the translator refuses every time.
+        // All of it in English is the service failing — shown, never kept.
+        const data = payload.romanNepali;
+        const parts = data.reading.length + Object.keys(data.solutions).length;
+        if (data.untranslated < parts) {
+          translations.set(key, data);
+          onLoadedRef.current?.(data);
+        }
+        setState({ status: "ready", data });
       } catch {
         if (!cancelled) {
           setState({ status: "error", message: "Couldn't reach NanoSyllabus. Showing English." });
@@ -117,6 +140,9 @@ export function useRomanNepali(challengeId: string, version: string, wanted: boo
     return () => {
       cancelled = true;
     };
+    // `covering` is derived from `stored` and `key`; the key already changes
+    // whenever the English it must cover does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [challengeId, key, wanted]);
 
   return state;
@@ -209,6 +235,30 @@ export function StudyLanguageSwitch({
           {note}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/** Whether the reader is waiting on a first Roman Nepali translation. */
+export function isTranslating(language: StudyLanguage, translation: Translation) {
+  return language === "rn" && translation.status === "loading";
+}
+
+/**
+ * Where translated text will land, while it is being written. The English is
+ * not left on screen meanwhile: the reader asked for Roman Nepali, and English
+ * that changes under them a few seconds in reads as the switch not working.
+ */
+export function TranslatingLines({ lines = 3, className }: { lines?: number; className?: string }) {
+  return (
+    <div className={cn("space-y-2.5 py-1", className)} aria-busy="true" aria-label="Putting this into Roman Nepali">
+      {Array.from({ length: lines }, (_, index) => (
+        <span
+          key={index}
+          className="block h-3 animate-pulse rounded bg-border motion-reduce:animate-none"
+          style={{ width: index === lines - 1 ? "62%" : "100%" }}
+        />
+      ))}
     </div>
   );
 }

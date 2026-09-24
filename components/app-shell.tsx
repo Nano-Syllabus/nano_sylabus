@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { NanoAiFloatingChat } from "@/components/nanoai-floating-chat";
 import { AppSidebar } from "@/components/app-sidebar";
 import type { AppUser } from "@/lib/types";
 import { AppShellContext } from "@/components/app-shell-context";
@@ -129,6 +130,7 @@ export function AppShell({
           </div>
         </main>
       </div>
+      <NanoAiFloatingChat user={user} />
     </AppShellContext.Provider>
   );
 }

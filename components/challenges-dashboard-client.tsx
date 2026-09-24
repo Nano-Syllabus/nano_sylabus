@@ -34,6 +34,7 @@ import {
   StudyLanguageSwitch,
   inStudyLanguage,
   useRomanNepali,
+  isTranslating,
   useStudyLanguage,
 } from "@/components/study-language";
 import {
@@ -336,6 +337,8 @@ function ChallengeDetail({
   );
   const [savingStep, setSavingStep] = useState<"lesson" | "examples" | null>(null);
   const [scanFile, setScanFile] = useState<File | null>(null);
+  /** Multiple-choice picks on an MCQ or hybrid paper: question id → option key. */
+  const [choices, setChoices] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [openingNext, setOpeningNext] = useState(false);
@@ -372,7 +375,12 @@ function ChallengeDetail({
     challenge.id,
     `${content?.lesson?.content?.length ?? 0}:${(content?.solvedExamples || []).filter((example) => example.solution).length}`,
     studyLanguage === "rn" && Boolean(content),
+    content?.romanNepali,
+    // Filed on the cached challenge too, so reopening it is instant.
+    (romanNepaliData) =>
+      content && onChange({ ...challenge, content: { ...content, romanNepali: romanNepaliData } }),
   );
+  const translating = isTranslating(studyLanguage, romanNepali);
   /** The face worked answers are written in — the reader's, shared with Revision. */
   const [answerFont, setAnswerFont] = useAnswerFont();
   /** The single list step one renders — see `mergeLearnQuestions` for why the
@@ -504,6 +512,7 @@ function ChallengeDetail({
     setActiveStep(incomingStep);
     setPracticeStage(isCompletedChallenge ? "result" : "questions");
     setScanFile(null);
+    setChoices({});
     setError("");
     setClock(Date.now());
     setResults(isCompletedChallenge ? savedResults(challenge) : []);
@@ -577,6 +586,61 @@ function ChallengeDetail({
     }
   };
 
+  /** A marked sitting, whichever way it was handed in. */
+  type GradedPayload = {
+    challenge: StudentChallengeDetail;
+    results: GradeResult[];
+    evaluation?: PracticeEvaluation;
+    totalScore: number;
+    totalMarks: number;
+    passed: boolean;
+    error?: string;
+  };
+  const applyGrade = (payload: GradedPayload) => {
+    setResults(payload.results);
+    setEvaluation(payload.evaluation ?? null);
+    setScore({ earned: payload.totalScore, total: payload.totalMarks, passed: payload.passed });
+    setScanFile(null);
+    setChoices({});
+    onChange(payload.challenge);
+    setActiveStep(2);
+    setPracticeStage("result");
+    // See the note in `submitScan`: the dashboard's numbers move in this tick.
+    if (payload.passed) {
+      dashboardPatch.completed({ challengeId: payload.challenge?.id });
+      onHubPatch((d) => applyChallengePassed(d, payload.challenge?.id));
+    } else {
+      dashboardPatch.attempted();
+      onHubPatch((d) => applyChallengeState(d, payload.challenge));
+    }
+  };
+
+  /** An all-MCQ paper: marked on the server from the picks, no scan. */
+  const submitChoices = async () => {
+    setSubmitting(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/student/challenges/${challenge.id}/submit-choices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: choices }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as GradedPayload;
+      if (!response.ok) {
+        if (payload.challenge) {
+          setChoices({});
+          onChange(payload.challenge);
+        }
+        throw new Error(payload.error || "Could not mark your answers.");
+      }
+      applyGrade(payload);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not mark your answers.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const submitScan = async () => {
     if (!scanFile) return;
     setSubmitting(true);
@@ -592,30 +656,18 @@ function ChallengeDetail({
     try {
       const form = new FormData();
       form.set("file", scanFile);
+      // A hybrid paper's multiple-choice part is handed in with the scan.
+      if (choiceQuestions.length) form.set("choices", JSON.stringify(choices));
       const response = await fetch(`/api/student/challenges/${challenge.id}/submit-file`, {
         method: "POST",
         body: form,
       });
-      const payload = (await response.json().catch(() => ({}))) as {
-        challenge: StudentChallengeDetail;
-        results: GradeResult[];
-        evaluation?: PracticeEvaluation;
-        totalScore: number;
-        totalMarks: number;
-        passed: boolean;
-        error?: string;
-      };
+      const payload = (await response.json().catch(() => ({}))) as GradedPayload;
       if (!response.ok) {
         if (payload.challenge) onChange(payload.challenge);
         throw new Error(payload.error || "Could not grade the handwritten answer.");
       }
-      setResults(payload.results);
-      setEvaluation(payload.evaluation ?? null);
-      setScore({ earned: payload.totalScore, total: payload.totalMarks, passed: payload.passed });
-      setScanFile(null);
-      onChange(payload.challenge);
-      setActiveStep(2);
-      setPracticeStage("result");
+      applyGrade(payload);
       /**
        * Move the dashboard's numbers here, in this tick, with no request.
        *
@@ -627,15 +679,9 @@ function ChallengeDetail({
        *
        * The hub's own copy of those numbers moves here too. Both screens show
        * the streak and today's count, so patching one and refreshing the other
-       * would have them disagree for as long as the refresh took.
+       * would have them disagree for as long as the refresh took. (`applyGrade`
+       * does it, for this path and the MCQ one alike.)
        */
-      if (payload.passed) {
-        dashboardPatch.completed({ challengeId: payload.challenge?.id });
-        onHubPatch((d) => applyChallengePassed(d, payload.challenge?.id));
-      } else {
-        dashboardPatch.attempted();
-        onHubPatch((d) => applyChallengeState(d, payload.challenge));
-      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not grade the handwritten answer.");
     } finally {
@@ -664,6 +710,7 @@ function ChallengeDetail({
       setEvaluation(null);
       setScore(null);
       setScanFile(null);
+      setChoices({});
       setClock(Date.now());
       onChange(payload.challenge);
     } catch (cause) {
@@ -753,6 +800,15 @@ function ChallengeDetail({
     results.filter((result) => Boolean(result.student_answer?.trim())).length;
   const resultMarksLost =
     resultEvaluation?.marks_lost ?? (score ? Math.max(0, score.total - score.earned) : 0);
+  /**
+   * The paper's shape, read off its questions rather than a stored label: a
+   * question with options is answered on screen, one without is written on
+   * paper. The community's creator chose which (QnA, MCQ or hybrid).
+   */
+  const choiceQuestions = content.examQuestions.filter((question) => question.options?.length);
+  const writtenQuestions = content.examQuestions.filter((question) => !question.options?.length);
+  const allChoice = choiceQuestions.length > 0 && writtenQuestions.length === 0;
+  const answeredChoices = choiceQuestions.filter((question) => choices[question.id]).length;
   const resultReady = activeStep === 2 && Boolean(score && challenge.status === "completed");
 
   const focusButtonClass =
@@ -896,6 +952,7 @@ function ChallengeDetail({
                   <ConceptsCard
                     key={challenge.id}
                     className="mb-6"
+                    translating={translating}
                     source={{
                       id: challenge.id,
                       title: challenge.title,
@@ -979,6 +1036,7 @@ function ChallengeDetail({
                                 // it once; the drawn one is filed on the
                                 // challenge, and patched into the cache here.
                                 onDrawn={(drawn) => onChange(drawn.challenge)}
+                                translating={translating}
                                 text={inStudyLanguage(
                                   studyLanguage,
                                   romanNepali,
@@ -1038,7 +1096,11 @@ function ChallengeDetail({
                       📝{" "}
                       {challenge.status === "completed"
                         ? "Review the questions and feedback from your completed attempt."
-                        : "Write your answers on paper."}
+                        : allChoice
+                          ? "Choose the correct answer for each question."
+                          : choiceQuestions.length
+                            ? "Pick the multiple-choice answers here, then write the rest on paper."
+                            : "Write your answers on paper."}
                     </h2>
                     {challenge.status === "completed" && !challenge.latestAttempt ? (
                       <div className="mt-5 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-text-secondary">
@@ -1047,17 +1109,76 @@ function ChallengeDetail({
                     ) : null}
                     {content.examQuestions.length ? (
                       <div className="mt-6 space-y-5">
-                        {content.examQuestions.map((question, index) => (
-                          <article key={question.id} className="rounded-xl bg-bg-secondary p-5">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                              Question {index + 1} · {question.marks} marks
-                            </p>
-                            <Markdown
-                              text={question.question}
-                              className="mt-2 text-sm font-semibold leading-6"
-                            />
-                          </article>
-                        ))}
+                        {[...choiceQuestions, ...writtenQuestions].map((question) => {
+                          const options = question.options ?? [];
+                          // Written questions are numbered on their own: the
+                          // answer sheet labels them 1, 2… and is read that way.
+                          const label = options.length
+                            ? `Question ${choiceQuestions.indexOf(question) + 1} · Multiple choice`
+                            : `${choiceQuestions.length ? "Written question" : "Question"} ${writtenQuestions.indexOf(question) + 1}`;
+                          return (
+                            <article key={question.id} className="rounded-xl bg-bg-secondary p-5">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                                {label} · {question.marks} marks
+                              </p>
+                              <Markdown
+                                text={question.question}
+                                className="mt-2 text-sm font-semibold leading-6"
+                              />
+                              {options.length ? (
+                                <div
+                                  className="mt-4 grid gap-2"
+                                  role="radiogroup"
+                                  aria-label={`${label} options`}
+                                >
+                                  {options.map((option) => {
+                                    const picked = choices[question.id] === option.key;
+                                    const locked = challenge.status === "completed" || submitting || examExpired;
+                                    return (
+                                      <button
+                                        key={option.key}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={picked}
+                                        disabled={locked}
+                                        onClick={() =>
+                                          setChoices((current) => ({ ...current, [question.id]: option.key }))
+                                        }
+                                        className={`flex min-h-11 items-start gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors disabled:cursor-default ${
+                                          picked
+                                            ? "border-blue-600 bg-blue-500/10"
+                                            : "border-border bg-card hover:bg-bg-secondary"
+                                        }`}
+                                      >
+                                        <span
+                                          className={`flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+                                            picked ? "border-blue-600 bg-blue-600 text-white" : "border-border"
+                                          }`}
+                                        >
+                                          {option.key}
+                                        </span>
+                                        <Markdown text={option.text} className="min-w-0 flex-1 leading-6" />
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : null}
+                            </article>
+                          );
+                        })}
+                        {allChoice && examExpired && challenge.status !== "completed" ? (
+                          <div className="rounded-xl border border-warning/40 bg-warning/10 p-5">
+                            <p className="text-sm font-semibold">This exam session expired.</p>
+                            <button
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => void refreshExam()}
+                              className={`${focusButtonClass} mt-4 bg-text-primary text-text-inverse`}
+                            >
+                              {submitting ? "Issuing…" : "Get a fresh exam"}
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     ) : buildingRest ? (
                       <ChallengeBuildingNotice label="Setting your questions from the course material…" />
@@ -1080,7 +1201,9 @@ function ChallengeDetail({
                   <div>
                     <h2 className="text-xl font-semibold">📤 Submit Your Answer Sheet</h2>
                     <p className="mt-2 text-sm text-text-muted">
-                      Upload one clear PDF or photo containing all numbered answers.
+                      {choiceQuestions.length
+                        ? `Upload one clear PDF or photo of your written answer. Your ${answeredChoices} of ${choiceQuestions.length} multiple-choice answers are handed in with it.`
+                        : "Upload one clear PDF or photo containing all numbered answers."}
                     </p>
                     {examExpired ? (
                       <div className="mt-6 rounded-xl border border-warning/40 bg-warning/10 p-5">
@@ -1544,6 +1667,20 @@ function ChallengeDetail({
                     ? "Working the past questions…"
                     : "Start practising →"}
               </button>
+            ) : practiceStage === "questions" && challenge.status !== "completed" && allChoice ? (
+              <button
+                type="button"
+                aria-busy={submitting}
+                disabled={!answeredChoices || submitting || examExpired}
+                onClick={() => void submitChoices()}
+                className={`${focusButtonClass} bg-blue-600 text-white`}
+              >
+                {submitting
+                  ? "Marking…"
+                  : answeredChoices < choiceQuestions.length
+                    ? `Submit ${answeredChoices} of ${choiceQuestions.length} answers`
+                    : "Submit answers"}
+              </button>
             ) : practiceStage === "questions" && challenge.status !== "completed" ? (
               <button
                 type="button"
@@ -1551,7 +1688,7 @@ function ChallengeDetail({
                 onClick={() => setPracticeStage("upload")}
                 className={`${focusButtonClass} bg-blue-600 text-white`}
               >
-                Upload answers →
+                {choiceQuestions.length ? "Upload written answer →" : "Upload answers →"}
               </button>
             ) : practiceStage === "questions" && challenge.status === "completed" ? (
               <button

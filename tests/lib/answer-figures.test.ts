@@ -56,3 +56,42 @@ describe("worked solutions that promise a picture", () => {
     expect(brief).not.toContain("Diagram:");
   });
 });
+
+describe("worked solutions that describe a picture without a heading", () => {
+  // The real stored example (screenshot, 2026-09-24): no "### Diagram", just prose.
+  const STORED =
+    "(a) The diagram shows: Logic-1 range is 3.0V to 4.0V (nominal 3.5V); Logic-0 range is 0V to 1.0V (nominal 0.5V). The forbidden region is the range between 1.0V and 3.0V.\n\n(b) A signal of 1.2V falls within the forbidden region.";
+  const ASKED =
+    "A digital system defines logic-1 as 3.5V ± 0.5V and logic-0 as 0.5V ± 0.5V. (a) Sketch the voltage range diagram for this system. (b) If an input signal of 1.2V is received, explain how the system interprets it.";
+
+  it("finds 'The diagram shows' with no image, and puts the picture above that paragraph", () => {
+    const section = emptyFigureSection(STORED)!;
+    expect(section).toMatchObject({ heading: "Diagram", insertAt: 0, placement: "before" });
+    expect(section.prose).toContain("Logic-1 range is 3.0V to 4.0V");
+    const drawn = withFigure(STORED, section, "/api/figure/abc.png");
+    expect(drawn.startsWith("![Diagram](/api/figure/abc.png)\n\n(a) The diagram shows")).toBe(true);
+    expect(emptyFigureSection(drawn, ASKED)).toBeNull();
+  });
+
+  it("finds the paragraph that mentions it, not the first one", () => {
+    const solution = "Given: 3V logic.\n\nAs the sketch below shows, the bands do not overlap.";
+    const section = emptyFigureSection(solution)!;
+    expect(section.insertAt).toBe(solution.indexOf("As the sketch"));
+    expect(withFigure(solution, section, "/x.png")).toBe(
+      "Given: 3V logic.\n\n![Diagram](/x.png)\n\nAs the sketch below shows, the bands do not overlap.",
+    );
+  });
+
+  it("draws for a question that asked for a diagram even when the answer never says so", () => {
+    expect(emptyFigureSection("Logic-1 is 3–4V; logic-0 is 0–1V.", ASKED)).toMatchObject({
+      insertAt: 0,
+      placement: "before",
+    });
+  });
+
+  it("leaves alone answers that have their picture, or never needed one", () => {
+    expect(emptyFigureSection(`![Diagram](/api/figure/a.png)\n\n${STORED}`, ASKED)).toBeNull();
+    expect(emptyFigureSection("Apply KVL around the loop.", "Find the current in the circuit.")).toBeNull();
+    expect(emptyFigureSection("| A | Y |\n|---|---|", "Draw the truth table of an XOR gate.")).toBeNull();
+  });
+});

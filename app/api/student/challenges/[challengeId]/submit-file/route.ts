@@ -6,6 +6,12 @@ import {
   submitStudentChallengeFile,
 } from "@/lib/data/student-challenges";
 import { persistStudentChallengeGrade } from "@/lib/data/student-challenge-grading";
+import {
+  choiceQuestionsOf,
+  combinedChallengeGrade,
+  gradeChallengeChoices,
+  parseChoiceSelections,
+} from "@/lib/data/challenge-exam-format";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { TeacherApiError } from "@/lib/teacher-app/client";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
@@ -77,6 +83,28 @@ export async function POST(
         return NextResponse.json({ error: "That sitting is no longer live. A fresh exam is ready.", challenge: refreshed }, { status: 409 });
       }
       throw error;
+    }
+    // A HYBRID paper: the multiple-choice part rides along with the scan and is
+    // marked here, then joined to the written part the course API marked.
+    const choiceQuestions = choiceQuestionsOf(challenge.content.examQuestions);
+    if (choiceQuestions.length) {
+      let picked: unknown = {};
+      try {
+        picked = JSON.parse(String(form.get("choices") || "{}"));
+      } catch {
+        picked = {};
+      }
+      graded = combinedChallengeGrade({
+        attemptId: externalPaperId,
+        subject: challenge.subjectName,
+        passMarks: challenge.passMarks,
+        choices: gradeChallengeChoices(
+          challengeId,
+          choiceQuestions,
+          parseChoiceSelections(picked, choiceQuestions),
+        ),
+        written: graded,
+      });
     }
     const updated = await persistStudentChallengeGrade({
       userId: user.id,

@@ -221,13 +221,17 @@ export async function completeDriveImport(
   if (!isMissingDriveQueue(error) && error) throw error;
 }
 
-export async function failDriveImport(id: string, message: string) {
+export async function failDriveImport(id: string, message: string, fileName = "") {
   const admin = createSupabaseAdminClient();
   const { error } = await admin
     .from("teacher_drive_imports")
     .update({
       status: "failed",
       error: message.slice(0, 500),
+      // Whatever name the worker learned before failing, for the same reason
+      // `completeDriveImport` corrects it: a failed row is the one a creator
+      // most needs to recognise.
+      ...(fileName ? { file_name: fileName } : {}),
       finished_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })

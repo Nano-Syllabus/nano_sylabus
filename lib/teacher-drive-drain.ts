@@ -42,7 +42,15 @@ import {
  *  finishes and is recorded rather than being killed mid-import and retried. */
 const DRAIN_BUDGET_MS = 240_000;
 
-async function importOne(collectionKey: string, teacherId: string, item: DriveImportItem) {
+async function importOne(
+  collectionKey: string,
+  teacherId: string,
+  item: DriveImportItem,
+  /** Filled in as the name becomes known, so a failure later on can still
+   *  record it — otherwise a failed row keeps the "Drive file" placeholder and
+   *  the creator cannot tell which document it was. */
+  learned: { fileName: string },
+) {
   // The destination is re-checked at import time, not trusted from enqueue: a
   // subject can be renamed or removed between the two, and this row's path is
   // about to be written to.
@@ -90,6 +98,8 @@ async function importOne(collectionKey: string, teacherId: string, item: DriveIm
     }
   }
 
+  learned.fileName = known.name;
+
   if (known.sizeBytes > 0) {
     const knownSizeError = teacherUploadSizeError(known.sizeBytes);
     if (knownSizeError) throw new Error(knownSizeError);
@@ -104,6 +114,7 @@ async function importOne(collectionKey: string, teacherId: string, item: DriveIm
   };
   const download = await downloadDriveFile(entry);
   const fileName = safeFilename(download.fileName || entry.name);
+  learned.fileName = fileName;
   const shelf = teacherUploadShelf(item.destinationPath);
   if (!isTeacherUploadFileSupported(fileName, shelf)) {
     throw new Error(`${shelf} cannot read "${fileName}". Convert it to PDF first.`);
@@ -155,8 +166,9 @@ export async function drainDriveQueue(collectionKey: string, teacherId: string) 
   while (Date.now() < deadline) {
     const item = await claimNextDriveImport(teacherId);
     if (!item) break;
+    const learned = { fileName: item.fileName };
     try {
-      const outcome = await importOne(collectionKey, teacherId, item);
+      const outcome = await importOne(collectionKey, teacherId, item, learned);
       await completeDriveImport(item.id, outcome);
       imported += 1;
     } catch (cause) {
@@ -166,7 +178,7 @@ export async function drainDriveQueue(collectionKey: string, teacherId: string) 
           : cause instanceof Error
             ? cause.message
             : "This file could not be imported from Drive.";
-      await failDriveImport(item.id, message);
+      await failDriveImport(item.id, message, learned.fileName);
       failed += 1;
     }
   }

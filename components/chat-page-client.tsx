@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUp, BookOpen, GraduationCap, LibraryBig, Share2 } from "lucide-react";
+import {
+  ArrowUp,
+  BookOpen,
+  GraduationCap,
+  History,
+  LibraryBig,
+  Maximize2,
+  SquarePen,
+  X,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -29,6 +38,7 @@ import {
 } from "@/components/library-nanoai-workspace";
 
 import { Markdown } from "@/components/markdown";
+import { streamSafeMarkdown } from "@/lib/markdown";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThinkingSteps } from "@/components/ui/thinking-steps";
@@ -135,6 +145,25 @@ type ChatSwitchSessionDetail = {
   title?: string;
   subjectContext?: string | null;
 };
+
+/**
+ * "page" is the full chat at /app/chat. "floating" is the same chat inside the
+ * NanoAI bubble that rides along on every other /app page, so it must leave the
+ * host page alone: no URL rewrites, no sidebar or rail changes, and its own
+ * event names — the sidebar's "chat-switch-session" / "app:new-chat" are meant
+ * for the page instance and are followed by a navigation to /app/chat.
+ */
+export type ChatVariant = "page" | "floating";
+
+export const FLOATING_CHAT_EVENTS = {
+  newChat: "nanoai-float:new-chat",
+  switchSession: "nanoai-float:switch-session",
+} as const;
+
+const PAGE_CHAT_EVENTS = {
+  newChat: "app:new-chat",
+  switchSession: "chat-switch-session",
+} as const;
 
 async function readJsonResponse<T>(response: Response): Promise<T | null> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -477,6 +506,8 @@ export function ChatPageClient({
   libraryCommunity,
   libraryInsights,
   initialLibrarySelection,
+  variant = "page",
+  onRequestClose,
 }: {
   user: AppUser;
   defaultLanguage: Language;
@@ -493,8 +524,22 @@ export function ChatPageClient({
   libraryCommunity: CommunityDetail | null;
   libraryInsights: Record<string, CommunitySubjectExplorerInsight>;
   initialLibrarySelection: LibraryNanoAiSelection;
+  variant?: ChatVariant;
+  /** Floating only: the header's close button. */
+  onRequestClose?: () => void;
 }) {
+  const isFloating = variant === "floating";
+  const chatEvents = isFloating ? FLOATING_CHAT_EVENTS : PAGE_CHAT_EVENTS;
+  /** The page mirrors the open session in its URL; the bubble must not touch the host page's. */
+  const replaceChatUrl = useCallback(
+    (path: string) => {
+      if (isFloating) return;
+      window.history.replaceState(null, "", path);
+    },
+    [isFloating],
+  );
   const [sessions, setSessions] = useState(initialSessions);
+  const [floatingHistoryOpen, setFloatingHistoryOpen] = useState(false);
   const [hasMoreSessions, setHasMoreSessions] = useState(initialHasMore);
   const [historySearch, setHistorySearch] = useState("");
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -794,15 +839,17 @@ export function ChatPageClient({
   }, [libraryOpen, dismissBooksSpotlight]);
 
   useEffect(() => {
+    if (isFloating) return;
     shell.setSidebarCollapsed(libraryOpen);
     return () => shell.setSidebarCollapsed(false);
-  }, [libraryOpen, shell]);
+  }, [isFloating, libraryOpen, shell]);
 
   useEffect(() => {
+    if (isFloating) return;
     const desktopRailWidth = libraryOpen && viewportWidth >= 1024 ? libraryWidth : 0;
     shell.setRightRailWidth(desktopRailWidth);
     return () => shell.setRightRailWidth(0);
-  }, [libraryOpen, libraryWidth, shell, viewportWidth]);
+  }, [isFloating, libraryOpen, libraryWidth, shell, viewportWidth]);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -843,11 +890,11 @@ export function ChatPageClient({
         requestWatchdogRef.current = null;
       }
       setThinkingSteps([]);
-      window.history.replaceState(null, "", "/app/chat");
+      replaceChatUrl("/app/chat");
     };
-    window.addEventListener("app:new-chat", handleNewChat);
-    return () => window.removeEventListener("app:new-chat", handleNewChat);
-  }, [clearThinkingStageTimers]);
+    window.addEventListener(chatEvents.newChat, handleNewChat);
+    return () => window.removeEventListener(chatEvents.newChat, handleNewChat);
+  }, [chatEvents.newChat, clearThinkingStageTimers, replaceChatUrl]);
 
   useEffect(() => {
     return () => {
@@ -1023,9 +1070,9 @@ export function ChatPageClient({
         }
       }
     };
-    window.addEventListener("chat-switch-session", handleSwitch);
-    return () => window.removeEventListener("chat-switch-session", handleSwitch);
-  }, [clearThinkingStageTimers, defaultSubjectContext]);
+    window.addEventListener(chatEvents.switchSession, handleSwitch);
+    return () => window.removeEventListener(chatEvents.switchSession, handleSwitch);
+  }, [chatEvents.switchSession, clearThinkingStageTimers, defaultSubjectContext]);
 
   async function refreshCredits() {
     const response = await fetch("/api/billing/credits", { cache: "no-store" });
@@ -1410,7 +1457,7 @@ export function ChatPageClient({
     const title = pendingTitleRef.current || "New chat";
     setCurrentSessionId(returnedSessionId);
     currentSessionIdRef.current = returnedSessionId;
-    window.history.replaceState(null, "", `/app/chat?session=${returnedSessionId}`);
+    replaceChatUrl(`/app/chat?session=${returnedSessionId}`);
     const now = new Date().toISOString();
     const created: ChatSessionSummary = {
       id: returnedSessionId,
@@ -1753,7 +1800,7 @@ export function ChatPageClient({
               if (event.sessionId && !currentSessionIdRef.current) {
                 setCurrentSessionId(event.sessionId);
                 currentSessionIdRef.current = event.sessionId;
-                window.history.replaceState(null, "", `/app/chat?session=${event.sessionId}`);
+                replaceChatUrl(`/app/chat?session=${event.sessionId}`);
               }
             }
           }
@@ -1863,7 +1910,7 @@ export function ChatPageClient({
             if (event.sessionId && !currentSessionIdRef.current) {
               setCurrentSessionId(event.sessionId);
               currentSessionIdRef.current = event.sessionId;
-              window.history.replaceState(null, "", `/app/chat?session=${event.sessionId}`);
+              replaceChatUrl(`/app/chat?session=${event.sessionId}`);
             }
           }
         }
@@ -2003,7 +2050,7 @@ export function ChatPageClient({
       setSessionDetail(null);
       setSubjectContext(null);
       setMessages([]);
-      window.history.replaceState(null, "", "/app/chat");
+      replaceChatUrl("/app/chat");
     }
   }
 
@@ -2073,10 +2120,10 @@ export function ChatPageClient({
       // A session is intentionally locked to its subject once it has begun.
       // Start a clean conversation so the previous subject's answers remain
       // coherent and the old chat stays available in history.
-      window.dispatchEvent(new Event("app:new-chat"));
+      window.dispatchEvent(new Event(chatEvents.newChat));
       window.requestAnimationFrame(() => setSubjectContext(nextSubjectContext));
     },
-    [isLoading, messages.length, subjectContext, updateSessionSubjectContext],
+    [chatEvents.newChat, isLoading, messages.length, subjectContext, updateSessionSubjectContext],
   );
 
   const handleWorkspaceSubjectSelect = useCallback(
@@ -2454,6 +2501,131 @@ export function ChatPageClient({
     </form>
   );
 
+  const renderFloatingHeader = () => {
+    const headerButton =
+      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors duration-100 hover:bg-bg-tertiary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none";
+    return (
+      <header
+        data-floating-drag-handle
+        className="relative flex h-12 shrink-0 cursor-grab touch-none select-none items-center gap-2 border-b border-border bg-bg-primary pl-4 pr-2 active:cursor-grabbing"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-text-primary">
+            {sessionDetail?.title && messages.length > 0 ? sessionDetail.title : "NanoAI"}
+          </p>
+        </div>
+        <button
+          type="button"
+          data-no-drag
+          onClick={() => setFloatingHistoryOpen((open) => !open)}
+          className={cn(headerButton, floatingHistoryOpen && "bg-bg-tertiary text-text-primary")}
+          aria-label="Chat history"
+          aria-expanded={floatingHistoryOpen}
+          title="Chat history"
+        >
+          <History className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          data-no-drag
+          onClick={() => {
+            setFloatingHistoryOpen(false);
+            window.dispatchEvent(new Event(chatEvents.newChat));
+          }}
+          className={headerButton}
+          aria-label="New chat"
+          title="New chat"
+        >
+          <SquarePen className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <Link
+          data-no-drag
+          href={currentSessionId ? `/app/chat?session=${currentSessionId}` : "/app/chat"}
+          onClick={() => onRequestClose?.()}
+          className={headerButton}
+          aria-label="Open in full chat"
+          title="Open in full chat"
+        >
+          <Maximize2 className="h-4 w-4" aria-hidden="true" />
+        </Link>
+        <button
+          type="button"
+          data-no-drag
+          onClick={() => onRequestClose?.()}
+          className={headerButton}
+          aria-label="Close NanoAI"
+          title="Close"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+
+        {floatingHistoryOpen ? (
+          <div
+            data-no-drag
+            className="absolute inset-x-2 top-[calc(100%+4px)] z-30 flex max-h-[min(60vh,420px)] cursor-default flex-col overflow-hidden rounded-xl border border-border bg-bg-primary shadow-[0_12px_32px_rgba(0,0,0,0.18)]"
+          >
+            <div className="border-b border-border p-2">
+              <Input
+                value={historySearch}
+                onChange={(event) => setHistorySearch(event.target.value)}
+                placeholder="Search chats"
+                aria-label="Search chats"
+                className="h-9 text-sm"
+              />
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-1">
+              {sessions.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-text-muted">
+                  {historyLoading ? "Loading chats..." : historyError || "No chats yet."}
+                </p>
+              ) : (
+                sessions.map((session) => (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => {
+                      setFloatingHistoryOpen(false);
+                      window.dispatchEvent(
+                        new CustomEvent<ChatSwitchSessionDetail>(chatEvents.switchSession, {
+                          detail: {
+                            sessionId: session.id,
+                            title: session.title,
+                            subjectContext: session.subjectContext,
+                          },
+                        }),
+                      );
+                    }}
+                    className={cn(
+                      "flex w-full flex-col items-start rounded-lg px-3 py-2 text-left transition-colors duration-100 hover:bg-bg-secondary motion-reduce:transition-none",
+                      session.id === currentSessionId && "bg-bg-secondary",
+                    )}
+                  >
+                    <span className="w-full truncate text-sm font-medium text-text-primary">{session.title}</span>
+                    <span className="w-full truncate text-xs text-text-muted">
+                      {[stripSubjectChapter(session.subjectContext), formatDate(session.updatedAt)]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </button>
+                ))
+              )}
+              {hasMoreSessions && sessions.length > 0 ? (
+                <button
+                  type="button"
+                  disabled={historyLoading}
+                  onClick={() => void fetchSessions({ reset: false, offset: sessions.length })}
+                  className="w-full rounded-lg px-3 py-2 text-center text-xs font-medium text-text-muted hover:bg-bg-secondary disabled:opacity-60"
+                >
+                  {historyLoading ? "Loading..." : "Load more"}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </header>
+    );
+  };
+
   return (
     <div
       className={cn(
@@ -2505,6 +2677,7 @@ export function ChatPageClient({
         aria-label={workspaceMaterial ? "NanoAI assistant" : undefined}
       >
         {/* matchedScope banner hidden temporarily */}
+        {isFloating ? renderFloatingHeader() : null}
 
 
 
@@ -2516,14 +2689,40 @@ export function ChatPageClient({
           <div
             className={cn(
               "flex min-h-full w-full flex-1 flex-col",
-              !showLibraryLanding &&
+              !showLibraryLanding && !isFloating &&
                 "mx-auto max-w-5xl px-3 pb-6 pt-4 sm:px-4 sm:pt-5 md:px-5 xl:px-6",
+              isFloating && messages.length > 0 && "px-3 pb-4 pt-3",
             )}
           >
             {switchingSessionId ? (
               <ChatSessionLoadingSkeleton />
             ) : messages.length === 0 ? (
-              workspaceMaterial && workspaceSubject ? (
+              isFloating ? (
+                <div className="flex w-full flex-1 flex-col justify-end gap-3 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2 text-left">
+                  <div className="rounded-xl border border-border bg-bg-secondary p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-bg-primary text-text-secondary">
+                        <LibraryBig className="size-5" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0">
+                        <h2 className="font-display text-base font-semibold">NanoAI Assistant</h2>
+                        <p className="mt-0.5 truncate text-xs text-text-muted">
+                          {subjectContext ?? "Pick a subject to begin"}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-text-secondary">
+                      Stuck on something? Ask NanoAI to explain, summarize, or quiz you. Answers stay grounded in your syllabus.
+                    </p>
+                  </div>
+                  {chatError ? (
+                    <p className="rounded-xl border border-destructive/40 bg-[color:var(--note-red)] px-4 py-3 text-sm text-destructive">
+                      {chatError}
+                    </p>
+                  ) : null}
+                  {renderInputForm()}
+                </div>
+              ) : workspaceMaterial && workspaceSubject ? (
                 <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-1 text-left">
                   <div className="mb-5 rounded-xl border border-border bg-bg-secondary p-4">
                     <div className="flex items-center gap-3">
@@ -2661,7 +2860,16 @@ export function ChatPageClient({
                           <>
                             {displayContent ? (
                               <div className="rounded-[22px] bg-black/[0.04] dark:bg-[#202020] px-4 py-4 text-text-primary shadow-sm sm:rounded-[24px] sm:px-5 w-full">
-                                <Markdown text={displayContent} className="text-[15px] leading-[26px] font-medium sm:text-[16px] sm:leading-[28px]" />
+                                <Markdown
+                                  text={
+                                    // The answer being written now: a formula
+                                    // half-arrived is held back until it closes.
+                                    isLoading && index === messages.length - 1
+                                      ? streamSafeMarkdown(displayContent)
+                                      : displayContent
+                                  }
+                                  className="text-[15px] leading-[26px] font-medium sm:text-[16px] sm:leading-[28px]"
+                                />
                               </div>
                             ) : null}
 
@@ -2871,7 +3079,12 @@ export function ChatPageClient({
         </div>
 
         {messages.length > 0 || switchingSessionId ? (
-          <div className="bg-bg-primary px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-4 md:px-5 xl:px-6">
+          <div
+            className={cn(
+              "bg-bg-primary px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3",
+              !isFloating && "sm:px-4 md:px-5 xl:px-6",
+            )}
+          >
             <div className="relative mx-auto max-w-3xl">
               {showScrollButton && (
                 <button
@@ -2898,15 +3111,17 @@ export function ChatPageClient({
         ) : null}
       </section>
 
-      <ChatMaterialsLibrary
-        subject={libraryShowAllSubjects ? null : chatLibrarySubject}
-        activeSubject={chatLibrarySubject}
-        open={libraryOpen}
-        width={libraryWidth}
-        onWidthChange={updateLibraryWidth}
-        onClose={closeLibrary}
-        onSubjectSelect={handleLibrarySubjectSelect}
-      />
+      {!isFloating ? (
+        <ChatMaterialsLibrary
+          subject={libraryShowAllSubjects ? null : chatLibrarySubject}
+          activeSubject={chatLibrarySubject}
+          open={libraryOpen}
+          width={libraryWidth}
+          onWidthChange={updateLibraryWidth}
+          onClose={closeLibrary}
+          onSubjectSelect={handleLibrarySubjectSelect}
+        />
+      ) : null}
 
       {saveState ? (
         <SaveNoteModal

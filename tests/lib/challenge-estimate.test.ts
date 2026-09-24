@@ -51,6 +51,17 @@ describe("a challenge's estimated time", () => {
     expect(challengeEstimate(content([2], [4, 4, 4, 4])).practiceQuestionCount).toBe(2);
   });
 
+  it("counts every question of an MCQ paper, at a minute each", () => {
+    const mcq = content([], []);
+    mcq.examQuestions = Array.from({ length: 10 }, (_, index) => ({
+      id: `m${index}`, question: `Pick ${index}`, topic: "Topic", marks: 2, questionType: "Multiple choice",
+      options: [{ key: "A", text: "a" }, { key: "B", text: "b" }], answerCheck: "sealed",
+    }));
+    const estimate = challengeEstimate(mcq);
+    expect(estimate.practiceQuestionCount).toBe(10);
+    expect(estimate.estimatedMinutes).toBe(10);
+  });
+
   it("assumes the two practice questions before the paper is set", () => {
     // Paper not issued yet: two answers at 5 min + one 2-mark read at 2 → 12 → 10.
     expect(challengeEstimate(content([2]))).toEqual({

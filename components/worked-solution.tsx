@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "@/components/markdown";
-import { emptyFigureSection } from "@/lib/answer-figures";
+import { TranslatingLines } from "@/components/study-language";
+import { emptyFigureSection, type EmptyFigureSection } from "@/lib/answer-figures";
 import { normalizeQuestionText } from "@/lib/challenge-learn-questions";
 import type { StudentChallengeDetail } from "@/lib/data/student-challenges";
 
@@ -32,8 +33,12 @@ function requestFigure(challengeId: string, question: string) {
   return pending;
 }
 
-function withNote(solution: string, insertAt: number, note: string) {
-  return `${solution.slice(0, insertAt)}\n\n*${note}*${solution.slice(insertAt)}`;
+function withNote(solution: string, section: EmptyFigureSection, note: string) {
+  const { insertAt } = section;
+  // Above a paragraph the note needs its own paragraph; under a heading the
+  // section's body already starts with one.
+  const after = section.placement === "before" ? "\n\n" : "";
+  return `${solution.slice(0, insertAt)}\n\n*${note}*${after}${solution.slice(insertAt)}`;
 }
 
 const IMAGE = /!\[[^\]]*\]\([^)\s]+\)/;
@@ -50,9 +55,10 @@ function translatedWithFigure(text: string, drawn: string) {
   const image = drawn.match(IMAGE)?.[0];
   if (!image || IMAGE.test(text)) return text;
   const section = emptyFigureSection(text);
-  return section
-    ? `${text.slice(0, section.insertAt)}\n\n${image}${text.slice(section.insertAt)}`
-    : `${image}\n\n${text}`;
+  if (!section) return `${image}\n\n${text}`;
+  return section.placement === "before"
+    ? `${text.slice(0, section.insertAt)}${image}\n\n${text.slice(section.insertAt)}`
+    : `${text.slice(0, section.insertAt)}\n\n${image}${text.slice(section.insertAt)}`;
 }
 
 /**
@@ -72,6 +78,7 @@ export function WorkedSolution({
   text,
   className,
   onDrawn,
+  translating = false,
 }: {
   challengeId: string;
   question: string;
@@ -82,11 +89,13 @@ export function WorkedSolution({
   className?: string;
   /** Hands the updated challenge to a screen that caches it. */
   onDrawn?: (drawn: DrawnFigure) => void;
+  /** Roman Nepali is being written for this answer: hold its place. */
+  translating?: boolean;
 }) {
   const [drawnSolution, setDrawnSolution] = useState<string | null>(null);
   const [state, setState] = useState<"idle" | "drawing" | "failed">("idle");
   const current = drawnSolution ?? solution;
-  const section = useMemo(() => emptyFigureSection(current), [current]);
+  const section = useMemo(() => emptyFigureSection(current, question), [current, question]);
   const rootRef = useRef<HTMLDivElement>(null);
   // Read at resolve time, so a parent re-rendering with a new callback does not
   // restart the observer.
@@ -113,7 +122,7 @@ export function WorkedSolution({
         setState("drawing");
         void requestFigure(challengeId, question).then((drawn) => {
           if (!active) return;
-          if (!drawn || emptyFigureSection(drawn.solution)) {
+          if (!drawn || emptyFigureSection(drawn.solution, question)) {
             setState("failed");
             return;
           }
@@ -137,18 +146,22 @@ export function WorkedSolution({
       ? translatedWithFigure(text, drawnSolution)
       : text
     : section && state === "drawing"
-      ? withNote(current, section.insertAt, "Drawing the diagram…")
+      ? withNote(current, section, "Drawing the diagram…")
       : section && state === "failed"
         ? withNote(
             current,
-            section.insertAt,
+            section,
             "The diagram could not be drawn right now. It will be tried again next time you open this.",
           )
         : current;
 
   return (
     <div ref={rootRef}>
-      <Markdown text={shown} className={className} />
+      {translating ? (
+        <TranslatingLines lines={4} className="pl-[var(--paper-inset)] pr-4 pt-2" />
+      ) : (
+        <Markdown text={shown} className={className} />
+      )}
     </div>
   );
 }

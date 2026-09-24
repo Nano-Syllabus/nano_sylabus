@@ -18,6 +18,7 @@ import {
   StudyLanguageSwitch,
   inStudyLanguage,
   useRomanNepali,
+  isTranslating,
   useStudyLanguage,
 } from "@/components/study-language";
 import { AwaitedConceptsCard, ConceptsCard, conceptsCardClass } from "@/components/concepts-reading";
@@ -471,6 +472,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
     `${topic.reading.length}:${topic.solvedExamples.filter((example) => example.solution).length}`,
     studyLanguage === "rn",
   );
+  const translating = isTranslating(studyLanguage, romanNepali);
   const percent = formatPercent(topic.scorePercent);
   const completed = formatDate(topic.completedAt);
   return (
@@ -522,6 +524,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
 
       {topic.reading.length ? (
         <ConceptsCard
+          translating={translating}
           className="mt-4"
           source={{
             id: topic.challengeId,
@@ -590,6 +593,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
                   challengeId={topic.challengeId}
                   question={example.question}
                   solution={example.solution}
+                  translating={translating}
                   text={inStudyLanguage(
                     studyLanguage,
                     romanNepali,

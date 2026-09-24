@@ -37,8 +37,26 @@ describe("communities", () => {
       totalYears: 4,
       totalSemesters: 8,
       visibility: "public",
+      challengeQuestionFormat: "mcq",
     });
     expect(parsed.success).toBe(true);
+  });
+
+  it("requires the creator to choose the challenge question type", () => {
+    const base = {
+      name: "SEC BEI",
+      university: "Pokhara University",
+      faculty: "BEI",
+      totalYears: 4,
+      totalSemesters: 8,
+    };
+    const missing = communityInputSchema.safeParse(base);
+    expect(missing.success).toBe(false);
+    expect(missing.error?.issues[0]?.message).toBe("Choose the type of challenge questions students get.");
+    expect(communityInputSchema.safeParse({ ...base, challengeQuestionFormat: "essay" }).success).toBe(false);
+    for (const format of ["qna", "mcq", "hybrid"]) {
+      expect(communityInputSchema.safeParse({ ...base, challengeQuestionFormat: format }).success).toBe(true);
+    }
   });
 
   it("rejects impossible year and semester combinations", () => {

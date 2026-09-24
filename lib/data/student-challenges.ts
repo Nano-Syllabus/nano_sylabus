@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { after } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getStudentCourseSubjectAccessCached } from "@/lib/student-courses";
@@ -44,6 +44,18 @@ import {
   type ChallengePoolSnapshot,
 } from "@/lib/data/challenge-pool";
 import type { PracticeEvaluation } from "@/lib/tenant/client";
+import {
+  CHALLENGE_HYBRID_MCQ_QUESTIONS,
+  CHALLENGE_HYBRID_WRITTEN_QUESTIONS,
+  CHALLENGE_MCQ_EXAM_QUESTIONS,
+  type ChallengeQuestionFormat,
+} from "@/lib/challenge-format";
+import { challengeFormatForCourse } from "@/lib/data/community-challenge-format";
+import {
+  ChallengeMcqUnavailableError,
+  issueChallengeChoiceQuestions,
+  type ChallengeChoiceOption,
+} from "@/lib/data/challenge-exam-format";
 
 const UNDEFINED_TABLE = "42P01";
 const UNDEFINED_COLUMN = "42703";
@@ -244,7 +256,17 @@ export type ChallengeExamQuestion = {
   topic: string;
   marks: number;
   questionType: string;
+  /** Present on a multiple-choice question, answered on screen rather than on
+   *  paper. Its key is sealed in `answerCheck` — see `challenge-exam-format.ts`. */
+  options?: ChallengeChoiceOption[];
+  answerCheck?: string;
 };
+
+export function isChoiceQuestion(
+  question: ChallengeExamQuestion,
+): question is ChallengeExamQuestion & { options: ChallengeChoiceOption[]; answerCheck: string } {
+  return Array.isArray(question.options) && question.options.length > 0 && Boolean(question.answerCheck);
+}
 
 /**
  * `pending` means the row holds a real lesson but its worked examples and exam
@@ -279,7 +301,14 @@ export type StudentChallengeContent = {
    * call at all. `practice-paper-v1` is the older persisted practice paper, kept
    * as a value because rows issued before the switch still have to grade.
    */
-  examProvider?: "practice-paper-v1" | "challenge-exam-v1";
+  examProvider?: "practice-paper-v1" | "challenge-exam-v1" | "challenge-mcq-v1";
+  /**
+   * The community's challenge question format when this paper was issued
+   * (`lib/challenge-format.ts`). A paper whose format no longer matches the
+   * community's is re-issued at the next open, which is how a creator's change
+   * reaches every student. Absent on papers from before formats: those are QnA.
+   */
+  examFormat?: ChallengeQuestionFormat;
   contentStatus?: ChallengeContentStatus;
   /** When the background completion was handed off; drives the stale re-kick. */
   contentPendingSince?: string;
@@ -475,9 +504,18 @@ export function challengeEstimate(content: StudentChallengeContent | null): {
   const reading = past.length
     ? past.reduce((sum, question) => sum + readingMinutes(question.marks), 0)
     : (content.solvedExamples ?? []).reduce((sum, example) => sum + readingMinutes(example.marks), 0);
-  const practice = (content.examQuestions ?? []).slice(0, CHALLENGE_QUESTIONS);
+  // Written questions are capped as they always were; an MCQ paper's choices
+  // are all counted, since each one is on the screen to be answered.
+  const practice = [
+    ...(content.examQuestions ?? []).filter(isChoiceQuestion),
+    ...(content.examQuestions ?? []).filter((question) => !isChoiceQuestion(question)).slice(0, CHALLENGE_QUESTIONS),
+  ];
   const answering = practice.length
-    ? practice.reduce((sum, question) => sum + answeringMinutes(question.marks), 0)
+    ? practice.reduce(
+        // A choice is picked on screen in about a minute, not written out.
+        (sum, question) => sum + (isChoiceQuestion(question) ? 1 : answeringMinutes(question.marks)),
+        0,
+      )
     : CHALLENGE_QUESTIONS * answeringMinutes(null);
   const total = Math.round((reading + answering) / 5) * 5;
   return {
@@ -1042,7 +1080,8 @@ function solvedExample(question: TeacherChallengeSolvedQuestion): ChallengeSolve
 function examQuestion(question: TeacherChallengeExam["questions"][number]): ChallengeExamQuestion {
   return {
     id: question.id,
-    question: question.text,
+    // Typeset for the student: a determinant as a grid, not "|a, b; c, d|".
+    question: question.display_text?.trim() || question.text,
     topic: question.topic || "",
     marks: number(question.marks),
     questionType: question.question_type || "Short answer",
@@ -1095,6 +1134,139 @@ async function issueChallengeExam(input: {
     throw new Error("The course API could not issue a live challenge exam.");
   }
   return exam;
+}
+
+/** A sitting as this app stores it, whichever format set it. */
+type IssuedChallengePaper = {
+  /** The upstream attempt for a paper with written questions; a local id for an
+   *  all-MCQ paper, which is marked here and has no upstream attempt. */
+  externalPaperId: string;
+  provider: NonNullable<StudentChallengeContent["examProvider"]>;
+  format: ChallengeQuestionFormat;
+  questions: ChallengeExamQuestion[];
+  expiresAt: string;
+  totalMarks: number;
+  passMarks: number;
+  durationMinutes: number;
+  warning: string | null;
+};
+
+/** How long an MCQ-only paper stays open. Nothing upstream holds it, so this is
+ *  only the sitting's own shelf life — a new day is a fresh paper. */
+const MCQ_PAPER_TTL_MS = 24 * 60 * 60 * 1000;
+
+function passMarksFor(totalMarks: number) {
+  return Math.ceil((totalMarks * CHALLENGE_PASS_PERCENT) / 100);
+}
+
+/**
+ * Issue the sitting in the format the student's community chose.
+ *
+ * - `qna`    — the original: `CHALLENGE_QUESTIONS` written questions, from the pool.
+ * - `mcq`    — `CHALLENGE_MCQ_EXAM_QUESTIONS` multiple-choice questions, marked here.
+ * - `hybrid` — one written question from the pool plus
+ *              `CHALLENGE_HYBRID_MCQ_QUESTIONS` multiple-choice ones.
+ *
+ * A course service too old to set exam MCQs gets the written paper and a note,
+ * with `format` still the one requested — so the paper is not re-issued on every
+ * open in the hope that the service has changed in the meantime.
+ */
+async function issueFormattedChallengeExam(input: {
+  format: ChallengeQuestionFormat;
+  challengeId: string;
+  collectionKey: string;
+  subject: string;
+  topicKeys: string[];
+  topicTitle: string;
+  durationMinutes: number;
+  attemptNumber: number;
+  exclude?: string[];
+}): Promise<IssuedChallengePaper> {
+  const written = async (count: number) => {
+    const exam = await issueChallengeExam({
+      collectionKey: input.collectionKey,
+      subject: input.subject,
+      topicKeys: input.topicKeys,
+      questionCount: count,
+      durationMinutes: input.durationMinutes,
+      exclude: input.exclude,
+    });
+    return exam;
+  };
+  const choices = (count: number) =>
+    issueChallengeChoiceQuestions({
+      collectionKey: input.collectionKey,
+      challengeId: input.challengeId,
+      subject: input.subject,
+      topicKeys: input.topicKeys,
+      topicTitle: input.topicTitle,
+      count,
+      attemptNumber: input.attemptNumber,
+    });
+  const writtenPaper = async (warning: string | null = null): Promise<IssuedChallengePaper> => {
+    const exam = await written(CHALLENGE_QUESTIONS);
+    return {
+      externalPaperId: exam.attempt_id,
+      provider: "challenge-exam-v1",
+      format: input.format,
+      questions: (exam.questions || []).map(examQuestion),
+      expiresAt: exam.expires_at,
+      totalMarks: number(exam.total_marks),
+      passMarks: number(exam.pass_marks),
+      durationMinutes: number(exam.duration_minutes) || input.durationMinutes,
+      warning: warningText(warning, exam.warning),
+    };
+  };
+  const unavailable =
+    "Multiple-choice challenge questions are not available on the course server yet, so this exam is written.";
+
+  if (input.format === "mcq") {
+    try {
+      const questions = await choices(CHALLENGE_MCQ_EXAM_QUESTIONS);
+      const totalMarks = questions.reduce((sum, question) => sum + question.marks, 0);
+      return {
+        externalPaperId: `mcq-${randomUUID()}`,
+        provider: "challenge-mcq-v1",
+        format: "mcq",
+        questions,
+        expiresAt: new Date(Date.now() + MCQ_PAPER_TTL_MS).toISOString(),
+        totalMarks,
+        passMarks: passMarksFor(totalMarks),
+        durationMinutes: input.durationMinutes,
+        warning: null,
+      };
+    } catch (cause) {
+      if (cause instanceof ChallengeMcqUnavailableError) return writtenPaper(unavailable);
+      throw cause;
+    }
+  }
+  if (input.format === "hybrid") {
+    const [exam, picked] = await Promise.all([
+      written(CHALLENGE_HYBRID_WRITTEN_QUESTIONS),
+      choices(CHALLENGE_HYBRID_MCQ_QUESTIONS).catch((cause) => {
+        if (cause instanceof ChallengeMcqUnavailableError) return null;
+        throw cause;
+      }),
+    ]);
+    if (!picked) return writtenPaper(unavailable);
+    const writtenQuestions = (exam.questions || []).map(examQuestion);
+    const totalMarks =
+      picked.reduce((sum, question) => sum + question.marks, 0) +
+      writtenQuestions.reduce((sum, question) => sum + question.marks, 0);
+    return {
+      externalPaperId: exam.attempt_id,
+      provider: "challenge-exam-v1",
+      format: "hybrid",
+      // Choices first: they are answered on screen, then the written answer on paper.
+      questions: [...picked, ...writtenQuestions],
+      expiresAt: exam.expires_at,
+      totalMarks,
+      passMarks: passMarksFor(totalMarks),
+      durationMinutes: number(exam.duration_minutes) || input.durationMinutes,
+      warning: warningText(exam.warning),
+    };
+  }
+  return writtenPaper();
 }
 
 /**
@@ -1251,16 +1423,18 @@ function studentFacingSolvedWarning(
 
 function contentWithExam(
   content: StudentChallengeContent,
-  exam: TeacherChallengeExam,
+  paper: IssuedChallengePaper,
   attemptNumber: number,
 ): StudentChallengeContent {
   return {
     ...content,
-    examProvider: "challenge-exam-v1",
-    examQuestions: (exam.questions || []).map(examQuestion),
-    examExpiresAt: exam.expires_at,
+    examProvider: paper.provider,
+    examFormat: paper.format,
+    examQuestions: paper.questions,
+    examExpiresAt: paper.expiresAt,
     examAttemptNumber: attemptNumber,
-    examWarning: warningText(content.examWarning, exam.warning),
+    // The previous paper's note is not carried: it described that paper.
+    examWarning: paper.warning,
   };
 }
 
@@ -1376,7 +1550,11 @@ function contentWithSolved(
   };
 }
 
-function hasLiveExam(detail: StudentChallengeDetail, externalAttemptId: string) {
+function hasLiveExam(
+  detail: StudentChallengeDetail,
+  externalAttemptId: string,
+  format: ChallengeQuestionFormat,
+) {
   const content = detail.content;
   if (
     content?.provider !== "collection-challenge-v1" ||
@@ -1394,10 +1572,16 @@ function hasLiveExam(detail: StudentChallengeDetail, externalAttemptId: string) 
    * is only enforced for the legacy practice papers, which really were always
    * banded at ten.
    */
+  // A paper set in another format than the community now asks for is stale:
+  // this is how a creator switching QnA → MCQ reaches every student.
+  if ((content.examFormat ?? "qna") !== format) return false;
   const hasCurrentMarkingShape =
-    content.examQuestions.length === CHALLENGE_QUESTIONS &&
-    (content.examProvider === "challenge-exam-v1" ||
-      content.examQuestions.every((question) => question.marks === CHALLENGE_MARKS_PER_QUESTION));
+    content.examQuestions.length > 0 &&
+    (content.examProvider === "challenge-mcq-v1" ||
+      content.examQuestions.some(isChoiceQuestion) ||
+      (content.examQuestions.length === CHALLENGE_QUESTIONS &&
+        (content.examProvider === "challenge-exam-v1" ||
+          content.examQuestions.every((question) => question.marks === CHALLENGE_MARKS_PER_QUESTION))));
   if (!hasCurrentMarkingShape) return false;
   const expiresAt = Date.parse(content.examExpiresAt);
   return (
@@ -1515,7 +1699,9 @@ export async function startStudentChallenge(
       restartStaleContentCompletion(userId, challengeId, current.content);
       return current;
     }
-    if (hasLiveExam(current, externalAttemptId)) return current;
+    if (hasLiveExam(current, externalAttemptId, await challengeFormatForCourse(current.courseId))) {
+      return current;
+    }
     if (current.content?.provider === "collection-challenge-v1") {
       // The lesson is already written and is what the student is about to read;
       // the paper is issued behind them rather than in front of them.
@@ -2511,16 +2697,19 @@ async function runChallengeContentCompletion(
       withSolved = contentWithSolved(pending, solved, practiceTopics, topicTitle);
       worked = (solved.questions || []).map((question) => question.text);
     }
-    const exam = await issueChallengeExam({
+    const paper = await issueFormattedChallengeExam({
+      format: await challengeFormatForCourse(row.course_id ? String(row.course_id) : null),
+      challengeId,
       collectionKey: lane.collectionKey,
       subject: lane.subject,
       topicKeys,
-      questionCount: CHALLENGE_QUESTIONS,
+      topicTitle,
       durationMinutes: number(row.duration_minutes) || 20,
+      attemptNumber: number(row.attempt_count) + 1,
       exclude: worked,
     });
     const content: StudentChallengeContent = {
-      ...contentWithExam(withSolved, exam, number(row.attempt_count) + 1),
+      ...contentWithExam(withSolved, paper, number(row.attempt_count) + 1),
       contentStatus: "ready",
       contentPendingSince: undefined,
       contentError: null,
@@ -2529,11 +2718,11 @@ async function runChallengeContentCompletion(
     const { data, error } = await admin
       .from("student_challenges")
       .update({
-        external_paper_id: exam.attempt_id,
+        external_paper_id: paper.externalPaperId,
         content,
-        total_marks: exam.total_marks,
-        pass_marks: exam.pass_marks,
-        duration_minutes: exam.duration_minutes,
+        total_marks: paper.totalMarks,
+        pass_marks: paper.passMarks,
+        duration_minutes: paper.durationMinutes,
         // The clock the student sees starts when the paper exists, not when the
         // lesson did — otherwise every second spent building this ate into the
         // twenty minutes they are given to sit it.
@@ -3006,7 +3195,12 @@ export async function getStudentChallengeRomanNepali(
       ? (response.translated || []).filter((ok) => !ok).length
       : texts.length,
   };
-  if (!result.untranslated) {
+  // Kept even when some parts stayed English. Those are the parts the
+  // translator refuses on purpose (maths, code, tables it would change), so
+  // asking again returns the same English at the price of another model call
+  // on every switch — which is what math-heavy challenges were paying. A reply
+  // that is not aligned is the service failing, not refusing: never filed.
+  if (aligned) {
     let write = admin
       .from("student_challenges")
       .update({ content: { ...content, romanNepali: result } satisfies StudentChallengeContent })
@@ -3063,32 +3257,35 @@ export async function refreshStudentChallengeExam(
   }
 
   const lane = await resolveChallengeLane(userId, row, access);
-  const exam = await issueChallengeExam({
+  const paper = await issueFormattedChallengeExam({
+    format: await challengeFormatForCourse(detail.courseId),
+    challengeId,
     collectionKey: lane.collectionKey,
     subject: lane.subject,
     topicKeys: detail.content.topicKeys?.length
       ? detail.content.topicKeys
       : [String(row.topic_key || "")].filter(Boolean),
-    questionCount: CHALLENGE_QUESTIONS,
+    topicTitle: detail.topicTitle,
     durationMinutes: detail.durationMinutes,
+    attemptNumber: detail.attemptCount + 1,
     // A retake must not be handed the worked examples as its paper. The pool
     // serves least-served-first, so this mostly matters on a thin topic.
     exclude: (detail.content.solvedExamples || []).map((example) => example.question),
   });
-  if (!exam.attempt_id || !exam.questions?.length) {
+  if (!paper.externalPaperId || !paper.questions.length) {
     throw new Error("The course API could not issue a fresh challenge exam.");
   }
-  const content = contentWithExam(detail.content, exam, detail.attemptCount + 1);
+  const content = contentWithExam(detail.content, paper, detail.attemptCount + 1);
   const now = new Date().toISOString();
   const { data, error } = await admin
     .from("student_challenges")
     .update({
       status: "started",
-      external_paper_id: exam.attempt_id,
+      external_paper_id: paper.externalPaperId,
       content,
-      total_marks: exam.total_marks,
-      pass_marks: exam.pass_marks,
-      duration_minutes: exam.duration_minutes,
+      total_marks: paper.totalMarks,
+      pass_marks: paper.passMarks,
+      duration_minutes: paper.durationMinutes,
       started_at: now,
       updated_at: now,
     })
@@ -3409,7 +3606,7 @@ export async function drawMissingChallengeFigure(
   if (!content || !example) {
     return { challenge: await withLatestAttemptReview(userId, row), solution: null, reason: "not_found" };
   }
-  const section = emptyFigureSection(example.solution);
+  const section = emptyFigureSection(example.solution, example.question);
   if (!section) {
     // Already drawn — by another tab, or an earlier visit this one's cache missed.
     return {

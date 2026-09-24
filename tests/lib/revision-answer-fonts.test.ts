@@ -69,9 +69,10 @@ describe("answer fonts", () => {
     // The card IS the sheet: label, question and answer all on its lines.
     expect(card).toMatch(/^<article class="answer-paper">/);
     expect(card).toContain(">Example 1 · 2072 Ashwin · 3 marks</p>");
-    expect(card).toMatch(/ answer-paper-body font-revision-answer text-sm text-text-primary"><p>What is mechanics\?/);
+    // The question in red pen (user, 2026-09-24), handwritten like the answer.
+    expect(card).toMatch(/ answer-paper-body answer-paper-question font-revision-answer text-sm"><p>What is mechanics\?/);
     expect(card.indexOf("What is mechanics?")).toBeLessThan(card.indexOf(">Solution</p>"));
-    // The question in the same hand as the answer, in darker ink.
+    // The question in the same hand as the answer, in red ink.
     expect(card.match(/font-revision-answer/g)).toHaveLength(2);
     expect(workedAnswerClass).toContain("answer-paper-body font-revision-answer");
     // Revision draws its worked examples with it.

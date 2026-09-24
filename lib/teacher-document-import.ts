@@ -113,7 +113,49 @@ export function indexedDocumentId(payload: ApiRecord) {
   return "";
 }
 
+/**
+ * Connection-level faults: the socket closed or never opened, before any
+ * response arrived. Node reports these as `socket hang up` / `ECONNRESET`, which
+ * is what a creator used to read on a failed Drive row — a message about our
+ * wiring, not about their file.
+ */
+const DROPPED_CONNECTION_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT"]);
+
+export function isDroppedConnection(cause: unknown) {
+  if (!(cause instanceof Error)) return false;
+  const code = (cause as NodeJS.ErrnoException).code ?? "";
+  return DROPPED_CONNECTION_CODES.has(code) || /socket hang up/i.test(cause.message);
+}
+
+/** Two more goes, 2s then 6s apart: long enough to ride out a service restart
+ *  (the deploy restarts it), short enough to stay inside the drain's budget. */
+const DROPPED_CONNECTION_RETRY_DELAYS_MS = [2_000, 6_000];
+
 async function sendTenantRequest(
+  url: URL,
+  rejectUnauthorized: boolean,
+  timeoutMs: number,
+  headers: Record<string, string | number>,
+  body: Buffer | string,
+) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await sendTenantRequestOnce(url, rejectUnauthorized, timeoutMs, headers, body);
+    } catch (cause) {
+      if (!isDroppedConnection(cause)) throw cause;
+      const delay = DROPPED_CONNECTION_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined) {
+        throw new UpstreamUploadError(
+          "The document service dropped the connection. Retry in a minute — the file itself is fine.",
+          502,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+function sendTenantRequestOnce(
   url: URL,
   rejectUnauthorized: boolean,
   timeoutMs: number,
@@ -124,7 +166,13 @@ async function sendTenantRequest(
   return new Promise<ApiRecord>((resolve, reject) => {
     const request = transport.request(
       url,
-      { method: "POST", rejectUnauthorized, headers },
+      // `agent: false` — a fresh connection per request. Node's global agent
+      // keeps sockets alive by default, and a pooled socket the server has
+      // already closed fails the NEXT request with "socket hang up". Between
+      // two Drive files the drain can sit idle long past nginx's keep-alive
+      // window, so that race is the common case here, not the rare one; one
+      // extra TLS handshake per multi-megabyte upload is nothing.
+      { method: "POST", rejectUnauthorized, headers, agent: false },
       (response) => {
         let raw = "";
         response.setEncoding("utf-8");

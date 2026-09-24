@@ -104,7 +104,7 @@ describe("draining the Drive import queue", () => {
     const result = await drainDriveQueue("collection-secret", "teacher-1");
 
     expect(result).toEqual({ imported: 1, failed: 1 });
-    expect(mocks.fail).toHaveBeenCalledWith("row-1", "That file is not shared.");
+    expect(mocks.fail).toHaveBeenCalledWith("row-1", "That file is not shared.", "notes.pdf");
     // The one behind it still landed — the whole point of a per-row verdict.
     expect(mocks.complete).toHaveBeenCalledWith(
       "row-2",
@@ -116,6 +116,7 @@ describe("draining the Drive import queue", () => {
     queue([item()]);
     mocks.validateDestination.mockResolvedValue(
       "Choose a folder inside one of this creator's subject shelves.",
+      "notes.pdf",
     );
 
     const result = await drainDriveQueue("collection-secret", "teacher-1");
@@ -127,6 +128,7 @@ describe("draining the Drive import queue", () => {
     expect(mocks.fail).toHaveBeenCalledWith(
       "row-1",
       "Choose a folder inside one of this creator's subject shelves.",
+      "notes.pdf",
     );
   });
 
@@ -159,7 +161,11 @@ describe("draining the Drive import queue", () => {
 
     expect(result).toEqual({ imported: 0, failed: 1 });
     expect(mocks.uploadAndIndex).not.toHaveBeenCalled();
-    expect(mocks.fail).toHaveBeenCalledWith("row-1", expect.stringContaining("course-pack.zip"));
+    expect(mocks.fail).toHaveBeenCalledWith(
+      "row-1",
+      expect.stringContaining("course-pack.zip"),
+      "course-pack.zip",
+    );
   });
 
   it("refuses a file Drive already said is oversize, without fetching it", async () => {
@@ -170,7 +176,7 @@ describe("draining the Drive import queue", () => {
 
     expect(result).toEqual({ imported: 0, failed: 1 });
     expect(mocks.download).not.toHaveBeenCalled();
-    expect(mocks.fail).toHaveBeenCalledWith("row-1", expect.stringContaining("50 MB"));
+    expect(mocks.fail).toHaveBeenCalledWith("row-1", expect.stringContaining("50 MB"), "notes.pdf");
   });
 
   it("still fetches when Drive reports no size, since 0 means unknown", async () => {
@@ -182,6 +188,27 @@ describe("draining the Drive import queue", () => {
 
     expect(result).toEqual({ imported: 1, failed: 0 });
     expect(mocks.download).toHaveBeenCalledTimes(1);
+  });
+
+  it("names a failed row after the file, not the placeholder", async () => {
+    // The keyless enqueue path stores no name; the drain learns it from the
+    // download. A row that then fails must keep that name, or the creator sees
+    // "Drive file" beside the error and cannot tell which document it was.
+    queue([item({ fileName: "" })]);
+    mocks.download.mockResolvedValue({
+      buffer: Buffer.from("pdf bytes"),
+      fileName: "Basic Electrical Engineering.pdf",
+      mimeType: "application/pdf",
+    });
+    mocks.uploadAndIndex.mockRejectedValue(new Error("The document service dropped the connection."));
+
+    await drainDriveQueue("collection-secret", "teacher-1");
+
+    expect(mocks.fail).toHaveBeenCalledWith(
+      "row-1",
+      "The document service dropped the connection.",
+      "Basic Electrical Engineering.pdf",
+    );
   });
 
   it("stops when the queue is empty", async () => {

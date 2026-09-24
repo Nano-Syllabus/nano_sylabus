@@ -30,8 +30,9 @@ import { invalidateMemo } from "@/lib/http/memo";
  *
  * The student picks the language; the course API translates the English already
  * written and pools each translation per text. What this pins: the right texts go
- * up, the answers come back to the right questions, a complete translation is
- * kept on the row, and a partial one is shown but asked for again.
+ * up, the answers come back to the right questions, a translation — complete, or
+ * partial because the maths was refused — is kept on the row, and a failed
+ * service is never kept.
  */
 
 type Row = Record<string, unknown>;
@@ -102,7 +103,7 @@ describe("a challenge in Roman Nepali", () => {
     expect(again?.reading).toEqual(READING.map(RN));
   });
 
-  it("shows a partial translation but does not keep it, so the rest is tried again", async () => {
+  it("keeps a partial translation: the parts left in English are refused every time", async () => {
     mocks.translate.mockImplementationOnce(async (_key: string, input: { texts: string[] }) => ({
       texts: input.texts.map((text, index) => (index === 1 ? text : RN(text))),
       translated: input.texts.map((_, index) => index !== 1),
@@ -112,10 +113,12 @@ describe("a challenge in Roman Nepali", () => {
     const partial = await getStudentChallengeRomanNepali("member", "c1");
     expect(partial?.untranslated).toBe(1);
     expect(partial?.reading[1]).toBe(READING[1]);
-    expect((row().content as { romanNepali?: unknown }).romanNepali).toBeUndefined();
+    expect((row().content as { romanNepali?: { untranslated: number } }).romanNepali?.untranslated).toBe(1);
 
-    await getStudentChallengeRomanNepali("member", "c1");
-    expect(mocks.translate).toHaveBeenCalledTimes(2);
+    // Asking again is served from the row — no second model call.
+    const again = await getStudentChallengeRomanNepali("member", "c1");
+    expect(again?.reading[0]).toBe(partial?.reading[0]);
+    expect(mocks.translate).toHaveBeenCalledTimes(1);
   });
 
   it("does not trust an answer that is not aligned with what was sent", async () => {
@@ -124,6 +127,8 @@ describe("a challenge in Roman Nepali", () => {
     expect(result?.reading).toEqual(READING);
     expect(result?.solutions[normalizeQuestionText(QUESTION)]).toBe(SOLUTION);
     expect(result?.untranslated).toBe(3);
+    // A failed service is not a refusal: nothing is filed, so the next ask retries.
+    expect((row().content as { romanNepali?: unknown }).romanNepali).toBeUndefined();
   });
 
   it("translates again when the English changes — a reading that landed later", async () => {

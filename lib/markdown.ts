@@ -442,6 +442,12 @@ export function isInlineMath(candidate: string) {
   if (!candidate || /^\s|\s$/.test(candidate)) return false;
 
   const symbolic = candidate
+    // The source is HTML-escaped before it is scanned, so a matrix's column
+    // separators arrive as `&amp;` — six of them in a 3×3 determinant, which
+    // counted as six prose words and printed the whole matrix as raw LaTeX.
+    .replace(/&(?:amp|lt|gt|quot|#39);/g, " ")
+    // An environment's name is not prose either: `\begin{vmatrix}`.
+    .replace(/\\(?:begin|end)\s*\{[a-zA-Z*]+\}/g, " ")
     // `\text{...}` and friends hold prose ON PURPOSE. It is not evidence of a
     // lost delimiter, so it is not counted as prose.
     .replace(/\\(?:text|textrm|textbf|textit|mathrm|mathbf|mathit|operatorname)\s*\{[^}]*\}/g, " ")
@@ -470,6 +476,8 @@ export function isInlineMath(candidate: string) {
  * is emitted as itself and the walk resumes from the very next character, so
  * every later delimiter is still available to open a span that IS maths.
  */
+const BLOCK_ENVIRONMENT = /\\begin\s*\{(?:[pbBvV]?matrix|cases|aligned|align\*?|array|gathered|split)\}/;
+
 function maskCodeAndMath(value: string, tokens: string[]): string {
   const push = (html: string) => {
     tokens.push(html);
@@ -506,7 +514,10 @@ function maskCodeAndMath(value: string, tokens: string[]): string {
       if (close > index + 1 && (line === -1 || close < line)) {
         const inner = value.slice(index + 1, close);
         if (isInlineMath(inner)) {
-          out += push(renderMath(inner, false));
+          // A matrix, cases or aligned block written between single dollars is
+          // still a block: set inline, a 3×3 determinant is squeezed to the
+          // height of one line of text.
+          out += push(renderMath(inner, BLOCK_ENVIRONMENT.test(inner)));
           index = close + 1;
           continue;
         }
@@ -599,8 +610,32 @@ function renderTable(rows: string[]) {
   return `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
 }
 
+/**
+ * A determinant a scanned paper flattened — `|a^2+1, ab; ab, b^2+1|` — set back
+ * as a grid. Stored questions and answers carry it that way, inside `$…$` and
+ * outside; KaTeX would otherwise print the run of entries, or not typeset it
+ * at all. Only a real grid: two or more rows, each with the same number (two or
+ * more) of entries, so a table row or `|x|` is never touched.
+ */
+const FLAT_GRID = /\|([^|$\n]{3,600}?;[^|$\n]{1,600}?)\|(\s*=\s*[^.,;:?!\n$]*[^.,;:?!\n$\s])?/g;
+
+export function rebuildFlatGrids(source: string) {
+  if (!source.includes(";") || !source.includes("|")) return source;
+  return source.replace(FLAT_GRID, (match, grid: string, rhs: string | undefined, offset: number) => {
+    const rows = grid.split(";").map((row) => row.split(",").map((entry) => entry.trim()));
+    const width = rows[0].length;
+    if (rows.length < 2 || width < 2 || rows.some((row) => row.length !== width || row.some((entry) => !entry))) {
+      return match;
+    }
+    const matrix = `\\begin{vmatrix} ${rows.map((row) => row.join(" & ")).join(" \\\\ ")} \\end{vmatrix}`;
+    const lineStart = source.lastIndexOf("\n", offset) + 1;
+    const insideMath = ((source.slice(lineStart, offset).match(/(?<!\\)\$/g) ?? []).length) % 2 === 1;
+    return insideMath ? `${matrix}${rhs ?? ""}` : `$${matrix}${rhs ? ` ${rhs.trim()}` : ""}$`;
+  });
+}
+
 function renderMd(source: string): string {
-  const lines = escapeHtml(source).split("\n");
+  const lines = escapeHtml(rebuildFlatGrids(source)).split("\n");
   let output = "";
   let listType: "ol" | "ul" | null = null;
   let inCodeBlock = false;
@@ -759,4 +794,31 @@ export function renderMathText(source: string) {
     /@@MATHBLOCK_(\d+)@@/g,
     (_, index) => blocks[Number(index)] ?? "",
   );
+}
+
+/**
+ * A streaming answer, cut back to what can already be drawn.
+ *
+ * Tokens arrive mid-formula: `$\frac{V_{in}` lands a frame before `}{R}$`, and
+ * in between the reader sees raw LaTeX that then snaps into a formula — the
+ * answer looks broken for as long as the formula takes to arrive. So an
+ * unclosed `$$` block, or an unclosed `$` on the line being written, is held
+ * back until its closing delimiter streams in. Inline maths never spans lines,
+ * so a lone `$` (a price, say) is held for at most the rest of its line.
+ */
+export function streamSafeMarkdown(text: string) {
+  if (!text.includes("$")) return text;
+  // Fenced code shows dollars as themselves; count only outside it.
+  const fences = text.match(/^\s*```/gm)?.length ?? 0;
+  if (fences % 2 === 1) return text;
+  const outsideCode = text.replace(/```[\s\S]*?```/g, (block) => " ".repeat(block.length));
+
+  const blocks = [...outsideCode.matchAll(/\$\$/g)];
+  if (blocks.length % 2 === 1) return text.slice(0, blocks[blocks.length - 1].index).trimEnd();
+
+  const lineStart = outsideCode.lastIndexOf("\n") + 1;
+  const line = outsideCode.slice(lineStart).replace(/\$\$/g, "  ").replace(/`[^`]*`/g, (span) => " ".repeat(span.length));
+  const singles = [...line.matchAll(/(?<!\\)\$/g)];
+  if (singles.length % 2 === 1) return text.slice(0, lineStart + singles[singles.length - 1].index!).trimEnd();
+  return text;
 }

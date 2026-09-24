@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { challengeQuestionFormats } from "@/lib/challenge-format";
 
 export const communityVisibility = ["public", "unlisted", "private"] as const;
 
@@ -11,6 +12,11 @@ export const communityInputSchema = z
     totalYears: z.number().int().min(1, "Add at least one year.").max(10),
     totalSemesters: z.number().int().min(1, "Add at least one semester.").max(40),
     visibility: z.enum(communityVisibility).default("public"),
+    /** Required on purpose: which questions every student's challenges ask is
+     *  the creator's decision, so the form never picks it for them. */
+    challengeQuestionFormat: z.enum(challengeQuestionFormats, {
+      errorMap: () => ({ message: "Choose the type of challenge questions students get." }),
+    }),
   })
   .superRefine((value, context) => {
     if (value.totalSemesters < value.totalYears) {

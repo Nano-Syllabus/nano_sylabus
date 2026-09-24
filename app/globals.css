@@ -87,6 +87,8 @@
   --paper-rule: rgba(37, 99, 235, 0.16);
   --paper-margin: rgba(220, 38, 38, 0.32);
   --paper-shadow: 0 1px 2px rgba(60, 45, 20, 0.06), 0 4px 12px -6px rgba(60, 45, 20, 0.12);
+  /* A question copied out in red pen above its answer. */
+  --paper-question-ink: #b42318;
 }
 
 [data-theme="dark"] {
@@ -128,6 +130,7 @@
   --paper-rule: rgba(148, 163, 184, 0.14);
   --paper-margin: rgba(248, 113, 113, 0.3);
   --paper-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --paper-question-ink: #f97066;
 }
 
 @layer base {
@@ -396,6 +399,37 @@ summary > .answer-paper-label {
 
 .answer-paper-body > :is(.math-block, pre, table, img, .answer-animation) {
   margin: 0.75rem 1rem 0.75rem var(--paper-inset);
+}
+
+/*
+ * A figure drawn ON the sheet, not pasted over it.
+ *
+ * Every figure comes from the renderer on its house page, an opaque #D9D9D9
+ * (video-gen-check `ioevid/theme.py`, shared with the videos). On the paper
+ * that was a grey slab inside a white card. That page colour is one known
+ * constant, so it is taken out here rather than re-rendering every figure:
+ * brightness 255/217 lifts #D9D9D9 to exactly white, and `multiply` then turns
+ * white into the paper's own colour while the ink stays ink. On the dark sheet
+ * the figure is inverted (hue kept) so its page goes black, and `screen` turns
+ * black into the paper. The full-screen viewer still shows the original.
+ */
+.answer-paper img.answer-figure {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  filter: brightness(1.1751);
+  mix-blend-mode: multiply;
+}
+
+[data-theme="dark"] .answer-paper img.answer-figure {
+  filter: brightness(1.1751) invert(1) hue-rotate(180deg);
+  mix-blend-mode: screen;
+}
+
+/* The question in red pen, formulas included — KaTeX sets its own colour
+   nowhere, so it follows. */
+.answer-paper-question {
+  color: var(--paper-question-ink);
 }
 
 /* A display equation is boxed on the sheet, the way a result is on a script,

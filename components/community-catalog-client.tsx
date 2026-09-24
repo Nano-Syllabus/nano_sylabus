@@ -11,6 +11,10 @@ import {
   type CommunitySummary,
 } from "@/lib/communities";
 import { titleCase } from "@/lib/utils";
+import {
+  challengeQuestionFormatLabels,
+  challengeQuestionFormats,
+} from "@/lib/challenge-format";
 import { CommunityLeaveControl } from "@/components/community-leave-control";
 
 type Draft = {
@@ -20,6 +24,8 @@ type Draft = {
   description: string;
   totalYears: string;
   totalSemesters: string;
+  /** Empty until the creator picks one — the form must not choose for them. */
+  challengeQuestionFormat: string;
 };
 
 const emptyDraft: Draft = {
@@ -29,6 +35,7 @@ const emptyDraft: Draft = {
   description: "",
   totalYears: "4",
   totalSemesters: "8",
+  challengeQuestionFormat: "",
 };
 
 function detectLevel(community: CommunitySummary): string {
@@ -1520,6 +1527,63 @@ export function CommunityCatalogClient({
                   />
                   <FieldError id="community-description-error" message={fieldErrors.description} />
                 </div>
+
+                <fieldset
+                  id="community-challengeQuestionFormat"
+                  tabIndex={-1}
+                  aria-describedby={
+                    fieldErrors.challengeQuestionFormat ? "community-format-error" : undefined
+                  }
+                  style={{ margin: 0, padding: 0, border: 0, minWidth: 0 }}
+                >
+                  <legend style={{ fontSize: 14, fontWeight: 600, padding: 0 }}>
+                    Challenge questions <span style={{ color: "#dc2626" }}>*</span>
+                  </legend>
+                  <p style={{ margin: "4px 0 0", fontSize: 13, color: "#606774", lineHeight: 1.5 }}>
+                    What every student in this community answers in their daily challenge exam. You can
+                    change it later in the community&apos;s settings.
+                  </p>
+                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                    {challengeQuestionFormats.map((format) => {
+                      const selected = draft.challengeQuestionFormat === format;
+                      return (
+                        <label
+                          key={format}
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 10,
+                            padding: "12px 14px",
+                            borderRadius: 10,
+                            border: `1px solid ${
+                              selected ? "#101114" : fieldErrors.challengeQuestionFormat ? "#dc2626" : "#d6dbe3"
+                            }`,
+                            backgroundColor: selected ? "#f6f7f9" : "#ffffff",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="challengeQuestionFormat"
+                            value={format}
+                            checked={selected}
+                            onChange={() => updateDraft("challengeQuestionFormat", format)}
+                            style={{ marginTop: 3 }}
+                          />
+                          <span>
+                            <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#101114" }}>
+                              {challengeQuestionFormatLabels[format].title}
+                            </span>
+                            <span style={{ display: "block", marginTop: 2, fontSize: 13, color: "#606774", lineHeight: 1.45 }}>
+                              {challengeQuestionFormatLabels[format].description}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <FieldError id="community-format-error" message={fieldErrors.challengeQuestionFormat} />
+                </fieldset>
               </div>
 
               <button

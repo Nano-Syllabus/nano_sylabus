@@ -28,6 +28,7 @@ const validInput = {
   totalYears: 4,
   totalSemesters: 8,
   visibility: "public",
+  challengeQuestionFormat: "hybrid",
 };
 
 describe("/api/communities", () => {
@@ -72,6 +73,19 @@ describe("/api/communities", () => {
       }),
     );
     expect(response.status).toBe(401);
+    expect(mocks.createCommunity).not.toHaveBeenCalled();
+  });
+
+  it("refuses a community whose creator has not chosen the challenge question type", async () => {
+    const { challengeQuestionFormat: _omitted, ...withoutFormat } = validInput;
+    const response = await POST(
+      new Request("http://localhost/api/communities", {
+        method: "POST",
+        body: JSON.stringify(withoutFormat),
+      }),
+    );
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ field: "challengeQuestionFormat" });
     expect(mocks.createCommunity).not.toHaveBeenCalled();
   });
 
