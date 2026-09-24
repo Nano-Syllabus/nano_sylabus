@@ -2,30 +2,217 @@
 
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   ArrowRight,
-  BookOpen,
   Check,
   CircleGauge,
   Clock3,
-  FileText,
   Flame,
   LibraryBig,
   LockKeyholeOpen,
+  Pencil,
+  Plus,
+  Quote,
   Sparkles,
-  Star,
 } from "lucide-react";
-import type {
-  DailyExamDate,
-  StudentDailyDashboard,
-} from "@/lib/data/student-daily-dashboard";
+import type { DailyExamDate, StudentDailyDashboard } from "@/lib/data/student-daily-dashboard";
+import { rankSemesterSubjects } from "@/lib/data/student-semester-ranking";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "@/lib/query/dashboard";
 import { PracticeCalendar } from "@/components/practice-calendar";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
+
+const STUDY_QUOTE_LIMIT = 140;
+
+function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
+  const [quote, setQuote] = useState(() => initialQuote.trim().slice(0, STUDY_QUOTE_LIMIT));
+  const [draft, setDraft] = useState(quote);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const quoteInputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editing) quoteInputRef.current?.focus();
+  }, [editing]);
+
+  function startEditing() {
+    setDraft(quote);
+    setError("");
+    setStatus("");
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    setDraft(quote);
+    setError("");
+    setEditing(false);
+  }
+
+  async function persist(nextQuote: string) {
+    setSaving(true);
+    setError("");
+    setStatus("");
+
+    try {
+      const response = await fetch("/api/student/profile/study-quote", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ quote: nextQuote || null }),
+      });
+      const result = (await response.json().catch(() => null)) as
+        | { quote?: string; error?: string }
+        | null;
+      if (!response.ok) throw new Error(result?.error || "Could not save your quote. Please try again.");
+
+      const savedQuote = typeof result?.quote === "string" ? result.quote : "";
+
+      setQuote(savedQuote);
+      setDraft(savedQuote);
+      setEditing(false);
+      setStatus(savedQuote ? "Saved to your profile." : "Quote removed.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not save your quote. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function saveQuote(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextQuote = draft.trim();
+
+    if (!nextQuote) {
+      setError("Write a short study reminder before saving.");
+      return;
+    }
+
+    void persist(nextQuote);
+  }
+
+  return (
+    <section
+      className="relative mt-5 overflow-hidden rounded-[27px] bg-[var(--community-accent)] px-6 py-[22px] text-[var(--community-accent-foreground)] shadow-sm sm:px-10"
+      aria-labelledby="study-quote-heading"
+    >
+      <div
+        className="pointer-events-none absolute -bottom-32 -right-16 size-80 rounded-full border border-current/15"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute -bottom-44 -right-2 size-[25rem] rounded-full border border-current/10"
+        aria-hidden="true"
+      />
+
+      {editing ? (
+        <form className="relative" onSubmit={saveQuote}>
+          <label htmlFor="study-quote-input" className="text-sm font-semibold">
+            Your study reminder
+          </label>
+          <textarea
+            ref={quoteInputRef}
+            id="study-quote-input"
+            value={draft}
+            maxLength={STUDY_QUOTE_LIMIT}
+            rows={3}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="You do not have to finish everything today. Just begin one topic."
+            aria-invalid={error ? "true" : undefined}
+            aria-describedby={error ? "study-quote-hint study-quote-error" : "study-quote-hint"}
+            className="mt-2 block min-h-24 w-full resize-y rounded-2xl border border-current/35 bg-bg-primary px-4 py-3 text-base text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--community-accent)]"
+          />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm opacity-90">
+            <p id="study-quote-hint">Make it yours. A short line is easiest to remember.</p>
+            <span className="tabular-nums">{draft.length} / {STUDY_QUOTE_LIMIT}</span>
+          </div>
+          {error ? (
+            <p id="study-quote-error" role="alert" className="mt-2 text-sm font-medium">
+              {error}
+            </p>
+          ) : null}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {quote ? (
+              <button
+                type="button"
+                onClick={() => void persist("")}
+                disabled={saving}
+                className="inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold underline underline-offset-4 transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--community-accent)]"
+              >
+                Remove quote
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={cancelEditing}
+              disabled={saving}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--community-accent)]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !draft.trim()}
+              aria-busy={saving}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-current/45 bg-bg-primary/10 px-4 text-sm font-semibold transition-colors hover:bg-bg-primary/20 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--community-accent)]"
+            >
+              {saving ? "Saving..." : "Save quote"}
+            </button>
+          </div>
+        </form>
+      ) : quote ? (
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className="grid size-[58px] shrink-0 place-items-center rounded-full border-2 border-current/80" aria-hidden="true">
+              <Quote className="size-6" fill="currentColor" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] opacity-80">Your study reminder</p>
+              <blockquote
+                id="study-quote-heading"
+                className="mt-1 max-w-4xl break-words font-sans text-[clamp(21px,2.3vw,30px)] font-semibold leading-[1.3] tracking-[-0.025em]"
+              >
+                {quote}
+              </blockquote>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={startEditing}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl border border-current/45 bg-bg-primary/10 px-4 text-sm font-semibold transition-colors hover:bg-bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--community-accent)] sm:self-auto"
+          >
+            <Pencil className="size-4" aria-hidden="true" />
+            Edit quote
+          </button>
+        </div>
+      ) : (
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+          <div className="flex min-w-0 items-center gap-4 sm:gap-6">
+            <span className="grid size-14 shrink-0 place-items-center rounded-full border-2 border-current/80" aria-hidden="true">
+              <Quote className="size-7" fill="currentColor" />
+            </span>
+            <h2 id="study-quote-heading" className="min-w-0 text-2xl font-semibold tracking-tight sm:text-3xl">
+              What words help you keep going?
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={startEditing}
+            className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 self-start rounded-full border-2 border-current/45 bg-bg-primary/10 px-5 text-base font-semibold transition-colors hover:bg-bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--community-accent)] sm:self-auto"
+          >
+            <Plus className="size-5" aria-hidden="true" />
+            Add your quote
+          </button>
+        </div>
+      )}
+
+      {status ? <p className="relative mt-3 text-sm font-medium" role="status">{status}</p> : null}
+    </section>
+  );
+}
 
 function formatNumber(value: number, maximumFractionDigits = 0) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits }).format(value);
@@ -102,9 +289,7 @@ function MetricCard({
     return (
       <article className="min-w-0 rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center justify-between gap-3">
-          <span className="type-student-eyebrow text-text-muted">
-            {label}
-          </span>
+          <span className="type-student-eyebrow text-text-muted">{label}</span>
           <span className="text-text-secondary" aria-hidden="true">
             {icon}
           </span>
@@ -128,9 +313,7 @@ function MetricCard({
       )}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className="type-student-eyebrow text-text-muted">
-          {label}
-        </span>
+        <span className="type-student-eyebrow text-text-muted">{label}</span>
         <span className="text-text-secondary" aria-hidden="true">
           {icon}
         </span>
@@ -152,155 +335,6 @@ function MetricCard({
   );
 }
 
-function StarterChallengeBanner({ dashboard }: { dashboard: StudentDailyDashboard }) {
-  const challenge = [...dashboard.challenge.challenges]
-    .filter((item) => item.status !== "completed")
-    .sort(
-      (left, right) =>
-        Number(right.status === "started") - Number(left.status === "started") ||
-        left.position - right.position,
-    )[0];
-  const community = dashboard.community ?? dashboard.challenge.community;
-  const params = new URLSearchParams();
-  if (community?.slug) params.set("community", community.slug);
-  const fallbackHref = community
-    ? `/app/challenges${params.toString() ? `?${params.toString()}` : ""}`
-    : "/app/community";
-  const action = challenge
-    ? challenge.status === "started"
-      ? "Continue challenge"
-      : "Start a challenge"
-    : community
-      ? "Find a challenge"
-      : "Browse communities";
-
-  return (
-    <section
-      className="relative mt-5 overflow-hidden rounded-[24px] border border-black/10 bg-[#cbf738] px-6 py-5 sm:px-8 sm:py-6 lg:px-9 lg:py-6 text-black shadow-sm"
-      aria-labelledby="starter-challenge-heading"
-    >
-      {/* Lighter organic curved hill / glow at the bottom matching reference */}
-      <div
-        className="pointer-events-none absolute -bottom-16 -left-12 h-48 w-[460px] rounded-[100%] bg-gradient-to-tr from-[#e5ff75]/80 via-[#daf955]/60 to-transparent blur-md"
-        aria-hidden="true"
-      />
-      <svg
-        className="pointer-events-none absolute bottom-0 left-0 h-20 w-full opacity-35"
-        viewBox="0 0 1200 160"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        <path
-          d="M 0 160 Q 350 30 900 160 Z"
-          fill="rgba(255, 255, 255, 0.4)"
-        />
-      </svg>
-
-      <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-        {/* Left column: the automatically selected challenge and its CTA. */}
-        <div className="max-w-xl">
-          <h2
-            id="starter-challenge-heading"
-            className="type-student-page-title text-black"
-          >
-            One topic.
-            <br />
-            One small win.
-          </h2>
-
-          <div className="mt-2.5 max-w-md text-xs sm:text-sm font-medium leading-relaxed text-black/80">
-            {community ? (
-              <p className="font-semibold text-black/95 truncate">
-                {community.university && community.faculty
-                  ? `${community.university} · ${community.faculty}`
-                  : community.university || community.faculty || community.name}
-              </p>
-            ) : challenge ? (
-              <p className="font-semibold text-black/95 truncate">
-                {challenge.subjectName}: {challenge.topicTitle}
-              </p>
-            ) : (
-              <p>Choose a programme to get your next challenge.</p>
-            )}
-          </div>
-
-          <Link
-            href={fallbackHref}
-            className={cn(
-              "mt-4 sm:mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#111215] px-6 text-xs sm:text-sm font-semibold text-white shadow-sm transition-all duration-150 hover:bg-black hover:scale-[1.02] active:scale-[0.98]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 focus-visible:ring-offset-[#cbf738]",
-            )}
-          >
-            {action}
-            <ArrowRight className="size-3.5 sm:size-4" aria-hidden="true" />
-          </Link>
-        </div>
-
-        {/* Right Column: Stacked Notebook Graphic & 3-Step Circles */}
-        <div className="relative hidden items-center justify-end gap-5 select-none lg:flex xl:gap-7" aria-hidden="true">
-          {/* Stacked Notebook Illustration */}
-          <div className="relative shrink-0">
-            {/* Back page for stacked 3D effect */}
-            <div className="absolute -bottom-1 -left-1 h-full w-full rotate-[-7deg] rounded-xl border-2 border-black bg-black/10" />
-            <div className="absolute -bottom-0.5 -left-0.5 h-full w-full rotate-[-5deg] rounded-xl border-2 border-black bg-[#dcfb80]" />
-
-            {/* Front notebook page */}
-            <div className="relative rotate-[-3deg] rounded-xl border-2 border-black bg-[#faffeb] px-4 py-3 shadow-[3px_3px_0_rgba(0,0,0,0.06)] min-w-[110px]">
-              {/* Binder marks on left spine */}
-              <div className="absolute -left-1 top-3.5 h-1.5 w-1 rounded-sm bg-black" />
-              <div className="absolute -left-1 top-6.5 h-1.5 w-1 rounded-sm bg-black" />
-              <div className="absolute -left-1 top-9.5 h-1.5 w-1 rounded-sm bg-black" />
-
-              {/* Topic badge */}
-              <div className="inline-flex items-center rounded-full border border-black/80 bg-black/[0.04] px-2 py-0.5 text-[10px] font-bold text-black">
-                Topic {String(challenge?.position ?? 1).padStart(2, "0")}
-              </div>
-
-              {/* Content lines */}
-              <div className="mt-2.5 h-[2px] w-16 rounded-full bg-black" />
-              <div className="mt-2 h-[2px] w-11 rounded-full bg-black/60" />
-              <div className="mt-2 h-[2px] w-14 rounded-full bg-black/40" />
-            </div>
-          </div>
-
-          {/* 3 Step Flow with Arrows */}
-          <div className="flex items-center gap-2.5 xl:gap-3.5">
-            {/* Step 1: Learn */}
-            <div className="flex flex-col items-center">
-              <div className="grid size-12 sm:size-13 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
-                <BookOpen className="size-5 text-black stroke-[1.8]" />
-              </div>
-              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight">Learn</span>
-            </div>
-
-            {/* Arrow 1 */}
-            <ArrowRight className="size-3.5 shrink-0 text-black stroke-[2.2]" />
-
-            {/* Step 2: Practice */}
-            <div className="flex flex-col items-center">
-              <div className="grid size-12 sm:size-13 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
-                <FileText className="size-5 text-black stroke-[1.8]" />
-              </div>
-              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight">Practice</span>
-            </div>
-
-            {/* Arrow 2 */}
-            <ArrowRight className="size-3.5 shrink-0 text-black stroke-[2.2]" />
-
-            {/* Step 3: Take the exam */}
-            <div className="flex flex-col items-center">
-              <div className="grid size-12 sm:size-13 place-items-center rounded-full border-2 border-black bg-white/40 shadow-xs backdrop-blur-xs transition-transform hover:scale-105">
-                <Star className="size-5 text-black stroke-[1.8]" />
-              </div>
-              <span className="mt-1.5 text-[11px] sm:text-xs font-bold text-black tracking-tight whitespace-nowrap">Take the exam</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function SemesterProgress({
   dashboard,
   compact = false,
@@ -316,6 +350,10 @@ function SemesterProgress({
   const semester = useMemo(
     () => community?.semesters.find((item) => item.id === semesterId) ?? community?.semesters[0],
     [community, semesterId],
+  );
+  const rankedSubjects = useMemo(
+    () => (semester ? rankSemesterSubjects(semester.subjects) : []),
+    [semester],
   );
 
   if (!community) {
@@ -345,18 +383,10 @@ function SemesterProgress({
         )}
       >
         <div className="min-w-0">
-          <p className="type-student-eyebrow text-text-muted">
-            Programme map
-          </p>
-          <h2
-            id="semester-progress-heading"
-            className="type-student-section-title mt-2"
-          >
+          <p className="type-student-eyebrow text-text-muted">Programme map</p>
+          <h2 id="semester-progress-heading" className="type-student-section-title mt-2">
             Semester progress
           </h2>
-          <p className="type-student-body mt-1 text-text-secondary">
-            Real topic readiness from your indexed subjects.
-          </p>
         </div>
         <label
           className={cn(
@@ -385,50 +415,30 @@ function SemesterProgress({
 
       {semester ? (
         <div className="p-5 sm:p-6">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold">{semester.label}</p>
-              <p className="mt-1 text-sm text-text-secondary">
-                {semester.subjects.length} subject{semester.subjects.length === 1 ? "" : "s"} ·{" "}
-                {semester.measuredSubjects} with measurable readiness
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="type-student-metric tabular-nums">
-                {semester.readiness === null ? "—" : `${Math.round(semester.readiness)}%`}
-              </p>
-              <p className="type-student-meta text-text-muted">Average readiness</p>
-            </div>
-          </div>
-
-          {semester.subjects.length ? (
-            <div className="mt-6 divide-y divide-border border-y border-border">
-              {semester.subjects.map((subject) => (
+          {rankedSubjects.length ? (
+            <div className="divide-y divide-border border-y border-border">
+              {rankedSubjects.map((subject) => (
                 <article
                   key={subject.id}
-                  className="grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.7fr)_auto] md:items-center"
+                  className="grid gap-4 py-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
                 >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       {subject.code ? (
                         <span className="rounded-md bg-border px-2 py-1 text-[11px] font-semibold text-text-secondary">
                           {subject.code}
                         </span>
                       ) : null}
-                      <h3 className="type-student-card-title truncate">{subject.name}</h3>
+                      <h3 className="type-student-card-title break-words">{subject.name}</h3>
                     </div>
-                    <p className="type-student-meta mt-1 text-text-muted">
-                      {subject.topicCount === null
-                        ? "Topics syncing"
-                        : `${formatNumber(subject.topicCount)} topics`}{" "}
-                      ·{" "}
-                      {subject.materialCount === null
-                        ? "Materials syncing"
-                        : `${formatNumber(subject.materialCount)} materials`}
-                    </p>
-                  </div>
-                  <div>
-                    <div className="h-2 overflow-hidden rounded-full bg-border" aria-hidden="true">
+                    <div
+                      className="mt-3 h-2 overflow-hidden rounded-full bg-border"
+                      role="progressbar"
+                      aria-label={`${subject.name} readiness`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={subject.readiness ?? undefined}
+                    >
                       {subject.readiness !== null ? (
                         <div
                           className="h-full rounded-full bg-[var(--community-accent)]"
@@ -436,11 +446,22 @@ function SemesterProgress({
                         />
                       ) : null}
                     </div>
-                    <p className="type-student-meta mt-1.5 text-text-muted">
-                      {subject.readiness === null
-                        ? "No graded practice yet"
-                        : `${Math.round(subject.readiness)}% ready`}
-                    </p>
+                    <div className="type-student-meta mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-text-muted">
+                      <span>
+                        {subject.topicCount === null
+                          ? "Topics syncing"
+                          : `${formatNumber(subject.topicCount)} topics`}{" "}
+                        ·{" "}
+                        {subject.materialCount === null
+                          ? "Materials syncing"
+                          : `${formatNumber(subject.materialCount)} materials`}
+                      </span>
+                      <span>
+                        {subject.readiness === null
+                          ? "No graded practice yet"
+                          : `${Math.round(subject.readiness)}% ready`}
+                      </span>
+                    </div>
                   </div>
                   <Link
                     href={`/app/chat?community=${encodeURIComponent(community.slug)}&semester=${encodeURIComponent(semester.id)}&librarySubject=${encodeURIComponent(subject.slug)}`}
@@ -500,6 +521,7 @@ export function StudentDailyDashboardView({
   fullName,
   creditBalance,
   hasUnlimitedAccess,
+  studyQuote,
   communitySlug,
   selectedCommunitySlug,
   initialDashboard,
@@ -509,6 +531,7 @@ export function StudentDailyDashboardView({
   fullName: string;
   creditBalance: number;
   hasUnlimitedAccess: boolean;
+  studyQuote?: string;
   /** What the URL asked for — the query key. `undefined` means "the default". */
   communitySlug?: string;
   /** What that resolved to — for the switcher's selected value only. */
@@ -526,6 +549,7 @@ export function StudentDailyDashboardView({
         fullName={fullName}
         creditBalance={creditBalance}
         hasUnlimitedAccess={hasUnlimitedAccess}
+        studyQuote={studyQuote}
       />
     );
 
@@ -536,6 +560,7 @@ export function StudentDailyDashboardView({
       fullName={fullName}
       creditBalance={creditBalance}
       hasUnlimitedAccess={hasUnlimitedAccess}
+      studyQuote={studyQuote}
       dashboard={dashboard}
     />
   );
@@ -564,19 +589,18 @@ function DashboardDataSkeleton({
   fullName,
   creditBalance,
   hasUnlimitedAccess,
+  studyQuote,
 }: {
   communityOptions?: import("@/lib/community-switch").CommunitySwitchOption[];
   selectedCommunitySlug?: string;
   fullName: string;
   creditBalance: number;
   hasUnlimitedAccess: boolean;
+  studyQuote?: string;
 }) {
   const line = "animate-pulse rounded-full bg-border motion-reduce:animate-none";
   return (
-    <main
-      className="student-page-frame"
-      aria-busy="true"
-    >
+    <main className="student-page-frame" aria-busy="true">
       {/*
         The real switcher, not a placeholder. Its options come from the page's
         server render, so it is usable before the dashboard data exists — and
@@ -591,6 +615,8 @@ function DashboardDataSkeleton({
           </h1>
         </div>
       </header>
+
+      <StudyQuoteCard initialQuote={studyQuote} />
 
       <section
         className="mt-5 min-h-[190px] animate-pulse rounded-[24px] bg-border motion-reduce:animate-none"
@@ -662,6 +688,7 @@ function DashboardContent({
   fullName,
   creditBalance,
   hasUnlimitedAccess,
+  studyQuote,
   dashboard,
 }: {
   userId: string;
@@ -669,6 +696,7 @@ function DashboardContent({
   fullName: string;
   creditBalance: number;
   hasUnlimitedAccess: boolean;
+  studyQuote?: string;
   dashboard: StudentDailyDashboard;
 }) {
   const queryClient = useQueryClient();
@@ -686,13 +714,11 @@ function DashboardContent({
     <main className="student-page-frame">
       <header className="pt-2">
         <div>
-          <h1 className="type-student-page-title">
-            Welcome, {firstName(fullName)}.
-          </h1>
+          <h1 className="type-student-page-title">Welcome, {firstName(fullName)}.</h1>
         </div>
       </header>
 
-      <StarterChallengeBanner dashboard={dashboard} />
+      <StudyQuoteCard initialQuote={studyQuote} />
 
       <section
         className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"

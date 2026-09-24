@@ -1208,31 +1208,45 @@ function CommunitySubjects({
             {selectedSubjects.map((subject) => (
               <article
                 key={subject.id}
-                className="grid gap-4 py-5 sm:grid-cols-[minmax(0,1fr)_150px_auto] sm:items-center"
+                className="grid gap-4 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
               >
-                <div>
-                  <h3 className="font-semibold">{titleCase(subject.name)}</h3>
-                  <p className="mt-1 text-sm text-text-muted">
-                    {subject.code || "Community subject"} ·{" "}
-                    {subject.topicCount === null
-                      ? "Topics unavailable"
-                      : `${subject.topicCount} extracted topics`}{" "}
-                    ·{" "}
-                    {subject.materialCount === null
-                      ? "Materials unavailable"
-                      : `${subject.materialCount} materials`}
-                  </p>
-                </div>
-                <div>
-                  <div className="flex justify-between text-xs text-text-muted">
-                    <span>Readiness</span>
-                    <span>{subject.progress === null ? "—" : `${subject.progress}%`}</span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    {subject.code ? (
+                      <span className="rounded-md bg-bg-secondary px-2 py-1 text-[11px] font-semibold text-text-secondary">
+                        {subject.code}
+                      </span>
+                    ) : null}
+                    <h3 className="break-words font-semibold">{titleCase(subject.name)}</h3>
                   </div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-bg-secondary">
+                  <div
+                    className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-secondary"
+                    role="progressbar"
+                    aria-label={`${subject.name} readiness`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={subject.progress ?? undefined}
+                  >
                     <div
                       className="h-full rounded-full bg-[var(--community-accent)]"
                       style={{ width: `${Math.max(0, Math.min(100, subject.progress || 0))}%` }}
                     />
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-muted">
+                    <span>
+                      {subject.topicCount === null
+                        ? "Topics unavailable"
+                        : `${subject.topicCount} extracted topics`}{" "}
+                      ·{" "}
+                      {subject.materialCount === null
+                        ? "Materials unavailable"
+                        : `${subject.materialCount} materials`}
+                    </span>
+                    <span>
+                      {subject.progress === null
+                        ? "Readiness unavailable"
+                        : `${subject.progress}% ready`}
+                    </span>
                   </div>
                 </div>
                 <Link

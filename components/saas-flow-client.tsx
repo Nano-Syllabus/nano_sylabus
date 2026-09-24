@@ -4,7 +4,19 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, Copy, CheckCircle2, Lock, Mail, User, ArrowLeft } from "lucide-react";
+import {
+  Check,
+  Copy,
+  CheckCircle2,
+  Lock,
+  Mail,
+  User,
+  ArrowLeft,
+  Lightbulb,
+  Play,
+  BarChart3,
+  BookOpen,
+} from "lucide-react";
 import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import { getGoogleAuthRedirectUrl, setOAuthNextCookie } from "@/lib/auth-redirect";
 import {
@@ -13,6 +25,7 @@ import {
   PENDING_STUDY_ANSWERS_KEY,
   readPendingStudyAnswers,
   saveStudyDiagnostic,
+  STUDY_DIAGNOSTIC_QUESTION_COUNT,
   STUDY_DIAGNOSTIC_STARTED_KEY,
   type StudyAnswer,
 } from "@/lib/study-diagnostic";
@@ -31,13 +44,12 @@ type CheckoutInvoice = {
 };
 
 export type FlowStep =
+  | "systemSlide"
   | "q1"
   | "q2"
   | "q3"
   | "q4"
   | "q5"
-  | "q6"
-  | "founderSlide"
   | "solutionSlide"
   | "login"
   | "pricing"
@@ -53,13 +65,12 @@ const PAYMENT_FLOW_STEPS = new Set<FlowStep>([
   "paymentPending",
 ]);
 const FLOW_STEPS = new Set<FlowStep>([
+  "systemSlide",
   "q1",
   "q2",
   "q3",
   "q4",
   "q5",
-  "q6",
-  "founderSlide",
   "solutionSlide",
   "login",
   ...PAYMENT_FLOW_STEPS,
@@ -117,14 +128,16 @@ const QUESTIONS = [
   },
   {
     id: 5,
-    title: "Do you get confused about what to study first?",
-    options: ["Yes", "No"],
-  },
-  {
-    id: 6,
     title: "Do you run out of time to practise enough past question papers?",
     options: ["Yes", "Sometimes", "No"],
   },
+];
+
+const UNIVERSITY_PASS_RATES = [
+  { rate: "30.1%", university: "Tribhuvan University", value: "30.1%" },
+  { rate: "40.1%", university: "Far Western University", value: "40.1%" },
+  { rate: "44.7%", university: "Mid-Western University", value: "44.7%" },
+  { rate: "45%", university: "Pokhara University", value: "45%" },
 ];
 
 export function SaaSFlowClient({
@@ -156,7 +169,9 @@ export function SaaSFlowClient({
   const [checkingPriorStart, setCheckingPriorStart] = useState(
     searchParams.get("resumeDiagnostic") !== "1",
   );
+  const [walkthroughNotice, setWalkthroughNotice] = useState(false);
   const startedAccountSave = useRef<Promise<unknown> | null>(null);
+  const walkthroughNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const googleAuthEnabled = process.env.NEXT_PUBLIC_ENABLE_GOOGLE_AUTH === "true";
 
   // Signed-out users have no account metadata yet. Keep a durable browser marker
@@ -317,10 +332,16 @@ export function SaaSFlowClient({
     }
   }, [currentStep, router]);
 
-  const isStruggle = (qNum: number) => {
-    const ans = answers[qNum];
-    if (!ans) return false;
-    return qNum === 3 ? ans.text !== "Yes" : ans.text !== "No";
+  useEffect(() => {
+    return () => {
+      if (walkthroughNoticeTimer.current) clearTimeout(walkthroughNoticeTimer.current);
+    };
+  }, []);
+
+  const showWalkthroughNotice = () => {
+    setWalkthroughNotice(true);
+    if (walkthroughNoticeTimer.current) clearTimeout(walkthroughNoticeTimer.current);
+    walkthroughNoticeTimer.current = setTimeout(() => setWalkthroughNotice(false), 3000);
   };
 
   const handleSelectAnswer = (qNum: number, optIndex: number, text: string) => {
@@ -347,17 +368,14 @@ export function SaaSFlowClient({
     setTimeout(() => {
       if (qNum === 3) {
         setCurrentStep("q4");
-      } else if (qNum === 6) {
-        setCurrentStep("founderSlide");
+      } else if (qNum === STUDY_DIAGNOSTIC_QUESTION_COUNT) {
+        setCurrentStep("systemSlide");
       } else {
         const nextQ = `q${qNum + 1}` as FlowStep;
         setCurrentStep(nextQ);
       }
     }, 220);
   };
-
-  // Dynamic analysis for Founder slide
-  const totalStruggles = [1, 2, 3, 4, 5, 6].filter(isStruggle).length;
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -540,6 +558,9 @@ export function SaaSFlowClient({
 
   const handleGoBack = () => {
     switch (currentStep) {
+      case "systemSlide":
+        setCurrentStep("q5");
+        break;
       case "q1":
         router.push("/");
         break;
@@ -555,14 +576,8 @@ export function SaaSFlowClient({
       case "q5":
         setCurrentStep("q4");
         break;
-      case "q6":
-        setCurrentStep("q5");
-        break;
-      case "founderSlide":
-        setCurrentStep("q6");
-        break;
       case "solutionSlide":
-        setCurrentStep("founderSlide");
+        setCurrentStep("systemSlide");
         break;
       case "login":
         setCurrentStep("solutionSlide");
@@ -620,13 +635,94 @@ export function SaaSFlowClient({
   return (
     <div className="min-h-screen bg-white text-[#111111] antialiased">
       {/* ═════════════════════════════════════════════════════════════════════
-          1. QUESTION SCREENS (q1 to q6)
+          1. STUDY-SYSTEM INTRO (systemSlide)
           ═════════════════════════════════════════════════════════════════════ */}
-      {["q1", "q2", "q3", "q4", "q5", "q6"].includes(currentStep) &&
+      {currentStep === "systemSlide" && (
+        <main className="mx-auto w-full max-w-[1120px] px-3 py-6 sm:w-[calc(100%_-_36px)] sm:px-0 sm:py-[42px] lg:py-[64px]">
+          {renderFlowHeader()}
+
+          <section
+            aria-labelledby="study-system-heading"
+            className="grid overflow-hidden rounded-[25px] border border-[#dde2ea] bg-[linear-gradient(125deg,#fbfaf9_0%,#f7f8fa_54%,#f5f4f4_100%)] shadow-[0_22px_64px_rgba(30,34,40,0.09)] lg:min-h-[590px] lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:rounded-[30px]"
+          >
+            <div className="flex flex-col justify-center p-6 sm:p-[38px] lg:p-[58px_52px]">
+              <h1
+                id="study-system-heading"
+                className="max-w-[540px] text-[36px] font-[760] leading-[1.04] tracking-[-0.057em] text-[#0d0d0e] sm:text-[42px] lg:text-[58px]"
+              >
+                Studying without a system has a real cost.
+              </h1>
+              <p className="mb-7 mt-[22px] max-w-[510px] text-[16px] leading-[1.48] tracking-[-0.015em] text-[#626a79] sm:text-[18px] lg:text-[19px]">
+                Poor results can delay graduation and close doors to colleges, scholarships and
+                careers.
+              </p>
+              <button
+                type="button"
+                onClick={() => setCurrentStep("solutionSlide")}
+                className="inline-flex min-h-[52px] w-full items-center justify-center rounded-[11px] bg-[#101011] px-5 py-3 text-[15px] font-[680] text-white shadow-[0_8px_20px_rgba(10,10,12,0.12)] transition hover:bg-[#202024] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6195ee] focus-visible:ring-offset-2 motion-reduce:transition-none lg:mt-auto lg:min-h-[64px] lg:text-[17px]"
+              >
+                Build a better study system →
+              </button>
+            </div>
+
+            <div className="border-t border-[rgba(215,210,210,0.95)] p-6 sm:p-[38px] lg:border-l lg:border-t-0 lg:p-[58px_52px]">
+              <h2 className="mb-[14px] mt-[3px] text-[12px] font-[800] leading-[1.35] tracking-[0.14em] text-[#6f6767] lg:text-[14px]">
+                PASS RATES REPORTED BY UGC NEPAL
+              </h2>
+
+              <div className="grid gap-2.5" aria-label="University pass rates">
+                {UNIVERSITY_PASS_RATES.map((item) => (
+                  <article
+                    key={item.university}
+                    className="grid min-h-[62px] grid-cols-[88px_minmax(0,1fr)] items-center rounded-[14px] border border-[#e4dddd] bg-[rgba(251,250,250,0.84)] px-4 py-3 shadow-[0_5px_14px_rgba(54,60,70,0.025)] sm:grid-cols-[90px_minmax(0,1fr)] sm:px-[19px] lg:min-h-[78px] lg:grid-cols-[110px_minmax(0,1fr)] lg:px-6 lg:py-4"
+                  >
+                    <strong className="text-[28px] font-[770] leading-none tracking-[-0.045em] text-[#8f3636] lg:text-[36px]">
+                      {item.rate}
+                    </strong>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(72px,1fr)_minmax(102px,auto)] sm:items-center sm:gap-[14px] lg:gap-5">
+                      <div
+                        aria-hidden="true"
+                        className="h-2.5 overflow-hidden rounded-full bg-[#eadcdc] lg:h-3"
+                      >
+                        <span
+                          className="block h-full rounded-full bg-[linear-gradient(90deg,#a83f3f,#c95757)]"
+                          style={{ width: item.value }}
+                        />
+                      </div>
+                      <span className="text-left text-[13px] font-[520] leading-[1.25] text-[#686164] sm:text-right lg:text-[15px]">
+                        {item.university}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <aside className="mt-4 grid grid-cols-[46px_minmax(0,1fr)] items-center gap-3 rounded-[15px] border border-[#e2d3d3] bg-[rgba(248,241,241,0.9)] p-4 text-[#7f3f3f] sm:grid-cols-[62px_minmax(0,1fr)] sm:gap-[18px] sm:p-[14px_18px] lg:mt-5 lg:grid-cols-[68px_minmax(0,1fr)] lg:gap-5 lg:p-[18px_22px]">
+                <span
+                  aria-hidden="true"
+                  className="grid h-11 w-11 place-items-center rounded-full bg-[#eedddd] text-[#b54848] sm:h-[42px] sm:w-[42px] lg:h-12 lg:w-12"
+                >
+                  <Lightbulb className="h-6 w-6 lg:h-7 lg:w-7" strokeWidth={2} />
+                </span>
+                <p className="border-l border-[#dfc8c8] pl-3 text-[14px] font-[720] leading-[1.4] sm:pl-[14px] lg:pl-[18px] lg:text-[16px]">
+                  This is not a motivation problem.
+                  <br />
+                  It is a system problem.
+                </p>
+              </aside>
+            </div>
+          </section>
+        </main>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          2. QUESTION SCREENS (q1 to q5)
+          ═════════════════════════════════════════════════════════════════════ */}
+      {["q1", "q2", "q3", "q4", "q5"].includes(currentStep) &&
         (() => {
           const qIndex = parseInt(currentStep.replace("q", ""), 10);
           const qData = QUESTIONS[qIndex - 1];
-          const progressPercent = Math.round((qIndex / 6) * 100);
+          const progressPercent = Math.round((qIndex / STUDY_DIAGNOSTIC_QUESTION_COUNT) * 100);
 
           return (
             <main className="mx-auto max-w-[760px] px-6 py-12 sm:py-16">
@@ -634,7 +730,9 @@ export function SaaSFlowClient({
 
               <div className="flex items-center justify-between text-[13px] text-[#777]">
                 <span>Let&apos;s understand how you study</span>
-                <span>{qIndex} / 6</span>
+                <span>
+                  {qIndex} / {STUDY_DIAGNOSTIC_QUESTION_COUNT}
+                </span>
               </div>
 
               {/* Progress bar */}
@@ -686,128 +784,215 @@ export function SaaSFlowClient({
         })()}
 
       {/* ═════════════════════════════════════════════════════════════════════
-          2. FOUNDER'S MESSAGE SLIDE (founderSlide)
-          ═════════════════════════════════════════════════════════════════════ */}
-      {currentStep === "founderSlide" && (
-        <main className="mx-auto max-w-[790px] px-6 py-12 sm:py-16">
-          {renderFlowHeader()}
-
-          <div className="rounded-[30px] border border-[rgba(0,0,0,0.08)] bg-gradient-to-br from-[#fff8e8]/70 via-[#f2f7ff]/70 to-[#f8efff]/70 p-7 sm:p-10 shadow-[0_22px_70px_rgba(52,57,92,0.12)]">
-            <div className="flex items-center gap-2.5 text-[11px] font-[850] uppercase tracking-[1.7px] text-[#7d61c8]">
-              <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fff0be] text-[17px]">
-                ✦
-              </span>
-              <span>ONE LAST THING</span>
-            </div>
-
-            <h1 className="mt-4 text-[34px] sm:text-[43px] font-[760] tracking-[-2px] leading-[1.08] text-[#111111]">
-              You are not bad at studying.
-              <br />
-              You need a better feedback loop.
-            </h1>
-
-            <p className="mt-4 text-[17px] leading-[1.7] text-[#575d67]">
-              I built Nano Syllabus because capable students spend too much energy wondering what to
-              study, whether they remember it, and how to turn what they know into marks.
-            </p>
-
-            <div className="mt-5 rounded-[16px] border border-[#d9e7ff] bg-[#eef5ff] p-[17px_19px] text-[14px] font-[700] text-[#42628f] leading-[1.5]">
-              {totalStruggles > 0 ? (
-                <>
-                  Your answers revealed <b>{totalStruggles} areas</b> where a clearer study system
-                  could reduce stress and improve exam readiness.
-                </>
-              ) : (
-                <>
-                  Your answers show a strong foundation. Nano Syllabus can help you keep it
-                  consistent and measurable.
-                </>
-              )}
-            </div>
-
-            <button
-              onClick={() => setCurrentStep("solutionSlide")}
-              className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[14px] font-[700] text-white transition hover:opacity-90 active:scale-[0.99] cursor-pointer"
-            >
-              See how NanoSyllabus helps →
-            </button>
-          </div>
-        </main>
-      )}
-
-      {/* ═════════════════════════════════════════════════════════════════════
-          3. SOLUTION ROADMAP SLIDE (solutionSlide)
+          3. 60-SECOND WALKTHROUGH (solutionSlide)
           ═════════════════════════════════════════════════════════════════════ */}
       {currentStep === "solutionSlide" && (
-        <main className="mx-auto max-w-[1200px] px-6 py-10 sm:py-14">
+        <main className="mx-auto w-full max-w-[1200px] px-3 py-6 sm:w-[calc(100%_-_44px)] sm:px-0 sm:py-10 lg:w-[calc(100%_-_64px)] lg:py-[34px]">
           {renderFlowHeader()}
 
-          <div className="text-center max-w-[800px] mx-auto">
-            <h1 className="text-[34px] sm:text-[40px] font-[760] tracking-[-2px] text-[#111111] m-[5px_0_9px]">
-              How a NanoSyllabus challenge works
+          <section className="mb-7 text-center lg:mb-[27px]" aria-labelledby="walkthrough-heading">
+            <h1
+              id="walkthrough-heading"
+              className="text-[39px] font-[790] leading-[1.04] tracking-[-0.052em] text-[#111214] sm:text-[44px] lg:text-[46px]"
+            >
+              See NanoSyllabus in 60 seconds
             </h1>
-            <p className="text-[15px] text-[#6e747d] leading-[1.45] m-0">
-              Every day, one challenge takes you from learning a topic to proving you can answer it
-              in the exam.
+            <p className="mx-auto mt-3 max-w-[700px] text-[17px] leading-[1.45] tracking-[-0.02em] text-[#778196] lg:mt-[11px] lg:text-[19px]">
+              From one small topic to exam-ready answers in one clear system.
             </p>
-            <div className="text-[12px] font-[850] tracking-[2px] text-[#5d91ef] uppercase mt-5 mb-1.5">
-              Daily Challenge Lifecycle
-            </div>
-          </div>
+          </section>
 
-          {/* 4-Step Pipeline */}
-          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Step 1 */}
-            <div className="relative rounded-[24px] border border-[#dce3ed] bg-white p-[22px] shadow-[0_14px_38px_rgba(43,62,91,0.09)] min-h-[180px]">
-              <div className="flex h-[47px] w-[47px] items-center justify-center rounded-[15px] bg-[#e9f2ff] font-[850] text-[18px] text-[#4f83dc] mb-[17px]">
-                1
-              </div>
-              <b className="block text-[17px] text-[#111] mb-2">Learn the content</b>
-              <span className="text-[13px] text-[#757b84] leading-[1.5] block">
-                Study one small topic from your own notes and books.
+          <section
+            className="grid grid-cols-1 gap-[18px] lg:grid-cols-[minmax(0,1.36fr)_minmax(384px,1fr)] lg:gap-6"
+            aria-label="NanoSyllabus walkthrough and features"
+          >
+            <article className="relative isolate min-h-[355px] overflow-hidden rounded-[18px] border-[8px] border-[#151b1f] bg-[#eef3fa] shadow-[0_22px_60px_rgba(54,69,92,0.08)] lg:min-h-[412px] lg:rounded-[19px] lg:border-[9px]">
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 z-[3] bg-[linear-gradient(180deg,rgba(12,18,23,0.08)_0%,transparent_47%,rgba(8,13,17,0.84)_100%),linear-gradient(120deg,rgba(255,255,255,0.28),transparent_38%)]"
+              />
+              <span className="absolute left-[11px] top-2.5 z-[5] rounded-full border border-white/20 bg-[rgba(24,30,36,0.82)] px-3.5 py-[7px] text-[10px] font-[800] tracking-[0.09em] text-white">
+                1 MIN WALKTHROUGH
               </span>
-            </div>
 
-            {/* Step 2 */}
-            <div className="relative rounded-[24px] border border-[#dce3ed] bg-white p-[22px] shadow-[0_14px_38px_rgba(43,62,91,0.09)] min-h-[180px] lg:translate-y-8">
-              <div className="flex h-[47px] w-[47px] items-center justify-center rounded-[15px] bg-[#fff0c9] font-[850] text-[18px] text-[#9b6b00] mb-[17px]">
-                2
-              </div>
-              <b className="block text-[17px] text-[#111] mb-2">Study a solved past question</b>
-              <span className="text-[13px] text-[#757b84] leading-[1.5] block">
-                See how that topic is used in a real exam answer, step by step.
-              </span>
-            </div>
+              <div
+                aria-hidden="true"
+                className="grid min-h-[339px] grid-cols-[92px_1fr] bg-[linear-gradient(135deg,#f5f8fd,#fff)] lg:min-h-[394px] lg:grid-cols-[139px_1fr]"
+              >
+                <aside className="border-r border-[#e7ebf1] bg-white/75 px-[7px] pb-2.5 pt-12 lg:px-[13px] lg:pb-4 lg:pt-[46px]">
+                  <div className="mb-[18px] ml-1 flex items-center gap-1.5 text-[8px] font-[800] lg:text-[10px]">
+                    <span className="grid h-[17px] w-[17px] place-items-center rounded-[5px] bg-[#111] text-[11px] text-[#c9ff38]">
+                      n.
+                    </span>
+                    <span>Nano Syllabus</span>
+                  </div>
+                  <ul className="grid gap-[5px] text-[8px] text-[#71809b] lg:text-[10px]">
+                    {["Home", "Subjects", "Past Questions", "My Uploads", "Progress"].map(
+                      (label, index) => (
+                        <li
+                          key={label}
+                          className={cn(
+                            "flex items-center gap-[5px] rounded-lg px-1.5 py-[7px] lg:gap-2 lg:px-2.5 lg:py-2",
+                            index === 0 && "bg-[#eaf3ff] text-[#1677f0]",
+                          )}
+                        >
+                          <span className="h-[7px] w-[7px] rounded-[3px] border-2 border-current" />
+                          {label}
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </aside>
 
-            {/* Step 3 */}
-            <div className="relative rounded-[24px] border border-[#dce3ed] bg-white p-[22px] shadow-[0_14px_38px_rgba(43,62,91,0.09)] min-h-[180px]">
-              <div className="flex h-[47px] w-[47px] items-center justify-center rounded-[15px] bg-[#e9f9ef] font-[850] text-[18px] text-[#2b8650] mb-[17px]">
-                3
+                <div className="px-3.5 pb-[74px] pt-[52px] lg:px-[25px] lg:pb-[67px] lg:pt-[49px]">
+                  <div className="mb-3 flex items-start justify-between">
+                    <div>
+                      <strong className="block text-[13px] tracking-[-0.025em] lg:text-[15px]">
+                        Good morning!
+                      </strong>
+                      <span className="text-[8px] text-[#8290a5] lg:text-[9px]">
+                        3 challenges ready for you today.
+                      </span>
+                    </div>
+                    <span className="text-[8px] font-[700] lg:text-[9px]">☀️ Keep going ›</span>
+                  </div>
+                  <div className="rounded-[13px] bg-[linear-gradient(120deg,#d7ff66,#edffb8)] p-3 lg:p-[14px]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[9px] font-[800]">◎ Today&apos;s Challenge</span>
+                        <strong className="mt-1 block text-[14px] lg:text-[15px]">
+                          Laws of Motion
+                        </strong>
+                        <span className="text-[9px] text-[#657246]">Physics · Topic 3.2</span>
+                      </div>
+                      <span className="rounded-full bg-white/60 px-2.5 py-1 text-[8px]">
+                        3 left ›
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 overflow-hidden rounded-[11px] bg-white/60">
+                      {[
+                        ["12", "Topics learned"],
+                        ["68%", "Overall progress"],
+                        ["5", "Day streak"],
+                      ].map(([value, label]) => (
+                        <div
+                          key={label}
+                          className="border-r border-[rgba(109,139,63,0.12)] px-1.5 py-2 last:border-r-0 lg:px-2.5"
+                        >
+                          <strong className="block text-[12px]">{value}</strong>
+                          <span className="block text-[7px] text-[#75816a] lg:text-[8px]">
+                            {label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mb-2 mt-4 flex justify-between text-[9px] lg:mt-[18px] lg:text-[10px]">
+                    <strong className="text-[12px] lg:text-[15px]">Your Subjects</strong>
+                    <span className="text-[#748199]">See all →</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-[5px] lg:gap-[9px]">
+                    {[
+                      ["Physics", "24 topics", "67%", "#1677f0"],
+                      ["Chemistry", "28 topics", "54%", "#13a076"],
+                      ["Mathematics", "32 topics", "41%", "#1677f0"],
+                    ].map(([subject, topics, progress, color]) => (
+                      <div
+                        key={subject}
+                        className="rounded-[9px] border border-[#e4e9f1] bg-white p-[7px] shadow-[0_8px_18px_rgba(36,53,76,0.05)] lg:p-2.5"
+                      >
+                        <strong className="block text-[7px] lg:text-[8px]">{subject}</strong>
+                        <span className="text-[7px] text-[#8994a6]">{topics}</span>
+                        <span className="mt-2 block h-[3px] rounded-full bg-[#edf0f5] lg:mt-[9px]">
+                          <span
+                            className="block h-full rounded-full"
+                            style={{ width: progress, background: color }}
+                          />
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <b className="block text-[17px] text-[#111] mb-2">Solve a new past question</b>
-              <span className="text-[13px] text-[#757b84] leading-[1.5] block">
-                Write the answer yourself without looking at the solution.
-              </span>
-            </div>
 
-            {/* Step 4 */}
-            <div className="relative rounded-[24px] border border-[#dce3ed] bg-white p-[22px] shadow-[0_14px_38px_rgba(43,62,91,0.09)] min-h-[180px] lg:translate-y-8">
-              <div className="absolute right-4 top-4 flex items-center gap-1.5 rounded-full bg-[#fff3c8] px-2.5 py-1 text-[11px] font-[850] text-[#7c5900] shadow-sm">
-                <i>🏁</i> Finish
+              <button
+                type="button"
+                onClick={showWalkthroughNotice}
+                className="absolute left-[52%] top-[46%] z-[6] grid h-[68px] w-[68px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#c9ff38] text-[#101214] shadow-[0_16px_30px_rgba(111,143,21,0.32)] transition hover:scale-105 hover:brightness-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#151b1f] motion-reduce:transition-none lg:h-[70px] lg:w-[70px]"
+                aria-label="Play the NanoSyllabus walkthrough"
+              >
+                <Play className="ml-1 h-7 w-7 fill-current" aria-hidden="true" />
+              </button>
+              <div className="absolute bottom-[38px] left-[13px] z-[5] text-white">
+                <strong className="block text-[16px] tracking-[-0.03em]">
+                  Watch how a challenge works
+                </strong>
+                <span className="block text-[11px]">Explained in Nepali</span>
               </div>
-              <div className="flex h-[47px] w-[47px] items-center justify-center rounded-[15px] bg-[#f3eaff] font-[850] text-[18px] text-[#7a4ab7] mb-[17px]">
-                4
+              <div
+                aria-hidden="true"
+                className="absolute bottom-2.5 left-[13px] right-[13px] z-[5] grid grid-cols-[auto_auto_1fr_auto] items-center gap-2.5 text-[10px] text-white"
+              >
+                <span>▶</span>
+                <span>0:00 / 1:00</span>
+                <span className="h-[3px] rounded-full bg-white/35">
+                  <span className="block h-full w-[7%] rounded-full bg-white" />
+                </span>
+                <span>🔊 ▣ ⌗</span>
               </div>
-              <b className="block text-[17px] text-[#111] mb-2">Get AI-graded marks</b>
-              <span className="text-[13px] text-[#757b84] leading-[1.5] block">
-                Upload your handwritten answer and get marks, feedback and the exact steps to
-                improve.
-              </span>
-            </div>
-          </div>
+            </article>
 
-          <div className="mt-16 text-center">
+            <div className="grid grid-cols-1 gap-[14px] sm:grid-cols-2 lg:gap-4">
+              {[
+                {
+                  title: "Complete syllabus divided into micro-topics",
+                  color: "text-[#1677f0] bg-[#e7f2ff]",
+                  Icon: BarChart3,
+                },
+                {
+                  title: "All past questions solved",
+                  color: "text-[#88c900] bg-[#edffd1]",
+                  Icon: BookOpen,
+                },
+                {
+                  title: "English and Romanized Nepali content",
+                  color: "text-[#d38a00] bg-[#fff2d5]",
+                  Icon: CheckCircle2,
+                },
+                {
+                  title: "Handwritten exam practice with AI grader",
+                  color: "text-[#8f38ec] bg-[#f2e6ff]",
+                  Icon: Lightbulb,
+                },
+              ].map(({ title, color, Icon }, index) => (
+                <article
+                  key={title}
+                  className="flex min-h-[190px] flex-col justify-between rounded-[20px] border border-[#dfe5ee] bg-white/90 p-[21px] shadow-[0_13px_32px_rgba(62,79,105,0.045)] transition hover:-translate-y-[3px] hover:shadow-[0_20px_42px_rgba(62,79,105,0.085)] motion-reduce:transition-none lg:min-h-[198px] lg:p-[20px_20px_23px]"
+                >
+                  <div className="flex items-start justify-between">
+                    <span className={cn("grid h-14 w-14 place-items-center rounded-[15px]", color)}>
+                      <Icon className="h-[31px] w-[31px]" aria-hidden="true" />
+                    </span>
+                    <span
+                      className={cn(
+                        "grid h-[35px] w-[35px] place-items-center rounded-[15px] text-[15px] font-[820]",
+                        color,
+                      )}
+                    >
+                      {index + 1}
+                    </span>
+                  </div>
+                  <h2 className="mt-[22px] max-w-[95%] text-[20px] font-[680] leading-[1.13] tracking-[-0.045em] text-[#111214] lg:text-[21px]">
+                    {title}
+                  </h2>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <div className="mt-[26px] flex justify-center lg:mt-7">
             <button
+              type="button"
               onClick={() => {
                 if (user) {
                   void finishStudyFlow();
@@ -817,16 +1002,24 @@ export function SaaSFlowClient({
               }}
               disabled={authLoading}
               aria-busy={authLoading}
-              className="inline-flex w-full max-w-[380px] items-center justify-center gap-2 rounded-[12px] bg-[#111] py-4 text-[15px] font-[700] text-white shadow-sm transition hover:opacity-90 active:scale-[0.99] cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2"
+              className="inline-flex min-h-[50px] w-full items-center justify-center rounded-[14px] bg-[#121313] px-7 py-3.5 text-[15px] font-[740] text-white shadow-[0_12px_28px_rgba(0,0,0,0.14)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1677f0] focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none sm:w-auto sm:min-w-[344px]"
             >
-              {authLoading ? "Saving answers…" : "Join Nano Syllabus →"}
+              {authLoading ? "Saving answers…" : "Start your first challenge →"}
             </button>
-            {authError && (
-              <p role="alert" className="mt-3 text-sm text-destructive">
-                {authError}
-              </p>
-            )}
           </div>
+          {authError && (
+            <p role="alert" className="mt-3 text-center text-sm text-destructive">
+              {authError}
+            </p>
+          )}
+          {walkthroughNotice && (
+            <p
+              role="status"
+              className="fixed bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-xl bg-[#111] px-4 py-3 text-sm text-white shadow-[0_12px_30px_rgba(0,0,0,0.2)]"
+            >
+              The walkthrough video is being prepared.
+            </p>
+          )}
         </main>
       )}
 

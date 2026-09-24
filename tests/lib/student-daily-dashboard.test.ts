@@ -6,6 +6,7 @@ import {
   aggregateScopedPracticeActivity,
   rankDailyCommunityMembers,
 } from "@/lib/data/student-daily-dashboard";
+import { rankSemesterSubjects } from "@/lib/data/student-semester-ranking";
 
 describe("student Daily Dashboard calculations", () => {
   it("aggregates the activity calendar from only the already-scoped attempts", () => {
@@ -169,5 +170,15 @@ describe("student Daily Dashboard calculations", () => {
       measuredSubjects: 0,
       subjects: [{ readiness: null, topicCount: 12, materialCount: 3 }],
     });
+  });
+
+  it("ranks subjects by readiness and keeps unmeasured subjects last", () => {
+    expect(
+      rankSemesterSubjects([
+        { id: "b", slug: "b", name: "Beta", code: "B", topicCount: 1, materialCount: 1, readiness: 42 },
+        { id: "a", slug: "a", name: "Alpha", code: "A", topicCount: 1, materialCount: 1, readiness: 88 },
+        { id: "c", slug: "c", name: "Gamma", code: "C", topicCount: 1, materialCount: 1, readiness: null },
+      ]).map((subject) => subject.id),
+    ).toEqual(["a", "b", "c"]);
   });
 });

@@ -76,6 +76,7 @@
   --note-green: rgba(56, 161, 105, 0.12);
   --community-banner: #0b2859;
   --community-accent: #2f6fed;
+  --community-accent-foreground: #ffffff;
   --challenge-banner: #cbf738;
   --challenge-banner-glow: #e5ff75;
   --challenge-banner-ink: #000000;
@@ -120,6 +121,7 @@
   --note-green: rgba(74, 222, 128, 0.13);
   --community-banner: #0a1e42;
   --community-accent: #6f9cff;
+  --community-accent-foreground: #081225;
   --challenge-banner: #cbf738;
   --challenge-banner-glow: #e5ff75;
   --challenge-banner-ink: #000000;
@@ -178,6 +180,117 @@
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+}
+
+/* The Challenges nav item gets a quiet invitation pulse until it is opened. */
+@keyframes app-nav-challenges-attention {
+  0%,
+  48%,
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  19% {
+    background-color: color-mix(in srgb, var(--challenge-banner) 18%, transparent);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--challenge-banner) 56%, transparent),
+      0 0 22px color-mix(in srgb, var(--challenge-banner) 28%, transparent);
+  }
+}
+
+@keyframes app-nav-challenges-label {
+  0%,
+  4%,
+  48%,
+  100% {
+    transform: translateX(0);
+  }
+
+  9%,
+  24% {
+    transform: translateX(-4px);
+  }
+
+  16%,
+  31% {
+    transform: translateX(4px);
+  }
+
+  38% {
+    transform: translateX(-2px);
+  }
+
+  43% {
+    transform: translateX(1px);
+  }
+}
+
+@keyframes app-nav-challenges-icon-pulse {
+  0%,
+  4%,
+  45%,
+  100% {
+    opacity: 0;
+    transform: scale(0.75);
+  }
+
+  16% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  42% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+.app-nav-challenges {
+  animation: app-nav-challenges-attention 2s ease-in-out infinite;
+}
+
+.app-nav-challenges-label {
+  display: inline-block;
+  animation: app-nav-challenges-label 2s linear infinite;
+}
+
+.app-nav-challenges-icon::after {
+  position: absolute;
+  inset: -7px;
+  border: 2px solid var(--challenge-banner);
+  border-radius: 9999px;
+  content: "";
+  opacity: 0;
+  animation: app-nav-challenges-icon-pulse 2s ease-out infinite;
+  pointer-events: none;
+}
+
+.app-nav-challenges:hover,
+.app-nav-challenges:focus-visible,
+.app-nav-challenges-active {
+  animation: none;
+}
+
+.app-nav-challenges:hover .app-nav-challenges-label,
+.app-nav-challenges:focus-visible .app-nav-challenges-label,
+.app-nav-challenges-active .app-nav-challenges-label,
+.app-nav-challenges:hover .app-nav-challenges-icon::after,
+.app-nav-challenges:focus-visible .app-nav-challenges-icon::after,
+.app-nav-challenges-active .app-nav-challenges-icon::after {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-nav-challenges,
+  .app-nav-challenges-label,
+  .app-nav-challenges-icon::after {
+    animation: none;
+  }
+
+  .app-nav-challenges:not(.app-nav-challenges-active) {
+    background-color: color-mix(in srgb, var(--challenge-banner) 14%, transparent);
   }
 }
 
@@ -383,7 +496,9 @@ summary > .answer-paper-label {
 /* Paragraph after paragraph on one sheet (the concepts reading is a body per
    paragraph): a skipped line between them too, so they do not run together.
    Text blocks only — the padding would sit inside a boxed equation's border. */
-.answer-paper-body + .answer-paper-body > :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote):first-child {
+.answer-paper-body
+  + .answer-paper-body
+  > :is(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote):first-child {
   padding-top: var(--paper-line);
 }
 
@@ -879,6 +994,95 @@ img.answer-figure[data-answer-zoom]:focus-visible {
   }
   100% {
     background-position: 220px 220px;
+  }
+}
+
+/* Challenge Hub motion follows the approved HTML prototype while keeping the
+   real app's controls usable: content enters in a short stagger, and the first
+   available challenge gets a gentle invitation to start. */
+@keyframes challenge-hub-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes challenge-hub-step-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes challenge-start-bounce {
+  0%,
+  8%,
+  58%,
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgb(37 99 235 / 20%);
+  }
+  24% {
+    transform: translateY(-12px);
+    box-shadow: 0 14px 22px rgb(37 99 235 / 30%);
+  }
+  38% {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgb(37 99 235 / 20%);
+  }
+  48% {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgb(37 99 235 / 26%);
+  }
+}
+
+.challenge-hub-reveal {
+  animation: challenge-hub-reveal 0.45s ease-out both;
+}
+
+.challenge-hub-reveal-delay-1 {
+  animation-delay: 100ms;
+}
+
+.challenge-hub-reveal-delay-2 {
+  animation-delay: 180ms;
+}
+
+.challenge-hub-step {
+  animation: challenge-hub-step-reveal 0.45s ease-out both;
+}
+
+.challenge-hub-step:nth-child(2) {
+  animation-delay: 100ms;
+}
+
+.challenge-hub-step:nth-child(3) {
+  animation-delay: 200ms;
+}
+
+.challenge-start-attention {
+  animation: challenge-start-bounce 1.6s ease-in-out infinite;
+}
+
+.challenge-start-attention:hover,
+.challenge-start-attention:focus-visible,
+.challenge-start-attention:active {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .challenge-hub-reveal,
+  .challenge-hub-step,
+  .challenge-start-attention {
+    animation: none;
   }
 }
 

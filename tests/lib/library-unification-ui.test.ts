@@ -192,17 +192,20 @@ describe("unified Figma library", () => {
     expect(settingsForm).not.toContain("Available subjects");
     expect(settingsForm).not.toContain("You are a student");
     expect(desktopNav).not.toContain('label: "Subject Explorer"');
-    expect(desktopNav).toContain('!isCollapsed && "Today"');
+    expect(desktopNav).toContain('!isCollapsed && "Performance"');
     expect(desktopNav).toContain('!isCollapsed && "Community"');
-    expect(desktopNav).toContain('!isCollapsed && "Challenges"');
+    expect(desktopNav).toContain('!isCollapsed && <span className="app-nav-challenges-label">Micro-Topics</span>');
     expect(desktopNav).toContain('title={isCollapsed ? "Library" : undefined}');
     expect(desktopNav).toContain('label: "Revision"');
     expect(mobileNav).not.toContain('label: "Subject Explorer"');
-    expect(mobileNav).toContain('label: "Today"');
+    expect(mobileNav).toContain('label: "Performance"');
     expect(mobileNav).toContain('label: "Community"');
-    expect(mobileNav).toContain('label: "Challenges"');
+    expect(mobileNav).toContain('label: "Micro-Topics"');
     expect(mobileNav).toContain('label: "Library"');
     expect(mobileNav).toContain('label: "Revision"');
+    expect(mobileNav.indexOf('label: "Revision"')).toBeLessThan(
+      mobileNav.indexOf('label: "Performance"'),
+    );
     expect(oldRoute).toContain("redirect(`/app/today");
   });
 });

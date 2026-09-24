@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { DM_Sans, Manrope } from "next/font/google";
+import { BarChart3, BookOpen, CheckCircle2, Lightbulb, Play } from "lucide-react";
 import { LandingPrimaryCta } from "@/components/landing-primary-cta";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 
@@ -8,9 +9,18 @@ const dmSans = DM_Sans({ subsets: ["latin"], display: "swap" });
 const manrope = Manrope({ subsets: ["latin"], display: "swap" });
 
 export const metadata = {
-  title: "NanoSyllabus — A little less stuck. A lot more learning.",
+  title: "NanoSyllabus — AI Study Companion for Nepal",
   description:
-    "Turn your syllabus into small learning challenges. Practise on paper, find your gaps, and study with people who get it.",
+    "Turn your syllabus into focused study challenges. Practice with guided feedback, exam prep, and a supportive community built for Nepal's students.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "NanoSyllabus — AI Study Companion for Nepal",
+    description:
+      "Turn your syllabus into focused study challenges. Practice with guided feedback, exam prep, and a supportive community built for Nepal's students.",
+    url: "/",
+  },
 };
 
 function Brand() {
@@ -114,6 +124,13 @@ const steps = [
   ],
 ];
 
+const walkthroughFeatures = [
+  { title: "Complete syllabus divided into micro-topics", color: "text-[#1677f0] bg-[#e7f2ff]", Icon: BarChart3 },
+  { title: "All past questions solved", color: "text-[#88c900] bg-[#edffd1]", Icon: BookOpen },
+  { title: "English and Romanized Nepali content", color: "text-[#d38a00] bg-[#fff2d5]", Icon: CheckCircle2 },
+  { title: "Handwritten exam practice with AI grader", color: "text-[#8f38ec] bg-[#f2e6ff]", Icon: Lightbulb },
+];
+
 const testimonials = [
   [
     "NanoSyllabus made my preparation so organized. The mock tests and feedback helped me improve every week.",
@@ -209,160 +226,198 @@ export default function LandingPage() {
 
       <main id="main-content">
         {/* ── Hero Section ── */}
-        <section className="mx-auto max-w-[1320px] px-5 py-14 lg:py-24 2xl:px-0">
-          <div className="grid items-center gap-12 lg:grid-cols-[1.12fr_0.88fr] lg:gap-14">
-            {/* Left Content */}
-            <div className="max-w-[620px]">
-              <div className="mb-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-                <span className="text-[#3049ed]">✳</span>
-                <span>FOR BACHELOR’S STUDENTS IN NEPAL</span>
-              </div>
-              <h1
-                className={`${manrope.className} text-[clamp(2.9rem,5.3vw,5.5rem)] font-extrabold leading-[1.04] tracking-[-0.055em] text-[#1c1e1a]`}
-              >
-                Turn Exam Preparation
-                <br />
-           
-                Into a{" "}
-                <span className="relative isolate inline-block px-1">
-                  Game.
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[#dcfa72]"
-                  />
-                </span>
-              </h1>
-              <p className="mt-6 text-[18px] leading-[1.55] text-[#5b5e55]">
-                Scattered notes. No study routine.
+<section className="relative isolate overflow-hidden px-5 pb-20 pt-16 lg:pb-28 lg:pt-24 2xl:px-0">
+  {/* Subtle notebook background */}
+  <div
+    aria-hidden="true"
+    className="pointer-events-none absolute inset-0 -z-10"
+    style={{
+      backgroundImage:
+        "repeating-linear-gradient(to bottom, transparent 0, transparent 47px, #e8ebdf 48px)",
+      maskImage:
+        "radial-gradient(ellipse 70% 65% at 50% 35%, black, transparent)",
+    }}
+  />
 
-                <br />
-                Learn one topic at a time, complete challenges, and get ready to ace your exams.
-              </p>
-              <p className="mt-3 text-[18px] leading-[1.55] text-[#5b5e55]">
-                Learn a topic, practise past questions, and get your handwritten answers checked. Build a daily study habit around your official syllabus.
-              </p>
-              <div className="mt-9 flex flex-wrap items-center gap-6">
-                <LandingPrimaryCta blue size="hero" communityOnly>
-                  Find your faculty
-                </LandingPrimaryCta>
-                <a
-                  href="#steps"
-                  className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:text-[#3049ed] hover:border-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]"
-                >
-                  How does it work?
-                </a>
-              </div>
+  <div
+    aria-hidden="true"
+    className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[550px] w-[800px] max-w-full -translate-x-1/2 rounded-full bg-[#dcfa72]/20 blur-[110px]"
+  />
+
+  <div className="mx-auto max-w-[1200px]">
+    <div className="mx-auto max-w-[1050px] text-center">
+      <h1
+        className={`${manrope.className} text-[clamp(2.7rem,5.5vw,5.5rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
+      >
+        Everything you need to 10x your exam {" "}
+        <span className="relative isolate inline-block px-1">
+          preparation.
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[#dcfa72]"
+          />
+        </span>
+      </h1>
+
+      <p className="mx-auto mt-7 max-w-[690px] text-[17px] leading-relaxed text-[#5b5e55] sm:text-[19px]">
+        Notes, solved past papers, and an AI tutor - organized into a study
+        routine, one topic at a time.
+      </p>
+
+      <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-5">
+        <LandingPrimaryCta blue size="hero" communityOnly>
+          Find your faculty
+        </LandingPrimaryCta>
+
+        <a
+          href="#steps"
+          className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:border-[#3049ed] hover:text-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]"
+        >
+          How does it work?
+        </a>
+      </div>
+    </div>
+
+    {/* Animated feature walkthrough */}
+    <div className="mx-auto mt-14 max-w-[1050px] lg:mt-20">
+      <div className="overflow-hidden rounded-[22px] border border-[#dfe4d6] bg-white p-2 shadow-[0_24px_70px_rgba(28,30,26,0.12)] sm:rounded-[30px] sm:p-3">
+        <iframe
+          src="/nanosyllabus-features-minimal-animation.html?capture"
+          title="How NanoSyllabus organizes topics, solves past questions, translates explanations, and grades handwritten answers"
+          className="block aspect-video w-full rounded-[15px] border-0 sm:rounded-[20px]"
+          loading="eager"
+        />
+      </div>
+    </div>
+  </div>
+</section>
+
+<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
+  {walkthroughFeatures.map(({ title }, index) => (
+    <article
+      key={title}
+      className="ns-feature flex min-h-[330px] flex-col rounded-[24px] border border-[#dfe5ee] bg-white p-5 shadow-[0_13px_32px_rgba(62,79,105,0.045)] sm:p-6"
+    >
+      <h3 className="min-h-[54px] text-[21px] font-extrabold leading-[1.15] tracking-[-0.045em] text-[#1c1e1a]">
+        {title}
+      </h3>
+
+      <div className="relative mt-5 h-[218px] overflow-hidden rounded-[18px] border border-[#e5eae2] bg-[#fafbf8]">
+        {index === 0 && (
+          <div className="p-4">
+            <div className="flex items-center justify-between rounded-xl bg-[#e6f99c] px-3 py-2.5">
+              <span className="text-sm font-bold text-[#263018]">
+                Physics
+              </span>
+              <span className="text-xs font-semibold text-[#53683b]">
+                37 topics
+              </span>
             </div>
 
-            {/* Right Card Mockup */}
-            <div className="relative mx-auto w-full max-w-[540px] lg:max-w-none">
-              {/* Lime decorative rays on top */}
-              <div className="absolute -top-7 left-12 flex gap-1.5" aria-hidden="true">
-                <span className="h-6 w-1.5 -rotate-25 rounded-full bg-[#dcfa72]" />
-                <span className="h-7 w-1.5 -rotate-10 rounded-full bg-[#dcfa72]" />
-                <span className="h-5 w-1.5 rotate-15 rounded-full bg-[#dcfa72]" />
-              </div>
+            <div className="ns-trace mx-auto h-5 w-px bg-[#8eaa6d]" />
 
-              {/* Main Lime Container */}
-              <div
-                className="relative rounded-[24px] bg-[#dcfa72] p-6 sm:p-8 lg:p-10 shadow-sm"
-                aria-label="A small learning challenge preview"
-              >
-                <p className="mb-6 flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.09em] text-[#1c1e1a]">
-                  <span>A smaller way through a big syllabus</span>
-                  <span aria-hidden="true" className="text-xl leading-none">
-                    ↙
-                  </span>
-                </p>
-
-                {/* Rotated White Challenge Note Card */}
-                <div className="mx-auto w-full rotate-[-3.5deg] rounded-xl border border-[#23251e]/15 bg-white p-6 sm:p-8 shadow-[12px_12px_0_#bedb62] transition-transform duration-300 hover:rotate-0">
-                  <div className="flex items-center justify-between text-[10.5px] font-bold uppercase tracking-widest text-[#5b5e55]">
-                    <span>Nano challenge</span>
-                    <span>Challenge no. 01</span>
-                  </div>
-                  <h2
-                    className={`${manrope.className} mt-6 text-[clamp(1.85rem,2.5vw,2.4rem)] font-extrabold leading-[1.08] tracking-[-0.05em] text-[#1c1e1a]`}
+            <div className="space-y-2">
+              {["Energy and work", "Power and efficiency", "Motion and speed"].map(
+                (topic, topicIndex) => (
+                  <div
+                    key={topic}
+                    className="ns-reveal flex items-center gap-2.5 rounded-lg border border-[#e5eae2] bg-white px-3 py-2"
                   >
-                    One topic.
-                    <br />
-                    Actually understood.
-                  </h2>
-
-                  <div className="mt-6 divide-y divide-[#e3e6db] border-t border-[#e3e6db]">
-                    {/* Step 01 */}
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3.5">
-                        <span className="grid size-7 shrink-0 place-items-center rounded-full border border-[#d9ddd3] text-xs font-bold text-[#1c1e1a]">
-                          01
-                        </span>
-                        <div>
-                          <strong className="block text-sm text-[#1c1e1a]">Learn the idea</strong>
-                          <span className="block text-xs text-[#5b5e55]">
-                            Make sense of the concept.
-                          </span>
-                        </div>
-                      </div>
-                      <span className="text-sm font-bold text-[#1c1e1a]" aria-hidden="true">
-                        ✓
-                      </span>
-                    </div>
-
-                    {/* Step 02 */}
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3.5">
-                        <span className="grid size-7 shrink-0 place-items-center rounded-full border border-[#d9ddd3] text-xs font-bold text-[#1c1e1a]">
-                          02
-                        </span>
-                        <div>
-                          <strong className="block text-sm text-[#1c1e1a]">See it in action</strong>
-                          <span className="block text-xs text-[#5b5e55]">
-                            Work through a solved question.
-                          </span>
-                        </div>
-                      </div>
-                      <span className="text-sm font-bold text-[#1c1e1a]" aria-hidden="true">
-                        ✓
-                      </span>
-                    </div>
-
-                    {/* Step 03 - Active / Highlighted */}
-                    <div className="mt-1 flex items-center justify-between rounded-lg bg-[#3049ed] px-3.5 py-3 text-white shadow-xs">
-                      <div className="flex items-center gap-3.5">
-                        <span className="grid size-7 shrink-0 place-items-center rounded-full border border-white/40 text-xs font-bold text-white">
-                          03
-                        </span>
-                        <div>
-                          <strong className="block text-sm">Your turn</strong>
-                          <span className="block text-xs text-white/80">
-                            Close the solution. Give it a go.
-                          </span>
-                        </div>
-                      </div>
-                      <span className="text-sm font-bold" aria-hidden="true">
-                        ↗
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="mt-4 flex items-center justify-between text-xs text-[#5b5e55]">
-                    <span>Learning → practice → feedback</span>
-                    <span aria-hidden="true" className="text-lg text-[#3049ed]">
-                      ✳
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#eaf0ff] text-[11px] font-bold text-[#3049ed]">
+                      {topicIndex + 1}
                     </span>
-                  </p>
-                </div>
+                    <span className="text-xs font-semibold text-[#273029]">
+                      {topic}
+                    </span>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        )}
 
-                {/* Hand-written style note */}
-                <p className="mt-6 text-right font-serif text-[17px] italic leading-tight text-[#1c1e1a]">
-                  Less “I think I know it.”
-                  <br />
-                  More “I can do it.”
+        {index === 1 && (
+          <div className="p-4">
+            <div className="rounded-xl border border-[#e5e3dc] bg-[#fffefa] p-4">
+              <span className="text-xs font-semibold text-[#778078]">
+                Past question
+              </span>
+
+              <p className="mt-3 text-[15px] font-bold leading-snug text-[#20251f]">
+                What is delegation?
+              </p>
+
+              <div className="mt-4 h-px bg-[#dce6fb]" />
+
+              <div className="ns-reveal mt-3 rounded-lg bg-[#edf3ff] p-3">
+                <span className="text-xs font-bold text-[#3049ed]">
+                  Solution ↗
+                </span>
+                <p className="mt-2 text-xs leading-snug text-[#303c35]">
+                  Assign authority to a team member for a task.
                 </p>
               </div>
             </div>
           </div>
-        </section>
+        )}
+
+        {index === 2 && (
+          <div className="p-4">
+            <div className="ns-english rounded-xl border border-[#e4e9e1] bg-white px-3 py-3">
+              <span className="text-xs font-bold text-[#78847b]">
+                English
+              </span>
+              <p className="mt-1.5 text-sm font-semibold leading-snug text-[#252c27]">
+                Power is the rate of energy transfer.
+              </p>
+            </div>
+
+            <div className="ns-reveal my-2 text-center text-sm font-bold text-[#3049ed]">
+              ↓
+            </div>
+
+            <div className="ns-reveal rounded-xl border border-[#d9e9bc] bg-[#f2f9e5] px-3 py-3">
+              <span className="text-xs font-bold text-[#5d774b]">
+                Romanized Nepali
+              </span>
+              <p className="mt-1.5 text-sm font-semibold leading-snug text-[#252c27]">
+                Power bhaneko energy transfer hune rate ho.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {index === 3 && (
+          <div className="flex h-full items-center gap-3 px-4">
+            <div className="relative h-[160px] w-[92px] shrink-0 rounded-[20px] border-[5px] border-[#242b25] bg-[#edf1e9] p-2">
+              <div className="h-[112px] rounded bg-[repeating-linear-gradient(to_bottom,#fffefa_0px,#fffefa_11px,#dce6f8_12px)] p-2">
+                <div className="mt-3 h-0.5 w-11 rounded bg-[#778276]" />
+                <div className="mt-2.5 h-0.5 w-9 rounded bg-[#778276]" />
+                <div className="mt-2.5 h-0.5 w-12 rounded bg-[#778276]" />
+                <div className="mt-2.5 h-0.5 w-8 rounded bg-[#778276]" />
+              </div>
+
+              <div className="ns-shutter absolute bottom-1 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full border-[3px] border-white bg-[#242b25] ring-1 ring-[#242b25]" />
+              <div className="ns-flash pointer-events-none absolute inset-0 rounded-[15px] bg-white opacity-0" />
+            </div>
+
+            <div className="ns-reveal min-w-0 flex-1 rounded-xl border border-[#d9ead8] bg-white p-3">
+              <span className="text-xs font-bold text-[#368255]">
+                AI feedback:
+              </span>
+              <div className="mt-2 text-2xl font-extrabold text-[#193421]">
+                7 / 8
+              </div>
+              <p className="mt-2 text-xs leading-snug text-[#526157]">
+                Add one team example.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </article>
+  ))}
+</div>
 
         {/* ── Marquee Ribbon 1 ── */}
         <div className="overflow-hidden bg-[#3049ed] py-4 text-white">
@@ -387,7 +442,6 @@ export default function LandingPage() {
         {/* ── Section 01 / Sound Familiar? ── */}
         <section id="little-steps" className="mx-auto max-w-[1320px] px-5 py-24 lg:py-28 2xl:px-0">
           <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-            01 / Sound familiar?
           </div>
           <div className="mt-6 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
             <h2
@@ -397,7 +451,6 @@ export default function LandingPage() {
               <br />A clear next step is.
             </h2>
             <p className="max-w-[320px] text-base leading-relaxed text-[#5b5e55]">
-            When your material is scattered and exams are getting closer, starting can feel like the hardest part.
             </p>
           </div>
 
@@ -419,7 +472,7 @@ export default function LandingPage() {
                   >
                     {quote}
                   </h3>
-                  <p className="mt-4 flex-1 text-[15px] leading-relaxed text-[#5b5e55]">{detail}</p>
+                  {/* <p className="mt-4 flex-1 text-[15px] leading-relaxed text-[#5b5e55]">{detail}</p> */}
                   <p
                     className={`mt-7 border-t pt-4 text-xs font-semibold uppercase tracking-wider ${
                       isLime ? "border-[#bedb62] text-[#1c1e1a]" : "border-[#e5e8df] text-[#5b5e55]"
@@ -437,7 +490,6 @@ export default function LandingPage() {
         <section id="steps" className="bg-[#eff1e9] py-24 lg:py-28">
           <div className="mx-auto max-w-[1320px] px-5 2xl:px-0">
             <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-              02 / Meet Nano Challenges
             </div>
             <div className="mt-6 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
               <h2
@@ -448,7 +500,6 @@ export default function LandingPage() {
                 <em className="font-serif font-normal italic">Little victories.</em>
               </h2>
               <p className="max-w-[340px] text-base leading-relaxed text-[#5b5e55]">
-                A personal learning system that takes you from studying a topic to writing an answer and understanding what to improve.
               </p>
             </div>
 
@@ -498,8 +549,7 @@ export default function LandingPage() {
                   id="featured-title"
                   className={`${manrope.className} mt-8 text-[clamp(2rem,3.2vw,2.9rem)] font-extrabold leading-[1.18] tracking-[-0.045em] text-[#1c1e1a]`}
                 >
-                  From Syllabus to Success
-                  <br />—{" "}
+    
                   <span className="relative isolate inline-block px-1">
                     A Smarter Way
                     <span
@@ -637,7 +687,6 @@ export default function LandingPage() {
     {/* Left copy */}
     <div className="relative z-10 max-w-[375px] lg:absolute lg:left-12 lg:top-[126px] 2xl:left-0">
       <p className="text-xs font-bold uppercase tracking-[0.12em] text-white/85">
-        04 / Same syllabus. Your people.
       </p>
 
       <h2
@@ -745,7 +794,8 @@ export default function LandingPage() {
     {/* Left copy */}
     <div>
       <p className="inline-flex rounded-full bg-[#3049ed] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
-        BCT students only · Weekly challenge
+       Tag the study buddy who needs this!
+
       </p>
 
       <h2
@@ -801,7 +851,6 @@ export default function LandingPage() {
         </a>
       </div>
       <p className="mt-5 text-sm text-[#5b5e55]">
-        Tag the study buddy who needs this!
       </p>
     </div>
 
@@ -809,7 +858,7 @@ export default function LandingPage() {
     <div className="relative">
       <div className="rounded-[28px] border border-[#243bc2] bg-[#3049ed] p-5 text-white shadow-[10px_12px_0_#17236d] sm:p-8">
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.1em]">
-          <span className="rounded-full border border-white/30 px-3 py-1.5">BCT weekly draw</span>
+          <span className="rounded-full border border-white/30 px-3 py-1.5"> Weekly Lucky draw</span>
           <span className="text-[#dcfa72]">3 winners</span>
         </div>
 
@@ -817,22 +866,22 @@ export default function LandingPage() {
           First prize
         </div>
         <div className={`${manrope.className} mt-2 text-[clamp(3.5rem,6vw,5.5rem)] font-extrabold leading-none tracking-[-0.075em] text-[#dcfa72]`}>
-          Rs. 5,000
+          Win Rs. 5,000
         </div>
-        <p className="mt-3 text-base font-semibold">+ 3 months Unlimited Challenge</p>
+        <p className="mt-3 text-base font-semibold">+ 3 months Pro Subscription</p>
 
         <div className="mt-9 grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
             <span className="text-xs font-bold uppercase tracking-[0.1em] text-[#dcfa72]">02 / Second prize</span>
             <strong className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}>
-              3 months Unlimited Challenge
+              3 months Pro Subscription
             </strong>
           </div>
 
           <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
             <span className="text-xs font-bold uppercase tracking-[0.1em] text-[#dcfa72]">03 / Third prize</span>
             <strong className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}>
-              1 month Unlimited Challenge
+              1 month Pro Subscription
             </strong>
           </div>
         </div>
@@ -858,24 +907,18 @@ export default function LandingPage() {
 >
   <div>
     <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-      06 / Fair questions
     </div>
 
     <h2
       className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.2vw,4.1rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
     >
-      Before you
+      Frequently Asked
       <br />
       <em className="font-serif font-normal italic">
-        jump in.
+        Questions
       </em>
     </h2>
 
-    <p className="mt-5 text-base leading-relaxed text-[#5b5e55]">
-      No big promises.
-      <br />
-      Just a better way to practise.
-    </p>
   </div>
 
   <div className="divide-y divide-[#d9ddd3] border-t border-[#d9ddd3]">
@@ -904,9 +947,7 @@ export default function LandingPage() {
         {/* ── Final Call To Action Banner ── */}
         <section className="mx-auto max-w-[1320px] px-5 pb-16 2xl:px-0">
           <div className="relative overflow-hidden rounded-[28px] bg-[#dcfa72] p-8 sm:p-14 lg:p-16 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#1c1e1a]/80">
-              3 free learning challenges a day. Your next step starts here.
-            </div>
+       
             <h2
               className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.5vw,4.6rem)] font-extrabold leading-[1.05] tracking-[-0.055em] text-[#1c1e1a]`}
             >

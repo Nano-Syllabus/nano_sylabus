@@ -41,6 +41,7 @@ import {
 } from "@/lib/teacher-upload";
 import { teacherLegacySubjectHref, teacherSubjectsHref } from "@/lib/teacher-subject-navigation";
 import { CommunityDeleteControl } from "@/components/community-delete-control";
+import { CommunityNameEditor } from "@/components/community-name-editor";
 import { subjectAccessLabel, type SubjectCommunity } from "@/lib/teacher-subject-access";
 import type { CommunityDetail } from "@/lib/communities";
 import type { CommunitySubjectWorkspace } from "@/lib/data/community-subjects";
@@ -1342,6 +1343,9 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               onSubjects={() => navigate("subjects")}
               onSettings={() => navigate("settings")}
               onRetry={() => void loadDashboard()}
+              onRefresh={async () => {
+                await Promise.all([loadDashboard(), loadWorkspace()]);
+              }}
             />
           ) : null}
           {view === "communities" ? (
@@ -1922,9 +1926,11 @@ export function CommunitiesView({
                   <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
                     Community workspace
                   </p>
-                  <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em]">
-                    {titleCase(selected.name)}
-                  </h1>
+                  <CommunityNameEditor
+                    slug={selected.slug}
+                    name={titleCase(selected.name)}
+                    onSaved={onRefresh}
+                  />
                   <p className="mt-2 text-sm text-white/65">
                     {selected.university} · {selected.faculty}
                   </p>
@@ -2063,6 +2069,7 @@ function TodayView({
   onSubjects,
   onSettings,
   onRetry,
+  onRefresh,
 }: {
   teacherHandle: string;
   subjectCount: number;
@@ -2077,6 +2084,7 @@ function TodayView({
   onSubjects: () => void;
   onSettings: () => void;
   onRetry: () => void;
+  onRefresh: () => Promise<unknown>;
 }) {
   const [usage, setUsage] = useState<ApiRecord>({});
   const [usageState, setUsageState] = useState<WorkspaceState>("loading");
@@ -2160,12 +2168,13 @@ function TodayView({
                 <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
                   Community admin
                 </p>
-                <h2
+                <CommunityNameEditor
+                  as="h2"
                   id="community-admin-heading"
-                  className="mt-1 truncate font-display text-2xl font-semibold tracking-[-0.03em]"
-                >
-                  {communityAdmin.name}
-                </h2>
+                  slug={communityAdmin.slug}
+                  name={communityAdmin.name}
+                  onSaved={onRefresh}
+                />
                 <p className="mt-1 text-sm text-white/65">
                   {communityAdmin.university} · {communityAdmin.faculty}
                 </p>
@@ -2326,4 +2335,3 @@ function CommunityMetric({ label, value }: { label: string; value: number | stri
     </div>
   );
 }
-

@@ -69,6 +69,7 @@ The first deliverable intentionally keeps the existing chat, practice, grading, 
 - [x] `GET /api/communities` lists public communities and the current user's membership state.
 - [x] `POST /api/communities` creates a community and generated terms.
 - [x] `GET /api/communities/[slug]` returns community structure and subjects.
+- [x] `PATCH /api/communities/[slug]` lets the creator rename a community without changing its URL.
 - [x] `POST /api/communities/[slug]/join` joins the signed-in user.
 - [x] `GET /api/communities/[slug]/subjects` lists the creator's reusable workspace subjects.
 - [x] `POST /api/communities/[slug]/subjects` attaches an existing subject to an owned term.

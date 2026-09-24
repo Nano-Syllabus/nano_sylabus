@@ -13,6 +13,7 @@ import {
   normalizeSubjects,
   normalizeTargetGrade,
 } from "@/lib/profile-normalization";
+import { getPhoneNumberError, normalizePhoneNumber } from "@/lib/phone-number";
 import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { AppUser, StudentProfile } from "@/lib/types";
 import { ThemeSetting } from "@/components/theme-setting";
@@ -33,9 +34,13 @@ export function SettingsForm({
   const router = useRouter();
   const [fullName, setFullName] = useState(profile.fullName);
   const [college, setCollege] = useState(profile.college);
+  const [phoneNumber, setPhoneNumber] = useState(profile.phoneNumber ?? "");
   const [languagePref, setLanguagePref] = useState<"EN" | "RN">(profile.languagePref);
   const [status, setStatus] = useState("");
+  const [phoneNumberError, setPhoneNumberError] = useState("");
+  const [phoneNumberStatus, setPhoneNumberStatus] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingPhoneNumber, setSavingPhoneNumber] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   async function saveProfile() {
@@ -69,6 +74,27 @@ export function SettingsForm({
 
     setSaving(false);
     setStatus(error ? error.message : "Saved.");
+  }
+
+  async function savePhoneNumber() {
+    const nextPhoneNumberError = getPhoneNumberError(phoneNumber);
+    if (nextPhoneNumberError) {
+      setPhoneNumberError(nextPhoneNumberError);
+      setPhoneNumberStatus("");
+      return;
+    }
+
+    setSavingPhoneNumber(true);
+    setPhoneNumberError("");
+    setPhoneNumberStatus("");
+
+    const supabase = await loadSupabaseBrowserClient();
+    const { error } = await supabase.auth.updateUser({
+      data: { phone_number: normalizePhoneNumber(phoneNumber) },
+    });
+
+    setSavingPhoneNumber(false);
+    setPhoneNumberStatus(error ? error.message : "Phone number saved.");
   }
 
   async function exportAccount() {
@@ -206,6 +232,40 @@ export function SettingsForm({
           <h2 className="type-student-section-title">Account</h2>
         </div>
         <div className="space-y-4 p-5">
+          <form
+            className="rounded-md border border-border bg-bg-secondary p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void savePhoneNumber();
+            }}
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
+                <Field
+                  label="Phone number"
+                  error={phoneNumberError || undefined}
+                  hint="Used for account and payment support. It is never shown publicly."
+                >
+                  <Input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={phoneNumber}
+                    onChange={(event) => setPhoneNumber(event.target.value)}
+                    onBlur={() => setPhoneNumberError(phoneNumber ? getPhoneNumberError(phoneNumber) : "")}
+                    placeholder="9812345678 or +977 9812345678"
+                    invalid={Boolean(phoneNumberError)}
+                    required
+                  />
+                </Field>
+              </div>
+              <Button type="submit" variant="outline" disabled={savingPhoneNumber} aria-busy={savingPhoneNumber}>
+                {savingPhoneNumber ? "Saving..." : "Save phone number"}
+              </Button>
+            </div>
+            {phoneNumberStatus ? <p className="mt-3 text-sm text-text-secondary">{phoneNumberStatus}</p> : null}
+          </form>
+
           <div className="rounded-md border border-border bg-bg-secondary p-4">
             <p className="text-sm font-medium">Export your data</p>
             <p className="mt-1 text-sm text-text-secondary">

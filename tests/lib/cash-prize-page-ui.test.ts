@@ -49,13 +49,19 @@ describe("student cash prize page", () => {
       sidebar.indexOf('label: "Pricing"'),
     );
     expect(appNav.indexOf('label: "Revision"')).toBeLessThan(appNav.indexOf('label: "Cash Prize"'));
-    // Community sits between Revision and Cash Prize, in both navs.
-    expect(appNav.indexOf('label: "Revision"')).toBeLessThan(appNav.indexOf('label: "Community"'));
+    // Performance follows Revision, before the community and reward surfaces.
+    expect(appNav.indexOf('label: "Revision"')).toBeLessThan(appNav.indexOf('label: "Performance"'));
+    expect(appNav.indexOf('label: "Performance"')).toBeLessThan(appNav.indexOf('label: "Community"'));
     expect(appNav.indexOf('label: "Community"')).toBeLessThan(appNav.indexOf('label: "Cash Prize"'));
     // The sidebar's Revision and Cash Prize come from its NAV array, so source
-    // order says nothing there: Community is rendered from inside that map,
-    // directly after the Revision item, and no longer ahead of Challenges.
-    expect(sidebar).toMatch(/item\.href === "\/app\/notes" \? \(\s*<Link\s+href="\/app\/community"/);
+    // order says nothing there: Performance and Community are rendered from
+    // inside that map, directly after Revision.
+    expect(sidebar.indexOf('item.href === "/app/notes"')).toBeLessThan(
+      sidebar.indexOf('href="/app/today"'),
+    );
+    expect(sidebar.indexOf('href="/app/today"')).toBeLessThan(
+      sidebar.indexOf('href="/app/community"'),
+    );
     expect(sidebar.indexOf('href="/app/challenges"')).toBeLessThan(sidebar.indexOf('href="/app/community"'));
     expect(appNav.indexOf('label: "Cash Prize"')).toBeLessThan(appNav.indexOf('label: "Pricing"'));
   });

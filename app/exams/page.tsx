@@ -9,9 +9,13 @@ const DESC =
 export const metadata: Metadata = {
   title: TITLE,
   description: DESC,
+  alternates: {
+    canonical: "/exams",
+  },
   openGraph: {
     title: TITLE,
     description: DESC,
+    url: "/exams",
   },
 };
 

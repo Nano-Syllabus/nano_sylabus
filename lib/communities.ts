@@ -3,9 +3,15 @@ import { challengeQuestionFormats } from "@/lib/challenge-format";
 
 export const communityVisibility = ["public", "unlisted", "private"] as const;
 
+export const communityNameSchema = z
+  .string()
+  .trim()
+  .min(3, "Community name is required.")
+  .max(120, "Community name must be 120 characters or fewer.");
+
 export const communityInputSchema = z
   .object({
-    name: z.string().trim().min(3, "Community name is required.").max(120),
+    name: communityNameSchema,
     university: z.string().trim().min(2, "University is required.").max(160),
     faculty: z.string().trim().min(2, "Faculty or programme is required.").max(160),
     description: z.string().trim().max(1200).default(""),

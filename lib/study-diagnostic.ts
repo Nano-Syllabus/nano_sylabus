@@ -10,6 +10,7 @@ export type StudyAnswer = {
 export type StudyAnswers = Record<number, StudyAnswer>;
 export const PENDING_STUDY_ANSWERS_KEY = "nano-pending-study-answers";
 export const STUDY_DIAGNOSTIC_STARTED_KEY = "nano-study-diagnostic-started";
+export const STUDY_DIAGNOSTIC_QUESTION_COUNT = 5;
 
 /** A one-time funnel marker. Once set, incomplete answers must not gate the app. */
 export function hasStartedStudyDiagnostic(value: unknown) {
@@ -20,18 +21,20 @@ export function hasStartedStudyDiagnostic(value: unknown) {
 export function hasCompletedStudyDiagnostic(value: unknown): value is StudyAnswers {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const answers = value as Record<string, unknown>;
-  return [1, 2, 3, 4, 5, 6].every((questionIndex) => {
-    const answer = answers[questionIndex] as Partial<StudyAnswer> | undefined;
-    return Boolean(
-      answer &&
+  return Array.from({ length: STUDY_DIAGNOSTIC_QUESTION_COUNT }, (_, index) => index + 1).every(
+    (questionIndex) => {
+      const answer = answers[questionIndex] as Partial<StudyAnswer> | undefined;
+      return Boolean(
+        answer &&
         answer.questionIndex === questionIndex &&
         Number.isInteger(answer.optionIndex) &&
         answer.optionIndex! >= 0 &&
-        answer.optionIndex! < (questionIndex === 5 ? 2 : 3) &&
+        answer.optionIndex! < 3 &&
         typeof answer.text === "string" &&
         answer.text.trim().length > 0,
-    );
-  });
+      );
+    },
+  );
 }
 
 export function studyFlowDestination(community?: string) {
@@ -45,7 +48,10 @@ export async function saveStudyDiagnostic(
   supabase: Pick<SupabaseClient, "auth">,
   answers: unknown,
 ) {
-  const { data: { user }, error: authError } = await getVerifiedUser(supabase);
+  const {
+    data: { user },
+    error: authError,
+  } = await getVerifiedUser(supabase);
   if (authError) throw authError;
   if (!user) throw new Error("Please sign in to save your study answers.");
   if (hasCompletedStudyDiagnostic(user.user_metadata?.study_answers)) return true;
@@ -59,10 +65,11 @@ export async function saveStudyDiagnostic(
 }
 
 /** Persist the first answer immediately so closing the app cannot restart the funnel. */
-export async function markStudyDiagnosticStarted(
-  supabase: Pick<SupabaseClient, "auth">,
-) {
-  const { data: { user }, error: authError } = await getVerifiedUser(supabase);
+export async function markStudyDiagnosticStarted(supabase: Pick<SupabaseClient, "auth">) {
+  const {
+    data: { user },
+    error: authError,
+  } = await getVerifiedUser(supabase);
   if (authError) throw authError;
   if (!user) return false;
   if (
@@ -83,8 +90,11 @@ export function readPendingStudyAnswers(raw: string | null, now = Date.now()): S
   if (!raw) return null;
   try {
     const pending = JSON.parse(raw);
-    return typeof pending?.expiresAt === "number" && pending.expiresAt > now &&
-      hasCompletedStudyDiagnostic(pending.answers) ? pending.answers : null;
+    return typeof pending?.expiresAt === "number" &&
+      pending.expiresAt > now &&
+      hasCompletedStudyDiagnostic(pending.answers)
+      ? pending.answers
+      : null;
   } catch {
     return null;
   }

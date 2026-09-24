@@ -27,8 +27,8 @@ export function CashPrizeHeader() {
           Complete challenges. Score higher. Win cash.
         </p>
       </div>
-      <div className="inline-flex items-center gap-[9px] rounded-full border-[1.5px] border-border bg-card px-[18px] py-[9px] text-base font-medium text-text-secondary lg:mt-[10px] lg:text-[19.5px]">
-        <span className="size-3 rounded-full bg-[#22c55e]" aria-hidden="true" />
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-text-secondary lg:mt-[10px] lg:text-sm">
+        <span className="size-2 rounded-full bg-[#22c55e]" aria-hidden="true" />
         <span>
           {ACTIVE_CAMPAIGNS} active {ACTIVE_CAMPAIGNS === 1 ? "campaign" : "campaigns"}
         </span>

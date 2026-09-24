@@ -415,6 +415,39 @@ export async function createCommunity(
   return community;
 }
 
+export async function updateOwnedCommunityName(
+  userId: string,
+  slug: string,
+  name: string,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+) {
+  const result = await admin.rpc("update_owned_community_name", {
+    target_user_id: userId,
+    target_community_slug: slug,
+    target_name: name,
+  });
+  if (result.error) {
+    if (result.error.code === "42501") {
+      throw new CommunityError("Only the community creator can rename this community.", 403);
+    }
+    if (result.error.code === "P0002") throw new CommunityError("Community not found.", 404);
+    if (result.error.code === "22023") {
+      throw new CommunityError("Community name must be between 3 and 120 characters.", 400);
+    }
+    if (result.error.code === "PGRST202" || result.error.code === "42883") {
+      throw new CommunityError(
+        "Community editing is not available yet. The database update must be installed first.",
+        503,
+      );
+    }
+    throw result.error;
+  }
+
+  const community = await getCommunity(slug, userId, admin);
+  if (!community) throw new CommunityError("Community not found.", 404);
+  return community;
+}
+
 export async function joinCommunity(
   userId: string,
   slug: string,
@@ -480,9 +513,32 @@ export async function joinCommunity(
       await markCommunityLearningError(admin, joinedCommunityId, error);
     }
   }
-  const community = await getCommunity(slug, userId, admin);
-  if (!community) throw new CommunityError("Community not found.", 404);
-  return community;
+
+  // The membership transaction above is the source of truth for a join.  The
+  // detail read is useful to API consumers, but it must not turn a committed
+  // membership into a failed join when an optional/read-model query is briefly
+  // unavailable (for example while PostgREST reloads a schema migration).
+  try {
+    const community = await getCommunity(slug, userId, admin);
+    if (community) return community;
+  } catch (error) {
+    const source = (error || {}) as CommunityStorageErrorLike;
+    console.error("[community:join] membership saved but detail refresh failed", {
+      slug,
+      code: source.code,
+      message: source.message,
+    });
+  }
+
+  return {
+    id: targetCommunityId,
+    slug,
+    membership: {
+      role: isCreator ? "creator" : "member",
+      status: "active",
+    },
+    needsRefresh: true,
+  };
 }
 
 export async function listCommunityCreatorSubjects(

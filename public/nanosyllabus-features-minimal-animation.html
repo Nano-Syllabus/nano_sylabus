@@ -1,0 +1,1589 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>NanoSyllabus — 30-second product demo</title>
+  <style>
+    :root {
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #171d18;
+      background: #eef1e9;
+      font-synthesis: none
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0
+    }
+
+    button {
+      font: inherit;
+      cursor: pointer
+    }
+
+    .wrap {
+      width: min(100%, 1480px);
+      padding: clamp(0px, 2vw, 28px)
+    }
+
+    .stage {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16/9;
+      overflow: hidden;
+      isolation: isolate;
+      border-radius: 22px;
+      background: #d8f475;
+      box-shadow: 0 32px 90px #21381e35
+    }
+
+    .art {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1280px;
+      height: 720px;
+      transform-origin: top left;
+      overflow: hidden;
+      background: radial-gradient(ellipse at 50% 45%, #efffb3 0%, #dafa77 57%, #c6e960 100%)
+    }
+
+    .art:before {
+      content: "";
+      position: absolute;
+      width: 930px;
+      height: 600px;
+      left: 180px;
+      top: 36px;
+      border: 1px solid #ffffff90;
+      border-radius: 50%;
+      transform: rotate(-15deg)
+    }
+
+    .art:after {
+      content: "";
+      position: absolute;
+      left: 250px;
+      right: 250px;
+      bottom: 29px;
+      height: 70px;
+      border-radius: 50%;
+      background: #39652445;
+      filter: blur(42px)
+    }
+
+    .brand-top {
+      position: absolute;
+      z-index: 5;
+      top: 30px;
+      left: 81px;
+      font-size: 28px;
+      font-weight: 850;
+      letter-spacing: -.04em;
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
+
+    .brand-top b,
+    .app-brand b {
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      background: #182019;
+      color: #dffa7a;
+      letter-spacing: -.1em;
+      font-weight: 900
+    }
+
+    .brand-top b {
+      width: 26px;
+      height: 26px;
+      font-size: 18px
+    }
+
+    .count {
+      position: absolute;
+      top: 35px;
+      right: 81px;
+      color: #54732e;
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: .12em
+    }
+
+    .headline {
+      position: absolute;
+      z-index: 5;
+      left: 81px;
+      right: 81px;
+      top: 67px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between
+    }
+
+    .headline h1 {
+      font-size: 36px;
+      font-weight: 810;
+      line-height: 1.1;
+      letter-spacing: -.065em
+    }
+
+    .headline p {
+      font-size: 14px;
+      color: #507332;
+      font-weight: 670;
+      letter-spacing: -.02em
+    }
+
+    .window {
+      position: absolute;
+      left: 81px;
+      top: 131px;
+      width: 1118px;
+      height: 526px;
+      border: 1px solid #30442b;
+      border-radius: 23px;
+      background: white;
+      box-shadow: 0 4px 0 #20351e, 0 25px 65px #24422035, 0 52px 85px #22392320;
+      overflow: hidden;
+      z-index: 2;
+      animation: window-in 1s cubic-bezier(.16, 1, .3, 1) both
+    }
+
+    @keyframes window-in {
+      from {
+        opacity: 0;
+        transform: perspective(1500px) translateY(45px) rotateX(7deg) scale(.95);
+        filter: blur(4px)
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+        filter: none
+      }
+    }
+
+    .chrome {
+      height: 47px;
+      border-bottom: 1px solid #e8ece7;
+      background: #fcfdfa;
+      display: flex;
+      align-items: center;
+      padding: 0 19px;
+      gap: 6px
+    }
+
+    .chrome i {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #d6dfd4
+    }
+
+    .chrome i:first-child {
+      background: #bcc9b7
+    }
+
+    .url {
+      margin: auto;
+      width: 285px;
+      height: 23px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #e8ece6;
+      border-radius: 5px;
+      color: #99a399;
+      font-size: 10px;
+      font-weight: 650
+    }
+
+    .app {
+      height: 479px;
+      display: grid;
+      grid-template-columns: 178px 1fr
+    }
+
+    .sidebar {
+      border-right: 1px solid #e9eee6;
+      padding: 21px 13px;
+      background: #fcfdfa;
+      display: flex;
+      flex-direction: column
+    }
+
+    .app-brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 8px 25px;
+      font-size: 14px;
+      font-weight: 830;
+      letter-spacing: -.055em
+    }
+
+    .app-brand b {
+      height: 25px;
+      width: 25px;
+      font-size: 17px
+    }
+
+    .nav {
+      padding: 11px 13px;
+      margin: 2px 0;
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 680;
+      color: #7d887d;
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
+
+    .nav svg {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round
+    }
+
+    .nav.selected {
+      background: #e8fcae;
+      color: #213719;
+      font-weight: 800
+    }
+
+    .side-foot {
+      margin: auto 5px 4px;
+      padding-top: 15px;
+      border-top: 1px solid #e9eee8;
+      font-size: 10px;
+      color: #95a193
+    }
+
+    .content {
+      position: relative;
+      overflow: hidden;
+      background: radial-gradient(circle at 100% 0%, #f4faee, white 36%)
+    }
+
+    .scene {
+      position: absolute;
+      inset: 0;
+      padding: 29px 35px;
+      opacity: 0;
+      transform: translateX(31px) scale(.98);
+      filter: blur(5px);
+      pointer-events: none;
+      transition: opacity .5s, transform .65s cubic-bezier(.2, .8, .2, 1), filter .5s
+    }
+
+    .scene.active {
+      opacity: 1;
+      transform: none;
+      filter: none;
+      pointer-events: auto
+    }
+
+    .scene.exit {
+      transform: translateX(-32px) scale(.975)
+    }
+
+    .crumb {
+      font-size: 11px;
+      font-weight: 790;
+      color: #879387;
+      letter-spacing: .04em
+    }
+
+    .scene h2 {
+      font-size: 27px;
+      font-weight: 800;
+      letter-spacing: -.055em;
+      line-height: 1.1;
+      margin-top: 8px
+    }
+
+    .sub {
+      font-size: 12px;
+      color: #899489;
+      margin-top: 7px;
+      font-weight: 560
+    }
+
+    .pill {
+      position: absolute;
+      right: 35px;
+      top: 29px;
+      border: 1px solid #e2e8e0;
+      border-radius: 50px;
+      background: #fff;
+      padding: 8px 13px;
+      font-size: 11px;
+      font-weight: 750;
+      color: #60715d
+    }
+
+    .cursor {
+      position: absolute;
+      z-index: 12;
+      width: 28px;
+      height: 38px;
+      pointer-events: none;
+      opacity: 0;
+      filter: drop-shadow(1px 3px 2px #10201852)
+    }
+
+    .cursor path {
+      fill: #fff;
+      stroke: #18221b;
+      stroke-width: 2.4;
+      stroke-linejoin: round
+    }
+
+    .pulse {
+      position: absolute;
+      z-index: 11;
+      border: 2px solid #315be9;
+      border-radius: 50%;
+      height: 37px;
+      width: 37px;
+      opacity: 0;
+      pointer-events: none
+    }
+
+    .pulse.go {
+      animation: pulse .5s both
+    }
+
+    @keyframes pulse {
+      from {
+        opacity: .75;
+        transform: scale(.45)
+      }
+
+      to {
+        opacity: 0;
+        transform: scale(1.75)
+      }
+    }
+
+    .floor {
+      position: absolute;
+      z-index: 5;
+      left: 81px;
+      right: 81px;
+      bottom: 25px;
+      display: flex;
+      align-items: center;
+      gap: 15px
+    }
+
+    .floor label {
+      font-size: 11px;
+      letter-spacing: .09em;
+      font-weight: 860;
+      color: #4c702a;
+      white-space: nowrap
+    }
+
+    .track {
+      height: 3px;
+      background: #73965059;
+      border-radius: 5px;
+      flex: 1;
+      overflow: hidden
+    }
+
+    .track b {
+      display: block;
+      width: 0;
+      height: 100%;
+      background: #263b1f;
+      border-radius: 5px
+    }
+
+    .clock {
+      font-size: 11px;
+      font-weight: 800;
+      color: #567533;
+      font-variant-numeric: tabular-nums;
+      width: 39px;
+      text-align: right
+    }
+
+    /* 01 · Turn a daunting syllabus into distinct, learnable cards */
+    .source {
+      position: absolute;
+      left: 108px;
+      top: 147px;
+      width: 635px;
+      height: 185px;
+      border: 1px solid #e0e8dd;
+      border-radius: 19px;
+      background: #fff;
+      box-shadow: 0 17px 42px #21351d12;
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      padding: 26px 30px
+    }
+
+    .book {
+      width: 80px;
+      height: 80px;
+      border-radius: 19px;
+      background: #ecf9c5;
+      flex: none;
+      display: grid;
+      place-items: center
+    }
+
+    .book svg {
+      height: 43px;
+      width: 43px;
+      stroke: #5d8639;
+      fill: none;
+      stroke-width: 2;
+      stroke-linejoin: round
+    }
+
+    .source strong {
+      font-size: 26px;
+      letter-spacing: -.055em
+    }
+
+    .source small {
+      display: block;
+      font-size: 13px;
+      color: #919d8e;
+      margin-top: 7px
+    }
+
+    .source .arrow {
+      margin-left: auto;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: #1e291d;
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 23px
+    }
+
+    .topics {
+      position: absolute;
+      left: 35px;
+      top: 147px;
+      right: 35px;
+      display: flex;
+      gap: 12px
+    }
+
+    .topic {
+      width: calc(33.33% - 8px);
+      height: 190px;
+      padding: 21px 19px;
+      border: 1px solid #e1e9df;
+      border-radius: 17px;
+      background: #fff;
+      box-shadow: 0 17px 34px #21381c15;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      opacity: 0;
+      transform: translateY(46px) scale(.89)
+    }
+
+    .topic i {
+      height: 33px;
+      width: 33px;
+      border-radius: 10px;
+      background: #e8f9b6;
+      color: #4c7224;
+      display: grid;
+      place-items: center;
+      font-style: normal;
+      font-size: 12px;
+      font-weight: 800
+    }
+
+    .topic:nth-child(2) i {
+      background: #e6efff;
+      color: #3563ce
+    }
+
+    .topic:nth-child(3) i {
+      background: #f2ebff;
+      color: #854fc3
+    }
+
+    .topic strong {
+      font-size: 21px;
+      line-height: 1.14;
+      letter-spacing: -.05em
+    }
+
+    .topic small {
+      font-size: 11px;
+      font-weight: 650;
+      color: #91a08d
+    }
+
+    .topic-payoff {
+      position: absolute;
+      left: 36px;
+      top: 362px;
+      font-size: 17px;
+      font-weight: 740;
+      letter-spacing: -.035em;
+      opacity: 0;
+      transform: translateY(12px)
+    }
+
+    .topic-payoff span {
+      color: #62923a
+    }
+
+    .active .source {
+      animation: source-away .7s 2s both
+    }
+
+    .active .topic:nth-child(1) {
+      animation: card-in .8s 2.4s both
+    }
+
+    .active .topic:nth-child(2) {
+      animation: card-in .8s 2.65s both
+    }
+
+    .active .topic:nth-child(3) {
+      animation: card-in .8s 2.9s both
+    }
+
+    .active .topic-payoff {
+      animation: rise .65s 3.6s both
+    }
+
+    @keyframes source-away {
+      to {
+        opacity: 0;
+        transform: translateY(-61px) scale(.83);
+        filter: blur(3px)
+      }
+    }
+
+    @keyframes card-in {
+      to {
+        opacity: 1;
+        transform: none;
+        filter: none
+      }
+    }
+
+    @keyframes rise {
+      to {
+        opacity: 1;
+        transform: none
+      }
+    }
+
+    /* 02 · Papers provide context and reveal a worked answer */
+    .questions {
+      display: flex;
+      gap: 11px;
+      margin-top: 29px
+    }
+
+    .question {
+      width: 50%;
+      height: 78px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      border: 1px solid #e3e9e1;
+      border-radius: 13px;
+      background: #fff;
+      box-shadow: 0 10px 19px #2336240a;
+      opacity: 0;
+      transform: translateY(19px)
+    }
+
+    .question:first-child {
+      background: #f7fbe9;
+      border-color: #acd268
+    }
+
+    .question i {
+      width: 31px;
+      height: 31px;
+      border-radius: 9px;
+      background: #e9f9b7;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      color: #50792d;
+      font-style: normal;
+      font-weight: 850;
+      flex: none
+    }
+
+    .question:nth-child(2) i {
+      background: #eff2ed;
+      color: #82907f
+    }
+
+    .question strong {
+      font-size: 13px;
+      line-height: 1.33;
+      letter-spacing: -.025em
+    }
+
+    .question small {
+      display: block;
+      color: #899788;
+      font-size: 10px;
+      margin-top: 3px
+    }
+
+    .paper {
+      position: relative;
+      height: 229px;
+      margin-top: 17px;
+      padding: 22px 34px 20px 49px;
+      border: 1px solid #e3e8df;
+      border-radius: 16px;
+      background: repeating-linear-gradient(to bottom, #fffefa 0, #fffefa 31px, #dce7f9 32px, #fffefa 33px);
+      box-shadow: 0 16px 27px #24372012;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(25px)
+    }
+
+    .paper:before {
+      content: "";
+      position: absolute;
+      left: 36px;
+      top: 0;
+      bottom: 0;
+      border-left: 1px solid #f0cac6
+    }
+
+    .paper-head {
+      font-size: 11px;
+      letter-spacing: .045em;
+      font-weight: 850;
+      color: #8b978c
+    }
+
+    .paper-head span {
+      float: right;
+      color: #4e8a40
+    }
+
+    .paper h3 {
+      font-size: 21px;
+      margin-top: 14px;
+      letter-spacing: -.05em
+    }
+
+    .paper p {
+      font-size: 15px;
+      line-height: 1.94;
+      color: #39473b;
+      margin-top: 15px;
+      font-weight: 570;
+      max-width: 665px;
+      opacity: 0;
+      transform: translateY(11px)
+    }
+
+    .paper p b {
+      color: #223822
+    }
+
+    .reveal {
+      position: absolute;
+      right: 28px;
+      bottom: 21px;
+      padding: 11px 15px;
+      border-radius: 10px;
+      background: #1e2d1c;
+      color: white;
+      font-size: 11px;
+      font-weight: 800;
+      box-shadow: 0 7px 18px #1521192c
+    }
+
+    .active .question:first-child {
+      animation: rise .55s .5s both
+    }
+
+    .active .question:nth-child(2) {
+      animation: rise .55s .75s both
+    }
+
+    .active .paper {
+      animation: rise .7s 1.25s both
+    }
+
+    .active .paper p {
+      animation: rise .7s 3s both
+    }
+
+    .active .reveal {
+      animation: reveal-away .5s 2.95s both
+    }
+
+    @keyframes reveal-away {
+      to {
+        opacity: 0;
+        transform: translateY(9px);
+        visibility: hidden
+      }
+    }
+
+    /* 03 · Language switches, academic terms do not */
+    .languages {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 26px;
+      margin-top: 38px
+    }
+
+    .language {
+      position: relative;
+      height: 283px;
+      border: 1px solid #e4e9e2;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 16px 35px #1e331d0e;
+      padding: 28px;
+      opacity: 0;
+      transform: translateY(26px)
+    }
+
+    .language.nepali {
+      background: #f5fbe7;
+      border-color: #cce69e;
+      transform: translateX(40px) rotateY(11deg)
+    }
+
+    .language label {
+      color: #738371;
+      font-size: 12px;
+      letter-spacing: .1em;
+      font-weight: 850
+    }
+
+    .language.nepali label {
+      color: #669245
+    }
+
+    .language p {
+      margin-top: 35px;
+      font-size: 27px;
+      line-height: 1.36;
+      letter-spacing: -.05em;
+      font-weight: 740;
+      max-width: 320px
+    }
+
+    .language.nepali p {
+      font-size: 25px;
+      line-height: 1.43
+    }
+
+    .language mark {
+      color: inherit;
+      background: linear-gradient(transparent 74%, #ddf888 74%)
+    }
+
+    .language small {
+      position: absolute;
+      bottom: 25px;
+      left: 28px;
+      color: #9aa99a;
+      font-size: 10px;
+      letter-spacing: .04em;
+      font-weight: 720
+    }
+
+    .switch {
+      position: absolute;
+      left: calc(50% - 27px);
+      top: 109px;
+      z-index: 2;
+      height: 54px;
+      width: 54px;
+      display: grid;
+      place-items: center;
+      border-radius: 15px;
+      background: #1d2a1c;
+      color: #ddfa83;
+      font-size: 29px;
+      box-shadow: 0 12px 24px #19251c37;
+      opacity: 0;
+      transform: scale(.6) rotate(-45deg)
+    }
+
+    .active .language.english {
+      animation: rise .75s .5s both
+    }
+
+    .active .switch {
+      animation: switch-in .65s 1.85s both
+    }
+
+    .active .language.nepali {
+      animation: translate-in 1s 2.55s both
+    }
+
+    @keyframes switch-in {
+      to {
+        opacity: 1;
+        transform: scale(1) rotate(0)
+      }
+    }
+
+    @keyframes translate-in {
+      to {
+        opacity: 1;
+        transform: none;
+        filter: none
+      }
+    }
+
+    /* 04 · Capture handwriting, then make feedback actionable */
+    .answer-sheet {
+      position: absolute;
+      left: 56px;
+      top: 139px;
+      width: 278px;
+      height: 254px;
+      padding: 21px 22px 20px 31px;
+      border: 1px solid #e1e5db;
+      border-radius: 11px;
+      background: repeating-linear-gradient(to bottom, #fffefa 0, #fffefa 23px, #dce7f9 24px, #fffefa 25px);
+      box-shadow: 0 12px 28px #2036231a;
+      opacity: 0;
+      transform: translateY(25px) rotate(-12deg)
+    }
+
+    .answer-sheet:before {
+      content: "";
+      position: absolute;
+      left: 23px;
+      top: 0;
+      bottom: 0;
+      border-left: 1px solid #f1c8c5
+    }
+
+    .answer-sheet strong {
+      font-size: 11px
+    }
+
+    .answer-sheet i {
+      display: block;
+      width: 94%;
+      height: 4px;
+      margin-top: 17px;
+      border-radius: 4px;
+      background: #64758788
+    }
+
+    .answer-sheet i:nth-of-type(2) {
+      width: 87%
+    }
+
+    .answer-sheet i:nth-of-type(3) {
+      width: 95%
+    }
+
+    .answer-sheet i:nth-of-type(4) {
+      width: 73%
+    }
+
+    .answer-sheet i:nth-of-type(5) {
+      width: 50%
+    }
+
+    .phone {
+      position: absolute;
+      left: 120px;
+      top: 120px;
+      z-index: 3;
+      width: 157px;
+      height: 292px;
+      border: 7px solid #1d291e;
+      border-radius: 28px;
+      background: #b8c9b7;
+      box-shadow: 0 19px 31px #172b2049;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateX(-60px) rotate(-10deg)
+    }
+
+    .phone:before {
+      content: "";
+      position: absolute;
+      left: 46px;
+      top: 0;
+      width: 51px;
+      height: 14px;
+      background: #1d291e;
+      border-radius: 0 0 10px 10px;
+      z-index: 3
+    }
+
+    .view {
+      position: absolute;
+      left: 20px;
+      top: 31px;
+      height: 182px;
+      width: 103px;
+      padding: 23px 12px;
+      background: repeating-linear-gradient(to bottom, #fffefa 0, #fffefa 13px, #dce7f8 14px, #fffefa 15px);
+      transform: rotate(-5deg);
+      box-shadow: 0 7px 16px #17251830
+    }
+
+    .view i {
+      display: block;
+      width: 88%;
+      height: 3px;
+      margin-top: 14px;
+      background: #647182
+    }
+
+    .view i:nth-child(2) {
+      width: 73%
+    }
+
+    .view i:nth-child(3) {
+      width: 95%
+    }
+
+    .view i:nth-child(4) {
+      width: 56%
+    }
+
+    .shutter {
+      position: absolute;
+      left: 52px;
+      bottom: 15px;
+      height: 39px;
+      width: 39px;
+      border-radius: 50%;
+      background: white;
+      border: 3px solid #e5eae4;
+      box-shadow: 0 0 0 3px #ffffff70
+    }
+
+    .flash {
+      position: absolute;
+      inset: 0;
+      background: white;
+      opacity: 0;
+      z-index: 5
+    }
+
+    .scan {
+      position: absolute;
+      left: 322px;
+      top: 202px;
+      height: 110px;
+      width: 106px;
+      border: 2px dashed #79a64d;
+      border-radius: 11px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      background: #f7fde9;
+      color: #547b34;
+      font-size: 11px;
+      font-weight: 800;
+      opacity: 0
+    }
+
+    .scan b {
+      display: block;
+      font-size: 23px
+    }
+
+    .report {
+      position: absolute;
+      left: 443px;
+      top: 129px;
+      height: 278px;
+      width: 351px;
+      padding: 23px 27px;
+      border: 1px solid #dbe7d8;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 19px 38px #1e371c1b;
+      opacity: 0;
+      transform: translateX(39px) scale(.93)
+    }
+
+    .report-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #548645;
+      font-size: 12px;
+      font-weight: 860;
+      letter-spacing: .02em
+    }
+
+    .check {
+      width: 27px;
+      height: 27px;
+      border-radius: 50%;
+      background: #eafad9;
+      color: #3e7d35;
+      display: grid;
+      place-items: center
+    }
+
+    .grade {
+      font-size: 72px;
+      line-height: 1;
+      margin-top: 16px;
+      font-weight: 820;
+      letter-spacing: -.09em
+    }
+
+    .grade small {
+      font-size: 29px;
+      letter-spacing: -.04em;
+      color: #95a997
+    }
+
+    .bar {
+      height: 7px;
+      background: #edf1ec;
+      border-radius: 5px;
+      margin: 17px 0 19px;
+      overflow: hidden
+    }
+
+    .bar b {
+      display: block;
+      width: 87.5%;
+      height: 100%;
+      background: #a9dc65;
+      border-radius: 5px
+    }
+
+    .report-label {
+      font-size: 10px;
+      letter-spacing: .09em;
+      font-weight: 850;
+      color: #6c985b
+    }
+
+    .report-note {
+      font-size: 17px;
+      line-height: 1.3;
+      font-weight: 750;
+      letter-spacing: -.035em;
+      margin-top: 7px
+    }
+
+    .active .answer-sheet {
+      animation: sheet-in .8s .35s both
+    }
+
+    .active .phone {
+      animation: phone-in 1s 1s both
+    }
+
+    .active .shutter {
+      animation: shutter .4s 2.45s both
+    }
+
+    .active .flash {
+      animation: flash .48s 2.52s both
+    }
+
+    .active .scan {
+      animation: scan-in .65s 2.95s both, scan-out .4s 4.25s both
+    }
+
+    .active .report {
+      animation: report-in .9s 4.15s both
+    }
+
+    @keyframes sheet-in {
+      to {
+        opacity: 1;
+        transform: rotate(-6deg)
+      }
+    }
+
+    @keyframes phone-in {
+      to {
+        opacity: 1;
+        transform: rotate(-4deg)
+      }
+    }
+
+    @keyframes shutter {
+      50% {
+        transform: scale(.73)
+      }
+
+      to {
+        transform: none
+      }
+    }
+
+    @keyframes flash {
+
+      0%,
+      100% {
+        opacity: 0
+      }
+
+      40% {
+        opacity: 1
+      }
+    }
+
+    @keyframes scan-in {
+      to {
+        opacity: 1
+      }
+    }
+
+    @keyframes scan-out {
+      to {
+        opacity: 0;
+        transform: translateX(28px) scale(.8)
+      }
+    }
+
+    @keyframes report-in {
+      to {
+        opacity: 1;
+        transform: none
+      }
+    }
+
+    /* An explicit cursor travels across the interface and clicks once in every chapter. */
+    .cursor.c1 {
+      animation: c1 3s .55s both
+    }
+
+    .cursor.c2 {
+      animation: c2 3.5s .4s both
+    }
+
+    .cursor.c3 {
+      animation: c3 3.3s .5s both
+    }
+
+    .cursor.c4 {
+      animation: c4 3s 1.15s both
+    }
+
+    @keyframes c1 {
+      0% {
+        opacity: 0;
+        transform: translate(940px, 494px)
+      }
+
+      20% {
+        opacity: 1
+      }
+
+      60% {
+        opacity: 1;
+        transform: translate(913px, 442px)
+      }
+
+      70% {
+        opacity: 1;
+        transform: translate(913px, 442px) scale(.82)
+      }
+
+      100% {
+        opacity: 0;
+        transform: translate(913px, 442px)
+      }
+    }
+
+    @keyframes c2 {
+      0% {
+        opacity: 0;
+        transform: translate(1024px, 570px)
+      }
+
+      20% {
+        opacity: 1
+      }
+
+      59% {
+        opacity: 1;
+        transform: translate(993px, 529px)
+      }
+
+      67% {
+        opacity: 1;
+        transform: translate(993px, 529px) scale(.82)
+      }
+
+      100% {
+        opacity: 0;
+        transform: translate(993px, 529px)
+      }
+    }
+
+    @keyframes c3 {
+      0% {
+        opacity: 0;
+        transform: translate(832px, 509px)
+      }
+
+      24% {
+        opacity: 1
+      }
+
+      63% {
+        opacity: 1;
+        transform: translate(784px, 414px)
+      }
+
+      70% {
+        opacity: 1;
+        transform: translate(784px, 414px) scale(.82)
+      }
+
+      100% {
+        opacity: 0;
+        transform: translate(784px, 414px)
+      }
+    }
+
+    @keyframes c4 {
+      0% {
+        opacity: 0;
+        transform: translate(462px, 556px)
+      }
+
+      23% {
+        opacity: 1
+      }
+
+      64% {
+        opacity: 1;
+        transform: translate(410px, 515px)
+      }
+
+      72% {
+        opacity: 1;
+        transform: translate(410px, 515px) scale(.82)
+      }
+
+      100% {
+        opacity: 0;
+        transform: translate(410px, 515px)
+      }
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      padding: 16px;
+      color: #667967;
+      font-size: 12px
+    }
+
+    .controls button {
+      background: white;
+      color: #1f2a1f;
+      padding: 8px 17px;
+      border: 1px solid #d6e0d3;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 750
+    }
+
+    .controls button:focus-visible {
+      outline: 3px solid #3868e9;
+      outline-offset: 3px
+    }
+
+    .capture .wrap {
+      width: 100%;
+      padding: 0
+    }
+
+    .capture .stage {
+      border-radius: 0;
+      box-shadow: none
+    }
+
+    .capture .controls {
+      display: none
+    }
+
+    .paused *,
+    .paused *:before,
+    .paused *:after {
+      animation-play-state: paused !important
+    }
+
+    @media(max-width:650px) {
+      .stage {
+        border-radius: 9px
+      }
+
+      .controls span {
+        display: none
+      }
+    }
+
+    @media(prefers-reduced-motion:reduce) {
+
+      .window,
+      .scene,
+      .active .source,
+      .active .topic,
+      .active .topic-payoff,
+      .active .question,
+      .active .paper,
+      .active .paper p,
+      .active .reveal,
+      .active .language,
+      .active .switch,
+      .active .answer-sheet,
+      .active .phone,
+      .active .scan,
+      .active .report {
+        animation-duration: .01ms !important;
+        animation-delay: 0ms !important;
+        transition: none !important
+      }
+
+      .cursor {
+        display: none
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="wrap">
+    <div class="stage" id="stage" role="img"
+      aria-label="NanoSyllabus product demo: micro-topics, solved past questions, English and Romanized Nepali, and feedback on a photographed handwritten answer">
+      <div class="art" id="art">
+        <div class="brand-top"><b>n.</b> NanoSyllabus</div>
+        <div class="count" id="count">01 / 04</div>
+        <div class="headline">
+          <h1 id="headline">Big syllabus. Small steps.</h1>
+          <p id="headline-note">Turn a course into a clear next step.</p>
+        </div>
+        <div class="window">
+          <div class="chrome"><i></i><i></i><i></i><span class="url">app.nanosyllabus.com</span></div>
+          <div class="app">
+            <aside class="sidebar" aria-hidden="true">
+              <div class="app-brand"><b>n.</b> Nano Syllabus</div>
+              <div class="nav selected"><svg viewBox="0 0 24 24">
+                  <path d="M4 7h16M4 12h16M4 17h11" />
+                </svg>Study</div>
+              <div class="nav"><svg viewBox="0 0 24 24">
+                  <path d="M5 4h14v16H5zM8 8h8M8 12h7" />
+                </svg>Past papers</div>
+              <div class="nav"><svg viewBox="0 0 24 24">
+                  <path d="M4 7h16M12 4v16M6 17h13" />
+                </svg>Languages</div>
+              <div class="nav"><svg viewBox="0 0 24 24">
+                  <path d="M5 18V6h14v12zM8 14l3 2 5-6" />
+                </svg>AI grader</div>
+              <div class="side-foot">Your learning, in one place.</div>
+            </aside>
+            <div class="content">
+              <section class="scene active" aria-label="Syllabus breaks into micro-topics">
+                <div class="crumb"></div>
+                <h2>A course, made manageable.</h2>
+                <p class="sub"></p><span class="pill">Year 1 · Semester 1</span>
+                <div class="source">
+                  <div class="book"><svg viewBox="0 0 48 48">
+                      <path d="M24 12C18 9 12 10 7 11v26c7-2 12-1 17 2 5-3 10-4 17-2V11c-5-1-11-2-17 1Zm0 0v27" />
+                    </svg></div>
+                  <div><strong>Applied Mechanics</strong><small>Your complete syllabus</small></div><span
+                    class="arrow">↗</span>
+                </div>
+                <div class="topics">
+                  <div class="topic"><i>01</i><strong>Forces &amp;<br>equilibrium</strong><small>8 minute lesson</small>
+                  </div>
+                  <div class="topic"><i>02</i><strong>Motion &amp;<br>speed</strong><small>6 minute lesson</small></div>
+                  <div class="topic"><i>03</i><strong>Energy &amp;<br>power</strong><small>9 minute lesson</small></div>
+                </div>
+                <p class="topic-payoff">Start with one topic. <span>Keep going from there.</span></p>
+              </section>
+              <section class="scene" aria-label="Past question and worked solution in management">
+                <div class="crumb"></div>
+                <h2>Past Question Solutions</h2>
+                <p class="sub"></p><span class="pill">Business Studies</span>
+                <div class="questions">
+                  <div class="question"><i>01</i>
+                    <div><strong>What is delegation? Why is it important?</strong><small>2024 · 5 marks</small></div>
+                  </div>
+                  <div class="question"><i>02</i>
+                    <div><strong>Explain the functions of management.</strong><small>2023 · 8 marks</small></div>
+                  </div>
+                </div>
+                <div class="paper">
+                  <div class="paper-head">WORKED ANSWER <span>QUESTION 01 · 5 MARKS</span></div>
+                  <h3>Delegation of authority</h3>
+                  <p><b>Delegation</b> means assigning responsibility and authority for a task to another person. It
+                    develops team skills and gives managers more time for decisions that need their attention.</p>
+                  <div class="reveal">Reveal solution ↗</div>
+                </div>
+              </section>
+              <section class="scene" aria-label="English text translated into Romanized Nepali">
+                <div class="crumb"></div>
+                <h2>Understand it in your language.</h2>
+                <p class="sub"></p><span class="pill">Language · EN / NP</span>
+                <div class="languages">
+                  <div class="language english"><label>ENGLISH</label>
+                    <p><mark>Power</mark> is the rate at which <mark>energy</mark> is transferred.</p><small>WORKED
+                      EXAMPLE 01</small>
+                  </div>
+                  <div class="switch">⇄</div>
+                  <div class="language nepali"><label>ROMANIZED NEPALI</label>
+                    <p><mark>Power</mark> bhaneko <mark>energy</mark> transfer hune rate ho.</p><small>SAME IDEA ·
+                      CLEARER LANGUAGE</small>
+                  </div>
+                </div>
+              </section>
+              <section class="scene" aria-label="Photograph a handwritten answer to get AI feedback">
+                <div class="crumb"></div>
+                <h2>Write it. Snap it. Improve it.</h2>
+                <p class="sub"></p><span class="pill">Business Studies · Practice</span>
+                <div class="answer-sheet"><strong>Explain working capital.</strong><i></i><i></i><i></i><i></i><i></i>
+                </div>
+                <div class="phone">
+                  <div class="view"><i></i><i></i><i></i><i></i></div>
+                  <div class="shutter"></div>
+                  <div class="flash"></div>
+                </div>
+                <div class="scan">
+                  <div><b>✦</b>Reviewing<br>your answer</div>
+                </div>
+                <div class="report">
+                  <div class="report-top">AI FEEDBACK <span class="check">✓</span></div>
+                  <div class="grade">7<small> / 8</small></div>
+                  <div class="bar"><b></b></div>
+                  <div class="report-label">ONE WAY TO IMPROVE</div>
+                  <p class="report-note">Define liquidity before your example.</p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+        <svg class="cursor" id="cursor" viewBox="0 0 29 39" aria-hidden="true">
+          <path d="M1.5 1.5v29l8-7 5 13 6-3-5-12H27Z" />
+        </svg>
+        <div class="pulse" id="pulse" aria-hidden="true"></div>
+        <div class="floor" aria-hidden="true"><label id="floor-label">MICRO-TOPICS</label>
+          <div class="track"><b id="fill"></b></div><span class="clock" id="clock">00:00</span>
+        </div>
+      </div>
+    </div>
+    <div class="controls"><button type="button" id="toggle">Pause</button><button type="button"
+        id="replay">Replay</button><span>30-second product demo · loops automatically</span></div>
+  </main>
+  <script>
+    (() => {
+      const stage = document.getElementById('stage'), art = document.getElementById('art');
+      const scenes = [...document.querySelectorAll('.scene')], nav = [...document.querySelectorAll('.nav')];
+      const cursor = document.getElementById('cursor'), pulse = document.getElementById('pulse');
+      const fill = document.getElementById('fill'), clock = document.getElementById('clock');
+
+      const chapters = [
+        {title: '', note: '', label: '', pointer: 'c1', click: 2.1, ring: [910, 439]},
+        {title: '', note: '', label: '', pointer: 'c2', click: 2.7, ring: [990, 525]},
+        {title: '', note: '', label: '', pointer: 'c3', click: 2.5, ring: [782, 412]},
+        {title: '', note: '', label: '', pointer: 'c4', click: 2.55, ring: [406, 510]}
+      ];
+      const DURATION = 30, STEP = 7.5, reduced = matchMedia('(prefers-reduced-motion: reduce)');
+      let elapsed = 0, last = 0, index = -1, paused = false, clicked = false;
+      function resize() {art.style.transform = 'scale(' + stage.clientWidth / 1280 + ')'}
+      if ('ResizeObserver' in window) new ResizeObserver(resize).observe(stage); else addEventListener('resize', resize);
+      resize();
+      function show(n) {
+        const old = index;
+        scenes.forEach((scene, i) => {scene.classList.toggle('active', i === n); scene.classList.toggle('exit', i === old && i !== n)});
+        nav.forEach((item, i) => item.classList.toggle('selected', i === n));
+        index = n;
+        document.getElementById('headline').textContent = chapters[n].title;
+        document.getElementById('headline-note').textContent = chapters[n].note;
+        document.getElementById('count').textContent = '0' + (n + 1) + ' / 04';
+        document.getElementById('floor-label').textContent = chapters[n].label;
+        cursor.setAttribute('class', 'cursor');
+        pulse.className = 'pulse';
+        void cursor.getBoundingClientRect();
+        cursor.classList.add(chapters[n].pointer);
+        clicked = false;
+      }
+      function animate(now) {
+        if (!last) last = now;
+        if (!paused) {
+          elapsed = (elapsed + Math.min((now - last) / 1000, .12)) % DURATION;
+          const current = Math.min(3, Math.floor(elapsed / STEP));
+          if (current !== index) show(current);
+          fill.style.width = (elapsed / DURATION * 100) + '%';
+          clock.textContent = '00:' + String(Math.floor(elapsed)).padStart(2, '0');
+          if (!clicked && elapsed - current * STEP > chapters[current].click && !reduced.matches) {
+            const [x, y] = chapters[current].ring;
+            pulse.style.left = x + 'px'; pulse.style.top = y + 'px';
+            pulse.classList.remove('go'); void pulse.offsetWidth; pulse.classList.add('go'); clicked = true;
+          }
+        }
+        last = now; requestAnimationFrame(animate);
+      }
+      const toggle = document.getElementById('toggle');
+      toggle.addEventListener('click', () => {paused = !paused; art.classList.toggle('paused', paused); toggle.textContent = paused ? 'Play' : 'Pause'; last = 0});
+      document.getElementById('replay').addEventListener('click', () => {
+        elapsed = 0; last = 0; paused = false; art.classList.remove('paused'); toggle.textContent = 'Pause';
+        scenes.forEach(scene => scene.classList.remove('active', 'exit'));
+        void art.offsetWidth; index = -1; show(0); fill.style.width = '0%'; clock.textContent = '00:00';
+      });
+      document.addEventListener('keydown', event => {if (event.code === 'Space' && document.activeElement.tagName !== 'BUTTON') {event.preventDefault(); toggle.click()} });
+      if (new URLSearchParams(location.search).has('capture')) document.body.classList.add('capture');
+      show(0); requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+
+</html>

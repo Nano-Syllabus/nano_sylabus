@@ -67,6 +67,10 @@ export interface ChatImageAttachment {
 export interface StudentProfile {
   userId: string;
   fullName: string;
+  /** Private contact value, shown and editable only in account settings. */
+  phoneNumber?: string | null;
+  /** A personal study reminder, saved on the student's profile. */
+  studyQuote?: string | null;
   college: string;
   board: string;
   grade: string;
