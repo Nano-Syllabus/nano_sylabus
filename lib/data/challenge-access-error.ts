@@ -27,7 +27,7 @@ export class ChallengeDailyLimitError extends Error {
   readonly status = 402;
   constructor(readonly limit: number) {
     super(
-      `You've used today's ${limit} free challenge attempts. Come back tomorrow, or upgrade to Plus or Pro for unlimited challenges.`,
+      `You've completed today's ${limit} free challenges. Come back tomorrow, or upgrade to Plus or Pro for unlimited challenges.`,
     );
     this.name = "ChallengeDailyLimitError";
   }

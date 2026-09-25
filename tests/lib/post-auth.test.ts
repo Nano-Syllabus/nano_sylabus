@@ -14,12 +14,12 @@ describe("sanitizeNextPath", () => {
 });
 
 describe("resolvePostAuthDestination", () => {
-  it("sends onboarded student to Today when next is missing", () => {
-    expect(resolvePostAuthDestination({ role: "student", onboarded: true })).toBe("/app/today");
+  it("sends onboarded student to Challenges when next is missing", () => {
+    expect(resolvePostAuthDestination({ role: "student", onboarded: true })).toBe("/app/challenges");
   });
 
-  it("sends a student without a completed profile to Today when next is missing", () => {
-    expect(resolvePostAuthDestination({ role: "student", onboarded: false })).toBe("/app/today");
+  it("sends a student without a completed profile to Challenges when next is missing", () => {
+    expect(resolvePostAuthDestination({ role: "student", onboarded: false })).toBe("/app/challenges");
   });
 
   it("preserves a safe destination without forcing onboarding", () => {

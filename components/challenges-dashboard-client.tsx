@@ -1909,6 +1909,9 @@ function UpgradeLockButton() {
   );
 }
 
+/** Challenges a day the hub asks of a student with no daily limit. */
+const DAILY_CHALLENGE_TARGET = 5;
+
 function DailyLimitNotice({ limit }: { limit: number }) {
   return (
     <div
@@ -1921,7 +1924,7 @@ function DailyLimitNotice({ limit }: { limit: number }) {
         </span>
         <div>
           <p className="text-sm font-semibold text-text-primary">
-            You&apos;ve used today&apos;s {limit} free challenge attempts
+            You&apos;ve completed today&apos;s {limit} free challenges
           </p>
           <p className="mt-0.5 text-sm text-text-secondary">
             Come back tomorrow for {limit} more, or upgrade to Plus or Pro for unlimited challenges. Challenges you
@@ -2125,16 +2128,18 @@ export function ChallengesDashboardClient({
   };
 
   /**
-   * THE FREE PLAN'S THREE A DAY. Starting a card counts here as it happens, so
-   * the fourth Start locks without a reload; the server refuses it regardless
-   * (402), and a 402 from it locks the rest. Continue is never locked.
+   * THE FREE PLAN'S THREE A DAY: the lock follows the "Today's quota" card —
+   * three challenges COMPLETED today — so it appears exactly at 3 / 5. The
+   * server refuses a Start past it regardless (402), and a 402 locks the rest.
+   * Continue is never locked.
    */
-  const [attemptsToday, setAttemptsToday] = useState(allowance?.used ?? 0);
-  // A new server render brings a fresh count (tomorrow's reset, an upgrade).
-  const serverAttempts = allowance?.used ?? 0;
-  useEffect(() => setAttemptsToday(serverAttempts), [serverAttempts]);
-  const FREE_LIMIT_REACHED = allowance?.limit ?? Number.POSITIVE_INFINITY;
-  const limitReached = Boolean(allowance && !allowance.paid && attemptsToday >= allowance.limit);
+  const [refusedToday, setRefusedToday] = useState(false);
+  const completedToday = Math.max(allowance?.used ?? 0, dashboard.todayCompletedCount ?? 0);
+  const limitReached = Boolean(
+    allowance && !allowance.paid && (refusedToday || completedToday >= allowance.limit),
+  );
+  /** A free student cannot pass the daily lock, so their target is the lock. */
+  const dailyTarget = allowance && !allowance.paid ? allowance.limit : DAILY_CHALLENGE_TARGET;
 
   const openChallenge = async (challenge: StudentChallengeSummary) => {
     setOpeningId(challenge.id);
@@ -2143,12 +2148,11 @@ export function ChallengesDashboardClient({
       const payload = await apiJson<{ challenge: StudentChallengeDetail }>(
         await fetch(`/api/student/challenges/${challenge.id}/start`, { method: "POST" }),
       );
-      if (challenge.status === "assigned") setAttemptsToday((used) => used + 1);
       setSelected(payload.challenge);
       return true;
     } catch (cause) {
       // The allowance ran out elsewhere (another tab, the dashboard): lock now.
-      if (cause instanceof ApiError && cause.status === 402) setAttemptsToday(FREE_LIMIT_REACHED);
+      if (cause instanceof ApiError && cause.status === 402) setRefusedToday(true);
       // The community was left (in another tab, say): the card is not
       // something this student can open any more, so it goes.
       if (cause instanceof ApiError && cause.status === 403) {
@@ -2177,10 +2181,9 @@ export function ChallengesDashboardClient({
         await fetch(`/api/student/challenges/${done.id}/next${query}`, { method: "POST" }),
       );
       patchHub((d) => applyChallengeAdded(d, payload.challenge));
-      setAttemptsToday((used) => used + 1);
       setSelected(payload.challenge);
     } catch (cause) {
-      if (cause instanceof ApiError && cause.status === 402) setAttemptsToday(FREE_LIMIT_REACHED);
+      if (cause instanceof ApiError && cause.status === 402) setRefusedToday(true);
       setOpenError(cause instanceof Error ? cause.message : "Could not open the next topic.");
     } finally {
       setOpeningId("");
@@ -2269,17 +2272,14 @@ export function ChallengesDashboardClient({
           className={`${hubMetricsClass} challenge-hub-reveal challenge-hub-reveal-delay-1`}
           aria-label="Challenge summary metrics"
         >
-          {/* Card 1: Today's Quota */}
+          {/* Card 1: Today's Quota — the same count the free plan's lock uses. */}
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               TODAY&apos;S QUOTA
             </p>
             <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="type-student-metric text-text-primary">
-                {dashboard.todayCompletedCount ??
-                  (dashboard.passedThisWeek > 0 ? dashboard.passedThisWeek : 0)}
-              </span>
-              <span className="type-student-metric text-[#84cc16]">/ 5</span>
+              <span className="type-student-metric text-text-primary">{completedToday}</span>
+              <span className="type-student-metric text-[#84cc16]">/ {dailyTarget}</span>
             </div>
             <div
               className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
@@ -2287,18 +2287,7 @@ export function ChallengesDashboardClient({
             >
               <div
                 className="h-full rounded-full bg-[#2563eb] transition-[width] duration-300 motion-reduce:transition-none"
-                style={{
-                  width: `${Math.min(
-                    100,
-                    Math.max(
-                      ((dashboard.todayCompletedCount ??
-                        (dashboard.passedThisWeek > 0 ? dashboard.passedThisWeek : 0)) /
-                        5) *
-                        100,
-                      dashboard.todayCompletedCount || dashboard.passedThisWeek ? 14 : 0,
-                    ),
-                  )}%`,
-                }}
+                style={{ width: `${Math.min(100, (completedToday / dailyTarget) * 100)}%` }}
               />
             </div>
           </article>
@@ -2306,20 +2295,17 @@ export function ChallengesDashboardClient({
           {/* Card 2: Daily Target */}
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">DAILY TARGET</p>
-            <p className="type-student-metric mt-2 text-text-primary">5</p>
+            <p className="type-student-metric mt-2 text-text-primary">{dailyTarget}</p>
           </article>
 
-          {/* Card 3: 7-Day Average */}
+          {/* Card 3: 7-Day Average — challenges completed a day over the last
+              seven days, always in that one unit. */}
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               7-DAY AVERAGE
             </p>
             <p className="type-student-metric mt-2 text-text-primary">
-              {dashboard.practicePerDay > 0
-                ? dashboard.practicePerDay.toFixed(1)
-                : dashboard.averageTestScore !== null
-                  ? `${dashboard.averageTestScore.toFixed(1)}%`
-                  : "0.0"}
+              {Math.max(0, dashboard.passedThisWeek / 7).toFixed(1)}
             </p>
           </article>
         </section>

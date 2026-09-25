@@ -12,5 +12,5 @@ export default async function OnboardingPage({
 }) {
   const { next } = await searchParams;
   const nextPath = sanitizeNextPath(next);
-  redirect(nextPath || "/app/today");
+  redirect(nextPath || "/app/challenges");
 }

@@ -4,12 +4,13 @@ import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
- * THE FREE PLAN'S DAILY CHALLENGES: three attempts a day.
+ * THE FREE PLAN'S DAILY CHALLENGES: three a day.
  *
- * An attempt is a challenge STARTED today (Nepal time) — in progress or
- * finished, both count, so "3 on Continue" is the limit reached. Reopening one
- * already started is never an attempt: Continue always works, and so does the
- * result of a finished one. A fourth Start is refused with
+ * What counts is a challenge COMPLETED today (Nepal time) — the same number as
+ * the hub's "Today's quota" card, so the lock appears exactly when that card
+ * reads 3 / 5. Challenges on Continue do not count. Reopening one already
+ * started is never refused: Continue always works, and so does the result of a
+ * finished one. A Start after the third completion is refused with
  * `ChallengeDailyLimitError`; tomorrow brings three more.
  *
  * Plus, Pro and Group have no limit — the same plans `getCurrentAuth` names as
@@ -20,7 +21,7 @@ export const FREE_DAILY_CHALLENGES = 3;
 export type ChallengeAllowance = {
   paid: boolean;
   limit: number;
-  /** Challenges started today (Nepal time). */
+  /** Challenges completed today (Nepal time) — the "Today's quota" count. */
   used: number;
 };
 
@@ -66,12 +67,13 @@ export async function hasPaidChallengePlan(userId: string, admin: SupabaseClient
   });
 }
 
-async function startedTodayCount(userId: string, admin: SupabaseClient) {
+async function completedTodayCount(userId: string, admin: SupabaseClient) {
   const { count, error } = await admin
     .from("student_challenges")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
-    .gte("started_at", nepalMidnight());
+    .eq("status", "completed")
+    .gte("completed_at", nepalMidnight());
   if (error) throw error;
   return count ?? 0;
 }
@@ -82,7 +84,7 @@ export async function challengeAllowance(
 ): Promise<ChallengeAllowance> {
   const [paid, used] = await Promise.all([
     hasPaidChallengePlan(userId, admin),
-    startedTodayCount(userId, admin),
+    completedTodayCount(userId, admin),
   ]);
   return { paid, limit: FREE_DAILY_CHALLENGES, used };
 }

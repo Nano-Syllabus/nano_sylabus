@@ -15,11 +15,11 @@ export function resolvePostAuthDestination(input: {
   const safeNext = sanitizeNextPath(input.nextPath);
 
   if (!safeNext) {
-    return "/app/today";
+    return "/app/challenges";
   }
 
   if (safeNext === "/login" || safeNext === "/signup" || safeNext === "/onboarding") {
-    return "/app/today";
+    return "/app/challenges";
   }
 
   return safeNext;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ subscriptions: [] as unknown[], startedToday: 0, since: "" }));
+const state = vi.hoisted(() => ({ subscriptions: [] as unknown[], completedToday: 0, since: "", column: "", statuses: [] as unknown[] }));
 
 vi.mock("@/lib/dev-auth-bypass", () => ({ DEV_AUTH_BYPASS: false }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -12,10 +12,14 @@ vi.mock("@/lib/supabase/admin", () => ({
       }
       const chain = {
         select: () => chain,
-        eq: () => chain,
-        gte: (_column: string, value: string) => {
+        eq: (column: string, value: unknown) => {
+          if (column === "status") state.statuses.push(value);
+          return chain;
+        },
+        gte: (column: string, value: string) => {
+          state.column = column;
           state.since = value;
-          return Promise.resolve({ count: state.startedToday, error: null });
+          return Promise.resolve({ count: state.completedToday, error: null });
         },
       };
       return chain;
@@ -30,24 +34,25 @@ const plan = (fields: Record<string, unknown>, endsAt: string | null = null) => 
 
 beforeEach(() => {
   state.subscriptions = [];
-  state.startedToday = 0;
+  state.completedToday = 0;
+  state.statuses = [];
 });
 
 describe("the free plan's three challenges a day", () => {
-  it("allows the first three new attempts and refuses the fourth", async () => {
-    state.startedToday = 2;
+  it("allows new starts until three are completed today", async () => {
+    state.completedToday = 2;
     await expect(assertChallengeAttemptAllowed("u", false)).resolves.toBeUndefined();
-    state.startedToday = 3;
+    state.completedToday = 3;
     await expect(assertChallengeAttemptAllowed("u", false)).rejects.toBeInstanceOf(ChallengeDailyLimitError);
   });
 
   it("never blocks the same attempt again — a restart of one started today", async () => {
-    state.startedToday = 3;
+    state.completedToday = 3;
     await expect(assertChallengeAttemptAllowed("u", true)).resolves.toBeUndefined();
   });
 
   it("does not limit Plus, Pro or Group", async () => {
-    state.startedToday = 9;
+    state.completedToday = 9;
     for (const fields of [{ slug: "plus-monthly" }, { is_unlimited: true }, { product_type: "group" }]) {
       state.subscriptions = [plan(fields)];
       await expect(assertChallengeAttemptAllowed("u", false)).resolves.toBeUndefined();
@@ -55,13 +60,15 @@ describe("the free plan's three challenges a day", () => {
   });
 
   it("limits a plan that has ended", async () => {
-    state.startedToday = 3;
+    state.completedToday = 3;
     state.subscriptions = [plan({ is_unlimited: true }, "2020-01-01T00:00:00Z")];
     await expect(assertChallengeAttemptAllowed("u", false)).rejects.toBeInstanceOf(ChallengeDailyLimitError);
   });
 
-  it("counts from midnight in Kathmandu", async () => {
+  it("counts completions from midnight in Kathmandu — the Today's quota number", async () => {
     const allowance = await challengeAllowance("u");
+    expect(state.column).toBe("completed_at");
+    expect(state.statuses).toContain("completed");
     expect(allowance).toMatchObject({ paid: false, limit: 3 });
     const since = new Date(state.since);
     const kathmandu = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kathmandu", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(since);
