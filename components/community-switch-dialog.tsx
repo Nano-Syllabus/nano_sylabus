@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { Loader2, X } from "lucide-react";
 import { titleCase } from "@/lib/utils";
+import { forgetCommunityScopedCaches } from "@/lib/query/membership";
 
 export type SwitchCommunity = { slug: string; name: string; university?: string };
 
@@ -72,6 +73,7 @@ export function CommunitySwitchDialog({
           throw new Error(leftPayload.error || `Could not leave ${titleCase(from.name)}. Nothing was changed.`);
         }
         setLeft(true);
+        forgetCommunityScopedCaches();
       }
       const joining = await fetch(`/api/communities/${encodeURIComponent(to.slug)}/join`, {
         method: "POST",
@@ -85,6 +87,7 @@ export function CommunitySwitchDialog({
           }`,
         );
       }
+      forgetCommunityScopedCaches();
       onSwitched();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Could not switch. Try again.");

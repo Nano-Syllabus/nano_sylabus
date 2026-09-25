@@ -3,6 +3,7 @@ import { z } from "zod";
 import { markStudentChallengeStep } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 
 const schema = z.object({ step: z.enum(["lesson", "examples"]) });
 
@@ -23,6 +24,8 @@ export async function POST(
     if (!challenge) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     return NextResponse.json({ challenge });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     const message =
       error instanceof z.ZodError
         ? error.issues[0]?.message || "Invalid challenge step."

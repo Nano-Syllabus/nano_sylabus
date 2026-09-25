@@ -49,6 +49,36 @@ vi.mock("@/lib/data/community-learning-topics", () => {
 
 import { getStudentRevisionDocs } from "@/lib/data/student-revision-docs";
 
+type Docs = Awaited<ReturnType<typeof getStudentRevisionDocs>>;
+
+/**
+ * The docs with the syllabus outline taken out: only the pages a challenge
+ * filed. Most cases below are about filing, and predate the outline; the outline
+ * has its own cases at the end.
+ */
+async function filedDocs(userId: string, options?: { unlockAll?: boolean }): Promise<Docs> {
+  const docs = await getStudentRevisionDocs(userId, options);
+  const semesters = docs.semesters
+    .map((semester) => {
+      const subjects = semester.subjects
+        .map((subject) => {
+          const units = subject.units
+            .map((unit) => ({ ...unit, topics: unit.topics.filter((topic) => topic.state === "filed") }))
+            .filter((unit) => unit.topics.length);
+          const topicCount = units.reduce((sum, unit) => sum + unit.topics.length, 0);
+          return { ...subject, units, topicCount };
+        })
+        .filter((subject) => subject.topicCount);
+      return {
+        ...semester,
+        subjects,
+        topicCount: subjects.reduce((sum, subject) => sum + subject.topicCount, 0),
+      };
+    })
+    .filter((semester) => semester.topicCount);
+  return { ...docs, semesters, topicCount: docs.filedCount };
+}
+
 /**
  * What these guard is the claim the revision docs make about every page in them:
  * "you worked through this, and here is what it said."
@@ -122,14 +152,14 @@ describe("revision docs", () => {
     mocks.topics.mockResolvedValue([
       { topic_key: "laplace", title: "Laplace Transform", unit_number: "7.1", position: 4 },
     ]);
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
     const units = docs.semesters[0].subjects[0].units;
     expect(units.map((unit) => unit.label)).toEqual([""]);
     expect(units[0].topics[0].title).toBe("Laplace Transform");
   });
 
   it("files a passed challenge under semester, subject and unit", async () => {
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.topicCount).toBe(1);
     const [semester] = docs.semesters;
@@ -140,7 +170,7 @@ describe("revision docs", () => {
   });
 
   it("reads the challenge's own material back rather than regenerating it", async () => {
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
     const topic = docs.semesters[0].subjects[0].units[0].topics[0];
 
     expect(topic.bigIdea).toBe("It turns a differential equation into an algebraic one.");
@@ -156,7 +186,7 @@ describe("revision docs", () => {
   it("drops a challenge whose subject the student no longer has", async () => {
     mocks.access.mockResolvedValue([]);
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     // The row is still there and still completed. Leaving the community takes
     // its material with it, exactly as opening the challenge itself would find.
@@ -174,7 +204,7 @@ describe("revision docs", () => {
       { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", position: 4 },
     ]);
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.semesters[0].subjects[0].units.map((unit) => unit.label)).toEqual([
       "Unit 2",
@@ -187,7 +217,7 @@ describe("revision docs", () => {
     // the wrong trade by a wide margin.
     mocks.topics.mockRejectedValue(new Error("catalogue unavailable"));
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.topicCount).toBe(1);
     expect(docs.semesters[0].subjects[0].units[0].label).toBe(""); // one plain list: nothing to number it by
@@ -202,7 +232,7 @@ describe("revision docs", () => {
       completedRow({ id: "challenge-open", status: "started", completed_at: null }),
     ];
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     const topic = docs.semesters[0].subjects[0].units[0].topics[0];
     expect(topic.title).toBe("Laplace Transform");
@@ -218,7 +248,7 @@ describe("revision docs", () => {
       completedRow({ id: "challenge-empty", status: "started", completed_at: null, content: null }),
     ];
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.topicCount).toBe(0);
     expect(docs.semesters).toEqual([]);
@@ -230,7 +260,7 @@ describe("revision docs", () => {
       completedRow({ id: "challenge-done", topic_key: "fourier", topic_title: "Fourier Series" }),
     ];
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     const byTitle = new Map(
       docs.semesters[0].subjects[0].units.flatMap((unit) => unit.topics).map((t) => [t.title, t]),
@@ -243,7 +273,7 @@ describe("revision docs", () => {
     mocks.topics.mockResolvedValue([
       { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", unit_title: "Transforms", position: 4 },
     ]);
-    const unit = (await getStudentRevisionDocs("member")).semesters[0].subjects[0].units[0];
+    const unit = (await filedDocs("member")).semesters[0].subjects[0].units[0];
     expect([unit.label, unit.title]).toEqual(["Unit 2", "Transforms"]);
 
     // A topic the catalogue has dropped, filed by the unit on its own row, still
@@ -252,14 +282,14 @@ describe("revision docs", () => {
     mocks.topics.mockResolvedValue([
       { topic_key: "z-transform", title: "Z Transform", unit_number: "2", unit_title: "Transforms", position: 5 },
     ]);
-    expect((await getStudentRevisionDocs("member")).semesters[0].subjects[0].units[0].title).toBe("Transforms");
+    expect((await filedDocs("member")).semesters[0].subjects[0].units[0].title).toBe("Transforms");
 
     // A catalogue synced before names were: the number alone, as before.
     mocks.topics.mockResolvedValue([
       { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", position: 4 },
     ]);
     db.tables.student_challenges = [completedRow()];
-    expect((await getStudentRevisionDocs("member")).semesters[0].subjects[0].units[0].title).toBe("");
+    expect((await filedDocs("member")).semesters[0].subjects[0].units[0].title).toBe("");
   });
 
   it("files the challenge under the unit written on its own row when the catalogue has moved on", async () => {
@@ -271,7 +301,7 @@ describe("revision docs", () => {
       { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", position: 4 },
     ]);
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.semesters[0].subjects[0].units[0].label).toBe("Unit 2");
   });
@@ -292,7 +322,7 @@ describe("revision docs", () => {
       },
     ]);
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.topicCount).toBe(1);
     expect(docs.semesters[0].subjects[0].name).toBe("Nims");
@@ -307,7 +337,7 @@ describe("revision docs", () => {
       }),
     ];
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
     const topic = docs.semesters[0].subjects[0].units[0].topics[0];
 
     // Filed the moment the challenge opens — the student can see the page exists
@@ -321,7 +351,7 @@ describe("revision docs", () => {
       completedRow({ content: { contentStatus: "ready", lesson: { content: [] } } }),
     ];
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.semesters[0].subjects[0].units[0].topics[0].readingPending).toBe(false);
   });
@@ -347,7 +377,7 @@ describe("revision docs", () => {
       }),
     });
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(attempts).toBe(2);
     // The retry drops the column rather than the query.
@@ -366,7 +396,7 @@ describe("revision docs", () => {
       completedRow({ topic_key: "laplace-v2-provider", unit_number: "" }),
     ];
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.semesters[0].subjects[0].units[0].label).toBe("Unit 2");
   });
@@ -382,7 +412,7 @@ describe("revision docs", () => {
       { topic_key: "intro-2", title: "Introduction", unit_number: "4", position: 9 },
     ]);
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.semesters[0].subjects[0].units[0].label).toBe("Other topics");
   });
@@ -402,7 +432,7 @@ describe("revision docs", () => {
       }),
     });
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.unavailable).toBe(true);
     expect(docs.semesters).toEqual([]);
@@ -423,7 +453,7 @@ describe("revision docs: one entry per topic, one copy per question", () => {
     ]);
   });
 
-  const unitTopics = (docs: Awaited<ReturnType<typeof getStudentRevisionDocs>>) =>
+  const unitTopics = (docs: Docs) =>
     docs.semesters[0].subjects[0].units[0].topics;
 
   it("lists a topic sat twice once, and counts it once", async () => {
@@ -436,7 +466,7 @@ describe("revision docs: one entry per topic, one copy per question", () => {
       completedRow({ updated_at: "2026-09-10T10:00:00.000Z" }),
     ];
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(unitTopics(docs).map((topic) => topic.title)).toEqual(["Laplace Transform"]);
     expect(docs.topicCount).toBe(1);
@@ -452,7 +482,7 @@ describe("revision docs: one entry per topic, one copy per question", () => {
       completedRow({ id: "challenge-old", updated_at: "2026-09-10T10:00:00.000Z", attempt_count: 1 }),
     ];
 
-    const [topic] = unitTopics(await getStudentRevisionDocs("member"));
+    const [topic] = unitTopics(await filedDocs("member"));
 
     expect(topic.challengeId).toBe("challenge-new");
     expect(topic.attempts).toBe(3);
@@ -464,7 +494,7 @@ describe("revision docs: one entry per topic, one copy per question", () => {
       completedRow({ updated_at: "2026-09-10T10:00:00.000Z" }),
     ];
 
-    expect(unitTopics(await getStudentRevisionDocs("member"))).toHaveLength(1);
+    expect(unitTopics(await filedDocs("member"))).toHaveLength(1);
   });
 
   it("keeps two topics that only share a title across different units", async () => {
@@ -477,7 +507,7 @@ describe("revision docs: one entry per topic, one copy per question", () => {
       completedRow({ id: "c3", topic_key: "intro-3", topic_title: "Introduction", title: "Introduction" }),
     ];
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(docs.topicCount).toBe(2);
     expect(docs.semesters[0].subjects[0].units.map((unit) => unit.label)).toEqual(["Unit 1", "Unit 3"]);
@@ -493,7 +523,7 @@ describe("revision docs: one entry per topic, one copy per question", () => {
       completedRow({ id: "challenge-b", topic_key: "inverse", topic_title: "Inverse Laplace Transform" }),
     ];
 
-    const docs = await getStudentRevisionDocs("member");
+    const docs = await filedDocs("member");
 
     expect(unitTopics(docs).map((topic) => topic.title)).toEqual([
       "Laplace Transform",
@@ -519,9 +549,83 @@ describe("revision docs: one entry per topic, one copy per question", () => {
       }),
     ];
 
-    const [topic] = unitTopics(await getStudentRevisionDocs("member"));
+    const [topic] = unitTopics(await filedDocs("member"));
 
     expect(topic.pastQuestions.map((question) => question.id)).toEqual(["p2"]);
     expect(topic.solvedExamples).toHaveLength(1);
+  });
+
+  describe("syllabus outline", () => {
+    beforeEach(() => {
+      db.tables.student_challenges = [completedRow()];
+    });
+
+    const outline = (docs: Docs) =>
+      docs.semesters[0].subjects[0].units.flatMap((unit) =>
+        unit.topics.map((topic) => [topic.title, topic.state]),
+      );
+
+    it("lists the rest of the syllabus locked on Free, beside what was filed", async () => {
+      const docs = await getStudentRevisionDocs("member");
+      expect(outline(docs)).toEqual([
+        ["Unit one opener", "locked"],
+        ["Laplace Transform", "filed"],
+      ]);
+      expect(docs.topicCount).toBe(2);
+      expect(docs.filedCount).toBe(1);
+    });
+
+    it("unlocks every topic for a plan that opens them all", async () => {
+      const docs = await getStudentRevisionDocs("member", { unlockAll: true });
+      expect(outline(docs)).toEqual([
+        ["Unit one opener", "unlocked"],
+        ["Laplace Transform", "filed"],
+      ]);
+    });
+
+    it("opens the topic the queue has reached, and never lists it twice", async () => {
+      db.tables.student_challenges = [
+        completedRow(),
+        completedRow({
+          id: "challenge-q",
+          topic_key: "__unit-one",
+          topic_title: "Unit one opener",
+          title: "Unit one opener",
+          status: "assigned",
+          content: null,
+        }),
+      ];
+      const docs = await getStudentRevisionDocs("member");
+      expect(outline(docs)).toEqual([
+        ["Unit one opener", "assigned"],
+        ["Laplace Transform", "filed"],
+      ]);
+      expect(docs.semesters[0].subjects[0].units[0].topics[0].challengeId).toBe("challenge-q");
+      expect(docs.filedCount).toBe(1);
+    });
+
+    it("prefers an opened sitting of a topic over one only queued", async () => {
+      db.tables.student_challenges = [
+        completedRow({ id: "challenge-new", status: "assigned", content: null }),
+        completedRow(),
+      ];
+      const docs = await getStudentRevisionDocs("member");
+      const laplace = docs.semesters[0].subjects[0].units
+        .flatMap((unit) => unit.topics)
+        .find((topic) => topic.title === "Laplace Transform");
+      expect(laplace?.state).toBe("filed");
+      expect(laplace?.challengeId).toBe("challenge-a");
+      expect(docs.filedCount).toBe(1);
+    });
+
+    it("lists a subject nothing has been started in, all of it locked", async () => {
+      db.tables.student_challenges = [];
+      const docs = await getStudentRevisionDocs("member");
+      expect(outline(docs)).toEqual([
+        ["Unit one opener", "locked"],
+        ["Laplace Transform", "locked"],
+      ]);
+      expect(docs.filedCount).toBe(0);
+    });
   });
 });

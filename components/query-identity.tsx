@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { resetQueryClient } from "@/lib/query/client";
 import { ACTIVE_USER_KEY, clearPersistedCache } from "@/components/query-provider";
+import { listenForMembershipChanges } from "@/lib/query/membership";
 
 /** Which account the in-memory cache currently holds data for. */
 let cachedUserId: string | null = null;
@@ -28,6 +29,9 @@ let cachedUserId: string | null = null;
  * is exactly the lifetime of the cache it is guarding.
  */
 export function QueryIdentity({ userId }: { userId: string }) {
+  // A community joined or left in another tab drops this tab's cache too.
+  useEffect(listenForMembershipChanges, []);
+
   useEffect(() => {
     /**
      * Record who this browser is serving.

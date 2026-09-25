@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import type { CommunitySummary } from "@/lib/communities";
 import { titleCase } from "@/lib/utils";
+import { forgetCommunityScopedCaches } from "@/lib/query/membership";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -59,6 +60,7 @@ export function CommunityLeaveControl({
       }
       setLeft(true);
       setConfirming(false);
+      forgetCommunityScopedCaches();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Could not leave. Please try again.");
       return;

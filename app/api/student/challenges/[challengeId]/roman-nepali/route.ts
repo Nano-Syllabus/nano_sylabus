@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStudentChallengeRomanNepali } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 
 export const dynamic = "force-dynamic";
 // A first translation of a long reading is a few model calls upstream.
@@ -28,6 +29,8 @@ export async function GET(
     if (!romanNepali) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     return NextResponse.json({ romanNepali });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     console.warn("[challenge] Roman Nepali failed", error);
     return NextResponse.json(
       { error: "This couldn't be put into Roman Nepali right now. Showing English." },

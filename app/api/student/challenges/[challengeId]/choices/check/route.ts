@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 import { z } from "zod";
 import { checkExamChoice, StalePaperError } from "@/lib/data/challenge-exam-picks";
 import { studentFacingBuildError } from "@/lib/data/student-challenges";
@@ -30,6 +31,8 @@ export async function POST(
     if (!result) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     return NextResponse.json({ result });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     if (error instanceof StalePaperError) {
       return NextResponse.json({ error: error.message, stale: true }, { status: 409 });
     }

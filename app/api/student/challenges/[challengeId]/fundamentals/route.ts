@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 import { getChallengeFundamentals } from "@/lib/data/challenge-fundamentals";
 import { TeacherApiError } from "@/lib/teacher-app/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -26,6 +27,8 @@ export async function GET(
     if (!questions) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     return NextResponse.json({ questions });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     console.warn("[challenge] fundamentals failed", error);
     // The one failure a retry will not fix, said as what it is.
     if (error instanceof TeacherApiError && error.status === 404) {

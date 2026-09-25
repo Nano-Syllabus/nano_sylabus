@@ -32,12 +32,15 @@ export default async function CommunitiesPage({
 }: {
   searchParams: Promise<{ create?: string }>;
 }) {
-  const params = await searchParams;
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await getVerifiedUser(supabase);
-  const communities = await listPublicCommunities(user?.id);
+  // Auth and the catalogue at the same time: the shared list does not wait for
+  // the viewer, only the viewer's own memberships do.
+  const userPromise = getVerifiedUser(supabase).then((result) => result.data.user);
+  const [params, user, communities] = await Promise.all([
+    searchParams,
+    userPromise,
+    listPublicCommunities(userPromise.then((viewer) => viewer?.id)),
+  ]);
 
   return (
     <div className={`${dmSans.variable} ${jakarta.variable} min-h-screen bg-white text-[#101114]`}>

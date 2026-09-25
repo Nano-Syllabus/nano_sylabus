@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 import { z } from "zod";
 import { explainExamChoice } from "@/lib/data/challenge-exam-picks";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -8,11 +9,16 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({ questionId: z.string().trim().min(1).max(64) });
 
-/** One render at a time per student, as the fundamentals explainer keeps it. */
-const SPACING_MS = 20_000;
-const lastRequest = new Map<string, number>();
+/**
+ * A question's video is one render shared by everyone and cached, and a paper can
+ * only ever name its own questions — so this bounds clicking, not spending. A
+ * student going down Revision watching one after another stays well inside it.
+ */
+const WINDOW_MS = 60_000;
+const PER_WINDOW = 12;
+const recent = new Map<string, number[]>();
 
-/** A short video on why a wrong MCQ answer is wrong — made now, never cached. */
+/** The short video for one MCQ whose answer is open: on the paper, or in Revision. */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
@@ -26,21 +32,25 @@ export async function POST(
     const parsed = bodySchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: "Choose a question." }, { status: 400 });
 
-    const since = Date.now() - (lastRequest.get(user.id) ?? 0);
-    if (since < SPACING_MS) {
+    const now = Date.now();
+    const asked = (recent.get(user.id) ?? []).filter((at) => now - at < WINDOW_MS);
+    if (asked.length >= PER_WINDOW) {
       return NextResponse.json(
-        { error: "One explainer is already being made. Give it a few seconds." },
-        { status: 429, headers: { "Retry-After": String(Math.ceil((SPACING_MS - since) / 1000)) } },
+        { error: "That's a lot of videos at once. Give it a few seconds." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil((WINDOW_MS - (now - asked[0])) / 1000)) } },
       );
     }
-    lastRequest.set(user.id, Date.now());
-    if (lastRequest.size > 5000) lastRequest.delete(lastRequest.keys().next().value as string);
+    recent.delete(user.id);
+    recent.set(user.id, [...asked, now]);
+    if (recent.size > 5000) recent.delete(recent.keys().next().value as string);
 
     const { challengeId } = await params;
     const explainer = await explainExamChoice(user.id, challengeId, parsed.data.questionId);
     if (!explainer) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     return NextResponse.json({ explainer });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     if (error instanceof RangeError) return NextResponse.json({ error: error.message }, { status: 400 });
     console.warn("[challenge] exam MCQ explainer failed", error);
     return NextResponse.json(

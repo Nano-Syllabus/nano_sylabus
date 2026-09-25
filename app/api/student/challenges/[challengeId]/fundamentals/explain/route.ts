@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 import { z } from "zod";
 import { FundamentalsChangedError, explainChallengeFundamental } from "@/lib/data/challenge-fundamentals";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -56,6 +57,8 @@ export async function POST(
     if (!explainer) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     return NextResponse.json({ explainer });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     if (error instanceof FundamentalsChangedError) {
       return NextResponse.json({ error: error.message, changed: true }, { status: 409 });
     }

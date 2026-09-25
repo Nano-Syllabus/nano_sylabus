@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { communityStorageError, joinCommunity } from "@/lib/data/communities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
@@ -17,6 +18,13 @@ export async function POST(_request: Request, context: RouteContext) {
 
     ({ slug } = await context.params);
     const community = await joinCommunity(user.id, slug);
+    // The join is committed; a failed revalidation must not report it as failed.
+    try {
+      revalidatePath("/app", "layout");
+      revalidatePath("/communities", "layout");
+    } catch {
+      /* the next navigation renders fresh anyway */
+    }
     return NextResponse.json({ community });
   } catch (error) {
     const source = (error || {}) as { code?: string; message?: string };

@@ -12,6 +12,9 @@ import {
 } from "@/lib/communities";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { ensureCommunityLearningSpace, markCommunityLearningError } from "@/lib/community-learning";
+import { invalidateStudentCourseAccess } from "@/lib/student-courses";
+import { invalidateMemo, memo } from "@/lib/http/memo";
+import { timed } from "@/lib/dev-timing";
 
 const communityColumns =
   "id,creator_id,slug,name,university,faculty,description,total_years,total_semesters,visibility,status,contribution_threshold,study_course_id,learning_status,learning_error,learning_ready_at,created_at,updated_at";
@@ -179,10 +182,20 @@ async function hydrateCommunitySummaries(
   return buildCommunitySummaries(rows, await fetchCommunityAggregates(admin, ids, viewerId));
 }
 
-export async function listPublicCommunities(
-  viewerId?: string | null,
-  admin: SupabaseClient = createSupabaseAdminClient(),
-) {
+/**
+ * THE PUBLIC CATALOGUE IS THE SAME FOR EVERYONE, SO IT IS READ ONCE.
+ *
+ * Browse used to run the communities query and then its three aggregate
+ * queries for every visitor, serially and behind the auth check — a signed-in
+ * load waited on auth, then the rows, then the counts. The rows and counts do
+ * not depend on who is looking, so they sit in a process memo (the app's 30s
+ * window, `docs/caching.md`) and load at the same time as auth. Only the
+ * viewer's own memberships are read per request, and they are read fresh, so
+ * "Joined" is never stale; a member count may lag by up to 30 seconds.
+ */
+const PUBLIC_COMMUNITIES_MEMO = "public-communities";
+
+async function loadPublicCatalog(admin: SupabaseClient) {
   const query = (columns: string) =>
     admin
       .from("communities")
@@ -197,11 +210,55 @@ export async function listPublicCommunities(
     result = await query(communityColumns);
   }
   if (result.error) throw result.error;
-  return hydrateCommunitySummaries(
-    admin,
-    (result.data || []) as unknown as Record<string, unknown>[],
-    viewerId,
-  );
+  const rows = (result.data || []) as unknown as Record<string, unknown>[];
+  const ids = rows.map((row) => String(row.id || "")).filter(Boolean);
+  const aggregates = ids.length ? await fetchCommunityAggregates(admin, ids) : null;
+  return { rows, aggregates };
+}
+
+/** Every membership row the viewer has, keyed by community. */
+async function viewerMemberships(admin: SupabaseClient, viewerId: string) {
+  const result = await admin
+    .from("community_memberships")
+    .select("community_id,role,status,joined_at,current_term_id")
+    .eq("user_id", viewerId);
+  if (result.error) throw result.error;
+  return membershipsByCommunity((result.data || []) as Record<string, unknown>[]);
+}
+
+/**
+ * `viewer` may be a promise, so a page can start this before its auth check
+ * has answered, and the catalogue loads while auth is still in flight.
+ */
+export async function listPublicCommunities(
+  viewer?: string | null | Promise<string | null | undefined>,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+) {
+  const [catalog, memberships] = await Promise.all([
+    timed("communities:public-catalog", () =>
+      memo(PUBLIC_COMMUNITIES_MEMO, () => loadPublicCatalog(admin), {
+        ttlSeconds: 30,
+        staleSeconds: 300,
+      }),
+    ),
+    timed("communities:viewer-memberships", async () => {
+      const viewerId = await viewer;
+      return viewerId ? viewerMemberships(admin, viewerId) : new Map<string, Record<string, unknown>>();
+    }),
+  ]);
+  if (!catalog.aggregates) return [];
+  return buildCommunitySummaries(catalog.rows, { ...catalog.aggregates, viewerMemberships: memberships });
+}
+
+/** Browse must show a community its creator just made, renamed or removed. */
+function invalidatesPublicCatalog<A extends unknown[], R>(write: (...args: A) => Promise<R>) {
+  return async (...args: A) => {
+    try {
+      return await write(...args);
+    } finally {
+      invalidateMemo(PUBLIC_COMMUNITIES_MEMO);
+    }
+  };
 }
 
 async function listJoinedCommunitiesOnce(userId: string, admin: SupabaseClient) {
@@ -373,7 +430,7 @@ async function availableCommunitySlug(admin: SupabaseClient, name: string) {
   throw new CommunityError("Could not create a unique community URL.", 409);
 }
 
-export async function createCommunity(
+async function createCommunityWrite(
   creatorId: string,
   input: CommunityInput,
   admin: SupabaseClient = createSupabaseAdminClient(),
@@ -431,7 +488,7 @@ export async function createCommunity(
   return community;
 }
 
-export async function updateOwnedCommunityName(
+async function updateOwnedCommunityNameWrite(
   userId: string,
   slug: string,
   name: string,
@@ -464,7 +521,7 @@ export async function updateOwnedCommunityName(
   return community;
 }
 
-export async function joinCommunity(
+async function joinCommunityWrite(
   userId: string,
   slug: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
@@ -523,6 +580,8 @@ export async function joinCommunity(
     }
     throw result.error;
   }
+  // A remembered "no access" (from before a leave, say) must not outlive the join.
+  invalidateStudentCourseAccess(userId);
   const joinedCommunityId = String(result.data || "");
   if (joinedCommunityId) {
     try {
@@ -633,7 +692,7 @@ export async function listCommunityCreatorSubjects(
   });
 }
 
-export async function attachCommunitySubject(
+async function attachCommunitySubjectWrite(
   creatorId: string,
   communitySlugValue: string,
   input: CommunitySubjectInput,
@@ -730,7 +789,7 @@ export async function attachCommunitySubject(
   return community;
 }
 
-export async function deleteOwnedCommunity(
+async function deleteOwnedCommunityWrite(
   userId: string,
   slug: string,
   confirmation: string,
@@ -763,3 +822,13 @@ export function communityStorageError(error: unknown) {
   if (error instanceof CommunityError) return error;
   return new CommunityError("The community service is temporarily unavailable. Try again.", 502);
 }
+
+export const createCommunity = invalidatesPublicCatalog(createCommunityWrite);
+
+export const updateOwnedCommunityName = invalidatesPublicCatalog(updateOwnedCommunityNameWrite);
+
+export const joinCommunity = invalidatesPublicCatalog(joinCommunityWrite);
+
+export const attachCommunitySubject = invalidatesPublicCatalog(attachCommunitySubjectWrite);
+
+export const deleteOwnedCommunity = invalidatesPublicCatalog(deleteOwnedCommunityWrite);

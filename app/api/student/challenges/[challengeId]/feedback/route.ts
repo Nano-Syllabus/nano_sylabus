@@ -3,6 +3,7 @@ import { parseChallengeFeedback } from "@/lib/challenge-feedback";
 import { recordChallengeFeedback } from "@/lib/data/student-challenge-feedback";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,8 @@ export async function POST(
     }
     return NextResponse.json({ stored: outcome === "stored" || outcome === "duplicate" });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     console.error("[challenge feedback]", error);
     return NextResponse.json({ error: "Could not save your feedback." }, { status: 500 });
   }

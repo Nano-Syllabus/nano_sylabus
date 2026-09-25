@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { drawMissingChallengeFigure } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,8 @@ export async function POST(
     }
     return NextResponse.json({ challenge: result.challenge, solution: result.solution });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not draw this diagram." },
       { status: 502 },

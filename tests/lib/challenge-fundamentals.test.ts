@@ -104,16 +104,17 @@ describe("the fundamentals check", () => {
     expect(mocks.mcq).not.toHaveBeenCalled();
   });
 
-  it("makes a fresh, short video about that exact wrong answer", async () => {
+  it("asks, urgently, for the question's shared video — the same whichever wrong option was picked", async () => {
     const explainer = await explainChallengeFundamental("student", "challenge-1", QUESTION.id, "A");
     expect(explainer?.specHash).toBe("ab".repeat(16));
     const [, request] = mocks.animation.mock.calls[0];
-    expect(request.fresh).toBe(true);
-    expect(request.seconds).toBeLessThanOrEqual(15);
+    expect(request.fresh).toBeUndefined();
+    expect(request.priority).toBe("urgent");
+    expect(request.seconds).toBeLessThanOrEqual(20);
     expect(request.concept.length).toBeLessThanOrEqual(200);
     expect(request.notes.length).toBeLessThanOrEqual(2000);
-    expect(request.notes).toContain("They chose A) Kirchhoff's current law");
-    expect(request.notes).toContain("The correct answer is B) Kirchhoff's voltage law");
+    expect(request.notes).toContain("Correct answer: B) Kirchhoff's voltage law");
+    expect(request.notes).not.toContain("They chose");
     expect(request.subject).toBe("Electric Circuit Theory");
   });
 

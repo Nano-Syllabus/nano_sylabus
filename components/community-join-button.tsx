@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowRight, Users } from "lucide-react";
+import { forgetCommunityScopedCaches } from "@/lib/query/membership";
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
@@ -56,6 +57,7 @@ export function CommunityJoinButton({
         setError(payload.error || "Could not join this community. Try again.");
         return;
       }
+      forgetCommunityScopedCaches();
       router.push(`/flow?community=${encodeURIComponent(slug)}`);
       router.refresh();
     } catch {

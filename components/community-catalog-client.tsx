@@ -15,6 +15,7 @@ import {
   type CommunitySummary,
 } from "@/lib/communities";
 import { titleCase } from "@/lib/utils";
+import { forgetCommunityScopedCaches } from "@/lib/query/membership";
 import { getPhoneNumberError, normalizePhoneNumber } from "@/lib/phone-number";
 import type { ChallengeQuestionFormat } from "@/lib/challenge-format";
 import { CommunitySwitchDialog, type SwitchCommunity } from "@/components/community-switch-dialog";
@@ -147,6 +148,7 @@ function CommunityCard({
         setJoinError(payload.error || "Could not join this community. Please try again.");
         return;
       }
+      forgetCommunityScopedCaches();
       openJoined();
     } catch {
       setJoinError("Could not reach NanoSyllabus. Check your connection and try again.");

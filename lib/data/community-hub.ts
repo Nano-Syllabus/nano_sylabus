@@ -7,6 +7,7 @@ import { readCommunityLearningTopics } from "@/lib/data/community-learning-topic
 import { ensureCommunityLearningSpace, markCommunityLearningError } from "@/lib/community-learning";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { timed } from "@/lib/dev-timing";
+import { invalidateStudentCourseAccess } from "@/lib/student-courses";
 
 export type CommunityHubSubject = {
   id: string;
@@ -814,5 +815,9 @@ export async function leaveCommunityMembership(
     target_community_id: community.id,
   });
   if (result.error) throw result.error;
+  // Every challenge route authorizes through a 30s memo of this student's
+  // entitlements; without this the left community's challenges stayed openable
+  // for up to half a minute after the leave was confirmed.
+  invalidateStudentCourseAccess(userId);
   return { left: true };
 }

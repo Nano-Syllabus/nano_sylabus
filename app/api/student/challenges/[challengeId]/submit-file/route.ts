@@ -17,6 +17,12 @@ import {
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { TeacherApiError } from "@/lib/teacher-app/client";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
+import {
+  AnswerSheetError,
+  answerSheetForGrading,
+  markAnswerSheetSubmitted,
+} from "@/lib/data/challenge-answer-sheet";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -34,15 +40,25 @@ export async function POST(
     const { data: { user } } = await getVerifiedUser(supabase);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const form = await request.formData();
+    // The answer sheet collected on the upload screen — photos from this computer
+    // or a phone, or one PDF — already in storage. A `file` in the body is the
+    // older client, kept working.
+    const sheetSessionId = String(form.get("uploadSessionId") || "").trim();
     const file = form.get("file");
-    if (!(file instanceof File) || !file.size) {
-      return NextResponse.json({ error: "Upload a clear scan of your answer." }, { status: 400 });
-    }
-    if (file.size > 20 * 1024 * 1024) {
-      return NextResponse.json({ error: "Upload a scan up to 20 MB." }, { status: 413 });
-    }
-    if (!allowedTypes.has(file.type)) {
-      return NextResponse.json({ error: "Use a PDF, JPG, PNG, or WebP scan." }, { status: 400 });
+    if (sheetSessionId) {
+      if (!/^[0-9a-f-]{36}$/i.test(sheetSessionId)) {
+        return NextResponse.json({ error: "Upload your answer sheet again." }, { status: 400 });
+      }
+    } else {
+      if (!(file instanceof File) || !file.size) {
+        return NextResponse.json({ error: "Upload a clear scan of your answer." }, { status: 400 });
+      }
+      if (file.size > 20 * 1024 * 1024) {
+        return NextResponse.json({ error: "Upload a scan up to 20 MB." }, { status: 413 });
+      }
+      if (!allowedTypes.has(file.type)) {
+        return NextResponse.json({ error: "Use a PDF, JPG, PNG, or WebP scan." }, { status: 400 });
+      }
     }
     const { challengeId } = await params;
     const context = await getStudentChallengeGradeContext(user.id, challengeId);
@@ -71,13 +87,20 @@ export async function POST(
       const refreshed = await refreshStudentChallengeExam(user.id, challengeId);
       return NextResponse.json({ error: "That sitting expired. A fresh exam is ready.", challenge: refreshed }, { status: 409 });
     }
+    const sheet = sheetSessionId ? await answerSheetForGrading(user.id, challengeId, sheetSessionId) : null;
+    const scan =
+      sheet?.file ??
+      (file instanceof File
+        ? { name: file.name, mimeType: file.type, buffer: Buffer.from(await file.arrayBuffer()) }
+        : null);
+    if (!scan) return NextResponse.json({ error: "Upload a clear scan of your answer." }, { status: 400 });
     let graded;
     try {
       graded = await submitStudentChallengeFile({
         userId: user.id,
         challengeId,
         studentName: String(user.user_metadata?.full_name || "Student"),
-        file: { name: file.name, mimeType: file.type, buffer: Buffer.from(await file.arrayBuffer()) },
+        file: scan,
       });
     } catch (error) {
       if (error instanceof TeacherApiError && error.status === 404) {
@@ -116,6 +139,13 @@ export async function POST(
       externalPaperId,
       graded,
     });
+    // The sheet is closed and keeps the PDF it was graded on, attached to this
+    // challenge. After the grade is saved: a failure here must not lose a grade.
+    if (sheet) {
+      await markAnswerSheetSubmitted(sheet.session.id, sheet.sheetPath).catch((error) =>
+        console.warn("[challenge] answer sheet could not be marked submitted", error),
+      );
+    }
     // A pass frees the subject's card: its next topic is assigned now and handed
     // back, so the hub shows the way on without a reload.
     const nextInSubject = graded.passed ? await nextChallengeInSubject(user.id, challenge) : null;
@@ -130,6 +160,11 @@ export async function POST(
       nextInSubject,
     });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
+    if (error instanceof AnswerSheetError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? studentFacingBuildError(error.message) : "Could not grade this scan." },
       { status: 502 },

@@ -1211,7 +1211,16 @@ export const getTeacherChallengeMcq = (
  */
 export const requestTeacherExplainerAnimation = (
   key: string,
-  input: { concept: string; subject: string; notes: string; seconds: number; style: "card"; fresh: true },
+  input: {
+    concept: string;
+    subject: string;
+    notes: string;
+    seconds: number;
+    style: "card";
+    /** When, not what: `urgent` jumps a waiting render forward; `background`
+     *  is prepared ahead and declined first when the renderer is busy. */
+    priority?: "urgent" | "normal" | "background";
+  },
 ) =>
   teacherRequest<TeacherAnimationReply>("/api/v1/media/animations", key, {
     method: "POST",

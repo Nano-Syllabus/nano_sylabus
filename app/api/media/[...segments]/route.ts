@@ -21,7 +21,7 @@ export async function GET(
   if (!upstreamPath) return new Response(null, { status: 404 });
 
   try {
-    return await proxyMedia(upstreamPath, request.signal);
+    return await proxyMedia(upstreamPath, request.signal, request.headers.get("range"));
   } catch {
     // The renderer being unreachable is a missing picture, not a broken page.
     return new Response(null, { status: 502 });

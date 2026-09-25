@@ -25,6 +25,7 @@ import {
   type StudyAnswer,
 } from "@/lib/study-diagnostic";
 import { cn } from "@/lib/utils";
+import { forgetCommunityScopedCaches } from "@/lib/query/membership";
 import type { PaymentMethodConfig, SubscriptionPlan } from "@/lib/types";
 
 type CheckoutInvoice = {
@@ -91,10 +92,11 @@ function clearPendingStudyAnswers() {
 async function joinRequestedCommunity(communitySlug?: string | null) {
   if (!communitySlug) return;
   try {
-    await fetch(`/api/communities/${encodeURIComponent(communitySlug)}/join`, {
+    const response = await fetch(`/api/communities/${encodeURIComponent(communitySlug)}/join`, {
       method: "POST",
       headers: { Accept: "application/json" },
     });
+    if (response.ok) forgetCommunityScopedCaches();
   } catch {
     // Non-blocking if already joined or offline
   }

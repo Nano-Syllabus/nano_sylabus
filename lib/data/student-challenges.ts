@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { ChallengeAccessError } from "@/lib/data/challenge-access-error";
 import { after } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getStudentCourseSubjectAccessCached } from "@/lib/student-courses";
@@ -891,6 +892,92 @@ async function hasUnlimitedConcurrentChallenges(userId: string): Promise<boolean
 }
 
 /**
+ * Plus and Pro open every syllabus topic in Revision, not only the ones the
+ * challenge queue has reached — the same plans that lift the open-challenge cap.
+ */
+export const unlocksEveryTopic = hasUnlimitedConcurrentChallenges;
+
+/** One `student_challenges` row assigning a recommendation. */
+function challengeRowFor(
+  userId: string,
+  date: string,
+  position: number,
+  recommendation: ChallengeRecommendation,
+) {
+  const topicTitle = studentFacingTopicTitle(recommendation.topicTitle, recommendation.subjectName);
+  return {
+    user_id: userId,
+    course_id: recommendation.courseId,
+    challenge_date: date,
+    position,
+    subject_slug: recommendation.subjectSlug,
+    subject_name: recommendation.subjectName,
+    namespace: recommendation.namespace,
+    topic_key: recommendation.topicKey,
+    topic_title: topicTitle,
+    topic_blurb: recommendation.topicBlurb,
+    // The syllabus's own unit for this subtopic, written down at assignment.
+    // `/start` rewrites `topic_key` to whatever the provider resolved, so the
+    // revision docs' catalogue join on that key is not something to depend on
+    // — this is the copy that survives a re-extraction. See the migration
+    // 20260915120000_challenge_syllabus_unit.sql for the whole argument.
+    unit_number: recommendation.unitNumber || "",
+    title: topicTitle,
+    recommendation_reason: recommendation.reason,
+    duration_minutes: 20,
+  };
+}
+
+async function insertChallengeRows(rows: ReturnType<typeof challengeRowFor>[]) {
+  const admin = createSupabaseAdminClient();
+  let { error } = await admin.from("student_challenges").insert(rows);
+  if (isMissingColumn(error)) {
+    // The migration has not run here yet. Assign the challenges anyway and let
+    // the revision docs fall back to the live catalogue for unit placement,
+    // which is what they did before this column existed.
+    console.warn(
+      "[challenge] student_challenges.unit_number is missing — assigning without it. " +
+        "Run supabase/migrations/20260915120000_challenge_syllabus_unit.sql.",
+    );
+    ({ error } = await admin
+      .from("student_challenges")
+      .insert(rows.map(({ unit_number: _unitNumber, ...row }) => row)));
+  }
+  return { error };
+}
+
+/**
+ * Assigns a challenge on ONE chosen topic, outside the daily queue, and returns
+ * its id — how Plus and Pro start a topic from Revision that the queue has not
+ * reached. The caller checks the plan. Today's row on the same topic is reused
+ * rather than duplicated (the table allows one per topic per day).
+ */
+export async function assignTopicChallenge(
+  userId: string,
+  recommendation: ChallengeRecommendation,
+): Promise<string> {
+  const date = nepaliChallengeDate();
+  const wanted = recommendationKey(recommendation);
+  const findToday = async () => {
+    const rows = await listDailyRows(userId, date);
+    if (rows === null) throw new Error("Challenges are unavailable.");
+    return { rows, twin: rows.find((row) => rowRecommendationKey(row) === wanted) };
+  };
+  const { rows, twin } = await findToday();
+  if (twin) return String(twin.id);
+  const position = rows.reduce((maximum, row) => Math.max(maximum, number(row.position) + 1), 0);
+  const { error } = await insertChallengeRows([
+    challengeRowFor(userId, date, position, recommendation),
+  ]);
+  // A concurrent insert took the topic or the position: whichever row now
+  // holds the topic is the one to open.
+  if (error && error.code !== "23505") throw error;
+  const after = await findToday();
+  if (!after.twin) throw error ?? new Error("The challenge could not be assigned.");
+  return String(after.twin.id);
+}
+
+/**
  * Keeps up to three real, unfinished challenges in today's general queue.
  * Free students receive at most three assignments total per day; Plus and
  * unlimited subscribers get the next unused recommendation as they finish.
@@ -968,51 +1055,14 @@ export async function ensureDailyChallenges(
 
   if (!selected.length) return listedToday(existing);
 
-  const admin = createSupabaseAdminClient();
   const nextPosition = existing.reduce(
     (maximum, row) => Math.max(maximum, number(row.position) + 1),
     0,
   );
-  const rows = selected.map((recommendation, offset) => {
-    const topicTitle = studentFacingTopicTitle(
-      recommendation.topicTitle,
-      recommendation.subjectName,
-    );
-    return {
-      user_id: userId,
-      course_id: recommendation.courseId,
-      challenge_date: date,
-      position: nextPosition + offset,
-      subject_slug: recommendation.subjectSlug,
-      subject_name: recommendation.subjectName,
-      namespace: recommendation.namespace,
-      topic_key: recommendation.topicKey,
-      topic_title: topicTitle,
-      topic_blurb: recommendation.topicBlurb,
-      // The syllabus's own unit for this subtopic, written down at assignment.
-      // `/start` rewrites `topic_key` to whatever the provider resolved, so the
-      // revision docs' catalogue join on that key is not something to depend on
-      // — this is the copy that survives a re-extraction. See the migration
-      // 20260915120000_challenge_syllabus_unit.sql for the whole argument.
-      unit_number: recommendation.unitNumber || "",
-      title: topicTitle,
-      recommendation_reason: recommendation.reason,
-      duration_minutes: 20,
-    };
-  });
-  let { error } = await admin.from("student_challenges").insert(rows);
-  if (isMissingColumn(error)) {
-    // The migration has not run here yet. Assign the challenges anyway and let
-    // the revision docs fall back to the live catalogue for unit placement,
-    // which is what they did before this column existed.
-    console.warn(
-      "[challenge] student_challenges.unit_number is missing — assigning without it. " +
-        "Run supabase/migrations/20260915120000_challenge_syllabus_unit.sql.",
-    );
-    ({ error } = await admin
-      .from("student_challenges")
-      .insert(rows.map(({ unit_number: _unitNumber, ...row }) => row)));
-  }
+  const rows = selected.map((recommendation, offset) =>
+    challengeRowFor(userId, date, nextPosition + offset, recommendation),
+  );
+  const { error } = await insertChallengeRows(rows);
   if (error?.code === "23505") {
     return listedToday((await listDailyRows(userId, date)) ?? []);
   }
@@ -1349,9 +1399,7 @@ async function requireChallengeAccess(userId: string, row: ChallengeRow) {
     row.course_id ? String(row.course_id) : null,
     String(row.subject_slug || ""),
   );
-  if (!access) {
-    throw new Error("You no longer have access to the course that assigned this challenge.");
-  }
+  if (!access) throw new ChallengeAccessError();
   return access;
 }
 

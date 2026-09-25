@@ -1,7 +1,8 @@
 "use client";
 
-import { BookOpen, Check, ChevronsUpDown, Menu, Search, X } from "lucide-react";
+import { ArrowRight, BookOpen, Check, ChevronsUpDown, Lock, Menu, Search, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -50,9 +51,31 @@ import type {
  * of mostly-closed branches for a student several subjects in, and a revision
  * sitting is one subject anyway.
  *
- * Everything in it has been earned. A topic is here because its challenge was
- * passed, so the page never has to explain what a locked or empty entry means.
+ * The navigator lists the whole syllabus. Only a topic a challenge has opened
+ * has a page; the rest say how they open (`OutlineTopicPage`): the queue's next
+ * card is one click away, and anything further is locked on Free and startable
+ * on Plus or Pro.
  */
+
+/** A payload cached before `id` and `state` existed is all filed pages. */
+function topicId(topic: RevisionDocTopic) {
+  return topic.id ?? topic.challengeId;
+}
+
+function isFiled(topic: RevisionDocTopic) {
+  return (topic.state ?? "filed") === "filed";
+}
+
+/** A locked topic opens the plan prompt, never a page. */
+function canOpen(topic: RevisionDocTopic) {
+  return topic.state !== "locked";
+}
+
+/** The page a subject opens on: its first readable one, else the first that
+ *  opens at all. Undefined when every topic is locked. */
+function firstPage(topics: RevisionDocTopic[]) {
+  return topics.find(isFiled) ?? topics.find(canOpen);
+}
 
 /** Within one subject, so the subject's own name is not in the haystack: it
  *  would match every topic in the navigator. */
@@ -77,6 +100,9 @@ type SubjectEntry = {
    *  1" and a subject of the same name, and they are different shelves. */
   key: string;
   semesterLabel: string;
+  /** Empty for own uploads, and in a cached payload older than the field. */
+  communityId: string;
+  communityName: string;
   subject: RevisionDocSubject;
 };
 
@@ -85,6 +111,8 @@ function listSubjects(semesters: RevisionDocSemester[]): SubjectEntry[] {
     semester.subjects.map((subject) => ({
       key: `${semester.id}:${subject.courseId}:${subject.subjectSlug}`,
       semesterLabel: semester.label,
+      communityId: semester.communityId ?? "",
+      communityName: semester.communityName ?? "",
       subject,
     })),
   );
@@ -226,10 +254,10 @@ function SubjectButton({
 /**
  * Every subject with something filed, to choose the one the navigator shows.
  *
- * Grouped by semester LABEL rather than by semester: two courses each have their
- * own "Year 1 · Semester 1", and two headings reading the same, one under the
- * other, look like a bug. Choosing is a radio group and "Revise" confirms it, so
- * arrowing through the list never swaps the page underneath.
+ * Grouped by community, then by semester LABEL within it. Grouping on the label
+ * alone filed two communities' "Year 1 · Semester 1" subjects under one heading
+ * as if they were one term. The community's name shows only when there is more
+ * than one. Choosing is a radio group and "Revise" confirms it, so arrowing through the list never swaps the page underneath.
  */
 function SubjectPicker({
   subjects,
@@ -246,13 +274,23 @@ function SubjectPicker({
   const radioName = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const [choice, setChoice] = useState(currentKey);
-  const groups = useMemo(() => {
-    const byLabel = new Map<string, SubjectEntry[]>();
+  const communities = useMemo(() => {
+    const byCommunity = new Map<string, { name: string; terms: Map<string, SubjectEntry[]> }>();
     for (const entry of subjects) {
-      byLabel.set(entry.semesterLabel, [...(byLabel.get(entry.semesterLabel) ?? []), entry]);
+      let community = byCommunity.get(entry.communityId);
+      if (!community) {
+        community = { name: entry.communityName || "Your own material", terms: new Map() };
+        byCommunity.set(entry.communityId, community);
+      }
+      community.terms.set(entry.semesterLabel, [...(community.terms.get(entry.semesterLabel) ?? []), entry]);
     }
-    return [...byLabel].map(([label, entries]) => ({ label, entries }));
+    return [...byCommunity].map(([id, { name, terms }]) => ({
+      id,
+      name,
+      groups: [...terms].map(([label, entries]) => ({ label, entries })),
+    }));
   }, [subjects]);
+  const showCommunities = communities.length > 1;
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -328,43 +366,50 @@ function SubjectPicker({
             </button>
           </header>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 pb-3 pt-1">
-            {groups.map((group) => (
-              <fieldset key={group.label}>
-                <legend className="px-2 text-xs font-medium text-text-muted">{group.label}</legend>
-                <div className="mt-1.5 space-y-0.5">
-                  {group.entries.map((entry) => {
-                    const checked = choice === entry.key;
-                    return (
-                      <label
-                        key={entry.key}
-                        className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 ${
-                          checked ? "bg-blue-500/10" : "hover:bg-bg-secondary"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name={radioName}
-                          value={entry.key}
-                          checked={checked}
-                          onChange={() => setChoice(entry.key)}
-                          className="sr-only"
-                        />
-                        <span
-                          className={`min-w-0 flex-1 truncate text-sm ${
-                            checked ? "font-semibold text-blue-700 dark:text-blue-300" : "font-medium text-text-primary"
-                          }`}
-                        >
-                          {entry.subject.name}
-                        </span>
-                        {checked ? (
-                          <Check className="size-4 shrink-0 text-blue-600 dark:text-blue-400" strokeWidth={2.5} aria-hidden="true" />
-                        ) : null}
-                      </label>
-                    );
-                  })}
-                </div>
-              </fieldset>
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pb-3 pt-1">
+            {communities.map((community) => (
+              <section key={community.id} className="space-y-4">
+                {showCommunities ? (
+                  <h3 className="truncate px-2 text-sm font-semibold text-text-primary">{community.name}</h3>
+                ) : null}
+                {community.groups.map((group) => (
+                  <fieldset key={group.label}>
+                    <legend className="px-2 text-xs font-medium text-text-muted">{group.label}</legend>
+                    <div className="mt-1.5 space-y-0.5">
+                      {group.entries.map((entry) => {
+                        const checked = choice === entry.key;
+                        return (
+                          <label
+                            key={entry.key}
+                            className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 ${
+                              checked ? "bg-blue-500/10" : "hover:bg-bg-secondary"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={radioName}
+                              value={entry.key}
+                              checked={checked}
+                              onChange={() => setChoice(entry.key)}
+                              className="sr-only"
+                            />
+                            <span
+                              className={`min-w-0 flex-1 truncate text-sm ${
+                                checked ? "font-semibold text-blue-700 dark:text-blue-300" : "font-medium text-text-primary"
+                              }`}
+                            >
+                              {entry.subject.name}
+                            </span>
+                            {checked ? (
+                              <Check className="size-4 shrink-0 text-blue-600 dark:text-blue-400" strokeWidth={2.5} aria-hidden="true" />
+                            ) : null}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                ))}
+              </section>
             ))}
           </div>
 
@@ -475,14 +520,18 @@ function McqReview({ challengeId, mcqs }: { challengeId: string; mcqs: RevisionD
                       className="mt-2 max-w-prose text-sm leading-6 text-text-muted"
                     />
                   ) : null}
-                  {/* The same short video a wrong pick gets on the paper. */}
-                  {missed && item.picked ? (
-                    <Explainer
-                      challengeId={challengeId}
-                      questionId={item.id}
-                      selected={item.picked}
-                      endpoint={`/api/student/challenges/${encodeURIComponent(challengeId)}/choices/explain`}
-                    />
+                  {/* The question's short video — the one a wrong pick gets on the
+                      paper, cached — on every question whose answer is open. */}
+                  {item.correct ? (
+                    <div className="mt-3">
+                      <Explainer
+                        challengeId={challengeId}
+                        questionId={item.id}
+                        selected={item.picked ?? ""}
+                        endpoint={`/api/student/challenges/${encodeURIComponent(challengeId)}/choices/explain`}
+                        label={missed ? "Why? Understand it with a video" : "Watch the 20-second explainer"}
+                      />
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -618,10 +667,164 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
   );
 }
 
+const primaryActionClass =
+  "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2";
+const secondaryActionClass =
+  "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-text-primary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500";
+
+/** What a locked topic says when clicked: the plan it needs, and nothing more
+ *  (user, 2026-09-25). */
+function UpgradeModal({ onClose }: { onClose: () => void }) {
+  const titleId = useId();
+  const primaryRef = useRef<HTMLAnchorElement>(null);
+
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    primaryRef.current?.focus();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      document.body.style.overflow = overflow;
+      opener?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40 animate-in fade-in duration-200 motion-reduce:animate-none"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative w-full max-w-sm rounded-2xl border border-border bg-bg-primary p-6 text-center shadow-2xl animate-in fade-in zoom-in-95 duration-200 motion-reduce:animate-none"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-2 top-2 inline-flex size-9 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+        <span className="mx-auto grid size-12 place-items-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+          <Lock className="size-5" strokeWidth={2.5} aria-hidden="true" />
+        </span>
+        <h2 id={titleId} className="mt-4 text-base font-semibold text-text-primary">
+          Needs a Plus or Pro subscription
+        </h2>
+        <p className="mt-1.5 text-xs text-text-muted">
+          Or keep going with your challenges. This topic unlocks for free when you reach it.
+        </p>
+        <div className="mt-5 grid gap-2">
+          <Link ref={primaryRef} href="/app/billing" className={primaryActionClass}>
+            Upgrade
+          </Link>
+          <button type="button" onClick={onClose} className={secondaryActionClass}>
+            Not now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A syllabus topic with no page yet, and how it opens.
+ *
+ * Next in the queue: one click to its challenge. Unlocked by the plan: start it
+ * here, which assigns its challenge and opens it in the hub. A locked topic never
+ * gets here — it opens `UpgradeModal` instead.
+ */
+function OutlineTopicPage({ topic }: { topic: RevisionDocTopic }) {
+  const router = useRouter();
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState("");
+
+  const start = async () => {
+    setStarting(true);
+    setError("");
+    try {
+      const response = await fetch("/api/student/revision/start-topic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseId: topic.courseId,
+          subjectSlug: topic.subjectSlug,
+          topicKey: topic.topicKey,
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        challengeId?: string;
+        error?: string;
+      };
+      if (!response.ok || !payload.challengeId) {
+        throw new Error(payload.error || "Could not start this topic. Try again.");
+      }
+      router.push(`/app/challenges?challenge=${encodeURIComponent(payload.challengeId)}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not start this topic. Try again.");
+      setStarting(false);
+    }
+  };
+
+  return (
+    <article className="student-reading-frame">
+      <div className="mx-auto max-w-md py-16 text-center">
+        <span className="mx-auto grid size-12 place-items-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+          <BookOpen className="size-6" aria-hidden="true" />
+        </span>
+        <p className="mt-4 text-base font-semibold text-text-primary">{topic.title}</p>
+        <p className="mt-2 text-sm text-text-secondary">
+          {topic.state === "assigned"
+            ? "This is next in your challenges. Open it, and its concepts and solved old questions are filed here as you go."
+            : "Your challenges haven't reached this topic yet, but your plan unlocks every topic. Start it now, and it's filed here as you go."}
+        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+          {topic.state === "assigned" ? (
+            <Link
+              href={`/app/challenges?challenge=${encodeURIComponent(topic.challengeId)}`}
+              className={primaryActionClass}
+            >
+              Open challenge
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          ) : (
+            <button type="button" onClick={start} disabled={starting} className={primaryActionClass}>
+              {starting ? "Starting…" : "Start this topic"}
+              {starting ? null : <ArrowRight className="size-4" aria-hidden="true" />}
+            </button>
+          )}
+        </div>
+        {error ? (
+          <p role="alert" className="mt-4 text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
 export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
   const [query, setQuery] = useState("");
   const [navOpen, setNavOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const closeUpgrade = useCallback(() => setUpgradeOpen(false), []);
   const [rememberedSubject, setRememberedSubject] = useRememberedSubject();
   // "" until a topic is clicked: the open page falls back to the first topic of
   // whichever subject the navigator is showing.
@@ -644,10 +847,10 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
   // A search that hides the open page selects the first thing it did find, so
   // the reading pane is never showing something the navigator no longer lists.
   const selected =
-    visibleTopics.find((topic) => topic.challengeId === selectedId) ??
-    visibleTopics[0] ??
-    subjectTopics.find((topic) => topic.challengeId === selectedId) ??
-    subjectTopics[0] ??
+    visibleTopics.find((topic) => topicId(topic) === selectedId && canOpen(topic)) ??
+    firstPage(visibleTopics) ??
+    subjectTopics.find((topic) => topicId(topic) === selectedId && canOpen(topic)) ??
+    firstPage(subjectTopics) ??
     null;
 
   // Ask AI reads the open topic, so it can start from it.
@@ -662,7 +865,8 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
     const entry = subjects.find((candidate) => candidate.key === key);
     setRememberedSubject(key);
     setQuery("");
-    setSelectedId(entry?.subject.units[0]?.topics[0]?.challengeId ?? "");
+    const first = firstPage(entry?.subject.units.flatMap((unit) => unit.topics) ?? []);
+    setSelectedId(first ? topicId(first) : "");
     setPickerOpen(false);
   };
 
@@ -731,33 +935,56 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
               ) : null}
               <ul className="space-y-0.5">
                 {unit.topics.map((topic) => {
-                  const isActive = selected?.challengeId === topic.challengeId;
+                  const id = topicId(topic);
+                  const isActive = selected ? topicId(selected) === id : false;
+                  const locked = topic.state === "locked";
                   return (
-                    <li key={topic.challengeId}>
+                    <li key={id}>
                       <button
                         type="button"
                         aria-current={isActive ? "page" : undefined}
                         onClick={() => {
-                          setSelectedId(topic.challengeId);
+                          // A locked topic has no page to open: the page being
+                          // read stays put, and the plan prompt comes up over it.
+                          if (locked) {
+                            setUpgradeOpen(true);
+                            return;
+                          }
+                          setSelectedId(id);
                           setNavOpen(false);
                         }}
-                        title={topic.title}
+                        aria-haspopup={locked ? "dialog" : undefined}
+                        title={locked ? `${topic.title} (locked)` : topic.title}
                         className={`flex min-h-10 w-full items-start gap-2.5 rounded-lg py-2 pl-3 pr-2 text-left text-sm leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                           isActive
                             ? "bg-blue-500/[0.07] font-semibold text-blue-700 ring-1 ring-inset ring-blue-500/25 dark:text-blue-300"
-                            : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
+                            : locked
+                              ? "group/locked text-text-muted/80 hover:bg-bg-secondary"
+                              : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
                         }`}
                       >
-                        {/* A quiet dot per topic; the open one glows. */}
+                        {/* A quiet dot per topic, in one column so every title
+                            lines up; the open one glows, one with no page yet is
+                            hollow, a locked one faint. */}
                         <span
                           className={`mt-[7px] size-1.5 shrink-0 rounded-full transition-shadow ${
                             isActive
                               ? "bg-blue-600 ring-4 ring-blue-500/20 dark:bg-blue-400"
-                              : "bg-text-muted/40"
+                              : locked
+                                ? "bg-text-muted/20"
+                                : isFiled(topic)
+                                  ? "bg-text-muted/40"
+                                  : "ring-1 ring-inset ring-text-muted/60"
                           }`}
                           aria-hidden="true"
                         />
-                        <span className="line-clamp-2 min-w-0">{topic.title}</span>
+                        <span className="line-clamp-2 min-w-0 flex-1">{topic.title}</span>
+                        {locked ? (
+                          <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md bg-bg-secondary text-text-muted transition-colors group-hover/locked:bg-amber-500/15 group-hover/locked:text-amber-600 dark:group-hover/locked:text-amber-400">
+                            <Lock className="size-3" strokeWidth={2.5} aria-hidden="true" />
+                            <span className="sr-only">Locked</span>
+                          </span>
+                        ) : null}
                       </button>
                     </li>
                   );
@@ -793,10 +1020,19 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
         </div>
 
         {selected ? (
-          <TopicPage key={selected.challengeId} topic={selected} />
+          isFiled(selected) ? (
+            <TopicPage key={topicId(selected)} topic={selected} />
+          ) : (
+            <OutlineTopicPage key={topicId(selected)} topic={selected} />
+          )
         ) : (
-          <div className="px-5 py-16 text-center text-sm text-text-muted">
-            Choose a topic from the list.
+          <div className="student-reading-frame max-w-md py-16 text-center">
+            <p className="text-sm text-text-secondary">
+              Topics unlock here as you work through your challenges.
+            </p>
+            <Link href="/app/challenges" className={`${primaryActionClass} mt-5`}>
+              Continue challenges
+            </Link>
           </div>
         )}
       </main>
@@ -831,6 +1067,8 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
           </div>
         </div>
       ) : null}
+
+      {upgradeOpen ? <UpgradeModal onClose={closeUpgrade} /> : null}
 
       {pickerOpen ? (
         <SubjectPicker

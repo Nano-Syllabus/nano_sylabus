@@ -4,7 +4,8 @@ import {
   openExplanation,
   unsealAnswer,
 } from "@/lib/data/challenge-exam-format";
-import { requestWrongAnswerVideo, type FundamentalsExplainer } from "@/lib/data/challenge-fundamentals";
+import type { FundamentalsExplainer } from "@/lib/data/challenge-fundamentals";
+import { requestQuestionVideo } from "@/lib/data/challenge-question-video";
 import { challengeUpstreamScope, type StudentChallengeContent } from "@/lib/data/student-challenges";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -15,8 +16,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
  * (`content.examPicks`): the student is shown the correct answer the moment
  * they choose, so a pick that could be changed afterwards would let them read
  * the key off the screen and hand it in. Marking the paper reads these picks,
- * not what the browser sends. The same pattern as the fundamentals check, whose
- * video explainer a wrong answer here gets too.
+ * not what the browser sends. The same pattern as the fundamentals check. Each
+ * question has one short video, prepared when the paper is issued.
  */
 
 export type ExamChoiceResult = {
@@ -104,7 +105,12 @@ export async function checkExamChoice(
   throw new Error("Your answer could not be saved. Try again.");
 }
 
-/** The short video for a wrong pick already recorded on this paper. */
+/**
+ * The video for a question on this paper whose answer is OPEN to this student —
+ * picked (on the paper, right or wrong), or anything once the paper is handed in
+ * (Revision). Never for an unanswered question on a live paper: the video
+ * teaches the answer. `urgent`: somebody is waiting on it.
+ */
 export async function explainExamChoice(
   userId: string,
   challengeId: string,
@@ -115,9 +121,10 @@ export async function explainExamChoice(
   const row = await readRow(userId, challengeId);
   if (!row?.content) return null;
   const question = paperQuestion(row.content, questionId);
-  const selected = row.content.examPicks?.[questionId];
-  if (!selected) throw new RangeError("Answer the question first.");
-  return requestWrongAnswerVideo(
+  if (!row.content.examPicks?.[questionId] && row.status !== "completed") {
+    throw new RangeError("Answer the question first.");
+  }
+  return requestQuestionVideo(
     scope,
     {
       text: question.question,
@@ -125,6 +132,6 @@ export async function explainExamChoice(
       correct: unsealAnswer(challengeId, question),
       explanation: openExplanation(question.explanationSealed),
     },
-    selected,
+    "urgent",
   );
 }

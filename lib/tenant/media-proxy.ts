@@ -90,7 +90,20 @@ export function assertMediaPath(
  * says is passed through rather than assumed: it is the side that knows whether
  * a given render is final.
  */
-const PASSTHROUGH_HEADERS = ["content-type", "content-length", "cache-control", "etag", "last-modified"];
+const PASSTHROUGH_HEADERS = [
+  "content-type",
+  "content-length",
+  "cache-control",
+  "etag",
+  "last-modified",
+  // A video is played in RANGES: Safari will not start an mp4 whose server does
+  // not answer them, and seeking anywhere needs them.
+  "accept-ranges",
+  "content-range",
+];
+
+/** A single byte range, the only kind a <video> asks for. Anything else is dropped. */
+const BYTE_RANGE = /^bytes=\d*-\d*$/;
 
 function responseHeaders(upstream: IncomingMessage): Headers {
   const headers = new Headers();
@@ -109,7 +122,8 @@ function responseHeaders(upstream: IncomingMessage): Headers {
   // the render box. Only what the backend itself calls immutable is shared: a
   // figure still being redrawn answers `no-cache`, and a status poll says
   // nothing, so neither is ever held at the edge.
-  if (/\bimmutable\b/i.test(headers.get("cache-control") ?? "")) {
+  // A PART of a file is never held at the edge under the whole file's URL.
+  if (upstream.statusCode !== 206 && /\bimmutable\b/i.test(headers.get("cache-control") ?? "")) {
     headers.set("cdn-cache-control", "public, max-age=31536000, immutable");
   }
   return headers;
@@ -127,7 +141,12 @@ function responseHeaders(upstream: IncomingMessage): Headers {
  * where the browser holds for it — so a normal API timeout would abandon exactly
  * the figures that were about to arrive.
  */
-export function proxyMedia(upstreamPath: string, signal?: AbortSignal): Promise<Response> {
+export function proxyMedia(
+  upstreamPath: string,
+  signal?: AbortSignal,
+  /** The browser's `Range` header, forwarded when it is one plain byte range. */
+  range?: string | null,
+): Promise<Response> {
   const { baseUrl, rejectUnauthorized } = getTenantApiEnv();
   const url = new URL(upstreamPath, baseUrl);
 
@@ -139,7 +158,7 @@ export function proxyMedia(upstreamPath: string, signal?: AbortSignal): Promise<
         method: "GET",
         rejectUnauthorized,
         agent: agentFor(url),
-        headers: { Accept: "*/*" },
+        headers: { Accept: "*/*", ...(range && BYTE_RANGE.test(range) ? { Range: range } : {}) },
       },
       (upstream) => {
         if (settled) {

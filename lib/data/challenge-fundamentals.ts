@@ -1,7 +1,7 @@
 import { challengeUpstreamScope } from "@/lib/data/student-challenges";
+import { requestQuestionVideo, type QuestionVideoQuestion } from "@/lib/data/challenge-question-video";
 import {
   getTeacherChallengeMcq,
-  requestTeacherExplainerAnimation,
   type TeacherAnimationReply,
   type TeacherChallengeMcqQuestion,
 } from "@/lib/teacher-app/client";
@@ -18,8 +18,8 @@ import {
  * would be an answer key handed out.
  *
  * A wrong answer is told the correct option — not a lecture on why theirs was
- * wrong. The "why" is on request, as a short video made for that one answer
- * (`explainChallengeFundamental`), generated fresh every time and never reused.
+ * wrong. The "why" is on request, as the question's short video
+ * (`explainChallengeFundamental`), shared and cached per question.
  */
 
 export type FundamentalsQuestion = {
@@ -118,10 +118,8 @@ export async function checkChallengeFundamental(
 }
 
 /**
- * A short animated explainer for ONE wrong answer — why the student's option is
- * wrong and the correct one right. `fresh`, so it is rendered for this request
- * and handed to no other; nothing about it is kept here. Refuses a correct
- * answer: there is nothing to explain and a render costs money.
+ * The short video for a wrong answer — the question's own, shared and cached.
+ * Refuses a correct answer: the check already said so.
  */
 export async function explainChallengeFundamental(
   userId: string,
@@ -145,53 +143,18 @@ export async function explainChallengeFundamental(
 }
 
 /**
- * A short animated explainer for ONE wrong answer to any challenge MCQ — the
- * fundamentals check's, or an MCQ community's exam question. `fresh`, so it is
- * rendered for this request and handed to no other.
+ * The video for a wrong answer to any challenge MCQ — the fundamentals check's,
+ * or an MCQ community's paper. The QUESTION's video, shared and cached (see
+ * `challenge-question-video.ts`); asked for `urgent` because a student is
+ * waiting on it.
  */
 export async function requestWrongAnswerVideo(
-  scope: { collectionKey: string; subject: string; topicTitle: string },
-  question: { text: string; options: Array<{ key: string; text: string }>; correct: string; explanation: string },
+  scope: { collectionKey: string; subject: string },
+  question: QuestionVideoQuestion,
   selected: string,
 ): Promise<FundamentalsExplainer> {
-  const textOf = (key: string) => question.options.find((option) => option.key === key)?.text ?? "";
-  const chosen = textOf(selected);
-  if (!chosen || selected === question.correct) {
+  if (!question.options.some((option) => option.key === selected) || selected === question.correct) {
     throw new RangeError("An explainer is made for a wrong answer.");
   }
-  const correctText = textOf(question.correct);
-  const reply = await requestTeacherExplainerAnimation(scope.collectionKey, {
-    concept: clip(`Why "${correctText}" and not "${chosen}": ${question.text}`, 200),
-    subject: scope.subject,
-    notes: clip(
-      [
-        `A student studying "${scope.topicTitle}" (${scope.subject}) answered a multiple-choice question wrongly.`,
-        `Question: ${question.text}`,
-        `Options: ${question.options.map((option) => `${option.key}) ${option.text}`).join("  ")}`,
-        `They chose ${selected}) ${chosen}. The correct answer is ${question.correct}) ${correctText}.`,
-        question.explanation ? `Why it is correct: ${question.explanation}` : "",
-        "Make the concept clear in under 15 seconds: show where the idea behind their choice goes wrong,",
-        "then why the correct answer holds. One idea per beat; no quiz, no recap, no title card.",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      2000,
-    ),
-    // Under the 15-second ceiling the student was promised; the planner writes to
-    // this number rather than to an exact frame count.
-    seconds: 12,
-    style: "card",
-    fresh: true,
-  });
-  return {
-    specHash: reply.spec_hash,
-    status: reply.status,
-    derivatives: reply.derivatives || {},
-    error: reply.error || "",
-  };
-}
-
-function clip(text: string, limit: number) {
-  const clean = text.replace(/\s+\n/g, "\n").trim();
-  return clean.length <= limit ? clean : `${clean.slice(0, limit - 1).trimEnd()}…`;
+  return requestQuestionVideo(scope, question, "urgent");
 }

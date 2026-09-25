@@ -29,6 +29,10 @@ const READING = [
 ];
 
 const topic: RevisionDocTopic = {
+  id: "dfa2dad9-d943-4cc7-9c76-cd123c3317d9",
+  state: "filed",
+  courseId: "course-1",
+  subjectSlug: "applied-mechanics",
   challengeId: "dfa2dad9-d943-4cc7-9c76-cd123c3317d9",
   topicKey: "definitions-and-scope",
   title: "Definitions and scope of Applied Mechanics",
@@ -50,11 +54,12 @@ const topic: RevisionDocTopic = {
 
 const docs: StudentRevisionDocs = {
   topicCount: 1,
+  filedCount: 1,
   unavailable: false,
   semesters: [{
-    id: "y1s1", label: "Year 1 · Semester 1", yearNumber: 1, semesterNumber: 1, position: 1, topicCount: 1,
+    id: "y1s1", label: "Year 1 · Semester 1", communityId: "community-1", communityName: "IOE", yearNumber: 1, semesterNumber: 1, position: 1, topicCount: 1,
     subjects: [{
-      courseId: "course-1", subjectSlug: "applied-mechanics", name: "Applied Mechanics", topicCount: 1,
+      courseId: "course-1", subjectSlug: "applied-mechanics", name: "Applied Mechanics", topicCount: 1, filedCount: 1,
       units: [{ unitNumber: "1", label: "Unit 1", title: "", topics: [topic] }],
     }],
   }],

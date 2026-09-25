@@ -5,6 +5,7 @@ import {
 import { SetAppShell } from "@/components/set-app-shell";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getStudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
+import { getStudentChallenge } from "@/lib/data/student-challenges";
 import { getActiveCommunity } from "@/lib/data/active-community";
 import { mayRestartChallenges } from "@/lib/challenge-refetch";
 
@@ -30,12 +31,26 @@ export default async function ChallengesPage({
     user.id,
     String(params.community || "").trim() || undefined,
   );
-  const dashboard = await getStudentChallengeDashboard(
+  let dashboard = await getStudentChallengeDashboard(
     user.id,
     Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1,
     courseId && subjectSlug ? { courseId, subjectSlug } : undefined,
     active.selected?.slug,
   );
+  // A challenge linked by id is opened even when the hub would not list it: a
+  // topic started from Revision, or the queue's card on a subject that already
+  // has one open (the hub shows one per subject), or another term's subject.
+  // `getStudentChallenge` re-checks access.
+  const requestedChallengeId = String(params.challenge || "").trim();
+  if (
+    requestedChallengeId &&
+    !dashboard.challenges.some((challenge) => challenge.id === requestedChallengeId)
+  ) {
+    const requested = await getStudentChallenge(user.id, requestedChallengeId).catch(() => null);
+    if (requested && requested.status !== "completed") {
+      dashboard = { ...dashboard, challenges: [requested, ...dashboard.challenges] };
+    }
+  }
 
   return (
     <>
@@ -43,7 +58,7 @@ export default async function ChallengesPage({
       <ChallengesDashboardClient
         key={active.selected?.id ?? "none"}
         dashboard={dashboard}
-        initialChallengeId={String(params.challenge || "").trim() || undefined}
+        initialChallengeId={requestedChallengeId || undefined}
         // Resolved here so the allowlist itself never reaches the browser. The
         // route enforces it again; this only decides whether to draw the button.
         canRestartChallenge={mayRestartChallenges(user.email)}

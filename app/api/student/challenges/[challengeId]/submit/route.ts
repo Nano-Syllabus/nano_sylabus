@@ -13,6 +13,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { TeacherApiError } from "@/lib/teacher-app/client";
 import type { StudentExam } from "@/lib/practice-sitting";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -173,6 +174,8 @@ export async function POST(
       passed: graded.passed,
     });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     const message =
       error instanceof z.ZodError
         ? error.issues[0]?.message || "Invalid challenge answers."

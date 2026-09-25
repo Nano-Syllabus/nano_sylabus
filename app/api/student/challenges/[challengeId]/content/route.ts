@@ -3,6 +3,7 @@ import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import { getStudentChallengeContent } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,8 @@ export async function GET(
     if (pending) return NextResponse.json({ status: "pending" });
     return NextResponse.json({ challenge });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     return NextResponse.json(
       { error: error instanceof Error ? studentFacingBuildError(error.message) : "Could not load this challenge." },
       { status: 502 },

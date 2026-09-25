@@ -391,11 +391,14 @@ export function Explainer({
   questionId,
   selected,
   endpoint,
+  label = "Why? Understand it with a video",
 }: {
   challengeId: string;
   questionId: string;
   selected: string;
   endpoint?: string;
+  /** The button's words; Revision offers it on every question, not just a miss. */
+  label?: string;
 }) {
   const [video, setVideo] = useState<Video>({ status: "idle" });
   const [specHash, setSpecHash] = useState("");
@@ -494,7 +497,7 @@ export function Explainer({
           className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-bg-primary px-3 text-sm font-semibold hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
           <Play className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-          {video.status === "error" ? "Try the video again" : "Why? Understand it with a video"}
+          {video.status === "error" ? "Try the video again" : label}
         </button>
         {video.status === "error" ? <p className="mt-2 text-xs text-text-secondary">{video.message}</p> : null}
       </div>
@@ -513,7 +516,7 @@ export function Explainer({
           progress={progress}
         />
         <p className="mt-2 text-xs text-text-secondary">
-          Please wait — a short video is being made for this answer. It usually takes under a minute.
+          Please wait — this question&apos;s short video is still being made. It usually takes under a minute.
         </p>
       </div>
     );

@@ -1,6 +1,7 @@
 import { SetAppShell } from "@/components/set-app-shell";
 import { RevisionDocsClient } from "@/components/revision-docs-client";
 import { requireOnboardedUser } from "@/lib/auth";
+import { unlocksEveryTopic } from "@/lib/data/student-challenges";
 import { getStudentRevisionDocs } from "@/lib/data/student-revision-docs";
 
 export const dynamic = "force-dynamic";
@@ -39,10 +40,18 @@ export const dynamic = "force-dynamic";
  * punishment, and it hit hardest the student who does not yet know the feature
  * exists. The flashcard deck at `/app/notes/revision/cards` keeps its own gate;
  * that one revises a different corpus and is a different product decision.
+ *
+ * What IS gated is reaching ahead. The navigator lists the whole syllabus, and a
+ * topic no challenge has reached yet is locked on Free: it opens when the queue,
+ * which runs in syllabus order, gets to it. Plus and Pro can start any topic from
+ * here (user, 2026-09-25). Filed pages stay open to everyone, as above.
  */
 export default async function RevisionPage() {
   const { user } = await requireOnboardedUser();
-  const docs = await getStudentRevisionDocs(user.id);
+  // The same check the start route makes, so the page never offers a Start
+  // button the route then refuses.
+  const unlockAll = await unlocksEveryTopic(user.id).catch(() => false);
+  const docs = await getStudentRevisionDocs(user.id, { unlockAll });
 
   return (
     <>

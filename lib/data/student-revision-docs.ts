@@ -6,6 +6,7 @@ import {
   type CommunityLearningTopic,
 } from "@/lib/data/community-learning-topics";
 import { unitsStartAtOne } from "@/lib/unit-numbering";
+import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
 import { choiceQuestionsOf, openExplanation, unsealAnswer } from "@/lib/data/challenge-exam-format";
 import {
   isMissingChallengeTable,
@@ -13,6 +14,7 @@ import {
   type ChallengePastQuestion,
   type ChallengeSolvedExample,
   type StudentChallengeContent,
+  studentFacingTopicTitle,
 } from "@/lib/data/student-challenges";
 import {
   listCreatorPrivateSubjectAccess,
@@ -34,10 +36,12 @@ import {
  *     Semester  →  Subject  →  Unit  →  Topic
  *
  * which is the shape of documentation, and is navigated like documentation. It is
- * NOT a syllabus browser: a topic appears once its challenge has been OPENED, and
- * never before, because the claim this page makes about every page in it is "you
- * have worked on this, here is what it said". An empty unit is a unit nothing has
- * been started in yet.
+ * The whole syllabus is listed, but only what a challenge has OPENED has a page:
+ * the claim every page makes is "you have worked on this, here is what it said".
+ * The rest of the outline is there so the student sees where the course goes, and
+ * each entry says how it opens (`RevisionDocTopicState`): challenges run in
+ * syllabus order, so a Free student reaches the next topic by finishing the one
+ * before it, and Plus or Pro unlocks every topic up front (user, 2026-09-25).
  *
  * Started counts, and is marked. The reading is written and stored by `/start`, so
  * a challenge in progress already has everything this page shows; withholding it
@@ -66,9 +70,29 @@ const UNPLACED_UNIT = "";
 /** Two topics in one subject share this title, so it identifies neither. */
 const AMBIGUOUS_TITLE = { unitNumber: UNPLACED_UNIT, position: Number.MAX_SAFE_INTEGER };
 
+/**
+ * How a topic in the outline opens.
+ *
+ * - `filed`: a challenge on it was opened, and its reading is the page.
+ * - `assigned`: the challenge queue has reached it but it has not been opened yet.
+ *   The page links to that challenge.
+ * - `unlocked`: nothing has reached it, but the plan (Plus or Pro) lets the student
+ *   start it now. The page starts it.
+ * - `locked`: nothing has reached it, and on Free only the queue can.
+ */
+export type RevisionDocTopicState = "filed" | "assigned" | "unlocked" | "locked";
+
 export type RevisionDocTopic = {
-  /** The challenge this was proved by. Shown, because it is the id a student
-   *  quotes when a specific topic's material is wrong. */
+  /** Unique across the docs: the challenge id, or `outline:<scope>:<key>` for a
+   *  topic no challenge has reached. */
+  id: string;
+  state: RevisionDocTopicState;
+  /** The subject's scope, for starting a topic from its outline entry. */
+  courseId: string;
+  subjectSlug: string;
+  /** The challenge this was proved by, or "" for an outline entry. Shown,
+   *  because it is the id a student quotes when a specific topic's material is
+   *  wrong. */
   challengeId: string;
   topicKey: string;
   title: string;
@@ -130,6 +154,8 @@ export type RevisionDocSubject = {
   subjectSlug: string;
   name: string;
   topicCount: number;
+  /** Topics with a page, as opposed to outline entries. */
+  filedCount: number;
   units: RevisionDocUnit[];
 };
 
@@ -137,6 +163,11 @@ export type RevisionDocSemester = {
   /** Stable across renders so the client can key its open/closed state on it. */
   id: string;
   label: string;
+  /** The community the term belongs to. A student in two communities has two
+   *  "Year 1 · Semester 1"s, and they are different shelves. Empty for a
+   *  creator's own uploads, which belong to no community. */
+  communityId: string;
+  communityName: string;
   yearNumber: number;
   semesterNumber: number;
   position: number;
@@ -146,7 +177,10 @@ export type RevisionDocSemester = {
 
 export type StudentRevisionDocs = {
   semesters: RevisionDocSemester[];
+  /** Every entry listed, outline included. */
   topicCount: number;
+  /** Entries with a page. */
+  filedCount: number;
   /** True when the challenge table itself is absent — a deployment that has not
    *  run the migration, which is a different thing from having revised nothing. */
   unavailable: boolean;
@@ -222,10 +256,20 @@ function revisionMcqs(row: ChallengeRow, content: StudentChallengeContent | null
   });
 }
 
-function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {
+function docTopic(
+  row: ChallengeRow,
+  subject: Pick<RevisionDocSubject, "courseId" | "subjectSlug" | "name">,
+): RevisionDocTopic {
   const content = (row.content ?? null) as StudentChallengeContent | null;
   const reading = content?.lesson?.content ?? [];
+  const subjectName = subject.name;
   return {
+    id: text(row.id),
+    // Queued but never opened: whatever the pool prepared on it is not a page
+    // the student has worked through.
+    state: text(row.status) === "assigned" ? "assigned" : "filed",
+    courseId: subject.courseId,
+    subjectSlug: subject.subjectSlug,
     challengeId: text(row.id),
     topicKey: text(row.topic_key),
     title: text(row.topic_title) || text(row.title) || "Untitled topic",
@@ -251,6 +295,44 @@ function docTopic(row: ChallengeRow, subjectName: string): RevisionDocTopic {
   };
 }
 
+/** A syllabus topic no challenge has reached: a title, and how it opens. */
+function outlineTopic(
+  topic: CommunityLearningTopic,
+  subject: Pick<RevisionDocSubject, "courseId" | "subjectSlug" | "name">,
+  unlocked: boolean,
+): RevisionDocTopic {
+  return {
+    id: `outline:${scopeKey(subject.courseId, subject.subjectSlug)}:${topic.topic_key}`,
+    state: unlocked ? "unlocked" : "locked",
+    courseId: subject.courseId,
+    subjectSlug: subject.subjectSlug,
+    challengeId: "",
+    topicKey: topic.topic_key,
+    title: studentFacingTopicTitle(topic.title, subject.name),
+    subjectName: subject.name,
+    completedAt: "",
+    inProgress: false,
+    scorePercent: null,
+    attempts: 0,
+    readingPending: false,
+    readingError: "",
+    bigIdea: "",
+    reading: [],
+    focus: "",
+    connections: [],
+    pastQuestions: [],
+    solvedExamples: [],
+    mcqs: [],
+  };
+}
+
+/** Which sitting of a topic the docs keep: a passed one over an open one over
+ *  one only queued. */
+function sittingRank(topic: RevisionDocTopic) {
+  if (topic.state === "assigned") return 0;
+  return topic.inProgress ? 1 : 2;
+}
+
 /**
  * Unit numbering for the subjects that actually have something filed.
  *
@@ -264,6 +346,8 @@ async function unitsByTopicKey(
   admin: ReturnType<typeof createSupabaseAdminClient>,
 ) {
   const placements = new Map<string, { unitNumber: string; position: number }>();
+  // Each subject's whole catalogue, in syllabus order, for the outline.
+  const catalogues = new Map<string, CommunityLearningTopic[]>();
   // Keyed by scope and unit NUMBER, not by topic: a topic the catalogue has
   // dropped is still filed under the unit stamped on its row, and that unit's
   // name is whatever its other topics say it is.
@@ -295,6 +379,7 @@ async function unitsByTopicKey(
         }),
       ) ?? null;
       const scope = scopeKey(subject.courseId, subject.subjectSlug);
+      if (topics?.length) catalogues.set(scope, topics);
       for (const topic of topics ?? []) {
         const placement = {
           unitNumber: topic.unit_number ?? UNPLACED_UNIT,
@@ -323,7 +408,7 @@ async function unitsByTopicKey(
       }
     }),
   );
-  return { placements, unitTitles };
+  return { placements, unitTitles, catalogues };
 }
 
 /** Everything the docs read off a challenge row, minus the unit. */
@@ -355,7 +440,9 @@ async function readFiledChallenges(
       // the material this page exists to give back — refusing to show it until
       // they pass means the topic they are actively studying is the one topic
       // they cannot look up. A started row with no content yet is dropped below.
-      .in("status", ["completed", "started"])
+      // Assigned rows are read too: they are how far the queue has reached, which
+      // is what unlocks a topic on Free.
+      .in("status", ["completed", "started", "assigned"])
       // `completed_at` is null on a started row, and Postgres sorts nulls first on
       // DESC — which would file everything in progress above everything passed.
       // `updated_at` is set on both and means "last touched", which is the order
@@ -371,7 +458,10 @@ async function readFiledChallenges(
   return query(DOC_COLUMNS);
 }
 
-export async function getStudentRevisionDocs(userId: string): Promise<StudentRevisionDocs> {
+export async function getStudentRevisionDocs(
+  userId: string,
+  options: { unlockAll?: boolean } = {},
+): Promise<StudentRevisionDocs> {
   const admin = createSupabaseAdminClient();
   const [community, privateSubjects, completed] = await Promise.all([
     listStudentCommunitySubjectAccess(userId, admin),
@@ -385,7 +475,7 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
   ]);
 
   if (isMissingChallengeTable(completed.error)) {
-    return { semesters: [], topicCount: 0, unavailable: true };
+    return { semesters: [], topicCount: 0, filedCount: 0, unavailable: true };
   }
   if (completed.error) throw completed.error;
 
@@ -420,6 +510,16 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
   const rows = ((completed.data ?? []) as unknown as ChallengeRow[]).filter(
     (row) =>
       Boolean(subjectFor(row)) &&
+      // A queued row needs no content: it is shown as "open this challenge".
+      // It must still be a real topic, not a source document an old catalogue
+      // listed as one.
+      (text(row.status) === "assigned"
+        ? !isChallengeSourceDocumentTopic({
+            topicKey: text(row.topic_key),
+            title: text(row.topic_title) || text(row.title),
+            subjectName: text(row.subject_name),
+          })
+        :
       // Every field this page renders is read off `content`. A row without it —
       // a challenge assigned but never opened, or one whose `/start` has not
       // landed yet — would file an empty page under a real topic title, which
@@ -427,19 +527,22 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       // An MCQ challenge files too — an MCQ-only community otherwise has an
       // empty Revision however much it has passed (user, 2026-09-24). It has no
       // solved questions, so its page carries the paper's MCQs, answers open.
-      Boolean((row.content ?? null) as StudentChallengeContent | null),
+        Boolean((row.content ?? null) as StudentChallengeContent | null)),
   );
-  if (!rows.length) return { semesters: [], topicCount: 0, unavailable: false };
 
-  const usedSubjects = [
+  // Every subject the student has, not only those with something filed: the
+  // outline of a subject not yet started is all of it, locked or not.
+  const allSubjects = [
     ...new Map(
-      rows.map((row) => {
-        const subject = subjectFor(row) as StudentCourseSubjectAccess;
-        return [scopeKey(subject.courseId, subject.subjectSlug), subject];
-      }),
+      [
+        ...rows.map((row) => subjectFor(row) as StudentCourseSubjectAccess),
+        ...community,
+        ...privateSubjects,
+      ].map((subject) => [scopeKey(subject.courseId, subject.subjectSlug), subject]),
     ).values(),
   ];
-  const { placements, unitTitles } = await unitsByTopicKey(usedSubjects, admin);
+  if (!allSubjects.length) return { semesters: [], topicCount: 0, filedCount: 0, unavailable: false };
+  const { placements, unitTitles, catalogues } = await unitsByTopicKey(allSubjects, admin);
 
   // Semester → subject → unit, built by walking the rows once. Each level keeps
   // an index alongside its list so the walk stays linear rather than searching
@@ -449,12 +552,10 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
   const unitsByKey = new Map<string, RevisionDocUnit>();
   const topicOrder = new Map<string, number>();
   let topicCount = 0;
+  let filedCount = 0;
 
-  for (const row of rows) {
-    const subjectAccess = subjectFor(row);
-    if (!subjectAccess) continue;
+  function subjectEntry(subjectAccess: StudentCourseSubjectAccess, fallbackName: string) {
     const key = scopeKey(subjectAccess.courseId, subjectAccess.subjectSlug);
-
     const term = subjectAccess.term;
     const semesterId = term?.id || `unscheduled:${subjectAccess.courseId}`;
     let semester = semesters.get(semesterId);
@@ -462,6 +563,8 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       semester = {
         id: semesterId,
         label: term ? semesterLabel(term) : "Not in a semester",
+        communityId: subjectAccess.community?.id ?? "",
+        communityName: subjectAccess.community?.name ?? "",
         yearNumber: term?.yearNumber ?? 0,
         semesterNumber: term?.semesterNumber ?? 0,
         // Unscheduled subjects sort last, after every real term.
@@ -478,23 +581,18 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       subject = {
         courseId: subjectAccess.courseId,
         subjectSlug: subjectAccess.subjectSlug,
-        name: subjectAccess.subjectName || text(row.subject_name),
+        name: subjectAccess.subjectName || fallbackName,
         topicCount: 0,
+        filedCount: 0,
         units: [],
       };
       subjectsByKey.set(subjectKey, subject);
       semester.subjects.push(subject);
     }
+    return { key, semester, subjectKey, subject };
+  }
 
-    // Three ways to place a topic, best first. The catalogue is live and moves
-    // when a teacher renumbers a unit, so it wins; its title index catches the
-    // rows whose key `/start` rewrote; and the unit stamped on the row at
-    // assignment is what survives when the catalogue has dropped the topic
-    // altogether — a unit re-read into its own bullets, for instance.
-    const placement =
-      placements.get(`${key}:${text(row.topic_key)}`) ??
-      placements.get(`${key}:title:${matchKey(text(row.topic_title) || text(row.title))}`);
-    const unitNumber = placement?.unitNumber || text(row.unit_number) || UNPLACED_UNIT;
+  function unitEntry(subjectKey: string, key: string, subject: RevisionDocSubject, unitNumber: string) {
     const unitKey = `${subjectKey}:${unitNumber}`;
     let unit = unitsByKey.get(unitKey);
     if (!unit) {
@@ -507,6 +605,24 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       unitsByKey.set(unitKey, unit);
       subject.units.push(unit);
     }
+    return { unitKey, unit };
+  }
+
+  for (const row of rows) {
+    const subjectAccess = subjectFor(row);
+    if (!subjectAccess) continue;
+    const { key, semester, subjectKey, subject } = subjectEntry(subjectAccess, text(row.subject_name));
+
+    // Three ways to place a topic, best first. The catalogue is live and moves
+    // when a teacher renumbers a unit, so it wins; its title index catches the
+    // rows whose key `/start` rewrote; and the unit stamped on the row at
+    // assignment is what survives when the catalogue has dropped the topic
+    // altogether — a unit re-read into its own bullets, for instance.
+    const placement =
+      placements.get(`${key}:${text(row.topic_key)}`) ??
+      placements.get(`${key}:title:${matchKey(text(row.topic_title) || text(row.title))}`);
+    const unitNumber = placement?.unitNumber || text(row.unit_number) || UNPLACED_UNIT;
+    const { unitKey, unit } = unitEntry(subjectKey, key, subject, unitNumber);
 
     // ONE ENTRY PER TOPIC, not per challenge. A topic is sat more than once —
     // passed, then assigned again on a later day or restarted — and each sitting
@@ -514,7 +630,7 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
     // Mechanics" twice under one unit. Same topic means the same key, or the
     // same title in the same unit (a re-read syllabus can re-key a topic without
     // renaming it). Two "Introduction"s in DIFFERENT units stay two topics.
-    const topic = docTopic(row, subject.name);
+    const topic = docTopic(row, subject);
     const titleKey = matchKey(topic.title);
     const twin = unit.topics.findIndex(
       (other) => (topic.topicKey && other.topicKey === topic.topicKey) || matchKey(other.title) === titleKey,
@@ -525,9 +641,13 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
       // Every sitting counts toward the attempts the page reports.
       const attempts = kept.attempts + topic.attempts;
       // Rows arrive newest first, so the one kept is already the latest — unless
-      // it is still in progress and this one was passed. A passed sitting is the
-      // one the page vouches for, and it carries the full reading.
-      if (kept.inProgress && !topic.inProgress) {
+      // this one ranks higher: a passed sitting is the one the page vouches for
+      // and carries the full reading, and an opened one beats one only queued.
+      if (sittingRank(topic) > sittingRank(kept)) {
+        if (kept.state === "assigned") {
+          subject.filedCount += 1;
+          filedCount += 1;
+        }
         unit.topics[twin] = { ...topic, attempts };
         topicOrder.set(`${unitKey}:${topic.topicKey}`, order);
       } else {
@@ -540,6 +660,56 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
     subject.topicCount += 1;
     semester.topicCount += 1;
     topicCount += 1;
+    if (topic.state === "filed") {
+      subject.filedCount += 1;
+      filedCount += 1;
+    }
+  }
+
+  // The rest of each syllabus, as outline entries. A catalogue topic already
+  // listed — by key, or by title, since `/start` re-keys rows — is not listed
+  // twice.
+  for (const subjectAccess of allSubjects) {
+    const catalogue = catalogues.get(scopeKey(subjectAccess.courseId, subjectAccess.subjectSlug));
+    if (!catalogue?.length) continue;
+    const { key, semester, subjectKey, subject } = subjectEntry(subjectAccess, "");
+    const listed = new Set(
+      subject.units
+        .flatMap((unit) => unit.topics)
+        .flatMap((topic) => [`key:${topic.topicKey}`, `title:${matchKey(topic.title)}`]),
+    );
+    for (const catalogueTopic of catalogue) {
+      if (
+        isChallengeSourceDocumentTopic({
+          topicKey: catalogueTopic.topic_key,
+          title: catalogueTopic.title,
+          subjectName: subject.name,
+        })
+      ) {
+        continue;
+      }
+      const topic = outlineTopic(catalogueTopic, subject, Boolean(options.unlockAll));
+      if (
+        listed.has(`key:${topic.topicKey}`) ||
+        listed.has(`title:${matchKey(topic.title)}`) ||
+        listed.has(`title:${matchKey(catalogueTopic.title)}`)
+      ) {
+        continue;
+      }
+      listed.add(`key:${topic.topicKey}`);
+      listed.add(`title:${matchKey(topic.title)}`);
+      const { unitKey, unit } = unitEntry(
+        subjectKey,
+        key,
+        subject,
+        catalogueTopic.unit_number || UNPLACED_UNIT,
+      );
+      unit.topics.push(topic);
+      topicOrder.set(`${unitKey}:${topic.topicKey}`, catalogueTopic.position);
+      subject.topicCount += 1;
+      semester.topicCount += 1;
+      topicCount += 1;
+    }
   }
 
   // A subject whose syllabus does not count its units from 1 (a licence
@@ -591,8 +761,15 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
     }
   }
 
+  // Community first, so one community's terms stay together rather than
+  // interleaving with another's by position. Community-less (own uploads) last.
   const ordered = [...semesters.values()].sort(
-    (left, right) => left.position - right.position || left.label.localeCompare(right.label),
+    (left, right) =>
+      Number(!left.communityId) - Number(!right.communityId) ||
+      left.communityName.localeCompare(right.communityName) ||
+      left.communityId.localeCompare(right.communityId) ||
+      left.position - right.position ||
+      left.label.localeCompare(right.label),
   );
   for (const semester of ordered) {
     semester.subjects.sort((left, right) => left.name.localeCompare(right.name));
@@ -602,6 +779,7 @@ export async function getStudentRevisionDocs(userId: string): Promise<StudentRev
     semesters: ordered,
     // Topics, not rows: a topic sat twice is one page in these docs.
     topicCount,
+    filedCount,
     unavailable: false,
   };
 }

@@ -3,7 +3,6 @@
 import { unitShownAlone } from "@/lib/unit-numbering";
 import {
   AlertTriangle,
-  FileCheck2,
   Check,
   ChevronDown,
   FileText,
@@ -53,6 +52,7 @@ import {
   hubTitleClass,
 } from "@/components/challenge-hub-frame";
 import { StarterChallengeBanner } from "@/components/starter-challenge-banner";
+import { AnswerSheetUploader } from "@/components/answer-sheet-uploader";
 import { Markdown } from "@/components/markdown";
 import { WorkedSolution } from "@/components/worked-solution";
 import {
@@ -75,6 +75,8 @@ import type {
 import type { PracticeEvaluation } from "@/lib/tenant/client";
 import { useAppRefresh } from "@/lib/query/refresh";
 import { useDashboardPatch } from "@/lib/query/dashboard";
+import { MEMBERSHIP_CHANGED_EVENT } from "@/lib/query/membership";
+import { ApiError } from "@/lib/query/api";
 import { applyChallengeAdded, applyChallengePassed, applyChallengeState } from "@/lib/challenges/local-updates";
 
 const WEEKLY_CHALLENGE_TARGET = 15;
@@ -259,7 +261,9 @@ function topicStatusClass(status: PracticeEvaluation["chapters"][number]["status
 
 async function apiJson<T>(response: Response): Promise<T> {
   const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
-  if (!response.ok) throw new Error(payload.error || "Request failed.");
+  // An ApiError is still an Error, so every caller reading `.message` is
+  // unchanged; the status is there for the one that needs it (a 403).
+  if (!response.ok) throw new ApiError(payload.error || "Request failed.", response.status, payload);
   return payload;
 }
 
@@ -356,7 +360,6 @@ function ChallengeDetail({
   const { setSidebarSuppressed } = useContext(AppShellContext);
   const enterFocusButtonRef = useRef<HTMLButtonElement>(null);
   const exitFocusButtonRef = useRef<HTMLButtonElement>(null);
-  const answerSheetInputRef = useRef<HTMLInputElement>(null);
   const focusModeWasActiveRef = useRef(false);
   const previousChallengeIdRef = useRef(challenge.id);
   // A challenge always OPENS on step one, whatever step it was left on: the
@@ -376,7 +379,8 @@ function ChallengeDetail({
     challenge.status === "completed" ? "result" : "questions",
   );
   const [savingStep, setSavingStep] = useState<"lesson" | "examples" | null>(null);
-  const [scanFile, setScanFile] = useState<File | null>(null);
+  /** The sheet on the upload screen — photos (this computer or a phone) or one PDF. */
+  const [answerSheet, setAnswerSheet] = useState<{ sessionId: string; pageCount: number } | null>(null);
   /** Multiple-choice picks on an MCQ or hybrid paper: question id → option key. */
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -518,6 +522,9 @@ function ChallengeDetail({
           status?: string;
         };
         if (cancelled) return;
+        // Gone (403: the community that set it was left; 404: the row) — no
+        // later poll will answer differently.
+        if (response.status === 403 || response.status === 404) return;
         const next = response.ok ? payload.challenge?.content : null;
         if (next && (next.contentStatus === "ready" || next.contentError)) {
           onChange(payload.challenge as StudentChallengeDetail);
@@ -553,7 +560,7 @@ function ChallengeDetail({
     previousChallengeIdRef.current = challenge.id;
     setActiveStep(incomingStep);
     setPracticeStage(isCompletedChallenge ? "result" : "questions");
-    setScanFile(null);
+    setAnswerSheet(null);
     setChoices({});
     setError("");
     setClock(Date.now());
@@ -643,7 +650,7 @@ function ChallengeDetail({
     setResults(payload.results);
     setEvaluation(payload.evaluation ?? null);
     setScore({ earned: payload.totalScore, total: payload.totalMarks, passed: payload.passed });
-    setScanFile(null);
+    setAnswerSheet(null);
     setChoices({});
     onChange(payload.challenge);
     setActiveStep(2);
@@ -685,7 +692,7 @@ function ChallengeDetail({
   };
 
   const submitScan = async () => {
-    if (!scanFile) return;
+    if (!answerSheet) return;
     setSubmitting(true);
     setError("");
     // Asked while the sheet is read and graded — the minute a student would
@@ -698,7 +705,7 @@ function ChallengeDetail({
     }
     try {
       const form = new FormData();
-      form.set("file", scanFile);
+      form.set("uploadSessionId", answerSheet.sessionId);
       // A hybrid paper's multiple-choice part is handed in with the scan.
       if (choiceQuestions.length) form.set("choices", JSON.stringify(choices));
       const response = await fetch(`/api/student/challenges/${challenge.id}/submit-file`, {
@@ -752,7 +759,7 @@ function ChallengeDetail({
       setResults([]);
       setEvaluation(null);
       setScore(null);
-      setScanFile(null);
+      setAnswerSheet(null);
       setChoices({});
       setClock(Date.now());
       onChange(payload.challenge);
@@ -1318,8 +1325,8 @@ function ChallengeDetail({
                     <h2 className="text-xl font-semibold">📤 Submit Your Answer Sheet</h2>
                     <p className="mt-2 text-sm text-text-muted">
                       {choiceQuestions.length
-                        ? `Upload one clear PDF or photo of your written answer. Your ${answeredChoices} of ${choiceQuestions.length} multiple-choice answers are handed in with it.`
-                        : "Upload one clear PDF or photo containing all numbered answers."}
+                        ? `Add a photo of each page of your written answer, or one PDF — from here or from your phone. Your ${answeredChoices} of ${choiceQuestions.length} multiple-choice answers are handed in with it.`
+                        : "Add a photo of each page, or one PDF, with all numbered answers — from here or from your phone."}
                     </p>
                     {examExpired ? (
                       <div className="mt-6 rounded-xl border border-warning/40 bg-warning/10 p-5">
@@ -1336,83 +1343,24 @@ function ChallengeDetail({
                     ) : null}
                     {!examExpired ? (
                       <div className="mt-6 space-y-4">
-                        <div className="rounded-xl border-2 border-dashed border-blue-500 bg-blue-500/10 p-6 text-center sm:p-10">
-                          <Upload
-                            className="mx-auto size-8 text-blue-600 dark:text-blue-400"
-                            aria-hidden="true"
-                          />
-                          <p className="mt-3 text-sm font-semibold">
-                            Your complete handwritten answer sheet
-                          </p>
-                          <input
-                            ref={answerSheetInputRef}
-                            id={`challenge-upload-${challenge.id}`}
-                            type="file"
-                            accept="application/pdf,image/jpeg,image/png,image/webp"
-                            disabled={submitting}
-                            onChange={(event) => {
-                              const selected = event.target.files?.[0] || null;
-                              if (selected && selected.size > 20 * 1024 * 1024) {
-                                setScanFile(null);
-                                setError("Upload an answer sheet up to 20 MB.");
-                                event.currentTarget.value = "";
-                                return;
-                              }
-                              setScanFile(selected);
-                              setError("");
-                            }}
-                            className="sr-only"
-                          />
-                          {scanFile ? (
-                            <div className="mx-auto mt-5 flex max-w-md items-center gap-3 rounded-xl border border-border bg-card p-3 text-left">
-                              <FileCheck2
-                                className="size-5 shrink-0 text-success"
-                                aria-hidden="true"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-semibold">{scanFile.name}</p>
-                                <p className="mt-0.5 text-xs text-text-muted">
-                                  {(scanFile.size / (1024 * 1024)).toFixed(1)} MB · ready to submit
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                disabled={submitting}
-                                onClick={() => {
-                                  setScanFile(null);
-                                  if (answerSheetInputRef.current)
-                                    answerSheetInputRef.current.value = "";
-                                }}
-                                aria-label="Remove selected answer sheet"
-                                className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                              >
-                                <X className="size-4" aria-hidden="true" />
-                              </button>
-                            </div>
-                          ) : null}
-                          <button
-                            type="button"
-                            disabled={submitting}
-                            onClick={() => {
-                              if (!answerSheetInputRef.current) return;
-                              answerSheetInputRef.current.value = "";
-                              answerSheetInputRef.current.click();
-                            }}
-                            className={`${focusButtonClass} mt-5 inline-flex cursor-pointer items-center justify-center gap-2 border border-border bg-card text-text-primary hover:bg-bg-secondary`}
-                          >
-                            <Upload className="size-4" aria-hidden="true" />
-                            {scanFile ? "Replace answer sheet" : "Choose answer sheet"}
-                          </button>
-                          <button
-                            type="button"
-                            aria-busy={submitting}
-                            disabled={!scanFile || submitting}
-                            onClick={() => void submitScan()}
-                            className={`${focusButtonClass} mx-auto mt-3 block bg-blue-600 text-white`}
-                          >
-                            {submitting ? "Reading and grading…" : "Submit answer sheet"}
-                          </button>
-                        </div>
+                        <AnswerSheetUploader
+                          challengeId={challenge.id}
+                          disabled={submitting}
+                          onChange={setAnswerSheet}
+                        />
+                        <button
+                          type="button"
+                          aria-busy={submitting}
+                          disabled={!answerSheet || submitting}
+                          onClick={() => void submitScan()}
+                          className={`${focusButtonClass} mx-auto block bg-blue-600 text-white`}
+                        >
+                          {submitting
+                            ? "Reading and grading…"
+                            : answerSheet
+                              ? `Submit answer sheet (${answerSheet.pageCount} ${answerSheet.pageCount === 1 ? "file" : "pages"})`
+                              : "Submit answer sheet"}
+                        </button>
                       </div>
                     ) : null}
                   </div>
@@ -1926,6 +1874,22 @@ export function SubjectCoverage({ progress }: { progress?: { covered: number; to
  * a full page load, which clears it.
  */
 const hubByTerm = new Map<string, StudentChallengeDashboard>();
+// Joining or leaving a community makes every copy here someone else's hub.
+if (typeof window !== "undefined") {
+  window.addEventListener(MEMBERSHIP_CHANGED_EVENT, () => hubByTerm.clear());
+}
+/** The hub with every challenge of one course taken off it. */
+export function withoutCourseChallenges(
+  dashboard: StudentChallengeDashboard,
+  courseId: string | null,
+): StudentChallengeDashboard {
+  if (!courseId) return dashboard;
+  return {
+    ...dashboard,
+    challenges: dashboard.challenges.filter((challenge) => challenge.courseId !== courseId),
+  };
+}
+
 const hubTermKey = (dashboard: StudentChallengeDashboard) =>
   dashboard.community?.currentTermId ? `${dashboard.community.id}:${dashboard.community.currentTermId}` : "";
 
@@ -2121,6 +2085,11 @@ export function ChallengesDashboardClient({
       setSelected(payload.challenge);
       return true;
     } catch (cause) {
+      // The community was left (in another tab, say): the card is not
+      // something this student can open any more, so it goes.
+      if (cause instanceof ApiError && cause.status === 403) {
+        patchHub((d) => withoutCourseChallenges(d, challenge.courseId));
+      }
       setOpenError(cause instanceof Error ? cause.message : "Could not open this challenge.");
       return false;
     } finally {
@@ -2161,6 +2130,18 @@ export function ChallengesDashboardClient({
     openedInitialChallengeRef.current = initialChallengeId;
     void openChallenge(initialChallenge);
   }, [dashboard.challenges, initialChallengeId]);
+
+  // The open challenge is in the address bar, `?challenge=<id>`, however it was
+  // opened — a card, Next, the next topic — so a refresh reopens it and the link
+  // can be shared. replaceState, like closing below: no navigation, no refetch.
+  const selectedId = selected?.id ?? "";
+  useEffect(() => {
+    if (!selectedId) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("challenge") === selectedId) return;
+    url.searchParams.set("challenge", selectedId);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [selectedId]);
 
   // Back to the hub — and the hub's URL. A challenge opened from a link keeps
   // `?challenge=<id>` in the address bar, and left there a refresh reopens the

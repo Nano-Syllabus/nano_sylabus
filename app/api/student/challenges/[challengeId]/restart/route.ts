@@ -3,6 +3,7 @@ import { mayRestartChallenges } from "@/lib/challenge-refetch";
 import { restartStudentChallenge } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -28,6 +29,8 @@ export async function POST(
     if (!challenge) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     return NextResponse.json({ challenge });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     return NextResponse.json(
       {
         error:

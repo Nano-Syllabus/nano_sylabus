@@ -16,6 +16,7 @@ import {
 import { persistStudentChallengeGrade } from "@/lib/data/student-challenge-grading";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 
 export const dynamic = "force-dynamic";
 
@@ -114,6 +115,8 @@ export async function POST(
       })),
     });
   } catch (error) {
+    const denied = challengeAccessResponse(error);
+    if (denied) return denied;
     return NextResponse.json(
       { error: error instanceof Error ? studentFacingBuildError(error.message) : "Could not mark these answers." },
       { status: 502 },

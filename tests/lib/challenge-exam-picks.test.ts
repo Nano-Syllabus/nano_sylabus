@@ -3,7 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ scope: vi.fn(), video: vi.fn(), row: null as Record<string, unknown> | null }));
 
 vi.mock("@/lib/data/student-challenges", () => ({ challengeUpstreamScope: mocks.scope }));
-vi.mock("@/lib/data/challenge-fundamentals", () => ({ requestWrongAnswerVideo: mocks.video }));
+vi.mock("@/lib/data/challenge-question-video", () => ({ requestQuestionVideo: mocks.video }));
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
     from: () => {
@@ -102,15 +102,21 @@ describe("answering one question", () => {
   });
 });
 
-describe("the video for a wrong answer", () => {
-  it("is made from the recorded pick, with the key opened on the server", async () => {
+describe("the question's video", () => {
+  it("is the question's own, with the key opened on the server — the pick is not in it", async () => {
     await checkExamChoice("u", "c", "q1", "A");
     await explainExamChoice("u", "c", "q1");
     expect(mocks.video).toHaveBeenCalledWith(
-      expect.objectContaining({ topicTitle: "Networking Model" }),
+      expect.objectContaining({ collectionKey: "k", subject: "s" }),
       expect.objectContaining({ correct: "B", explanation: expect.stringContaining("electrical") }),
-      "A",
+      "urgent",
     );
+  });
+
+  it("opens every question once the paper is handed in (Revision)", async () => {
+    mocks.row = { ...mocks.row!, status: "completed" };
+    await explainExamChoice("u", "c", "q1");
+    expect(mocks.video).toHaveBeenCalledTimes(1);
   });
 
   it("needs an answer first", async () => {
