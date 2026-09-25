@@ -18,8 +18,29 @@ export class ChallengeAccessError extends Error {
   }
 }
 
-/** The response for a lost entitlement, or null for any other failure. */
+/**
+ * A free account has started its daily share of challenges (see
+ * `challenge-daily-limit.ts`). 402: it is a plan boundary, not a fault and not
+ * lost access — the hub locks its Start buttons and offers the upgrade.
+ */
+export class ChallengeDailyLimitError extends Error {
+  readonly status = 402;
+  constructor(readonly limit: number) {
+    super(
+      `You've used today's ${limit} free challenge attempts. Come back tomorrow, or upgrade to Plus or Pro for unlimited challenges.`,
+    );
+    this.name = "ChallengeDailyLimitError";
+  }
+}
+
+/** The response for a lost entitlement or a used-up daily allowance, or null for any other failure. */
 export function challengeAccessResponse(error: unknown) {
+  if (error instanceof ChallengeDailyLimitError) {
+    return NextResponse.json(
+      { error: error.message, code: "daily_limit", limit: error.limit },
+      { status: 402 },
+    );
+  }
   return error instanceof ChallengeAccessError
     ? NextResponse.json({ error: error.message, code: "access_revoked" }, { status: 403 })
     : null;

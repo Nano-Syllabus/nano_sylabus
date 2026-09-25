@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle, RefreshCw, Smartphone, Upload } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { AnswerSheetPages } from "@/components/answer-sheet-pages";
-import { addFilesToSheet, removeSheetPages } from "@/lib/answer-sheet-client";
+import { addFilesToSheet, removeSheetPages, reorderSheetPages } from "@/lib/answer-sheet-client";
 import type { AnswerSheetState } from "@/lib/data/challenge-answer-sheet";
 
 type Opened = AnswerSheetState & { token: string; uploadUrl: string };
@@ -71,15 +71,17 @@ export function AnswerSheetUploader({
     if (sheet) retries.current = 0;
   }, [sheet]);
 
+  /** Page-order saves in flight: a poll landing meanwhile would show the old order. */
+  const arranging = useRef(0);
   const refresh = useCallback(async () => {
-    if (!sheet) return;
+    if (!sheet || arranging.current) return;
     const response = await fetch(
       `/api/student/challenges/${encodeURIComponent(challengeId)}/answer-sheet?sessionId=${sheet.sessionId}`,
       { cache: "no-store" },
     ).catch(() => null);
     if (!response?.ok) return;
     const state = (await response.json().catch(() => null)) as AnswerSheetState | null;
-    if (!state) return;
+    if (!state || arranging.current) return;
     setSheet((current) => {
       if (!current || current.sessionId !== state.sessionId) return current;
       // Keep a thumbnail's first signed URL: a new one each poll would reload the image.
@@ -119,6 +121,25 @@ export function AnswerSheetUploader({
     } finally {
       setBusy("");
       await refresh();
+    }
+  };
+
+  /** Shown in the new order at once; polls wait until it is saved, so they cannot undo it. */
+  const reorder = async (order: string[]) => {
+    if (!sheet) return;
+    setError("");
+    arranging.current += 1;
+    setSheet((current) => {
+      if (!current) return current;
+      const byId = new Map(current.pages.map((page) => [page.id, page]));
+      return { ...current, pages: order.flatMap((id) => byId.get(id) ?? []) };
+    });
+    try {
+      await reorderSheetPages({ challengeId, token: sheet.token }, order);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save the page order.");
+    } finally {
+      arranging.current -= 1;
     }
   };
 
@@ -164,7 +185,12 @@ export function AnswerSheetUploader({
         />
         {sheet?.pages.length ? (
           <div className="mt-5">
-            <AnswerSheetPages pages={sheet.pages} disabled={locked} onRemove={(id) => void remove(id)} />
+            <AnswerSheetPages
+              pages={sheet.pages}
+              disabled={locked}
+              onRemove={(id) => void remove(id)}
+              onReorder={(order) => void reorder(order)}
+            />
           </div>
         ) : null}
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">

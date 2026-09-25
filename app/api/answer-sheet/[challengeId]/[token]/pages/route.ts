@@ -4,6 +4,7 @@ import {
   AnswerSheetError,
   answerSheetForToken,
   removeAnswerSheetPages,
+  reorderAnswerSheetPages,
   reserveAnswerSheetPage,
 } from "@/lib/data/challenge-answer-sheet";
 
@@ -45,5 +46,21 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return NextResponse.json({ ok: true });
   } catch (error) {
     return failure(error, "Could not clear the answer sheet.");
+  }
+}
+
+const orderSchema = z.object({ order: z.array(z.string().uuid()).min(1).max(40) });
+
+/** The pages in the order the student dragged them into. */
+export async function PATCH(request: Request, { params }: { params: Promise<{ challengeId: string; token: string }> }) {
+  try {
+    const parsed = orderSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json({ error: "Arrange the pages again." }, { status: 400 });
+    const { challengeId, token } = await params;
+    const { session } = await answerSheetForToken(challengeId, token);
+    await reorderAnswerSheetPages(session, parsed.data.order);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return failure(error, "Could not save the page order.");
   }
 }

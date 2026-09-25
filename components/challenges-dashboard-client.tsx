@@ -7,6 +7,7 @@ import {
   ChevronDown,
   FileText,
   LoaderCircle,
+  Lock,
   Maximize2,
   Minimize2,
   Pencil,
@@ -68,6 +69,7 @@ import {
 import { mergeLearnQuestions } from "@/lib/challenge-learn-questions";
 import { academicNumberLabel } from "@/lib/academic";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
+import type { ChallengeAllowance } from "@/lib/data/challenge-daily-limit";
 import type {
   StudentChallengeDetail,
   StudentChallengeSummary,
@@ -1893,12 +1895,59 @@ export function withoutCourseChallenges(
 const hubTermKey = (dashboard: StudentChallengeDashboard) =>
   dashboard.community?.currentTermId ? `${dashboard.community.id}:${dashboard.community.currentTermId}` : "";
 
+/** Where Start was, once the free plan's challenges for today are used. */
+function UpgradeLockButton() {
+  return (
+    <Link
+      href="/app/billing"
+      title="Today's free challenges are used. Upgrade to Plus or Pro for unlimited challenges."
+      className="inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center gap-1.5 rounded-[10px] border border-amber-500/40 bg-amber-500/10 px-3 text-[14px] font-semibold text-amber-700 transition-colors hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-amber-300"
+    >
+      <Lock className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
+      Upgrade
+    </Link>
+  );
+}
+
+function DailyLimitNotice({ limit }: { limit: number }) {
+  return (
+    <div
+      role="status"
+      className="flex flex-col gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300">
+          <Lock className="size-4" strokeWidth={2.5} aria-hidden="true" />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-text-primary">
+            You&apos;ve used today&apos;s {limit} free challenge attempts
+          </p>
+          <p className="mt-0.5 text-sm text-text-secondary">
+            Come back tomorrow for {limit} more, or upgrade to Plus or Pro for unlimited challenges. Challenges you
+            already started can still be continued.
+          </p>
+        </div>
+      </div>
+      <Link
+        href="/app/billing"
+        className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+      >
+        Upgrade to Plus or Pro
+      </Link>
+    </div>
+  );
+}
+
 export function ChallengesDashboardClient({
   dashboard: serverDashboard,
   initialChallengeId,
   canRestartChallenge = false,
+  allowance,
 }: {
   dashboard: StudentChallengeDashboard;
+  /** Today's free-plan challenges (see challenge-daily-limit.ts); absent = no limit. */
+  allowance?: ChallengeAllowance;
   /** Opened straight away, so the dashboard's starter card lands the student
    *  inside the challenge rather than on the hub they came from. */
   initialChallengeId?: string;
@@ -2075,6 +2124,18 @@ export function ChallengesDashboardClient({
     }
   };
 
+  /**
+   * THE FREE PLAN'S THREE A DAY. Starting a card counts here as it happens, so
+   * the fourth Start locks without a reload; the server refuses it regardless
+   * (402), and a 402 from it locks the rest. Continue is never locked.
+   */
+  const [attemptsToday, setAttemptsToday] = useState(allowance?.used ?? 0);
+  // A new server render brings a fresh count (tomorrow's reset, an upgrade).
+  const serverAttempts = allowance?.used ?? 0;
+  useEffect(() => setAttemptsToday(serverAttempts), [serverAttempts]);
+  const FREE_LIMIT_REACHED = allowance?.limit ?? Number.POSITIVE_INFINITY;
+  const limitReached = Boolean(allowance && !allowance.paid && attemptsToday >= allowance.limit);
+
   const openChallenge = async (challenge: StudentChallengeSummary) => {
     setOpeningId(challenge.id);
     setOpenError("");
@@ -2082,9 +2143,12 @@ export function ChallengesDashboardClient({
       const payload = await apiJson<{ challenge: StudentChallengeDetail }>(
         await fetch(`/api/student/challenges/${challenge.id}/start`, { method: "POST" }),
       );
+      if (challenge.status === "assigned") setAttemptsToday((used) => used + 1);
       setSelected(payload.challenge);
       return true;
     } catch (cause) {
+      // The allowance ran out elsewhere (another tab, the dashboard): lock now.
+      if (cause instanceof ApiError && cause.status === 402) setAttemptsToday(FREE_LIMIT_REACHED);
       // The community was left (in another tab, say): the card is not
       // something this student can open any more, so it goes.
       if (cause instanceof ApiError && cause.status === 403) {
@@ -2113,8 +2177,10 @@ export function ChallengesDashboardClient({
         await fetch(`/api/student/challenges/${done.id}/next${query}`, { method: "POST" }),
       );
       patchHub((d) => applyChallengeAdded(d, payload.challenge));
+      setAttemptsToday((used) => used + 1);
       setSelected(payload.challenge);
     } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 402) setAttemptsToday(FREE_LIMIT_REACHED);
       setOpenError(cause instanceof Error ? cause.message : "Could not open the next topic.");
     } finally {
       setOpeningId("");
@@ -2330,6 +2396,7 @@ export function ChallengesDashboardClient({
             </div>
           ) : dashboard.challenges.length ? (
             <div className={hubRowsClass}>
+              {limitReached ? <DailyLimitNotice limit={allowance?.limit ?? 3} /> : null}
               {hubRows(dashboard.challenges).map(({ challenge, doneToday }) => {
                 const completed = challenge.status === "completed";
                 const started = challenge.status === "started";
@@ -2370,6 +2437,9 @@ export function ChallengesDashboardClient({
                             <span className="block text-[11px] tabular-nums text-text-muted">{score}</span>
                           ) : null}
                         </span>
+                        {limitReached ? (
+                          <UpgradeLockButton />
+                        ) : (
                         <button
                           type="button"
                           onClick={() => void openNextInSubject(challenge)}
@@ -2379,6 +2449,7 @@ export function ChallengesDashboardClient({
                         >
                           {openingId === challenge.id ? "Opening…" : "Next topic"}
                         </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -2442,6 +2513,9 @@ export function ChallengesDashboardClient({
                           </>
                         ) : null}
                       </span>
+                      {limitReached && !started ? (
+                        <UpgradeLockButton />
+                      ) : (
                       <button
                         type="button"
                         onClick={() => void openChallenge(challenge)}
@@ -2453,6 +2527,7 @@ export function ChallengesDashboardClient({
                       >
                         {openingId === challenge.id ? "Opening…" : started ? "Continue" : "Start"}
                       </button>
+                      )}
                     </div>
                   </div>
                 );

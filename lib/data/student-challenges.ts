@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { assertChallengeAttemptAllowed, startedToday } from "@/lib/data/challenge-daily-limit";
 import { ChallengeAccessError } from "@/lib/data/challenge-access-error";
 import { after } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -1780,6 +1781,11 @@ export async function startStudentChallenge(
   const row = raw as ChallengeRow;
   const access = await requireChallengeAccess(userId, row);
   const current = toDetail(row);
+  // A NEW attempt counts against the free plan's daily challenges: a card being
+  // started, or a restart. Continuing one already under way never does.
+  if (current.status === "assigned" || options.restart) {
+    await assertChallengeAttemptAllowed(userId, startedToday(row.started_at as string | null | undefined));
+  }
   const externalAttemptId = String(row.external_paper_id || "");
   const sourceDocumentTopic = isSourceDocumentChallengeRow(row);
   if (!options.restart && current.content?.contentStatus === "ready") {

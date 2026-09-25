@@ -81,3 +81,14 @@ export async function removeSheetPages(link: SheetLink, pageId: string | "all") 
     "Could not remove that page.",
   );
 }
+
+export async function reorderSheetPages(link: SheetLink, order: string[]) {
+  await json(
+    await fetch(`${sheetBase(link)}/pages`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order }),
+    }),
+    "Could not save the page order.",
+  );
+}

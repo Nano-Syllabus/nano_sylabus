@@ -353,6 +353,42 @@ export async function commitAnswerSheetPage(session: SessionRow, pageId: string)
   if (updateError) throw updateError;
 }
 
+/**
+ * Put the pages in the student's order (dragged on the upload screen); the
+ * sheet is joined and graded in it. `order` must name every page, once.
+ *
+ * Order IS arrival order (`created_at`), so this rewrites the pages' times into
+ * the new sequence from the sheet's first moment, a millisecond apart. No
+ * separate position column: a page added afterwards is later than all of them
+ * and lands at the end, as a new page should.
+ */
+export async function reorderAnswerSheetPages(session: SessionRow, order: string[]) {
+  assertWritable(session);
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("challenge_answer_sheet_pages")
+    .select("id,created_at")
+    .eq("session_id", session.id)
+    .eq("status", "ready");
+  if (error) throw error;
+  const rows = (data ?? []) as Array<{ id: string; created_at: string }>;
+  const known = new Set(rows.map((row) => row.id));
+  if (order.length !== rows.length || new Set(order).size !== order.length || order.some((id) => !known.has(id))) {
+    throw new AnswerSheetError("The pages changed while you were arranging them. Try again.", 409);
+  }
+  const start = Math.min(...rows.map((row) => Date.parse(row.created_at)));
+  await Promise.all(
+    order.map(async (id, index) => {
+      const { error: updateError } = await admin
+        .from("challenge_answer_sheet_pages")
+        .update({ created_at: new Date(start + index).toISOString() })
+        .eq("id", id)
+        .eq("session_id", session.id);
+      if (updateError) throw updateError;
+    }),
+  );
+}
+
 /** Remove some pages, or all of them (`pageIds` null). */
 export async function removeAnswerSheetPages(session: SessionRow, pageIds: string[] | null) {
   assertWritable(session);

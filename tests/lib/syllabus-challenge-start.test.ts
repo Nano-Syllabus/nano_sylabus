@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
   submitExamFile: vi.fn(),
   gradeAnswers: vi.fn(),
 }));
+// The free plan's daily limit is its own concern (challenge-daily-limit.test.ts).
+vi.mock("@/lib/data/challenge-daily-limit", () => ({
+  assertChallengeAttemptAllowed: async () => undefined,
+  startedToday: () => false,
+}));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.admin }));
 vi.mock("@/lib/student-courses", () => ({
   getStudentCourseSubjectAccessForCourse: mocks.access,

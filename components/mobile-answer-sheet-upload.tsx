@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, CheckCircle2, FileImage, ImagePlus, LoaderCircle } from "lucide-react";
 import { AnswerSheetPages } from "@/components/answer-sheet-pages";
-import { addFilesToSheet, removeSheetPages } from "@/lib/answer-sheet-client";
+import { addFilesToSheet, removeSheetPages, reorderSheetPages } from "@/lib/answer-sheet-client";
 import type { AnswerSheetState } from "@/lib/data/challenge-answer-sheet";
 
 type Loaded = AnswerSheetState & { topicTitle: string; subjectName: string };
@@ -24,12 +24,16 @@ export function MobileAnswerSheetUpload({ challengeId, token }: { challengeId: s
   const cameraRef = useRef<HTMLInputElement>(null);
   const pickerRef = useRef<HTMLInputElement>(null);
 
+  /** Page-order saves in flight: a poll landing meanwhile would show the old order. */
+  const arranging = useRef(0);
   const load = useCallback(async () => {
+    if (arranging.current) return;
     const response = await fetch(`/api/answer-sheet/${encodeURIComponent(challengeId)}/${encodeURIComponent(token)}`, { cache: "no-store" }).catch(
       () => null,
     );
     if (!response) return;
     const payload = (await response.json().catch(() => ({}))) as Loaded & { error?: string };
+    if (arranging.current) return;
     if (!response.ok) {
       setFatal(payload.error || "This upload link is unavailable.");
       return;
@@ -60,6 +64,25 @@ export function MobileAnswerSheetUpload({ challengeId, token }: { challengeId: s
     } finally {
       setBusy("");
       await load();
+    }
+  };
+
+  /** Shown in the new order at once; polls wait until it is saved, so they cannot undo it. */
+  const reorder = async (order: string[]) => {
+    
+    setError("");
+    arranging.current += 1;
+    setSheet((current) => {
+      if (!current) return current;
+      const byId = new Map(current.pages.map((page) => [page.id, page]));
+      return { ...current, pages: order.flatMap((id) => byId.get(id) ?? []) };
+    });
+    try {
+      await reorderSheetPages({ challengeId, token }, order);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save the page order.");
+    } finally {
+      arranging.current -= 1;
     }
   };
 
@@ -176,7 +199,12 @@ export function MobileAnswerSheetUpload({ challengeId, token }: { challengeId: s
 
             {sheet.pages.length ? (
               <div className="mt-5">
-                <AnswerSheetPages pages={sheet.pages} disabled={locked} onRemove={(id) => void remove(id)} />
+                <AnswerSheetPages
+                  pages={sheet.pages}
+                  disabled={locked}
+                  onRemove={(id) => void remove(id)}
+                  onReorder={(order) => void reorder(order)}
+                />
                 <div className="mt-4 flex items-start gap-2 rounded-xl border border-success/40 bg-success/10 p-3 text-sm">
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
                   <p>
