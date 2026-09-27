@@ -4,6 +4,7 @@ import { Check, Loader2, Minus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Explainer } from "@/components/challenge-fundamentals";
 import { Markdown } from "@/components/markdown";
+import { delimitBareMath } from "@/lib/markdown";
 import type { ExamChoiceResult } from "@/lib/data/challenge-exam-picks";
 import type { StudentChallengeDetail, StudentChallengeSummary } from "@/lib/data/student-challenges";
 import { cn } from "@/lib/utils";
@@ -332,7 +333,7 @@ export function ChallengeMcqPage({
                         <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border text-xs font-semibold">
                           {option.key}
                         </span>
-                        <Markdown text={option.text} className="min-w-0 flex-1 leading-6" />
+                        <Markdown text={delimitBareMath(option.text)} className="min-w-0 flex-1 leading-6" />
                         {isCorrect ? <span className="sr-only">Correct answer</span> : null}
                         {isChosenWrong ? <span className="sr-only">Your answer</span> : null}
                       </li>
@@ -486,7 +487,7 @@ export function ChallengeMcqPage({
                             )}
                             {isCorrect || isChosenWrong ? <span className="sr-only">{option.key}</span> : null}
                           </span>
-                          <Markdown text={option.text} className="min-w-0 flex-1 leading-6" />
+                          <Markdown text={delimitBareMath(option.text)} className="min-w-0 flex-1 leading-6" />
                           {isCorrect ? (
                             <span className="sr-only">(correct answer)</span>
                           ) : isChosenWrong ? (
@@ -506,7 +507,7 @@ export function ChallengeMcqPage({
                       ) : (
                         <div className="rounded-lg border border-success/40 bg-success/10 p-3">
                           <p className="text-sm font-semibold text-success">Correct answer: {result.correct}</p>
-                          <Markdown text={result.correctText} className="mt-0.5 text-sm" />
+                          <Markdown text={delimitBareMath(result.correctText)} className="mt-0.5 text-sm" />
                           {result.explanation ? (
                             <Markdown text={result.explanation} className="mt-1.5 text-xs leading-5 text-text-secondary" />
                           ) : null}

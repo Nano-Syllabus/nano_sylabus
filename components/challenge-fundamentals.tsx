@@ -3,6 +3,7 @@
 import { Check, ChevronRight, Loader2, Play, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { MathText } from "@/components/math-text";
+import { delimitBareMath } from "@/lib/markdown";
 import type {
   FundamentalsExplainer,
   FundamentalsQuestion,
@@ -267,7 +268,7 @@ function Question({
                   {/* The letter is still the option's name once an icon stands in for it. */}
                   {isCorrect || isChosenWrong ? <span className="sr-only">{option.key}</span> : null}
                 </span>
-                <MathText text={option.text} className="min-w-0 flex-1 text-text-primary" />
+                <MathText text={delimitBareMath(option.text)} className="min-w-0 flex-1 text-text-primary" />
                 {isCorrect ? (
                   <span className="sr-only">(correct answer)</span>
                 ) : isChosenWrong ? (
@@ -287,7 +288,7 @@ function Question({
           ) : (
             <div className="rounded-lg border border-success/40 bg-success/10 p-3">
               <p className="text-sm font-semibold text-success">Correct answer: {result.correct}</p>
-              <MathText as="div" text={result.correctText} className="mt-0.5 text-sm text-text-primary" />
+              <MathText as="div" text={delimitBareMath(result.correctText)} className="mt-0.5 text-sm text-text-primary" />
               {result.explanation ? (
                 <MathText as="div" text={result.explanation} className="mt-1.5 text-xs leading-5 text-text-secondary" />
               ) : null}

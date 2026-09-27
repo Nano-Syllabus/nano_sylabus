@@ -785,6 +785,28 @@ function renderMd(source: string): string {
   return output;
 }
 
+const BARE_TEX_COMMAND = /\\[A-Za-z]+/;
+const BARE_TEX_RUN = /[\d.,]*\s*\\[A-Za-z]+(?:\s*\{[^{}]*\})*(?:\s*[\^_]\s*(?:\{[^{}]*\}|\w))*/g;
+
+/**
+ * Supplies the missing `$…$` around an MCQ option written as bare LaTeX.
+ *
+ * Options are short, and the model often drops the delimiters it keeps on the
+ * question: `4 \Omega`, `50.5 \text{ V}`. Nothing then marks them as maths, so
+ * the student read the backslashes. A formula-shaped option is wrapped whole;
+ * an option that is a sentence has only its command runs wrapped, so its words
+ * stay upright prose. Text that already carries a `$` is left as written.
+ */
+export function delimitBareMath(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.includes("$") || !BARE_TEX_COMMAND.test(trimmed)) return text;
+  if (isInlineMath(trimmed)) return `$${trimmed}$`;
+  return trimmed.replace(BARE_TEX_RUN, (run) => {
+    const lead = run.match(/^\s*/)?.[0] ?? "";
+    return `${lead}$${run.trim()}$`;
+  });
+}
+
 export function renderMarkdown(source: string) {
   return renderMd(source);
 }

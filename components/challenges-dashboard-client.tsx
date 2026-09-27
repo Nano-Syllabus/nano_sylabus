@@ -55,6 +55,7 @@ import {
 import { StarterChallengeBanner } from "@/components/starter-challenge-banner";
 import { AnswerSheetUploader } from "@/components/answer-sheet-uploader";
 import { Markdown } from "@/components/markdown";
+import { delimitBareMath } from "@/lib/markdown";
 import { WorkedSolution } from "@/components/worked-solution";
 import {
   WorkedExampleCard,
@@ -1282,7 +1283,7 @@ function ChallengeDetail({
                                         >
                                           {option.key}
                                         </span>
-                                        <Markdown text={option.text} className="min-w-0 flex-1 leading-6" />
+                                        <Markdown text={delimitBareMath(option.text)} className="min-w-0 flex-1 leading-6" />
                                       </button>
                                     );
                                   })}

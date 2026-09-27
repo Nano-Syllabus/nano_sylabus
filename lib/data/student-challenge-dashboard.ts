@@ -484,6 +484,20 @@ function recommendationReason(mastery: TopicMastery | undefined) {
         : "Recommended as one of your next lowest-readiness topics.";
 }
 
+const COMPLETED_TITLE_PREFIX = "title:";
+
+/** A challenge on this topic was passed (`completed` is only ever a pass). */
+function hasPassedChallenge(
+  completed: Set<string> | undefined,
+  topic: { topic_key: string; title: string },
+) {
+  if (!completed) return false;
+  return (
+    completed.has(topic.topic_key.trim().toLowerCase()) ||
+    completed.has(`${COMPLETED_TITLE_PREFIX}${String(topic.title || "").trim().toLowerCase()}`)
+  );
+}
+
 /**
  * Which subtopics each subject has a completed challenge on, for one course.
  *
@@ -499,7 +513,7 @@ async function completedChallengeTopics(
   const bySubject = new Map<string, Set<string>>();
   const { data, error } = await admin
     .from("student_challenges")
-    .select("subject_slug,topic_key")
+    .select("subject_slug,topic_key,topic_title")
     .eq("user_id", userId)
     .eq("course_id", courseId)
     .eq("status", "completed");
@@ -510,6 +524,11 @@ async function completedChallengeTopics(
     const key = subjectScopeKey(courseId, String(row.subject_slug || ""));
     const topics = bySubject.get(key) ?? new Set<string>();
     topics.add(String(row.topic_key || "").trim().toLowerCase());
+    // `/start` can rewrite a row's key to the provider's; its title is how the
+    // queue still recognises the catalogue topic. Prefixed, so a title never
+    // counts as a key in the progress bar.
+    const title = String(row.topic_title || "").trim().toLowerCase();
+    if (title) topics.add(`${COMPLETED_TITLE_PREFIX}${title}`);
     bySubject.set(key, topics);
   }
   return bySubject;
@@ -747,13 +766,22 @@ export async function getStudentChallengeDashboard(
            * on. A topic that has been attempted and NOT passed keeps its place —
            * that is where the student actually is, and skipping past it would
            * quietly write the topic off.
+           *
+           * PASSED MEANS A PASSED CHALLENGE, NOT ONLY STRONG MASTERY. A 40% pass
+           * leaves mastery "developing", so the passed topic kept its place at
+           * the front; the duplicate guard only sees TODAY's rows, so the next
+           * Nepal day handed the student topic #1 again, then #2… — five repeats
+           * of challenges already passed (reported 2026-09-27).
            */
+          const completedTopics = completedBySubject.get(scopeKey);
+          const isBehind = (topic: (typeof learningTopics)[number], mastery?: TopicMastery) =>
+            isPassedTopic(mastery) || hasPassedChallenge(completedTopics, topic);
           const rankedTopics = learningTopics
             .map((topic, index) => ({ topic, index, mastery: stored.get(topic.topic_key) }))
+            .map((entry) => ({ ...entry, behind: isBehind(entry.topic, entry.mastery) }))
             .sort(
               (left, right) =>
-                Number(isPassedTopic(left.mastery)) - Number(isPassedTopic(right.mastery)) ||
-                left.index - right.index,
+                Number(left.behind) - Number(right.behind) || left.index - right.index,
             );
           const next = rankedTopics[0]?.topic;
           return {

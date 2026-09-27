@@ -24,6 +24,8 @@ import {
 } from "@/components/study-language";
 import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
 import { Markdown } from "@/components/markdown";
+import { MathText } from "@/components/math-text";
+import { delimitBareMath } from "@/lib/markdown";
 import { Explainer } from "@/components/challenge-fundamentals";
 import { cn } from "@/lib/utils";
 import { publishNanoAiTopic } from "@/lib/nanoai-topic";
@@ -502,7 +504,7 @@ function McqReview({ challengeId, mcqs }: { challengeId: string; mcqs: RevisionD
                           )}
                         >
                           <span className="w-4 shrink-0 font-mono text-xs leading-6">{option.key}</span>
-                          <span className="min-w-0 flex-1">{option.text}</span>
+                          <MathText text={delimitBareMath(option.text)} className="min-w-0 flex-1" />
                           {correct ? <Check className="mt-1 h-4 w-4 shrink-0" aria-label="Correct answer" /> : null}
                           {wrongPick ? <span className="shrink-0 text-xs no-underline">your pick</span> : null}
                         </li>
