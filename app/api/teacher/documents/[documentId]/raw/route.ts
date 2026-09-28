@@ -60,6 +60,9 @@ async function findMirror(teacherId: string, documentId: string, path: string) {
     if (byPath.data) return byPath.data;
   }
 
+  // Mirror ids are uuids; comparing a collection id ("doc_…") to that column is
+  // a Postgres error, not a miss.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)) return null;
   const byMirrorId = await admin
     .from("teacher_document_files")
     .select(columns)

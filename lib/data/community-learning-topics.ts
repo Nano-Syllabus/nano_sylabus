@@ -179,6 +179,12 @@ const communityIdForCourse = cache(async function communityIdForCourse(
   courseId: string,
   admin: SupabaseClient,
 ): Promise<string | null> {
+  // A creator's own-upload subject has a synthetic `private:<id>` course, which
+  // is no community's course. Asked as a uuid it failed the WHOLE batch it was
+  // in ("invalid input syntax for type uuid"), and Revision's catch turned that
+  // into no catalogue for any subject — so a creator's Revision listed raw
+  // challenge titles under "Other topics" instead of the syllabus (2026-09-28).
+  if (courseId.startsWith("private:")) return null;
   const community = await admin
     .from("communities")
     .select("id")

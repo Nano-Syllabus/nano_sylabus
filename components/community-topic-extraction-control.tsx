@@ -77,62 +77,42 @@ export function CommunityTopicExtractionControl({
     }
   }
 
+  // Just the button: the words around it explained what publishing does, and a
+  // creator asked for the button alone (2026-09-28).
   return (
-    <div className="w-full rounded-lg border border-border bg-bg-secondary p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">
-            {published
-              ? "Published to community members"
-              : status === "error"
-                ? "Subject publishing needs attention"
-                : "Ready to publish?"}
-          </p>
-          <p className="mt-1 text-xs leading-5 text-text-secondary">
-            {published
-              ? "Members can access this subject. Refresh after adding or changing indexed material."
-              : "Publishing extracts topics from indexed syllabus and notes, prepares member challenges, and makes the subject visible to community members."}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void extract()}
-          disabled={busy}
-          aria-busy={busy}
-          aria-label={`${published ? "Refresh published" : "Publish"} subject ${subject.name}`}
-          className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse hover:opacity-90 disabled:cursor-wait disabled:opacity-60 ${focusRing}`}
-        >
-          {busy ? (
-            <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" />
-          ) : published ? (
-            <RefreshCw className="size-4" aria-hidden="true" />
-          ) : (
-            <Globe2 className="size-4" aria-hidden="true" />
-          )}
-          {busy
-            ? published
-              ? "Refreshing published subject…"
-              : "Publishing subject…"
-            : error
-              ? "Retry publishing"
-              : published
-                ? "Refresh published subject"
-                : "Publish subject"}
-        </button>
-      </div>
-      {busy ? (
-        <p role="status" className="mt-3 text-xs text-text-secondary">
-          Reading indexed material, extracting topics, and preparing member challenges. This may
-          take a minute.
-        </p>
-      ) : null}
+    <div className="flex flex-col items-start gap-2">
+      <button
+        type="button"
+        onClick={() => void extract()}
+        disabled={busy}
+        aria-busy={busy}
+        aria-label={`${published ? "Refresh published" : "Publish"} subject ${subject.name}`}
+        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse hover:opacity-90 disabled:cursor-wait disabled:opacity-60 ${focusRing}`}
+      >
+        {busy ? (
+          <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" />
+        ) : published ? (
+          <RefreshCw className="size-4" aria-hidden="true" />
+        ) : (
+          <Globe2 className="size-4" aria-hidden="true" />
+        )}
+        {busy
+          ? published
+            ? "Refreshing…"
+            : "Publishing…"
+          : error
+            ? "Retry publish"
+            : published
+              ? "Refresh"
+              : "Publish"}
+      </button>
       {notice ? (
-        <p role="status" className="mt-3 text-sm text-text-secondary">
+        <p role="status" className="text-sm text-text-secondary">
           {notice}
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="mt-3 text-sm text-destructive">
+        <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
       ) : null}

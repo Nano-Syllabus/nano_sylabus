@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
+import { communityLevel } from "@/lib/communities";
 import { getCommunity } from "@/lib/data/communities";
 import { getCommunitySubjectWorkspace } from "@/lib/data/community-subjects";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -41,17 +42,38 @@ async function getCommunityAdminOverview(
   creatorId: string,
   requestedSlug: string,
 ) {
-  const communitiesResult = await admin
-    .from("communities")
-    .select(
-      "id,slug,name,university,faculty,total_years,total_semesters,contribution_threshold,created_at",
-    )
-    .eq("creator_id", creatorId)
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
+  const communityColumns =
+    "id,slug,name,university,faculty,total_years,total_semesters,contribution_threshold,created_at";
+  const queryCommunities = (columns: string) =>
+    admin
+      .from("communities")
+      .select(columns)
+      .eq("creator_id", creatorId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
+  // `level` arrives with 20260924180000_community_level.sql; without it the
+  // cards guess the level from the name, as Browse does.
+  let communitiesResult = await queryCommunities(`${communityColumns},level`);
+  if (
+    communitiesResult.error &&
+    ["42703", "PGRST204"].includes(String(communitiesResult.error.code))
+  ) {
+    communitiesResult = await queryCommunities(communityColumns);
+  }
   if (communitiesResult.error) throw communitiesResult.error;
 
-  const communities = communitiesResult.data || [];
+  const communities = (communitiesResult.data || []) as unknown as {
+    id: string;
+    slug: string;
+    name: string;
+    university: string;
+    faculty: string;
+    total_years: number;
+    total_semesters: number;
+    contribution_threshold: number;
+    created_at: string;
+    level?: string | null;
+  }[];
   const communityIds = communities.map((community) => community.id);
   const [allMembersResult, allSubjectsResult] = communityIds.length
     ? await Promise.all([
@@ -62,7 +84,7 @@ async function getCommunityAdminOverview(
           .eq("status", "active"),
         admin
           .from("community_subjects")
-          .select("community_id")
+          .select("community_id,term_id")
           .in("community_id", communityIds)
           .eq("status", "active"),
       ])
@@ -81,14 +103,22 @@ async function getCommunityAdminOverview(
   };
   const memberCounts = countByCommunity(allMembersResult.data || []);
   const subjectCounts = countByCommunity(allSubjectsResult.data || []);
+  const filledTerms = new Map<string, Set<string>>();
+  (allSubjectsResult.data || []).forEach((row) => {
+    const terms = filledTerms.get(row.community_id) || new Set<string>();
+    terms.add(String(row.term_id));
+    filledTerms.set(row.community_id, terms);
+  });
   const managedCommunities = communities.map((community) => ({
     id: community.id,
     slug: community.slug,
     name: community.name,
     university: community.university,
     faculty: community.faculty,
+    level: communityLevel(community),
     totalYears: community.total_years,
     totalSemesters: community.total_semesters,
+    filledSemesterCount: filledTerms.get(community.id)?.size || 0,
     memberCount: memberCounts.get(community.id) || 0,
     subjectCount: subjectCounts.get(community.id) || 0,
     createdAt: community.created_at,

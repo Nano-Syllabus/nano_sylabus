@@ -10,7 +10,11 @@ import {
   canonicalUniversity,
   communityInputSchema,
   communityLevel,
+  communityLevelDefaults,
+  communityLevelLockedFormat,
+  communityLevelStructure,
   communityLevels,
+  communityTermName,
   generateCommunityTerms,
   type CommunitySummary,
 } from "@/lib/communities";
@@ -35,6 +39,9 @@ type Draft = {
   description: string;
   totalYears: string;
   totalSemesters: string;
+  /** Bachelor and Master only: "year" or "semester". Form-only — a year-wise
+   *  faculty is stored as one semester per year. */
+  studyPattern: string;
   /** Empty until the creator picks one — the form must not choose for them. */
   challengeQuestionFormat: string;
 };
@@ -65,7 +72,16 @@ const emptyDraft: Draft = {
   description: "",
   totalYears: "4",
   totalSemesters: "8",
+  studyPattern: "",
   challengeQuestionFormat: "",
+};
+
+/** The programme placeholder, so the example matches the level picked. */
+const facultyPlaceholders: Record<string, string> = {
+  "+2": "Science (Class 11–12)",
+  Entrance: "IOE Engineering Entrance",
+  License: "Nepal Engineering Council Licence",
+  Master: "Master in Computer System and Knowledge Engineering",
 };
 
 
@@ -283,6 +299,8 @@ export function CommunityCatalogClient({
   initialShowCreate = false,
   initialPhoneNumber = "",
   studyingSlug = null,
+  createOnly = false,
+  onCreateClose,
 }: {
   initialCommunities: CommunitySummary[];
   signedIn: boolean;
@@ -291,6 +309,12 @@ export function CommunityCatalogClient({
   initialShowCreate?: boolean;
   /** The signed-in creator's saved number, so they rarely retype it. */
   initialPhoneNumber?: string;
+  /**
+   * Only the Create faculty dialog, over whatever page opened it — the creator
+   * workspace opens it in place instead of sending the creator to Browse.
+   */
+  createOnly?: boolean;
+  onCreateClose?: () => void;
 }) {
   const router = useRouter();
   const firstFieldRef = useRef<HTMLInputElement>(null);
@@ -300,7 +324,17 @@ export function CommunityCatalogClient({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 6;
 
-  const [showCreate, setShowCreate] = useState(initialShowCreate);
+  const [showCreate, setShowCreate] = useState(initialShowCreate || createOnly);
+  // Kept in a ref: the opener passes a fresh function each render, and the
+  // dialog's effect (which moves focus) must not re-run while someone types.
+  const onCreateCloseRef = useRef(onCreateClose);
+  useEffect(() => {
+    onCreateCloseRef.current = onCreateClose;
+  }, [onCreateClose]);
+  function closeCreate() {
+    setShowCreate(false);
+    onCreateCloseRef.current?.();
+  }
   const [draft, setDraft] = useState<Draft>({ ...emptyDraft, phoneNumber: initialPhoneNumber });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
@@ -383,6 +417,10 @@ export function CommunityCatalogClient({
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  const levelStructure = communityLevelStructure(draft.level);
+  const lockedFormat = communityLevelLockedFormat(draft.level);
+  const yearWise = levelStructure === "classes" || draft.studyPattern === "year";
+
   const totalYears = Number.parseInt(draft.totalYears, 10) || 0;
   const totalSemesters = Number.parseInt(draft.totalSemesters, 10) || 0;
   const previewTerms =
@@ -390,14 +428,50 @@ export function CommunityCatalogClient({
       ? generateCommunityTerms(totalYears, totalSemesters)
       : [];
 
+  const structureSummary =
+    levelStructure === "classes"
+      ? "Class 11 · Class 12"
+      : levelStructure === "single-track"
+        ? "One MCQ track"
+        : yearWise
+          ? plural(totalYears, "year")
+          : !levelStructure
+            ? "Pick a level"
+            : !draft.studyPattern
+            ? "Year-wise or semester-wise"
+            : `${plural(totalYears, "year")} · ${plural(totalSemesters, "semester")}`;
+
   function stepDraft(field: "totalYears" | "totalSemesters", delta: number, min: number, max: number) {
     const current = Number.parseInt(draft[field], 10) || min;
     updateDraft(field, String(Math.min(max, Math.max(min, current + delta))));
   }
 
   function updateDraft(field: keyof Draft, value: string) {
-    setDraft((current) => ({ ...current, [field]: value }));
-    setFieldErrors((current) => ({ ...current, [field]: "" }));
+    setDraft((current) => {
+      const next = { ...current, [field]: value };
+      if (field === "level") {
+        // Each level brings its own structure; a single-track level also fixes the format.
+        const defaults = communityLevelDefaults(value);
+        next.totalYears = String(defaults.totalYears);
+        next.totalSemesters = String(defaults.totalSemesters);
+        next.studyPattern = "";
+        const locked = communityLevelLockedFormat(value);
+        if (locked) next.challengeQuestionFormat = locked;
+        else if (communityLevelLockedFormat(current.level)) next.challengeQuestionFormat = "";
+      }
+      if (field === "studyPattern" || (field === "totalYears" && next.studyPattern)) {
+        const years = Number.parseInt(next.totalYears, 10) || 0;
+        if (years) next.totalSemesters = String(next.studyPattern === "year" ? years : Math.min(40, years * 2));
+      }
+      return next;
+    });
+    setFieldErrors((current) =>
+      field === "level"
+        ? { ...current, level: "", totalYears: "", totalSemesters: "", studyPattern: "", challengeQuestionFormat: "" }
+        : field === "studyPattern"
+          ? { ...current, studyPattern: "", totalYears: "", totalSemesters: "" }
+          : { ...current, [field]: "" },
+    );
   }
 
   // Modal housekeeping: Escape closes, the page behind stops scrolling, and the
@@ -405,14 +479,23 @@ export function CommunityCatalogClient({
   useEffect(() => {
     if (!showCreate) return;
     const previousOverflow = document.body.style.overflow;
+    const previousPadding = document.body.style.paddingRight;
+    // Hiding the scrollbar widens the page; pad by its width so nothing behind
+    // the dialog jumps sideways as it opens.
+    const scrollbar = window.innerWidth - document.documentElement.clientWidth;
+    if (scrollbar > 0) document.body.style.paddingRight = `${scrollbar}px`;
     document.body.style.overflow = "hidden";
     const focusTimer = window.setTimeout(() => firstFieldRef.current?.focus(), 120);
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !submitting) setShowCreate(false);
+      if (event.key === "Escape" && !submitting) {
+        setShowCreate(false);
+        onCreateCloseRef.current?.();
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPadding;
       window.clearTimeout(focusTimer);
       window.removeEventListener("keydown", onKeyDown);
     };
@@ -422,8 +505,10 @@ export function CommunityCatalogClient({
     event.preventDefault();
     setFormError("");
     setFieldErrors({});
-    const { phoneNumber, ...fields } = draft;
+    const { phoneNumber, studyPattern, ...fields } = draft;
     const phoneError = getPhoneNumberError(phoneNumber);
+    const patternError =
+      levelStructure === "years-or-semesters" && !studyPattern ? "Choose year-wise or semester-wise." : "";
     const parsed = communityInputSchema.safeParse({
       ...fields,
       // No separate name field: the community is called by its programme.
@@ -432,14 +517,15 @@ export function CommunityCatalogClient({
       totalSemesters,
       visibility: "public",
     });
-    if (!parsed.success || phoneError) {
+    if (!parsed.success || phoneError || patternError) {
       const errors: Record<string, string> = {};
-      if (phoneError) errors.phoneNumber = phoneError;
       for (const issue of parsed.success ? [] : parsed.error.issues) {
         let field = String(issue.path[0] || "form");
         if (field === "name") field = "faculty";
         if (!errors[field]) errors[field] = issue.message;
       }
+      if (patternError) errors.studyPattern = patternError;
+      if (phoneError) errors.phoneNumber = phoneError;
       setFieldErrors(errors);
       const first = Object.keys(errors)[0];
       if (first) document.getElementById(`community-${first}`)?.focus();
@@ -478,7 +564,9 @@ export function CommunityCatalogClient({
   }
 
   return (
-    <main className="ns-communities-page">
+    // Create-only: the dialog is fixed over the page, so the Browse layout's own
+    // box must take no room in the page that opened it.
+    <main className="ns-communities-page" style={createOnly ? { display: "contents" } : undefined}>
       <style jsx global>{`
         .ns-communities-page {
           width: min(1440px, calc(100% - 64px));
@@ -1025,6 +1113,9 @@ export function CommunityCatalogClient({
           grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
           width: 100%;
           max-width: 1000px;
+          /* One row that may shrink below its content, so the form body scrolls
+             and the Cancel / Create footer always stays on screen. */
+          grid-template-rows: minmax(0, 1fr);
           max-height: calc(100dvh - 32px);
           overflow: hidden;
           border-radius: 24px;
@@ -1032,12 +1123,14 @@ export function CommunityCatalogClient({
           box-shadow: 0 30px 80px rgba(12, 16, 30, .28), 0 0 0 1px rgba(12, 16, 30, .06);
           font-family: var(--font-dm-sans), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
           color: #171c27;
-          will-change: transform, opacity;
+          will-change: transform;
         }
         .ns-cf button,
         .ns-cf input { font: inherit; }
 
-        .ns-cf-form { display: flex; flex-direction: column; min-height: 0; }
+        .ns-cf-form { display: flex; flex-direction: column; min-height: 0; max-height: inherit; overflow: hidden; }
+        .ns-cf-body { flex: 1 1 auto; min-height: 0; }
+        .ns-cf-foot { flex: 0 0 auto; }
         .ns-cf-head {
           display: flex;
           align-items: flex-start;
@@ -1109,6 +1202,29 @@ export function CommunityCatalogClient({
           color: #273041;
         }
         .ns-cf-hint { margin: 7px 0 0; font-size: 12px; color: #7a8394; }
+        .ns-cf-note {
+          margin: 0;
+          padding: 12px 14px;
+          border: 1px solid #e3e7ee;
+          border-radius: 12px;
+          background: #f8f9fc;
+          font-size: 13px;
+          line-height: 1.5;
+          color: #3a4354;
+        }
+        .ns-cf-fixed { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .ns-cf-fixed span {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 42px;
+          border: 1px solid #3158f4;
+          border-radius: 12px;
+          background: #eef2ff;
+          color: #2440c9;
+          font-size: 14px;
+          font-weight: 600;
+        }
 
         .ns-cf-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
         .ns-cf-select { position: relative; }
@@ -1469,7 +1585,8 @@ export function CommunityCatalogClient({
           .ns-page-button span { display: none; }
         }
       `}</style>
-
+      {createOnly ? null : (
+      <>
       {/* Topbar matching preview (2).html */}
       <header className="ns-topbar">
         <Link className="ns-brand" href="/" aria-label="NanoSyllabus home">
@@ -1526,6 +1643,8 @@ export function CommunityCatalogClient({
           </svg>
         </div>
       </section>
+      </>
+      )}
 
       {/* Create Form — centred modal */}
       <LazyMotion features={domAnimation} strict>
@@ -1534,12 +1653,14 @@ export function CommunityCatalogClient({
             <m.div
               key="create-overlay"
               className="ns-cf-overlay"
-              initial={{ opacity: 0 }}
+              // Opened from the workspace, a stand-in backdrop is already on
+              // screen while this loads; fading in again would blink it.
+              initial={createOnly ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
               onClick={(event) => {
-                if (event.target === event.currentTarget && !submitting) setShowCreate(false);
+                if (event.target === event.currentTarget && !submitting) closeCreate();
               }}
             >
               <m.section
@@ -1548,8 +1669,11 @@ export function CommunityCatalogClient({
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="create-community-title"
-                initial={{ opacity: 0, y: 18, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
+                // Solid from the first frame. Fading the panel's opacity over the
+                // blurred overlay let the page show through unblurred for a
+                // moment on every open — the flicker creators saw.
+                initial={{ y: 14, scale: 0.98 }}
+                animate={{ y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.98 }}
                 transition={{ type: "spring", stiffness: 380, damping: 32, mass: 0.7 }}
               >
@@ -1563,12 +1687,12 @@ export function CommunityCatalogClient({
                     </span>
                     <div className="ns-cf-head-text">
                       <h2 id="create-community-title">Create a faculty</h2>
-                      <p>Set the structure once. Semesters are generated for you.</p>
+                      <p>Pick a level. Its classes, years or semesters are set up for you.</p>
                     </div>
                     <button
                       type="button"
                       className="ns-cf-close"
-                      onClick={() => setShowCreate(false)}
+                      onClick={closeCreate}
                       disabled={submitting}
                       aria-label="Close"
                     >
@@ -1578,7 +1702,9 @@ export function CommunityCatalogClient({
 
                   <m.div
                     className="ns-cf-body"
-                    initial="hidden"
+                    // Fields are there when the panel is; staggering them in left
+                    // the form blank for its first frames.
+                    initial={false}
                     animate="show"
                     variants={{ hidden: {}, show: { transition: { staggerChildren: 0.035, delayChildren: 0.06 } } }}
                   >
@@ -1657,7 +1783,7 @@ export function CommunityCatalogClient({
                         className="ns-cf-input"
                         value={draft.faculty}
                         onChange={(event) => updateDraft("faculty", event.target.value)}
-                        placeholder="Bachelor in Electronics Engineering"
+                        placeholder={facultyPlaceholders[draft.level] ?? "Bachelor in Electronics Engineering"}
                         autoComplete="off"
                         aria-invalid={Boolean(fieldErrors.faculty) || undefined}
                         aria-describedby={fieldErrors.faculty ? "community-faculty-error" : undefined}
@@ -1665,47 +1791,100 @@ export function CommunityCatalogClient({
                       <FieldError id="community-faculty-error" message={fieldErrors.faculty} />
                     </m.div>
 
-                    <div className="ns-cf-pair">
-                    {(
-                      [
-                        ["totalYears", "Total years", "community-years-error", 1, 10],
-                        ["totalSemesters", "Total semesters", "community-semesters-error", 1, 40],
-                      ] as const
-                    ).map(([field, label, errorId, min, max]) => (
-                      <m.div key={field} variants={fieldReveal} className="ns-cf-field">
-                        <label htmlFor={`community-${field}`} className="ns-cf-label">
-                          {label}
-                        </label>
-                        <div className="ns-cf-stepper" data-invalid={Boolean(fieldErrors[field]) || undefined}>
-                          <button
-                            type="button"
-                            onClick={() => stepDraft(field, -1, min, max)}
-                            aria-label={`Fewer ${label.toLowerCase().replace("total ", "")}`}
-                          >
-                            −
-                          </button>
-                          <input
-                            id={`community-${field}`}
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={draft[field]}
-                            onChange={(event) => updateDraft(field, event.target.value)}
-                            aria-invalid={Boolean(fieldErrors[field]) || undefined}
-                            aria-describedby={fieldErrors[field] ? errorId : undefined}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => stepDraft(field, 1, min, max)}
-                            aria-label={`More ${label.toLowerCase().replace("total ", "")}`}
-                          >
-                            +
-                          </button>
+                    {levelStructure === "classes" ? (
+                      <m.div variants={fieldReveal} className="ns-cf-field">
+                        <span className="ns-cf-label">Classes</span>
+                        <div className="ns-cf-fixed">
+                          <span>Class 11</span>
+                          <span>Class 12</span>
                         </div>
-                        <FieldError id={errorId} message={fieldErrors[field]} />
+                        <p className="ns-cf-hint">Subjects are filed under Class 11 and Class 12.</p>
                       </m.div>
-                    ))}
-                    </div>
+                    ) : levelStructure === "single-track" ? (
+                      <m.div variants={fieldReveal} className="ns-cf-field">
+                        <span className="ns-cf-label">Structure</span>
+                        <p className="ns-cf-note">
+                          No years or semesters. Every subject sits in one list and challenges are MCQ.
+                        </p>
+                      </m.div>
+                    ) : levelStructure === "years-or-semesters" ? (
+                      <>
+                        <m.fieldset
+                          variants={fieldReveal}
+                          id="community-studyPattern"
+                          tabIndex={-1}
+                          className="ns-cf-field"
+                          aria-describedby={fieldErrors.studyPattern ? "community-pattern-error" : undefined}
+                        >
+                          <legend className="ns-cf-label">Runs</legend>
+                          <div className="ns-cf-chips ns-cf-chips--wide" role="radiogroup">
+                            {(
+                              [
+                                ["year", "Year-wise"],
+                                ["semester", "Semester-wise"],
+                              ] as const
+                            ).map(([pattern, label]) => (
+                              <label key={pattern} className="ns-cf-chip">
+                                <input
+                                  type="radio"
+                                  name="studyPattern"
+                                  value={pattern}
+                                  checked={draft.studyPattern === pattern}
+                                  onChange={() => updateDraft("studyPattern", pattern)}
+                                />
+                                <span>{label}</span>
+                              </label>
+                            ))}
+                          </div>
+                          <FieldError id="community-pattern-error" message={fieldErrors.studyPattern} />
+                        </m.fieldset>
+                        {draft.studyPattern ? (
+                        <div className="ns-cf-pair">
+                        {(
+                          [
+                            ["totalYears", "Total years", "community-years-error", 1, 10],
+                            ["totalSemesters", "Total semesters", "community-semesters-error", 1, 40],
+                          ] as const
+                        )
+                          .filter(([field]) => !yearWise || field === "totalYears")
+                          .map(([field, label, errorId, min, max]) => (
+                          <m.div key={field} variants={fieldReveal} className="ns-cf-field">
+                            <label htmlFor={`community-${field}`} className="ns-cf-label">
+                              {label}
+                            </label>
+                            <div className="ns-cf-stepper" data-invalid={Boolean(fieldErrors[field]) || undefined}>
+                              <button
+                                type="button"
+                                onClick={() => stepDraft(field, -1, min, max)}
+                                aria-label={`Fewer ${label.toLowerCase().replace("total ", "")}`}
+                              >
+                                −
+                              </button>
+                              <input
+                                id={`community-${field}`}
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={draft[field]}
+                                onChange={(event) => updateDraft(field, event.target.value)}
+                                aria-invalid={Boolean(fieldErrors[field]) || undefined}
+                                aria-describedby={fieldErrors[field] ? errorId : undefined}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => stepDraft(field, 1, min, max)}
+                                aria-label={`More ${label.toLowerCase().replace("total ", "")}`}
+                              >
+                                +
+                              </button>
+                            </div>
+                            <FieldError id={errorId} message={fieldErrors[field]} />
+                          </m.div>
+                        ))}
+                        </div>
+                        ) : null}
+                      </>
+                    ) : null}
 
                     <m.div variants={fieldReveal} className="ns-cf-field">
                       <label htmlFor="community-phoneNumber" className="ns-cf-label">
@@ -1769,7 +1948,9 @@ export function CommunityCatalogClient({
                     >
                       <legend className="ns-cf-label">Challenge questions</legend>
                       <div className="ns-cf-chips ns-cf-chips--wide" role="radiogroup">
-                        {createFormatOptions.map(({ format, label }) => (
+                        {createFormatOptions
+                          .filter(({ format }) => !lockedFormat || format === lockedFormat)
+                          .map(({ format, label }) => (
                           <label key={format} className="ns-cf-chip">
                             <input
                               type="radio"
@@ -1782,6 +1963,9 @@ export function CommunityCatalogClient({
                           </label>
                         ))}
                       </div>
+                      {lockedFormat ? (
+                        <p className="ns-cf-hint">{draft.level} challenges are always MCQ.</p>
+                      ) : null}
                       <FieldError id="community-format-error" message={fieldErrors.challengeQuestionFormat} />
                     </m.fieldset>
                   </m.div>
@@ -1790,7 +1974,7 @@ export function CommunityCatalogClient({
                     <button
                       type="button"
                       className="ns-cf-cancel"
-                      onClick={() => setShowCreate(false)}
+                      onClick={closeCreate}
                       disabled={submitting}
                     >
                       Cancel
@@ -1825,9 +2009,7 @@ export function CommunityCatalogClient({
                       <h3 className="ns-fc-title">{draft.faculty.trim() || "Your faculty"}</h3>
                       <p className="ns-fc-subtitle">{draft.university || "Choose a university"}</p>
                       <div className="ns-fc-meta">
-                        <span>
-                          {plural(totalYears, "year")} · {plural(totalSemesters, "semester")}
-                        </span>
+                        <span>{structureSummary}</span>
                         {draft.challengeQuestionFormat ? (
                           <span>
                             <strong>{draft.challengeQuestionFormat === "mcq" ? "MCQ" : "QnA"}</strong> challenges
@@ -1839,25 +2021,51 @@ export function CommunityCatalogClient({
 
                   <div className="ns-cf-structure">
                     <div className="ns-cf-structure-head">
-                      <span>Semester structure</span>
-                      {previewTerms.length ? <span>{plural(previewTerms.length, "slot")}</span> : null}
+                      <span>
+                        {levelStructure === "classes"
+                          ? "Classes"
+                          : levelStructure === "single-track" || !levelStructure
+                            ? "Structure"
+                            : yearWise
+                              ? "Year structure"
+                              : "Semester structure"}
+                      </span>
+                      {levelStructure && (levelStructure !== "years-or-semesters" || draft.studyPattern) && previewTerms.length > 1 ? (
+                        <span>{plural(previewTerms.length, "slot")}</span>
+                      ) : null}
                     </div>
-                    {previewTerms.length ? (
+                    {!levelStructure ? (
+                      <p className="ns-cf-structure-empty">Pick a level to preview the structure.</p>
+                    ) : levelStructure === "single-track" ? (
+                      <p className="ns-cf-structure-empty">
+                        One list of subjects with MCQ challenges. No years or semesters.
+                      </p>
+                    ) : levelStructure === "years-or-semesters" && !draft.studyPattern ? (
+                      <p className="ns-cf-structure-empty">Choose year-wise or semester-wise.</p>
+                    ) : previewTerms.length ? (
                       <div className="ns-cf-years">
-                        {Array.from({ length: totalYears }, (_, index) => index + 1).map((year) => (
-                          <div key={year} className="ns-cf-year">
-                            <span className="ns-cf-year-label">Year {year}</span>
-                            <div>
-                              {previewTerms
-                                .filter((term) => term.yearNumber === year)
-                                .map((term) => (
-                                  <span key={term.semesterNumber} className="ns-cf-sem">
-                                    Sem {term.semesterNumber}
-                                  </span>
-                                ))}
+                        {Array.from({ length: totalYears }, (_, index) => index + 1).map((year) => {
+                          const terms = previewTerms.filter((term) => term.yearNumber === year);
+                          return (
+                            <div key={year} className="ns-cf-year">
+                              <span className="ns-cf-year-label">
+                                {levelStructure === "classes" ? `Class ${10 + year}` : `Year ${year}`}
+                              </span>
+                              {yearWise ? null : (
+                                <div>
+                                  {terms.map((term) => (
+                                    <span key={term.semesterNumber} className="ns-cf-sem">
+                                      {communityTermName(
+                                        { level: draft.level, totalYears, totalSemesters },
+                                        term,
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="ns-cf-structure-empty">
@@ -1872,6 +2080,8 @@ export function CommunityCatalogClient({
         </AnimatePresence>
       </LazyMotion>
 
+      {createOnly ? null : (
+      <>
       {/* Discovery Section: Filters + Community Grid */}
       <section className="ns-discovery" id="communities" aria-label="Browse faculties">
         {/* Sleek Sidebar Filters */}
@@ -2041,6 +2251,8 @@ export function CommunityCatalogClient({
           ) : null}
         </div>
       </section>
+      </>
+      )}
     </main>
   );
 }

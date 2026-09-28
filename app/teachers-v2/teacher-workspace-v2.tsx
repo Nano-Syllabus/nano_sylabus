@@ -23,6 +23,15 @@ const CommunityTopicExtractionControl = dynamic(() =>
     (m) => m.CommunityTopicExtractionControl,
   ),
 );
+const loadCreateFaculty = () => import("@/components/create-faculty-launcher");
+const CreateFacultyDialog = dynamic(() => loadCreateFaculty().then((m) => m.CreateFacultyDialog), {
+  // The same dim the dialog opens on, so the first click shows at once.
+  loading: () => <DialogBackdrop tone="faculty" />,
+});
+/** Warm both dialog chunks before the click, so the first open has nothing to wait for. */
+function preloadCreateFaculty() {
+  void loadCreateFaculty().then((m) => m.preloadCommunityCatalog());
+}
 const TeacherCoursesClient = dynamic(
   () => import("@/components/teacher-courses-client").then((m) => m.TeacherCoursesClient),
   { loading: () => <SkeletonCard lines={6} /> },
@@ -45,7 +54,11 @@ import { teacherLegacySubjectHref, teacherSubjectsHref } from "@/lib/teacher-sub
 import { CommunityDeleteControl } from "@/components/community-delete-control";
 import { CommunityNameEditor } from "@/components/community-name-editor";
 import { subjectAccessLabel, type SubjectCommunity } from "@/lib/teacher-subject-access";
-import type { CommunityDetail } from "@/lib/communities";
+import {
+  communityLevel,
+  communityLevelStructure,
+  type CommunityDetail,
+} from "@/lib/communities";
 import type { CommunitySubjectWorkspace } from "@/lib/data/community-subjects";
 import { withRenamedDocument } from "@/lib/teacher-document-name";
 import { cn, titleCase } from "@/lib/utils";
@@ -78,6 +91,7 @@ import {
   DashboardError,
   initials,
   formatDate,
+  DialogBackdrop,
 } from "@/app/teachers-v2/workspace-shared";
 
 /**
@@ -115,15 +129,30 @@ const SubjectView = dynamic(
   () => import("./views/subject-view").then((m) => m.SubjectView),
   { loading: () => <SkeletonCard /> },
 );
-const CreateClassroomDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.CreateClassroomDialog));
-const CreateSubjectDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.CreateSubjectDialog));
-const CreateFolderDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.CreateFolderDialog));
-const CommunityChallengeFormatSettings = dynamic(() =>
-  import("@/components/challenge-format-picker").then((m) => m.CommunityChallengeFormatSettings),
-);
-const UploadDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.UploadDialog));
-const DocumentDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.DocumentDialog));
-const CollectionOverviewDialog = dynamic(() => import("./views/workspace-dialogs").then((m) => m.CollectionOverviewDialog));
+// Every workspace dialog lives in one chunk. It is fetched once the workspace
+// is idle (below); until then a click paints the backdrop at once, so the first
+// open never lands on a still screen and then pops.
+const loadDialogs = () => import("./views/workspace-dialogs");
+// The options must be written inline: Next.js reads them at build time and
+// refuses a shared variable ("next/dynamic options must be an object literal").
+const CreateClassroomDialog = dynamic(() => loadDialogs().then((m) => m.CreateClassroomDialog), {
+  loading: () => <DialogBackdrop />,
+});
+const CreateSubjectDialog = dynamic(() => loadDialogs().then((m) => m.CreateSubjectDialog), {
+  loading: () => <DialogBackdrop />,
+});
+const CreateFolderDialog = dynamic(() => loadDialogs().then((m) => m.CreateFolderDialog), {
+  loading: () => <DialogBackdrop />,
+});
+const UploadDialog = dynamic(() => loadDialogs().then((m) => m.UploadDialog), {
+  loading: () => <DialogBackdrop />,
+});
+const DocumentDialog = dynamic(() => loadDialogs().then((m) => m.DocumentDialog), {
+  loading: () => <DialogBackdrop />,
+});
+const CollectionOverviewDialog = dynamic(() => loadDialogs().then((m) => m.CollectionOverviewDialog), {
+  loading: () => <DialogBackdrop />,
+});
 type RecoveryState = "idle" | "recovering" | "missing" | "recreating";
 type MainView =
   | "today"
@@ -363,8 +392,10 @@ function normalizeDashboard(payload: ApiRecord): TeacherDashboard {
           name: text(community.name) || "Community",
           university: text(community.university),
           faculty: text(community.faculty),
+          level: text(community.level),
           totalYears: numberValue(community.totalYears),
           totalSemesters: numberValue(community.totalSemesters),
+          filledSemesterCount: numberValue(community.filledSemesterCount),
           memberCount: numberValue(community.memberCount),
           subjectCount: numberValue(community.subjectCount),
           createdAt: text(community.createdAt),
@@ -435,15 +466,111 @@ function normalizeDashboard(payload: ApiRecord): TeacherDashboard {
  * rather than inside it — a panel that vanishes is right inside a dialog and
  * wrong as a whole page.
  */
-function ActivityView({ onSettled }: { onSettled?: () => void }) {
+type UploadActivity = {
+  jobId: string;
+  fileName: string;
+  state: "indexing" | "indexed" | "failed" | "slow";
+  at: number;
+};
+
+const uploadStateText: Record<UploadActivity["state"] | TeacherDocument["status"], string> = {
+  indexing: "Indexing…",
+  processing: "Indexing…",
+  indexed: "Indexed",
+  ready: "Indexed",
+  failed: "Indexing failed",
+  error: "Indexing failed",
+  slow: "Still processing",
+  unindexed: "Not indexed",
+};
+
+/**
+ * FILE UPLOADS BESIDE THE DRIVE QUEUE (2026-09-28).
+ *
+ * Activity showed only Drive imports, so a file uploaded from the computer
+ * never appeared here. Two sources, both already in hand — nothing is fetched:
+ * the indexing jobs this session followed (with how each ended), and any file in
+ * the workspace still indexing, failed, or never indexed, which covers uploads
+ * from before this page was opened. Files carry no upload time, so a finished
+ * upload from an earlier visit is not listed; only what still needs a look is.
+ */
+function UploadActivityList({
+  uploads,
+  documents,
+}: {
+  uploads: UploadActivity[];
+  documents: TeacherDocument[];
+}) {
+  const followed = new Set(uploads.map((entry) => entry.fileName));
+  const pending = documents.filter(
+    (document) => document.status !== "ready" && !followed.has(document.name),
+  );
+  const rows = [
+    ...uploads.map((entry) => ({
+      key: entry.jobId,
+      name: entry.fileName,
+      state: entry.state as UploadActivity["state"] | TeacherDocument["status"],
+      detail: new Date(entry.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+    })),
+    ...pending.map((document) => ({
+      key: document.path,
+      name: document.name,
+      state: document.status as UploadActivity["state"] | TeacherDocument["status"],
+      detail: document.shelf === "Other" ? "" : document.shelf,
+    })),
+  ];
+
+  if (!rows.length) {
+    return (
+      <p className="mt-3 rounded-lg border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+        No file uploads recently.
+      </p>
+    );
+  }
+  return (
+    <ul className="mt-3 divide-y divide-border rounded-lg border border-border bg-bg-primary">
+      {rows.map((row) => (
+        <li key={row.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm">
+          <span className="min-w-0 flex-1 break-words font-medium">{row.name}</span>
+          {row.detail ? <span className="text-xs text-text-muted">{row.detail}</span> : null}
+          <span
+            className={cn(
+              "text-xs font-medium",
+              row.state === "indexed" || row.state === "ready"
+                ? "text-success"
+                : row.state === "failed" || row.state === "error"
+                  ? "text-destructive"
+                  : "text-text-secondary",
+            )}
+          >
+            {uploadStateText[row.state]}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ActivityView({
+  onSettled,
+  uploads,
+  documents,
+}: {
+  onSettled?: () => void;
+  uploads: UploadActivity[];
+  documents: TeacherDocument[];
+}) {
   return (
     <section>
       <h1 className="font-display text-2xl font-semibold">Activity</h1>
       <p className="mt-2 max-w-prose text-sm text-text-secondary">
-        Imports run in the background, so you can close a dialog or this tab and they carry on.
-        Anything still running, finished or failed in the last while shows here.
+        Uploads and imports run in the background, so you can close a dialog or this tab and they
+        carry on. Anything still running, finished or failed in the last while shows here.
       </p>
-      <DriveImportQueue onSettled={onSettled} emptyMessage="Nothing has been imported recently." />
+      <h2 className="mt-6 text-sm font-semibold">File uploads</h2>
+      <UploadActivityList uploads={uploads} documents={documents} />
+      <h2 className="mt-6 text-sm font-semibold">Google Drive imports</h2>
+      <DriveImportQueue onSettled={onSettled} emptyMessage="No Drive imports recently." />
     </section>
   );
 }
@@ -501,6 +628,16 @@ function WorkspaceSkeleton() {
 }
 
 export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string }) {
+  useEffect(() => {
+    const warm = () => void loadDialogs();
+    const idle = window.requestIdleCallback
+      ? window.requestIdleCallback(warm, { timeout: 5000 })
+      : window.setTimeout(warm, 2500);
+    return () => {
+      if (window.cancelIdleCallback) window.cancelIdleCallback(idle);
+      else window.clearTimeout(idle);
+    };
+  }, []);
   const searchParams = useSearchParams();
   const search = searchParams.toString();
   const communitySlug = searchParams.get("community") || searchParams.get("attachCommunity") || "";
@@ -544,6 +681,8 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>({});
   const [requestedPaperId, setRequestedPaperId] = useState("");
   const [indexingJobs, setIndexingJobs] = useState<Record<string, string>>({});
+  /** Every file this session sent for indexing, and how it went — what Activity lists. */
+  const [uploadLog, setUploadLog] = useState<UploadActivity[]>([]);
   /** The file names this session has an indexing job running for — what keeps a
    *  card that was just queued from reading "Not indexed". */
   const indexingNames = useMemo(() => new Set(Object.values(indexingJobs)), [indexingJobs]);
@@ -639,6 +778,12 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
     async (jobId: string, fileName: string) => {
       if (!jobId) return;
       setIndexingJobs((current) => ({ ...current, [jobId]: fileName }));
+      const log = (state: UploadActivity["state"]) =>
+        setUploadLog((current) => [
+          { jobId, fileName, state, at: Date.now() },
+          ...current.filter((entry) => entry.jobId !== jobId),
+        ]);
+      log("indexing");
       let consecutiveErrors = 0;
       for (let attempt = 0; attempt < 80; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 1500));
@@ -657,6 +802,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             delete next[jobId];
             return next;
           });
+          log(state === "complete" ? "indexed" : "failed");
           await loadWorkspace();
           setToast(
             state === "complete"
@@ -675,6 +821,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
         delete next[jobId];
         return next;
       });
+      log("slow");
       await loadWorkspace();
       setToast(`${fileName} is still processing. Its status will update on the next refresh.`);
     },
@@ -1157,7 +1304,6 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             [
               ["today", "Analytics"],
               ["communities", "My Communities"],
-              ["subjects", "Create Subjects"],
               ["activity", "Activity"],
               ["settings", "Your Public Profile"],
             ] as const
@@ -1169,7 +1315,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               className={cn(
                 "min-h-10 w-full rounded-[9px] px-[11px] text-left text-sm font-normal transition",
                 interactive,
-                view === value
+                view === value || (value === "communities" && view === "subjects")
                   ? "bg-text-primary font-medium text-text-inverse"
                   : "text-text-secondary hover:bg-bg-secondary hover:text-text-primary",
               )}
@@ -1311,7 +1457,6 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             [
               ["today", "Analytics"],
               ["communities", "My Communities"],
-              ["subjects", "Create Subjects"],
               ["activity", "Activity"],
               ["settings", "Your Public Profile"],
             ] as const
@@ -1323,7 +1468,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               className={cn(
                 "min-h-10 shrink-0 rounded-full px-4 text-sm font-medium",
                 interactive,
-                view === value
+                view === value || (value === "communities" && view === "subjects")
                   ? "bg-text-primary text-text-inverse"
                   : "border border-border text-text-secondary",
               )}
@@ -1433,7 +1578,13 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               onDashboardRefresh={() => void loadDashboard()}
             />
           ) : null}
-          {view === "activity" ? <ActivityView onSettled={() => void loadWorkspace()} /> : null}
+          {view === "activity" ? (
+            <ActivityView
+              onSettled={() => void loadWorkspace()}
+              uploads={uploadLog}
+              documents={workspace.documents}
+            />
+          ) : null}
           {view === "subjects" && !selectedSubject && !showSubjectLibrary ? (
             <CommunitiesView
               subjectsMode
@@ -1729,6 +1880,104 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   );
 }
 
+function countLabel(count: number, word: string) {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+/** How a faculty is laid out, in words, and what one of its terms is called. */
+function facultyStructure(community: { level: string; totalYears: number; totalSemesters: number }) {
+  const structure = communityLevelStructure(community.level);
+  if (structure === "single-track") return { text: "One list of subjects", unit: null };
+  if (structure === "classes") return { text: "Class 11 · Class 12", unit: "classes" };
+  if (community.totalSemesters <= community.totalYears) {
+    return { text: `Year-wise · ${countLabel(community.totalYears, "year")}`, unit: "years" };
+  }
+  return {
+    text: `${countLabel(community.totalYears, "year")} · ${countLabel(community.totalSemesters, "semester")}`,
+    unit: "semesters",
+  };
+}
+
+function FacultyCard({
+  community,
+  subjectsHref,
+  adminHref,
+}: {
+  community: TeacherDashboard["managedCommunities"][number];
+  subjectsHref: string;
+  adminHref: string;
+}) {
+  const structure = facultyStructure(community);
+  const filled = Math.min(community.filledSemesterCount, community.totalSemesters);
+  const percent = community.totalSemesters ? Math.round((filled / community.totalSemesters) * 100) : 0;
+  return (
+    <article className="flex flex-col rounded-xl border border-border bg-bg-primary p-5">
+      <div className="flex items-start gap-3">
+        <p className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-widest text-text-muted">
+          {community.university}
+        </p>
+        {community.level ? (
+          <span className="shrink-0 rounded-full border border-border px-2.5 py-0.5 text-xs font-medium text-text-secondary">
+            {community.level}
+          </span>
+        ) : null}
+      </div>
+      <h2 className="mt-3 font-display text-xl font-semibold">{titleCase(community.name)}</h2>
+      {/* Two lines reserved, so a one-line programme keeps the cards level. */}
+      <p className="mt-1 line-clamp-2 min-h-12 text-sm leading-6 text-text-secondary">
+        {community.faculty}
+      </p>
+      <p className="mt-3 text-xs text-text-muted">
+        {structure.text} · {countLabel(community.memberCount, "member")}
+      </p>
+
+      <div className="mt-4 flex min-h-[4.25rem] flex-col justify-center rounded-lg bg-bg-secondary p-3">
+        <div className="flex items-baseline justify-between gap-3 text-sm">
+          <span className="font-medium">{countLabel(community.subjectCount, "subject")}</span>
+          <span className="text-xs text-text-muted">
+            {structure.unit
+              ? `${filled} of ${community.totalSemesters} ${structure.unit} filled`
+              : "No years or semesters"}
+          </span>
+        </div>
+        {structure.unit ? (
+          <div
+            className="mt-2 h-1.5 overflow-hidden rounded-full bg-border"
+            role="progressbar"
+            aria-label={`${structure.unit} with subjects`}
+            aria-valuenow={filled}
+            aria-valuemin={0}
+            aria-valuemax={community.totalSemesters}
+          >
+            <div className="h-full rounded-full bg-text-primary" style={{ width: `${percent}%` }} />
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-auto flex flex-wrap gap-2 pt-5">
+        <Link
+          href={subjectsHref}
+          className={cn(
+            "inline-flex min-h-10 flex-1 items-center justify-center whitespace-nowrap rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90",
+            interactive,
+          )}
+        >
+          {community.subjectCount ? "Manage subjects" : "Add subjects"}
+        </Link>
+        <Link
+          href={adminHref}
+          className={cn(
+            "inline-flex min-h-10 flex-1 items-center justify-center whitespace-nowrap rounded-lg border border-border px-4 text-sm font-medium text-text-primary transition hover:bg-bg-secondary",
+            interactive,
+          )}
+        >
+          Members & settings
+        </Link>
+      </div>
+    </article>
+  );
+}
+
 export function CommunitiesView({
   dashboard,
   state,
@@ -1754,6 +2003,17 @@ export function CommunitiesView({
     programme: string;
   }) => void;
 }) {
+  const [creatingFaculty, setCreatingFaculty] = useState(false);
+  // Creators on this page are the ones who press Create faculty; fetch it once idle.
+  useEffect(() => {
+    const idle = window.requestIdleCallback
+      ? window.requestIdleCallback(preloadCreateFaculty, { timeout: 4000 })
+      : window.setTimeout(preloadCreateFaculty, 2000);
+    return () => {
+      if (window.cancelIdleCallback) window.cancelIdleCallback(idle);
+      else window.clearTimeout(idle);
+    };
+  }, []);
   if (state === "loading" && !dashboard) return <DashboardSkeleton />;
   if (state === "error") {
     return <DashboardError message={error} onRetry={onRetry} />;
@@ -1762,138 +2022,188 @@ export function CommunitiesView({
 
   const selected = dashboard.communityWorkspace;
   const admin = dashboard.communityAdmin;
+  const adminHref = (slug: string) =>
+    `/teachers?${new URLSearchParams({ view: "communities", community: slug })}`;
+  const subjectsHref = (slug: string, term?: string) => teacherSubjectsHref({ community: slug, term });
   const workspaceHref = (slug: string, term?: string) =>
-    subjectsMode
-      ? teacherSubjectsHref({ community: slug, term })
-      : `/teachers?${new URLSearchParams({ view: "communities", community: slug, ...(term ? { term } : {}) })}`;
+    subjectsMode ? subjectsHref(slug, term) : adminHref(slug);
 
   if (!selected) {
+    const communities = dashboard.managedCommunities;
     return (
       <>
+        {creatingFaculty ? <CreateFacultyDialog onClose={() => setCreatingFaculty(false)} /> : null}
         <header className="flex flex-wrap items-end gap-4 border-b border-border pb-6">
           <div className="min-w-0 flex-1">
-            <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
-              {subjectsMode ? "Community curriculum" : "Community admin"}
-            </p>
-            <h1 className="mt-2 font-display text-[28px] font-semibold tracking-[-0.04em]">
+            <h1 className="font-display text-[28px] font-semibold tracking-[-0.04em]">
               {subjectsMode ? "Create Subjects" : "My communities"}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
               {subjectsMode
-                ? "Choose a community to see its semesters, create subjects, and manage their details in one place."
-                : "Open a community you created to view its overview and members. Manage its subjects from Create Subjects."}
+                ? "Pick a faculty to add its subjects."
+                : "The faculties you run. Add subjects to each one, then share it so students can join."}
             </p>
           </div>
-          {!subjectsMode ? (
-            <Link
-              href="/communities?create=1"
+          <div className="flex flex-wrap items-center gap-2">
+            {subjectsMode ? (
+              <Link
+                href={teacherSubjectsHref({ library: true })}
+                className={cn(
+                  "inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-sm font-medium text-text-primary transition hover:bg-bg-secondary",
+                  interactive,
+                )}
+              >
+                Subject library
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setCreatingFaculty(true)}
+              onPointerEnter={preloadCreateFaculty}
+              onFocus={preloadCreateFaculty}
               className={cn(
-                "inline-flex min-h-10 items-center justify-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90",
+                "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90",
                 interactive,
               )}
             >
-              Create faculty
-            </Link>
-          ) : null}
+              <span aria-hidden="true">+</span> Create faculty
+            </button>
+          </div>
         </header>
-        {subjectsMode ? (
-          <Link
-            href={teacherSubjectsHref({ library: true })}
-            className={cn(
-              "mt-3 inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
-              interactive,
-            )}
-          >
-            Browse reusable subject library →
-          </Link>
-        ) : null}
 
-        {dashboard.managedCommunities.length ? (
+        {communities.length ? (
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {dashboard.managedCommunities.map((community) => (
-              <article
+            {communities.map((community) => (
+              <FacultyCard
                 key={community.id}
-                className="flex min-h-56 flex-col rounded-xl border border-border bg-bg-primary p-5"
-              >
-                <p className="text-xs font-medium uppercase tracking-widest text-text-muted">
-                  {community.university}
-                </p>
-                <h2 className="mt-3 font-display text-xl font-semibold">
-                  {titleCase(community.name)}
-                </h2>
-                <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-secondary">
-                  {community.faculty}
-                </p>
-                <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-text-muted">
-                  <span>{community.totalYears} years</span>
-                  <span>{community.totalSemesters} semesters</span>
-                  <span>{community.subjectCount} subjects</span>
-                  <span>{community.memberCount} members</span>
-                </div>
-                <Link
-                  href={workspaceHref(community.slug)}
-                  className={cn(
-                    "mt-auto inline-flex min-h-10 items-center justify-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse transition hover:opacity-90",
-                    interactive,
-                  )}
-                >
-                  {subjectsMode ? "Manage subjects →" : "Open admin workspace →"}
-                </Link>
-              </article>
+                community={community}
+                subjectsHref={subjectsHref(community.slug)}
+                adminHref={adminHref(community.slug)}
+              />
             ))}
           </div>
         ) : (
           <section className="mt-6 rounded-xl border border-dashed border-border bg-bg-primary px-6 py-14 text-center">
-            <h2 className="font-display text-xl font-semibold">
-              {subjectsMode ? "No communities available" : "Create your first community"}
-            </h2>
+            <h2 className="font-display text-xl font-semibold">Create your first faculty</h2>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-text-secondary">
-              {subjectsMode
-                ? "Create a faculty from My Communities, then return here to organise its subjects by semester. Your reusable subject library is still available."
-                : "Once created, every community you own will appear here as a separate admin workspace."}
+              A faculty is a programme students join, such as BEI or +2 Science. Once it exists
+              you add its subjects here.
             </p>
-            {subjectsMode ? (
-              <Link
-                href="/teachers?view=communities"
-                className={cn(
-                  "mt-5 inline-flex min-h-10 items-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse",
-                  interactive,
-                )}
-              >
-                Open My Communities →
-              </Link>
-            ) : (
-              <Link
-                href="/communities?create=1"
-                className={cn(
-                  "mt-5 inline-flex min-h-10 items-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse",
-                  interactive,
-                )}
-              >
-                Create faculty
-              </Link>
-            )}
+            <button
+              type="button"
+              onClick={() => setCreatingFaculty(true)}
+              onPointerEnter={preloadCreateFaculty}
+              onFocus={preloadCreateFaculty}
+              className={cn(
+                "mt-5 inline-flex min-h-10 items-center rounded-lg bg-text-primary px-4 text-sm font-medium text-text-inverse",
+                interactive,
+              )}
+            >
+              Create faculty
+            </button>
           </section>
         )}
       </>
     );
   }
 
+  const selectedLevel = communityLevel(selected);
+  const selectedStructure = facultyStructure({ ...selected, level: selectedLevel });
+
   return (
     <>
+      <Link
+        href="/teachers?view=communities"
+        className={cn(
+          "inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
+          interactive,
+        )}
+      >
+        ← My communities
+      </Link>
+
+      <section className="mt-3 overflow-hidden rounded-xl border border-border bg-bg-primary">
+        <div className="bg-[var(--community-banner)] px-5 pt-6 text-white sm:px-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
+                {selectedLevel} · {selected.university}
+              </p>
+              <CommunityNameEditor
+                slug={selected.slug}
+                name={titleCase(selected.name)}
+                onSaved={onRefresh}
+              />
+              <p className="mt-2 text-sm text-white/65">
+                {selected.faculty} · {selectedStructure.text}
+              </p>
+            </div>
+            <Link
+              href={`/app/communities/${encodeURIComponent(selected.slug)}`}
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center rounded-lg border border-white/25 px-4 text-sm font-medium text-white transition hover:bg-white/10",
+                interactive,
+              )}
+            >
+              Preview student view →
+            </Link>
+          </div>
+          <nav className="mt-5 flex gap-1" aria-label="Faculty sections">
+            {(
+              [
+                [true, "Subjects", subjectsHref(selected.slug)],
+                [false, "Members & settings", adminHref(selected.slug)],
+              ] as const
+            ).map(([forSubjects, label, href]) => (
+              <Link
+                key={label}
+                href={href}
+                aria-current={subjectsMode === forSubjects ? "page" : undefined}
+                className={cn(
+                  "inline-flex min-h-10 items-center rounded-t-lg px-4 text-sm font-medium transition",
+                  interactive,
+                  subjectsMode === forSubjects
+                    ? "bg-bg-primary text-text-primary"
+                    : "text-white/70 hover:bg-white/10 hover:text-white",
+                )}
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+
+        {admin && !subjectsMode ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+            <CommunityMetric label="Active members" value={admin.memberCount} />
+            <CommunityMetric label="Linked subjects" value={admin.subjectCount} />
+            <CommunityMetric
+              label={`${selectedStructure.unit ? titleCase(selectedStructure.unit) : "Terms"} filled`}
+              value={`${admin.filledSemesterCount}/${admin.totalSemesters}`}
+            />
+            <CommunityMetric label="Resources waiting" value={admin.pendingResourceCount} />
+            <CommunityMetric label="Resources merged" value={admin.mergedResourceCount} />
+            <CommunityMetric label="Discussions" value={admin.discussionCount} />
+          </div>
+        ) : null}
+      </section>
+
+      {/* The question format is chosen when the faculty is created; the admin
+          page no longer offers a picker for it (2026-09-28). */}
+
       {subjectsMode ? (
-        <header className="flex flex-wrap items-end gap-5 border-b border-border pb-6">
-          <div className="min-w-0 flex-1">
-            <p className="font-mono text-xs uppercase tracking-widest text-text-muted">
-              Community curriculum
-            </p>
-            <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em]">
-              Create Subjects
-            </h1>
-            <p className="mt-2 text-sm leading-6 text-text-secondary">
-              Add subjects by semester. Every subject here is available to this community&apos;s
-              members.
-            </p>
+        <section className="mt-7" aria-labelledby="community-curriculum-heading">
+          <div className="mb-5 flex flex-wrap items-end gap-4">
+            <div className="min-w-0 flex-1">
+              <h2 id="community-curriculum-heading" className="font-display text-xl font-semibold">
+                {selectedStructure.unit
+                  ? `Subjects by ${{ classes: "class", years: "year", semesters: "semester" }[selectedStructure.unit]}`
+                  : "Subjects"}
+              </h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Create a new subject, or reuse one you already made.
+              </p>
+            </div>
             <Link
               href={teacherSubjectsHref({
                 community: selected.slug,
@@ -1901,113 +2211,12 @@ export function CommunitiesView({
                 library: true,
               })}
               className={cn(
-                "mt-2 inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
+                "inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
                 interactive,
               )}
             >
               All saved subjects →
             </Link>
-          </div>
-          <div className="w-full sm:w-72">
-            <label htmlFor="subject-community" className="mb-2 block text-sm font-medium">
-              Community
-            </label>
-            <select
-              id="subject-community"
-              value={selected.slug}
-              onChange={(event) =>
-                window.history.pushState(
-                  null,
-                  "",
-                  teacherSubjectsHref({ community: event.target.value }),
-                )
-              }
-              className={cn(
-                "min-h-11 w-full rounded-lg border border-border bg-bg-primary px-3 text-sm text-text-primary",
-                interactive,
-              )}
-            >
-              <option value="">Choose another community…</option>
-              {dashboard.managedCommunities.map((community) => (
-                <option key={community.id} value={community.slug}>
-                  {titleCase(community.name)} · {community.faculty}
-                </option>
-              ))}
-            </select>
-          </div>
-        </header>
-      ) : (
-        <>
-          <Link
-            href="/teachers?view=communities"
-            className={cn(
-              "inline-flex min-h-10 items-center text-sm text-text-secondary hover:text-text-primary",
-              interactive,
-            )}
-          >
-            ← My communities
-          </Link>
-
-          <section className="mt-3 overflow-hidden rounded-xl border border-border bg-bg-primary">
-            <div className="bg-[var(--community-banner)] px-5 py-6 text-white sm:px-6">
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
-                    Community workspace
-                  </p>
-                  <CommunityNameEditor
-                    slug={selected.slug}
-                    name={titleCase(selected.name)}
-                    onSaved={onRefresh}
-                  />
-                  <p className="mt-2 text-sm text-white/65">
-                    {selected.university} · {selected.faculty}
-                  </p>
-                </div>
-                <Link
-                  href={`/app/communities/${encodeURIComponent(selected.slug)}`}
-                  className={cn(
-                    "inline-flex min-h-10 items-center justify-center rounded-lg border border-white/25 px-4 text-sm font-medium text-white transition hover:bg-white/10",
-                    interactive,
-                  )}
-                >
-                  Preview student view →
-                </Link>
-              </div>
-            </div>
-
-            {admin ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-                <CommunityMetric label="Active members" value={admin.memberCount} />
-                <CommunityMetric label="Linked subjects" value={admin.subjectCount} />
-                <CommunityMetric
-                  label="Semesters filled"
-                  value={`${admin.filledSemesterCount}/${admin.totalSemesters}`}
-                />
-                <CommunityMetric label="Resources waiting" value={admin.pendingResourceCount} />
-                <CommunityMetric label="Resources merged" value={admin.mergedResourceCount} />
-                <CommunityMetric label="Discussions" value={admin.discussionCount} />
-              </div>
-            ) : null}
-          </section>
-        </>
-      )}
-
-      {/* A community setting, and the first thing its admin page offers: which
-          questions every student's challenge exam asks. Existing communities
-          choose it here too — they run on QnA until they do. */}
-      {!subjectsMode && selected.canManage ? (
-        <CommunityChallengeFormatSettings key={`format-${selected.slug}`} slug={selected.slug} />
-      ) : null}
-
-      {subjectsMode ? (
-        <section className="mt-7" aria-labelledby="community-curriculum-heading">
-          <div className="mb-5 flex flex-wrap items-end gap-4">
-            <div className="min-w-0 flex-1">
-              <h2 id="community-curriculum-heading" className="font-display text-xl font-semibold">
-                Subjects by semester
-              </h2>
-            </div>
           </div>
           <CommunityStudySpaceClient
             key={selected.slug}
@@ -2027,23 +2236,6 @@ export function CommunitiesView({
         </section>
       ) : null}
 
-      {!subjectsMode && selected.canManage ? (
-        <section className="mt-7 rounded-xl border border-border bg-bg-primary p-5 sm:p-6">
-          <h2 className="font-display text-xl font-semibold">Delete community</h2>
-          <p className="mb-4 mt-2 text-sm text-text-secondary">
-            Only the creator can delete this community. Your reusable subject library will be kept.
-          </p>
-          <CommunityDeleteControl
-            key={selected.id}
-            slug={selected.slug}
-            name={selected.name}
-            onDeleted={async () => {
-              window.history.replaceState(null, "", "/teachers?view=communities");
-              await onRefresh();
-            }}
-          />
-        </section>
-      ) : null}
 
       {admin && !subjectsMode ? (
         <section className="mt-7 rounded-xl border border-border bg-bg-primary p-5 sm:p-6">
@@ -2078,6 +2270,28 @@ export function CommunitiesView({
               Members will appear here when students join.
             </p>
           )}
+        </section>
+      ) : null}
+
+      {/* Last on the tab, as GitHub keeps its danger zone. */}
+      {!subjectsMode && selected.canManage ? (
+        <section
+          className="mt-7 rounded-xl border border-destructive/30 bg-bg-primary p-5 sm:p-6"
+          aria-labelledby="danger-zone-heading"
+        >
+          <h2 id="danger-zone-heading" className="mb-4 font-display text-xl font-semibold text-destructive">
+            Danger zone
+          </h2>
+          <CommunityDeleteControl
+            key={selected.id}
+            slug={selected.slug}
+            name={selected.name}
+            memberCount={admin?.memberCount}
+            onDeleted={async () => {
+              window.history.replaceState(null, "", "/teachers?view=communities");
+              await onRefresh();
+            }}
+          />
         </section>
       ) : null}
     </>

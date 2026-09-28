@@ -628,7 +628,19 @@ export async function getStudentRevisionDocs(
     const placement =
       placements.get(`${key}:${text(row.topic_key)}`) ??
       placements.get(`${key}:title:${matchKey(text(row.topic_title) || text(row.title))}`);
-    const unitNumber = placement?.unitNumber || text(row.unit_number) || UNPLACED_UNIT;
+    // THE SYLLABUS IS THE LIST (user, 2026-09-28): where a subject has a topic
+    // catalogue, Revision shows exactly its topics, as the Library does, each
+    // with the challenge solved on it. A row matching no catalogue topic is a
+    // sitting from before the syllabus was re-split (a whole unit line as one
+    // "topic") or one set on a file name ("CamScanner…", "Syllabus 1"); listing
+    // it put a "Unit 1" of stale lines above an "Other topics" of real ones.
+    const catalogued = catalogues.has(key);
+    if (catalogued && !placement) continue;
+    // The catalogue's unit, never the unit stamped on an old row: a catalogue
+    // with no units lists its topics as one list, like the Library.
+    const unitNumber = catalogued
+      ? placement?.unitNumber || UNPLACED_UNIT
+      : placement?.unitNumber || text(row.unit_number) || UNPLACED_UNIT;
     const { unitKey, unit } = unitEntry(subjectKey, key, subject, unitNumber);
 
     // ONE ENTRY PER TOPIC, not per challenge. A topic is sat more than once —

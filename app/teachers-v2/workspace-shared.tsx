@@ -123,8 +123,12 @@ export type TeacherDashboard = {
     name: string;
     university: string;
     faculty: string;
+    /** "+2", "Bachelor", "Master", "Entrance" or "License" — stored or guessed. */
+    level: string;
     totalYears: number;
     totalSemesters: number;
+    /** Terms with at least one subject. */
+    filledSemesterCount: number;
     memberCount: number;
     subjectCount: number;
     createdAt: string;
@@ -715,3 +719,19 @@ export function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
 }
 
+/**
+ * The dim behind a dialog, on its own: what a click paints while the dialog's
+ * code is still arriving. It matches `Dialog`'s backdrop exactly (no fade), so
+ * the dialog replaces it without a blink.
+ */
+export function DialogBackdrop({ tone = "workspace" }: { tone?: "workspace" | "faculty" }) {
+  return tone === "faculty" ? (
+    <div
+      aria-hidden="true"
+      className="fixed inset-0 z-[1000] backdrop-blur-[3px]"
+      style={{ background: "rgba(12, 16, 30, .46)" }}
+    />
+  ) : (
+    <div aria-hidden="true" className="fixed inset-0 z-50 bg-black/45" />
+  );
+}

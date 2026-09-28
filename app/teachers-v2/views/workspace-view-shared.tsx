@@ -715,7 +715,10 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="teacher-dialog-title"
-        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-bg-primary shadow-xl"
+        // The panel rises in, solid (no opacity fade, which shows the page
+        // through it); the backdrop does not fade either, so it takes over
+        // from DialogBackdrop seamlessly.
+        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-bg-primary shadow-xl animate-in zoom-in-[0.98] slide-in-from-bottom-2 duration-200 motion-reduce:animate-none"
       >
         <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-bg-primary px-5 py-4">
           <h2 id="teacher-dialog-title" className="font-display text-xl font-semibold">

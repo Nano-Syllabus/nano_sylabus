@@ -250,6 +250,36 @@ function SubjectProgressRing({
   );
 }
 
+/** The subject ring in miniature, for a semester chip: same track, fill and colours. */
+function SemesterProgressRing({ percentage, active }: { percentage: number; active: boolean }) {
+  const value = Math.max(0, Math.min(100, percentage));
+  const circumference = 2 * Math.PI * 13;
+  const tone =
+    value >= 70 ? "text-success" : active ? "text-[#1d57fd]" : "text-[var(--community-accent)]";
+  // The number sits inside the ring, as on the subject cards below.
+  return (
+    <span className={cn("relative inline-flex size-8 shrink-0 items-center justify-center", tone)} aria-hidden="true">
+      <svg viewBox="0 0 32 32" className="absolute inset-0 size-8 -rotate-90">
+        <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" strokeOpacity="0.16" strokeWidth="3" />
+        {value > 0 ? (
+          <circle
+            cx="16"
+            cy="16"
+            r="13"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference - (circumference * value) / 100}
+          />
+        ) : null}
+      </svg>
+      <span className="relative text-[9px] font-semibold leading-none tabular-nums">{Math.round(value)}%</span>
+    </span>
+  );
+}
+
 export function LibraryNanoAiWorkspace({
   community,
   insights,
@@ -412,6 +442,25 @@ export function LibraryNanoAiWorkspace({
 
   const visibleMaterials = materials;
 
+  /**
+   * A semester's % is the same rule as each subject's ring, pooled: subtopics
+   * completed over subtopics, across the semester's subjects. Only subjects
+   * whose progress is known count; a semester with none shows no number.
+   */
+  function termPercent(term: CommunityTerm) {
+    let completed = 0;
+    let total = 0;
+    for (const subject of term.subjects) {
+      const insight = insights[subject.id];
+      // The ring's own number, weighted by its topic count, so the chip and the
+      // rings can never disagree.
+      if (!insight?.topicCount || insight.readiness === null) continue;
+      completed += (insight.readiness / 100) * insight.topicCount;
+      total += insight.topicCount;
+    }
+    return total ? Math.round((completed / total) * 100) : null;
+  }
+
   function browseTerm(term: CommunityTerm) {
     dispatchSemesterSelection({ type: "browse", termId: term.id });
     setSelectedSubject(null);
@@ -461,19 +510,29 @@ export function LibraryNanoAiWorkspace({
         <div className="mt-3 flex flex-wrap gap-2 sm:gap-2.5">
           {orderedTerms.map((term) => {
             const active = selectedTerm?.id === term.id;
+            const percent = termPercent(term);
             return (
               <button
                 key={term.id}
                 type="button"
                 onClick={() => browseTerm(term)}
+                aria-label={
+                  percent === null
+                    ? undefined
+                    : `${academicNumberLabel(term.semesterNumber, "Sem")}, ${percent}% complete`
+                }
                 className={cn(
-                  "h-10 shrink-0 rounded-full border px-4 text-sm font-medium transition-colors",
+                  "inline-flex h-10 shrink-0 items-center gap-2 rounded-full border text-sm font-medium transition-colors",
+                  percent === null ? "px-4" : "pl-1 pr-4",
                   active
                     ? "border-[#1d57fd] bg-card text-[#1d57fd]"
                     : "border-border bg-card text-text-secondary hover:border-border-strong",
                   focusRing,
                 )}
               >
+                {percent === null ? null : (
+                  <SemesterProgressRing percentage={percent} active={active} />
+                )}
                 {academicNumberLabel(term.semesterNumber, "Sem")}
               </button>
             );

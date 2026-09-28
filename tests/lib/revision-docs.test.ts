@@ -259,6 +259,10 @@ describe("revision docs", () => {
       completedRow({ id: "challenge-open", status: "started", completed_at: null }),
       completedRow({ id: "challenge-done", topic_key: "fourier", topic_title: "Fourier Series" }),
     ];
+    mocks.topics.mockResolvedValue([
+      { topic_key: "laplace", title: "Laplace Transform", unit_number: "2", position: 4 },
+      { topic_key: "fourier", title: "Fourier Series", unit_number: "2", position: 5 },
+    ]);
 
     const docs = await filedDocs("member");
 
@@ -276,9 +280,8 @@ describe("revision docs", () => {
     const unit = (await filedDocs("member")).semesters[0].subjects[0].units[0];
     expect([unit.label, unit.title]).toEqual(["Unit 2", "Transforms"]);
 
-    // A topic the catalogue has dropped, filed by the unit on its own row, still
-    // gets that unit's name from the unit's other topics.
-    db.tables.student_challenges = [completedRow({ topic_key: "laplace-v2", topic_title: "Old name", unit_number: "2" })];
+    // A row `/start` re-keyed is placed by its title, and takes that unit's name.
+    db.tables.student_challenges = [completedRow({ topic_key: "z-v2", topic_title: "Z Transform", unit_number: "2" })];
     mocks.topics.mockResolvedValue([
       { topic_key: "z-transform", title: "Z Transform", unit_number: "2", unit_title: "Transforms", position: 5 },
     ]);
@@ -290,6 +293,31 @@ describe("revision docs", () => {
     ]);
     db.tables.student_challenges = [completedRow()];
     expect((await filedDocs("member")).semesters[0].subjects[0].units[0].title).toBe("");
+  });
+
+  it("lists exactly the catalogue's topics, dropping sittings on topics it no longer has", async () => {
+    // A subject re-split after some challenges were sat: the old whole-unit line,
+    // and a challenge set on a file name, match no catalogue topic. Listing them
+    // put a "Unit 1" of stale lines above an "Other topics" of the real syllabus
+    // (user, 2026-09-28). The syllabus is the list, as in the Library.
+    db.tables.student_challenges = [
+      completedRow({ id: "old-line", topic_key: "basic_concept_ohm", topic_title: "Basic concept: Ohm's law, power and energy.", unit_number: "1" }),
+      completedRow({ id: "file", topic_key: "camscanner_05_09", topic_title: "CamScanner 05 09 26 14 22" }),
+      completedRow({ id: "ohm", topic_key: "ohm_s_law", topic_title: "Ohm's Law" }),
+    ];
+    mocks.noUnitOne = true;
+    mocks.topics.mockResolvedValue([
+      { topic_key: "ohm_s_law", title: "Ohm's Law", unit_number: null, position: 0 },
+      { topic_key: "kirchhoff", title: "Kirchhoff's Law", unit_number: null, position: 1 },
+    ]);
+
+    const docs = await getStudentRevisionDocs("member");
+    const units = docs.semesters[0].subjects[0].units;
+    expect(units.map((unit) => unit.label)).toEqual([""]);
+    expect(units[0].topics.map((topic) => [topic.title, topic.state])).toEqual([
+      ["Ohm's Law", "filed"],
+      ["Kirchhoff's Law", expect.any(String)],
+    ]);
   });
 
   it("files the challenge under the unit written on its own row when the catalogue has moved on", async () => {

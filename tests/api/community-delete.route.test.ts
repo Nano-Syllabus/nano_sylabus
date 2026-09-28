@@ -43,14 +43,14 @@ describe("DELETE community route", () => {
     expect((await DELETE(request({ confirmation: "owned" }), context)).status).toBe(401);
     expect(mocks.remove).not.toHaveBeenCalled();
   });
-  it.each([{}, null, { confirmation: true }, { confirmation: "wrong" }])(
+  it.each([{}, null, { confirmation: true }, { confirmation: "   " }])(
     "requires explicit exact confirmation: %j",
     async (body) => {
       expect((await DELETE(request(body), context)).status).toBe(400);
       expect(mocks.remove).not.toHaveBeenCalled();
     },
   );
-  it.each([403, 404, 503])("preserves a service rejection (%s)", async (status) => {
+  it.each([403, 404, 409, 503])("preserves a service rejection (%s)", async (status) => {
     mocks.remove.mockRejectedValue(new CommunityError("Not allowed or unavailable", status));
     expect((await DELETE(request({ confirmation: "owned" }), context)).status).toBe(status);
   });

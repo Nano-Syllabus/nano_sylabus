@@ -73,7 +73,7 @@ function dashboard(selected = false): Dashboard {
     },
     classrooms: [],
     needsAttention: [],
-    managedCommunities: [community],
+    managedCommunities: [{ ...community, level: "Bachelor", filledSemesterCount: 1, subjectCount: 1 }],
     communityWorkspace: selected ? community : null,
     communityAdmin: null,
     communitySubjectWorkspace: null,
@@ -108,8 +108,10 @@ describe("Create Subjects community manager (server-rendered, no browser)", () =
     expect(html).toContain("Manage subjects");
     expect(html).toContain("/teachers?view=subjects&amp;community=henglish");
     expect(html).toContain("/teachers?view=subjects&amp;library=1");
-    expect(html).not.toContain("Create faculty");
-    expect(html).not.toContain("Open admin workspace");
+    // Every card reaches both halves of a faculty.
+    expect(html).toContain("Members &amp; settings");
+    expect(html).toContain("/teachers?view=communities&amp;community=henglish");
+    expect(html).toContain("1 of 8 semesters filled");
   });
 
   it("offers deletion only in the owner's community admin page", () => {
@@ -125,7 +127,8 @@ describe("Create Subjects community manager (server-rendered, no browser)", () =
   it("shows the requested year's semesters and links subjects inside Create Subjects", () => {
     navigation.search = "view=subjects&community=henglish&term=term-3";
     const html = render({ dashboard: dashboard(true), selectedTermId: "term-3" });
-    expect(html).toContain('id="subject-community"');
+    expect(html).toContain('aria-label="Faculty sections"');
+    expect(html).toContain('aria-current="page"');
     expect(html).toContain("Semester 3");
     expect(html).toContain("Semester 4");
     expect(html).not.toContain("Semester 1</h2>");
@@ -140,7 +143,8 @@ describe("Create Subjects community manager (server-rendered, no browser)", () =
     expect(html).toContain("Use an existing subject");
     expect(html).toContain("Published · Community members");
     expect(html).not.toContain("Private");
-    expect(html).not.toContain("Preview student view");
+    // Both tabs share the faculty header, preview link included.
+    expect(html).toContain("Preview student view");
     expect(html).toContain("Refresh published subject");
     expect(html).toContain('aria-label="Refresh published subject Nims"');
   });
@@ -161,8 +165,9 @@ describe("Create Subjects community manager (server-rendered, no browser)", () =
       })),
     };
     const html = render({ dashboard: selected, selectedTermId: "term-3" });
-    expect(html).toContain("Publish subject");
-    expect(html).toContain("Publishing extracts topics from indexed syllabus and notes");
+    expect(html).toContain('aria-label="Publish subject Nims"');
+    // Just the buttons: no explanation panel around Publish.
+    expect(html).not.toContain("Publishing extracts topics");
     expect(html).toContain("Draft · Only you");
     expect(html).toContain("Open Nims");
     expect(html).not.toContain("Subject forum");
@@ -212,9 +217,8 @@ describe("Create Subjects community manager (server-rendered, no browser)", () =
     const empty = dashboard();
     empty.managedCommunities = [];
     const html = render({ dashboard: empty });
-    expect(html).toContain("No communities available");
-    expect(html).toContain("Open My Communities");
-    expect(html).not.toContain("Create faculty");
+    expect(html).toContain("Create your first faculty");
+    expect(html).toContain("Create faculty");
     expect(
       render({ dashboard: null, state: "error", error: "Unable to load communities" }),
     ).toContain("Unable to load communities");
@@ -226,7 +230,7 @@ describe("Create Subjects community manager (server-rendered, no browser)", () =
   it("preserves the existing My Communities admin entry", () => {
     const html = render({ subjectsMode: false });
     expect(html).toContain("My communities");
-    expect(html).toContain("Open admin workspace");
+    expect(html).toContain("Members &amp; settings");
     expect(html).toContain("/teachers?view=communities&amp;community=henglish");
   });
 
@@ -256,7 +260,7 @@ describe("Create Subjects community manager (server-rendered, no browser)", () =
     expect(html).not.toContain("Choose academic year");
     expect(html).not.toContain("Add subject");
     expect(html).not.toContain("Open Nims workspace");
-    expect(html).toContain("Community workspace");
+    expect(html).toContain("Bachelor · Tribhuvan University");
     expect(html).toContain("Active members");
     expect(html).toContain("Community members");
     expect(html).toContain("Suman");

@@ -55,9 +55,11 @@ export async function DELETE(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Sign in to delete your community." }, { status: 401 });
     const { slug } = await context.params;
     const body = await request.json().catch(() => null);
-    if (!body || typeof body.confirmation !== "string" || body.confirmation !== slug) {
+    // The creator types the community's NAME; the name check and the member
+    // limit are enforced in deleteOwnedCommunity.
+    if (!body || typeof body.confirmation !== "string" || !body.confirmation.trim()) {
       return NextResponse.json(
-        { error: "Type the community URL name exactly to confirm deletion." },
+        { error: "Type the community name exactly to confirm deletion." },
         { status: 400 },
       );
     }

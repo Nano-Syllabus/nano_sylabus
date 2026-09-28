@@ -313,7 +313,14 @@ export function SubjectView({
             onOpen={onDocument}
           />
           {tab === "syllabus" ? (
-            <SyllabusEditor subject={subject} syllabus={syllabus} setSyllabus={setSyllabus} />
+            <SyllabusEditor
+              subject={subject}
+              syllabus={syllabus}
+              setSyllabus={setSyllabus}
+              hasIndexedSyllabus={documents.some(
+                (document) => document.shelf === "Syllabus" && document.status === "ready",
+              )}
+            />
           ) : null}
         </div>
       )}
@@ -1098,17 +1105,21 @@ export function SyllabusEditor({
   subject,
   syllabus,
   setSyllabus,
+  hasIndexedSyllabus = false,
 }: {
   subject: TeacherSubject;
   syllabus: SyllabusState;
   setSyllabus: (next: SyllabusState) => void;
+  /** An indexed syllabus file is on the shelf, so there is something to extract from. */
+  hasIndexedSyllabus?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SyllabusUnit[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const autoExtracted = useRef("");
 
-  async function extract() {
+  async function extract(retries = 0) {
     setBusy(true);
     setError("");
     try {
@@ -1128,11 +1139,32 @@ export function SyllabusEditor({
         error: "",
       });
     } catch (caught) {
+      if (retries > 0) {
+        // The automatic run tries again once before asking the creator.
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        return extract(retries - 1);
+      }
       setError(caught instanceof Error ? caught.message : "Could not extract the syllabus.");
     } finally {
       setBusy(false);
     }
   }
+
+  // No structure yet but an indexed syllabus to read it from: extract it by
+  // default instead of waiting for the button (2026-09-28). Once per subject.
+  useEffect(() => {
+    if (
+      syllabus.state !== "ready" ||
+      syllabus.structure.length ||
+      !hasIndexedSyllabus ||
+      autoExtracted.current === subject.slug
+    ) {
+      return;
+    }
+    autoExtracted.current = subject.slug;
+    void extract(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on the state, not on `extract`
+  }, [syllabus.state, syllabus.structure.length, hasIndexedSyllabus, subject.slug]);
 
   function startEditing() {
     setDraft(
@@ -1331,10 +1363,16 @@ export function SyllabusEditor({
         </div>
       ) : syllabus.state === "ready" ? (
         <div className="mt-6 rounded-lg border border-dashed border-border p-6 text-center">
-          <h3 className="font-display text-lg font-semibold">No editable units yet</h3>
-          <p className="mt-2 text-sm text-text-secondary">
-            Upload and index a syllabus, then extract its structure.
-          </p>
+          <h3 className="font-display text-lg font-semibold">
+            {busy ? "Extracting units from the indexed syllabus…" : "No editable units yet"}
+          </h3>
+          {busy ? null : (
+            <p className="mt-2 text-sm text-text-secondary">
+              {hasIndexedSyllabus
+                ? "Extract the structure from the indexed syllabus."
+                : "Upload and index a syllabus, then extract its structure."}
+            </p>
+          )}
         </div>
       ) : null}
     </section>

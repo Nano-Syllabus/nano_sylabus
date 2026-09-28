@@ -814,16 +814,58 @@ async function attachCommunitySubjectWrite(
   return community;
 }
 
+/** A faculty with more active members than this cannot be deleted: students depend on it. */
+export const COMMUNITY_DELETE_MEMBER_LIMIT = 2;
+
+function sameCommunityName(typed: string, name: string) {
+  const clean = (value: string) => value.trim().replace(/\s+/g, " ");
+  return clean(typed) !== "" && clean(typed) === clean(name);
+}
+
+/**
+ * Delete a faculty its creator owns, confirmed by typing its NAME (as GitHub
+ * asks for a repository's), and only while it has at most
+ * COMMUNITY_DELETE_MEMBER_LIMIT active members. The RPC keeps its own slug
+ * check and does the ownership test and the delete atomically.
+ */
 async function deleteOwnedCommunityWrite(
   userId: string,
   slug: string,
-  confirmation: string,
+  confirmationName: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ) {
+  const community = await admin
+    .from("communities")
+    .select("id,name,creator_id")
+    .eq("slug", slug)
+    .eq("status", "active")
+    .maybeSingle();
+  if (community.error) throw community.error;
+  if (!community.data) throw new CommunityError("Community not found.", 404);
+  if (community.data.creator_id !== userId) {
+    throw new CommunityError("Only the community creator can delete this community.", 403);
+  }
+  if (!sameCommunityName(confirmationName, String(community.data.name || ""))) {
+    throw new CommunityError("Type the community name exactly to confirm deletion.", 400);
+  }
+  const members = await admin
+    .from("community_memberships")
+    .select("user_id", { count: "exact", head: true })
+    .eq("community_id", community.data.id)
+    .eq("status", "active");
+  if (members.error) throw members.error;
+  const memberCount = members.count ?? 0;
+  if (memberCount > COMMUNITY_DELETE_MEMBER_LIMIT) {
+    throw new CommunityError(
+      `This community has ${memberCount} members. It can only be deleted while it has ${COMMUNITY_DELETE_MEMBER_LIMIT} or fewer.`,
+      409,
+    );
+  }
+
   const { data, error } = await admin.rpc("delete_owned_community", {
     target_user_id: userId,
     target_community_slug: slug,
-    confirmation_slug: confirmation,
+    confirmation_slug: slug,
   });
   if (error) {
     if (error.code === "42501")

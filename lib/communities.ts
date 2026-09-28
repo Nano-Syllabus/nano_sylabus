@@ -12,6 +12,49 @@ export function isCommunityLevel(value: unknown): value is CommunityLevel {
 }
 
 /**
+ * How a level is laid out. +2 is always Class 11 and Class 12; Bachelor and
+ * Master run year-wise or semester-wise; Entrance and License are one MCQ
+ * track with no years at all.
+ */
+export type CommunityLevelStructure = "classes" | "years-or-semesters" | "single-track";
+
+export function communityLevelStructure(level: string): CommunityLevelStructure | null {
+  if (level === "+2") return "classes";
+  if (level === "Bachelor" || level === "Master") return "years-or-semesters";
+  if (level === "Entrance" || level === "License") return "single-track";
+  return null;
+}
+
+/** The only question format a single-track (Entrance, License) faculty can use. */
+export function communityLevelLockedFormat(level: string) {
+  return communityLevelStructure(level) === "single-track" ? ("mcq" as const) : null;
+}
+
+/** Where a level's structure starts when the creator picks it. */
+export function communityLevelDefaults(level: string) {
+  if (level === "+2") return { totalYears: 2, totalSemesters: 2 };
+  if (level === "Master") return { totalYears: 2, totalSemesters: 4 };
+  if (level === "Entrance" || level === "License") return { totalYears: 1, totalSemesters: 1 };
+  return { totalYears: 4, totalSemesters: 8 };
+}
+
+/**
+ * What one term is called for this faculty: "Class 11", "Year 2", "Semester 3",
+ * or "All subjects" for a single-track faculty. Year-wise faculties have one
+ * term per year, so the year is the name.
+ */
+export function communityTermName(
+  community: { level?: string | null; totalYears: number; totalSemesters: number },
+  term: { yearNumber: number; semesterNumber: number },
+) {
+  const structure = communityLevelStructure(community.level ?? "");
+  if (structure === "single-track") return "All subjects";
+  if (structure === "classes") return `Class ${10 + term.yearNumber}`;
+  if (community.totalSemesters === community.totalYears) return `Year ${term.yearNumber}`;
+  return `Semester ${term.semesterNumber}`;
+}
+
+/**
  * The stored level, or — for a faculty created before levels were stored, or a
  * database without the column yet — a guess from its name and programme.
  */
@@ -73,6 +116,30 @@ export const communityInputSchema = z
     }),
   })
   .superRefine((value, context) => {
+    const structure = communityLevelStructure(value.level);
+    if (structure === "classes" && (value.totalYears !== 2 || value.totalSemesters !== 2)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["totalYears"],
+        message: "+2 runs as Class 11 and Class 12.",
+      });
+    }
+    if (structure === "single-track") {
+      if (value.totalYears !== 1 || value.totalSemesters !== 1) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["totalYears"],
+          message: `${value.level} faculties have no years or semesters.`,
+        });
+      }
+      if (value.challengeQuestionFormat !== "mcq") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["challengeQuestionFormat"],
+          message: `${value.level} challenges are MCQ.`,
+        });
+      }
+    }
     if (value.totalSemesters < value.totalYears) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

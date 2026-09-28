@@ -150,7 +150,10 @@ describe("unified Figma library", () => {
     // The semester chips still say which term is being browsed — in the short
     // form the chip row uses. The long "1st Semester" was the running-semester
     // picker's option, and that picker now lives on the Challenges tab.
-    expect(html).toContain(">1st Sem</button>");
+    // …with the semester's completion beside it, pooled from its subjects' rings.
+    // The number sits inside the ring, before the label.
+    expect(html).toMatch(/<span[^>]*>64%<\/span><\/span>1st Sem<\/button>/);
+    expect(html).toContain('aria-label="1st Sem, 64% complete"');
     expect(html).not.toContain("Search subjects and chapters");
   });
 

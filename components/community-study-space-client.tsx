@@ -5,7 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, BookOpen, Plus, RefreshCw, X } from "lucide-react";
 import {
+  communityLevel,
   communitySubjectInputSchema,
+  communityTermName,
   type CommunityDetail,
   type CreatorSubjectOption,
 } from "@/lib/communities";
@@ -53,7 +55,15 @@ export function CommunityStudySpaceClient({
     () => Array.from({ length: community.totalYears }, (_, index) => index + 1),
     [community.totalYears],
   );
-  const terms = community.terms.filter((term) => term.yearNumber === selectedYear);
+  // One term per year (+2 classes, year-wise, Entrance/License) fits on one
+  // screen, so every term shows at once; only semester-wise faculties page by year.
+  const level = communityLevel(community);
+  const oneTermPerYear = community.totalSemesters <= community.totalYears;
+  const termName = (term: { yearNumber: number; semesterNumber: number }) =>
+    communityTermName({ ...community, level }, term);
+  const terms = oneTermPerYear
+    ? community.terms
+    : community.terms.filter((term) => term.yearNumber === selectedYear);
 
   useEffect(() => {
     setCommunity(initialCommunity);
@@ -124,7 +134,7 @@ export function CommunityStudySpaceClient({
         const attached = payload.community.terms
           .flatMap((term) => term.subjects)
           .find((subject) => subject.externalSubjectSlug === subjectSlug);
-        setNotice(`${attached?.name || "Subject"} attached to this semester.`);
+        setNotice(`${attached?.name || "Subject"} attached.`);
         await onSubjectAttached?.();
         return true;
       } catch (caught) {
@@ -179,6 +189,7 @@ export function CommunityStudySpaceClient({
 
   return (
     <>
+      {oneTermPerYear ? null : (
       <div className="flex flex-wrap gap-2" aria-label="Choose academic year">
         {years.map((year) => (
           <button
@@ -202,8 +213,9 @@ export function CommunityStudySpaceClient({
           </button>
         ))}
       </div>
+      )}
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+      <div className={`${oneTermPerYear ? "" : "mt-6 "}grid gap-5 lg:grid-cols-2`}>
         {terms.map((term) => {
           const availableSubjects = creatorSubjects.filter((subject) => !subject.attachedTermId);
           return (
@@ -214,11 +226,13 @@ export function CommunityStudySpaceClient({
             >
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium uppercase tracking-widest text-text-muted">
-                    Year {term.yearNumber}
-                  </p>
-                  <h2 id={`term-${term.id}`} className="mt-2 font-display text-xl font-semibold">
-                    Semester {term.semesterNumber}
+                  {oneTermPerYear ? null : (
+                    <p className="mb-2 text-xs font-medium uppercase tracking-widest text-text-muted">
+                      Year {term.yearNumber}
+                    </p>
+                  )}
+                  <h2 id={`term-${term.id}`} className="font-display text-xl font-semibold">
+                    {termName(term)}
                   </h2>
                   {canManage ? (
                     <p className="mt-1 text-xs text-text-secondary">
@@ -229,7 +243,7 @@ export function CommunityStudySpaceClient({
                 {canManage ? (
                   <button
                     type="button"
-                    aria-label={`Add subject to Semester ${term.semesterNumber}`}
+                    aria-label={`Add subject to ${termName(term)}`}
                     onClick={() => onCreateSubject?.(term.id)}
                     disabled={!onCreateSubject}
                     className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse hover:opacity-90 disabled:opacity-50 ${focusRing}`}
@@ -332,7 +346,7 @@ export function CommunityStudySpaceClient({
                       <BookOpen className="mx-auto size-6 text-text-muted" aria-hidden="true" />
                       <p className="mt-3 text-sm font-medium">No reusable subjects available</p>
                       <p className="mt-1 text-xs leading-5 text-text-muted">
-                        Use Add subject to create a new one for this semester.
+                        Use Add subject to create a new one for {termName(term)}.
                       </p>
                     </div>
                   ) : null}
@@ -372,9 +386,10 @@ export function CommunityStudySpaceClient({
                             subject.externalSubjectSlug,
                             term.id,
                           )}
+                          aria-label={`Open ${titleCase(subject.name)}`}
                           className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-4 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
                         >
-                          Open {titleCase(subject.name)}
+                          Open
                           <ArrowRight className="size-4" aria-hidden="true" />
                         </Link>
                       ) : canManage ? (
@@ -401,8 +416,8 @@ export function CommunityStudySpaceClient({
                   <p className="mt-3 text-sm font-medium">No subjects yet</p>
                   <p className="mt-1 text-xs leading-5 text-text-muted">
                     {canManage
-                      ? "Add your first subject for this semester."
-                      : "The community creator has not added a subject to this semester yet."}
+                      ? `Add the first subject to ${termName(term)}.`
+                      : `No subject has been added to ${termName(term)} yet.`}
                   </p>
                 </div>
               )}
