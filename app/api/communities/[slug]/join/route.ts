@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { communityStorageError, joinCommunity } from "@/lib/data/communities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { ACTIVE_COMMUNITY_COOKIE } from "@/lib/community-switch";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
@@ -25,7 +26,19 @@ export async function POST(_request: Request, context: RouteContext) {
     } catch {
       /* the next navigation renders fresh anyway */
     }
-    return NextResponse.json({ community });
+    const response = NextResponse.json({ community });
+    // A creator opening their own faculty as a student: with no joined faculty
+    // left, the active one is chosen by this preference among those they own.
+    if (community.membership?.role === "creator") {
+      response.cookies.set(ACTIVE_COMMUNITY_COOKIE, JSON.stringify({ userId: user.id, slug }), {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+    }
+    return response;
   } catch (error) {
     const source = (error || {}) as { code?: string; message?: string };
     console.error("[community:join] failed", {

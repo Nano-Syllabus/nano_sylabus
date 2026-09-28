@@ -112,9 +112,9 @@ describe("account-wide study diagnostic", () => {
     expect(updateUser).not.toHaveBeenCalled();
   });
   it("opens the newly joined community, not a different community", () => {
-    expect(studyFlowDestination("henglish")).toBe("/app/today?community=henglish");
+    expect(studyFlowDestination("henglish")).toBe("/app/challenges?community=henglish");
     expect(studyFlowDestination("engineering-programming")).toBe(
-      "/app/today?community=engineering-programming",
+      "/app/challenges?community=engineering-programming",
     );
   });
   it.each([undefined, "", "//evil.com", "../admin", "a?next=/admin", "a/b"])(

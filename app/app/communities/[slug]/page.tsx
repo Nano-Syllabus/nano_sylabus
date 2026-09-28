@@ -7,5 +7,5 @@ export const dynamic = "force-dynamic";
 
 export default async function CommunityStudySpacePage({ params }: PageProps) {
   const { slug } = await params;
-  redirect(`/app/today?community=${encodeURIComponent(slug)}`);
+  redirect(`/app/challenges?community=${encodeURIComponent(slug)}`);
 }

@@ -37,9 +37,10 @@ export function hasCompletedStudyDiagnostic(value: unknown): value is StudyAnswe
   );
 }
 
+/** Joining a faculty lands on its Micro-Topics hub; the plain flow on Today. */
 export function studyFlowDestination(community?: string) {
   return community && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(community)
-    ? `/app/today?community=${encodeURIComponent(community)}`
+    ? `/app/challenges?community=${encodeURIComponent(community)}`
     : "/app/today";
 }
 

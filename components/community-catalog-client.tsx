@@ -215,13 +215,28 @@ function CommunityCard({
 
           <div className="ns-fc-actions">
             {creator ? (
-              <Link
-                className="ns-fc-open"
-                href={`/teachers?view=communities&community=${encodeURIComponent(community.slug)}`}
-                aria-label={`Open ${community.name} admin workspace`}
-              >
-                {actionLabel} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" /></svg>
-              </Link>
+              // Open is the student view of their own faculty (joining it as a
+              // student, which replaces a joined one); Manage is the workspace.
+              <>
+                <Link
+                  className="ns-fc-manage"
+                  href={`/teachers?view=communities&community=${encodeURIComponent(community.slug)}`}
+                  aria-label={`Manage ${community.name} in the creator workspace`}
+                >
+                  Manage
+                </Link>
+                <button
+                  type="button"
+                  className="ns-fc-open"
+                  onClick={joinCommunity}
+                  disabled={joining}
+                  aria-busy={joining}
+                  aria-label={`Open ${community.name} as a student`}
+                >
+                  {actionLabel}
+                  {joining ? <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} /> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" /></svg>}
+                </button>
+              </>
             ) : joined ? (
               <Link
                 className="ns-fc-open"
@@ -910,6 +925,19 @@ export function CommunityCatalogClient({
           transition: background .2s, transform .2s;
         }
         .ns-fc-open:hover { background: #3158f4; transform: translateX(2px); }
+        .ns-fc-manage {
+          padding: 10px 13px;
+          border: 1px solid #d5dbe8;
+          border-radius: 10px;
+          color: #212b48;
+          font-size: 13px !important;
+          font-weight: 800 !important;
+          text-decoration: none;
+          white-space: nowrap;
+          transition: border-color .2s, color .2s;
+        }
+        .ns-fc-manage:hover { border-color: #3158f4; color: #3158f4; }
+        .ns-fc-manage:focus-visible { outline: 3px solid #9aafff; outline-offset: 3px; }
         .ns-fc-open:disabled { cursor: wait; opacity: .7; }
         .ns-fc-open svg { width: 16px; height: 16px; }
         .ns-fc-open:focus-visible,

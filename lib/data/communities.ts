@@ -536,54 +536,62 @@ async function joinCommunityWrite(
 
   const targetCommunityId = String(targetResult.data.id);
   const isCreator = String(targetResult.data.creator_id) === userId;
-  if (!isCreator) {
-    /**
-     * JOINING REPLACES WHATEVER THE STUDENT HAD JOINED.
-     *
-     * A student is a member of one community at a time (the database's
-     * `community_memberships_one_active_member_per_user`). Joining another from
-     * Browse used to be refused until they left the first; it now leaves every
-     * other joined community for them, through the same `leave_community` the
-     * Leave button uses. Communities they created are not memberships of this
-     * kind and are untouched.
-     *
-     * Checked first: a community that is not open must not cost the student
-     * the one they are in.
-     */
-    if (targetResult.data.status !== "active" || targetResult.data.visibility !== "public") {
-      throw new CommunityError("This community is not open to new members.", 403);
-    }
-    const activeMembershipResult = await admin
+  /**
+   * JOINING REPLACES WHATEVER THE STUDENT HAD JOINED.
+   *
+   * A student is a member of one community at a time (the database's
+   * `community_memberships_one_active_member_per_user`). Joining another from
+   * Browse used to be refused until they left the first; it now leaves every
+   * other joined community for them, through the same `leave_community` the
+   * Leave button uses. Communities they created are not memberships of this
+   * kind and are untouched.
+   *
+   * Checked first: a community that is not open must not cost the student
+   * the one they are in.
+   *
+   * A creator "joining" their own faculty is opening it as a student
+   * (2026-09-28): it becomes the faculty they study in, so it replaces the
+   * joined one exactly like any other join. Their own faculty needs no
+   * public listing for that — they already hold its creator membership.
+   */
+  const open = targetResult.data.status === "active" && targetResult.data.visibility === "public";
+  if (!open && !(isCreator && targetResult.data.status === "active")) {
+    throw new CommunityError("This community is not open to new members.", 403);
+  }
+  const activeMembershipResult = await admin
+    .from("community_memberships")
+    .select("community_id")
+    .eq("user_id", userId)
+    .eq("role", "member")
+    .eq("status", "active")
+    .neq("community_id", targetCommunityId);
+  if (activeMembershipResult.error) throw activeMembershipResult.error;
+  for (const membership of activeMembershipResult.data ?? []) {
+    const left = await admin.rpc("leave_community", {
+      target_user_id: userId,
+      target_community_id: String(membership.community_id),
+    });
+    if (!left.error) continue;
+    // An archived community cannot be left through the RPC (it matches active
+    // communities only), yet its membership still holds the one member slot.
+    if (left.error.code !== "P0002") throw left.error;
+    const closed = await admin
       .from("community_memberships")
-      .select("community_id")
+      .update({ status: "left", left_at: new Date().toISOString(), current_term_id: null })
       .eq("user_id", userId)
-      .eq("role", "member")
-      .eq("status", "active")
-      .neq("community_id", targetCommunityId);
-    if (activeMembershipResult.error) throw activeMembershipResult.error;
-    for (const membership of activeMembershipResult.data ?? []) {
-      const left = await admin.rpc("leave_community", {
-        target_user_id: userId,
-        target_community_id: String(membership.community_id),
-      });
-      if (!left.error) continue;
-      // An archived community cannot be left through the RPC (it matches active
-      // communities only), yet its membership still holds the one member slot.
-      if (left.error.code !== "P0002") throw left.error;
-      const closed = await admin
-        .from("community_memberships")
-        .update({ status: "left", left_at: new Date().toISOString(), current_term_id: null })
-        .eq("user_id", userId)
-        .eq("community_id", String(membership.community_id))
-        .eq("role", "member");
-      if (closed.error) throw closed.error;
-    }
+      .eq("community_id", String(membership.community_id))
+      .eq("role", "member");
+    if (closed.error) throw closed.error;
   }
 
-  const result = await admin.rpc("join_community", {
-    target_user_id: userId,
-    target_community_slug: slug,
-  });
+  // The RPC refuses a private community even to its creator, whose membership
+  // row was made with the community; a public one it re-activates as usual.
+  const result = isCreator && !open
+    ? { data: targetCommunityId, error: null }
+    : await admin.rpc("join_community", {
+        target_user_id: userId,
+        target_community_slug: slug,
+      });
   if (result.error) {
     if (result.error.code === "P0002") throw new CommunityError("Community not found.", 404);
     if (result.error.code === "42501") {
