@@ -131,17 +131,22 @@ function challengeScore(challenge: StudentChallengeSummary) {
   return Math.max(0, Math.min(100, (challenge.lastScore / challenge.lastTotalMarks) * 100));
 }
 
-/** Advance through the daily queue in its displayed order, including a partly
- * completed challenge. Completing #1 should lead to unfinished #2, then #3. */
+/** Advance only within the current subject, including a partly completed card. */
 export function nextAvailableChallenge(
   challenges: StudentChallengeSummary[],
-  currentChallenge: Pick<StudentChallengeSummary, "id" | "position">,
+  currentChallenge: Pick<StudentChallengeSummary, "id" | "position" | "courseId" | "subjectSlug">,
 ) {
   // A refresh removes a completed card from the dashboard list. Positions are
   // persisted with the daily queue, so they remain the reliable sequence even
   // when the just-completed card is no longer in `challenges`.
   const remaining = challenges
-    .filter((challenge) => challenge.id !== currentChallenge.id && challenge.status !== "completed")
+    .filter(
+      (challenge) =>
+        challenge.id !== currentChallenge.id &&
+        challenge.status !== "completed" &&
+        challenge.courseId === currentChallenge.courseId &&
+        challenge.subjectSlug.trim().toLowerCase() === currentChallenge.subjectSlug.trim().toLowerCase(),
+    )
     .sort((left, right) => left.position - right.position);
   return (
     remaining.find((challenge) => challenge.position > currentChallenge.position) ??
@@ -477,10 +482,10 @@ function ChallengeDetail({
   }, [focusMode]);
 
   useEffect(() => {
-    if (challenge.status === "completed" || !content?.examExpiresAt) return;
+    if (mcqPage || challenge.status === "completed" || !content?.examExpiresAt) return;
     const timer = window.setInterval(() => setClock(Date.now()), 1_000);
     return () => window.clearInterval(timer);
-  }, [challenge.status, content?.examExpiresAt]);
+  }, [mcqPage, challenge.status, content?.examExpiresAt]);
 
   /**
    * Wait for the half of the challenge that `/start` did not block on.
@@ -766,6 +771,7 @@ function ChallengeDetail({
       setChoices({});
       setClock(Date.now());
       onChange(payload.challenge);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not issue a fresh exam.");
     } finally {
@@ -799,6 +805,7 @@ function ChallengeDetail({
       setPracticeStage("questions");
       onChange(payload.challenge);
       onHubPatch((d) => applyChallengeState(d, payload.challenge));
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not restart this challenge.");
     } finally {
@@ -812,11 +819,14 @@ function ChallengeDetail({
     try {
       const opened = await onNext();
       if (!opened) setError("Could not open the next challenge. Try again.");
-      else setNoNextAvailable(false);
+      else {
+        setNoNextAvailable(false);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Could not open the next challenge.";
       setError(message);
-      if (message.includes("All currently extracted topics")) setNoNextAvailable(true);
+      if (message.includes("All currently extracted subtopics")) setNoNextAvailable(true);
     } finally {
       setOpeningNext(false);
     }
@@ -878,10 +888,11 @@ function ChallengeDetail({
   const focusButtonClass =
     "min-h-10 rounded-lg px-5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary disabled:cursor-not-allowed disabled:opacity-50";
 
+  // A paper with multiple-choice questions on it is untimed — no clock at all.
   // Built once and placed twice: along the top in the hub layout, and down the
   // right-hand rail in focus mode. One definition is the only way the two cannot
   // drift apart.
-  const timerBox = (
+  const timerBox = mcqPage || choiceQuestions.length ? null : (
     <div
       aria-label={timeRemaining ? `${timeRemaining} remaining` : "Challenge timer"}
       className="min-w-20 rounded-lg border border-border bg-card px-3 py-2 text-center font-mono text-sm font-semibold tabular-nums"
@@ -1771,7 +1782,7 @@ function ChallengeDetail({
                 {/* Re-issuing a graded challenge costs a model call and hands out
                     a second attempt at a topic already scored, so it is not a
                     control every student gets. See lib/challenge-refetch.ts. */}
-                {canRestart ? (
+                {canRestart && challenge.status !== "completed" ? (
                   <button
                     type="button"
                     disabled={restarting || openingNext}
@@ -1787,7 +1798,7 @@ function ChallengeDetail({
                   onClick={() => void openNextChallenge()}
                   title={
                     noNextAvailable
-                      ? "All currently extracted topics already have challenges."
+                      ? "All currently extracted subtopics are complete or already have challenges."
                       : nextChallenge
                         ? "Open the next available challenge"
                         : "Find and open the next available challenge"
@@ -2244,10 +2255,8 @@ export function ChallengesDashboardClient({
         onNext={async () => {
           if (nextChallenge) return openChallenge(nextChallenge);
           const params = new URLSearchParams();
-          if (dashboard.scope) {
-            params.set("courseId", dashboard.scope.courseId);
-            params.set("subject", dashboard.scope.subjectSlug);
-          }
+          if (selected.courseId) params.set("courseId", selected.courseId);
+          if (selected.subjectSlug) params.set("subject", selected.subjectSlug);
           if (dashboard.community) params.set("community", dashboard.community.slug);
           const suffix = params.size ? `?${params.toString()}` : "";
           const payload = await apiJson<{ challenge: StudentChallengeDetail }>(

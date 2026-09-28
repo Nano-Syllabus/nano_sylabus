@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ArrowRight, BookOpen, CheckCircle2, Upload } from "lucide-react";
-import { CourseLeaveButton } from "@/components/course-leave-button";
 import type { StudentCourse } from "@/lib/student-courses";
 import { titleCase } from "@/lib/utils";
 
@@ -45,7 +44,6 @@ function CourseCard({ course }: { course: StudentCourse }) {
         >
           Details
         </Link>
-        <CourseLeaveButton slug={course.slug} courseName={titleCase(course.name)} />
       </div>
     </article>
   );

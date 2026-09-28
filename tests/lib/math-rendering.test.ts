@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isKatexReady,
   isWordFormula,
+  latexifySqrtCalls,
   normalizeTex,
   renderMarkdown,
   renderMathText,
@@ -317,6 +318,37 @@ describe("model-written maths reads as maths", () => {
       "<p>An <em>important</em> point and a <strong>bold</strong> one.</p>",
     );
     expect(renderMarkdown("**Given.** Load 3V.")).toContain("<strong>Given.</strong> Load 3V.");
+  });
+});
+
+describe("OCR and translated square roots", () => {
+  const raw = "Show that a = sqrt((v1²x2² - v2²x1²)/(v1² - v2²)).";
+
+  it("turns a balanced sqrt call and Unicode powers into delimited LaTeX", () => {
+    const repaired = latexifySqrtCalls(raw);
+    expect(repaired).toContain(
+      String.raw`$\sqrt{\frac{v_{1}^{2}x_{2}^{2} - v_{2}^{2}x_{1}^{2}}{v_{1}^{2} - v_{2}^{2}}}$`,
+    );
+  });
+
+  it("renders raw roots in questions and solved answers through KaTeX", () => {
+    for (const html of [renderMarkdown(raw), renderMathText(raw)]) {
+      expect(html).toContain('class="katex"');
+      expect(html).not.toContain("sqrt(");
+      expect(html).not.toContain("²");
+    }
+  });
+
+  it("repairs roots already inside math without adding nested delimiters", () => {
+    expect(latexifySqrtCalls("$a = sqrt(x² + 1)$")).toBe(String.raw`$a = \sqrt{x^{2} + 1}$`);
+    expect(latexifySqrtCalls(String.raw`$a = \sqrt{x^2 + 1}$`)).toBe(String.raw`$a = \sqrt{x^2 + 1}$`);
+  });
+
+  it("does not reinterpret programming examples as mathematics", () => {
+    expect(latexifySqrtCalls("Use `sqrt(value)` in code.")).toBe("Use `sqrt(value)` in code.");
+    expect(latexifySqrtCalls("```js\nconst root = sqrt(value);\n```")).toBe(
+      "```js\nconst root = sqrt(value);\n```",
+    );
   });
 });
 

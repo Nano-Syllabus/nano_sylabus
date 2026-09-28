@@ -13,6 +13,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import NepaliDateConverter from "nepali-date-converter";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   DailyActivityDay,
@@ -79,24 +80,20 @@ export const NEPALI_MONTH_APPROX_ENG = [
   "Mar-Apr",
 ] as const;
 
-const BS_MONTH_DAYS: Record<number, number[]> = {
-  2078: [31, 31, 31, 32, 31, 31, 30, 29, 30, 29, 30, 30],
-  2079: [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
-  2080: [31, 31, 31, 32, 31, 31, 30, 29, 30, 29, 30, 30],
-  2081: [31, 31, 32, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2082: [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
-  2083: [31, 31, 32, 31, 31, 30, 30, 30, 29, 30, 29, 31],
-  2084: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 30],
-  2085: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2086: [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
-  2087: [31, 32, 31, 32, 31, 30, 30, 30, 29, 30, 29, 31],
-  2088: [31, 31, 32, 31, 31, 31, 30, 29, 30, 29, 30, 30],
-};
+// Bikram Sambat month lengths are fixed by the Nepal Panchang Nirnayak Samiti
+// each year and can't be computed, so conversion comes from
+// nepali-date-converter's published tables (BS 2000–2090) rather than a
+// hand-typed list.
+export const BS_MIN_YEAR = 2000;
+export const BS_MAX_YEAR = 2090;
 
-const REFERENCE_BS_YEAR = 2080;
-const REFERENCE_BS_MONTH = 1;
-const REFERENCE_BS_DAY = 1;
-const REFERENCE_AD_DATE = new Date(Date.UTC(2023, 3, 14)); // 2023-04-14
+function clampBs(bs: NepaliDate): NepaliDate {
+  if (bs.year < BS_MIN_YEAR) return { year: BS_MIN_YEAR, month: 1, day: 1 };
+  if (bs.year > BS_MAX_YEAR) {
+    return { year: BS_MAX_YEAR, month: 12, day: getDaysInBsMonth(BS_MAX_YEAR, 12) };
+  }
+  return bs;
+}
 
 export function toDevanagariDigits(num: number | string): string {
   const digits = ["०", "१", "२", "३", "४", "५", "६", "७", "८", "९"];
@@ -104,96 +101,25 @@ export function toDevanagariDigits(num: number | string): string {
 }
 
 export function adToBs(dateInput: string | Date): NepaliDate {
-  const targetDate =
+  const [year, month, day] =
     typeof dateInput === "string"
-      ? new Date(`${dateInput.slice(0, 10)}T12:00:00.000Z`)
-      : new Date(
-          Date.UTC(dateInput.getUTCFullYear(), dateInput.getUTCMonth(), dateInput.getUTCDate(), 12),
-        );
-
-  let diffDays = Math.round(
-    (targetDate.getTime() - REFERENCE_AD_DATE.getTime()) / (1000 * 60 * 60 * 24),
-  );
-
-  let curYear = REFERENCE_BS_YEAR;
-  let curMonth = REFERENCE_BS_MONTH;
-  let curDay = REFERENCE_BS_DAY;
-
-  if (diffDays >= 0) {
-    while (diffDays > 0) {
-      const daysInCurrentMonth = BS_MONTH_DAYS[curYear]?.[curMonth - 1] ?? 30;
-      const remainingDaysInMonth = daysInCurrentMonth - curDay + 1;
-
-      if (diffDays >= remainingDaysInMonth) {
-        diffDays -= remainingDaysInMonth;
-        curDay = 1;
-        curMonth++;
-        if (curMonth > 12) {
-          curMonth = 1;
-          curYear++;
-        }
-      } else {
-        curDay += diffDays;
-        diffDays = 0;
-      }
-    }
-  } else {
-    diffDays = Math.abs(diffDays);
-    while (diffDays > 0) {
-      if (curDay > 1) {
-        if (diffDays < curDay) {
-          curDay -= diffDays;
-          diffDays = 0;
-        } else {
-          diffDays -= curDay - 1;
-          curDay = 1;
-        }
-      } else {
-        curMonth--;
-        if (curMonth < 1) {
-          curMonth = 12;
-          curYear--;
-        }
-        const daysInPrevMonth = BS_MONTH_DAYS[curYear]?.[curMonth - 1] ?? 30;
-        if (diffDays >= daysInPrevMonth) {
-          diffDays -= daysInPrevMonth;
-          curDay = 1;
-        } else {
-          curDay = daysInPrevMonth - diffDays + 1;
-          diffDays = 0;
-        }
-      }
-    }
+      ? dateInput.slice(0, 10).split("-").map(Number)
+      : [dateInput.getUTCFullYear(), dateInput.getUTCMonth() + 1, dateInput.getUTCDate()];
+  try {
+    // fromAD reads the local calendar day, so build the Date in local time.
+    const bs = NepaliDateConverter.fromAD(new Date(year, month - 1, day, 12)).getBS();
+    return { year: bs.year, month: bs.month + 1, day: bs.date };
+  } catch {
+    // Outside the published tables (before 1943 or after 2034 AD).
+    return clampBs({ year: year < 1944 ? BS_MIN_YEAR - 1 : BS_MAX_YEAR + 1, month: 1, day: 1 });
   }
-
-  return { year: curYear, month: curMonth, day: curDay };
 }
 
+/** Returns the AD date at UTC midnight, so `toISOString().slice(0, 10)` is the calendar day. */
 export function bsToAd(bs: NepaliDate): Date {
-  let daysCount = 0;
-  if (bs.year >= REFERENCE_BS_YEAR) {
-    for (let y = REFERENCE_BS_YEAR; y < bs.year; y++) {
-      const yearMonths = BS_MONTH_DAYS[y] ?? Array(12).fill(30);
-      daysCount += yearMonths.reduce((a, b) => a + b, 0);
-    }
-    const currentYearMonths = BS_MONTH_DAYS[bs.year] ?? Array(12).fill(30);
-    for (let m = 1; m < bs.month; m++) {
-      daysCount += currentYearMonths[m - 1];
-    }
-    daysCount += bs.day - 1;
-  } else {
-    for (let y = REFERENCE_BS_YEAR - 1; y > bs.year; y--) {
-      const yearMonths = BS_MONTH_DAYS[y] ?? Array(12).fill(30);
-      daysCount -= yearMonths.reduce((a, b) => a + b, 0);
-    }
-    const targetYearMonths = BS_MONTH_DAYS[bs.year] ?? Array(12).fill(30);
-    for (let m = bs.month; m <= 12; m++) {
-      daysCount -= targetYearMonths[m - 1];
-    }
-    daysCount += bs.day;
-  }
-
-  return new Date(REFERENCE_AD_DATE.getTime() + daysCount * 24 * 60 * 60 * 1000);
+  const { year, month, day } = clampBs(bs);
+  const ad = new NepaliDateConverter(year, month - 1, day).getAD();
+  return new Date(Date.UTC(ad.year, ad.month, ad.date));
 }
 
 export function formatNepaliDate(bs: NepaliDate): string {
@@ -207,7 +133,16 @@ export function formatNepaliMonth(year: number, month: number): string {
 }
 
 export function getDaysInBsMonth(year: number, month: number): number {
-  return BS_MONTH_DAYS[year]?.[month - 1] ?? 30;
+  if (year < BS_MIN_YEAR || year > BS_MAX_YEAR) return 30;
+  // The converter rolls an out-of-range day into the next month.
+  for (let day = 32; day > 29; day--) {
+    try {
+      if (new NepaliDateConverter(year, month - 1, day).getBS().month === month - 1) return day;
+    } catch {
+      // Past the end of the table (Chaitra of the last year): try a shorter month.
+    }
+  }
+  return 29;
 }
 
 function currentKathmanduDate() {
@@ -383,6 +318,7 @@ export function PracticeCalendar({
 
   // Month navigation functions
   function handlePrevMonth() {
+    if (visibleBsYear <= BS_MIN_YEAR && visibleBsMonth === 1) return;
     if (visibleBsMonth === 1) {
       setVisibleBsYear((y) => y - 1);
       setVisibleBsMonth(12);
@@ -393,6 +329,7 @@ export function PracticeCalendar({
   }
 
   function handleNextMonth() {
+    if (visibleBsYear >= BS_MAX_YEAR && visibleBsMonth === 12) return;
     if (visibleBsMonth === 12) {
       setVisibleBsYear((y) => y + 1);
       setVisibleBsMonth(1);
@@ -622,14 +559,14 @@ export function PracticeCalendar({
                   <div className="flex gap-1">
                     <button
                       type="button"
-                      onClick={() => setVisibleBsYear((y) => y - 1)}
+                      onClick={() => setVisibleBsYear((y) => Math.max(BS_MIN_YEAR, y - 1))}
                       className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-xs font-bold text-text-muted hover:bg-bg-secondary hover:text-text-primary"
                     >
                       −
                     </button>
                     <button
                       type="button"
-                      onClick={() => setVisibleBsYear((y) => y + 1)}
+                      onClick={() => setVisibleBsYear((y) => Math.min(BS_MAX_YEAR, y + 1))}
                       className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-xs font-bold text-text-muted hover:bg-bg-secondary hover:text-text-primary"
                     >
                       +
@@ -999,7 +936,7 @@ export function PracticeCalendar({
 
       {/* ── Upcoming Exams Section ── */}
       <section
-        className="mt-6 overflow-hidden rounded-[20px] border border-border bg-bg-secondary p-5 shadow-xs sm:p-6"
+        className="mt-6 rounded-[20px] border border-border bg-bg-secondary p-5 shadow-xs sm:p-6"
         aria-labelledby="upcoming-exams-heading"
       >
         <div className="mb-4 flex items-center justify-between">

@@ -24,7 +24,7 @@ export const ANSWER_FONTS = [
 
 export type AnswerFontId = (typeof ANSWER_FONTS)[number]["id"];
 
-const DEFAULT_FONT: AnswerFontId = "stay-with-me";
+const DEFAULT_FONT: AnswerFontId = "chillin-on-sunday";
 const STORAGE_KEY = "ns-answer-font";
 
 const listeners = new Set<() => void>();

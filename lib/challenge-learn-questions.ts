@@ -157,9 +157,10 @@ export function mergeLearnQuestions(input: {
   // Worked first, so the copy that carries a solution is the one whose wording
   // is kept when the two sources punctuate the same question differently.
   for (const example of input.solvedExamples ?? []) {
+    const recordedSessions = (example.years ?? []).map((session) => session.trim()).filter(Boolean);
     add(
       example.question,
-      example.years ?? (example.year ? [example.year] : []),
+      recordedSessions.length ? recordedSessions : example.year ? [example.year] : [],
       example.marks,
       example.solution,
       example.displayQuestion,
@@ -168,9 +169,10 @@ export function mergeLearnQuestions(input: {
     );
   }
   for (const pastQuestion of input.pastQuestions ?? []) {
+    const recordedSessions = (pastQuestion.years ?? []).map((session) => session.trim()).filter(Boolean);
     add(
       pastQuestion.question,
-      pastQuestion.years ?? (pastQuestion.year ? [pastQuestion.year] : []),
+      recordedSessions.length ? recordedSessions : pastQuestion.year ? [pastQuestion.year] : [],
       pastQuestion.marks,
       "",
       pastQuestion.displayQuestion,

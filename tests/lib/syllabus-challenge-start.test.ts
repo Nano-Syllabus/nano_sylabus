@@ -174,7 +174,7 @@ describe("starting a saved syllabus challenge", () => {
       topics: ["provider-42"],
       questions: 2,
       duration_minutes: 20,
-      pass_percent: 40,
+      pass_percent: 60,
       exclude_questions: [],
     });
     expect(db.tables.student_challenges[0].external_paper_id).toBe("attempt-1");
@@ -569,17 +569,15 @@ describe("starting a saved syllabus challenge", () => {
     expect(mocks.pastQuestions).not.toHaveBeenCalled();
   });
 
-  it("restarts a completed challenge with a fresh sitting", async () => {
+  it("never restarts a completed challenge", async () => {
     db.tables.student_challenges[0].status = "completed";
 
-    const result = await restartStudentChallenge("member", "challenge-1");
-
-    expect(result?.status).toBe("started");
-    expect(mocks.pastQuestions).toHaveBeenCalledTimes(1);
-
-    await settled();
-    expect(mocks.solved).toHaveBeenCalledTimes(1);
-    expect(mocks.createExam).toHaveBeenCalledTimes(1);
+    await expect(restartStudentChallenge("member", "challenge-1")).rejects.toThrow(
+      "Completed challenges cannot be restarted or repeated.",
+    );
+    expect(mocks.pastQuestions).not.toHaveBeenCalled();
+    expect(mocks.solved).not.toHaveBeenCalled();
+    expect(mocks.createExam).not.toHaveBeenCalled();
   });
 
   it("rebuilds an UNFINISHED challenge through the course API too", async () => {

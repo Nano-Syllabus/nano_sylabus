@@ -12,7 +12,9 @@ export type SwitchCommunity = { slug: string; name: string; university?: string 
 /**
  * A student can be a member of one faculty they do not own. Joining a second
  * one used to fail with that rule as an error; this asks instead, naming both
- * sides, and on confirm leaves the old faculty and joins the new one.
+ * sides. There is no separate "leave": the join itself replaces the faculty the
+ * student was in (`joinCommunity`), so a switch is one request and can never
+ * strand a student between two faculties.
  *
  * Portalled to <body>: the cards it opens from lift with a transform on hover,
  * and a transformed ancestor would pin a `position: fixed` overlay to the card.
@@ -32,13 +34,11 @@ export function CommunitySwitchDialog({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [left, setLeft] = useState(false);
   const stayButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setError("");
-    setLeft(false);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusTimer = window.setTimeout(() => stayButton.current?.focus(), 80);
@@ -62,30 +62,13 @@ export function CommunitySwitchDialog({
     setBusy(true);
     setError("");
     try {
-      // A retry after a failed join must not try to leave a second time.
-      if (!left) {
-        const leaving = await fetch(`/api/communities/${encodeURIComponent(from.slug)}/membership`, {
-          method: "DELETE",
-          headers: { Accept: "application/json" },
-        });
-        const leftPayload = (await leaving.json().catch(() => ({}))) as { left?: boolean; error?: string };
-        if (!leaving.ok || leftPayload.left !== true) {
-          throw new Error(leftPayload.error || `Could not leave ${titleCase(from.name)}. Nothing was changed.`);
-        }
-        setLeft(true);
-        forgetCommunityScopedCaches();
-      }
       const joining = await fetch(`/api/communities/${encodeURIComponent(to.slug)}/join`, {
         method: "POST",
         headers: { Accept: "application/json" },
       });
       const joinPayload = (await joining.json().catch(() => ({}))) as { error?: string };
       if (!joining.ok) {
-        throw new Error(
-          `You left ${titleCase(from.name)}, but joining ${titleCase(to.name)} failed: ${
-            joinPayload.error || "try again."
-          }`,
-        );
+        throw new Error(joinPayload.error || `Could not switch to ${titleCase(to.name)}. Nothing was changed.`);
       }
       forgetCommunityScopedCaches();
       onSwitched();
@@ -138,7 +121,7 @@ export function CommunitySwitchDialog({
                 <div className="ns-sw-side ns-sw-side--from">
                   <span className="ns-sw-tag">From</span>
                   <strong>{titleCase(from.name)}</strong>
-                  <span>{left ? "Left" : "You will leave this faculty"}</span>
+                  <span>Your current faculty</span>
                 </div>
                 <span className="ns-sw-arrow" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -165,7 +148,7 @@ export function CommunitySwitchDialog({
 
               <footer className="ns-sw-foot">
                 <button ref={stayButton} type="button" className="ns-cf-cancel" onClick={onClose} disabled={busy}>
-                  {left ? "Close" : `Stay in ${titleCase(from.name)}`}
+                  {`Stay in ${titleCase(from.name)}`}
                 </button>
                 <button
                   type="button"

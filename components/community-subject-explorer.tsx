@@ -9,7 +9,6 @@ import { academicOrdinalLabel } from "@/lib/academic";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
 import { titleCase } from "@/lib/utils";
-import { CommunityLeaveControl } from "@/components/community-leave-control";
 import { SubjectTopicProgress } from "@/components/subject-topic-progress";
 import {
   initialSemesterSelection,
@@ -309,9 +308,6 @@ export function CommunitySubjectExplorer({
       <header className="border-b border-border pb-6">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm font-medium text-text-secondary">{titleCase(community.name)}</p>
-          {!community.canManage ? (
-            <CommunityLeaveControl key={community.id} community={community} />
-          ) : null}
         </div>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>

@@ -21,7 +21,13 @@ export function communitySwitchState(
       (community.creatorId === userId || community.membership.role === "member"),
   );
   const isOwner = accessible.some((community) => community.creatorId === userId);
-  const selected = selectStudentCommunity(accessible, isOwner ? preferredSlug : undefined);
+  // The faculty a student JOINED is the one they study in, always. A creator's
+  // own communities are workspaces; a remembered preference for one of them
+  // must not pull the Challenge Hub or Revision away from the joined faculty
+  // (the settings switcher that set that preference is gone, 2026-09-28).
+  const joined = accessible.find((community) => community.membership?.role === "member");
+  const selected =
+    joined ?? selectStudentCommunity(accessible, isOwner ? preferredSlug : undefined);
   const options: CommunitySwitchOption[] = isOwner
     ? accessible.map((community) => ({
         slug: community.slug,

@@ -13,7 +13,6 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
 
-import { CommunityLeaveControl } from "@/components/community-leave-control";
 import { CommunitySubjectExplorer } from "@/components/community-subject-explorer";
 import { CommunityCatalogClient } from "@/components/community-catalog-client";
 import { CommunityHubClient } from "@/components/community-hub-client";
@@ -46,36 +45,16 @@ const community: CommunityDetail = {
   })),
 };
 
-describe("community leave controls (without browser)", () => {
-  it("offers a named confirmation with clear consequences and a safe cancel action", () => {
-    const html = renderToStaticMarkup(createElement(CommunityLeaveControl, { community }));
-    expect(html).toContain('aria-label="Leave Henglish community"');
-    expect(html).toContain('aria-haspopup="dialog"');
-    expect(html).toContain("<dialog");
-    expect(html).toContain("Stay in community");
-    expect(html).toContain("Confirm leave");
-    expect(html).toContain("will not be deleted");
-    expect(html).toContain("min-h-11");
-    expect(html).toContain("focus-visible:ring-2");
-  });
-  it.each([
-    null,
-    { role: "creator", status: "active", joinedAt: "" },
-    { role: "member", status: "left", joinedAt: "" },
-  ] as const)("does not offer leave to owners, visitors, or former members: %j", (membership) => {
-    expect(
-      renderToStaticMarkup(
-        createElement(CommunityLeaveControl, { community: { ...community, membership } }),
-      ),
-    ).toBe("");
-  });
-  it("puts leave in the Subject Explorer header, including an empty community", () => {
+/**
+ * There is no "leave" (user, 2026-09-28): a student changes faculty by joining
+ * another from Browse, which replaces the one they were in.
+ */
+describe("community membership controls (without browser)", () => {
+  it("offers no leave in the Subject Explorer", () => {
     const html = renderWithQueryClient(
       createElement(CommunitySubjectExplorer, { community, insights: {} }),
     );
-    expect(html.slice(0, html.indexOf("</header>"))).toContain(
-      'aria-label="Leave Henglish community"',
-    );
+    expect(html).not.toContain("Leave Henglish community");
   });
   it("loads the persisted current semester in both the box and current badge", () => {
     const html = renderWithQueryClient(
@@ -92,7 +71,7 @@ describe("community leave controls (without browser)", () => {
     expect(html).not.toContain("Semester 1 · current");
     expect(html).toContain("Tabs below only change what you browse.");
   });
-  it("opens a joined community from its card; leaving happens inside the community", () => {
+  it("opens a joined community from its card, with no leave", () => {
     const html = renderToStaticMarkup(
       createElement(CommunityCatalogClient, { initialCommunities: [community], signedIn: true }),
     );
@@ -134,7 +113,7 @@ describe("community leave controls (without browser)", () => {
     expect(html).toContain('href="/teachers?view=communities&amp;community=henglish"');
     expect(html).toContain("Admin Workspace");
   });
-  it("keeps leave in a dedicated membership footer below the community overview", () => {
+  it("offers no leave on the community overview", () => {
     const data: CommunityHubData = {
       community,
       currentTerm: community.terms[0],
@@ -159,10 +138,7 @@ describe("community leave controls (without browser)", () => {
       viewer: { rank: null, xp: 0, weeklyXp: 0, completedThisWeek: 0, streak: 0, bestScore: null },
     };
     const html = renderWithQueryClient(createElement(CommunityHubClient, { initialData: data }));
-    expect(html).toContain("You are a member of Henglish.");
-    expect(html.indexOf('aria-label="Leave Henglish community"')).toBeGreaterThan(
-      html.indexOf("Community leaderboard"),
-    );
+    expect(html).not.toContain("Leave Henglish community");
     expect(html).not.toContain("Leave and switch");
   });
 });

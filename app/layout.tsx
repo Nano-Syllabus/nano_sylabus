@@ -38,6 +38,9 @@ const themeBootScript = `
 (function(){try{
   var k='ns-theme-v2';
   var v=localStorage.getItem(k);
+  if(v==='system'){
+    v=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+  }
   if(v!=='light'&&v!=='dark'){
     v='light';
   }

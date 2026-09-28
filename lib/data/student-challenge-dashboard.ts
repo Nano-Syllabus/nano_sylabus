@@ -12,6 +12,7 @@ import {
   type StudentChallengeSummary,
 } from "@/lib/data/student-challenges";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { challengeSettingsForCourse } from "@/lib/data/community-challenge-format";
 import { type PracticeTopic, type PracticeTopicStatus } from "@/lib/tenant/client";
 import { getTeacherPracticeTopics } from "@/lib/teacher-app/client";
 import {
@@ -889,11 +890,28 @@ export async function getStudentChallengeDashboard(
    * that is started before the warm-up lands simply builds the old way.
    */
   scheduleChallengeWarmups(userId, accessibleChallenges);
-  const challenges = activeRequestedScope
+  const scopedChallenges = activeRequestedScope
     ? accessibleChallenges.filter((challenge) =>
         challengeBelongsToScope(challenge, activeRequestedScope),
       )
     : accessibleChallenges;
+  /**
+   * An MCQ community's card before its paper is set: estimate from the
+   * community's MCQ count (a minute each), not the written exam's default of
+   * two questions. Settings are memoised per course for 30s.
+   */
+  const challenges = await Promise.all(
+    scopedChallenges.map(async (challenge) => {
+      if (challenge.status === "completed" || challenge.estimateFromPaper) return challenge;
+      const settings = await challengeSettingsForCourse(challenge.courseId).catch(() => null);
+      if (settings?.format !== "mcq") return challenge;
+      return {
+        ...challenge,
+        practiceQuestionCount: settings.mcqCount,
+        estimatedMinutes: settings.mcqCount,
+      };
+    }),
+  );
   const completedHistory = currentCourseId
     ? await listCompletedStudentChallenges(userId, completedChallengePage, undefined, {
         courseId: currentCourseId,

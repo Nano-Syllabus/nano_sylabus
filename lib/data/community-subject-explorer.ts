@@ -61,6 +61,40 @@ export function calculateSubjectReadiness(
   return Math.round((readinessPoints / topicCount) * 10) / 10;
 }
 
+type CompletedChallengeRow = {
+  subject_slug: string | null;
+  topic_key: string | null;
+  topic_title: string | null;
+  last_score: number | null;
+  last_total_marks: number | null;
+};
+
+function normalizedTitle(value: string | null | undefined) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Best passed-challenge score (percent) per subtopic of one subject, keyed by
+ * topic key and by `title:`-prefixed title — `/start` can rewrite a row's key,
+ * and the title is how the Challenge Hub still recognises the topic.
+ */
+function bestPassedScores(rows: CompletedChallengeRow[] | null, subjectSlug: string) {
+  const best = new Map<string, number>();
+  for (const row of rows ?? []) {
+    if (String(row.subject_slug ?? "").toLowerCase() !== subjectSlug.toLowerCase()) continue;
+    const total = Number(row.last_total_marks) || 0;
+    const percent = total > 0 ? Math.max(0, Math.min(100, (Number(row.last_score) / total) * 100)) : 100;
+    const rounded = Math.round(percent * 10) / 10;
+    for (const key of [
+      String(row.topic_key ?? "").trim().toLowerCase(),
+      row.topic_title ? `title:${normalizedTitle(row.topic_title)}` : "",
+    ]) {
+      if (key && rounded > (best.get(key) ?? -1)) best.set(key, rounded);
+    }
+  }
+  return best;
+}
+
 /** Real student-facing counts and mastery for the joined community explorer. */
 export async function getCommunitySubjectExplorerInsights(
   userId: string,
@@ -76,7 +110,7 @@ export async function getCommunitySubjectExplorerInsights(
     ),
   ];
 
-  const [topicsResult, documentsResult, masteryResult, attemptsResult] = await Promise.allSettled([
+  const [topicsResult, documentsResult, masteryResult, attemptsResult, challengesResult] = await Promise.allSettled([
     readCommunityLearningTopics(subjects, admin),
     teacherIds.length
       ? admin
@@ -86,6 +120,15 @@ export async function getCommunitySubjectExplorerInsights(
       : Promise.resolve({ data: [], error: null }),
     listTopicMastery(userId),
     listPracticeAttempts(userId, 1000),
+    // Passed challenges: the Challenge Hub's "N of M subtopics completed".
+    community.studyCourseId
+      ? admin
+          .from("student_challenges")
+          .select("subject_slug,topic_key,topic_title,last_score,last_total_marks")
+          .eq("user_id", userId)
+          .eq("course_id", community.studyCourseId)
+          .eq("status", "completed")
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const topicRows =
@@ -98,6 +141,10 @@ export async function getCommunitySubjectExplorerInsights(
       : null;
   const mastery = masteryResult.status === "fulfilled" ? masteryResult.value : null;
   const practiceAttempts = attemptsResult.status === "fulfilled" ? attemptsResult.value : null;
+  const completedChallenges =
+    challengesResult.status === "fulfilled" && !challengesResult.value.error
+      ? ((challengesResult.value.data || []) as CompletedChallengeRow[])
+      : null;
 
   return Object.fromEntries(
     subjects.map((subject) => {
@@ -113,31 +160,42 @@ export async function getCommunitySubjectExplorerInsights(
           row.subjectSlug.toLowerCase() === subjectSlug.toLowerCase() &&
           (!topicKeys.size || topicKeys.has(row.topicKey)),
       );
-      const practiced = subjectMastery.filter((row) => row.attempts > 0);
       const masteryByTopic = new Map(subjectMastery.map((row) => [row.topicKey, row]));
+      const passedBest = bestPassedScores(completedChallenges, subjectSlug);
+      const known = mastery !== null || completedChallenges !== null;
       const topicProgress = (topics || []).map((topic) => {
         const progress = masteryByTopic.get(topic.topic_key);
-        const status = progress?.status;
+        const passed =
+          passedBest.get(topic.topic_key.trim().toLowerCase()) ??
+          passedBest.get(`title:${normalizedTitle(topic.title)}`);
+        const status = passed !== undefined ? "strong" : progress?.status;
         return {
           key: topic.topic_key,
           title: topic.title,
           blurb: topic.blurb || "",
           unitNumber: topic.unit_number,
-          percentage: mastery === null ? null : (progress?.percentage ?? 0),
-          attempts: mastery === null ? null : (progress?.attempts ?? 0),
+          // A passed challenge is the topic's score, as on the Challenge Hub's
+          // "Ohm's Law · 14/20"; practice mastery is the fallback.
+          percentage: !known ? null : (passed ?? progress?.percentage ?? 0),
+          attempts: !known ? null : Math.max(progress?.attempts ?? 0, passed !== undefined ? 1 : 0),
+          passed: passed !== undefined,
           status:
-            mastery === null
+            !known
               ? "unavailable"
               : status === "weak" || status === "developing" || status === "strong"
                 ? status
                 : "not_attempted",
         } as const;
       });
+      const practiced = topicProgress.filter((topic) => (topic.attempts ?? 0) > 0);
       const topicCount = topics?.length ?? null;
-      const readiness = calculateSubjectReadiness(
-        topicCount,
-        mastery === null ? null : topicProgress.map((topic) => topic.percentage ?? 0),
-      );
+      const completedCount = topicProgress.filter((topic) => topic.passed).length;
+      // Subject progress = subtopics completed / subtopics, the Challenge Hub's
+      // bar ("7 of 35 subtopics completed · 20%"), so the two never disagree.
+      const readiness =
+        !known || topicCount === null || topicCount <= 0
+          ? null
+          : Math.round((completedCount / topicCount) * 1000) / 10;
       const subjectAttempts =
         practiceAttempts?.filter(
           (attempt) =>
@@ -175,16 +233,13 @@ export async function getCommunitySubjectExplorerInsights(
           readiness,
           materialCount,
           topicCount,
-          practicedTopicCount: mastery === null ? null : practiced.length,
-          masteredTopicCount:
-            mastery === null
-              ? null
-              : subjectMastery.filter((row) => row.status === "strong").length,
+          practicedTopicCount: !known ? null : practiced.length,
+          masteredTopicCount: !known ? null : completedCount,
           // Every row is a real graded sitting for this community course + subject:
           // mock/practice, teacher exam, or challenge exam.
           examsTaken: subjectAttempts?.length ?? null,
           averageScore,
-          topics: topicProgress,
+          topics: topicProgress.map(({ passed: _passed, ...topic }) => topic),
         } satisfies CommunitySubjectExplorerInsight,
       ];
     }),

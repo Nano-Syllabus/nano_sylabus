@@ -71,7 +71,7 @@ const UNDEFINED_COLUMN = "42703";
 /** PostgREST's own code for a column its schema cache does not know. */
 const POSTGREST_MISSING_COLUMN = "PGRST204";
 const POSTGREST_MISSING_TABLE = "PGRST205";
-export const CHALLENGE_PASS_PERCENT = 40;
+export const CHALLENGE_PASS_PERCENT = 60;
 export const CHALLENGE_QUESTIONS = 2;
 /**
  * How many of this subject's own questions step one lists.
@@ -235,6 +235,8 @@ export type StudentChallengeSummary = {
   /** Reading plus answering, in minutes, rounded to 5 and at most 20. Null until
    *  the content is built — never a guess. See `challengeEstimate`. */
   estimatedMinutes?: number | null;
+  /** True once the estimate counts the real paper's questions, not a default. */
+  estimateFromPaper?: boolean;
 };
 
 export type ChallengeSolvedExample = {
@@ -528,9 +530,28 @@ export function challengeEstimate(content: StudentChallengeContent | null): {
   pastQuestionCount: number | null;
   practiceQuestionCount: number | null;
   estimatedMinutes: number | null;
+  estimateFromPaper: boolean;
 } {
   if (!content || content.provider !== "collection-challenge-v1") {
-    return { pastQuestionCount: null, practiceQuestionCount: null, estimatedMinutes: null };
+    return {
+      pastQuestionCount: null,
+      practiceQuestionCount: null,
+      estimatedMinutes: null,
+      estimateFromPaper: false,
+    };
+  }
+  const choices = (content.examQuestions ?? []).filter(isChoiceQuestion);
+  // AN MCQ PAPER IS ITS QUESTIONS: a minute a choice, nothing else. Its step one
+  // is the Concepts reading, not a paper to write, so the old reading-plus-
+  // answering sum (rounded to 5) read "~10 min" for every paper whatever its
+  // length (user, 2026-09-28).
+  if (choices.length && choices.length === (content.examQuestions ?? []).length) {
+    return {
+      pastQuestionCount: (content.pastQuestions ?? []).length,
+      practiceQuestionCount: choices.length,
+      estimatedMinutes: choices.length,
+      estimateFromPaper: true,
+    };
   }
   const past = content.pastQuestions ?? [];
   // A topic no paper examined is studied from its worked examples instead.
@@ -555,6 +576,7 @@ export function challengeEstimate(content: StudentChallengeContent | null): {
     pastQuestionCount: past.length,
     practiceQuestionCount: practice.length || CHALLENGE_QUESTIONS,
     estimatedMinutes: Math.min(CHALLENGE_MINUTES_CAP, Math.max(5, total)),
+    estimateFromPaper: practice.length > 0,
   };
 }
 
@@ -593,7 +615,11 @@ function toSummary(row: ChallengeRow): StudentChallengeSummary {
     status: (row.status as ChallengeStatus) ?? "assigned",
     durationMinutes: number(row.duration_minutes) || 20,
     totalMarks: number(row.total_marks),
-    passMarks: number(row.pass_marks),
+    // Old open papers may still carry the former 40% threshold. Reading them
+    // through the current rule makes the displayed mark and the grader agree:
+    // a challenge now requires at least 60%, including one issued before this
+    // change.
+    passMarks: passMarksFor(number(row.total_marks), number(row.pass_marks)),
     lessonRead: Boolean(row.lesson_read_at),
     examplesReviewed: Boolean(row.examples_reviewed_at),
     attemptCount: number(row.attempt_count),
@@ -765,6 +791,63 @@ function rowRecommendationKey(row: ChallengeRow) {
       .trim()
       .toLowerCase(),
   ].join(":");
+}
+
+function normalizedTopicTitle(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function recommendationTitleKey(recommendation: ChallengeRecommendation) {
+  return [
+    recommendation.courseId ?? "owner-private",
+    recommendation.subjectSlug.trim().toLowerCase(),
+    normalizedTopicTitle(recommendation.topicTitle),
+  ].join(":");
+}
+
+function rowTitleKey(row: ChallengeRow) {
+  return [
+    row.course_id ? String(row.course_id) : "owner-private",
+    String(row.subject_slug ?? "").trim().toLowerCase(),
+    normalizedTopicTitle(row.topic_title || row.title),
+  ].join(":");
+}
+
+/**
+ * Every subtopic this student has already finished, across every date.
+ *
+ * The daily queue used to compare recommendations with today's rows only. On
+ * the next day the same highest-ranked topic was eligible again, so a student
+ * could finish a challenge and immediately be assigned its twin tomorrow.
+ * Keep both identities: keys survive ordinary reads, while titles catch a
+ * syllabus re-extraction that renumbered the same named subtopic.
+ */
+async function completedChallengeIdentities(userId: string) {
+  const admin = createSupabaseAdminClient();
+  const keys = new Set<string>();
+  const titles = new Set<string>();
+  const pageSize = 1_000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await admin
+      .from("student_challenges")
+      .select("id,course_id,subject_slug,topic_key,topic_title,title")
+      .eq("user_id", userId)
+      .eq("status", "completed")
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (isMissingChallengeTable(error)) return { keys, titles };
+    if (error) throw error;
+    const rows = (data ?? []) as ChallengeRow[];
+    for (const row of rows) {
+      keys.add(rowRecommendationKey(row));
+      const title = normalizedTopicTitle(row.topic_title || row.title);
+      if (title) titles.add(rowTitleKey(row));
+    }
+    if (rows.length < pageSize) return { keys, titles };
+  }
 }
 
 /** Subject identity for a row or a recommendation, without the topic. */
@@ -959,6 +1042,10 @@ export async function assignTopicChallenge(
 ): Promise<string> {
   const date = nepaliChallengeDate();
   const wanted = recommendationKey(recommendation);
+  const completed = await completedChallengeIdentities(userId);
+  if (completed.keys.has(wanted) || completed.titles.has(recommendationTitleKey(recommendation))) {
+    throw new Error("This subtopic has already been completed and will not be assigned again.");
+  }
   const findToday = async () => {
     const rows = await listDailyRows(userId, date);
     if (rows === null) throw new Error("Challenges are unavailable.");
@@ -991,9 +1078,10 @@ export async function ensureDailyChallenges(
   options: EnsureDailyChallengeOptions = {},
 ): Promise<StudentChallengeSummary[]> {
   const date = nepaliChallengeDate();
-  const [existing, unlimitedConcurrentChallenges] = await Promise.all([
+  const [existing, unlimitedConcurrentChallenges, completed] = await Promise.all([
     listDailyRows(userId, date),
     hasUnlimitedConcurrentChallenges(userId),
+    completedChallengeIdentities(userId),
   ]);
   if (existing === null) return [];
 
@@ -1003,22 +1091,39 @@ export async function ensureDailyChallenges(
   // may be offered. Keep both in storage for auditability, but do not let them
   // occupy today's student challenge slots or appear in the list.
   const retired = retiredTopicRows(existing, recommendations);
+  const repeatedOpenRow = (row: ChallengeRow) =>
+    row.status !== "completed" &&
+    (completed.keys.has(rowRecommendationKey(row)) || completed.titles.has(rowTitleKey(row)));
   const offerableRow = (row: ChallengeRow) =>
-    !isSourceDocumentChallengeRow(row) && !retired.has(String(row.id));
+    !isSourceDocumentChallengeRow(row) &&
+    !retired.has(String(row.id)) &&
+    !repeatedOpenRow(row);
   const active = existing.filter((row) => row.status !== "completed" && offerableRow(row));
   const ceilingKeys = options.ceilingScopeKeys;
   const activeInScope = ceilingKeys
     ? active.filter((row) => ceilingKeys.has(rowSubjectKey(row)))
     : active;
-  const assignedKeys = new Set(existing.map(rowRecommendationKey));
+  const assignedKeys = new Set([...existing.map(rowRecommendationKey), ...completed.keys]);
+  const assignedTitles = new Set([
+    ...existing.map(rowTitleKey).filter((key) => !key.endsWith(":")),
+    ...completed.titles,
+  ]);
   const recommendationKeys = new Set(recommendations.map(recommendationKey));
   const activeRecommendationCount = active.filter((row) =>
     recommendationKeys.has(rowRecommendationKey(row)),
   ).length;
   const openSubjects = new Set(active.map(rowSubjectKey));
-  const available = recommendations.filter(
-    (recommendation) => !assignedKeys.has(recommendationKey(recommendation)),
-  ).filter((recommendation) => {
+  // De-duplicate the catalogue too. A malformed extraction can contain the
+  // same subtopic twice under two keys; accepting the first adds both its key
+  // and title before the next recommendation is considered.
+  const available = recommendations.filter((recommendation) => {
+    const key = recommendationKey(recommendation);
+    const title = recommendationTitleKey(recommendation);
+    if (assignedKeys.has(key) || assignedTitles.has(title)) return false;
+    assignedKeys.add(key);
+    assignedTitles.add(title);
+    return true;
+  }).filter((recommendation) => {
     if (!options.onePerSubject) return true;
     // One per subject: none for a subject that already has an open card, and
     // only the first (best-ranked) for one that does not.
@@ -1164,10 +1269,19 @@ export async function getStudentChallengeGradeContext(userId: string, challengeI
   };
 }
 
-/** Distinct, non-empty sessions in the order the API gave them (oldest first). */
-function sessions(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const out = [...new Set(value.map((item) => String(item ?? "").trim()).filter(Boolean))];
+/** Distinct, non-empty exam sessions in the order the API gave them (oldest first).
+ *
+ * Older indexed rows stored the paper's full session (`2081 Chaitra`) in `year`
+ * but left `years` as an empty array. An empty array must not erase that month
+ * and year: it is still printed evidence from the paper, not a guessed date. */
+function sessions(value: unknown, latest?: unknown): string[] | undefined {
+  const listed = Array.isArray(value) ? value : [];
+  const fallback = String(latest ?? "").trim();
+  const out = [...new Set(
+    [...listed, ...(listed.length ? [] : [fallback])]
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean),
+  )];
   return out.length ? out : undefined;
 }
 
@@ -1177,7 +1291,7 @@ function solvedExample(question: TeacherChallengeSolvedQuestion): ChallengeSolve
     year: question.year?.trim() || null,
     question: question.text,
     displayQuestion: question.display_text?.trim() || undefined,
-    years: sessions(question.years),
+    years: sessions(question.years, question.year),
     solution: question.solution?.trim() || "",
     topic: question.topic || "",
     marks: number(question.marks),
@@ -1265,8 +1379,8 @@ type IssuedChallengePaper = {
  *  only the sitting's own shelf life — a new day is a fresh paper. */
 const MCQ_PAPER_TTL_MS = 24 * 60 * 60 * 1000;
 
-function passMarksFor(totalMarks: number) {
-  return Math.ceil((totalMarks * CHALLENGE_PASS_PERCENT) / 100);
+function passMarksFor(totalMarks: number, storedPassMarks = 0) {
+  return Math.max(storedPassMarks, Math.ceil((totalMarks * CHALLENGE_PASS_PERCENT) / 100));
 }
 
 /**
@@ -1318,14 +1432,15 @@ async function issueFormattedChallengeExam(input: {
     });
   const writtenPaper = async (warning: string | null = null): Promise<IssuedChallengePaper> => {
     const exam = await written(CHALLENGE_QUESTIONS);
+    const totalMarks = number(exam.total_marks);
     return {
       externalPaperId: exam.attempt_id,
       provider: "challenge-exam-v1",
       format: input.format,
       questions: (exam.questions || []).map(examQuestion),
       expiresAt: exam.expires_at,
-      totalMarks: number(exam.total_marks),
-      passMarks: number(exam.pass_marks),
+      totalMarks,
+      passMarks: passMarksFor(totalMarks, number(exam.pass_marks)),
       durationMinutes: number(exam.duration_minutes) || input.durationMinutes,
       warning: warningText(warning, exam.warning),
       negativePercent: 0,
@@ -1653,7 +1768,7 @@ function challengeLessonContent(
         question.marks === null || question.marks === undefined ? null : number(question.marks),
       year: question.year || "",
       displayQuestion: question.display_text?.trim() || undefined,
-      years: sessions(question.years),
+      years: sessions(question.years, question.year),
     })),
     pastQuestionNote: pastQuestions.note || "",
     pastQuestionSource: pastQuestions.topic_source,
@@ -1781,6 +1896,9 @@ export async function startStudentChallenge(
   const row = raw as ChallengeRow;
   const access = await requireChallengeAccess(userId, row);
   const current = toDetail(row);
+  if (current.status === "completed" && options.restart) {
+    throw new Error("Completed challenges cannot be restarted or repeated.");
+  }
   // A NEW attempt counts against the free plan's daily challenges: a card being
   // started, or a restart. Continuing one already under way never does.
   if (current.status === "assigned" || options.restart) {
@@ -2022,6 +2140,15 @@ async function pastQuestionsForReplacedTopic(
       .filter((other) => String(other.id) !== String(row.id))
       .map((other) => String(other.topic_key || "")),
   );
+  const completed = await completedChallengeIdentities(userId);
+  const subjectPrefix = `${row.course_id ? String(row.course_id) : "owner-private"}:${String(
+    row.subject_slug ?? "",
+  ).trim().toLowerCase()}:`;
+  for (const key of completed.keys) {
+    if (key.startsWith(subjectPrefix)) taken.add(key.slice(subjectPrefix.length));
+  }
+  const completedTitle = (value: unknown) =>
+    completed.titles.has(`${subjectPrefix}${normalizedTopicTitle(value)}`);
 
   const candidates: string[] = [];
   if (!sourceDocumentTopic) {
@@ -2053,14 +2180,14 @@ async function pastQuestionsForReplacedTopic(
   }
 
   for (const candidate of candidates) {
-    if (taken.has(candidate)) continue;
+    if (taken.has(candidate) || completedTitle(candidate)) continue;
     try {
       const response = await getTeacherChallengePastQuestions(collectionKey, {
         ...topicRequest,
         topics: [candidate],
       });
       const resolved = response.topics?.[0]?.topic_key;
-      if (resolved && taken.has(resolved)) continue;
+      if ((resolved && taken.has(resolved)) || completedTitle(response.topics?.[0]?.title)) continue;
       return response;
     } catch (error) {
       if (!isTopicMiss(error)) throw error;
@@ -2069,9 +2196,9 @@ async function pastQuestionsForReplacedTopic(
 
   const chosen = await getTeacherChallengePastQuestions(collectionKey, { ...topicRequest, topics: [] });
   const resolved = chosen.topics?.[0]?.topic_key;
-  if (resolved && taken.has(resolved)) {
+  if ((resolved && taken.has(resolved)) || completedTitle(chosen.topics?.[0]?.title)) {
     throw new Error(
-      "This challenge's topic was replaced when the course syllabus was re-read, and the subtopic it now maps to is already in today's list. Open that challenge instead.",
+      "This challenge's topic was replaced when the course syllabus was re-read, and the subtopic it now maps to is completed or already in today's list.",
     );
   }
   return chosen;
@@ -2423,8 +2550,8 @@ function scheduleChallengePreparation(userId: string, challengeId: string): Prom
 }
 
 /**
- * The open challenge a student reaches after this one: the next in the same
- * subject, else the next on today's list — the order the hub and `/next` use.
+ * The open challenge a student reaches after this one, always in the same
+ * subject. Another subject is a separate learning path chosen from the hub.
  */
 export async function nextOpenChallengeId(userId: string, current: ChallengeRow) {
   const rows = await listDailyRows(userId, nepaliChallengeDate());
@@ -2439,11 +2566,7 @@ export async function nextOpenChallengeId(userId: string, current: ChallengeRow)
     String(row.course_id ?? "") === String(current.course_id ?? "") &&
     String(row.subject_slug ?? "") === String(current.subject_slug ?? "");
   const later = (row: ChallengeRow) => number(row.position) > number(current.position);
-  const next =
-    open.find((row) => sameSubject(row) && later(row)) ??
-    open.find(sameSubject) ??
-    open.find(later) ??
-    open[0];
+  const next = open.find((row) => sameSubject(row) && later(row)) ?? open.find(sameSubject);
   return next ? String(next.id) : null;
 }
 
@@ -3392,16 +3515,18 @@ export async function getStudentChallengeRomanNepali(
   return result;
 }
 
-/** Reopens a completed challenge with a fresh sitting; prior attempts remain durable. */
+/** Rebuilds an unfinished challenge. A completed subtopic is permanent history. */
 export async function restartStudentChallenge(userId: string, challengeId: string) {
   const detail = await getStudentChallenge(userId, challengeId);
   if (!detail) return null;
-  // `restart` on BOTH paths. An unfinished challenge used to be sent through the
+  if (detail.status === "completed") {
+    throw new Error("Completed challenges cannot be restarted or repeated.");
+  }
+  // `restart` for an unfinished challenge. It used to be sent through the
   // ordinary open, which is the one that short-circuits on content already sitting
   // on the row — so pressing restart on the challenge a student is actually
   // looking at did nothing at all, no call left the app, and the reading they
-  // wanted rebuilt came straight back. Finished or not, a restart means "build
-  // this again from the course material".
+  // wanted rebuilt came straight back.
   return startStudentChallenge(userId, challengeId, { restart: true });
 }
 
@@ -3512,10 +3637,15 @@ export async function submitStudentChallengeAttempt(input: {
       student_name: "Student",
       answers,
     });
-    return practiceGradeAsChallengeGrade(graded, attemptId, lane.subject, number(row.pass_marks));
+    return practiceGradeAsChallengeGrade(graded, attemptId, lane.subject, detail.passMarks);
   }
   try {
-    return await submitTeacherChallengeExam(lane.collectionKey, attemptId, { answers });
+    const graded = await submitTeacherChallengeExam(lane.collectionKey, attemptId, { answers });
+    return {
+      ...graded,
+      pass_marks: detail.passMarks,
+      passed: graded.graded && number(graded.total_score) >= detail.passMarks,
+    };
   } catch (cause) {
     if (!isLostChallengeAttempt(cause)) throw cause;
     return gradeChallengeFromStoredQuestions({
@@ -3523,7 +3653,7 @@ export async function submitStudentChallengeAttempt(input: {
       subject: lane.subject,
       attemptId,
       questions: detail.content?.examQuestions || [],
-      passMarks: number(row.pass_marks),
+      passMarks: detail.passMarks,
       answers: input.answers,
     });
   }
@@ -3667,16 +3797,21 @@ export async function submitStudentChallengeFile(input: {
   if (detail.content?.examProvider === "challenge-exam-v1") {
     // No stored-question fallback on this one: reading the answers off the scan
     // is the upstream's job and there is no local copy of what the student wrote.
-    return submitTeacherChallengeExamFile(lane.collectionKey, attemptId, {
+    const graded = await submitTeacherChallengeExamFile(lane.collectionKey, attemptId, {
       studentName: input.studentName,
       file: input.file,
     });
+    return {
+      ...graded,
+      pass_marks: detail.passMarks,
+      passed: graded.graded && number(graded.total_score) >= detail.passMarks,
+    };
   }
   const graded = await gradeTeacherPracticePaperFile(lane.collectionKey, attemptId, {
     studentName: input.studentName,
     file: input.file,
   });
-  return practiceGradeAsChallengeGrade(graded, attemptId, lane.subject, number(row.pass_marks));
+  return practiceGradeAsChallengeGrade(graded, attemptId, lane.subject, detail.passMarks);
 }
 
 export async function markStudentChallengeStep(

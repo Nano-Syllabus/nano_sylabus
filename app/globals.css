@@ -88,8 +88,9 @@
   --paper-rule: rgba(37, 99, 235, 0.16);
   --paper-margin: rgba(220, 38, 38, 0.32);
   --paper-shadow: 0 1px 2px rgba(60, 45, 20, 0.06), 0 4px 12px -6px rgba(60, 45, 20, 0.12);
-  /* A question copied out in red pen above its answer. */
-  --paper-question-ink: #b42318;
+  /* A question copied out in red pen above its answer — a bright pen red, not
+     a dark brick one (still 4.7:1 on the paper). */
+  --paper-question-ink: #d92d20;
 }
 
 [data-theme="dark"] {
@@ -1278,8 +1279,8 @@ img.answer-figure.answer-figure-failed {
   }
 }
 
-/* Ask AI: the intro and its starters rise in, one after another; the pill
-   breathes a soft ring while idle so it reads as there to be used. */
+/* Ask AI: the intro and its starters rise in, one after another. The pill
+   itself stays still — its idle glow and wiggle were irritating (user). */
 @keyframes nanoai-rise {
   from {
     opacity: 0;
@@ -1291,67 +1292,12 @@ img.answer-figure.answer-figure-failed {
   }
 }
 
-/* The same invitation as the Micro-Topics nav item (app-nav-challenges): a
-   2s beat of glow, a wiggle on the label and a ring off the icon — so the two
-   things asking to be used move alike. The pill keeps its drop shadow. */
-@keyframes nanoai-pill-attention {
-  0%,
-  48%,
-  100% {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
-  }
-
-  19% {
-    box-shadow:
-      0 8px 24px rgba(0, 0, 0, 0.22),
-      0 0 0 3px color-mix(in srgb, var(--challenge-banner) 45%, transparent),
-      0 0 26px color-mix(in srgb, var(--challenge-banner) 60%, transparent);
-  }
-}
-
 .nanoai-intro {
   animation: nanoai-rise 320ms ease-out both;
 }
 
-.nanoai-pill {
-  animation: nanoai-pill-attention 2s ease-in-out infinite;
-}
-
-.nanoai-pill-label {
-  display: inline-block;
-  animation: app-nav-challenges-label 2s linear infinite;
-}
-
-.nanoai-pill-icon {
-  position: relative;
-}
-
-.nanoai-pill-icon::after {
-  position: absolute;
-  inset: -5px;
-  /* Dark on the lime pill: a lime ring would vanish into it. */
-  border: 2px solid #111827;
-  border-radius: 9999px;
-  content: "";
-  opacity: 0;
-  animation: app-nav-challenges-icon-pulse 2s ease-out infinite;
-  pointer-events: none;
-}
-
-.nanoai-pill:hover,
-.nanoai-pill:focus-visible,
-.nanoai-pill:hover .nanoai-pill-label,
-.nanoai-pill:focus-visible .nanoai-pill-label,
-.nanoai-pill:hover .nanoai-pill-icon::after,
-.nanoai-pill:focus-visible .nanoai-pill-icon::after {
-  animation: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .nanoai-intro,
-  .nanoai-pill,
-  .nanoai-pill-label,
-  .nanoai-pill-icon::after {
+  .nanoai-intro {
     animation: none;
   }
 }

@@ -36,7 +36,7 @@ describe("a challenge's estimated time", () => {
     // One 4-mark past question: 2 min. Two 4-mark practice answers: 3 min each.
     // 8 minutes, rounded to 10.
     expect(challengeEstimate(content([4], [4, 4]))).toEqual({
-      pastQuestionCount: 1, practiceQuestionCount: 2, estimatedMinutes: 10,
+      pastQuestionCount: 1, practiceQuestionCount: 2, estimatedMinutes: 10, estimateFromPaper: true,
     });
   });
 
@@ -65,7 +65,7 @@ describe("a challenge's estimated time", () => {
   it("assumes the two practice questions before the paper is set", () => {
     // Paper not issued yet: two answers at 5 min + one 2-mark read at 2 → 12 → 10.
     expect(challengeEstimate(content([2]))).toEqual({
-      pastQuestionCount: 1, practiceQuestionCount: 2, estimatedMinutes: 10,
+      pastQuestionCount: 1, practiceQuestionCount: 2, estimatedMinutes: 10, estimateFromPaper: false,
     });
   });
 
@@ -75,7 +75,7 @@ describe("a challenge's estimated time", () => {
 
   it("says nothing before the content is prepared, rather than the same guess everywhere", () => {
     expect(challengeEstimate(null)).toEqual({
-      pastQuestionCount: null, practiceQuestionCount: null, estimatedMinutes: null,
+      pastQuestionCount: null, practiceQuestionCount: null, estimatedMinutes: null, estimateFromPaper: false,
     });
   });
 

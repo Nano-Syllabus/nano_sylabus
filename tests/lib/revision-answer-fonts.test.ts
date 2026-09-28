@@ -16,6 +16,7 @@ import { WorkedExampleCard, workedAnswerClass } from "@/components/worked-exampl
 
 const styles = readFileSync("app/globals.css", "utf8");
 const revision = readFileSync("components/revision-docs-client.tsx", "utf8");
+const pickerSource = readFileSync("components/answer-font-picker.tsx", "utf8");
 
 const faces = [...styles.matchAll(/@font-face\s*{([^}]*)}/g)].map(([, body]) => ({
   family: /font-family:\s*"([^"]+)"/.exec(body)?.[1],
@@ -24,6 +25,10 @@ const faces = [...styles.matchAll(/@font-face\s*{([^}]*)}/g)].map(([, body]) => 
 
 describe("answer fonts", () => {
   const handwritten = ANSWER_FONTS.filter((font) => font.id !== "plain");
+
+  it("uses Chillin on Sunday as the default reading font", () => {
+    expect(pickerSource).toContain('const DEFAULT_FONT: AnswerFontId = "chillin-on-sunday"');
+  });
 
   it("declares a face for every font the picker offers, from a file that exists", () => {
     for (const font of handwritten) {

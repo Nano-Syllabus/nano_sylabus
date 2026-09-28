@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Loader2, Minus, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Explainer } from "@/components/challenge-fundamentals";
 import { Markdown } from "@/components/markdown";
 import { delimitBareMath } from "@/lib/markdown";
@@ -122,6 +122,11 @@ export function ChallengeMcqPage({
   );
   /** Each answered question's verdict — final once made, restored on reload. */
   const [checked, setChecked] = useState<Record<string, ExamChoiceResult>>({});
+  const checkedRef = useRef<Record<string, ExamChoiceResult>>({});
+  const clearChecked = () => {
+    checkedRef.current = {};
+    setChecked({});
+  };
   const [checking, setChecking] = useState<Record<string, string>>({});
   const [checkErrors, setCheckErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -134,7 +139,7 @@ export function ChallengeMcqPage({
 
   // Another challenge opened in the same screen starts clean.
   useEffect(() => {
-    setChecked({});
+    clearChecked();
     setCheckErrors({});
     setError("");
     setResult(challenge.status === "completed" ? savedResult(challenge) : null);
@@ -166,13 +171,21 @@ export function ChallengeMcqPage({
       if (payload.stale) {
         // This screen was painted from an older paper: swap in the one the row
         // holds rather than leave every option failing with the same message.
-        setChecked({});
+        clearChecked();
         setCheckErrors({});
         await onStalePaper();
         return;
       }
       if (!response.ok || !payload.result) throw new Error(payload.error || "That answer could not be checked.");
-      setChecked((current) => ({ ...current, [questionId]: payload.result! }));
+      const nextChecked = { ...checkedRef.current, [questionId]: payload.result };
+      checkedRef.current = nextChecked;
+      setChecked(nextChecked);
+      // Every pick is already final and marked. Once the last answer lands,
+      // there is nothing meaningful left for a separate score-confirmation
+      // click, so hand the paper in and reveal the result directly.
+      if (questions.every((question) => nextChecked[question.id])) {
+        void submit(nextChecked);
+      }
     } catch (cause) {
       setCheckErrors((current) => ({
         ...current,
@@ -196,7 +209,7 @@ export function ChallengeMcqPage({
   const expiresAt = Date.parse(content?.examExpiresAt || "");
   const expired = Number.isFinite(expiresAt) && expiresAt <= Date.now();
 
-  async function submit() {
+  async function submit(answers = checked) {
     setSubmitting(true);
     setError("");
     const paper = questions;
@@ -205,13 +218,13 @@ export function ChallengeMcqPage({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          answers: Object.fromEntries(Object.entries(checked).map(([id, item]) => [id, item.selected])),
+          answers: Object.fromEntries(Object.entries(answers).map(([id, item]) => [id, item.selected])),
         }),
       });
       const payload = (await response.json().catch(() => ({}))) as Graded;
       if (!response.ok) {
         if (payload.challenge) {
-          setChecked({});
+          clearChecked();
           onGraded({ challenge: payload.challenge, passed: false });
         }
         throw new Error(payload.error || "Could not mark your answers.");
@@ -238,10 +251,10 @@ export function ChallengeMcqPage({
     const verdict = new Map(result.review.map((item) => [item.questionId, item]));
     const { tally } = result;
     return (
-      <section aria-labelledby="mcq-result-heading" className="mt-8">
+      <section aria-labelledby="mcq-result-heading" className="mt-8 flex flex-col">
         <div
           className={cn(
-            "rounded-xl border p-5",
+            "order-2 mt-6 rounded-xl border p-5",
             result.passed ? "border-success/40 bg-success/10" : "border-warning/40 bg-warning/10",
           )}
         >
@@ -280,7 +293,7 @@ export function ChallengeMcqPage({
           ) : null}
         </div>
 
-        <ol className="mt-6 space-y-4">
+        <ol className="order-1 space-y-4">
           {shown.map((question, index) => {
             const item = verdict.get(question.id);
             return (
@@ -313,7 +326,18 @@ export function ChallengeMcqPage({
                     </span>
                   ) : null}
                 </div>
-                <Markdown text={question.question} className="mt-2 text-sm font-semibold leading-6" />
+                <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+                  <Markdown text={question.question} className="min-w-0 flex-1 text-sm font-semibold leading-6" />
+                  {item?.outcome === "wrong" ? (
+                    <Explainer
+                      challengeId={challenge.id}
+                      questionId={question.id}
+                      selected={item.chosen}
+                      endpoint={`/api/student/challenges/${encodeURIComponent(challenge.id)}/choices/explain`}
+                      besideQuestion
+                    />
+                  ) : null}
+                </div>
                 <ul className="mt-3 grid gap-2">
                   {(question.options ?? []).map((option) => {
                     const isCorrect = item?.correct === option.key;
@@ -345,29 +369,34 @@ export function ChallengeMcqPage({
           })}
         </ol>
 
-        <div className="mt-6 flex flex-wrap justify-end gap-3">
-          {!result.passed ? (
+        <div className="order-3 mt-6 flex flex-wrap justify-end gap-3">
+          {result.passed ? (
+            <button
+              type="button"
+              disabled={nextDisabled}
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                onNext();
+              }}
+              className="min-h-11 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              {nextLabel}
+            </button>
+          ) : (
             <button
               type="button"
               onClick={() => {
                 setResult(null);
                 setReviewed(null);
-                setChecked({});
+                clearChecked();
+                window.scrollTo({ top: 0, behavior: "smooth" });
                 onRetake();
               }}
               className="min-h-11 rounded-lg border border-border bg-card px-4 text-sm font-semibold hover:bg-bg-secondary"
             >
-              Try a fresh set
+              Retake exam
             </button>
-          ) : null}
-          <button
-            type="button"
-            disabled={nextDisabled}
-            onClick={onNext}
-            className="min-h-11 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {nextLabel}
-          </button>
+          )}
         </div>
       </section>
     );
@@ -441,7 +470,18 @@ export function ChallengeMcqPage({
                       </span>
                     ) : null}
                   </div>
-                  <Markdown text={question.question} className="mt-2 text-sm font-semibold leading-6" />
+                  <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+                    <Markdown text={question.question} className="min-w-0 flex-1 text-sm font-semibold leading-6" />
+                    {result && !result.isCorrect ? (
+                      <Explainer
+                        challengeId={challenge.id}
+                        questionId={question.id}
+                        selected={result.selected}
+                        endpoint={`/api/student/challenges/${encodeURIComponent(challenge.id)}/choices/explain`}
+                        besideQuestion
+                      />
+                    ) : null}
+                  </div>
                   <div className="mt-3 grid gap-2" role="radiogroup" aria-label={`Question ${index + 1} options`}>
                     {(question.options ?? []).map((option) => {
                       const isCorrect = result?.correct === option.key;
@@ -513,14 +553,6 @@ export function ChallengeMcqPage({
                           ) : null}
                         </div>
                       )}
-                      {result.isCorrect ? null : (
-                        <Explainer
-                          challengeId={challenge.id}
-                          questionId={question.id}
-                          selected={result.selected}
-                          endpoint={`/api/student/challenges/${encodeURIComponent(challenge.id)}/choices/explain`}
-                        />
-                      )}
                     </div>
                   ) : null}
                 </li>
@@ -547,6 +579,11 @@ export function ChallengeMcqPage({
               >
                 This set expired — get a fresh one
               </button>
+            ) : answered === questions.length ? (
+              <p className="flex min-h-11 items-center gap-2 px-2 text-sm font-semibold text-text-muted" role="status">
+                <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                Calculating your result…
+              </p>
             ) : (
               <button
                 type="button"
@@ -555,7 +592,7 @@ export function ChallengeMcqPage({
                 onClick={() => void submit()}
                 className="min-h-11 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               >
-                {submitting ? "Marking…" : answered < questions.length ? "Finish now" : "See your score"}
+                {submitting ? "Marking…" : "Finish now"}
               </button>
             )}
           </div>

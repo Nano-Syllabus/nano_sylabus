@@ -31,6 +31,9 @@ export async function POST(
   } catch (error) {
     const denied = challengeAccessResponse(error);
     if (denied) return denied;
+    if (error instanceof Error && error.message === "Completed challenges cannot be restarted or repeated.") {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     return NextResponse.json(
       {
         error:

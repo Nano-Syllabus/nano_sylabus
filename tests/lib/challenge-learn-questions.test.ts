@@ -80,6 +80,16 @@ describe("the question list step one renders", () => {
     expect(only.appearances).toBe(3);
   });
 
+  it("does not hide a dated session when an older row has an empty years array", () => {
+    const text = "Explain the advantages and disadvantages of object oriented programming.";
+    const [only] = mergeLearnQuestions({
+      pastQuestions: [{ ...past(text, "2081 Chaitra"), years: [] }],
+    });
+
+    expect(only.years).toEqual(["2081 Chaitra"]);
+    expect(only.appearances).toBe(1);
+  });
+
   it("collapses repeat appearances into one question carrying its years", () => {
     const list = mergeLearnQuestions({
       pastQuestions: [

@@ -12,13 +12,14 @@ function challenge(
   id: string,
   status: StudentChallengeSummary["status"],
   position: number,
+  subjectSlug = "math",
 ): StudentChallengeSummary {
   return {
     id,
     courseId: "course-1",
     date: "2026-09-06",
     position,
-    subjectSlug: "math",
+    subjectSlug,
     unitNumber: "",
     subjectName: "Math",
     topicKey: id,
@@ -63,6 +64,13 @@ describe("next challenge navigation", () => {
     );
 
     expect(next).toBeNull();
+  });
+
+  it("never advances into another subject", () => {
+    const current = challenge("fractions", "completed", 1, "math");
+    const otherSubject = challenge("circuits", "assigned", 2, "physics");
+
+    expect(nextAvailableChallenge([otherSubject], current)).toBeNull();
   });
 
   it("starts an untouched challenge at the learn step", () => {

@@ -459,6 +459,16 @@ function askedIn(example: RevisionDocTopic["solvedExamples"][number]) {
   return years.join(", ");
 }
 
+/** Every dated session printed for an unsolved past question. Older challenge
+ * rows may have only `year`; newer ones carry the complete `years` list. */
+function pastQuestionAskedIn(question: RevisionDocTopic["pastQuestions"][number]) {
+  return [...new Set(
+    [...(question.years ?? []), question.year]
+      .map((session) => session?.trim())
+      .filter(Boolean),
+  )].join(", ");
+}
+
 /**
  * The paper's MCQs, answer open: the right option ticked, a wrong pick struck
  * through beside it, and the one-line reason under the options.
@@ -603,22 +613,25 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
         <section className="mt-8">
           <h2 className="type-student-section-title">Past questions on this topic</h2>
           <ol className="mt-3 space-y-3">
-            {topic.pastQuestions.map((question, index) => (
-              <li
-                key={question.id}
-                className={docsItemCardClass}
-              >
-                <div className="flex flex-wrap items-center gap-x-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                  <span className="text-blue-600 dark:text-blue-400">Question {index + 1}</span>
-                  {question.year ? <span>· {question.year}</span> : null}
-                  {question.marks ? <span>· {question.marks} marks</span> : null}
-                </div>
-                <Markdown
-                  text={question.question}
-                  className="mt-2 max-w-prose text-sm font-semibold leading-6 text-text-primary"
-                />
-              </li>
-            ))}
+            {topic.pastQuestions.map((question, index) => {
+              const asked = pastQuestionAskedIn(question);
+              return (
+                <li
+                  key={question.id}
+                  className={docsItemCardClass}
+                >
+                  <div className="flex flex-wrap items-center gap-x-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    <span className="text-blue-600 dark:text-blue-400">Question {index + 1}</span>
+                    {asked ? <span>· Asked {asked}</span> : <span>· Exam session not printed</span>}
+                    {question.marks ? <span>· {question.marks} marks</span> : null}
+                  </div>
+                  <Markdown
+                    text={question.question}
+                    className="mt-2 max-w-prose text-sm font-semibold leading-6 text-text-primary"
+                  />
+                </li>
+              );
+            })}
           </ol>
         </section>
       ) : null}
@@ -645,7 +658,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
                 ]
                   .filter(Boolean)
                   .join(" · ")}
-                question={example.question}
+                question={example.displayQuestion || example.question}
               >
                 <WorkedSolution
                   challengeId={topic.challengeId}

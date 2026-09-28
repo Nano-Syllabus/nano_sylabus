@@ -69,4 +69,5 @@ export function negativeMarkingPercent(value: unknown) {
 }
 export const CHALLENGE_HYBRID_MCQ_QUESTIONS = 5;
 export const CHALLENGE_HYBRID_WRITTEN_QUESTIONS = 1;
-export const CHALLENGE_MCQ_MARKS = 2;
+/** Every multiple-choice question is worth one mark: ten questions, pass at six. */
+export const CHALLENGE_MCQ_MARKS = 1;

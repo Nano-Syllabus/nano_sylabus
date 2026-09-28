@@ -20,7 +20,8 @@ describe("owner community switching authorization", () => {
       "second",
     );
     expect(state.canSwitch).toBe(true);
-    expect(state.selected?.slug).toBe("second");
+    // The joined faculty is where the student studies, whatever was remembered.
+    expect(state.selected?.slug).toBe("joined");
     expect(state.options).toEqual([
       { slug: "first", name: "first", owned: true },
       { slug: "second", name: "second", owned: true },

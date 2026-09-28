@@ -21,6 +21,17 @@ describe("today's finished challenges on the hub", () => {
     subject_slug: "basic_electrical", subject_name: "Basic Electrical Engineering",
     topic_key: topicKey, topic_title: topicKey, status, created_at: "2026-09-18T01:00:00Z", ...extra,
   });
+  const recommendation = (topicKey: string, topicTitle = topicKey) => ({
+    courseId: "course-1",
+    subjectSlug: "basic_electrical",
+    subjectName: "Basic Electrical Engineering",
+    namespace: "electrical",
+    topicKey,
+    topicTitle,
+    topicBlurb: "",
+    unitNumber: "1",
+    reason: "Next subtopic",
+  });
 
   beforeEach(() => {
     db = communityLearningFixture();
@@ -44,6 +55,38 @@ describe("today's finished challenges on the hub", () => {
     const listed = await ensureDailyChallenges("member", []);
 
     expect(listed.map((challenge) => challenge.id)).toEqual(["open"]);
+  });
+
+  it("never assigns a subtopic completed on an earlier day", async () => {
+    db.tables.student_challenges = [
+      row("old-done", "ohms-law", "completed", {
+        challenge_date: "2026-09-17",
+        completed_at: "2026-09-17T02:00:00Z",
+        topic_title: "Ohm's law",
+      }),
+      // A duplicate already assigned by the old daily-only rule is hidden too;
+      // fixing selection must not leave yesterday's bug on today's hub.
+      row("stale-repeat", "ohms-law", "assigned", { topic_title: "Ohm's law" }),
+    ];
+
+    const listed = await ensureDailyChallenges("member", [
+      recommendation("ohms-law", "Ohm's law"),
+      recommendation("kvl", "Kirchhoff's voltage law"),
+    ]);
+
+    expect(listed.map((challenge) => challenge.topicKey)).toEqual(["kvl"]);
+  });
+
+  it("deduplicates a repeated subtopic title even when extraction gave it two keys", async () => {
+    db.tables.student_challenges = [];
+
+    const listed = await ensureDailyChallenges("member", [
+      recommendation("kvl-v1", "Kirchhoff's voltage law"),
+      recommendation("kvl-v2", "  KIRCHHOFF'S   VOLTAGE LAW  "),
+    ]);
+
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.topicKey).toBe("kvl-v1");
   });
 
   it("shows a finished subject as today's win, with the way on to its next topic", () => {

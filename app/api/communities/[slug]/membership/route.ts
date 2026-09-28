@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { communityStorageError } from "@/lib/data/communities";
-import { leaveCommunityMembership, setCommunityCurrentTerm } from "@/lib/data/community-hub";
+import { setCommunityCurrentTerm } from "@/lib/data/community-hub";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
@@ -30,22 +30,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     const { slug } = await context.params;
     const result = await setCommunityCurrentTerm(user.id, slug, termId);
     revalidatePath("/app", "layout");
-    return NextResponse.json(result);
-  } catch (error) {
-    const mapped = communityStorageError(error);
-    return NextResponse.json({ error: mapped.message }, { status: mapped.status });
-  }
-}
-
-export async function DELETE(_request: Request, context: RouteContext) {
-  try {
-    const user = await authenticatedUser();
-    if (!user)
-      return NextResponse.json({ error: "Sign in to leave your community." }, { status: 401 });
-    const { slug } = await context.params;
-    const result = await leaveCommunityMembership(user.id, slug);
-    revalidatePath("/app", "layout");
-    revalidatePath("/communities", "layout");
     return NextResponse.json(result);
   } catch (error) {
     const mapped = communityStorageError(error);

@@ -3,6 +3,7 @@ import { agentFor, transportFor } from "@/lib/http-agents";
 import { trackApiRequest } from "@/lib/api-request-tracking";
 import { createLimiter } from "@/lib/http/limit";
 import { invalidateMemo, memo } from "@/lib/http/memo";
+import { timed } from "@/lib/dev-timing";
 
 export type ApiRecord = Record<string, unknown>;
 
@@ -767,10 +768,15 @@ export type TeacherWorkspaceReads = {
 /** The four reads the creator workspace is built from, in one round of fan-out. */
 export async function readTeacherWorkspace(key: string): Promise<TeacherWorkspaceReads> {
   const [collection, subjects, sourceTree, documents] = await Promise.all([
-    withWorkspaceSnapshot("me", key, () => getTeacherMe(key)),
-    withWorkspaceSnapshot("subjects", key, () => getTeacherSubjects(key)),
-    withWorkspaceSnapshot("source-tree", key, () => getTeacherSourceTree(key)),
-    withWorkspaceSnapshot("documents", key, () => getTeacherDocuments(key)),
+    // `timed` (PERF_TIMING=1, development only) names which of the four is slow.
+    timed("workspace:me", () => withWorkspaceSnapshot("me", key, () => getTeacherMe(key))),
+    timed("workspace:subjects", () => withWorkspaceSnapshot("subjects", key, () => getTeacherSubjects(key))),
+    timed("workspace:source-tree", () =>
+      withWorkspaceSnapshot("source-tree", key, () => getTeacherSourceTree(key)),
+    ),
+    timed("workspace:documents", () =>
+      withWorkspaceSnapshot("documents", key, () => getTeacherDocuments(key)),
+    ),
   ]);
   return {
     collection: collection.value,

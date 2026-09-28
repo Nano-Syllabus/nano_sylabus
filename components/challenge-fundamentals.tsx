@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Loader2, Play, RotateCcw, X } from "lucide-react";
+import { Check, ChevronRight, Lightbulb, Loader2, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { MathText } from "@/components/math-text";
 import { delimitBareMath } from "@/lib/markdown";
@@ -224,7 +224,21 @@ function Question({
   const answered = Boolean(result);
   return (
     <div className="mt-4">
-      <MathText as="div" text={question.text} className="text-[15px] font-semibold leading-6 text-text-primary" />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <MathText
+          as="div"
+          text={question.text}
+          className="min-w-0 flex-1 text-[15px] font-semibold leading-6 text-text-primary"
+        />
+        {result && !result.isCorrect ? (
+          <Explainer
+            challengeId={challengeId}
+            questionId={question.id}
+            selected={result.selected}
+            besideQuestion
+          />
+        ) : null}
+      </div>
       <ul className="mt-3 space-y-2">
         {question.options.map((option) => {
           const isCorrect = result?.correct === option.key;
@@ -293,9 +307,6 @@ function Question({
                 <MathText as="div" text={result.explanation} className="mt-1.5 text-xs leading-5 text-text-secondary" />
               ) : null}
             </div>
-          )}
-          {result.isCorrect ? null : (
-            <Explainer challengeId={challengeId} questionId={question.id} selected={result.selected} />
           )}
           <div className="flex justify-end">
             <button
@@ -383,16 +394,17 @@ function LoadingFrame({ poster, title, detail, progress }: { poster?: string; ti
  * it has taken, and the frame is only a faint hint behind it.
  */
 /**
- * "Why? Understand it with a video" under a wrong answer. `endpoint` is where the
- * render is asked for: the fundamentals check's route by default, or an MCQ
- * community paper's (`/choices/explain`), which reads the recorded pick itself.
+ * A compact hint for a question. `endpoint` is where its short visual explanation
+ * is requested: the fundamentals check's route by default, or an MCQ community
+ * paper's (`/choices/explain`), which reads the recorded pick itself.
  */
 export function Explainer({
   challengeId,
   questionId,
   selected,
   endpoint,
-  label = "Why? Understand it with a video",
+  label = "Hint",
+  besideQuestion = false,
 }: {
   challengeId: string;
   questionId: string;
@@ -400,6 +412,8 @@ export function Explainer({
   endpoint?: string;
   /** The button's words; Revision offers it on every question, not just a miss. */
   label?: string;
+  /** Keep the trigger beside the question, then use the full row once opened. */
+  besideQuestion?: boolean;
 }) {
   const [video, setVideo] = useState<Video>({ status: "idle" });
   const [specHash, setSpecHash] = useState("");
@@ -491,14 +505,14 @@ export function Explainer({
 
   if (video.status === "idle" || video.status === "error") {
     return (
-      <div>
+      <div className={cn(besideQuestion && "shrink-0")}>
         <button
           type="button"
           onClick={() => void make()}
-          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-bg-primary px-3 text-sm font-semibold hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-bg-primary px-3 text-sm font-semibold hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
-          <Play className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-          {video.status === "error" ? "Try the video again" : label}
+          <Lightbulb className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+          {video.status === "error" ? "Try hint again" : label}
         </button>
         {video.status === "error" ? <p className="mt-2 text-xs text-text-secondary">{video.message}</p> : null}
       </div>
@@ -509,7 +523,12 @@ export function Explainer({
     const seconds = Math.max(0, Math.round((now - startedAt) / 1000));
     const progress = Math.min(95, STAGE_FLOOR[video.stage] + Math.min(20, seconds / 2));
     return (
-      <div className="mx-auto w-full max-w-xl" role="status" aria-live="polite" aria-busy="true">
+      <div
+        className={cn("mx-auto w-full max-w-xl", besideQuestion && "basis-full")}
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
         <LoadingFrame
           poster={video.poster}
           title="Loading your video…"
@@ -524,7 +543,7 @@ export function Explainer({
   }
 
   return (
-    <div className="relative mx-auto w-full max-w-xl">
+    <div className={cn("relative mx-auto w-full max-w-xl", besideQuestion && "basis-full")}>
       <video
         src={video.mp4}
         poster={video.poster}

@@ -8,7 +8,13 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
 
-import { ConceptsDrawer, readingBlocks, readingMinutes, readingPreview } from "@/components/concepts-reading";
+import {
+  bulletPointReading,
+  ConceptsDrawer,
+  readingBlocks,
+  readingMinutes,
+  readingPreview,
+} from "@/components/concepts-reading";
 import { RevisionDocsClient } from "@/components/revision-docs-client";
 import type { RevisionDocTopic, StudentRevisionDocs } from "@/lib/data/student-revision-docs";
 
@@ -166,6 +172,7 @@ describe("the sheet's worked examples", () => {
     // The whole reading is the note paper, every paragraph in the reader's hand.
     expect(sheet.match(/class="answer-paper"/g)).toHaveLength(1);
     expect(sheet.match(/answer-paper-body font-revision-answer/g)).toHaveLength(READING.length);
+    expect(sheet).toContain('--answer-font:&quot;Chillin on Sunday&quot;');
     expect(sheet).toContain("Handwriting font");
   });
 });
@@ -179,5 +186,22 @@ describe("the teaser's preview and length", () => {
   it("estimates reading time at a normal reading pace, never zero", () => {
     expect(readingMinutes(["word ".repeat(1000)])).toBe(5);
     expect(readingMinutes(["short"])).toBe(1);
+  });
+});
+
+describe("readable concept notes", () => {
+  it("turns dense prose into sentence-level bullets", () => {
+    expect(bulletPointReading("First useful point. Second useful point.")).toBe(
+      "- First useful point.\n- Second useful point.",
+    );
+    expect(bulletPointReading("> **The idea:** Keep this memorable.")).toBe(
+      "- **The idea:** Keep this memorable.",
+    );
+  });
+
+  it("preserves Markdown that is already structured", () => {
+    expect(bulletPointReading("### A heading")).toBe("### A heading");
+    expect(bulletPointReading("- Existing point\n- Another point")).toBe("- Existing point\n- Another point");
+    expect(bulletPointReading("$$\nV = IR\n$$")).toBe("$$\nV = IR\n$$");
   });
 });

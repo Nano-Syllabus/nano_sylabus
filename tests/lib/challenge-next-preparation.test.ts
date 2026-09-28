@@ -255,7 +255,7 @@ describe("which challenge comes next", () => {
     mocks.admin.mockReturnValue(db.admin);
   });
 
-  it("is the next open one in the same subject, else the next on today's list", async () => {
+  it("is the next open one in the same subject and never crosses subjects", async () => {
     const other = { subject_slug: "teacher_other" };
     db.tables.student_challenges = [
       challenge("earlier-same", 0),
@@ -272,7 +272,7 @@ describe("which challenge comes next", () => {
     await expect(nextOpenChallengeId("member", current)).resolves.toBe("earlier-same");
 
     db.tables.student_challenges = db.tables.student_challenges.filter((row: Row) => row.id !== "earlier-same");
-    await expect(nextOpenChallengeId("member", current)).resolves.toBe("later-other");
+    await expect(nextOpenChallengeId("member", current)).resolves.toBeNull();
 
     db.tables.student_challenges = db.tables.student_challenges.filter((row: Row) => row.id !== "later-other");
     await expect(nextOpenChallengeId("member", current)).resolves.toBeNull();

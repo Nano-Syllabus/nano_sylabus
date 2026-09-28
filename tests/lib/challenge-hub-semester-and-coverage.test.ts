@@ -107,7 +107,7 @@ describe("the challenge screen, pared back", () => {
     const markup = bar.slice(0, bar.indexOf("</header>"));
     expect(markup).toContain("sticky top-0");
     expect(markup.indexOf("{focusToggle}")).toBeLessThan(markup.indexOf("{challengeEyebrow}"));
-    expect(markup.indexOf("{challengeEyebrow}")).toBeLessThan(markup.indexOf("{timerBox}"));
+    expect(markup.indexOf("{challengeEyebrow}")).toBeLessThan(markup.indexOf("timerBox}"));
   });
 
   it("drops the black topic card — the bar and the title carry what it said", () => {
@@ -136,6 +136,11 @@ describe("opening and sitting a challenge", () => {
   it("drops the duration beside Start and the remaining-time line under the questions", () => {
     expect(hub).not.toContain("{challenge.durationMinutes} min");
     expect(hub).not.toContain("You have ${timeRemaining} remaining.");
+  });
+
+  it("does not render the challenge timer for an MCQ page", () => {
+    expect(hub).toContain("{mcqPage ? null : timerBox}");
+    expect(hub).toContain('if (mcqPage || challenge.status === "completed"');
   });
 
   it("walks practice as questions, then upload, then result, one screen at a time", () => {

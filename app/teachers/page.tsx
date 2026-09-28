@@ -4,6 +4,7 @@ import { TeacherOnboarding } from "@/app/teachers/onboarding";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { TeacherWorkspaceV2 } from "@/app/teachers-v2/teacher-workspace-v2";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { QueryIdentity } from "@/components/query-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,14 @@ export default async function TeachersPage() {
     return <TeacherOnboarding userEmail={user.email || ""} />;
   }
 
-  return <TeacherWorkspaceV2 teacherHandle={teacher.handle} />;
+  return (
+    <>
+      {/* Keys the persisted cache (which holds the last workspace) to this
+          account, and drops another account's copy — as every /app page does. */}
+      <QueryIdentity userId={user.id} />
+      <TeacherWorkspaceV2 teacherHandle={teacher.handle} />
+    </>
+  );
 }
 
 function TeacherLoginRequired() {

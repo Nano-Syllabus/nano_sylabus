@@ -4,6 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keys } from "@/lib/query/keys";
 import {
   useCallback,
   useEffect,
@@ -547,6 +549,30 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   const indexingNames = useMemo(() => new Set(Object.values(indexingJobs)), [indexingJobs]);
   const [communityReturnTo, setCommunityReturnTo] = useState("");
 
+  /**
+   * PAINT FROM THE BROWSER'S LAST COPY, THEN RECONCILE ONCE.
+   *
+   * The workspace is four creator-service reads that take 10–19s when that
+   * service is busy, and the whole screen waited on them behind a skeleton on
+   * every visit — for a workspace that only changes when this creator acts.
+   * The persisted query cache (per account, erased on sign-out) holds the last
+   * one this browser loaded; it is painted as soon as it is restored and the
+   * live read replaces it when it lands. Never fetched through this query:
+   * `loadWorkspace` stays the one request, and writes the cache back.
+   */
+  const queryClient = useQueryClient();
+  const { data: cachedWorkspace } = useQuery<Workspace>({
+    queryKey: keys.teacher.workspace(),
+    queryFn: () => Promise.reject(new Error("The workspace is loaded by loadWorkspace.")),
+    enabled: false,
+    staleTime: Infinity,
+  });
+  useEffect(() => {
+    if (!cachedWorkspace || workspace) return;
+    setWorkspace(cachedWorkspace);
+    setWorkspaceState((current) => (current === "loading" ? "ready" : current));
+  }, [cachedWorkspace, workspace]);
+
   const loadWorkspace = useCallback(async () => {
     setWorkspaceState("loading");
     setWorkspaceError("");
@@ -559,6 +585,9 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       const payload = await responsePayload(response);
       const next = normalizeWorkspace(payload);
       setWorkspace(next);
+      // A snapshot the server served while the creator service was down is not
+      // worth keeping over the last live copy.
+      if (!next.stale) queryClient.setQueryData(keys.teacher.workspace(), next);
       setSelectedSlug((current) =>
         current && next.subjects.some((subject) => subject.slug === current) ? current : "",
       );
@@ -572,7 +601,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       setWorkspaceState("error");
       return null;
     }
-  }, []);
+  }, [queryClient]);
 
   const loadDashboard = useCallback(async () => {
     const request = ++dashboardRequest.current;

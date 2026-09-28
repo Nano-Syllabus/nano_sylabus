@@ -401,10 +401,6 @@ export function CommunityCatalogClient({
     setFieldErrors((current) => ({ ...current, [field]: "" }));
   }
 
-  function openCreate() {
-    setShowCreate(true);
-  }
-
   // Modal housekeeping: Escape closes, the page behind stops scrolling, and the
   // first field takes focus once the panel has started to settle.
   useEffect(() => {
@@ -1487,11 +1483,13 @@ export function CommunityCatalogClient({
           />
           <span>NanoSyllabus</span>
         </Link>
+        {/* No Sign in here: a visitor signs in when they join a faculty. */}
+        {signedIn ? (
         <Link
           className="ns-top-cta"
-          href={signedIn ? "/app/today" : "/login?next=%2Fcommunities"}
+          href="/app/today"
         >
-          <span>{signedIn ? "Go to app" : "Sign in"}</span>
+          <span>Go to app</span>
           <svg
             width="18"
             height="18"
@@ -1504,6 +1502,7 @@ export function CommunityCatalogClient({
             <path d="M5 12h14M13 6l6 6-6 6"/>
           </svg>
         </Link>
+        ) : null}
       </header>
 
       {/* Hero Section */}
@@ -1511,46 +1510,6 @@ export function CommunityCatalogClient({
         <div>
           <h1 id="hero-title">Study better together.</h1>
           <p>Join students following your syllabus.</p>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 20 }}>
-            {signedIn ? (
-              <button
-                type="button"
-                className="ns-hero-cta ns-hero-cta--blue"
-                onClick={openCreate}
-              >
-                Add New Faculty
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  aria-hidden="true"
-                >
-                  <path d="M7 17L17 7M17 7H8M17 7v9"/>
-                </svg>
-              </button>
-            ) : (
-              <Link
-                href="/login?next=%2Fcommunities%3Fcreate%3D1"
-                className="ns-hero-cta ns-hero-cta--blue"
-              >
-                Add New Faculty
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  aria-hidden="true"
-                >
-                  <path d="M7 17L17 7M17 7H8M17 7v9"/>
-                </svg>
-              </Link>
-            )}
-          </div>
         </div>
         <div className="ns-hero-art" aria-hidden="true">
           <svg

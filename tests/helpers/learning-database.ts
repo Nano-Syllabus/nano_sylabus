@@ -34,6 +34,8 @@ export function learningDatabase(tables: Record<string, Row[]>) {
     let ignoreDuplicates = false;
     let single = false;
     let limit = Infinity;
+    let rangeFrom = 0;
+    let rangeTo = Infinity;
     const execute = () => {
       if (missing.has(table)) {
         return {
@@ -65,7 +67,9 @@ export function learningDatabase(tables: Record<string, Row[]>) {
       } else if (operation === "delete") {
         tables[table] = rows.filter((row) => !matches(row));
       }
-      const selected = rows.filter(matches).slice(0, limit);
+      const selected = rows
+        .filter(matches)
+        .slice(rangeFrom, Math.min(rangeTo + 1, rangeFrom + limit));
       return { data: single ? selected[0] || null : selected, error: null };
     };
     const query = {
@@ -102,6 +106,11 @@ export function learningDatabase(tables: Record<string, Row[]>) {
       },
       limit: (count: number) => {
         limit = count;
+        return query;
+      },
+      range: (from: number, to: number) => {
+        rangeFrom = from;
+        rangeTo = to;
         return query;
       },
       order: () => query,

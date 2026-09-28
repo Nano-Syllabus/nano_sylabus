@@ -40,7 +40,6 @@ import type {
 } from "@/lib/data/community-hub";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 import { cn, titleCase } from "@/lib/utils";
-import { CommunityLeaveControl } from "@/components/community-leave-control";
 import { patchDashboardRunningSemester } from "@/lib/query/dashboard";
 
 type CommunitySection = "overview" | "members";
@@ -630,19 +629,6 @@ export function CommunityHubClient({
       ) : null}
       {section === "members" ? (
         <CommunityMembers data={initialData} ranking={memberRanking} />
-      ) : null}
-
-      {!initialData.canManage ? (
-        <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-border pt-8 sm:flex-row">
-          <p className="text-xs text-text-muted">
-            You are a member of {titleCase(community.name)}.
-          </p>
-          <CommunityLeaveControl
-            key={community.id}
-            community={community}
-            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-full border border-rose-200 bg-rose-50/50 px-4 py-1.5 text-xs font-semibold text-rose-600 hover:border-rose-300 hover:bg-rose-100/70 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-400"
-          />
-        </div>
       ) : null}
 
       <Modal

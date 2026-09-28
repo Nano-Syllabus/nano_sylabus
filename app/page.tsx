@@ -418,23 +418,48 @@ export default function LandingPage() {
 </div>
 
         {/* ── Marquee Ribbon 1 ── */}
+        {/*
+          Five phrases do not fit a phone's width. Wrapped, they broke into three
+          ragged lines with a ✳ starting two of them, so below `sm` the ribbon
+          is one line that scrolls (two copies, moved by half their width, loop
+          seamlessly); from `sm` up it is the static, centred row.
+        */}
         <div className="overflow-hidden bg-[#3049ed] py-4 text-white">
           <div
-            className={`${manrope.className} mx-auto flex max-w-[1320px] flex-wrap items-center justify-center gap-x-12 gap-y-3 px-5 text-xs font-bold uppercase tracking-[0.1em]`}
+            className={`${manrope.className} ns-ribbon-track flex w-max items-center text-xs font-bold uppercase tracking-[0.1em] sm:mx-auto sm:w-auto sm:max-w-[1320px] sm:flex-wrap sm:justify-center sm:gap-y-3 sm:px-5`}
           >
-            {["Less panic", "More practice", "Your people", "Small wins", "Real learning"].map(
-              (item, index) => (
-                <span key={item} className="inline-flex items-center gap-12">
-                  {index > 0 && (
-                    <span aria-hidden="true" className="text-white/70">
-                      ✳
+            {[0, 1].map((copy) => (
+              <span
+                key={copy}
+                aria-hidden={copy === 1 ? true : undefined}
+                className={`flex shrink-0 items-center ${copy === 1 ? "sm:hidden" : ""}`}
+              >
+                {["Less panic", "More practice", "Your people", "Small wins", "Real learning"].map(
+                  (item, index) => (
+                    <span key={item} className="inline-flex shrink-0 items-center">
+                      <span
+                        aria-hidden="true"
+                        className={`px-6 text-white/70 sm:px-6 ${index === 0 ? "sm:hidden" : ""}`}
+                      >
+                        ✳
+                      </span>
+                      <span className="whitespace-nowrap">{item}</span>
                     </span>
-                  )}
-                  <span>{item}</span>
-                </span>
-              ),
-            )}
+                  ),
+                )}
+              </span>
+            ))}
           </div>
+          <style>{`
+            @keyframes ns-ribbon { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+            @media (max-width: 639.98px) {
+              .ns-ribbon-track { animation: ns-ribbon 22s linear infinite; }
+            }
+            @media (max-width: 639.98px) and (prefers-reduced-motion: reduce) {
+              .ns-ribbon-track { animation: none; width: auto; flex-wrap: wrap; justify-content: center; row-gap: 0.75rem; padding: 0 1.25rem; }
+              .ns-ribbon-track > [aria-hidden="true"] { display: none; }
+            }
+          `}</style>
         </div>
 
         {/* ── Section 01 / Sound Familiar? ── */}

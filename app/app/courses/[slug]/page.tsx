@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, Clock3, MessageSquareText } from "lucide-react";
-import { CourseLeaveButton } from "@/components/course-leave-button";
 import { SetAppShell } from "@/components/set-app-shell";
 import { requireOnboardedUser } from "@/lib/auth";
 import { getStudentCourse } from "@/lib/student-courses";
@@ -74,11 +73,6 @@ export default async function CourseStudySpacePage({ params }: PageProps) {
               >
                 Start practice <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
-              <CourseLeaveButton
-                slug={course.slug}
-                courseName={titleCase(course.name)}
-                redirectTo="/app/courses"
-              />
             </div>
           </div>
         </header>

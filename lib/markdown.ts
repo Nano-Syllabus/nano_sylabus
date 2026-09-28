@@ -591,6 +591,78 @@ function applyInlineStyles(value: string): string {
   return withFormatting.replace(/@@TOKEN_(\d+)@@/g, (_, index) => tokens[Number(index)] ?? "");
 }
 
+const UNICODE_SCRIPT: Record<string, string> = {
+  "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
+  "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+};
+
+function latexScripts(value: string) {
+  return value.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (script) =>
+    `^{${[...script].map((character) => UNICODE_SCRIPT[character] ?? character).join("")}}`,
+  );
+}
+
+function latexRootBody(value: string) {
+  const scripted = latexScripts(value).replace(/(?<![A-Za-z\\])([A-Za-z])(\d+)(?![A-Za-z])/g, "$1_{$2}");
+  const quotient = /^\(([^()]*)\)\s*\/\s*\(([^()]*)\)$/.exec(scripted.trim());
+  return quotient ? `\\frac{${quotient[1]}}{${quotient[2]}}` : scripted;
+}
+
+function insideCode(source: string, index: number) {
+  const before = source.slice(0, index);
+  if ((before.match(/^\s*(?:```|~~~)/gm)?.length ?? 0) % 2 === 1) return true;
+  const line = before.slice(before.lastIndexOf("\n") + 1);
+  return (line.match(/(?<!\\)`/g)?.length ?? 0) % 2 === 1;
+}
+
+/**
+ * Repair roots copied from OCR or returned by a translation as function calls.
+ *
+ * A question such as `a = sqrt((v1²x2²-v2²x1²)/(v1²-v2²))` has balanced,
+ * nested parentheses, so a regular expression cannot safely find the end of
+ * the root. This small scanner does, converts Unicode powers while it is there,
+ * and supplies math delimiters only when the root is not already inside them.
+ * Existing `\sqrt{...}` LaTeX is deliberately untouched.
+ */
+export function latexifySqrtCalls(source: string, alreadyMath = false): string {
+  const root = /(?<![\\A-Za-z])(?:sqrt|√)\s*\(/g;
+  let output = "";
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = root.exec(source))) {
+    const open = root.lastIndex - 1;
+    let depth = 0;
+    let close = -1;
+    for (let index = open; index < source.length; index += 1) {
+      if (source[index] === "(") depth += 1;
+      else if (source[index] === ")" && --depth === 0) {
+        close = index;
+        break;
+      }
+    }
+    if (close < 0) continue;
+
+    if (insideCode(source, match.index)) {
+      output += source.slice(cursor, close + 1);
+      cursor = close + 1;
+      root.lastIndex = cursor;
+      continue;
+    }
+
+    output += source.slice(cursor, match.index);
+    const dollarsBefore = source.slice(0, match.index).match(/(?<!\\)\$/g)?.length ?? 0;
+    const inMath = alreadyMath || dollarsBefore % 2 === 1;
+    const inner = latexRootBody(latexifySqrtCalls(source.slice(open + 1, close), true));
+    const latex = `\\sqrt{${inner}}`;
+    output += inMath ? latex : `$${latex}$`;
+    cursor = close + 1;
+    root.lastIndex = cursor;
+  }
+
+  return output ? output + source.slice(cursor) : source;
+}
+
 function isTableRow(value: string) {
   const trimmed = value.trim();
   return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.split("|").length > 2;
@@ -659,7 +731,7 @@ export function rebuildFlatGrids(source: string) {
 }
 
 function renderMd(source: string): string {
-  const lines = escapeHtml(rebuildFlatGrids(source)).split("\n");
+  const lines = escapeHtml(rebuildFlatGrids(latexifySqrtCalls(source))).split("\n");
   let output = "";
   let listType: "ol" | "ul" | null = null;
   let inCodeBlock = false;
@@ -826,7 +898,7 @@ export function renderMarkdown(source: string) {
  * fighting the CSS.
  */
 export function renderMathText(source: string) {
-  const escaped = escapeHtml(source);
+  const escaped = escapeHtml(latexifySqrtCalls(source));
 
   // Display math first: `$$…$$` would otherwise be eaten as two empty inline
   // expressions by the single-dollar rule.

@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CourseInviteCodeEntry } from "@/components/course-invite-code-form";
-import { CourseLeaveButton } from "@/components/course-leave-button";
 import type { StudentCourse } from "@/lib/student-courses";
 import type { SubjectExplorerSummary } from "@/lib/types";
 import { titleCase } from "@/lib/utils";
@@ -234,7 +233,7 @@ function Modal({
   );
 }
 
-function CourseDetails({ course, onLeft }: { course: StudentCourse; onLeft: () => void }) {
+function CourseDetails({ course }: { course: StudentCourse; onLeft: () => void }) {
   const firstSubject = course.subjects[0];
   const chatHref = firstSubject
     ? `/app/chat?subject=${encodeURIComponent(firstSubject.name)}`
@@ -359,14 +358,6 @@ function CourseDetails({ course, onLeft }: { course: StudentCourse; onLeft: () =
           >
             Start practice <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
-          <div className="mt-2 border-t border-border pt-2">
-            <CourseLeaveButton
-              slug={course.slug}
-              courseName={course.name}
-              label="Leave course"
-              onLeft={onLeft}
-            />
-          </div>
         </div>
       </aside>
     </div>

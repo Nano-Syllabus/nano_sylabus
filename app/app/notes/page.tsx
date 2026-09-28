@@ -3,6 +3,7 @@ import { RevisionDocsClient } from "@/components/revision-docs-client";
 import { requireOnboardedUser } from "@/lib/auth";
 import { unlocksEveryTopic } from "@/lib/data/student-challenges";
 import { getStudentRevisionDocs } from "@/lib/data/student-revision-docs";
+import { getActiveCommunity } from "@/lib/data/active-community";
 
 export const dynamic = "force-dynamic";
 
@@ -50,8 +51,14 @@ export default async function RevisionPage() {
   const { user } = await requireOnboardedUser();
   // The same check the start route makes, so the page never offers a Start
   // button the route then refuses.
-  const unlockAll = await unlocksEveryTopic(user.id).catch(() => false);
-  const docs = await getStudentRevisionDocs(user.id, { unlockAll });
+  const [unlockAll, activeCommunity] = await Promise.all([
+    unlocksEveryTopic(user.id).catch(() => false),
+    getActiveCommunity(user.id),
+  ]);
+  const docs = await getStudentRevisionDocs(user.id, {
+    unlockAll,
+    communityId: activeCommunity.selected?.id ?? null,
+  });
 
   return (
     <>

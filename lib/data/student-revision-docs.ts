@@ -460,10 +460,10 @@ async function readFiledChallenges(
 
 export async function getStudentRevisionDocs(
   userId: string,
-  options: { unlockAll?: boolean } = {},
+  options: { unlockAll?: boolean; communityId?: string | null } = {},
 ): Promise<StudentRevisionDocs> {
   const admin = createSupabaseAdminClient();
-  const [community, privateSubjects, completed] = await Promise.all([
+  const [allCommunitySubjects, privateSubjects, completed] = await Promise.all([
     listStudentCommunitySubjectAccess(userId, admin),
     // A creator studying their own uploaded material has no community and no
     // course: their challenges carry `course_id = null` and are authorised by
@@ -473,6 +473,13 @@ export async function getStudentRevisionDocs(
     listCreatorPrivateSubjectAccess(userId, admin).catch(() => []),
     readFiledChallenges(userId, admin),
   ]);
+
+  // ONE FACULTY: the active one, as on the Challenge Hub. A student who joined
+  // one faculty and owns another saw the owned faculty's subjects here (its
+  // "Applied Mechanics" first) while the hub ran the joined one.
+  const community = options.communityId
+    ? allCommunitySubjects.filter((subject) => subject.community?.id === options.communityId)
+    : allCommunitySubjects;
 
   if (isMissingChallengeTable(completed.error)) {
     return { semesters: [], topicCount: 0, filedCount: 0, unavailable: true };

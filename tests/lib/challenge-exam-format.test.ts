@@ -71,19 +71,19 @@ describe("sealed MCQ answers", () => {
 });
 
 describe("one grade for the sitting", () => {
-  it("passes an all-MCQ paper at 40% of its marks", () => {
+  it("requires at least 60% to pass an all-MCQ paper", () => {
     const questions = Array.from({ length: 10 }, (_, i) => sealedChoiceQuestion("c", upstream(`q${i}`, "A"), "Topic", 2));
-    const four = Object.fromEntries(questions.slice(0, 4).map((q) => [q.id, "A"]));
+    const six = Object.fromEntries(questions.slice(0, 6).map((q) => [q.id, "A"]));
     const grade = combinedChallengeGrade({
       attemptId: "mcq-1",
       subject: "Circuits",
-      passMarks: 8,
-      choices: gradeChallengeChoices("c", questions, four),
+      passMarks: 12,
+      choices: gradeChallengeChoices("c", questions, six),
     });
-    expect(grade.total_score).toBe(8);
+    expect(grade.total_score).toBe(12);
     expect(grade.total_marks).toBe(20);
     expect(grade.passed).toBe(true);
-    expect(grade.evaluation?.chapters[0].status).toBe("weak");
+    expect(grade.evaluation?.chapters[0].status).toBe("developing");
   });
 
   it("joins a hybrid paper's written marks to its MCQ marks", () => {
@@ -148,7 +148,7 @@ describe("setting the MCQ part", () => {
     expect(mocks.mcq.mock.calls.map((call) => call[1].variant)).toEqual([0, 1]);
     expect(mocks.mcq.mock.calls[0][1]).toMatchObject({ purpose: "exam", count: 10 });
     expect(first).toHaveLength(2);
-    expect(first.every((question) => question.marks === 2 && unsealAnswer("c", question))).toBe(true);
+    expect(first.every((question) => question.marks === 1 && unsealAnswer("c", question))).toBe(true);
   });
 });
 

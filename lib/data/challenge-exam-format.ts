@@ -154,7 +154,9 @@ export async function issueChallengeChoiceQuestions(input: {
   // An older course service ignores `purpose` and answers with the step-one
   // fundamentals set — which the student has already been shown the answers to.
   if (response.purpose !== "exam") throw new ChallengeMcqUnavailableError();
-  const marks = Number(response.marks) || CHALLENGE_MCQ_MARKS;
+  // One mark a question, whatever the course service suggests: the pass mark
+  // (60%) then reads as "6 of 10" on a ten-question paper.
+  const marks = CHALLENGE_MCQ_MARKS;
   const usable = (response.questions || []).filter(
     (question) =>
       question.id &&

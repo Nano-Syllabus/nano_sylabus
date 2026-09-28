@@ -181,7 +181,8 @@ describe("unified Figma library", () => {
     expect(library).toContain('type: "browse"');
     expect(library).toContain("onClick={() => browseTerm(term)}");
     expect(library).not.toContain("async function selectTerm");
-    expect(settingsPage).toContain("getActiveCommunity(user.id)");
+    // Settings has no community switcher: joining from Browse is the switch.
+    expect(settingsPage).not.toContain("getActiveCommunity(user.id)");
     expect(settingsPage).not.toContain("currentTermId: community.membership.currentTermId");
     expect(settingsForm).not.toContain('label="Branch"');
     expect(settingsForm).not.toContain('label="Running semester"');

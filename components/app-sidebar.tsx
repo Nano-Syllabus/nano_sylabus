@@ -173,7 +173,9 @@ export function AppSidebar({
    * lib/query/chat-sessions.ts for why that was the expensive mistake it looks
    * like.
    */
-  const showChatHistory = pathname.startsWith("/app/chat");
+  // The sidebar no longer shows chat history at all (user, 2026-09-28), so it
+  // is never fetched.
+  const showChatHistory = false;
 
   const queryClient = useQueryClient();
   /**
@@ -417,7 +419,7 @@ export function AppSidebar({
       {/* ── Brand ── */}
       <div
         className={cn(
-          "mb-3 flex items-center pt-[18px]",
+          "mb-6 flex items-center pt-[18px]",
           isCollapsed ? "justify-center px-0" : "justify-between px-3",
         )}
       >
@@ -760,269 +762,6 @@ export function AppSidebar({
         })}
       </nav>
 
-      {/* ── Chat History ── */}
-      {pathname.startsWith("/app/chat") ? (
-        <div className={cn("mt-6 flex flex-col flex-1 min-h-0", isCollapsed && "hidden")}>
-          <div className="hidden items-center justify-between px-4 py-1.5 shrink-0">
-            <div className="relative">
-              <input
-                id="sidebar-search"
-                type="text"
-                value={historySearch}
-                onChange={(event) => setHistorySearch(event.target.value)}
-                placeholder="Search..."
-                className="h-6 w-0 rounded-md border-0 bg-transparent text-xs text-text-primary outline-none transition-all duration-200 focus:w-24 focus:border focus:border-border focus:bg-bg-secondary focus:px-2"
-              />
-            </div>
-          </div>
-
-          {/* ── Recent Chats ── */}
-          <div
-            ref={historyScrollRef}
-            onScroll={handleHistoryScroll}
-            className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 mt-1"
-          >
-            <div className="space-y-0.5">
-              {groupedSessions.map(({ group, items }) =>
-                items.length ? (
-                  <div key={group} className="mb-6 last:mb-0">
-                    <button
-                      onClick={() =>
-                        setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }))
-                      }
-                      className="flex w-full items-center mb-1 mt-2 px-2 text-[14px] font-semibold text-text-primary first:mt-0 hover:text-text-primary/80 transition group/header"
-                    >
-                      <span>{group}</span>
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className={cn(
-                          "ml-1.5 text-text-muted transition-all duration-200",
-                          collapsedGroups[group]
-                            ? "-rotate-90 opacity-100 group-hover/header:text-text-secondary"
-                            : "rotate-0 opacity-0 group-hover/header:opacity-100 group-hover/header:text-text-secondary",
-                        )}
-                      >
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                    </button>
-                    {!collapsedGroups[group] && (
-                      <ul className="space-y-0.5">
-                        {items.map((session) => {
-                          const displayTitle = compactSessionTitle(session.title);
-
-                          return (
-                            <li key={session.id} className="relative group">
-                              <div className="flex items-center">
-                                <button
-                                  type="button"
-                                  onPointerEnter={() => {
-                                    router.prefetch(`/app/chat?session=${session.id}`);
-                                  }}
-                                  onClick={() => {
-                                    if (activeSessionId === session.id) {
-                                      onCloseMobile?.();
-                                      return;
-                                    }
-
-                                    setPendingSessionId(session.id);
-                                    window.dispatchEvent(
-                                      new CustomEvent("chat-switch-session", {
-                                        detail: {
-                                          sessionId: session.id,
-                                          title: session.title,
-                                          subjectContext: session.subjectContext,
-                                        },
-                                      }),
-                                    );
-                                    router.push(`/app/chat?session=${session.id}`, {
-                                      scroll: false,
-                                    });
-                                    onCloseMobile?.();
-                                  }}
-                                  className={cn(
-                                    "group flex items-center gap-2.5 w-full rounded-xl px-2 py-2 text-left text-[14px] leading-5 transition",
-                                    activeSessionId === session.id
-                                      ? "bg-bg-secondary font-semibold text-text-primary"
-                                      : "font-medium text-text-primary hover:bg-bg-secondary hover:text-text-primary",
-                                  )}
-                                >
-                                  {session.isPinned && (
-                                    <svg
-                                      width="16"
-                                      height="16"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      className="shrink-0 text-text-muted"
-                                    >
-                                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                                    </svg>
-                                  )}
-                                  <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={`Open actions for ${displayTitle}`}
-                                  data-chat-context-menu
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setContextMenuId(
-                                      contextMenuId === session.id ? null : session.id,
-                                    );
-                                  }}
-                                  className={cn(
-                                    "absolute right-1 z-10 p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition",
-                                    contextMenuId === session.id
-                                      ? "opacity-100"
-                                      : "opacity-0 group-hover:opacity-100",
-                                  )}
-                                >
-                                  <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <circle cx="12" cy="12" r="1" />
-                                    <circle cx="12" cy="5" r="1" />
-                                    <circle cx="12" cy="19" r="1" />
-                                  </svg>
-                                </button>
-                              </div>
-                              {contextMenuId === session.id && (
-                                <div
-                                  data-chat-context-menu
-                                  className="absolute right-0 top-8 z-[80] flex w-40 flex-col rounded-xl border border-border bg-bg-primary p-1.5 shadow-xl animate-in fade-in zoom-in-95 duration-100"
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      void handleTogglePin(session);
-                                    }}
-                                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition"
-                                  >
-                                    <svg
-                                      width="14"
-                                      height="14"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    >
-                                      {session.isPinned ? (
-                                        <>
-                                          <path d="m3 3 18 18" />
-                                          <path d="M15 9.34V5a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v2.34l-.82 1.23M19 14.5l-2.12 1.41L12 11l-3-3L6.88 6.59 5 5m14 9.5L14 9v0l-2 2m5 3.5-3.32-2.21M12 17v5l-2-2v-3" />
-                                        </>
-                                      ) : (
-                                        <>
-                                          <path d="M12 17v5" />
-                                          <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
-                                        </>
-                                      )}
-                                    </svg>
-                                    {session.isPinned ? "Unpin chat" : "Pin chat"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setRenameSession(session);
-                                      setRenameValue(session.title);
-                                      setContextMenuId(null);
-                                    }}
-                                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition"
-                                  >
-                                    <svg
-                                      width="14"
-                                      height="14"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    >
-                                      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                                    </svg>
-                                    Rename
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setDeleteSessionId(session.id);
-                                      setContextMenuId(null);
-                                    }}
-                                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-destructive hover:bg-destructive/10 transition"
-                                  >
-                                    <svg
-                                      width="14"
-                                      height="14"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    >
-                                      <path d="M3 6h18" />
-                                      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                                      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                                    </svg>
-                                    Delete
-                                  </button>
-                                </div>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                ) : null,
-              )}
-              {sessions.length === 0 && historyLoading ? (
-                <p className="px-2.5 py-4 text-[12px] text-text-muted">Loading chats...</p>
-              ) : null}
-              {sessions.length === 0 && !historyLoading ? (
-                <p className="px-2.5 py-4 text-[12px] text-text-muted">No chat history yet.</p>
-              ) : null}
-              {historyError ? (
-                <p className="px-2.5 text-xs text-destructive">{historyError}</p>
-              ) : null}
-              {hasMoreSessions && historyLoading && sessions.length > 0 ? (
-                <p className="px-2.5 py-2 text-[12px] text-text-muted">Loading older chats...</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {/* Spacer for collapsed state */}
       {isCollapsed && <div className="flex-1" />}
 
@@ -1197,6 +936,10 @@ export function AppSidebar({
         <div className={cn("flex items-center", isCollapsed ? "flex-col gap-2" : "gap-2")}>
           <button
             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+            // Settings lives in this menu, so it has no link on screen to
+            // prefetch. Reaching for the menu is the intent: warm it then.
+            onPointerEnter={() => router.prefetch("/app/settings")}
+            onFocus={() => router.prefetch("/app/settings")}
             className={cn(
               "flex items-center transition hover:bg-bg-secondary relative group",
               isProfileMenuOpen && "bg-bg-secondary",

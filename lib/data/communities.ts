@@ -537,29 +537,46 @@ async function joinCommunityWrite(
   const targetCommunityId = String(targetResult.data.id);
   const isCreator = String(targetResult.data.creator_id) === userId;
   if (!isCreator) {
+    /**
+     * JOINING REPLACES WHATEVER THE STUDENT HAD JOINED.
+     *
+     * A student is a member of one community at a time (the database's
+     * `community_memberships_one_active_member_per_user`). Joining another from
+     * Browse used to be refused until they left the first; it now leaves every
+     * other joined community for them, through the same `leave_community` the
+     * Leave button uses. Communities they created are not memberships of this
+     * kind and are untouched.
+     *
+     * Checked first: a community that is not open must not cost the student
+     * the one they are in.
+     */
+    if (targetResult.data.status !== "active" || targetResult.data.visibility !== "public") {
+      throw new CommunityError("This community is not open to new members.", 403);
+    }
     const activeMembershipResult = await admin
       .from("community_memberships")
       .select("community_id")
       .eq("user_id", userId)
       .eq("role", "member")
       .eq("status", "active")
-      .neq("community_id", targetCommunityId)
-      .limit(1);
+      .neq("community_id", targetCommunityId);
     if (activeMembershipResult.error) throw activeMembershipResult.error;
-    if (activeMembershipResult.data?.length) {
-      const currentId = String(activeMembershipResult.data[0].community_id || "");
-      const currentResult = await admin
-        .from("communities")
-        .select("slug,name")
-        .eq("id", currentId)
-        .maybeSingle();
-      throw new CommunityError(
-        "You can join one community you do not own. Communities you create do not use this slot.",
-        409,
-        currentResult.data
-          ? { slug: String(currentResult.data.slug), name: String(currentResult.data.name) }
-          : undefined,
-      );
+    for (const membership of activeMembershipResult.data ?? []) {
+      const left = await admin.rpc("leave_community", {
+        target_user_id: userId,
+        target_community_id: String(membership.community_id),
+      });
+      if (!left.error) continue;
+      // An archived community cannot be left through the RPC (it matches active
+      // communities only), yet its membership still holds the one member slot.
+      if (left.error.code !== "P0002") throw left.error;
+      const closed = await admin
+        .from("community_memberships")
+        .update({ status: "left", left_at: new Date().toISOString(), current_term_id: null })
+        .eq("user_id", userId)
+        .eq("community_id", String(membership.community_id))
+        .eq("role", "member");
+      if (closed.error) throw closed.error;
     }
   }
 

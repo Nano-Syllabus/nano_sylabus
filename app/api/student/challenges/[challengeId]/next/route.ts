@@ -36,7 +36,13 @@ export async function POST(
     // Loading the dashboard also tops up today's queue with unassigned real
     // topics. This makes Next work even when the client holds an old snapshot.
     const remaining = dashboard.challenges
-      .filter((challenge) => challenge.id !== challengeId && challenge.status !== "completed")
+      .filter(
+        (challenge) =>
+          challenge.id !== challengeId &&
+          challenge.status !== "completed" &&
+          challenge.courseId === current.courseId &&
+          challenge.subjectSlug.trim().toLowerCase() === current.subjectSlug.trim().toLowerCase(),
+      )
       .sort((left, right) => left.position - right.position);
     const next =
       remaining.find((challenge) => challenge.position > current.position) ?? remaining[0] ?? null;
@@ -44,7 +50,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "All currently extracted topics have a challenge already. Restart a completed challenge or ask the creator to publish more topics.",
+            "All currently extracted subtopics have been completed or already have challenges. Ask the creator to publish more subtopics.",
         },
         { status: 409 },
       );

@@ -70,6 +70,33 @@ export function readingBlocks(reading: string[]): ReadingBlock[] {
   });
 }
 
+/**
+ * Turn dense generated prose into scan-friendly notes without changing its
+ * meaning. Structural Markdown (headings, equations, existing lists, tables,
+ * figures and code) is already easy to scan and is left alone. Ordinary prose
+ * becomes one bullet per sentence, including readings already cached before the
+ * shorter generation brief was introduced.
+ */
+export function bulletPointReading(text: string) {
+  let content = text.trim();
+  if (!content) return content;
+  if (/^(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|\$\$|```|~~~|\||!\[|<)/.test(content)) return content;
+
+  // The opening idea used to be a quote. It is more consistent with the rest of
+  // the quick notes as the first bullet.
+  content = content.replace(/^>\s*/, "");
+
+  const italic = /^\*(?!\*)([\s\S]+)\*$/.exec(content);
+  const prose = italic?.[1] ?? content;
+  const sentences = prose
+    .split(/(?<=[.!?])\s+(?=[A-Z0-9*_`(])/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  return sentences
+    .map((sentence) => `- ${italic ? `*${sentence}*` : sentence}`)
+    .join("\n");
+}
+
 export function readingMinutes(reading: string[]) {
   const words = reading.join(" ").split(/\s+/).filter(Boolean).length;
   return Math.max(1, Math.round(words / 200));
@@ -191,7 +218,7 @@ export function ConceptsDrawer({
               ) : (
                 <Markdown
                   key={`${source.id}-reading-${index}`}
-                  text={block.text}
+                  text={bulletPointReading(block.text)}
                   className={paperTextClass}
                 />
               ),

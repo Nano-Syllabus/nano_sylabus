@@ -598,7 +598,7 @@ describe("the global challenge pool", () => {
         topics: ["t1"],
         questions: 2,
         duration_minutes: 20,
-        pass_percent: 40,
+        pass_percent: 60,
         exclude_questions: content?.solvedExamples.map((example) => example.question),
       });
       expect(student("c1").external_paper_id).toBe("attempt-1");
