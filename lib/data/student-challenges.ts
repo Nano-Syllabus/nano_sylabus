@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { isPlatformAdmin } from "@/lib/data/platform-admin";
 import { assertChallengeAttemptAllowed, startedToday } from "@/lib/data/challenge-daily-limit";
 import { ChallengeAccessError } from "@/lib/data/challenge-access-error";
 import { after } from "next/server";
@@ -959,6 +960,7 @@ export function dailyChallengeAssignmentCount({
 
 async function hasUnlimitedConcurrentChallenges(userId: string): Promise<boolean> {
   const admin = createSupabaseAdminClient();
+  if (await isPlatformAdmin(userId, admin)) return true;
   const { data, error } = await admin
     .from("user_subscriptions")
     .select("ends_at,subscription_plans(slug,is_unlimited)")

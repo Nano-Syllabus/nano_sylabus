@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isPlatformAdmin } from "@/lib/data/platform-admin";
 
 export type NotePlanTier = "free" | "basic" | "pro" | "unlimited";
 
@@ -25,6 +26,9 @@ function resolveTierFromPlan(plan: { slug?: string | null; name?: string | null 
 }
 
 export async function getNoteAccessPolicy(userId: string): Promise<NoteAccessPolicy> {
+  if (await isPlatformAdmin(userId)) {
+    return { tier: "pro", maxNotes: NOTE_LIMIT_BY_TIER.pro, revisionEnabled: true };
+  }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("user_subscriptions")

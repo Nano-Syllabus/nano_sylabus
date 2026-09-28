@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isPlatformAdmin } from "@/lib/data/platform-admin";
 import { ChallengeDailyLimitError } from "@/lib/data/challenge-access-error";
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -49,6 +50,7 @@ export function startedToday(startedAt: string | null | undefined, now = new Dat
 
 export async function hasPaidChallengePlan(userId: string, admin: SupabaseClient = createSupabaseAdminClient()) {
   if (DEV_AUTH_BYPASS) return true;
+  if (await isPlatformAdmin(userId, admin)) return true;
   const { data, error } = await admin
     .from("user_subscriptions")
     .select("ends_at, subscription_plans(slug,product_type,is_unlimited)")

@@ -127,8 +127,12 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
       (onboarded ? await grantStarterCredits(user.id) : 0));
 
   const now = Date.now();
+  // Whoever can see platform analytics is always on Pro (see
+  // lib/data/platform-admin.ts); the profile is already in hand, so no extra read.
+  const platformAdmin = isAdminRole(profile?.role);
   const hasUnlimitedAccess =
     DEV_AUTH_BYPASS ||
+    platformAdmin ||
     (subscriptionResult.data ?? []).some((subscription: any) => {
       const plan = Array.isArray(subscription.subscription_plans)
         ? subscription.subscription_plans[0]
@@ -146,7 +150,7 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
         ? subscription.subscription_plans[0]
         : subscription.subscription_plans,
     );
-  const activePlanTier: AppUser["activePlanTier"] = DEV_AUTH_BYPASS
+  const activePlanTier: AppUser["activePlanTier"] = DEV_AUTH_BYPASS || platformAdmin
     ? "pro"
     : activePlans.some((plan: any) => plan?.product_type === "group")
       ? "group"

@@ -1,4 +1,5 @@
 import { STARTER_CREDITS } from "@/lib/billing";
+import { isPlatformAdmin } from "@/lib/data/platform-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
@@ -242,6 +243,7 @@ export async function getActiveManualPaymentConfig() {
 }
 
 export async function hasUnlimitedSubscription(userId: string) {
+  if (await isPlatformAdmin(userId)) return true;
   const supabase = await createSupabaseServerClient();
   const now = new Date().toISOString();
   const { data, error } = await supabase
