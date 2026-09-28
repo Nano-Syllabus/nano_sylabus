@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertCanFinishChallenge } from "@/lib/data/challenge-daily-limit";
 import { z } from "zod";
 import {
   challengeExamExpired,
@@ -48,6 +49,8 @@ export async function POST(
     if (challenge.status === "completed") {
       return NextResponse.json({ error: "This challenge is already complete." }, { status: 409 });
     }
+    // Before grading, so a refused submission costs no grading.
+    await assertCanFinishChallenge(user.id);
     if (!challenge.lessonRead || !challenge.examplesReviewed) {
       return NextResponse.json(
         { error: "Finish the lesson and worked examples before taking the exam." },

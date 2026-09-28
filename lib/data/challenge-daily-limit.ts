@@ -96,6 +96,19 @@ export async function challengeAllowance(
  * was started today, so starting it again (a restart, a re-issued paper) is
  * the same attempt, not another.
  */
+/**
+ * FINISHING counts too, not only starting (user, 2026-09-28).
+ *
+ * Starting is free and completions are what the limit counts, so a student
+ * could open ten challenges while under it — in ten tabs — and then submit them
+ * all. Every path that grades or completes a challenge asks this first: past
+ * today's limit, a free student can answer, submit or check nothing more until
+ * tomorrow (or an upgrade). Reviewing a finished challenge is never gated.
+ */
+export async function assertCanFinishChallenge(userId: string) {
+  await assertChallengeAttemptAllowed(userId, false);
+}
+
 export async function assertChallengeAttemptAllowed(userId: string, alreadyToday: boolean) {
   if (alreadyToday) return;
   const admin = createSupabaseAdminClient();

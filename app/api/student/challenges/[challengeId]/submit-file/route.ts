@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertCanFinishChallenge } from "@/lib/data/challenge-daily-limit";
 import { nextChallengeInSubject } from "@/lib/data/challenge-next-in-subject";
 import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import {
@@ -65,6 +66,7 @@ export async function POST(
     if (!context) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     const { detail: challenge, externalPaperId } = context;
     if (challenge.status === "completed") return NextResponse.json({ error: "This challenge is already complete." }, { status: 409 });
+    await assertCanFinishChallenge(user.id);
     if (!challenge.lessonRead || !challenge.examplesReviewed) {
       return NextResponse.json({ error: "Finish the lesson and worked examples before submitting." }, { status: 409 });
     }

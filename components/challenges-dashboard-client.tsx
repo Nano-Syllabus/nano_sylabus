@@ -1962,8 +1962,7 @@ function DailyLimitNotice({ limit }: { limit: number }) {
             You&apos;ve completed today&apos;s {limit} free challenges
           </p>
           <p className="mt-0.5 text-sm text-text-secondary">
-            Come back tomorrow for {limit} more, or upgrade to Plus or Pro for unlimited challenges. Challenges you
-            already started can still be continued.
+            Come back tomorrow for {limit} more, or upgrade to Plus or Pro for unlimited challenges.
           </p>
         </div>
       </div>
@@ -2168,7 +2167,7 @@ export function ChallengesDashboardClient({
    * THE FREE PLAN'S THREE A DAY: the lock follows the "Today's quota" card —
    * three challenges COMPLETED today — so it appears exactly at 3 / 5. The
    * server refuses a Start past it regardless (402), and a 402 locks the rest.
-   * Continue is never locked.
+   * Continue locks too (user, 2026-09-28): at the limit every card is Upgrade.
    */
   const [refusedToday, setRefusedToday] = useState(false);
   const completedToday = Math.max(allowance?.used ?? 0, dashboard.todayCompletedCount ?? 0);
@@ -2534,7 +2533,8 @@ export function ChallengesDashboardClient({
                           </>
                         ) : null}
                       </span>
-                      {limitReached && !started ? (
+                      {/* Every card locks at the limit, Continue included (user, 2026-09-28). */}
+                      {limitReached ? (
                         <UpgradeLockButton />
                       ) : (
                       <button

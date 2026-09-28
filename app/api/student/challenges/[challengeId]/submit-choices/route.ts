@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertCanFinishChallenge } from "@/lib/data/challenge-daily-limit";
 import { nextChallengeInSubject } from "@/lib/data/challenge-next-in-subject";
 import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import {
@@ -39,6 +40,7 @@ export async function POST(
     if (!context) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     const { detail: challenge, externalPaperId } = context;
     if (challenge.status === "completed") return NextResponse.json({ error: "This challenge is already complete." }, { status: 409 });
+    await assertCanFinishChallenge(user.id);
     if (!challenge.content || !externalPaperId) return NextResponse.json({ error: "Start the challenge first." }, { status: 409 });
     // An MCQ community's challenge is one page — concepts and questions — with
     // no worked-examples step to have passed. Any other paper keeps its order.

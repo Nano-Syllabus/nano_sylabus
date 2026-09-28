@@ -1,3 +1,4 @@
+import { assertCanFinishChallenge } from "@/lib/data/challenge-daily-limit";
 import {
   choiceQuestionsOf,
   gradeChallengeChoices,
@@ -66,6 +67,7 @@ export async function checkExamChoice(
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const row = await readRow(userId, challengeId);
     if (!row?.content) return null;
+    if (attempt === 0 && row.status !== "completed") await assertCanFinishChallenge(userId);
     const question = paperQuestion(row.content, questionId);
     const picks = row.content.examPicks ?? {};
     const wanted = selected.trim().toUpperCase();

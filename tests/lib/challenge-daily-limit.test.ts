@@ -28,7 +28,12 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 import { ChallengeDailyLimitError, challengeAccessResponse } from "@/lib/data/challenge-access-error";
-import { assertChallengeAttemptAllowed, challengeAllowance, startedToday } from "@/lib/data/challenge-daily-limit";
+import {
+  assertCanFinishChallenge,
+  assertChallengeAttemptAllowed,
+  challengeAllowance,
+  startedToday,
+} from "@/lib/data/challenge-daily-limit";
 
 const plan = (fields: Record<string, unknown>, endsAt: string | null = null) => ({ ends_at: endsAt, subscription_plans: fields });
 
@@ -44,6 +49,17 @@ describe("the free plan's three challenges a day", () => {
     await expect(assertChallengeAttemptAllowed("u", false)).resolves.toBeUndefined();
     state.completedToday = 3;
     await expect(assertChallengeAttemptAllowed("u", false)).rejects.toBeInstanceOf(ChallengeDailyLimitError);
+  });
+
+  it("stops finishing past the limit, however many were opened beforehand", async () => {
+    // Open ten while under the limit, then submit them one by one: the fourth
+    // submission is refused, because finishing is checked, not only starting.
+    state.completedToday = 2;
+    await expect(assertCanFinishChallenge("u")).resolves.toBeUndefined();
+    state.completedToday = 3;
+    await expect(assertCanFinishChallenge("u")).rejects.toBeInstanceOf(ChallengeDailyLimitError);
+    state.subscriptions = [plan({ slug: "plus-monthly" })];
+    await expect(assertCanFinishChallenge("u")).resolves.toBeUndefined();
   });
 
   it("never blocks the same attempt again — a restart of one started today", async () => {

@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   persist: vi.fn(),
 }));
 
+// The free plan's daily limit is its own concern (challenge-daily-limit.test.ts).
+vi.mock("@/lib/data/challenge-daily-limit", () => ({ assertCanFinishChallenge: async () => undefined }));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: mocks.createSupabaseServerClient,
 }));

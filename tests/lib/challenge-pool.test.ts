@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 // The free plan's daily limit is its own concern (challenge-daily-limit.test.ts).
 vi.mock("@/lib/data/challenge-daily-limit", () => ({
   assertChallengeAttemptAllowed: async () => undefined,
+  assertCanFinishChallenge: async () => undefined,
   startedToday: () => false,
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.admin }));

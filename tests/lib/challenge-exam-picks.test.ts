@@ -2,6 +2,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ scope: vi.fn(), video: vi.fn(), row: null as Record<string, unknown> | null }));
 
+// The free plan's daily limit is its own concern (challenge-daily-limit.test.ts).
+vi.mock("@/lib/data/challenge-daily-limit", () => ({ assertCanFinishChallenge: async () => undefined }));
 vi.mock("@/lib/data/student-challenges", () => ({ challengeUpstreamScope: mocks.scope }));
 vi.mock("@/lib/data/challenge-question-video", () => ({ requestQuestionVideo: mocks.video }));
 vi.mock("@/lib/supabase/admin", () => ({

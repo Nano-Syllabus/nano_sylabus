@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isPlatformAdmin } from "@/lib/data/platform-admin";
-import { assertChallengeAttemptAllowed, startedToday } from "@/lib/data/challenge-daily-limit";
+import { assertCanFinishChallenge, assertChallengeAttemptAllowed, startedToday } from "@/lib/data/challenge-daily-limit";
 import { ChallengeAccessError } from "@/lib/data/challenge-access-error";
 import { after } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -1902,9 +1902,14 @@ export async function startStudentChallenge(
     throw new Error("Completed challenges cannot be restarted or repeated.");
   }
   // A NEW attempt counts against the free plan's daily challenges: a card being
-  // started, or a restart. Continuing one already under way never does.
+  // started, or a restart (a restart of today's attempt is the same attempt).
   if (current.status === "assigned" || options.restart) {
     await assertChallengeAttemptAllowed(userId, startedToday(row.started_at as string | null | undefined));
+  } else if (current.status !== "completed") {
+    // And past the limit nothing opens but a finished challenge's review —
+    // Continue is locked too (user, 2026-09-28). The count is still completions
+    // only, so this changes nothing below the limit.
+    await assertChallengeAttemptAllowed(userId, false);
   }
   const externalAttemptId = String(row.external_paper_id || "");
   const sourceDocumentTopic = isSourceDocumentChallengeRow(row);
@@ -3860,6 +3865,9 @@ export async function recordStudentChallengeGrade(input: {
   totalMarks: number;
   passed: boolean;
 }) {
+  // Every path that completes a challenge lands here, so the limit holds even
+  // for one a route forgot to check.
+  await assertCanFinishChallenge(input.userId);
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin.rpc("record_student_challenge_grade", {
     target_user_id: input.userId,
