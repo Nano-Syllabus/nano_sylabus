@@ -33,6 +33,9 @@ import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-das
  *   - `currentStreak`, but ONLY when this is the day's first completion — a
  *     second challenge today does not extend a streak. `todayCompleted` is the
  *     guard, and it is read before it is overwritten.
+ *   - the subject's `completedTopics`, which is the "7 of 58 subtopics
+ *     completed" bar. Left out, the card flipped to Passed while the bar under
+ *     it kept the old count until a reload.
  *
  * Deliberately NOT touched: `readiness`, `practicedTopics` and
  * `practiceScoreChange`. Those are aggregates over graded topic attempts, and
@@ -82,7 +85,78 @@ export function applyChallengePassed(
     passedThisWeek: dashboard.passedThisWeek + 1,
     passedThisMonth: dashboard.passedThisMonth + 1,
     currentStreak: firstToday ? dashboard.currentStreak + 1 : dashboard.currentStreak,
+    subjects: completed ? withTopicCompleted(dashboard, completed) : dashboard.subjects,
   };
+}
+
+/**
+ * One more completed subtopic on the challenge's subject row.
+ *
+ * The server counts a SET of topic keys (see `completedTopics` in
+ * student-challenge-dashboard.ts), so this only moves when the topic is new to
+ * it: not for a challenge already completed, nor for a topic another completed
+ * row already covers. Capped at the subject's total, as the server caps it.
+ */
+function withTopicCompleted(
+  dashboard: StudentChallengeDashboard,
+  completed: StudentChallengeSummary,
+): StudentChallengeDashboard["subjects"] {
+  // Read defensively, like `SubjectCoverage`: this also runs over whatever
+  // payload the Router Cache replays (see `applyLocalPasses`), which may
+  // predate a field.
+  if (!dashboard.subjects?.length) return dashboard.subjects;
+  const scope = scopeKeyOf(completed);
+  const topic = topicOf(completed);
+  const counted = [...dashboard.challenges, ...(dashboard.completedChallenges ?? [])].some(
+    (row) => row.status === "completed" && scopeKeyOf(row) === scope && topicOf(row) === topic,
+  );
+  if (counted) return dashboard.subjects;
+  return dashboard.subjects.map((subject) =>
+    subject.scopeKey === scope
+      ? {
+          ...subject,
+          completedTopics: Math.min(subject.completedTopics + 1, subject.totalTopics),
+        }
+      : subject,
+  );
+}
+
+/** The subject row's `scopeKey` for a challenge — the server's own format. */
+function scopeKeyOf(challenge: StudentChallengeSummary) {
+  return `${challenge.courseId ?? "owner-private"}:${String(challenge.subjectSlug ?? "").trim().toLowerCase()}`;
+}
+
+function topicOf(challenge: StudentChallengeSummary) {
+  return String(challenge.topicKey ?? "").trim().toLowerCase();
+}
+
+/**
+ * Put this tab's passes back onto a server copy that predates them.
+ *
+ * The hub's copy lives in component state, so it is lost when the student
+ * leaves the page. Coming back — a sidebar link, the browser's Back — replays
+ * the Router Cache's payload for `/app/challenges` (`staleTimes.dynamic` is an
+ * hour), which is the server render from BEFORE the pass: the count went back
+ * to "6 of 58" and stayed there until a reload.
+ *
+ * Only a challenge the copy still shows as not completed is replayed, so a
+ * fresh server render — which already has the pass — comes through unchanged,
+ * and replaying twice counts nothing twice.
+ */
+export function applyLocalPasses(
+  dashboard: StudentChallengeDashboard,
+  passes: ReadonlyMap<
+    string,
+    StudentChallengeDashboard["challenges"][number] | null | undefined
+  >,
+): StudentChallengeDashboard {
+  let next = dashboard;
+  for (const [challengeId, nextInSubject] of passes) {
+    const row = next.challenges.find((challenge) => challenge.id === challengeId);
+    if (!row || row.status === "completed") continue;
+    next = applyChallengePassed(next, challengeId, nextInSubject);
+  }
+  return next;
 }
 
 /**

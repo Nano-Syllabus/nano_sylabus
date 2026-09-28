@@ -7,7 +7,11 @@ import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 export const dynamic = "force-dynamic";
 
-const bodySchema = z.object({ questionId: z.string().trim().min(1).max(64) });
+const bodySchema = z.object({
+  questionId: z.string().trim().min(1).max(64),
+  /** "hint": the idea only, open before answering; otherwise the solution video. */
+  mode: z.enum(["solution", "hint"]).optional(),
+});
 
 /**
  * A question's video is one render shared by everyone and cached, and a paper can
@@ -45,7 +49,12 @@ export async function POST(
     if (recent.size > 5000) recent.delete(recent.keys().next().value as string);
 
     const { challengeId } = await params;
-    const explainer = await explainExamChoice(user.id, challengeId, parsed.data.questionId);
+    const explainer = await explainExamChoice(
+      user.id,
+      challengeId,
+      parsed.data.questionId,
+      parsed.data.mode ?? "solution",
+    );
     if (!explainer) return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
     return NextResponse.json({ explainer });
   } catch (error) {

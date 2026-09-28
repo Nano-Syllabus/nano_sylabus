@@ -3,6 +3,7 @@
 import { BookOpen, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { trimModelFiller } from "@/lib/model-filler";
 import { AnswerFontPicker, answerFontStyle, useAnswerFont } from "@/components/answer-font-picker";
 import { Markdown } from "@/components/markdown";
 import { paperLabelClass, paperTextClass, workedAnswerClass } from "@/components/worked-example-card";
@@ -61,7 +62,8 @@ export type ReadingBlock =
  *  its own card and numbered in reading order. */
 export function readingBlocks(reading: string[]): ReadingBlock[] {
   let examples = 0;
-  return reading.map((paragraph) => {
+  return reading.map((raw) => {
+    const paragraph = trimModelFiller(raw);
     const label = paragraph.match(WORKED_EXAMPLE);
     const text = label ? paragraph.slice(label[0].length).trim() : "";
     if (!text) return { kind: "text", text: paragraph };

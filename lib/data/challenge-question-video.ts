@@ -18,7 +18,7 @@ import { requestTeacherExplainerAnimation } from "@/lib/teacher-app/client";
  * per student.
  *
  * Made AHEAD: when a paper is issued, `prepareQuestionVideos` queues every
- * question's video in the background, so by the time a student gets one wrong it
+ * question's hint and video in the background, so by the time a student gets one wrong it
  * is usually ready. A student asking for one marks it `urgent`, which moves it
  * to the front if it is still waiting.
  *
@@ -61,10 +61,12 @@ export function questionVideoSpec(subject: string, question: QuestionVideoQuesti
   const correctText = question.options.find((option) => option.key === question.correct)?.text ?? "";
   const topic = subjectWords(subject);
   return {
-    concept: clip(`Why "${correctText}": ${question.text}`, 200),
+    concept: clip(`The principle that decides this question (never state its answer): ${question.text}`, 200),
     subject: clip(topic, 120),
     notes: clip(
       [
+        // First, because the renderer's own brief says to "answer" the concept.
+        "NEVER state the answer on screen or in the narration: no option letter, no option text, no final value for this question. The student sees the correct option on the page; the video teaches the reasoning that gets there, and the hook and last beat are about the principle, not this question's result.",
         `A student revising ${topic || "their course"} met this multiple-choice question.`,
         `Question: ${question.text}`,
         `Options: ${question.options.map((option) => `${option.key}) ${option.text}`).join("  ")}`,
@@ -73,7 +75,7 @@ export function questionVideoSpec(subject: string, question: QuestionVideoQuesti
         `Teach it so the idea is clear within ${VIDEO_SECONDS + 2} seconds:`,
         "1. Open straight on the core idea in one plain sentence, shown as a picture, diagram or small worked number — no title card.",
         "2. Make it concrete with ONE example the eye can follow step by step.",
-        "3. Show why that leads to the correct option, and name the most tempting wrong option and the slip that leads to it.",
+        "3. Show the reasoning that leads to the right choice, and the slip that makes the most tempting wrong choice look right — without naming either option or its value.",
         "Plain words a first-year student understands. Define a symbol the moment it appears. Short on-screen text, large and readable.",
         "Three or four beats, one idea each. No quiz, no recap, no 'in this video'.",
       ]
@@ -83,6 +85,59 @@ export function questionVideoSpec(subject: string, question: QuestionVideoQuesti
     ),
     seconds: VIDEO_SECONDS,
     style: "card" as const,
+  };
+}
+
+/**
+ * THE HINT — the video a student may watch BEFORE answering (2026-09-28).
+ *
+ * The solution video above teaches the answer, so it stays locked until the
+ * question is answered. The hint teaches only the idea the question rests on:
+ * it is built from the question text alone — never the options, the key or the
+ * explanation — so there is nothing in its request that could give the answer
+ * away, and it is safe to hand out on an open question. Like the solution, it is
+ * a pure function of the question, so one render serves the whole cohort.
+ */
+export function questionHintSpec(subject: string, question: Pick<QuestionVideoQuestion, "text">) {
+  const topic = subjectWords(subject);
+  return {
+    concept: clip(`The principle a student needs for this question (never answer it): ${question.text}`, 200),
+    subject: clip(topic, 120),
+    notes: clip(
+      [
+        // First, because the renderer's own brief says to "answer" the concept.
+        "NEVER answer this question, on screen or in the narration: no final value, no result, nothing a student could copy as the answer. The hook and the last beat are about the general principle, not this question.",
+        `A student revising ${topic || "their course"} is about to answer this multiple-choice question and wants to learn the idea first.`,
+        `Question: ${question.text}`,
+        "This is a HINT, watched BEFORE answering. Do NOT answer the question, do NOT solve it, do NOT state or imply the final result, and do NOT mention any option.",
+        `Teach the underlying concept so it is clear within ${VIDEO_SECONDS + 2} seconds:`,
+        "1. Open straight on the core idea in one plain sentence, shown as a picture, diagram or small worked number — no title card.",
+        "2. Make it concrete with ONE different example (not this question's own values or wording) the eye can follow step by step.",
+        "3. End on what to look for in a question like this one, leaving the student to work out the answer.",
+        "Plain words a first-year student understands. Define a symbol the moment it appears. Short on-screen text, large and readable.",
+        "Three or four beats, one idea each. No quiz, no recap, no 'in this video'.",
+      ].join("\n"),
+      2000,
+    ),
+    seconds: VIDEO_SECONDS,
+    style: "card" as const,
+  };
+}
+
+export async function requestQuestionHint(
+  scope: { collectionKey: string; subject: string },
+  question: Pick<QuestionVideoQuestion, "text">,
+  priority: "urgent" | "background",
+): Promise<QuestionVideo> {
+  const reply = await requestTeacherExplainerAnimation(scope.collectionKey, {
+    ...questionHintSpec(scope.subject, question),
+    priority,
+  });
+  return {
+    specHash: reply.spec_hash,
+    status: reply.status,
+    derivatives: reply.derivatives || {},
+    error: reply.error || "",
   };
 }
 
@@ -118,10 +173,14 @@ export function prepareQuestionVideos(
 ) {
   if (!questions.length) return;
   const work = async () => {
-    const queue = [...questions];
+    // Hints first: they are watched before answering, the solutions only after.
+    const queue: Array<() => Promise<unknown>> = [
+      ...questions.map((question) => () => requestQuestionHint(scope, question, "background")),
+      ...questions.map((question) => () => requestQuestionVideo(scope, question, "background")),
+    ];
     const lane = async () => {
-      for (let question = queue.shift(); question; question = queue.shift()) {
-        await requestQuestionVideo(scope, question, "background").catch(() => null);
+      for (let job = queue.shift(); job; job = queue.shift()) {
+        await job().catch(() => null);
       }
     };
     await Promise.all(Array.from({ length: Math.min(PREPARE_CONCURRENCY, queue.length) }, lane));

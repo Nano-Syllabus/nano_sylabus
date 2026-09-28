@@ -136,8 +136,7 @@ export function CommunitySwitchDialog({
               </div>
 
               <p id="ns-switch-note" className="ns-sw-note">
-                Your past answers, results and progress stay saved. Faculties you create yourself don&apos;t
-                count toward this limit.
+                Your past answers, results and progress stay saved.
               </p>
 
               {error ? (

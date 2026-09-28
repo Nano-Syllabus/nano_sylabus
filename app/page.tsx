@@ -621,15 +621,33 @@ export default function LandingPage() {
         </section>
 
         {/* ── Marquee Ribbon 2 ── */}
-        <div className="bg-[#3049ed] py-5 text-white">
-          <p
-            className={`${manrope.className} mx-auto flex max-w-[1320px] flex-wrap justify-center gap-x-12 gap-y-2 px-5 text-xs font-bold uppercase tracking-[0.1em]`}
+        {/* The same phone treatment as ribbon 1 (its `ns-ribbon-track` styles). */}
+        <div className="overflow-hidden bg-[#3049ed] py-5 text-white">
+          <div
+            className={`${manrope.className} ns-ribbon-track flex w-max items-center text-xs font-bold uppercase tracking-[0.1em] sm:mx-auto sm:w-auto sm:max-w-[1320px] sm:flex-wrap sm:justify-center sm:gap-y-3 sm:px-5`}
           >
-            Unlimited tests <span className="text-white/70">✳</span> AI feedback{" "}
-            <span className="text-white/70">✳</span> Chapter-wise practice{" "}
-            <span className="text-white/70">✳</span> Progress tracking{" "}
-            <span className="text-white/70">✳</span> Study community
-          </p>
+            {[0, 1].map((copy) => (
+              <span
+                key={copy}
+                aria-hidden={copy === 1 ? true : undefined}
+                className={`flex shrink-0 items-center ${copy === 1 ? "sm:hidden" : ""}`}
+              >
+                {["Unlimited tests", "AI feedback", "Chapter-wise practice", "Progress tracking", "Study community"].map(
+                  (item, index) => (
+                    <span key={item} className="inline-flex shrink-0 items-center">
+                      <span
+                        aria-hidden="true"
+                        className={`px-6 text-white/70 sm:px-6 ${index === 0 ? "sm:hidden" : ""}`}
+                      >
+                        ✳
+                      </span>
+                      <span className="whitespace-nowrap">{item}</span>
+                    </span>
+                  ),
+                )}
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* ── Testimonials Section ── */}

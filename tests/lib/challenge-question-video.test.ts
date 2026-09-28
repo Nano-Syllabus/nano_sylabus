@@ -7,6 +7,7 @@ vi.mock("@/lib/teacher-app/client", () => ({
 
 import {
   prepareQuestionVideos,
+  questionHintSpec,
   questionVideoSpec,
   requestQuestionVideo,
 } from "@/lib/data/challenge-question-video";
@@ -48,11 +49,22 @@ describe("question videos", () => {
     ).rejects.toBeInstanceOf(RangeError);
   });
 
-  it("prepares a paper's videos in the background, and a failure costs nothing", async () => {
+  it("prepares a paper's hints then videos in the background, and a failure costs nothing", async () => {
     requestAnimation.mockRejectedValueOnce(new Error("renderer busy"));
     const paper = Array.from({ length: 6 }, (_, index) => ({ ...question, text: `${question.text} (${index})` }));
     prepareQuestionVideos({ collectionKey: "k", subject: "s" }, paper);
-    await vi.waitFor(() => expect(requestAnimation).toHaveBeenCalledTimes(6));
+    await vi.waitFor(() => expect(requestAnimation).toHaveBeenCalledTimes(12));
     for (const [, spec] of requestAnimation.mock.calls) expect(spec.priority).toBe("background");
+    expect(requestAnimation.mock.calls[0][1].concept).toMatch(/^The principle a student needs/);
+  });
+
+  it("builds the hint from the question text alone — no options, key or explanation", () => {
+    const spec = questionHintSpec("digital-logic", question);
+    const text = JSON.stringify(spec);
+    expect(text).not.toContain("Options:");
+    expect(text).not.toContain("Correct answer");
+    expect(text).not.toContain(question.explanation);
+    expect(spec.notes).toContain("Do NOT answer the question");
+    expect(questionHintSpec("digital-logic", question)).toEqual(spec);
   });
 });

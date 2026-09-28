@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { applyChallengePassed, applyChallengeState } from "@/lib/challenges/local-updates";
+import {
+  applyChallengePassed,
+  applyChallengeState,
+  applyLocalPasses,
+} from "@/lib/challenges/local-updates";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
 import type { StudentChallengeSummary } from "@/lib/data/student-challenges";
 
@@ -122,6 +126,76 @@ describe("applyChallengePassed", () => {
 
     expect(next.completedChallengeTotal).toBe(1);
     expect(next.completedChallenges.filter((c) => c.id === "c1")).toHaveLength(1);
+  });
+});
+
+/** The Physics row the hub's "6 of 58 subtopics completed" bar reads. */
+function physics(completedTopics = 6, totalTopics = 58) {
+  return {
+    courseId: "course-1",
+    scopeKey: "course-1:physics",
+    slug: "physics",
+    name: "Physics",
+    readiness: null,
+    totalTopics,
+    practicedTopics: completedTopics,
+    completedTopics,
+    weakTopics: 0,
+    nextTopic: null,
+    topicDataAvailable: true,
+  };
+}
+
+describe("subject coverage on a pass", () => {
+  it("moves the subject's bar from 6 of 58 to 7 of 58", () => {
+    const other = { ...physics(2, 30), scopeKey: "course-1:chemistry", slug: "chemistry" };
+    const next = applyChallengePassed(hub({ subjects: [physics(), other] }), "c1");
+
+    expect(next.subjects[0].completedTopics).toBe(7);
+    // Another subject's bar is not this pass's business.
+    expect(next.subjects[1]).toBe(other);
+  });
+
+  it("does not count a topic another completed row already covers", () => {
+    const earlier = challenge({ id: "c0", status: "completed" });
+    const next = applyChallengePassed(
+      hub({ subjects: [physics()], completedChallenges: [earlier], completedChallengeTotal: 1 }),
+      "c1",
+    );
+    expect(next.subjects[0].completedTopics).toBe(6);
+  });
+
+  it("never passes the subject's total", () => {
+    const next = applyChallengePassed(hub({ subjects: [physics(58, 58)] }), "c1");
+    expect(next.subjects[0].completedTopics).toBe(58);
+  });
+});
+
+describe("applyLocalPasses", () => {
+  // Coming back to the hub replays the Router Cache's render from BEFORE the
+  // pass; the pass has to go back on top of it, or the bar reads 6 again.
+  it("puts a pass back onto a server copy that predates it", () => {
+    const stale = hub({ subjects: [physics()] });
+    const next = applyLocalPasses(stale, new Map([["c1", null]]));
+
+    expect(next.challenges[0].status).toBe("completed");
+    expect(next.subjects[0].completedTopics).toBe(7);
+    expect(next.passedThisWeek).toBe(stale.passedThisWeek + 1);
+  });
+
+  it("leaves a fresh server copy, which already has the pass, alone", () => {
+    const fresh = hub({
+      subjects: [physics(7)],
+      challenges: [challenge({ status: "completed" })],
+      passedThisWeek: 3,
+    });
+    expect(applyLocalPasses(fresh, new Map([["c1", null]]))).toBe(fresh);
+  });
+
+  it("counts a pass once however many times it is replayed", () => {
+    const passes = new Map([["c1", null]]);
+    const once = applyLocalPasses(hub({ subjects: [physics()] }), passes);
+    expect(applyLocalPasses(once, passes)).toBe(once);
   });
 });
 

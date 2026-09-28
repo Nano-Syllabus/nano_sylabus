@@ -377,3 +377,20 @@ describe("names written with underscores for spaces", () => {
     expect(text).toContain("Number of Frames in Window");
   });
 });
+
+describe("code written between dollars", () => {
+  const QUESTION =
+    "In a for loop with the form $for(initialization; condition; update)$, what happens immediately after the body of the loop is executed?";
+
+  it("sets it as inline code, never raw dollars or maths", () => {
+    const html = renderMarkdown(QUESTION);
+    expect(html).toContain("<code>for(initialization; condition; update)</code>");
+    expect(html).not.toContain("$");
+    expect(html).not.toContain("katex");
+  });
+
+  it("leaves real maths as maths", () => {
+    expect(renderMarkdown(String.raw`Energy is $E = mc^2$ and $\frac{a}{b}$.`)).not.toContain("<code>");
+    expect(renderMarkdown("Here $i++$ and $a != b$ are code.")).toContain("<code>i++</code>");
+  });
+});

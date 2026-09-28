@@ -335,6 +335,8 @@ export function ChallengeMcqPage({
                       selected={item.chosen}
                       endpoint={`/api/student/challenges/${encodeURIComponent(challenge.id)}/choices/explain`}
                       besideQuestion
+                      inSheet
+                      questionText={question.question}
                     />
                   ) : null}
                 </div>
@@ -472,13 +474,29 @@ export function ChallengeMcqPage({
                   </div>
                   <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
                     <Markdown text={question.question} className="min-w-0 flex-1 text-sm font-semibold leading-6" />
-                    {result && !result.isCorrect ? (
+                    {!result ? (
+                      // Before answering: the idea only, never the answer.
                       <Explainer
+                        key="hint"
+                        challengeId={challenge.id}
+                        questionId={question.id}
+                        selected=""
+                        mode="hint"
+                        endpoint={`/api/student/challenges/${encodeURIComponent(challenge.id)}/choices/explain`}
+                        besideQuestion
+                        inSheet
+                        questionText={question.question}
+                      />
+                    ) : !result.isCorrect ? (
+                      <Explainer
+                        key="solution"
                         challengeId={challenge.id}
                         questionId={question.id}
                         selected={result.selected}
                         endpoint={`/api/student/challenges/${encodeURIComponent(challenge.id)}/choices/explain`}
                         besideQuestion
+                        inSheet
+                        questionText={question.question}
                       />
                     ) : null}
                   </div>
@@ -566,11 +584,7 @@ export function ChallengeMcqPage({
             </p>
           ) : null}
 
-          <div className="sticky bottom-0 z-10 -mx-5 mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card/95 px-5 py-3 backdrop-blur sm:-mx-8 sm:px-8">
-            <p className="text-sm text-text-muted">
-              {answered} of {questions.length} answered · {formatMarks(Math.max(0, runningScore))} marks so far
-              {negativePercent && answered < questions.length ? " · blanks lose nothing" : ""}
-            </p>
+          <div className="sticky bottom-0 z-10 -mx-5 mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-border bg-card/95 px-5 py-3 backdrop-blur sm:-mx-8 sm:px-8">
             {expired ? (
               <button
                 type="button"

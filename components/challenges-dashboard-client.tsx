@@ -80,7 +80,12 @@ import { useAppRefresh } from "@/lib/query/refresh";
 import { useDashboardPatch } from "@/lib/query/dashboard";
 import { MEMBERSHIP_CHANGED_EVENT } from "@/lib/query/membership";
 import { ApiError } from "@/lib/query/api";
-import { applyChallengeAdded, applyChallengePassed, applyChallengeState } from "@/lib/challenges/local-updates";
+import {
+  applyChallengeAdded,
+  applyChallengePassed,
+  applyChallengeState,
+  applyLocalPasses,
+} from "@/lib/challenges/local-updates";
 
 const WEEKLY_CHALLENGE_TARGET = 15;
 /** What the shell's top bar says when no challenge is open. Shared with the
@@ -666,7 +671,7 @@ function ChallengeDetail({
     // See the note in `submitScan`: the dashboard's numbers move in this tick.
     if (payload.passed) {
       dashboardPatch.completed({ challengeId: payload.challenge?.id });
-      onHubPatch((d) => applyChallengePassed(d, payload.challenge?.id, payload.nextInSubject));
+      onHubPatch(passedPatch(payload.challenge?.id, payload.nextInSubject));
     } else {
       dashboardPatch.attempted();
       onHubPatch((d) => applyChallengeState(d, payload.challenge));
@@ -1051,7 +1056,7 @@ function ChallengeDetail({
                     onChange(updated);
                     if (passed) {
                       dashboardPatch.completed({ challengeId: updated.id });
-                      onHubPatch((d) => applyChallengePassed(d, updated.id, nextInSubject));
+                      onHubPatch(passedPatch(updated.id, nextInSubject));
                     } else {
                       dashboardPatch.attempted();
                       onHubPatch((d) => applyChallengeState(d, updated));
@@ -1904,6 +1909,24 @@ export function withoutCourseChallenges(
   };
 }
 
+/**
+ * Every challenge passed in this tab, with the next card the server assigned on
+ * it. The hub's own copy is component state and does not survive leaving the
+ * page; coming back replays the Router Cache's older render, and these are put
+ * back onto it (see `applyLocalPasses`). Module scope for the same reason as
+ * `hubByTerm`; a sign-out is a full page load, which clears it.
+ */
+const passesThisTab = new Map<string, StudentChallengeSummary | null | undefined>();
+
+/** The hub patch for a pass, remembered so a later mount can replay it. */
+function passedPatch(
+  challengeId: string | undefined,
+  nextInSubject?: StudentChallengeSummary | null,
+) {
+  if (challengeId) passesThisTab.set(challengeId, nextInSubject);
+  return (d: StudentChallengeDashboard) => applyChallengePassed(d, challengeId, nextInSubject);
+}
+
 const hubTermKey = (dashboard: StudentChallengeDashboard) =>
   dashboard.community?.currentTermId ? `${dashboard.community.id}:${dashboard.community.currentTermId}` : "";
 
@@ -1981,13 +2004,15 @@ export function ChallengesDashboardClient({
    * calling `router.refresh()`. The prop still wins whenever the server sends a
    * genuinely new one — a community switch, a recovery retry — which is the
    * documented way to reset state on a prop change: compare against the last
-   * prop seen and assign during render, no effect and no extra paint.
+   * prop seen and assign during render, no effect and no extra paint. Either
+   * way this tab's passes go back on top, since the prop may be the Router
+   * Cache's render from before them.
    */
-  const [dashboard, setDashboard] = useState(serverDashboard);
+  const [dashboard, setDashboard] = useState(() => applyLocalPasses(serverDashboard, passesThisTab));
   const [lastServerDashboard, setLastServerDashboard] = useState(serverDashboard);
   if (serverDashboard !== lastServerDashboard) {
     setLastServerDashboard(serverDashboard);
-    setDashboard(serverDashboard);
+    setDashboard(applyLocalPasses(serverDashboard, passesThisTab));
   }
   const patchHub = useCallback(
     (patch: (d: StudentChallengeDashboard) => StudentChallengeDashboard) => setDashboard(patch),

@@ -500,6 +500,29 @@ export function isInlineMath(candidate: string) {
  * is emitted as itself and the walk resumes from the very next character, so
  * every later delimiter is still available to open a span that IS maths.
  */
+/**
+ * CODE THE MODEL WROTE BETWEEN DOLLARS.
+ *
+ * Programming questions come back with code set as maths:
+ * `$for(initialization; condition; update)$`. Three words, so `isInlineMath`
+ * refused it and the student read the raw dollars (reported 2026-09-28); and as
+ * maths it would have been italic letters run together anyway. Code has no TeX
+ * commands and carries a statement separator, a C operator, or opens with a
+ * keyword call — so it is set as inline code instead.
+ */
+export function isDollarCode(candidate: string) {
+  if (!candidate.trim() || candidate.includes("\\")) return false;
+  // The source is HTML-escaped by now: `a &lt; b` is maths, not a statement.
+  const plain = candidate.replace(/&(?:amp|lt|gt|quot|#39);/g, "&");
+  return (
+    plain.includes(";") ||
+    /\+\+|--|!=|==|&amp;&amp;|\|\||-&gt;/.test(candidate) ||
+    /^\s*(?:for|while|if|switch|do|else|return|printf|scanf|sizeof|int|float|double|char|void|struct)\s*[({]/.test(
+      candidate,
+    )
+  );
+}
+
 const BLOCK_ENVIRONMENT = /\\begin\s*\{(?:[pbBvV]?matrix|cases|aligned|align\*?|array|gathered|split)\}/;
 
 function maskCodeAndMath(value: string, tokens: string[]): string {
@@ -537,6 +560,11 @@ function maskCodeAndMath(value: string, tokens: string[]): string {
       const close = value.indexOf("$", index + 1);
       if (close > index + 1 && (line === -1 || close < line)) {
         const inner = value.slice(index + 1, close);
+        if (isDollarCode(inner)) {
+          out += push(`<code>${inner.trim()}</code>`);
+          index = close + 1;
+          continue;
+        }
         if (isInlineMath(inner)) {
           // A matrix, cases or aligned block written between single dollars is
           // still a block: set inline, a 3×3 determinant is squeezed to the

@@ -26,7 +26,9 @@ describe("MCQ result flow", () => {
   it("offers a compact hint beside a wrong question in live and reviewed results", () => {
     expect(fundamentals).toContain('label = "Hint"');
     expect(fundamentals).toContain("<Lightbulb");
-    expect(page.match(/besideQuestion/g)).toHaveLength(2);
+    // Hint before answering, solution after a miss (live), solution in results.
+    expect(page.match(/besideQuestion/g)).toHaveLength(3);
+    expect(page).toContain('mode="hint"');
     expect(page).not.toContain("Why? Understand it with a video");
   });
 });

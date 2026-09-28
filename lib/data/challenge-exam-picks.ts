@@ -5,7 +5,7 @@ import {
   unsealAnswer,
 } from "@/lib/data/challenge-exam-format";
 import type { FundamentalsExplainer } from "@/lib/data/challenge-fundamentals";
-import { requestQuestionVideo } from "@/lib/data/challenge-question-video";
+import { requestQuestionHint, requestQuestionVideo } from "@/lib/data/challenge-question-video";
 import { challengeUpstreamScope, type StudentChallengeContent } from "@/lib/data/student-challenges";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -115,12 +115,15 @@ export async function explainExamChoice(
   userId: string,
   challengeId: string,
   questionId: string,
+  mode: "solution" | "hint" = "solution",
 ): Promise<FundamentalsExplainer | null> {
   const scope = await challengeUpstreamScope(userId, challengeId);
   if (!scope) return null;
   const row = await readRow(userId, challengeId);
   if (!row?.content) return null;
   const question = paperQuestion(row.content, questionId);
+  // The hint never knew the key, so it is open before the question is answered.
+  if (mode === "hint") return requestQuestionHint(scope, { text: question.question }, "urgent");
   if (!row.content.examPicks?.[questionId] && row.status !== "completed") {
     throw new RangeError("Answer the question first.");
   }

@@ -1,7 +1,8 @@
 "use client";
 
 import { Check, ChevronRight, Lightbulb, Loader2, RotateCcw, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { MathText } from "@/components/math-text";
 import { delimitBareMath } from "@/lib/markdown";
 import type {
@@ -405,6 +406,9 @@ export function Explainer({
   endpoint,
   label = "Hint",
   besideQuestion = false,
+  mode,
+  inSheet = false,
+  questionText,
 }: {
   challengeId: string;
   questionId: string;
@@ -414,7 +418,15 @@ export function Explainer({
   label?: string;
   /** Keep the trigger beside the question, then use the full row once opened. */
   besideQuestion?: boolean;
+  /** "hint": the idea-only video an MCQ paper offers before the question is answered. */
+  mode?: "hint";
+  /** Play in a sheet from the right instead of pushing the options down the page. */
+  inSheet?: boolean;
+  /** Shown at the top of the sheet, so the question stays in view while watching. */
+  questionText?: string;
 }) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
   const [video, setVideo] = useState<Video>({ status: "idle" });
   const [specHash, setSpecHash] = useState("");
   const [startedAt, setStartedAt] = useState(0);
@@ -486,7 +498,7 @@ export function Explainer({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ questionId, selected }),
+          body: JSON.stringify(mode ? { questionId, mode } : { questionId, selected }),
         },
       );
       const payload = (await response.json().catch(() => ({}))) as {
@@ -502,6 +514,61 @@ export function Explainer({
       setVideo({ status: "error", message: "Couldn't reach NanoSyllabus." });
     }
   };
+
+  if (inSheet) {
+    return (
+      <div className={cn(besideQuestion && "shrink-0")}>
+        <button
+          type="button"
+          onClick={() => {
+            // A video already made or on its way is shown again, not re-asked for.
+            if (video.status === "idle" || video.status === "error") void make();
+            setSheetOpen(true);
+          }}
+          aria-haspopup="dialog"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-bg-primary px-3 text-sm font-semibold hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        >
+          <Lightbulb className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+          {video.status === "error" ? "Try hint again" : label}
+        </button>
+        {sheetOpen && typeof document !== "undefined"
+          ? createPortal(
+              <VideoSheet title={mode === "hint" ? "Hint" : "Explanation"} onClose={closeSheet}>
+                <div className="mb-5 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+                  <p className="flex items-start gap-2 text-sm leading-6 text-text-primary">
+                    <Lightbulb className="mt-1 size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                    {mode === "hint"
+                      ? "Watch the idea this question is built on, shown with a different example. It won't tell you which option is right — work that out yourself, then pick your answer."
+                      : "Why the correct option is right, and the slip that leads to the most tempting wrong one."}
+                  </p>
+                  {questionText ? (
+                    <MathText
+                      text={questionText}
+                      className="mt-3 block border-t border-border pt-3 text-sm font-semibold leading-6 text-text-secondary"
+                    />
+                  ) : null}
+                </div>
+                {video.status === "error" ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-text-secondary">{video.message}</p>
+                    <button
+                      type="button"
+                      onClick={() => void make()}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold hover:border-blue-500/60"
+                    >
+                      <RotateCcw className="size-4" aria-hidden="true" /> Try again
+                    </button>
+                  </div>
+                ) : (
+                  videoBody()
+                )}
+              </VideoSheet>,
+              document.body,
+            )
+          : null}
+      </div>
+    );
+  }
 
   if (video.status === "idle" || video.status === "error") {
     return (
@@ -519,12 +586,17 @@ export function Explainer({
     );
   }
 
+  return videoBody();
+
+  function videoBody(): ReactNode {
+  if (video.status === "idle" || video.status === "error") return null;
+  const wide = besideQuestion && !inSheet;
   if (video.status === "making") {
     const seconds = Math.max(0, Math.round((now - startedAt) / 1000));
     const progress = Math.min(95, STAGE_FLOOR[video.stage] + Math.min(20, seconds / 2));
     return (
       <div
-        className={cn("mx-auto w-full max-w-xl", besideQuestion && "basis-full")}
+        className={cn("mx-auto w-full max-w-xl", wide && "basis-full")}
         role="status"
         aria-live="polite"
         aria-busy="true"
@@ -543,7 +615,7 @@ export function Explainer({
   }
 
   return (
-    <div className={cn("relative mx-auto w-full max-w-xl", besideQuestion && "basis-full")}>
+    <div className={cn("relative mx-auto w-full max-w-xl", wide && "basis-full")}>
       <video
         src={video.mp4}
         poster={video.poster}
@@ -561,6 +633,80 @@ export function Explainer({
           <LoadingFrame poster={video.poster} title="Loading your video…" detail="Almost there" />
         </div>
       )}
+    </div>
+  );
+}
+}
+
+/**
+ * The sheet a question's video plays in, from the right — the same dialog
+ * contract as the Concepts sheet: Escape and the backdrop close it, focus moves
+ * in and returns to the button, and the page behind does not scroll. Escape is
+ * caught in the capture phase and kept, so closing the video never also exits
+ * the challenge's focus mode.
+ */
+function VideoSheet({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      document.body.style.overflow = overflow;
+      opener?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[70]">
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label={`Close ${title.toLowerCase()}`}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40 animate-in fade-in duration-200 motion-reduce:animate-none"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-border bg-bg-primary shadow-2xl animate-in slide-in-from-right duration-200 motion-reduce:animate-none"
+      >
+        <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
+          <h2 id={titleId} className="type-student-card-title text-text-primary">
+            {title}
+          </h2>
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            aria-label={`Close ${title.toLowerCase()}`}
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">{children}</div>
+      </div>
     </div>
   );
 }

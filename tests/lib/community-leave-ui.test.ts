@@ -78,7 +78,7 @@ describe("community membership controls (without browser)", () => {
     expect(html).toContain('aria-label="Open Henglish community"');
     expect(html).not.toContain("Leave Henglish community");
   });
-  it("opens a creator's own community as a student, with Manage for the workspace", () => {
+  it("offers a creator plain Join on their own community", () => {
     const html = renderToStaticMarkup(
       createElement(CommunityCatalogClient, {
         initialCommunities: [
@@ -91,9 +91,8 @@ describe("community membership controls (without browser)", () => {
         signedIn: true,
       }),
     );
-    expect(html).toContain('aria-label="Open Henglish as a student"');
-    expect(html).toContain('aria-label="Manage Henglish in the creator workspace"');
-    expect(html).toContain('href="/teachers?view=communities&amp;community=henglish"');
+    expect(html).toContain('aria-label="Join Henglish"');
+    expect(html).not.toContain("/teachers?view=communities");
     expect(html).toContain("Creator");
     expect(html).not.toContain("Leave Henglish community");
   });

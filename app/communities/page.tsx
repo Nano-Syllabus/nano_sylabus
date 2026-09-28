@@ -1,8 +1,14 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { DM_Sans, Plus_Jakarta_Sans } from "next/font/google";
 import { CommunityCatalogClient } from "@/components/community-catalog-client";
 import { listPublicCommunities } from "@/lib/data/communities";
 import { buildCanonicalUrl } from "@/lib/site";
+import {
+  ACTIVE_COMMUNITY_COOKIE,
+  communitySwitchState,
+  savedCommunitySlug,
+} from "@/lib/community-switch";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
@@ -36,17 +42,28 @@ export default async function CommunitiesPage({
   // Auth and the catalogue at the same time: the shared list does not wait for
   // the viewer, only the viewer's own memberships do.
   const userPromise = getVerifiedUser(supabase).then((result) => result.data.user);
-  const [params, user, communities] = await Promise.all([
+  const [params, user, communities, store] = await Promise.all([
     searchParams,
     userPromise,
     listPublicCommunities(userPromise.then((viewer) => viewer?.id)),
+    cookies(),
   ]);
+  // The faculty the student portal is showing — a joined one, or one they own
+  // and opened as a student — so joining another asks to switch from it.
+  const studying = user
+    ? communitySwitchState(
+        user.id,
+        communities,
+        savedCommunitySlug(store.get(ACTIVE_COMMUNITY_COOKIE)?.value, user.id),
+      ).selected
+    : null;
 
   return (
     <div className={`${dmSans.variable} ${jakarta.variable} min-h-screen bg-white text-[#101114]`}>
       <CommunityCatalogClient
         initialCommunities={communities}
         signedIn={Boolean(user)}
+        studyingSlug={studying?.slug ?? null}
         initialShowCreate={params.create === "1"}
         initialPhoneNumber={
           typeof user?.user_metadata?.phone_number === "string" ? user.user_metadata.phone_number : ""
