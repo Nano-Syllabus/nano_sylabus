@@ -11,13 +11,24 @@ import { useSyncExternalStore } from "react";
  * topic instead of a blank box. A window event, like the chat's own events,
  * because there is nothing to share but this one value.
  */
-export type NanoAiTopic = { subjectName: string; topicTitle: string };
+export type NanoAiTopic = {
+  subjectName: string;
+  topicTitle: string;
+  /** Where it was published. "challenge" also shows the bubble over a
+   *  challenge's focus mode, which is not under /app/notes. */
+  surface?: "revision" | "challenge";
+};
 
 const EVENT = "nanoai:topic";
 let current: NanoAiTopic | null = null;
 
 export function publishNanoAiTopic(topic: NanoAiTopic | null) {
-  if (current?.subjectName === topic?.subjectName && current?.topicTitle === topic?.topicTitle) return;
+  if (
+    current?.subjectName === topic?.subjectName &&
+    current?.topicTitle === topic?.topicTitle &&
+    current?.surface === topic?.surface
+  )
+    return;
   current = topic;
   window.dispatchEvent(new Event(EVENT));
 }

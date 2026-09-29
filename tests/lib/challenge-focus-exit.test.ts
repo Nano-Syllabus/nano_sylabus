@@ -29,8 +29,18 @@ describe("leaving focus mode", () => {
 
   it("closes it the same way from Escape", () => {
     // Unless something open on top (the concepts sheet) already used the key.
-    expect(source).toContain('if (event.key === "Escape" && !event.defaultPrevented) onBack();');
+    expect(source).toContain('if (event.key !== "Escape" || event.defaultPrevented) return;');
+    // Nor an Escape pressed inside the Ask AI chat that sits over the challenge.
+    expect(source).toContain('event.target.closest("[data-nanoai-panel]")) return;');
     expect(source).not.toContain('if (event.key === "Escape") setFocusMode(false);');
+  });
+
+  it("offers Ask AI while reading and on MCQ pages, and withdraws it for the written paper", () => {
+    expect(source).toContain(
+      'const askAiAllowed = challenge.status === "completed" || mcqPage || activeStep === 1;',
+    );
+    expect(source).toContain('surface: "challenge"');
+    expect(source).toContain("useEffect(() => () => publishNanoAiTopic(null), []);");
   });
 
   it("lands on the hub's own URL, so a refresh does not reopen the challenge", () => {

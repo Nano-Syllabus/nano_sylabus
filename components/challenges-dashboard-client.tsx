@@ -1,5 +1,6 @@
 "use client";
 
+import { publishNanoAiTopic } from "@/lib/nanoai-topic";
 import { unitShownAlone } from "@/lib/unit-numbering";
 import {
   AlertTriangle,
@@ -469,11 +470,34 @@ function ChallengeDetail({
     const exitOnEscape = (event: KeyboardEvent) => {
       // An Escape something open on top already used — the concepts sheet
       // closing — is not also a request to leave the challenge.
-      if (event.key === "Escape" && !event.defaultPrevented) onBack();
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // Nor is one pressed inside the Ask AI chat, which sits over this page.
+      if (event.target instanceof Element && event.target.closest("[data-nanoai-panel]")) return;
+      onBack();
     };
     window.addEventListener("keydown", exitOnEscape);
     return () => window.removeEventListener("keydown", exitOnEscape);
   }, [focusMode, onBack]);
+
+  /**
+   * ASK AI OVER THE CHALLENGE — WHILE READING, NOT WHILE ANSWERING.
+   *
+   * The shell's Ask AI bubble shows over a challenge when the challenge
+   * publishes its topic: on the reading step, on an MCQ page (user, 2026-09-29
+   * — its questions reveal their answer as each is picked), and once the
+   * challenge is finished. It is withdrawn only while a timed WRITTEN paper is
+   * being answered (step two), which also closes an open chat.
+   */
+  const askAiAllowed = challenge.status === "completed" || mcqPage || activeStep === 1;
+  const askAiTopic = challenge.topicTitle || challenge.title;
+  useEffect(() => {
+    publishNanoAiTopic(
+      askAiAllowed && askAiTopic
+        ? { subjectName: challenge.subjectName, topicTitle: askAiTopic, surface: "challenge" }
+        : null,
+    );
+  }, [askAiAllowed, askAiTopic, challenge.subjectName]);
+  useEffect(() => () => publishNanoAiTopic(null), []);
 
   useEffect(() => {
     if (focusMode) {

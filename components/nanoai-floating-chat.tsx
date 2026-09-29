@@ -163,6 +163,12 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
   const [draggingButton, setDraggingButton] = useState(false);
   /** "Stuck on …?" beside the pill, for a few seconds when a topic first opens. */
   const topic = useNanoAiTopic();
+  // Also over a challenge (user, 2026-09-29), which publishes its topic only
+  // while the student is reading — never while answering the graded paper.
+  const onChallenge = topic?.surface === "challenge";
+  const hidden = offRevision && !onChallenge;
+  // Above the challenge's focus overlay (z-[60]), below its sheets (z-[70]).
+  const layer = onChallenge ? "z-[65]" : "z-40";
   const [nudge, setNudge] = useState("");
   const nudgedTopics = useRef(new Set<string>());
   const everOpened = useRef(false);
@@ -244,16 +250,19 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       // Leave Escape to the chat's own dialogs (save note, rename, delete).
       if (panelRef.current?.querySelector(".fixed.inset-0")) return;
+      // Claimed, so a challenge's "Escape exits focus mode" leaves it alone.
+      event.preventDefault();
       closePanel();
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    // Capture phase: runs before the challenge's own window listener.
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [open, closePanel]);
 
-  // Outside the Revision section the bubble steps aside.
+  // Outside the Revision section (and a challenge's reading) the bubble steps aside.
   useEffect(() => {
-    if (offRevision) setOpen(false);
-  }, [offRevision]);
+    if (hidden) setOpen(false);
+  }, [hidden]);
 
   function startDrag(
     target: "button" | "panel",
@@ -307,6 +316,10 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
   }
 
   if (!button) return null;
+  // Over a challenge the pill keeps clear of the sticky Previous / Next bar.
+  const shown = onChallenge
+    ? { x: button.x, y: Math.min(button.y, window.innerHeight - BUTTON_HEIGHT - 84) }
+    : button;
 
   const panelStyle: CSSProperties | undefined =
     isSheet || !panel
@@ -320,7 +333,7 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
 
   return (
     <>
-      {!open && !offRevision ? (
+      {!open && !hidden ? (
         <button
           ref={buttonRef}
           type="button"
@@ -328,7 +341,7 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
           title="Ask NanoAI — drag to move"
           onPointerEnter={prefetch}
           onFocus={prefetch}
-          onPointerDown={(event) => startDrag("button", event, button)}
+          onPointerDown={(event) => startDrag("button", event, shown)}
           onPointerMove={moveDrag}
           onPointerUp={(event) => {
             if (!endDrag(event)) openPanel();
@@ -340,9 +353,10 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
               openPanel();
             }
           }}
-          style={{ left: button.x, top: button.y, width: BUTTON_WIDTH, height: BUTTON_HEIGHT }}
+          style={{ left: shown.x, top: shown.y, width: BUTTON_WIDTH, height: BUTTON_HEIGHT }}
           className={cn(
-            "fixed z-40 flex touch-none select-none items-center justify-center gap-2 rounded-full bg-[var(--challenge-banner)] px-4 text-sm font-semibold text-[#111827] shadow-[0_8px_24px_rgba(0,0,0,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary",
+            "fixed flex touch-none select-none items-center justify-center gap-2 rounded-full bg-[var(--challenge-banner)] px-4 text-sm font-semibold text-[#111827] shadow-[0_8px_24px_rgba(0,0,0,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary",
+            layer,
             draggingButton
               ? "cursor-grabbing scale-105"
               : "cursor-pointer transition-[left,top,transform] duration-200 ease-out hover:scale-105 motion-reduce:transition-none",
@@ -354,16 +368,16 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
           </span>
         </button>
       ) : null}
-      {nudge && !open && !offRevision && !draggingButton ? (
+      {nudge && !open && !hidden && !draggingButton ? (
         <button
           type="button"
           onClick={openPanel}
           style={
-            button.x + BUTTON_WIDTH / 2 >= window.innerWidth / 2
-              ? { right: window.innerWidth - button.x + 10, top: button.y + 4 }
-              : { left: button.x + BUTTON_WIDTH + 10, top: button.y + 4 }
+            shown.x + BUTTON_WIDTH / 2 >= window.innerWidth / 2
+              ? { right: window.innerWidth - shown.x + 10, top: shown.y + 4 }
+              : { left: shown.x + BUTTON_WIDTH + 10, top: shown.y + 4 }
           }
-          className="nanoai-intro fixed z-40 max-w-[240px] truncate rounded-full border border-border bg-bg-primary px-3.5 py-2 text-sm text-text-primary shadow-[0_8px_24px_rgba(0,0,0,0.16)] hover:bg-bg-secondary"
+          className={cn(layer, "nanoai-intro fixed max-w-[240px] truncate rounded-full border border-border bg-bg-primary px-3.5 py-2 text-sm text-text-primary shadow-[0_8px_24px_rgba(0,0,0,0.16)] hover:bg-bg-secondary")}
         >
           Stuck on <span className="font-semibold">{nudge}</span>?
         </button>
@@ -375,7 +389,8 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
           role="dialog"
           aria-label="NanoAI chat"
           aria-modal="false"
-          aria-hidden={!open || offRevision}
+          aria-hidden={!open || hidden}
+          data-nanoai-panel=""
           style={panelStyle}
           onPointerDown={(event) => {
             if (isSheet || !panel) return;
@@ -391,8 +406,9 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
           className={cn(
             // No transform on this box: the chat's own modals and selection
             // popover are `position: fixed` and must stay viewport-relative.
-            "fixed z-40 flex flex-col overflow-hidden bg-bg-primary text-text-primary",
-            (!open || offRevision) && "hidden",
+            "fixed flex flex-col overflow-hidden bg-bg-primary text-text-primary",
+            layer,
+            (!open || hidden) && "hidden",
             isSheet
               ? "inset-0"
               : "rounded-2xl border border-border shadow-[0_24px_64px_rgba(0,0,0,0.28)]",
