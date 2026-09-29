@@ -78,6 +78,10 @@ describe("syllabus extraction → publication → student catalogue", () => {
         structure,
         sync: { subjectsSynced: 1, topicCount: 2 },
       });
+      if (method === "POST") {
+        // Extraction reads the Syllabus shelf only, never Notes or Question Bank.
+        expect(mocks.ask.mock.calls[0].at(-1)).toBe("Syllabus");
+      }
       expect(db.tables.community_subject_topics.map((row) => row.title)).toEqual([
         "Identifiers",
         "Operators",

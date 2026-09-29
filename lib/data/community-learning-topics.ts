@@ -140,17 +140,30 @@ export async function readCommunityLearningTopics(
   const recovered = await Promise.all(
     recoverable.map(async (subject) => {
       const teacher = teachers.data?.find((row) => row.id === subject.teacherId);
-      if (!teacher?.collection_sk) throw new Error("Subject collection is unavailable.");
-      // By slug: the community's display name can drift from the creator's own.
-      const payload = await getTeacherPracticeTopics(
-        String(teacher.collection_sk),
-        subject.externalSubjectSlug || subject.name,
-      );
-      return extractedLearningTopics(payload).map((topic) => ({
-        ...topic,
-        id: topic.topic_key,
-        community_subject_id: subject.id,
-      }));
+      if (!teacher?.collection_sk) return [];
+      // ONE SUBJECT, NOT THE PAGE. A subject whose saved syllabus the creator
+      // service cannot turn into topics (nothing indexed yet: "no syllabus
+      // topics or indexed chapters found") failed this whole Promise.all, and
+      // with it the Daily Dashboard, which then sat on its skeleton for good
+      // (reported 2026-09-29). That subject simply has no catalogue yet.
+      try {
+        // By slug: the community's display name can drift from the creator's own.
+        const payload = await getTeacherPracticeTopics(
+          String(teacher.collection_sk),
+          subject.externalSubjectSlug || subject.name,
+        );
+        return extractedLearningTopics(payload).map((topic) => ({
+          ...topic,
+          id: topic.topic_key,
+          community_subject_id: subject.id,
+        }));
+      } catch (error) {
+        console.warn(
+          `[learning-topics] no catalogue for ${subject.externalSubjectSlug || subject.name}:`,
+          error instanceof Error ? error.message : error,
+        );
+        return [];
+      }
     }),
   );
   return [...learningRows, ...recovered.flat()];

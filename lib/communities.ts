@@ -38,19 +38,78 @@ export function communityLevelDefaults(level: string) {
   return { totalYears: 4, totalSemesters: 8 };
 }
 
+type TermLayoutCommunity = {
+  level?: string | null;
+  name?: string;
+  faculty?: string;
+  totalYears: number;
+  totalSemesters: number;
+};
+
+/**
+ * How a faculty's terms read. +2 is "Class 11/12", Entrance and License are one
+ * track with no terms at all, and a Bachelor or Master is year-wise when it has
+ * one term per year. A faculty from before `level` was stored falls back to the
+ * same guess Browse uses, so an old "Loksewa licence" faculty is still one track.
+ */
+export function communityTermLayout(
+  community: TermLayoutCommunity,
+): "single-track" | "classes" | "years" | "semesters" {
+  const level = isCommunityLevel(community.level)
+    ? community.level
+    : community.name !== undefined && community.faculty !== undefined
+      ? communityLevel({ level: null, name: community.name, faculty: community.faculty })
+      : null;
+  const structure = communityLevelStructure(level ?? "");
+  if (structure === "single-track") return "single-track";
+  if (structure === "classes") return "classes";
+  if (community.totalSemesters <= community.totalYears) return "years";
+  return "semesters";
+}
+
+/** False when there is nothing to pick: one track, or a single term. */
+export function communityHasTermChoice(community: TermLayoutCommunity & { terms?: unknown[] }) {
+  if (communityTermLayout(community) === "single-track") return false;
+  const count = community.terms ? community.terms.length : community.totalSemesters;
+  return count > 1;
+}
+
+/** "Class", "Year" or "Semester" — for "Running Semester", "Choose Class"… Null for one track. */
+export function communityTermNoun(community: TermLayoutCommunity) {
+  const layout = communityTermLayout(community);
+  if (layout === "single-track") return null;
+  if (layout === "classes") return "Class";
+  if (layout === "years") return "Year";
+  return "Semester";
+}
+
+function ordinal(value: number) {
+  const mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
+  if (value % 10 === 1) return `${value}st`;
+  if (value % 10 === 2) return `${value}nd`;
+  if (value % 10 === 3) return `${value}rd`;
+  return `${value}th`;
+}
+
 /**
  * What one term is called for this faculty: "Class 11", "Year 2", "Semester 3",
  * or "All subjects" for a single-track faculty. Year-wise faculties have one
- * term per year, so the year is the name.
+ * term per year, so the year is the name. `short` gives "2nd Year" / "3rd
+ * Semester", the form the pickers show; `full` gives "Year 2 · Semester 3" for
+ * a semester-wise faculty, where the year adds something.
  */
 export function communityTermName(
-  community: { level?: string | null; totalYears: number; totalSemesters: number },
+  community: TermLayoutCommunity,
   term: { yearNumber: number; semesterNumber: number },
+  form: "plain" | "short" | "full" = "plain",
 ) {
-  const structure = communityLevelStructure(community.level ?? "");
-  if (structure === "single-track") return "All subjects";
-  if (structure === "classes") return `Class ${10 + term.yearNumber}`;
-  if (community.totalSemesters === community.totalYears) return `Year ${term.yearNumber}`;
+  const layout = communityTermLayout(community);
+  if (layout === "single-track") return "All subjects";
+  if (layout === "classes") return `Class ${10 + term.yearNumber}`;
+  if (layout === "years") return form === "short" ? `${ordinal(term.yearNumber)} Year` : `Year ${term.yearNumber}`;
+  if (form === "short") return `${ordinal(term.semesterNumber)} Semester`;
+  if (form === "full") return `Year ${term.yearNumber} · Semester ${term.semesterNumber}`;
   return `Semester ${term.semesterNumber}`;
 }
 

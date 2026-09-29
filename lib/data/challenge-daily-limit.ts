@@ -9,7 +9,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
  *
  * What counts is a challenge COMPLETED today (Nepal time) — the same number as
  * the hub's "Today's quota" card, so the lock appears exactly when that card
- * reads 3 / 5. Challenges on Continue do not count. Reopening one already
+ * reads 3 / 3. Challenges on Continue do not count. Reopening one already
  * started is never refused: Continue always works, and so does the result of a
  * finished one. A Start after the third completion is refused with
  * `ChallengeDailyLimitError`; tomorrow brings three more.

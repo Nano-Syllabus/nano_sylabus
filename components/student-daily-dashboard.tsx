@@ -64,10 +64,12 @@ function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ quote: nextQuote || null }),
       });
-      const result = (await response.json().catch(() => null)) as
-        | { quote?: string; error?: string }
-        | null;
-      if (!response.ok) throw new Error(result?.error || "Could not save your quote. Please try again.");
+      const result = (await response.json().catch(() => null)) as {
+        quote?: string;
+        error?: string;
+      } | null;
+      if (!response.ok)
+        throw new Error(result?.error || "Could not save your quote. Please try again.");
 
       const savedQuote = typeof result?.quote === "string" ? result.quote : "";
 
@@ -76,7 +78,11 @@ function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
       setEditing(false);
       setStatus(savedQuote ? "Saved to your profile." : "Quote removed.");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Could not save your quote. Please try again.");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Could not save your quote. Please try again.",
+      );
     } finally {
       setSaving(false);
     }
@@ -97,7 +103,11 @@ function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
   return (
     <section
       className={`relative mt-5 overflow-hidden bg-[var(--community-accent)] text-[var(--community-accent-foreground)] shadow-sm ${
-        editing || quote ? "rounded-[27px] px-6 py-[22px] sm:px-10" : "rounded-2xl px-4 py-2.5 sm:px-5"
+        editing
+          ? "rounded-[27px] px-6 py-[22px] sm:px-10"
+          : quote
+            ? "rounded-2xl px-5 py-4 sm:px-6"
+            : "rounded-2xl px-4 py-2.5 sm:px-5"
       }`}
       aria-labelledby="study-quote-heading"
     >
@@ -129,7 +139,9 @@ function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
           />
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm opacity-90">
             <p id="study-quote-hint">Make it yours. A short line is easiest to remember.</p>
-            <span className="tabular-nums">{draft.length} / {STUDY_QUOTE_LIMIT}</span>
+            <span className="tabular-nums">
+              {draft.length} / {STUDY_QUOTE_LIMIT}
+            </span>
           </div>
           {error ? (
             <p id="study-quote-error" role="alert" className="mt-2 text-sm font-medium">
@@ -166,20 +178,20 @@ function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
           </div>
         </form>
       ) : quote ? (
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <span className="grid size-[58px] shrink-0 place-items-center rounded-full border-2 border-current/80" aria-hidden="true">
-              <Quote className="size-6" fill="currentColor" />
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              className="grid size-10 shrink-0 place-items-center rounded-full border-2 border-current/80"
+              aria-hidden="true"
+            >
+              <Quote className="size-4" fill="currentColor" />
             </span>
-            <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] opacity-80">Your study reminder</p>
-              <blockquote
-                id="study-quote-heading"
-                className="mt-1 max-w-4xl break-words font-sans text-[clamp(21px,2.3vw,30px)] font-semibold leading-[1.3] tracking-[-0.025em]"
-              >
-                {quote}
-              </blockquote>
-            </div>
+            <blockquote
+              id="study-quote-heading"
+              className="min-w-0 max-w-4xl break-words font-sans text-lg font-semibold leading-snug tracking-[-0.01em] sm:text-xl"
+            >
+              {quote}
+            </blockquote>
           </div>
           <button
             type="button"
@@ -193,7 +205,10 @@ function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
       ) : (
         <div className="relative flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full border-[1.5px] border-current/80" aria-hidden="true">
+            <span
+              className="grid size-8 shrink-0 place-items-center rounded-full border-[1.5px] border-current/80"
+              aria-hidden="true"
+            >
               <Quote className="size-3.5" fill="currentColor" />
             </span>
             <h2 id="study-quote-heading" className="min-w-0 text-base font-semibold">
@@ -211,7 +226,10 @@ function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
         </div>
       )}
 
-      {status ? <p className="relative mt-3 text-sm font-medium" role="status">{status}</p> : null}
+      {/* Announced to screen readers only: the quote appearing IS the visible confirmation. */}
+      <p className="sr-only" role="status">
+        {status}
+      </p>
     </section>
   );
 }
@@ -373,6 +391,9 @@ function SemesterProgress({
     );
   }
 
+  // A payload cached before `termNoun` existed reads as the old "Semester".
+  const termNoun = community.termNoun === undefined ? "Semester" : community.termNoun;
+
   return (
     <section
       className="overflow-hidden rounded-2xl border border-border bg-card"
@@ -387,32 +408,35 @@ function SemesterProgress({
         <div className="min-w-0">
           <p className="type-student-eyebrow text-text-muted">Programme map</p>
           <h2 id="semester-progress-heading" className="type-student-section-title mt-2">
-            Semester progress
+            {termNoun ?? "Syllabus"} progress
           </h2>
         </div>
-        <label
-          className={cn(
-            "grid gap-1.5 text-xs font-medium text-text-secondary",
-            compact && "w-full",
-          )}
-        >
-          Semester
-          <select
-            value={semester?.id ?? ""}
-            onChange={(event) => setSemesterId(event.target.value)}
+        {/* Nothing to pick for one track (Entrance, License) or a single term. */}
+        {termNoun && community.semesters.length > 1 ? (
+          <label
             className={cn(
-              "min-h-11 rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary",
-              compact ? "w-full min-w-0" : "min-w-[220px]",
-              focusRing,
+              "grid gap-1.5 text-xs font-medium text-text-secondary",
+              compact && "w-full",
             )}
           >
-            {community.semesters.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            {termNoun}
+            <select
+              value={semester?.id ?? ""}
+              onChange={(event) => setSemesterId(event.target.value)}
+              className={cn(
+                "min-h-11 rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary",
+                compact ? "w-full min-w-0" : "min-w-[220px]",
+                focusRing,
+              )}
+            >
+              {community.semesters.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       {semester ? (
@@ -540,8 +564,33 @@ export function StudentDailyDashboardView({
   selectedCommunitySlug?: string;
   initialDashboard?: StudentDailyDashboard;
 }) {
-  const { data } = useDashboard(communitySlug, initialDashboard);
+  const { data, isError, isFetching, refetch } = useDashboard(communitySlug, initialDashboard);
   const dashboard = data?.dashboard;
+
+  // Failed with nothing to show: say so. The skeleton alone read as "still
+  // loading" for as long as the tab stayed open (reported 2026-09-29).
+  if (!dashboard && isError)
+    return (
+      <main className="student-page-frame">
+        <h1 className="type-student-page-title pt-2">
+          Welcome, {fullName.trim().split(/\s+/)[0] || "there"}.
+        </h1>
+        <div role="alert" className="mt-5 rounded-2xl border border-border bg-card p-6">
+          <p className="text-base font-semibold text-text-primary">Your dashboard didn&apos;t load</p>
+          <p className="mt-1 text-sm text-text-secondary">
+            The server took too long to answer. Your progress is safe.
+          </p>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            className="mt-4 inline-flex min-h-10 items-center rounded-full bg-text-primary px-4 text-sm font-semibold text-text-inverse disabled:opacity-60"
+          >
+            {isFetching ? "Trying again…" : "Try again"}
+          </button>
+        </div>
+      </main>
+    );
 
   if (!dashboard)
     return (

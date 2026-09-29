@@ -304,19 +304,21 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     const document = await getTeacherDocument(teacher.collection_sk, id);
     await deleteTeacherDocument(teacher.collection_sk, id);
-    const path = documentPath(document);
-    if (path) {
+    // The same lookup as rename and preview — by document id, then by every
+    // spelling of the path. An exact-path-only match missed paths written with
+    // the namespace in front, and the orphaned row kept the file in the
+    // student Library after the creator deleted it.
+    const mirror = await findMirror(teacher.id, id, documentPath(document));
+    if (mirror) {
       const admin = createSupabaseAdminClient();
-      const { data: mirror } = await admin
-        .from("teacher_document_files")
-        .select("id,storage_path")
-        .eq("teacher_id", teacher.id)
-        .eq("collection_path", path)
-        .maybeSingle();
-      if (mirror) {
+      if (mirror.storage_path) {
         await admin.storage.from("teacher-documents").remove([mirror.storage_path]);
-        await admin.from("teacher_document_files").delete().eq("id", mirror.id);
       }
+      await admin
+        .from("teacher_document_files")
+        .delete()
+        .eq("id", mirror.id)
+        .eq("teacher_id", teacher.id);
     }
     return NextResponse.json({ deleted: true });
   } catch (error) {

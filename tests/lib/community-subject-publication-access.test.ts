@@ -157,6 +157,10 @@ describe("community subject publication access", () => {
       communitySlug: "coding",
       communityName: "Coding",
       courseId: "course-1",
+      // The fixture's rows carry no level or counts: the defaults.
+      level: null,
+      totalYears: 1,
+      totalSemesters: 1,
       currentTermId: null,
     });
     expect(ownedScope).toEqual({
@@ -164,6 +168,9 @@ describe("community subject publication access", () => {
       communitySlug: "my-community",
       communityName: "My Community",
       courseId: "course-2",
+      level: null,
+      totalYears: 1,
+      totalSemesters: 1,
       currentTermId: null,
     });
   });

@@ -108,6 +108,10 @@ export type StudentChallengeDashboard = {
     name: string;
     university?: string;
     faculty?: string;
+    /** For the term names: +2 is Class 11/12, Entrance/License has no terms. */
+    level: string | null;
+    totalYears: number;
+    totalSemesters: number;
     courseId: string | null;
     /** The semester the student has said they are in — what scopes this queue. */
     currentTermId: string | null;
@@ -737,10 +741,10 @@ export async function getStudentChallengeDashboard(
           } else {
             if (!collectionKey) throw new Error("Subject collection is unavailable.");
             // By slug: the display name can drift from the creator's own.
-            const response = await getTeacherPracticeTopics(collectionKey, subjectSlug || subjectName, {
-              totalMarks: 20,
-              maxQuestions: 5,
-            });
+            // No marks budget: only `topics` is read here, which it does not
+            // change, and asking without one shares the memo entry every other
+            // caller of this subject's catalogue already filled.
+            const response = await getTeacherPracticeTopics(collectionKey, subjectSlug || subjectName);
             topics = (Array.isArray(response.topics) ? response.topics : []) as PracticeTopic[];
           }
           const learningTopics = topics.filter(
@@ -956,6 +960,9 @@ export async function getStudentChallengeDashboard(
           name: communityScope.communityName,
           university: communityScope.university,
           faculty: communityScope.faculty,
+          level: communityScope.level,
+          totalYears: communityScope.totalYears,
+          totalSemesters: communityScope.totalSemesters,
           courseId: communityScope.courseId,
           currentTermId: communityScope.currentTermId ?? null,
           terms,

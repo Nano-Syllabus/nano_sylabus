@@ -1,3 +1,4 @@
+import { communityTermLayout, communityTermName } from "@/lib/communities";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -32,6 +33,10 @@ export type StudentCommunityLearningScope = {
   university?: string;
   faculty?: string;
   courseId: string | null;
+  /** Null when the `level` column is absent; `communityTermLayout` then guesses from the name. */
+  level: string | null;
+  totalYears: number;
+  totalSemesters: number;
   /** The semester this student says they are in, off their own membership row.
    *  Null when they have not picked one, which is the whole-course view. */
   currentTermId: string | null;
@@ -60,13 +65,17 @@ export async function getStudentCommunityLearningScope(
     .filter(Boolean);
   if (!communityIds.length) return null;
 
-  const communityResult = await admin
-    .from("communities")
-    .select("id,slug,name,university,faculty,study_course_id")
-    .in("id", communityIds)
-    .eq("status", "active");
+  const queryCommunities = (columns: string) =>
+    admin.from("communities").select(columns).in("id", communityIds).eq("status", "active");
+  const baseColumns = "id,slug,name,university,faculty,study_course_id,total_years,total_semesters";
+  // `level` arrives with 20260924180000_community_level.sql; without it the
+  // term layout is guessed from the name.
+  let communityResult = await queryCommunities(`${baseColumns},level`);
+  if (communityResult.error && ["42703", "PGRST204"].includes(String(communityResult.error.code))) {
+    communityResult = await queryCommunities(baseColumns);
+  }
   if (communityResult.error) throw communityResult.error;
-  const communities = communityResult.data || [];
+  const communities = (communityResult.data || []) as unknown as Record<string, unknown>[];
   const communityById = new Map(communities.map((row) => [String(row.id), row]));
   const activeMemberships = memberships.filter((row) =>
     communityById.has(String(row.community_id || "")),
@@ -95,7 +104,22 @@ export async function getStudentCommunityLearningScope(
     university: community.university ? String(community.university) : undefined,
     faculty: community.faculty ? String(community.faculty) : undefined,
     courseId: community.study_course_id ? String(community.study_course_id) : null,
-    currentTermId: membership?.current_term_id ? String(membership.current_term_id) : null,
+    level: community.level ? String(community.level) : null,
+    totalYears: Number(community.total_years) || 1,
+    totalSemesters: Number(community.total_semesters) || 1,
+    // Entrance and License are one track: no running term narrows the queue,
+    // even for a faculty still carrying a degree's terms from before the rule.
+    currentTermId:
+      membership?.current_term_id &&
+      communityTermLayout({
+        level: community.level ? String(community.level) : null,
+        name: String(community.name || ""),
+        faculty: String(community.faculty || ""),
+        totalYears: Number(community.total_years) || 1,
+        totalSemesters: Number(community.total_semesters) || 1,
+      }) !== "single-track"
+        ? String(membership.current_term_id)
+        : null,
   };
 }
 
@@ -571,6 +595,9 @@ export type StudentCourseSubjectAccess = {
     semesterNumber: number;
     semesterInYear: number;
     position: number;
+    /** "Year 1 · Semester 2", "Class 11", "Year 3" or "All subjects" — the
+     *  faculty's own name for this term. */
+    name?: string;
   };
 };
 
@@ -669,8 +696,12 @@ export async function listStudentCommunitySubjectAccess(
    * identical: a subject whose community has no `study_course_id` is dropped by
    * the `courseId` guard in the final `flatMap`, exactly as before.
    */
-  const [communitiesResult, subjectResult, termsResult] = await Promise.all([
-    admin.from("communities").select("id,name,study_course_id").in("id", communityIds).eq("status", "active"),
+  const communityColumns = "id,name,faculty,total_years,total_semesters,study_course_id";
+  const queryCommunities = (columns: string) =>
+    admin.from("communities").select(columns).in("id", communityIds).eq("status", "active");
+  const [communitiesFirst, subjectResult, termsResult] = await Promise.all([
+    // `level` names the terms (+2 = Class 11/12); before its migration it is guessed.
+    queryCommunities(`${communityColumns},level`),
     admin
       .from("community_subjects")
       .select("community_id,term_id,teacher_id,external_subject_slug,name,folder_path")
@@ -682,17 +713,34 @@ export async function listStudentCommunitySubjectAccess(
       .select("id,year_number,semester_number,semester_in_year,position")
       .in("community_id", communityIds),
   ]);
+  const communitiesResult =
+    communitiesFirst.error && ["42703", "PGRST204"].includes(String(communitiesFirst.error.code))
+      ? await queryCommunities(communityColumns)
+      : communitiesFirst;
   if (communitiesResult.error) throw communitiesResult.error;
   if (subjectResult.error) throw subjectResult.error;
   if (termsResult.error) throw termsResult.error;
+  const communityRows = (communitiesResult.data || []) as unknown as Record<string, unknown>[];
+  const layoutById = new Map(
+    communityRows.map((row) => [
+      String(row.id || ""),
+      {
+        level: row.level ? String(row.level) : null,
+        name: String(row.name || ""),
+        faculty: String(row.faculty || ""),
+        totalYears: Number(row.total_years) || 1,
+        totalSemesters: Number(row.total_semesters) || 1,
+      },
+    ]),
+  );
 
   const courseByCommunity = new Map(
-    (communitiesResult.data || [])
+    communityRows
       .filter((row) => Boolean(row.study_course_id))
       .map((row) => [String(row.id), String(row.study_course_id)]),
   );
   const communityNameById = new Map(
-    (communitiesResult.data || []).map((row) => [
+    communityRows.map((row) => [
       String(row.id || ""),
       String(row.name || "Community"),
     ]),
@@ -728,6 +776,16 @@ export async function listStudentCommunitySubjectAccess(
               semesterNumber: Number(term.semester_number) || 1,
               semesterInYear: Number(term.semester_in_year) || 1,
               position: Number(term.position) || 0,
+              name: layoutById.has(communityId)
+                ? communityTermName(
+                    layoutById.get(communityId)!,
+                    {
+                      yearNumber: Number(term.year_number) || 1,
+                      semesterNumber: Number(term.semester_number) || 1,
+                    },
+                    "full",
+                  )
+                : undefined,
             }
           : undefined,
       } satisfies StudentCourseSubjectAccess,

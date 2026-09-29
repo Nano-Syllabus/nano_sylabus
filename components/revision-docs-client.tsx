@@ -31,6 +31,11 @@ import { cn } from "@/lib/utils";
 import { publishNanoAiTopic } from "@/lib/nanoai-topic";
 import { WorkedExampleCard, workedAnswerClass } from "@/components/worked-example-card";
 import { WorkedSolution } from "@/components/worked-solution";
+import {
+  usePrefetchRevisionTopic,
+  useRevisionDocs,
+  useRevisionTopic,
+} from "@/lib/query/revision";
 import type {
   RevisionDocSemester,
   RevisionDocSubject,
@@ -259,7 +264,9 @@ function SubjectButton({
  * Grouped by community, then by semester LABEL within it. Grouping on the label
  * alone filed two communities' "Year 1 · Semester 1" subjects under one heading
  * as if they were one term. The community's name shows only when there is more
- * than one. Choosing is a radio group and "Revise" confirms it, so arrowing through the list never swaps the page underneath.
+ * than one. A click on a subject opens it and closes the list — there is no
+ * confirm button (user, 2026-09-29). Long names wrap rather than scroll
+ * sideways, and the list scrolls without a visible bar.
  */
 function SubjectPicker({
   subjects,
@@ -273,9 +280,7 @@ function SubjectPicker({
   onClose: () => void;
 }) {
   const titleId = useId();
-  const radioName = useId();
   const panelRef = useRef<HTMLDivElement>(null);
-  const [choice, setChoice] = useState(currentKey);
   const communities = useMemo(() => {
     const byCommunity = new Map<string, { name: string; terms: Map<string, SubjectEntry[]> }>();
     for (const entry of subjects) {
@@ -297,7 +302,10 @@ function SubjectPicker({
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const panel = panelRef.current;
-    (panel?.querySelector<HTMLElement>("input:checked") ?? panel?.querySelector<HTMLElement>("input"))?.focus();
+    (
+      panel?.querySelector<HTMLElement>('[aria-current="true"]') ??
+      panel?.querySelector<HTMLElement>("[data-subject]")
+    )?.focus();
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
@@ -310,7 +318,7 @@ function SubjectPicker({
       }
       if (event.key !== "Tab" || !panelRef.current) return;
       const focusable = panelRef.current.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), input:checked, [tabindex]:not([tabindex="-1"])',
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
       if (!focusable.length) return;
       const first = focusable[0];
@@ -345,86 +353,65 @@ function SubjectPicker({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col rounded-t-2xl border border-border bg-bg-primary shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none sm:max-h-[min(40rem,calc(100dvh-2rem))] sm:rounded-2xl"
+        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-border bg-bg-primary shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none sm:max-h-[min(40rem,calc(100dvh-2rem))] sm:rounded-2xl"
       >
-        <form
-          className="flex min-h-0 flex-1 flex-col"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (choice) onRevise(choice);
-          }}
-        >
-          <header className="flex items-center justify-between gap-3 px-5 pb-2 pt-4">
-            <h2 id={titleId} className="type-student-card-title text-text-primary">
-              Select a subject
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close subject list"
-              className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            >
-              <X className="size-4" aria-hidden="true" />
-            </button>
-          </header>
+        <header className="flex items-center justify-between gap-3 px-5 pb-2 pt-4">
+          <h2 id={titleId} className="type-student-card-title text-text-primary">
+            Select a subject
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close subject list"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </header>
 
-          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pb-3 pt-1">
-            {communities.map((community) => (
-              <section key={community.id} className="space-y-4">
-                {showCommunities ? (
-                  <h3 className="truncate px-2 text-sm font-semibold text-text-primary">{community.name}</h3>
-                ) : null}
-                {community.groups.map((group) => (
-                  <fieldset key={group.label}>
-                    <legend className="px-2 text-xs font-medium text-text-muted">{group.label}</legend>
-                    <div className="mt-1.5 space-y-0.5">
-                      {group.entries.map((entry) => {
-                        const checked = choice === entry.key;
-                        return (
-                          <label
-                            key={entry.key}
-                            className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 ${
-                              checked ? "bg-blue-500/10" : "hover:bg-bg-secondary"
+        <div className="scrollbar-hidden min-h-0 flex-1 space-y-6 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-4 pt-1">
+          {communities.map((community) => (
+            <section key={community.id} className="space-y-4">
+              {showCommunities ? (
+                <h3 className="break-words px-2 text-sm font-semibold text-text-primary">{community.name}</h3>
+              ) : null}
+              {community.groups.map((group) => (
+                <div key={group.label} role="group" aria-label={group.label}>
+                  <p className="px-2 text-xs font-medium text-text-muted">{group.label}</p>
+                  <ul className="mt-1.5 space-y-0.5">
+                    {group.entries.map((entry) => {
+                      const current = currentKey === entry.key;
+                      return (
+                        <li key={entry.key}>
+                          <button
+                            type="button"
+                            data-subject
+                            aria-current={current ? "true" : undefined}
+                            onClick={() => onRevise(entry.key)}
+                            className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                              current ? "bg-blue-500/10" : "hover:bg-bg-secondary"
                             }`}
                           >
-                            <input
-                              type="radio"
-                              name={radioName}
-                              value={entry.key}
-                              checked={checked}
-                              onChange={() => setChoice(entry.key)}
-                              className="sr-only"
-                            />
                             <span
-                              className={`min-w-0 flex-1 truncate text-sm ${
-                                checked ? "font-semibold text-blue-700 dark:text-blue-300" : "font-medium text-text-primary"
+                              className={`min-w-0 flex-1 break-words text-sm ${
+                                current ? "font-semibold text-blue-700 dark:text-blue-300" : "font-medium text-text-primary"
                               }`}
                             >
                               {entry.subject.name}
                             </span>
-                            {checked ? (
+                            {current ? (
                               <Check className="size-4 shrink-0 text-blue-600 dark:text-blue-400" strokeWidth={2.5} aria-hidden="true" />
                             ) : null}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </fieldset>
-                ))}
-              </section>
-            ))}
-          </div>
-
-          <footer className="border-t border-border px-5 py-3">
-            <button
-              type="submit"
-              disabled={!choice}
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50"
-            >
-              Revise
-            </button>
-          </footer>
-        </form>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -682,6 +669,45 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
   );
 }
 
+/**
+ * A filed topic's page, read from the browser cache or fetched on open.
+ *
+ * The navigator's copy of a topic carries only its title and state (see
+ * `revisionDocsIndex`); its reading and questions come from their own query,
+ * so a page opened once opens from memory from then on, across reloads.
+ */
+function FiledTopicPage({ topic }: { topic: RevisionDocTopic }) {
+  const page = useRevisionTopic(topic.challengeId, true);
+  const full = page.data?.topic;
+  if (full) return <TopicPage topic={{ ...topic, ...pageFields(full) }} />;
+  if (page.isError) {
+    return (
+      <div className="student-reading-frame max-w-md py-16 text-center">
+        <p className="text-sm text-text-secondary">This page could not be loaded.</p>
+        <button type="button" onClick={() => void page.refetch()} className={`${secondaryActionClass} mt-5`}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+  return <TopicPageSkeleton />;
+}
+
+/** What only the page read carries; the index's own fields win for the rest. */
+function pageFields(topic: RevisionDocTopic) {
+  return {
+    reading: topic.reading,
+    focus: topic.focus,
+    connections: topic.connections,
+    pastQuestions: topic.pastQuestions,
+    solvedExamples: topic.solvedExamples,
+    mcqs: topic.mcqs,
+    readingPending: topic.readingPending,
+    readingError: topic.readingError,
+    bigIdea: topic.bigIdea || "",
+  };
+}
+
 const primaryActionClass =
   "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2";
 const secondaryActionClass =
@@ -834,6 +860,30 @@ function OutlineTopicPage({ topic }: { topic: RevisionDocTopic }) {
   );
 }
 
+/**
+ * The page, painted from the browser cache when it has been seen before.
+ *
+ * `community` is the saved faculty slug from the cookie — only a partition of
+ * the cache, so another faculty's navigator is never painted under this one.
+ * The route re-resolves the faculty itself.
+ */
+export function RevisionDocsView({ community }: { community: string }) {
+  const docs = useRevisionDocs(community);
+  if (docs.data) return <RevisionDocsClient docs={docs.data.docs} />;
+  if (docs.isError) {
+    return (
+      <div className="student-reading-frame max-w-2xl py-16 text-center">
+        <h1 className="type-student-page-title">Revision docs could not be loaded</h1>
+        <p className="mt-3 text-sm text-text-secondary">Check your connection and try again.</p>
+        <button type="button" onClick={() => void docs.refetch()} className={`${primaryActionClass} mt-6`}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+  return <RevisionDocsSkeleton />;
+}
+
 export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
   const [query, setQuery] = useState("");
   const [navOpen, setNavOpen] = useState(false);
@@ -845,6 +895,7 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
   // whichever subject the navigator is showing.
   const [selectedId, setSelectedId] = useState("");
   const closePicker = useCallback(() => setPickerOpen(false), []);
+  const prefetchTopic = usePrefetchRevisionTopic();
 
   const subjects = useMemo(() => listSubjects(docs.semesters), [docs.semesters]);
   // A remembered subject that is gone (left the community, another account on
@@ -968,6 +1019,8 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
                           setSelectedId(id);
                           setNavOpen(false);
                         }}
+                        onPointerEnter={isFiled(topic) ? () => prefetchTopic(topic.challengeId) : undefined}
+                        onFocus={isFiled(topic) ? () => prefetchTopic(topic.challengeId) : undefined}
                         aria-haspopup={locked ? "dialog" : undefined}
                         title={locked ? `${topic.title} (locked)` : topic.title}
                         className={`flex min-h-10 w-full items-start gap-2.5 rounded-lg py-2 pl-3 pr-2 text-left text-sm leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
@@ -1036,7 +1089,7 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
 
         {selected ? (
           isFiled(selected) ? (
-            <TopicPage key={topicId(selected)} topic={selected} />
+            <FiledTopicPage key={topicId(selected)} topic={selected} />
           ) : (
             <OutlineTopicPage key={topicId(selected)} topic={selected} />
           )
@@ -1100,6 +1153,38 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
 const pulse = "animate-pulse bg-border motion-reduce:animate-none";
 const bar = `${pulse} rounded`;
 
+/** The open page while its words are on their way: the headings are known and
+ *  drawn for real; the text pulses. Shared by the route skeleton and by a topic
+ *  whose page is not in the browser cache yet. */
+function TopicPageSkeleton() {
+  return (
+    <article className="student-reading-frame">
+      {/* No header: the page opens on its concepts (see TopicPage). */}
+      <section className="mt-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="type-student-section-title">Concepts</h2>
+          <div className={`h-3 w-16 ${bar}`} />
+        </div>
+        <div className={`mt-3 h-3.5 w-full max-w-prose ${bar}`} />
+        <div className={`mt-2 h-3.5 w-2/3 ${bar}`} />
+        <div className={`mt-4 h-10 w-40 rounded-lg ${pulse}`} />
+      </section>
+
+      <section className="mt-8">
+        <h2 className="type-student-section-title">Past questions on this topic</h2>
+        <div className="mt-3 space-y-3">
+          {[0, 1, 2].map((index) => (
+            <div key={index} className={docsItemCardClass}>
+              <div className={`h-3 w-40 ${bar}`} />
+              <div className={`mt-3 h-4 ${index === 1 ? "w-3/5" : "w-4/5"} ${bar}`} />
+            </div>
+          ))}
+        </div>
+      </section>
+    </article>
+  );
+}
+
 /**
  * The route skeleton for Revision, drawn from the page's own pieces.
  *
@@ -1123,30 +1208,7 @@ export function RevisionDocsSkeleton() {
           </span>
         </div>
 
-        <article className="student-reading-frame">
-          {/* No header: the page opens on its concepts (see TopicPage). */}
-          <section className="mt-1">
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="type-student-section-title">Concepts</h2>
-              <div className={`h-3 w-16 ${bar}`} />
-            </div>
-            <div className={`mt-3 h-3.5 w-full max-w-prose ${bar}`} />
-            <div className={`mt-2 h-3.5 w-2/3 ${bar}`} />
-            <div className={`mt-4 h-10 w-40 rounded-lg ${pulse}`} />
-          </section>
-
-          <section className="mt-8">
-            <h2 className="type-student-section-title">Past questions on this topic</h2>
-            <div className="mt-3 space-y-3">
-              {[0, 1, 2].map((index) => (
-                <div key={index} className={docsItemCardClass}>
-                  <div className={`h-3 w-40 ${bar}`} />
-                  <div className={`mt-3 h-4 ${index === 1 ? "w-3/5" : "w-4/5"} ${bar}`} />
-                </div>
-              ))}
-            </div>
-          </section>
-        </article>
+        <TopicPageSkeleton />
       </main>
 
       <aside className={docsAsideClass}>

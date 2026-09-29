@@ -40,8 +40,8 @@ export type QuestionVideo = {
   error: string;
 };
 
-/** Long enough to teach one idea with one example; short enough to watch. */
-const VIDEO_SECONDS = 18;
+/** Long enough for one idea and its first step; short enough that it stays a hint. */
+const VIDEO_SECONDS = 15;
 /** Requests to the course API at once while preparing a paper's videos. The
  *  renderer queues and plans in parallel itself; this only bounds our fan-out. */
 const PREPARE_CONCURRENCY = 4;
@@ -56,28 +56,48 @@ function subjectWords(subject: string) {
   return subject.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * HINTS, NOT ANSWERS (2026-09-29). Both videos give away only about 30% of the
+ * way to the answer — the idea the question rests on and the first move — and
+ * then hand the rest to the student. A video that walks the whole solution is
+ * one the student watches instead of thinking; a nudge is one they finish.
+ *
+ * These lines lead the planner's `notes` because the renderer's own brief tells
+ * it to "answer" the concept and to close by answering its hook.
+ */
+const HINT_RULES = [
+  "THIS VIDEO IS A HINT, NOT A SOLUTION. Never state the answer on screen or in the narration: no option letter, no option text, no final value, nothing a student could copy.",
+  "Give only about 30% of the way to the answer: the one idea the question rests on and the FIRST step of using it. Stop there. Do not carry the working through, do not reach a result, do not show the last steps.",
+  "Make it intuitive before it is formal: open on a picture, an everyday analogy or a tiny example the eye can follow, then name the idea in one plain sentence.",
+  'End by handing the next step to the student — one short line such as "Now try that on the question" or a question that points where to look — instead of closing with a conclusion.',
+];
+
+const STYLE_RULES = [
+  "Plain words a first-year student understands. Define a symbol the moment it appears. Short on-screen text, large and readable.",
+  "Three beats, one idea each. No quiz, no recap, no title card, no 'in this video'.",
+];
+
 /** The request for a question's video. Exported for the test that pins it. */
 export function questionVideoSpec(subject: string, question: QuestionVideoQuestion) {
   const correctText = question.options.find((option) => option.key === question.correct)?.text ?? "";
   const topic = subjectWords(subject);
   return {
-    concept: clip(`The principle that decides this question (never state its answer): ${question.text}`, 200),
+    concept: clip(`A hint (never the answer) that nudges a student toward: ${question.text}`, 200),
     subject: clip(topic, 120),
     notes: clip(
       [
-        // First, because the renderer's own brief says to "answer" the concept.
-        "NEVER state the answer on screen or in the narration: no option letter, no option text, no final value for this question. The student sees the correct option on the page; the video teaches the reasoning that gets there, and the hook and last beat are about the principle, not this question's result.",
-        `A student revising ${topic || "their course"} met this multiple-choice question.`,
+        ...HINT_RULES,
+        `A student revising ${topic || "their course"} got this multiple-choice question wrong and wants a nudge, not the full working.`,
         `Question: ${question.text}`,
         `Options: ${question.options.map((option) => `${option.key}) ${option.text}`).join("  ")}`,
-        `Correct answer: ${question.correct}) ${correctText}`,
-        question.explanation ? `Why it is correct: ${question.explanation}` : "",
-        `Teach it so the idea is clear within ${VIDEO_SECONDS + 2} seconds:`,
-        "1. Open straight on the core idea in one plain sentence, shown as a picture, diagram or small worked number — no title card.",
-        "2. Make it concrete with ONE example the eye can follow step by step.",
-        "3. Show the reasoning that leads to the right choice, and the slip that makes the most tempting wrong choice look right — without naming either option or its value.",
-        "Plain words a first-year student understands. Define a symbol the moment it appears. Short on-screen text, large and readable.",
-        "Three or four beats, one idea each. No quiz, no recap, no 'in this video'.",
+        // Given so the planner steers the right way — it must never be shown.
+        `Correct answer (for your direction only, never show or say it): ${question.correct}) ${correctText}`,
+        question.explanation ? `Why it is correct (for your direction only): ${question.explanation}` : "",
+        `Make the nudge clear within ${VIDEO_SECONDS + 2} seconds:`,
+        "1. Show the slip that makes the most tempting wrong choice look right, as a picture or tiny example — without naming the option or its value.",
+        "2. Show the idea that fixes it and take the FIRST step of the right reasoning, on a different small example rather than this question's own values.",
+        "3. Hand the student the rest: point at what to check next in the question, and stop.",
+        ...STYLE_RULES,
       ]
         .filter(Boolean)
         .join("\n"),
@@ -91,31 +111,29 @@ export function questionVideoSpec(subject: string, question: QuestionVideoQuesti
 /**
  * THE HINT — the video a student may watch BEFORE answering (2026-09-28).
  *
- * The solution video above teaches the answer, so it stays locked until the
- * question is answered. The hint teaches only the idea the question rests on:
- * it is built from the question text alone — never the options, the key or the
- * explanation — so there is nothing in its request that could give the answer
- * away, and it is safe to hand out on an open question. Like the solution, it is
- * a pure function of the question, so one render serves the whole cohort.
+ * The solution video above knows the answer, so it stays locked until the
+ * question is answered. The hint is built from the question text alone — never
+ * the options, the key or the explanation — so there is nothing in its request
+ * that could give the answer away, and it is safe to hand out on an open
+ * question. Like the solution, it is a pure function of the question, so one
+ * render serves the whole cohort.
  */
 export function questionHintSpec(subject: string, question: Pick<QuestionVideoQuestion, "text">) {
   const topic = subjectWords(subject);
   return {
-    concept: clip(`The principle a student needs for this question (never answer it): ${question.text}`, 200),
+    concept: clip(`A hint (never the answer) for the first step of: ${question.text}`, 200),
     subject: clip(topic, 120),
     notes: clip(
       [
-        // First, because the renderer's own brief says to "answer" the concept.
-        "NEVER answer this question, on screen or in the narration: no final value, no result, nothing a student could copy as the answer. The hook and the last beat are about the general principle, not this question.",
-        `A student revising ${topic || "their course"} is about to answer this multiple-choice question and wants to learn the idea first.`,
+        ...HINT_RULES,
+        `A student revising ${topic || "their course"} is about to answer this multiple-choice question and wants a hint first.`,
         `Question: ${question.text}`,
-        "This is a HINT, watched BEFORE answering. Do NOT answer the question, do NOT solve it, do NOT state or imply the final result, and do NOT mention any option.",
-        `Teach the underlying concept so it is clear within ${VIDEO_SECONDS + 2} seconds:`,
-        "1. Open straight on the core idea in one plain sentence, shown as a picture, diagram or small worked number — no title card.",
-        "2. Make it concrete with ONE different example (not this question's own values or wording) the eye can follow step by step.",
-        "3. End on what to look for in a question like this one, leaving the student to work out the answer.",
-        "Plain words a first-year student understands. Define a symbol the moment it appears. Short on-screen text, large and readable.",
-        "Three or four beats, one idea each. No quiz, no recap, no 'in this video'.",
+        "Do NOT answer the question, do NOT solve it, do NOT state or imply the final result, and do NOT mention any option.",
+        `Make the hint clear within ${VIDEO_SECONDS + 2} seconds:`,
+        "1. Open on the core idea as a picture, analogy or tiny worked number — something the student already knows.",
+        "2. Show the FIRST step of applying it, on a different small example (not this question's own values or wording).",
+        "3. Point at what to look for in this question next, and stop — the student works out the rest.",
+        ...STYLE_RULES,
       ].join("\n"),
       2000,
     ),

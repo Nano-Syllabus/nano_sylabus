@@ -42,7 +42,7 @@ describe("the challenge hub skeleton", () => {
   });
 
   it("shows for real only labels the hub itself prints", () => {
-    for (const label of ["TODAY&apos;S QUOTA", "DAILY TARGET", "7-DAY AVERAGE", "Available challenges", "Micro-Topics Hub"]) {
+    for (const label of ["TODAY&apos;S QUOTA", "TOPICS PASSED", "7-DAY AVERAGE", "Available challenges", "Micro-Topics Hub"]) {
       expect(skeleton).toContain(label);
       expect(hub).toContain(label);
     }

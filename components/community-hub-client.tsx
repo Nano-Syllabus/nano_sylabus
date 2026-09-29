@@ -41,6 +41,7 @@ import type {
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 import { cn, titleCase } from "@/lib/utils";
 import { patchDashboardRunningSemester } from "@/lib/query/dashboard";
+import { communityTermLayout, communityTermName, communityTermNoun } from "@/lib/communities";
 
 type CommunitySection = "overview" | "members";
 
@@ -181,7 +182,10 @@ function getCommunityAbbreviation(community: { slug?: string; name: string }) {
   }
   const words = community.name.trim().split(/\s+/);
   if (words.length > 1) {
-    const acronym = words.map((w) => w[0]).join("").toUpperCase();
+    const acronym = words
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase();
     if (acronym.length >= 2 && acronym.length <= 5) return acronym;
   }
   return community.slug?.split("-")[0].toUpperCase() || "HUB";
@@ -274,12 +278,11 @@ export function CommunityHubClient({
     [community.terms],
   );
 
-  const abbreviation = useMemo(
-    () => getCommunityAbbreviation(community),
-    [community],
-  );
+  const abbreviation = useMemo(() => getCommunityAbbreviation(community), [community]);
 
   const currentSemesterSummary = initialData.currentTermSummary;
+  const termLayout = communityTermLayout(community);
+  const termNoun = communityTermNoun(community);
 
   async function generateInvite() {
     setInviteLoading(true);
@@ -488,9 +491,7 @@ export function CommunityHubClient({
   return (
     <main className="student-page-frame">
       <div className="mb-6">
-        <h1 className="type-student-page-title text-text-primary">
-          Community Hub
-        </h1>
+        <h1 className="type-student-page-title text-text-primary">Community Hub</h1>
       </div>
 
       <section className="relative isolate overflow-hidden rounded-[24px] sm:rounded-[28px] bg-[#1242be] px-6 py-7 text-white shadow-lg sm:px-8 sm:py-8 lg:px-9 lg:py-8">
@@ -516,19 +517,34 @@ export function CommunityHubClient({
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs font-medium text-white/90 sm:text-sm">
-              <span>
-                <strong className="font-bold text-white">{community.totalYears}</strong> years
-              </span>
-              <span className="text-white/40" aria-hidden="true">
-                |
-              </span>
-              <span>
-                <strong className="font-bold text-white">{community.totalSemesters}</strong>{" "}
-                semesters
-              </span>
-              <span className="text-white/40" aria-hidden="true">
-                |
-              </span>
+              {/* +2 counts classes, a year-wise degree years only, and Entrance
+                  or License neither — only a semester-wise degree has both. */}
+              {termLayout === "single-track" ? null : (
+                <>
+                  <span>
+                    <strong className="font-bold text-white">
+                      {termLayout === "semesters"
+                        ? community.totalYears
+                        : community.terms.length || community.totalYears}
+                    </strong>{" "}
+                    {termLayout === "classes" ? "classes" : "years"}
+                  </span>
+                  <span className="text-white/40" aria-hidden="true">
+                    |
+                  </span>
+                </>
+              )}
+              {termLayout === "semesters" ? (
+                <>
+                  <span>
+                    <strong className="font-bold text-white">{community.totalSemesters}</strong>{" "}
+                    semesters
+                  </span>
+                  <span className="text-white/40" aria-hidden="true">
+                    |
+                  </span>
+                </>
+              ) : null}
               <span>
                 <strong className="font-bold text-white">{initialData.subjects.length}</strong>{" "}
                 subjects
@@ -544,10 +560,10 @@ export function CommunityHubClient({
 
           <div className="border-t border-white/20 pt-6 lg:border-l lg:border-t-0 lg:py-2 lg:pl-8">
             <p className="text-[11px] font-bold uppercase tracking-widest text-white/70">
-              Current semester
+              {termNoun ? `Current ${termNoun.toLowerCase()}` : "Your track"}
             </p>
             <p className="mt-1.5 font-display text-xl font-bold text-white sm:text-2xl">
-              Year {currentTerm.yearNumber} · Semester {currentTerm.semesterNumber}
+              {communityTermName(community, currentTerm, "full")}
             </p>
             <p className="mt-1 text-xs text-white/80 sm:text-sm">
               {currentSemesterSummary.subjectCount} subject
@@ -916,6 +932,8 @@ function CommunityOverview({
   data: CommunityHubData;
   onOpenReferral: () => void;
 }) {
+  const termNoun = communityTermNoun(data.community);
+  const termScope = termNoun ? `Current-${termNoun.toLowerCase()}` : "All";
   return (
     <div className="grid gap-8 pt-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
       <div className="min-w-0">
@@ -936,7 +954,7 @@ function CommunityOverview({
             icon={<FileText className="size-5" aria-hidden="true" />}
             label="Total materials"
             value={formatNumber(data.currentTermSummary.materialCount)}
-            detail="Files in current-semester subject repositories"
+            detail={`Files in ${termScope.toLowerCase()} subject repositories`}
           />
           <MetricCard
             icon={<ClipboardCheck className="size-5" aria-hidden="true" />}
@@ -946,7 +964,7 @@ function CommunityOverview({
                 ? "—"
                 : `${data.currentTermSummary.contentReadiness}%`
             }
-            detail="Current-semester subjects with a syllabus and Question Bank"
+            detail={`${termScope} subjects with a syllabus and Question Bank`}
           />
         </section>
 
@@ -1079,9 +1097,7 @@ function CommunityTodayLeaderboard({ data }: { data: CommunityHubData }) {
                 </span>
               </span>
               <span className="text-right font-semibold tabular-nums">{member.todayAttempts}</span>
-              <span className="text-right text-text-secondary tabular-nums">
-                {member.streak}d
-              </span>
+              <span className="text-right text-text-secondary tabular-nums">{member.streak}d</span>
             </li>
           ))}
         </ol>
@@ -1400,7 +1416,13 @@ function CommunityForum({
   );
 }
 
-function CommunityMembers({ data, ranking }: { data: CommunityHubData; ranking: "streak" | "today" }) {
+function CommunityMembers({
+  data,
+  ranking,
+}: {
+  data: CommunityHubData;
+  ranking: "streak" | "today";
+}) {
   const members =
     ranking === "today"
       ? [...data.members].sort(

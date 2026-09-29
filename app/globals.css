@@ -1140,6 +1140,15 @@ img.answer-figure[data-answer-zoom]:focus-visible {
   background: transparent;
 }
 
+/* Still scrolls (wheel, touch, keys), just without a visible bar — for short
+   pick lists inside a dialog, where a bar reads as clutter. */
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* The React teacher workspace intentionally mirrors the approved HTML prototype. */
 .teacher-html-parity {
   color-scheme: inherit;

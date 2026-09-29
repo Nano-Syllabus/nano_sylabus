@@ -77,6 +77,11 @@ export const keys = {
       attempt: (attemptId: string) => ["student", "practice", "attempt", attemptId] as const,
       mcqSet: (setId: string) => ["student", "practice", "mcq", setId] as const,
     },
+    /** Revision: the navigator (per faculty) and one page per filed topic. */
+    revision: {
+      docs: (community: string) => ["student", "revision", "docs", "v1", community] as const,
+      topic: (challengeId: string) => ["student", "revision", "topic", "v1", challengeId] as const,
+    },
     challenges: {
       all: () => ["student", "challenges"] as const,
       progress: (challengeId: string) =>

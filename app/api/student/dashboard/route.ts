@@ -46,6 +46,8 @@ export async function GET(request: Request) {
     // unchanged response cheap to transfer.
     return privateJson({ dashboard }, { request });
   } catch (error) {
+    // The 502 body is all the browser sees; the cause belongs in the log.
+    console.error("[GET /api/student/dashboard] failed", error);
     return errorJson(
       error instanceof Error ? error.message : "Could not load your dashboard.",
       502,

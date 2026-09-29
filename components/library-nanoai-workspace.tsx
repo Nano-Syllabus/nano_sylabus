@@ -8,14 +8,21 @@ import {
   FileText,
   LibraryBig,
   LockKeyhole,
+  Plus,
   RefreshCw,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
+import {
+  communityTermLayout,
+  communityTermName,
+  communityTermNoun,
+} from "@/lib/communities";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
 import { SubjectTopicProgress } from "@/components/subject-topic-progress";
+import { LibraryContributeDialog } from "@/components/library-contribute-dialog";
 import {
   initialSemesterSelection,
   semesterSelectionReducer,
@@ -32,7 +39,20 @@ export type LibraryNanoAiMaterial = {
   sizeBytes: number;
   mimeType?: string;
   previewAvailable?: boolean;
+  addedAt?: string | null;
 };
+
+/** "29 Sept 2026" — the day a resource was added, in Nepal time. */
+function addedLabel(value?: string | null) {
+  const time = Date.parse(value || "");
+  if (!Number.isFinite(time)) return "";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kathmandu",
+  }).format(time);
+}
 
 export type LibraryNanoAiSubject = Pick<
   CommunitySubject,
@@ -87,6 +107,11 @@ function formatSize(bytes: number) {
   if (!bytes) return "File";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Added by a student through Upload, after the page check accepted it. */
+function isContributedMaterial(material: LibraryNanoAiMaterial) {
+  return /(^|\/)Community Contributed\//i.test(material.path);
 }
 
 function materialApiSubject(subject: LibraryNanoAiSubject) {
@@ -258,9 +283,20 @@ function SemesterProgressRing({ percentage, active }: { percentage: number; acti
     value >= 70 ? "text-success" : active ? "text-[#1d57fd]" : "text-[var(--community-accent)]";
   // The number sits inside the ring, as on the subject cards below.
   return (
-    <span className={cn("relative inline-flex size-8 shrink-0 items-center justify-center", tone)} aria-hidden="true">
+    <span
+      className={cn("relative inline-flex size-8 shrink-0 items-center justify-center", tone)}
+      aria-hidden="true"
+    >
       <svg viewBox="0 0 32 32" className="absolute inset-0 size-8 -rotate-90">
-        <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" strokeOpacity="0.16" strokeWidth="3" />
+        <circle
+          cx="16"
+          cy="16"
+          r="13"
+          fill="none"
+          stroke="currentColor"
+          strokeOpacity="0.16"
+          strokeWidth="3"
+        />
         {value > 0 ? (
           <circle
             cx="16"
@@ -275,7 +311,9 @@ function SemesterProgressRing({ percentage, active }: { percentage: number; acti
           />
         ) : null}
       </svg>
-      <span className="relative text-[9px] font-semibold leading-none tabular-nums">{Math.round(value)}%</span>
+      <span className="relative text-[9px] font-semibold leading-none tabular-nums">
+        {Math.round(value)}%
+      </span>
     </span>
   );
 }
@@ -339,6 +377,7 @@ export function LibraryNanoAiWorkspace({
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [restoredDocument, setRestoredDocument] = useState(false);
+  const [contributing, setContributing] = useState(false);
 
   useEffect(() => {
     if (!savedSemesterSelection.currentTermId) return;
@@ -436,9 +475,13 @@ export function LibraryNanoAiWorkspace({
     return [...groups.entries()];
   }, [materials]);
 
+  // A one-track faculty (Entrance, License) has no term to pick, so it shows
+  // every subject — including a legacy one still spread over several terms.
+  const singleTrack = community ? communityTermLayout(community) === "single-track" : false;
   const visibleSubjects = useMemo(() => {
+    if (singleTrack) return orderedTerms.flatMap((term) => term.subjects);
     return selectedTerm?.subjects ?? [];
-  }, [selectedTerm]);
+  }, [selectedTerm, singleTrack, orderedTerms]);
 
   const visibleMaterials = materials;
 
@@ -499,46 +542,58 @@ export function LibraryNanoAiWorkspace({
     );
   }
 
+  // +2 picks a Class, a year-wise degree a Year; Entrance and License are one
+  // track, so they skip the step and start at the subjects.
+  const termNoun = communityTermNoun(community);
+  const showTerms = Boolean(termNoun);
+  const termChip = (term: CommunityTerm) =>
+    communityTermLayout(community) === "semesters"
+      ? academicNumberLabel(term.semesterNumber, "Sem")
+      : communityTermName(community, term, "short");
+
   return (
     <main className={libraryPageClass}>
       <LibraryHeader />
 
-      <section className="mt-7" aria-labelledby="library-semesters-heading">
-        <h2 id="library-semesters-heading" className="type-student-section-title text-text-primary">
-          1. Choose Semester
-        </h2>
-        <div className="mt-3 flex flex-wrap gap-2 sm:gap-2.5">
-          {orderedTerms.map((term) => {
-            const active = selectedTerm?.id === term.id;
-            const percent = termPercent(term);
-            return (
-              <button
-                key={term.id}
-                type="button"
-                onClick={() => browseTerm(term)}
-                aria-label={
-                  percent === null
-                    ? undefined
-                    : `${academicNumberLabel(term.semesterNumber, "Sem")}, ${percent}% complete`
-                }
-                className={cn(
-                  "inline-flex h-10 shrink-0 items-center gap-2 rounded-full border text-sm font-medium transition-colors",
-                  percent === null ? "px-4" : "pl-1 pr-4",
-                  active
-                    ? "border-[#1d57fd] bg-card text-[#1d57fd]"
-                    : "border-border bg-card text-text-secondary hover:border-border-strong",
-                  focusRing,
-                )}
-              >
-                {percent === null ? null : (
-                  <SemesterProgressRing percentage={percent} active={active} />
-                )}
-                {academicNumberLabel(term.semesterNumber, "Sem")}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      {showTerms ? (
+        <section className="mt-7" aria-labelledby="library-semesters-heading">
+          <h2
+            id="library-semesters-heading"
+            className="type-student-section-title text-text-primary"
+          >
+            {`1. Choose ${termNoun}`}
+          </h2>
+          <div className="mt-3 flex flex-wrap gap-2 sm:gap-2.5">
+            {orderedTerms.map((term) => {
+              const active = selectedTerm?.id === term.id;
+              const percent = termPercent(term);
+              return (
+                <button
+                  key={term.id}
+                  type="button"
+                  onClick={() => browseTerm(term)}
+                  aria-label={
+                    percent === null ? undefined : `${termChip(term)}, ${percent}% complete`
+                  }
+                  className={cn(
+                    "inline-flex h-10 shrink-0 items-center gap-2 rounded-full border text-sm font-medium transition-colors",
+                    percent === null ? "px-4" : "pl-1 pr-4",
+                    active
+                      ? "border-[#1d57fd] bg-card text-[#1d57fd]"
+                      : "border-border bg-card text-text-secondary hover:border-border-strong",
+                    focusRing,
+                  )}
+                >
+                  {percent === null ? null : (
+                    <SemesterProgressRing percentage={percent} active={active} />
+                  )}
+                  {termChip(term)}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <section className="mt-7" aria-labelledby="library-subjects-heading">
         <div>
@@ -546,7 +601,7 @@ export function LibraryNanoAiWorkspace({
             id="library-subjects-heading"
             className="type-student-section-title text-text-primary"
           >
-            2. Choose Subject
+            {showTerms ? "2. Choose Subject" : "1. Choose Subject"}
           </h2>
         </div>
         {selectedTerm && visibleSubjects.length ? (
@@ -583,19 +638,52 @@ export function LibraryNanoAiWorkspace({
           </div>
         ) : (
           <div className="mt-3 rounded-2xl border border-dashed border-border bg-bg-secondary p-6 text-center text-sm text-text-muted">
-            {selectedTerm ? "No matching subjects." : "No semesters are available yet."}
+            {selectedTerm ? "No matching subjects." : "No subjects are available yet."}
           </div>
         )}
       </section>
 
       <div className="mt-7 grid gap-4 lg:grid-cols-2">
         <section className={libraryPanelClass} aria-labelledby="library-resources-heading">
-          <h2
-            id="library-resources-heading"
-            className="type-student-section-title text-text-primary"
-          >
-            Learning Resources
-          </h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2
+              id="library-resources-heading"
+              className="type-student-section-title text-text-primary"
+            >
+              Learning Resources
+            </h2>
+            {selectedSubject && loadState === "ready" ? (
+              <button
+                type="button"
+                onClick={() => setContributing(true)}
+                className={cn(
+                  "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3.5 text-sm font-semibold text-text-primary transition-colors hover:bg-bg-secondary",
+                  focusRing,
+                )}
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                Upload
+              </button>
+            ) : null}
+          </div>
+          {contributing && selectedSubject ? (
+            <LibraryContributeDialog
+              subjectName={selectedSubject.name}
+              subject={materialApiSubject(selectedSubject)}
+              courseId={community?.studyCourseId}
+              onClose={() => setContributing(false)}
+              onAccepted={(material) => {
+                // A write patches the shelf it changed; nothing is refetched.
+                const next = [material, ...materials.filter((row) => row.path !== material.path)];
+                materialsCache.current.set(materialsKey, next);
+                setMaterials(next);
+              }}
+              onPendingSettled={() => {
+                materialsCache.current.delete(materialsKey);
+                setReloadKey((key) => key + 1);
+              }}
+            />
+          ) : null}
           <div className="mt-4">
             {!selectedSubject ? (
               <div className="rounded-2xl bg-bg-secondary px-5 py-6 text-center text-xs text-text-muted">
@@ -630,7 +718,8 @@ export function LibraryNanoAiWorkspace({
                 <FileText className="mx-auto size-8 text-text-muted" aria-hidden="true" />
                 <h3 className="type-student-card-title mt-4">No resources yet</h3>
                 <p className="mt-2 text-sm text-text-secondary">
-                  The community creator has not uploaded material for this subject yet.
+                  Nothing has been added for this subject yet. Use Upload to share your notes or
+                  past papers.
                 </p>
               </div>
             ) : null}
@@ -674,7 +763,14 @@ export function LibraryNanoAiWorkspace({
                               {readableMaterialName(material.name)}
                             </span>
                             <span className="mt-1 block truncate text-[13px] text-text-muted">
-                              {material.shelf || formatSize(material.sizeBytes)}
+                              {[
+                                isContributedMaterial(material)
+                                  ? "Community contributed"
+                                  : material.shelf || formatSize(material.sizeBytes),
+                                addedLabel(material.addedAt) && `Added ${addedLabel(material.addedAt)}`,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
                             </span>
                           </span>
                           <span
@@ -744,7 +840,8 @@ export function LibraryWorkspaceSkeleton() {
       <LibraryHeader />
 
       <section className="mt-7">
-        <h2 className="type-student-section-title text-text-primary">1. Choose Semester</h2>
+        {/* Semester, Class or Year depends on the faculty, which is not known yet. */}
+        <div className={`h-6 w-44 rounded-md ${pulse}`} />
         <div className="mt-3 flex flex-wrap gap-2 sm:gap-2.5">
           {Array.from({ length: 4 }).map((_, index) => (
             <span key={index} className={`h-10 w-[84px] shrink-0 rounded-full ${pulse}`} />

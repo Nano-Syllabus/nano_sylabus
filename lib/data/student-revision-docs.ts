@@ -17,6 +17,7 @@ import {
   studentFacingTopicTitle,
 } from "@/lib/data/student-challenges";
 import {
+  getStudentCourseSubjectAccessCached,
   listCreatorPrivateSubjectAccess,
   listStudentCommunitySubjectAccess,
   type StudentCourseSubjectAccess,
@@ -204,7 +205,7 @@ function matchKey(value: string) {
 }
 
 function semesterLabel(term: NonNullable<StudentCourseSubjectAccess["term"]>) {
-  return `Year ${term.yearNumber} · Semester ${term.semesterNumber}`;
+  return term.name || `Year ${term.yearNumber} · Semester ${term.semesterNumber}`;
 }
 
 function scorePercent(row: ChallengeRow) {
@@ -460,10 +461,16 @@ async function readFiledChallenges(
 
 export async function getStudentRevisionDocs(
   userId: string,
-  options: { unlockAll?: boolean; communityId?: string | null } = {},
+  options: {
+    /** A promise is fine: the plan and the active faculty are read ALONGSIDE the
+     *  rows below instead of before them, which took a whole round trip off the
+     *  front of every Revision load. */
+    unlockAll?: boolean | Promise<boolean>;
+    communityId?: string | null | Promise<string | null>;
+  } = {},
 ): Promise<StudentRevisionDocs> {
   const admin = createSupabaseAdminClient();
-  const [allCommunitySubjects, privateSubjects, completed] = await Promise.all([
+  const [allCommunitySubjects, privateSubjects, completed, communityId, unlockAll] = await Promise.all([
     listStudentCommunitySubjectAccess(userId, admin),
     // A creator studying their own uploaded material has no community and no
     // course: their challenges carry `course_id = null` and are authorised by
@@ -472,13 +479,15 @@ export async function getStudentRevisionDocs(
     // `requireChallengeAccess` consults both, and so must this.
     listCreatorPrivateSubjectAccess(userId, admin).catch(() => []),
     readFiledChallenges(userId, admin),
+    options.communityId ?? null,
+    options.unlockAll ?? false,
   ]);
 
   // ONE FACULTY: the active one, as on the Challenge Hub. A student who joined
   // one faculty and owns another saw the owned faculty's subjects here (its
   // "Applied Mechanics" first) while the hub ran the joined one.
-  const community = options.communityId
-    ? allCommunitySubjects.filter((subject) => subject.community?.id === options.communityId)
+  const community = communityId
+    ? allCommunitySubjects.filter((subject) => subject.community?.id === communityId)
     : allCommunitySubjects;
 
   if (isMissingChallengeTable(completed.error)) {
@@ -707,7 +716,7 @@ export async function getStudentRevisionDocs(
       ) {
         continue;
       }
-      const topic = outlineTopic(catalogueTopic, subject, Boolean(options.unlockAll));
+      const topic = outlineTopic(catalogueTopic, subject, Boolean(unlockAll));
       if (
         listed.has(`key:${topic.topicKey}`) ||
         listed.has(`title:${matchKey(topic.title)}`) ||
@@ -801,4 +810,77 @@ export async function getStudentRevisionDocs(
     filedCount,
     unavailable: false,
   };
+}
+
+/**
+ * THE INDEX: the docs minus every topic's page.
+ *
+ * Revision used to ship every filed topic's reading, past questions, solved
+ * questions and MCQs in one payload, for a page that shows ONE of them. That
+ * payload gated the server render (so `loading.tsx` covered the page on every
+ * visit) and was too big to keep in the browser cache. The navigator needs only
+ * titles and states, so that is what the index carries; a topic's page is read
+ * on its own (`getStudentRevisionTopic`) when it is opened, and each is cached
+ * in the browser under its own key.
+ *
+ * `bigIdea` stays: the navigator's search matches on it, and it is one line.
+ */
+export function revisionDocsIndex(docs: StudentRevisionDocs): StudentRevisionDocs {
+  return {
+    ...docs,
+    semesters: docs.semesters.map((semester) => ({
+      ...semester,
+      subjects: semester.subjects.map((subject) => ({
+        ...subject,
+        units: subject.units.map((unit) => ({
+          ...unit,
+          topics: unit.topics.map((topic) => ({
+            ...topic,
+            reading: [],
+            focus: "",
+            connections: [],
+            pastQuestions: [],
+            solvedExamples: [],
+            mcqs: [],
+          })),
+        })),
+      })),
+    })),
+  };
+}
+
+/**
+ * One filed topic's page, read by its challenge id.
+ *
+ * Only the student's own row, and only while they still have its subject — the
+ * same re-check the index makes (see ACCESS IS RE-CHECKED above): leaving a
+ * community takes its pages with it. Null when either fails; the route answers
+ * 404 and the navigator's copy of the index is simply behind.
+ */
+export async function getStudentRevisionTopic(
+  userId: string,
+  challengeId: string,
+): Promise<RevisionDocTopic | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("student_challenges")
+    .select(DOC_COLUMNS)
+    .eq("user_id", userId)
+    .eq("id", challengeId)
+    .in("status", ["completed", "started", "assigned"])
+    .maybeSingle();
+  if (error) throw error;
+  const row = (data ?? null) as ChallengeRow | null;
+  if (!row) return null;
+  const access = await getStudentCourseSubjectAccessCached(
+    userId,
+    text(row.course_id) || null,
+    text(row.subject_slug),
+  );
+  if (!access) return null;
+  return docTopic(row, {
+    courseId: access.courseId,
+    subjectSlug: access.subjectSlug,
+    name: access.subjectName || text(row.subject_name),
+  });
 }

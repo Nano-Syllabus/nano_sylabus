@@ -523,6 +523,18 @@ export function isDollarCode(candidate: string) {
   );
 }
 
+/**
+ * The next UNESCAPED `$` from `from`. Money is written `$\$8000$`, and the
+ * `\$` inside is a dollar sign, not the end of the maths: closing on it split
+ * the span in two and printed `\8000$` (reported 2026-09-29).
+ */
+function closingDollar(value: string, from: number) {
+  for (let at = value.indexOf("$", from); at !== -1; at = value.indexOf("$", at + 1)) {
+    if (value[at - 1] !== "\\") return at;
+  }
+  return -1;
+}
+
 const BLOCK_ENVIRONMENT = /\\begin\s*\{(?:[pbBvV]?matrix|cases|aligned|align\*?|array|gathered|split)\}/;
 
 function maskCodeAndMath(value: string, tokens: string[]): string {
@@ -545,6 +557,13 @@ function maskCodeAndMath(value: string, tokens: string[]): string {
       }
     }
 
+    // An escaped dollar in prose is a dollar sign, not a delimiter.
+    if (char === "\\" && value[index + 1] === "$") {
+      out += "$";
+      index += 2;
+      continue;
+    }
+
     if (char === "$") {
       // `$$…$$` first: the single-dollar rule below would read it as an empty
       // expression and leave a stray dollar either side of the result.
@@ -557,7 +576,7 @@ function maskCodeAndMath(value: string, tokens: string[]): string {
         }
       }
       const line = value.indexOf("\n", index + 1);
-      const close = value.indexOf("$", index + 1);
+      const close = closingDollar(value, index + 1);
       if (close > index + 1 && (line === -1 || close < line)) {
         const inner = value.slice(index + 1, close);
         if (isDollarCode(inner)) {

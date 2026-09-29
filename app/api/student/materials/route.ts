@@ -23,6 +23,8 @@ type Material = {
   sizeBytes: number;
   mimeType: string;
   previewAvailable: boolean;
+  /** When the file was added, for the Library row. Null for files known only to the index. */
+  addedAt: string | null;
 };
 
 type DbMaterialFile = {
@@ -33,6 +35,7 @@ type DbMaterialFile = {
   original_name: string | null;
   mime_type: string | null;
   size_bytes: number | null;
+  created_at: string | null;
 };
 
 type TenantFileNode = TenantSourceTreeNode & {
@@ -87,6 +90,7 @@ function collectFiles(nodes: TenantSourceTreeNode[], trail: string[] = []): Mate
       sizeBytes: Number(file.size ?? file.size_bytes ?? 0),
       mimeType: "application/pdf",
       previewAvailable: false,
+      addedAt: null,
     });
   }
 
@@ -141,7 +145,7 @@ async function loadSubjectMaterials(
       admin
         .from("teacher_document_files")
         .select(
-          "id, external_document_id, collection_path, storage_path, original_name, mime_type, size_bytes",
+          "id, external_document_id, collection_path, storage_path, original_name, mime_type, size_bytes, created_at",
         )
         .eq("teacher_id", access.teacherId)
         .ilike("collection_path", `${normalizedFolder}/%`)
@@ -170,6 +174,7 @@ async function loadSubjectMaterials(
           sizeBytes: Number(row.size_bytes || 0),
           mimeType: row.mime_type || "application/octet-stream",
           previewAvailable: Boolean(row.storage_path),
+          addedAt: row.created_at || null,
         };
       });
   } catch {

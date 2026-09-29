@@ -52,11 +52,13 @@ import {
 } from "@/lib/teacher-upload";
 import { teacherLegacySubjectHref, teacherSubjectsHref } from "@/lib/teacher-subject-navigation";
 import { CommunityDeleteControl } from "@/components/community-delete-control";
+import { CommunityTransferControl } from "@/components/community-transfer-control";
 import { CommunityNameEditor } from "@/components/community-name-editor";
 import { subjectAccessLabel, type SubjectCommunity } from "@/lib/teacher-subject-access";
 import {
   communityLevel,
   communityLevelStructure,
+  communityTermName,
   type CommunityDetail,
 } from "@/lib/communities";
 import type { CommunitySubjectWorkspace } from "@/lib/data/community-subjects";
@@ -1710,9 +1712,13 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
             dialog.communityAttach
               ? {
                   name: dashboard?.communityWorkspace?.name || dialog.communityAttach.slug,
-                  semester: dashboard?.communityWorkspace?.terms.find(
-                    (term) => term.id === dialog.communityAttach?.termId,
-                  )?.semesterNumber,
+                  termName: (() => {
+                    const workspace = dashboard?.communityWorkspace;
+                    const term = workspace?.terms.find(
+                      (item) => item.id === dialog.communityAttach?.termId,
+                    );
+                    return workspace && term ? communityTermName(workspace, term) : undefined;
+                  })(),
                 }
               : undefined
           }
@@ -1935,9 +1941,7 @@ function FacultyCard({
         <div className="flex items-baseline justify-between gap-3 text-sm">
           <span className="font-medium">{countLabel(community.subjectCount, "subject")}</span>
           <span className="text-xs text-text-muted">
-            {structure.unit
-              ? `${filled} of ${community.totalSemesters} ${structure.unit} filled`
-              : "No years or semesters"}
+            {structure.unit ? `${filled} of ${community.totalSemesters} ${structure.unit} filled` : ""}
           </span>
         </div>
         {structure.unit ? (
@@ -2282,6 +2286,8 @@ export function CommunitiesView({
           <h2 id="danger-zone-heading" className="mb-4 font-display text-xl font-semibold text-destructive">
             Danger zone
           </h2>
+          <CommunityTransferControl key={`transfer-${selected.id}`} slug={selected.slug} name={selected.name} />
+          <div className="my-5 border-t border-border" />
           <CommunityDeleteControl
             key={selected.id}
             slug={selected.slug}

@@ -5,6 +5,7 @@ import {
   getStudentChallengeDashboard,
   type StudentChallengeDashboard,
 } from "@/lib/data/student-challenge-dashboard";
+import { communityTermLayout, communityTermName, communityTermNoun } from "@/lib/communities";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getStudentCommunityLearningScope } from "@/lib/student-courses";
 
@@ -70,6 +71,8 @@ export type StudentDailyDashboard = {
     topicCount: number;
     leaderboard: DailyLeaderboardMember[];
     currentSemesterId: string;
+    /** "Semester", "Class" or "Year"; null for a one-track (Entrance, License) faculty. */
+    termNoun: string | null;
     semesters: DailySemester[];
   };
 };
@@ -187,38 +190,43 @@ export function rankDailyCommunityMembers(members: CommunityHubMember[]): DailyL
 export function buildDailySemesters(data: CommunityHubData): DailySemester[] {
   const subjectById = new Map(data.subjects.map((subject) => [subject.id, subject]));
 
-  return [...data.community.terms]
-    .sort((left, right) => left.position - right.position)
-    .map((term) => {
-      const subjects = term.subjects.map((subject) => {
-        const insight = subjectById.get(subject.id);
-        return {
-          id: subject.id,
-          slug: subject.slug,
-          name: subject.name,
-          code: subject.code,
-          topicCount: insight?.topicCount ?? null,
-          materialCount: insight?.materialCount ?? null,
-          readiness: insight?.progress ?? null,
-        } satisfies DailySemesterSubject;
-      });
-      const measured = subjects.filter(
-        (subject): subject is DailySemesterSubject & { readiness: number } =>
-          subject.readiness !== null,
-      );
-
+  const ordered = [...data.community.terms].sort((left, right) => left.position - right.position);
+  // One track (Entrance, License): a single entry with every subject, even for
+  // a faculty that still carries a degree's terms from before the rule.
+  const terms =
+    communityTermLayout(data.community) === "single-track" && ordered.length > 1
+      ? [{ ...ordered[0], subjects: ordered.flatMap((term) => term.subjects) }]
+      : ordered;
+  return terms.map((term) => {
+    const subjects = term.subjects.map((subject) => {
+      const insight = subjectById.get(subject.id);
       return {
-        id: term.id,
-        label: `Year ${term.yearNumber} · Semester ${term.semesterNumber}`,
-        yearNumber: term.yearNumber,
-        semesterNumber: term.semesterNumber,
-        readiness: measured.length
-          ? measured.reduce((sum, subject) => sum + subject.readiness, 0) / measured.length
-          : null,
-        measuredSubjects: measured.length,
-        subjects,
-      } satisfies DailySemester;
+        id: subject.id,
+        slug: subject.slug,
+        name: subject.name,
+        code: subject.code,
+        topicCount: insight?.topicCount ?? null,
+        materialCount: insight?.materialCount ?? null,
+        readiness: insight?.progress ?? null,
+      } satisfies DailySemesterSubject;
     });
+    const measured = subjects.filter(
+      (subject): subject is DailySemesterSubject & { readiness: number } =>
+        subject.readiness !== null,
+    );
+
+    return {
+      id: term.id,
+      label: communityTermName(data.community, term, "full"),
+      yearNumber: term.yearNumber,
+      semesterNumber: term.semesterNumber,
+      readiness: measured.length
+        ? measured.reduce((sum, subject) => sum + subject.readiness, 0) / measured.length
+        : null,
+      measuredSubjects: measured.length,
+      subjects,
+    } satisfies DailySemester;
+  });
 }
 
 export function aggregateScopedPracticeActivity(
@@ -359,7 +367,12 @@ export async function getStudentDailyDashboard(
           materialCount: community.materialCount,
           topicCount: community.topicCount,
           leaderboard: rankDailyCommunityMembers(community.members),
-          currentSemesterId: community.currentTermId,
+          currentSemesterId:
+            communityTermLayout(community.community) === "single-track"
+              ? ([...community.community.terms].sort((a, b) => a.position - b.position)[0]?.id ??
+                community.currentTermId)
+              : community.currentTermId,
+          termNoun: communityTermNoun(community.community),
           semesters: buildDailySemesters(community),
         }
       : null,

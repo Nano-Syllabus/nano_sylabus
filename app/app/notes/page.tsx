@@ -1,9 +1,8 @@
+import { cookies } from "next/headers";
 import { SetAppShell } from "@/components/set-app-shell";
-import { RevisionDocsClient } from "@/components/revision-docs-client";
+import { RevisionDocsView } from "@/components/revision-docs-client";
 import { requireOnboardedUser } from "@/lib/auth";
-import { unlocksEveryTopic } from "@/lib/data/student-challenges";
-import { getStudentRevisionDocs } from "@/lib/data/student-revision-docs";
-import { getActiveCommunity } from "@/lib/data/active-community";
+import { ACTIVE_COMMUNITY_COOKIE, savedCommunitySlug } from "@/lib/community-switch";
 
 export const dynamic = "force-dynamic";
 
@@ -47,23 +46,24 @@ export const dynamic = "force-dynamic";
  * which runs in syllabus order, gets to it. Plus and Pro can start any topic from
  * here (user, 2026-09-25). Filed pages stay open to everyone, as above.
  */
+/*
+ * A SHELL, NOT A DATA PAGE (2026-09-29), for the reason `/app/today` gives: this
+ * used to await the whole docs build — plan, faculty, every challenge row and
+ * every catalogue, in four rounds — before sending anything, so `loading.tsx`
+ * covered the screen on every visit and nothing the browser had cached could
+ * help. The navigator now comes from `/api/student/revision/docs` and each page
+ * from `/api/student/revision/topic/[id]`, both held in the browser cache.
+ *
+ * The cookie is read only to partition that cache by faculty; it costs no query.
+ */
 export default async function RevisionPage() {
-  const { user } = await requireOnboardedUser();
-  // The same check the start route makes, so the page never offers a Start
-  // button the route then refuses.
-  const [unlockAll, activeCommunity] = await Promise.all([
-    unlocksEveryTopic(user.id).catch(() => false),
-    getActiveCommunity(user.id),
-  ]);
-  const docs = await getStudentRevisionDocs(user.id, {
-    unlockAll,
-    communityId: activeCommunity.selected?.id ?? null,
-  });
+  const [{ user }, store] = await Promise.all([requireOnboardedUser(), cookies()]);
+  const community = savedCommunitySlug(store.get(ACTIVE_COMMUNITY_COOKIE)?.value, user.id) ?? "";
 
   return (
     <>
       <SetAppShell title="Revision" />
-      <RevisionDocsClient docs={docs} />
+      <RevisionDocsView community={community} />
     </>
   );
 }

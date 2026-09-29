@@ -1800,13 +1800,6 @@ export function CommunityCatalogClient({
                         </div>
                         <p className="ns-cf-hint">Subjects are filed under Class 11 and Class 12.</p>
                       </m.div>
-                    ) : levelStructure === "single-track" ? (
-                      <m.div variants={fieldReveal} className="ns-cf-field">
-                        <span className="ns-cf-label">Structure</span>
-                        <p className="ns-cf-note">
-                          No years or semesters. Every subject sits in one list and challenges are MCQ.
-                        </p>
-                      </m.div>
                     ) : levelStructure === "years-or-semesters" ? (
                       <>
                         <m.fieldset
@@ -2019,12 +2012,14 @@ export function CommunityCatalogClient({
                     </div>
                   </div>
 
+                  {/* Entrance and License have no structure to preview. */}
+                  {levelStructure === "single-track" ? null : (
                   <div className="ns-cf-structure">
                     <div className="ns-cf-structure-head">
                       <span>
                         {levelStructure === "classes"
                           ? "Classes"
-                          : levelStructure === "single-track" || !levelStructure
+                          : !levelStructure
                             ? "Structure"
                             : yearWise
                               ? "Year structure"
@@ -2036,10 +2031,6 @@ export function CommunityCatalogClient({
                     </div>
                     {!levelStructure ? (
                       <p className="ns-cf-structure-empty">Pick a level to preview the structure.</p>
-                    ) : levelStructure === "single-track" ? (
-                      <p className="ns-cf-structure-empty">
-                        One list of subjects with MCQ challenges. No years or semesters.
-                      </p>
                     ) : levelStructure === "years-or-semesters" && !draft.studyPattern ? (
                       <p className="ns-cf-structure-empty">Choose year-wise or semester-wise.</p>
                     ) : previewTerms.length ? (
@@ -2073,6 +2064,7 @@ export function CommunityCatalogClient({
                       </p>
                     )}
                   </div>
+                  )}
                 </aside>
               </m.section>
             </m.div>

@@ -985,6 +985,9 @@ export const askTeacherSubject = (
   topK: number,
   prompt: string,
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+  /** Answer from this one shelf only. "Syllabus" keeps Notes and Question Bank
+   *  out of a syllabus extraction; an older course API ignores the field. */
+  shelf?: "Syllabus" | "Notes" | "Question Bank",
 ) =>
   teacherRequest<ApiRecord>("/v1/collection/ask", key, {
     method: "POST",
@@ -994,6 +997,7 @@ export const askTeacherSubject = (
       top_k: topK,
       prompt,
       conversation_history: conversationHistory,
+      ...(shelf ? { shelf } : {}),
     },
   });
 
@@ -1127,12 +1131,31 @@ export const getTeacherPracticeTopics = (
   // `maxQuestions` are in it because they are query parameters the tenant API
   // shapes its response by — two callers asking with different budgets must
   // not share an entry.
+  // A 404 ("no syllabus topics or indexed chapters found") is REMEMBERED, then
+  // re-thrown: a subject with nothing indexed was asked again on every page
+  // load, and upstream recomputes a miss from the index each time — seconds of
+  // CPU per subject, three subjects at once on the Daily Dashboard, which
+  // pushed every one of them past the timeout (2026-09-29). Callers still see
+  // the same error. Re-indexing clears it (`invalidateTeacherPracticeTopics`).
   return memo(
     `teacher:practice-topics:${key}:${subject}:${options.totalMarks ?? ""}:${options.maxQuestions ?? ""}`,
-    request,
+    () =>
+      request().catch((error: unknown) => {
+        if (error instanceof TeacherApiError && error.status === 404) {
+          return { [MISSING_TOPICS]: error.message } as ApiRecord;
+        }
+        throw error;
+      }),
     { ttlSeconds: 300, staleSeconds: 900 },
-  );
+  ).then((payload) => {
+    if (payload && MISSING_TOPICS in payload) {
+      throw new TeacherApiError(String(payload[MISSING_TOPICS]), 404);
+    }
+    return payload;
+  });
 };
+
+const MISSING_TOPICS = "__missingTopics";
 
 /** Drop cached topic lists for a collection, after material is (re)indexed. */
 export function invalidateTeacherPracticeTopics(key: string) {

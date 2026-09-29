@@ -34,7 +34,8 @@ describe("question videos", () => {
     expect(spec.seconds).toBeLessThanOrEqual(20);
     expect(spec.subject).toBe("digital logic");
     expect(spec).not.toHaveProperty("fresh");
-    expect(spec.notes).toContain("Correct answer: A) 0");
+    expect(spec.notes).toContain("never show or say it): A) 0");
+    expect(spec.notes).toContain("about 30% of the way");
   });
 
   it("asks urgently for a video a student is waiting on", async () => {
@@ -55,7 +56,7 @@ describe("question videos", () => {
     prepareQuestionVideos({ collectionKey: "k", subject: "s" }, paper);
     await vi.waitFor(() => expect(requestAnimation).toHaveBeenCalledTimes(12));
     for (const [, spec] of requestAnimation.mock.calls) expect(spec.priority).toBe("background");
-    expect(requestAnimation.mock.calls[0][1].concept).toMatch(/^The principle a student needs/);
+    expect(requestAnimation.mock.calls[0][1].concept).toMatch(/^A hint \(never the answer\) for the first step/);
   });
 
   it("builds the hint from the question text alone — no options, key or explanation", () => {
@@ -65,6 +66,7 @@ describe("question videos", () => {
     expect(text).not.toContain("Correct answer");
     expect(text).not.toContain(question.explanation);
     expect(spec.notes).toContain("Do NOT answer the question");
+    expect(spec.notes).toContain("about 30% of the way");
     expect(questionHintSpec("digital-logic", question)).toEqual(spec);
   });
 });

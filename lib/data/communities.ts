@@ -193,7 +193,7 @@ async function hydrateCommunitySummaries(
  * viewer's own memberships are read per request, and they are read fresh, so
  * "Joined" is never stale; a member count may lag by up to 30 seconds.
  */
-const PUBLIC_COMMUNITIES_MEMO = "public-communities";
+export const PUBLIC_COMMUNITIES_MEMO = "public-communities";
 
 async function loadPublicCatalog(admin: SupabaseClient) {
   const query = (columns: string) =>

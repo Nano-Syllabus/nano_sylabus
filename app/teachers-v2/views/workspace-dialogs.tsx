@@ -233,7 +233,7 @@ export function CreateSubjectDialog({
   onCreated: (result: SubjectCreationResult) => Promise<void>;
   initialUniversity?: string;
   initialProgramme?: string;
-  communityContext?: { name: string; semester?: number };
+  communityContext?: { name: string; termName?: string };
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [name, setName] = useState("");
@@ -525,9 +525,7 @@ export function CreateSubjectDialog({
       {communityContext ? (
         <p className="mb-5 rounded-lg border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
           {titleCase(communityContext.name)}
-          {communityContext.semester
-            ? ` · Semester ${communityContext.semester}`
-            : " · Selected semester"}
+          {communityContext.termName ? ` · ${communityContext.termName}` : ""}
         </p>
       ) : null}
       <ol className="mb-7 grid grid-cols-3 gap-2" aria-label="Create subject progress">

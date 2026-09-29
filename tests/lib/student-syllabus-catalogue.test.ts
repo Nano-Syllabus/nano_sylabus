@@ -210,9 +210,8 @@ describe("student challenge dashboard uses the community learning map", () => {
     db.tables.communities = [];
     const result = await getStudentChallengeDashboard("member");
     expect(result.totalTopics).toBe(1);
-    expect(mocks.topics).toHaveBeenCalledWith("collection", "teacher_nims", {
-      totalMarks: 20,
-      maxQuestions: 5,
-    });
+    // No marks budget: only `topics` is read, and the budget-less key is the
+    // memo entry every other caller of this catalogue shares.
+    expect(mocks.topics).toHaveBeenCalledWith("collection", "teacher_nims");
   });
 });

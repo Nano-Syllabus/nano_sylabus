@@ -394,3 +394,15 @@ describe("code written between dollars", () => {
     expect(renderMarkdown("Here $i++$ and $a != b$ are code.")).toContain("<code>i++</code>");
   });
 });
+
+describe("escaped dollars", () => {
+  it("keeps money inside maths whole", () => {
+    const html = renderMarkdown("It generates $\\$8000$ in revenue and $\\$1000$ in costs.");
+    expect(html).not.toContain("\\8000");
+    expect(html).not.toMatch(/8000\$|1000\$/);
+  });
+
+  it("prints an escaped dollar in prose as a dollar sign", () => {
+    expect(renderMarkdown("It costs \\$5 and $x$ more.")).toContain("It costs $5");
+  });
+});

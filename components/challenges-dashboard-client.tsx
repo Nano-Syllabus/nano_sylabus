@@ -68,7 +68,7 @@ import {
   type ChallengeFeedbackChoice,
 } from "@/components/challenge-feedback-modal";
 import { mergeLearnQuestions } from "@/lib/challenge-learn-questions";
-import { academicNumberLabel } from "@/lib/academic";
+import { communityTermName, communityTermNoun } from "@/lib/communities";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
 import type { ChallengeAllowance } from "@/lib/data/challenge-daily-limit";
 import type {
@@ -1945,7 +1945,9 @@ function UpgradeLockButton() {
 }
 
 /** Challenges a day the hub asks of a student with no daily limit. */
-const DAILY_CHALLENGE_TARGET = 5;
+/** Everyone's daily target is three (user, 2026-09-29). For Free it is also
+ *  the cap; Plus, Pro and Group may go past it, and the card counts the extra. */
+const DAILY_CHALLENGE_TARGET = 3;
 
 function DailyLimitNotice({ limit }: { limit: number }) {
   return (
@@ -2062,6 +2064,16 @@ export function ChallengesDashboardClient({
    * `scopeKey` is `${courseId ?? "owner-private"}:${slug}` — the same string a
    * challenge row resolves to below, so the two cannot drift apart.
    */
+  const topicsPassed = useMemo(() => {
+    let covered = 0;
+    let total = 0;
+    for (const subject of dashboard.subjects) {
+      const subjectTotal = count(subject.totalTopics);
+      total += subjectTotal;
+      covered += Math.min(count(subject.completedTopics), subjectTotal);
+    }
+    return { covered, total };
+  }, [dashboard.subjects]);
   const subjectProgress = useMemo(() => {
     const byKey = new Map<string, { covered: number; total: number }>();
     for (const subject of dashboard.subjects) {
@@ -2101,8 +2113,9 @@ export function ChallengesDashboardClient({
     const termId = dashboard.community?.currentTermId;
     if (!termId || dashboard.subjects.length) return "";
     const term = dashboard.community?.terms.find((item) => item.id === termId);
-    return term ? academicNumberLabel(term.semesterNumber, "Semester") : "";
+    return term && dashboard.community ? communityTermName(dashboard.community, term, "short") : "";
   })();
+  const termNoun = dashboard.community ? communityTermNoun(dashboard.community) : null;
   const [runningTermId, setRunningTermId] = useState(dashboard.community?.currentTermId ?? "");
   const [savingSemester, setSavingSemester] = useState(false);
   // The semester being switched to, while nothing for it is on screen yet: its
@@ -2165,7 +2178,7 @@ export function ChallengesDashboardClient({
 
   /**
    * THE FREE PLAN'S THREE A DAY: the lock follows the "Today's quota" card —
-   * three challenges COMPLETED today — so it appears exactly at 3 / 5. The
+   * three challenges COMPLETED today — so it appears exactly at 3 / 3. The
    * server refuses a Start past it regardless (402), and a 402 locks the rest.
    * Continue locks too (user, 2026-09-28): at the limit every card is Upgrade.
    */
@@ -2176,6 +2189,7 @@ export function ChallengesDashboardClient({
   );
   /** A free student cannot pass the daily lock, so their target is the lock. */
   const dailyTarget = allowance && !allowance.paid ? allowance.limit : DAILY_CHALLENGE_TARGET;
+  const extraToday = Math.max(0, completedToday - dailyTarget);
 
   const openChallenge = async (challenge: StudentChallengeSummary) => {
     setOpeningId(challenge.id);
@@ -2314,6 +2328,11 @@ export function ChallengesDashboardClient({
             <div className="mt-2 flex items-baseline gap-1.5">
               <span className="type-student-metric text-text-primary">{completedToday}</span>
               <span className="type-student-metric text-[#84cc16]">/ {dailyTarget}</span>
+              {extraToday ? (
+                <span className="ml-auto text-[13px] font-semibold tabular-nums text-success">
+                  +{extraToday} extra
+                </span>
+              ) : null}
             </div>
             <div
               className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
@@ -2326,10 +2345,34 @@ export function ChallengesDashboardClient({
             </div>
           </article>
 
-          {/* Card 2: Daily Target */}
+          {/* Card 2: Topics passed — how far through the syllabus the student is,
+              over the same subjects (and the same counts) as the rows below, so
+              a pass moves both at once. It replaced a "Daily target" that only
+              repeated the quota's denominator. */}
           <article className={hubMetricCardClass}>
-            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">DAILY TARGET</p>
-            <p className="type-student-metric mt-2 text-text-primary">{dailyTarget}</p>
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">TOPICS PASSED</p>
+            {topicsPassed.total > 0 ? (
+              <>
+                <div className="mt-2 flex items-baseline gap-1.5">
+                  <span className="type-student-metric text-text-primary">{topicsPassed.covered}</span>
+                  <span className="type-student-metric text-text-muted">/ {topicsPassed.total}</span>
+                  <span className="ml-auto text-[13px] font-semibold tabular-nums text-text-secondary">
+                    {Math.round((topicsPassed.covered / topicsPassed.total) * 100)}%
+                  </span>
+                </div>
+                <div
+                  className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
+                  aria-hidden="true"
+                >
+                  <div
+                    className="h-full rounded-full bg-[#84cc16] transition-[width] duration-300 motion-reduce:transition-none"
+                    style={{ width: `${(topicsPassed.covered / topicsPassed.total) * 100}%` }}
+                  />
+                </div>
+              </>
+            ) : (
+              <p className="mt-2 text-[13px] text-text-muted">Topics not mapped yet</p>
+            )}
           </article>
 
           {/* Card 3: 7-Day Average — challenges completed a day over the last
@@ -2359,14 +2402,15 @@ export function ChallengesDashboardClient({
             {/* The running semester lives here now, not in the Library: it is the
                 thing that decides which subjects this queue draws from, so it
                 belongs next to the queue it changes. */}
-            {dashboard.community && dashboard.community.terms.length ? (
+            {/* Not for a one-track faculty (Entrance, License): it has no terms to pick. */}
+            {dashboard.community && termNoun && dashboard.community.terms.length ? (
               <div className="flex flex-col gap-1.5 sm:items-end">
                 <div className="flex items-center gap-3">
                   <label
                     htmlFor="running-semester"
                     className="whitespace-nowrap text-[13px] font-medium text-[#6b7280] dark:text-text-muted"
                   >
-                    Running Semester
+                    Running {termNoun}
                   </label>
                   <select
                     id="running-semester"
@@ -2375,10 +2419,10 @@ export function ChallengesDashboardClient({
                     disabled={savingSemester}
                     className="min-h-9 cursor-pointer rounded-xl border border-[#e5e7eb] dark:border-border bg-white dark:bg-bg-primary px-3.5 py-1 text-[13px] font-medium text-text-primary shadow-2xs transition-colors duration-100 hover:border-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-wait disabled:opacity-60"
                   >
-                    {runningTermId ? null : <option value="">Choose a semester</option>}
+                    {runningTermId ? null : <option value="">Choose a {termNoun.toLowerCase()}</option>}
                     {dashboard.community.terms.map((term) => (
                       <option key={term.id} value={term.id}>
-                        {academicNumberLabel(term.semesterNumber, "Semester")}
+                        {communityTermName(dashboard.community!, term, "short")}
                       </option>
                     ))}
                   </select>
@@ -2598,7 +2642,7 @@ export function ChallengesDashboardClient({
               </p>
               <p className="mt-2 text-sm text-text-muted">
                 {emptySemesterLabel && dashboard.community
-                  ? `${dashboard.community.name} has not published any ${emptySemesterLabel} subjects. If that is not the semester you are in, pick yours above.`
+                  ? `${dashboard.community.name} has not published any ${emptySemesterLabel} subjects. If that is not the ${(termNoun ?? "semester").toLowerCase()} you are in, pick yours above.`
                   : dashboard.scope
                     ? "Ask the community creator to refresh this subject's extracted topics."
                     : dashboard.community

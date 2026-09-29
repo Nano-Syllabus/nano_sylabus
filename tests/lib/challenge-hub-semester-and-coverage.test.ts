@@ -25,7 +25,7 @@ describe("the running semester lives on the Challenge Hub", () => {
   const hub = readFileSync("components/challenges-dashboard-client.tsx", "utf8");
 
   it("offers the semester picker where the subject filter used to be", () => {
-    expect(hub).toContain("Running Semester");
+    expect(hub).toContain("Running {termNoun}");
     expect(hub).not.toContain("RUNNING SEMESTER");
     expect(hub).toContain('id="running-semester"');
     expect(hub).not.toContain("PRIORITY SUBJECT");

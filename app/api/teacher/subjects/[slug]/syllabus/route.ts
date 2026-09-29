@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { askTeacherSubject, getTeacherSubjects, TeacherApiError } from "@/lib/teacher-app/client";
 import { syncTeacherSyllabusToCommunities } from "@/lib/data/community-subjects";
 import { revalidatePath } from "next/cache";
+import { stripUnitNumber } from "@/lib/syllabus-unit-title";
 
 type Context = { params: Promise<{ slug: string }> };
 
@@ -16,6 +17,10 @@ const chapterSchema = z.object({
   topics: z.array(topicSchema).max(100),
 });
 const structureSchema = z.array(chapterSchema).min(1).max(100);
+
+function cleanStructure(structure: z.infer<typeof structureSchema>) {
+  return structure.map((unit) => ({ ...unit, title: stripUnitNumber(unit.title) }));
+}
 
 async function publishSyllabus(userId: string, teacherId: string, slug: string) {
   try {
@@ -48,7 +53,7 @@ function parseStructure(answer: string) {
   if (!raw) return null;
   try {
     const parsed = structureSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : null;
+    return parsed.success ? cleanStructure(parsed.data) : null;
   } catch {
     return null;
   }
@@ -56,9 +61,13 @@ function parseStructure(answer: string) {
 
 export async function GET(_request: Request, context: Context) {
   try {
-    const { teacher, subject, slug } = await teacherAndSubject(context);
+    // Reading the saved structure needs only Supabase. It used to ask the course
+    // API for the subject list first, so a busy backend (2026-09-29: 21s, then a
+    // 502) blanked a panel whose data was never on the backend. The row is keyed
+    // on this teacher's own id, so nobody else's syllabus can be read this way.
+    const teacher = await getTeacherProfile();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (!subject) return NextResponse.json({ error: "Subject not found." }, { status: 404 });
+    const { slug } = await context.params;
     const admin = createSupabaseAdminClient();
     const { data, error } = await admin
       .from("teacher_subject_syllabi")
@@ -67,8 +76,12 @@ export async function GET(_request: Request, context: Context) {
       .eq("subject_slug", slug)
       .maybeSingle();
     if (error) throw error;
+    const stored = Array.isArray(data?.structure) ? (data.structure as Array<Record<string, unknown>>) : [];
     return NextResponse.json({
-      structure: data?.structure || [],
+      // Saved before titles were cleaned: shown without the "1.4" too.
+      structure: stored.map((unit) =>
+        typeof unit.title === "string" ? { ...unit, title: stripUnitNumber(unit.title) } : unit,
+      ),
       updatedAt: data?.updated_at || null,
     });
   } catch {
@@ -94,14 +107,14 @@ export async function PUT(request: Request, context: Context) {
       {
         teacher_id: teacher.id,
         subject_slug: slug,
-        structure: parsed.data,
+        structure: cleanStructure(parsed.data),
         updated_at: updatedAt,
       },
       { onConflict: "teacher_id,subject_slug" },
     );
     if (error) throw error;
     const sync = await publishSyllabus(teacher.user_id, teacher.id, slug);
-    return NextResponse.json({ structure: parsed.data, updatedAt, sync });
+    return NextResponse.json({ structure: cleanStructure(parsed.data), updatedAt, sync });
   } catch (error) {
     return NextResponse.json(
       {
@@ -123,9 +136,13 @@ export async function POST(_request: Request, context: Context) {
     const result = await askTeacherSubject(
       teacher.collection_sk,
       typeof subject.name === "string" && subject.name.trim() ? subject.name.trim() : slug,
-      'Read the indexed syllabus for this subject and extract its units or chapters and topics. Return ONLY valid JSON in this exact shape: [{"title":"Unit title","topics":[{"name":"Topic"}]}]. Do not add markdown or commentary. Preserve the syllabus order and wording. If no syllabus structure is present, return [].',
+      'Read the indexed syllabus for this subject and extract its units or chapters and topics. Return ONLY valid JSON in this exact shape: [{"title":"Unit title","topics":[{"name":"Topic"}]}]. Include EVERY unit the syllabus lists, in order, and skip none. Write each unit title without its number (not "1.4 Semiconductor Devices" but "Semiconductor Devices"). Do not add markdown or commentary. Preserve the syllabus order and wording. If no syllabus structure is present, return [].',
       15,
       "Use the indexed Syllabus shelf as the source. Return only the requested JSON array and no markdown.",
+      [],
+      // Only the Syllabus shelf: the whole-subject search let a Drive folder of
+      // notes or past papers outvote a one-page syllabus and become its units.
+      "Syllabus",
     );
     const answer = typeof result.answer === "string" ? result.answer : "";
     const structure = parseStructure(answer);

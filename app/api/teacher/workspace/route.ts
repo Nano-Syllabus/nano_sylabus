@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { readTeacherWorkspace, TeacherApiError } from "@/lib/teacher-app/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { profileFromUser, withTeacherAvatar } from "@/lib/teacher-public-profile";
 import { groupSubjectCommunities } from "@/lib/teacher-subject-access";
+import { pruneOrphanedMirrors } from "@/lib/teacher-document-mirrors";
 
 // The four tenant reads get 10s and one retry each (`workspaceReadOptions`), so
 // the worst honest case is ~20s. Vercel's default function budget is shorter
@@ -74,6 +75,24 @@ export async function GET() {
     if (communityLinks.error)
       throw new Error("Could not load subject community access. Please try again.");
     const communitiesBySubject = groupSubjectCommunities(communityLinks.data || []);
+
+    // Library previews whose file is gone from the collection (a delete that
+    // missed its mirror). Only against a fresh listing, after the response.
+    if (!tenant.stale) {
+      const listed = Array.isArray(documents)
+        ? documents
+        : (documents as { documents?: unknown })?.documents;
+      if (Array.isArray(listed)) {
+        const prune = () =>
+          pruneOrphanedMirrors(admin, teacher.id, listed as Array<Record<string, unknown>>);
+        try {
+          after(prune);
+        } catch {
+          // Outside a request scope (tests): best effort, never awaited.
+          void prune();
+        }
+      }
+    }
 
     return NextResponse.json({
       // Truthful about which of the two things the teacher is looking at: the

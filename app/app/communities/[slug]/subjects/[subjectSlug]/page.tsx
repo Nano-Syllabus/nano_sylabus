@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { CommunitySubjectWorkspaceClient } from "@/components/community-subject-workspace-client";
 import { SetAppShell } from "@/components/set-app-shell";
 import { requireOnboardedUser } from "@/lib/auth";
+import { communityTermLayout, communityTermName } from "@/lib/communities";
 import { getCommunity } from "@/lib/data/communities";
 import { getCommunitySubjectWorkspace } from "@/lib/data/community-subjects";
 import { titleCase } from "@/lib/utils";
@@ -36,16 +37,23 @@ export default async function CommunitySubjectPage({ params, searchParams }: Pag
           href={`/app/communities/${encodeURIComponent(community.slug)}/semesters/${encodeURIComponent(term.id)}`}
           className="inline-flex min-h-10 items-center gap-2 text-sm text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
         >
-          <ArrowLeft className="size-4" aria-hidden="true" /> Semester {term.semesterNumber}
+          <ArrowLeft className="size-4" aria-hidden="true" />{" "}
+          {communityTermLayout(community) === "single-track"
+            ? "Library"
+            : communityTermName(community, term)}
         </Link>
         <header className="border-b border-border pb-8 pt-4">
           <p className="text-sm text-text-secondary">
-            Year {term.yearNumber} · Semester {term.semesterNumber}
-            {subject.code ? ` · ${subject.code}` : ""}
+            {[
+              communityTermLayout(community) === "single-track"
+                ? ""
+                : communityTermName(community, term, "full"),
+              subject.code,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
-          <h1 className="type-student-page-title mt-2">
-            {titleCase(subject.name)}
-          </h1>
+          <h1 className="type-student-page-title mt-2">{titleCase(subject.name)}</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-text-secondary">
             {subject.description ||
               "This subject workspace will collect syllabus topics, study material, challenges, and community discussions."}

@@ -131,7 +131,7 @@ export function isDroppedConnection(cause: unknown) {
  *  (the deploy restarts it), short enough to stay inside the drain's budget. */
 const DROPPED_CONNECTION_RETRY_DELAYS_MS = [2_000, 6_000];
 
-async function sendTenantRequest(
+export async function sendTenantRequest(
   url: URL,
   rejectUnauthorized: boolean,
   timeoutMs: number,

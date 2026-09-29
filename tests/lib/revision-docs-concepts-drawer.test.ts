@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -16,7 +17,8 @@ import {
   readingPreview,
 } from "@/components/concepts-reading";
 import { RevisionDocsClient } from "@/components/revision-docs-client";
-import type { RevisionDocTopic, StudentRevisionDocs } from "@/lib/data/student-revision-docs";
+import { revisionDocsIndex, type RevisionDocTopic, type StudentRevisionDocs } from "@/lib/data/student-revision-docs";
+import { keys } from "@/lib/query/keys";
 
 /**
  * The concepts reading lives in a sheet, not in the page.
@@ -72,7 +74,16 @@ const docs: StudentRevisionDocs = {
 };
 
 describe("revision docs: the concepts reading", () => {
-  const page = renderToStaticMarkup(createElement(RevisionDocsClient, { docs }));
+  // The navigator gets the index; the open page comes from its own cached read.
+  const client = new QueryClient();
+  client.setQueryData(keys.student.revision.topic(topic.challengeId), { topic });
+  const page = renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(RevisionDocsClient, { docs: revisionDocsIndex(docs) }),
+    ),
+  );
 
   it("is not laid out inline on the page any more", () => {
     // The body of the reading only appears once the sheet is opened.

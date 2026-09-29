@@ -113,7 +113,7 @@ describe("the fundamentals check", () => {
     expect(request.seconds).toBeLessThanOrEqual(20);
     expect(request.concept.length).toBeLessThanOrEqual(200);
     expect(request.notes.length).toBeLessThanOrEqual(2000);
-    expect(request.notes).toContain("Correct answer: B) Kirchhoff's voltage law");
+    expect(request.notes).toContain("never show or say it): B) Kirchhoff's voltage law");
     expect(request.notes).not.toContain("They chose");
     expect(request.subject).toBe("Electric Circuit Theory");
   });

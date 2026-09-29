@@ -29,7 +29,7 @@ const skeleton = `${pulse} rounded`;
  * The Challenge Hub as it will look, drawn from the same frame the hub uses.
  *
  * Everything here that does not depend on a query is real — the heading, the
- * whole Challenge loop card, the three metric labels, the daily target of five,
+ * whole Challenge loop card, the three metric labels, the free plan's quota of three,
  * "Available challenges" — and comes from `challenge-hub-frame`, so a redesign of
  * the hub cannot leave this skeleton describing a page that no longer exists
  * (it did: "Weekly Target Progress" and "Available Daily Subtopic Challenges"
@@ -51,9 +51,10 @@ export default function ChallengesLoading() {
               TODAY&apos;S QUOTA
             </p>
             <div className="mt-2 flex items-baseline gap-1.5">
-              {/* Today's count is unknown; the target it is out of is not. */}
+              {/* Today's count is unknown; the free plan's three it is out of is
+                  everyone's target (paid plans may go past it). */}
               <span className={`inline-block h-7 w-8 align-middle ${skeleton}`} />
-              <span className="type-student-metric text-[#84cc16]">/ 5</span>
+              <span className="type-student-metric text-[#84cc16]">/ 3</span>
             </div>
             <div
               className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
@@ -62,9 +63,12 @@ export default function ChallengesLoading() {
           </article>
 
           <article className={hubMetricCardClass}>
-            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">DAILY TARGET</p>
-            {/* A constant, not data: drawn for real. */}
-            <p className="type-student-metric mt-2 text-text-primary">5</p>
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">TOPICS PASSED</p>
+            <div className={`mt-2 h-7 w-20 ${skeleton}`} />
+            <div
+              className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
+              aria-hidden="true"
+            />
           </article>
 
           <article className={hubMetricCardClass}>

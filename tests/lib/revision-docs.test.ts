@@ -47,7 +47,7 @@ vi.mock("@/lib/data/community-learning-topics", () => {
   };
 });
 
-import { getStudentRevisionDocs } from "@/lib/data/student-revision-docs";
+import { getStudentRevisionDocs, revisionDocsIndex } from "@/lib/data/student-revision-docs";
 
 type Docs = Awaited<ReturnType<typeof getStudentRevisionDocs>>;
 
@@ -609,6 +609,30 @@ describe("revision docs: one entry per topic, one copy per question", () => {
         ["Unit one opener", "unlocked"],
         ["Laplace Transform", "filed"],
       ]);
+    });
+
+    it("takes the plan as a promise, read alongside the rows", async () => {
+      const docs = await getStudentRevisionDocs("member", { unlockAll: Promise.resolve(true) });
+      expect(outline(docs)).toEqual([
+        ["Unit one opener", "unlocked"],
+        ["Laplace Transform", "filed"],
+      ]);
+    });
+
+    it("ships the navigator without the pages", async () => {
+      const docs = await getStudentRevisionDocs("member");
+      const index = revisionDocsIndex(docs);
+      const topics = index.semesters.flatMap((semester) =>
+        semester.subjects.flatMap((subject) => subject.units.flatMap((unit) => unit.topics)),
+      );
+      expect(topics.map((topic) => [topic.title, topic.state])).toEqual(outline(docs));
+      for (const topic of topics) {
+        expect(topic.reading).toEqual([]);
+        expect(topic.solvedExamples).toEqual([]);
+        expect(topic.pastQuestions).toEqual([]);
+        expect(topic.mcqs).toEqual([]);
+      }
+      expect(index.topicCount).toBe(docs.topicCount);
     });
 
     it("opens the topic the queue has reached, and never lists it twice", async () => {
