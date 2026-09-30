@@ -1310,3 +1310,42 @@ img.answer-figure.answer-figure-failed {
     animation: none;
   }
 }
+
+/* Subject finished: a one-shot confetti fall over the challenge view
+   (components/subject-complete-celebration.tsx). */
+.subject-confetti {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+}
+
+.subject-confetti span {
+  position: absolute;
+  top: -24px;
+  opacity: 0;
+  animation-name: subject-confetti-fall;
+  animation-timing-function: cubic-bezier(0.25, 0.6, 0.45, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes subject-confetti-fall {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--confetti-drift), 105vh, 0) rotate(var(--confetti-spin));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subject-confetti {
+    display: none;
+  }
+}

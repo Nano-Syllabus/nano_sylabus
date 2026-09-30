@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, CircleAlert, CircleCheck, Download, RefreshCw } from "lucide-react";
 import { AdminActivityChart } from "@/components/admin-activity-chart";
 import { AdminPageHeader } from "@/components/admin-billing-frame";
+import { AdminTokenUsageCard } from "@/components/admin-token-usage-card";
 import {
   adminAnalyticsSchema,
   formatMetric as num,
@@ -236,6 +237,8 @@ export function AdminAnalyticsDashboard({ pendingPayments }: { pendingPayments: 
               <Line label="Subjects" value={data && num(data.content.subjects)} />
             </dl>
           </section>
+
+          <AdminTokenUsageCard />
 
           <div className="mt-4 flex justify-end">
             <button

@@ -505,7 +505,7 @@
     }
 
     .topic {
-      width: calc(33.33% - 8px);
+      width: calc(25% - 9px);
       height: 190px;
       padding: 21px 19px;
       border: 1px solid #e1e9df;
@@ -542,8 +542,13 @@
       color: #854fc3
     }
 
+    .topic:nth-child(4) i {
+      background: #fff2d5;
+      color: #a66b00
+    }
+
     .topic strong {
-      font-size: 21px;
+      font-size: 17px;
       line-height: 1.14;
       letter-spacing: -.05em
     }
@@ -585,8 +590,12 @@
       animation: card-in .8s 2.9s both
     }
 
+    .active .topic:nth-child(4) {
+      animation: card-in .8s 3.15s both
+    }
+
     .active .topic-payoff {
-      animation: rise .65s 3.6s both
+      animation: rise .65s 3.85s both
     }
 
     @keyframes source-away {
@@ -1246,8 +1255,8 @@
     .search { position: absolute; left: 35px; top: 96px; width: 430px; height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 15px; font-size: 14px; font-weight: 650; color: #283528 }
     .search svg { width: 17px; height: 17px; stroke: #87967f; fill: none; stroke-width: 2 }
     .typed { display: inline-block; overflow: hidden; white-space: nowrap; width: 0; border-right: 2px solid #2563eb; padding-right: 2px }
-    .active .typed { animation: type-9 .9s .45s steps(9) both, caret .8s 1.35s 4 both }
-    @keyframes type-9 { to { width: 9.2ch } }
+    .active .typed { animation: type-search 1.15s .35s steps(20) both, caret .8s 1.5s 4 both }
+    @keyframes type-search { to { width: 20.2ch } }
     @keyframes caret { 50% { border-color: transparent } }
     .faculties { position: absolute; left: 35px; right: 35px; top: 162px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px }
     .faculty { height: 150px; padding: 18px; display: flex; flex-direction: column; opacity: 0; transform: translateY(26px) scale(.96) }
@@ -1450,9 +1459,9 @@
     .ctl:hover { background: #f3f8ec }
     .ctl.play { background: #1e291d; color: #dffa7a; border-color: #1e291d }
     .ctl svg { width: 14px; height: 14px; fill: currentColor }
-    .chips { position: relative; flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 4px 2px; scroll-behavior: smooth }
+    .chips { position: relative; flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; scrollbar-width: none; padding: 4px 2px; scroll-behavior: smooth; touch-action: pan-x }
     .chips::-webkit-scrollbar { display: none }
-    .chip { font-family: inherit; position: relative; flex: none; height: 32px; padding: 0 13px; border-radius: 99px; border: 1px solid #e0e7dc; background: #fff; color: #5e6d5b; font-size: 12px; font-weight: 750; overflow: hidden; white-space: nowrap }
+    .chip { font-family: inherit; position: relative; flex: none; height: 32px; padding: 0 13px; border-radius: 99px; border: 1px solid #e0e7dc; background: #fff; color: #5e6d5b; font-size: 12px; font-weight: 750; overflow: hidden; white-space: nowrap; scroll-snap-align: center }
     .chip:hover { color: #1f2a1f; border-color: #c4d4bc }
     .chip.on { color: #1f2a1f; border-color: #acd268; background: #f4fbe2 }
     .chip.on:after { content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: calc(var(--p, 0) * 100%); background: #7fb33c }
@@ -1500,66 +1509,67 @@
               <section class="scene" aria-label="Find and join your study community">
                 <h2>Find your community.</h2>
                 <span class="pill">Community</span>
-                <div class="search card"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg><span class="typed">IOE Civil</span></div>
+                <div class="search card"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg><span class="typed">Computer Engineering</span></div>
                 <div class="faculties">
                   <div class="faculty card pick">
-                    <div class="fac-top"><span class="fac-logo">IOE</span><div><strong>Engineering</strong><small>Faculty and semester study space</small></div></div>
-                    <div class="fac-meta">Choose your faculty<span class="join"><span class="j1">Join</span><span class="j2">Joined ✓</span></span></div>
+                    <div class="fac-top"><span class="fac-logo">BCT</span><div><strong>BCT</strong><small>TU · Bachelor in Computer Engineering</small></div></div>
+                    <div class="fac-meta">4 years · 8 semesters<span class="join"><span class="j1">Join</span><span class="j2">Joined ✓</span></span></div>
                   </div>
                   <div class="faculty card">
-                    <div class="fac-top"><span class="fac-logo">TU</span><div><strong>University community</strong><small>Browse available courses</small></div></div>
-                    <div class="fac-meta">Choose your course<span class="join"><span class="j1">Join</span></span></div>
+                    <div class="fac-top"><span class="fac-logo">BEI</span><div><strong>BEI</strong><small>TU · Electronics, Communication &amp; Information</small></div></div>
+                    <div class="fac-meta">4 years · 8 semesters<span class="join"><span class="j1">Join</span></span></div>
                   </div>
                   <div class="faculty card">
-                    <div class="fac-top"><span class="fac-logo">+</span><div><strong>Your institution</strong><small>Search the community catalogue</small></div></div>
-                    <div class="fac-meta">See what is available<span class="join"><span class="j1">Browse</span></span></div>
+                    <div class="fac-top"><span class="fac-logo">CSIT</span><div><strong>BSc CSIT</strong><small>TU · Computer Science and Technology</small></div></div>
+                    <div class="fac-meta">4 years · 8 semesters<span class="join"><span class="j1">Join</span></span></div>
                   </div>
                 </div>
-                <div class="ready card"><b>✓</b>Community joined. <span>Your available semesters and subjects are ready.</span></div>
+                <div class="ready card"><b>✓</b>BCT joined. <span>Semester 1 and its published subjects are ready.</span></div>
               </section>
 
               <!-- 02 · Micro-topics -->
-              <section class="scene" aria-label="Syllabus breaks into micro-topics">
-                <h2>A course, made manageable.</h2>
+              <section class="scene" aria-label="BCT Semester 1 subjects from the NanoSyllabus database">
+                <h2>Your BCT subjects.</h2>
                 <span class="pill">Year 1 · Semester 1</span>
                 <div class="source">
                   <div class="book"><svg viewBox="0 0 48 48"><path d="M24 12C18 9 12 10 7 11v26c7-2 12-1 17 2 5-3 10-4 17-2V11c-5-1-11-2-17 1Zm0 0v27" /></svg></div>
-                  <div><strong>Applied Mechanics</strong><small>Topics from your course syllabus</small></div><span class="arrow">↗</span>
+                  <div><strong>Bachelor in Computer Engineering</strong><small>Tribhuvan University · 8 semesters in the catalogue</small></div><span class="arrow">↗</span>
                 </div>
                 <div class="topics">
-                  <div class="topic"><i>01</i><strong>Forces &amp;<br>equilibrium</strong><small>Focused topic</small></div>
-                  <div class="topic"><i>02</i><strong>Motion &amp;<br>speed</strong><small>Focused topic</small></div>
-                  <div class="topic"><i>03</i><strong>Energy &amp;<br>power</strong><small>Focused topic</small></div>
+                  <div class="topic"><i>01</i><strong>Applied<br>Mechanics</strong><small>Published · topics ready</small></div>
+                  <div class="topic"><i>02</i><strong>Engineering<br>Physics</strong><small>Published · topics ready</small></div>
+                  <div class="topic"><i>03</i><strong>Basic Electrical<br>Engineering</strong><small>Published · topics ready</small></div>
+                  <div class="topic"><i>04</i><strong>Computer<br>Programming</strong><small>Published · topics ready</small></div>
                 </div>
-                <p class="topic-payoff">Start with one topic. <span>Keep going from there.</span></p>
+                <p class="topic-payoff">Choose a subject. <span>Then open one stored syllabus topic.</span></p>
               </section>
 
               <!-- 03 · Daily challenge -->
               <section class="scene" aria-label="The shipped challenge loop: learn, take a handwritten exam, and receive an AI grade">
                 <h2>One topic. One result.</h2>
-                <span class="pill">Applied Mechanics · Topic 01</span>
+                <span class="pill">Applied Mechanics · Unit 1</span>
                 <div class="steps"><span class="s1"><i>1</i>Learn</span><span class="line"></span><span class="s2"><i>2</i>Handwritten exam</span><span class="line"></span><span><i>3</i>AI grade</span></div>
                 <div class="learn">
-                  <div class="card concepts"><span class="tag">STEP 1</span><strong>Concepts</strong><small>Forces &amp; equilibrium · 3 key ideas</small><span class="go">Open reading →</span></div>
-                  <div class="card"><span class="tag">PAST PAPERS</span><strong>Solved Old Questions</strong><small>Asked on this topic</small><div class="years"><span>2081</span><span>2079</span><span>2078</span></div></div>
+                  <div class="card concepts"><span class="tag">STEP 1</span><strong>Concepts</strong><small>Definitions and scope of Applied Mechanics</small><span class="go">Open reading →</span></div>
+                  <div class="card"><span class="tag">PAST QUESTIONS</span><strong>4 grounded questions</strong><small>From this subject's indexed question bank</small><div class="years"><span>2073</span><span>2072</span><span>2071</span></div></div>
                 </div>
                 <div class="sheet">
-                  <div class="sheet-head">CONCEPTS <span>FORCES &amp; EQUILIBRIUM</span></div>
-                  <h3 class="hand">Forces in balance</h3>
+                  <div class="sheet-head">CONCEPTS <span>APPLIED MECHANICS · UNIT 1</span></div>
+                  <h3 class="hand">What you need to know</h3>
                   <ul class="hand">
-                    <li>A force is a push or a pull.</li>
-                    <li>At rest ⇒ ΣF = 0 in every direction.</li>
-                    <li>No turning ⇒ ΣM = 0 about any point.</li>
+                    <li>Mechanics studies bodies under forces.</li>
+                    <li>Statics deals with bodies in equilibrium.</li>
+                    <li>Dynamics deals with bodies in motion.</li>
                   </ul>
                 </div>
                 <div class="mcq card">
                   <div class="mcq-top">QUICK CHECK <span>1 MARK</span></div>
-                  <h3>A body is in equilibrium when the net force on it is…</h3>
+                  <h3>Which branch studies bodies in equilibrium?</h3>
                   <div class="opts">
-                    <div class="opt"><i>A</i>At its maximum</div>
-                    <div class="opt right"><i>B</i>Zero<span class="ok">✓</span></div>
-                    <div class="opt"><i>C</i>Equal to its weight</div>
-                    <div class="opt"><i>D</i>Increasing steadily</div>
+                    <div class="opt right"><i>A</i>Statics<span class="ok">✓</span></div>
+                    <div class="opt"><i>B</i>Dynamics</div>
+                    <div class="opt"><i>C</i>Thermodynamics</div>
+                    <div class="opt"><i>D</i>Electromagnetics</div>
                   </div>
                 </div>
                 <div class="result"><span class="pass">Learn complete</span><span>Continue to handwritten exam →</span></div>
@@ -1568,16 +1578,15 @@
               <!-- 04 · Past questions -->
               <section class="scene" aria-label="Past question and worked solution">
                 <h2>Past questions, worked.</h2>
-                <span class="pill">Business Studies</span>
+                <span class="pill">Applied Mechanics · Unit 1</span>
                 <div class="questions">
-                  <div class="question"><i>01</i><div><strong>What is delegation? Why is it important?</strong><small>2024 · 5 marks</small></div></div>
-                  <div class="question"><i>02</i><div><strong>Explain the functions of management.</strong><small>2023 · 8 marks</small></div></div>
+                  <div class="question"><i>01</i><div><strong>What is applied mechanics? Mention its scope in engineering.</strong><small>2073 Bhadra · 3 marks</small></div></div>
+                  <div class="question"><i>02</i><div><strong>What is Mechanics? Define rigid body and deformable body.</strong><small>2073 Magh · 3 marks</small></div></div>
                 </div>
                 <div class="paper">
-                  <div class="paper-head">WORKED ANSWER <span>QUESTION 01 · 5 MARKS</span></div>
-                  <h3>Delegation of authority</h3>
-                  <p><b>Delegation</b> means assigning responsibility and authority for a task to another person. It
-                    develops team skills and gives managers more time for decisions that need their attention.</p>
+                  <div class="paper-head">WORKED ANSWER <span>QUESTION 01 · 3 MARKS</span></div>
+                  <h3>Applied Mechanics</h3>
+                  <p><b>Applied mechanics</b> applies the principles of mechanics to practical engineering problems. Its scope includes statics, dynamics, strength of materials, machine design and efficiency analysis.</p>
                   <div class="reveal">Reveal solution ↗</div>
                 </div>
               </section>
@@ -1588,11 +1597,11 @@
                 <span class="pill">EN | RN</span>
                 <div class="languages">
                   <div class="language english"><label>ENGLISH</label>
-                    <p><mark>Power</mark> is the rate at which <mark>energy</mark> is transferred.</p><small>WORKED EXAMPLE 01</small>
+                    <p><mark>Applied mechanics</mark> applies mechanics principles to practical <mark>engineering problems</mark>.</p><small>APPLIED MECHANICS · READING</small>
                   </div>
                   <div class="switch">⇄</div>
                   <div class="language nepali"><label>ROMAN NEPALI</label>
-                    <p><mark>Power</mark> bhaneko <mark>energy</mark> transfer hune rate ho.</p><small>SAME IDEA · CLEARER LANGUAGE</small>
+                    <p><mark>Applied mechanics</mark> bhane ko mechanics ko principles lai practical <mark>engineering problems</mark> ma apply garnu ho.</p><small>SAME STORED READING · ROMAN NEPALI</small>
                   </div>
                 </div>
               </section>
@@ -1601,7 +1610,7 @@
               <section class="scene" aria-label="Upload a handwritten exam for marks and feedback">
                 <h2>Upload for marks and feedback.</h2>
                 <span class="pill">Handwritten exam</span>
-                <div class="answer-sheet"><strong>Explain working capital.</strong><i></i><i></i><i></i><i></i><i></i></div>
+                <div class="answer-sheet"><strong>What is applied mechanics? Mention its scope.</strong><i></i><i></i><i></i><i></i><i></i></div>
                 <div class="phone">
                   <div class="view"><i></i><i></i><i></i><i></i></div>
                   <div class="shutter"></div>
@@ -1610,10 +1619,10 @@
                 <div class="scan"><div><b>✦</b>Reviewing<br>your answer</div></div>
                 <div class="report">
                   <div class="report-top">AI FEEDBACK <span class="check">✓</span></div>
-                  <div class="grade">7<small> / 8</small></div>
+                  <div class="grade">Marks<small> + feedback</small></div>
                   <div class="bar"><b></b></div>
                   <div class="report-label">ONE WAY TO IMPROVE</div>
-                  <p class="report-note">Define liquidity before your example.</p>
+                  <p class="report-note">Separate statics, dynamics and strength of materials.</p>
                 </div>
               </section>
 
@@ -1621,20 +1630,20 @@
               <section class="scene" aria-label="Use uploaded course material in Library and ask NanoAI">
                 <h2>Your Library, with NanoAI.</h2>
                 <span class="pill">Library</span>
-                <div class="reading card fade-up"><strong>Forces &amp; equilibrium</strong><i></i><i></i><i></i><i></i>
-                  <div class="formula">ΣF<sub>x</sub> = 0 , ΣF<sub>y</sub> = 0</div><i></i><i></i><i></i></div>
+                <div class="reading card fade-up"><strong>Applied-mechanics-text-book</strong><i></i><i></i><i></i><i></i>
+                  <div class="formula">Applied Mechanics · Notes</div><i></i><i></i><i></i></div>
                 <div class="bubble">✦</div>
                 <div class="chat card">
-                  <div class="chat-head"><b>✦</b>NanoAI<span>Forces &amp; equilibrium</span></div>
+                  <div class="chat-head"><b>✦</b>NanoAI<span>Applied Mechanics</span></div>
                   <div class="chat-body">
-                    <div class="me">Why is ΣF = 0 when a body is at rest?</div>
+                    <div class="me">What is the difference between statics and dynamics?</div>
                     <div class="dots"><i></i><i></i><i></i></div>
                     <div class="ai">
-                      <div class="ai-step"><i>1</i><div>Start from Newton's second law<em>ΣF = m · a</em></div></div>
-                      <div class="ai-step"><i>2</i><div>A body at rest does not accelerate<em>a = 0</em></div></div>
-                      <div class="ai-step"><i>3</i><div>Substitute into step 1<em>ΣF = m · 0 = 0</em></div></div>
+                      <div class="ai-step"><i>1</i><div>Statics studies equilibrium<em>rest or constant velocity</em></div></div>
+                      <div class="ai-step"><i>2</i><div>Dynamics studies motion<em>forces that change motion</em></div></div>
+                      <div class="ai-step"><i>3</i><div>Both are parts of mechanics<em>analysis of bodies under forces</em></div></div>
                     </div>
-                    <div class="ai-final">✓ So every force on it is balanced.</div>
+                    <div class="ai-final">✓ Grounded in the selected Applied Mechanics source.</div>
                   </div>
                 </div>
               </section>
@@ -1644,24 +1653,24 @@
                 <h2>Revise it all, anytime.</h2>
                 <span class="pill">Revision</span>
                 <div class="doc card">
-                  <h3>Forces &amp; equilibrium</h3>
+                  <h3>Definitions and scope of Applied Mechanics</h3>
                   <label>CONCEPTS</label>
-                  <p>At rest, the forces in every direction add up to zero.</p>
-                  <p>Take moments about a point where unknown forces meet.</p>
-                  <label>SOLVED OLD QUESTIONS</label>
-                  <div class="solved"><span>Find the tension in each cable.<small>2081 · 6 marks</small></span><span>State Lami's theorem.<small>2079 · 4 marks</small></span></div>
+                  <p>Mechanics studies bodies at rest or in motion under forces.</p>
+                  <p>Its engineering scope includes statics, dynamics and machine design.</p>
+                  <label>SOLVED PAST QUESTIONS</label>
+                  <div class="solved"><span>What is applied mechanics? Mention its scope.<small>2073 Bhadra · 3 marks</small></span><span>Define rigid and deformable bodies.<small>2073 Magh · 3 marks</small></span></div>
                 </div>
                 <div class="navigator card">
                   <div class="nav-sub">Applied Mechanics</div>
-                  <div class="count-line"><span><b><span>3<br>4</span></b> of 12 subtopics</span><span>Unit 1</span></div>
+                  <div class="count-line"><span><b><span>3<br>4</span></b> of 37 topics</span><span>Semester 1</span></div>
                   <div class="progress"><b></b></div>
-                  <div class="unit">UNIT 1 · STATICS</div>
-                  <div class="sub-item done"><i>✓</i>Introduction to statics</div>
-                  <div class="sub-item done"><i>✓</i>Resultant of forces</div>
-                  <div class="sub-item done"><i>✓</i>Moments &amp; couples</div>
-                  <div class="sub-item cur"><i>✓</i>Forces &amp; equilibrium</div>
-                  <div class="unit">UNIT 2 · DYNAMICS</div>
-                  <div class="sub-item"><i></i>Motion &amp; speed</div>
+                  <div class="unit">UNIT 1 · INTRODUCTION</div>
+                  <div class="sub-item done"><i>✓</i>Definitions and scope</div>
+                  <div class="sub-item done"><i>✓</i>Rigid and deformed bodies</div>
+                  <div class="sub-item done"><i>✓</i>Newtonian mechanics</div>
+                  <div class="unit">UNIT 2 · STATIC EQUILIBRIUM</div>
+                  <div class="sub-item cur"><i>✓</i>Particles and free-body diagram</div>
+                  <div class="sub-item"><i></i>Equation of equilibrium in 2D</div>
                 </div>
               </section>
 
@@ -1732,8 +1741,14 @@
 
       const chips = chapters.map((c, i) => {
         const b = document.createElement('button');
-        b.type = 'button'; b.className = 'chip'; b.setAttribute('role', 'tab'); b.textContent = (i + 1) + '. ' + c.label;
+        b.type = 'button'; b.className = 'chip'; b.id = 'tour-tab-' + i; b.setAttribute('role', 'tab');
+        b.setAttribute('aria-controls', 'tour-panel-' + i); b.setAttribute('tabindex', i === 0 ? '0' : '-1');
+        b.textContent = (i + 1) + '. ' + c.label;
         b.addEventListener('click', () => jump(i)); chipsBox.appendChild(b); return b;
+      });
+      scenes.forEach((scene, i) => {
+        scene.id = 'tour-panel-' + i; scene.setAttribute('role', 'tabpanel');
+        scene.setAttribute('aria-labelledby', 'tour-tab-' + i);
       });
       const segs = chapters.map((c, i) => {
         const b = document.createElement('button');
@@ -1770,13 +1785,21 @@
         const old = index;
         if (restart) scenes[n].classList.remove('active');
         void art.offsetWidth;
-        scenes.forEach((scene, i) => {scene.classList.toggle('active', i === n); scene.classList.toggle('exit', i === old && i !== n)});
+        scenes.forEach((scene, i) => {
+          scene.classList.toggle('active', i === n); scene.classList.toggle('exit', i === old && i !== n);
+          scene.setAttribute('aria-hidden', i === n ? 'false' : 'true');
+        });
         navItems.forEach((item, i) => item.classList.toggle('selected', i === chapters[n].nav));
-        chips.forEach((chip, i) => {chip.classList.toggle('on', i === n); chip.setAttribute('aria-selected', i === n)});
+        chips.forEach((chip, i) => {
+          chip.classList.toggle('on', i === n); chip.setAttribute('aria-selected', i === n);
+          chip.setAttribute('tabindex', i === n ? '0' : '-1');
+        });
         segs.forEach((seg, i) => {seg.classList.toggle('done', i < n); seg.querySelector('i').style.width = i < n ? '100%' : '0'});
         document.getElementById('count').textContent = pad(n + 1) + ' / ' + pad(chapters.length);
         document.getElementById('now').textContent = chapters[n].label;
-        const chip = chips[n]; chipsBox.scrollLeft = chip.offsetLeft - (chipsBox.clientWidth - chip.offsetWidth) / 2;
+        const chip = chips[n];
+        const chipLeft = chip.offsetLeft - (chipsBox.clientWidth - chip.offsetWidth) / 2;
+        chipsBox.scrollTo({left: chipLeft, behavior: index < 0 ? 'auto' : 'smooth'});
         index = n; fired = [];
         cursor.classList.remove('on');
         const first = chapters[n].clicks[0];
@@ -1823,7 +1846,21 @@
       for (const id of ['prev', 'prev-in']) document.getElementById(id).addEventListener('click', () => jump(index - 1));
       for (const id of ['next', 'next-in']) document.getElementById(id).addEventListener('click', () => jump(index + 1));
       document.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => jump(+el.dataset.go)));
+      chipsBox.addEventListener('wheel', event => {
+        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || chipsBox.scrollWidth <= chipsBox.clientWidth) return;
+        event.preventDefault(); chipsBox.scrollBy({left: event.deltaY, behavior: 'smooth'});
+      }, {passive: false});
+      chipsBox.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const focusedIndex = chips.indexOf(document.activeElement);
+        const base = focusedIndex >= 0 ? focusedIndex : index;
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? chapters.length - 1 :
+          (base + (event.key === 'ArrowRight' ? 1 : -1) + chapters.length) % chapters.length;
+        jump(next); chips[next].focus({preventScroll: true});
+      });
       document.addEventListener('keydown', event => {
+        if (event.defaultPrevented) return;
         if (event.code === 'ArrowRight') jump(index + 1);
         else if (event.code === 'ArrowLeft') jump(index - 1);
         else if (event.code === 'Space' && document.activeElement.tagName !== 'BUTTON') {event.preventDefault(); setPaused(!paused)}

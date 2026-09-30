@@ -10,12 +10,22 @@ export function LandingPrimaryCta({
   size = "nav",
   className = "",
   communityOnly = false,
+  joinHref,
+  appOrigin = "",
 }: {
   children?: React.ReactNode;
   blue?: boolean;
   size?: "default" | "hero" | "nav";
   className?: string;
   communityOnly?: boolean;
+  /**
+   * A site's one main action: join its community and start onboarding. Every
+   * button follows it, except the header button of someone already signed in,
+   * which stays "Continue learning".
+   */
+  joinHref?: string;
+  /** Where the app lives when this page is served from a subdomain ("" = here). */
+  appOrigin?: string;
 }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -46,16 +56,21 @@ export function LandingPrimaryCta({
         ? "min-h-[44px] px-5 text-[13.5px] font-semibold"
         : "min-h-[48px] px-6 text-sm font-semibold";
   const colorClass = blue
-    ? "bg-[#3049ed] text-white hover:bg-[#2439d0] focus-visible:ring-[#3049ed]"
+    ? "bg-[var(--lp-primary,#3049ed)] text-white hover:bg-[var(--lp-primary-hover,#2439d0)] focus-visible:ring-[var(--lp-primary,#3049ed)]"
     : "bg-[#1c1e1a] text-white hover:bg-[#33362e] focus-visible:ring-[#1c1e1a]";
+
+  const joins = Boolean(joinHref) && !(isLoggedIn && children === undefined && !communityOnly);
+  const defaultHref = communityOnly ? "/communities" : isLoggedIn ? "/app" : "/communities";
 
   return (
     <Link
-      href={communityOnly ? "/communities" : isLoggedIn ? "/app" : "/communities"}
+      href={joins ? joinHref! : `${appOrigin}${defaultHref}`}
       className={`inline-flex items-center justify-center gap-2.5 rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${sizeClass} ${colorClass} ${className}`}
     >
       <span>
-        {communityOnly
+        {joins
+          ? (children ?? "Start Learning")
+          : communityOnly
           ? (children ?? "Find your program")
           : isLoggedIn
             ? "Continue learning"

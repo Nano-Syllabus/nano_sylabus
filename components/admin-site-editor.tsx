@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ChevronDown,
@@ -14,11 +14,13 @@ import {
   Plus,
   Smartphone,
   Trash2,
+  Upload,
 } from "lucide-react";
-import type { LandingSiteDetail } from "@/lib/data/landing-sites";
+import type { CommunityChoice, LandingSiteDetail } from "@/lib/data/landing-sites";
 import {
   LANDING_LIST_LIMITS,
   LANDING_SECTIONS,
+  DEFAULT_LANDING_CONTENT,
   type LandingContent,
   type LandingField,
   type LandingList,
@@ -35,6 +37,12 @@ const inputClass =
   "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-600/40";
 
 type SaveState = "saved" | "saving" | "unsaved" | "error";
+
+/** What the non-text controls (community picker, logo upload) need. */
+const EditorContext = createContext<{ slug: string; communities: CommunityChoice[] }>({
+  slug: "",
+  communities: [],
+});
 type Path = Array<string | number>;
 
 /** A copy of `value` with `path` set to `next`; untouched branches are shared. */
@@ -59,9 +67,11 @@ async function readJson(response: Response) {
 export function AdminSiteEditor({
   initialSite,
   rootDomain,
+  communities,
 }: {
   initialSite: LandingSiteDetail;
   rootDomain: string;
+  communities: CommunityChoice[];
 }) {
   const router = useRouter();
   const [site, setSite] = useState(initialSite);
@@ -69,7 +79,7 @@ export function AdminSiteEditor({
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [busy, setBusy] = useState<"publish" | "status" | "delete" | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
-  const [openSection, setOpenSection] = useState<string | null>("hero");
+  const [openSection, setOpenSection] = useState<string | null>("brand");
   const [mobileTab, setMobileTab] = useState<"edit" | "preview">("edit");
   const [device, setDevice] = useState<"desktop" | "phone">("desktop");
 
@@ -330,6 +340,7 @@ export function AdminSiteEditor({
             mobileTab === "edit" ? "" : "hidden lg:block"
           }`}
         >
+          <EditorContext.Provider value={{ slug: site.slug, communities }}>
           {LANDING_SECTIONS.map((section) => (
             <SectionCard
               key={section.key}
@@ -340,6 +351,7 @@ export function AdminSiteEditor({
               onChange={(path, value) => update([section.key, ...path], value)}
             />
           ))}
+          </EditorContext.Provider>
 
           {!isMain ? (
             <div className="rounded-xl border border-red-500/30 bg-card p-4">
@@ -494,6 +506,9 @@ function TextField({
   value: string;
   onChange: (value: string) => void;
 }) {
+  if (field.kind === "community") return <CommunityField field={field} value={value} onChange={onChange} />;
+  if (field.kind === "image") return <ImageField field={field} value={value} onChange={onChange} />;
+  if (field.kind === "color") return <ColorField field={field} value={value} onChange={onChange} />;
   return (
     <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
       {field.label}
@@ -509,6 +524,131 @@ function TextField({
       )}
       {field.hint ? <span className="font-normal">{field.hint}</span> : null}
     </label>
+  );
+}
+
+type FieldProps = { field: LandingField; value: string; onChange: (value: string) => void };
+
+function CommunityField({ field, value, onChange }: FieldProps) {
+  const { communities } = useContext(EditorContext);
+  const known = communities.some((community) => community.slug === value);
+  return (
+    <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+      {field.label}
+      <select value={value} onChange={(event) => onChange(event.target.value)} className={`${inputClass} min-h-10`}>
+        <option value="">Let visitors choose their faculty</option>
+        {value && !known ? <option value={value}>{value} (no longer active)</option> : null}
+        {communities.map((community) => (
+          <option key={community.slug} value={community.slug}>
+            {community.name}
+            {community.faculty && community.faculty !== community.name ? ` — ${community.faculty}` : ""}
+          </option>
+        ))}
+      </select>
+      {field.hint ? <span className="font-normal">{field.hint}</span> : null}
+    </label>
+  );
+}
+
+function ImageField({ field, value, onChange }: FieldProps) {
+  const { slug } = useContext(EditorContext);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function upload(file: File) {
+    setUploading(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const response = await fetch(`/api/admin/sites/${slug}/logo`, { method: "POST", body });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Couldn’t upload the logo.");
+      onChange(payload.url);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Couldn’t upload the logo.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+      {field.label}
+      <div className="flex items-center gap-3 rounded-lg border border-border bg-background p-3">
+        <div className="grid h-12 w-28 shrink-0 place-items-center rounded-md bg-[#fafbf7]">
+          {value ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={value} alt="Current logo" className="max-h-10 max-w-24 object-contain" />
+          ) : (
+            <span className="text-[11px] text-[#5b5e55]">Default logo</span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <label className={`${secondaryButton} min-h-9 cursor-pointer`}>
+            <Upload size={14} aria-hidden="true" />
+            {uploading ? "Uploading…" : value ? "Replace" : "Upload"}
+            <input
+              type="file"
+              accept="image/png,image/svg+xml,image/webp,image/jpeg"
+              className="sr-only"
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void upload(file);
+              }}
+            />
+          </label>
+          {value ? (
+            <button type="button" onClick={() => onChange("")} className={`${secondaryButton} min-h-9`}>
+              Use default
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {error ? <span className="font-normal text-red-600">{error}</span> : null}
+      {field.hint ? <span className="font-normal">{field.hint}</span> : null}
+    </div>
+  );
+}
+
+function ColorField({ field, value, onChange }: FieldProps) {
+  const fallback = DEFAULT_LANDING_CONTENT.brand[field.key as keyof LandingContent["brand"]] ?? "#000000";
+  const [text, setText] = useState(value);
+  useEffect(() => setText(value), [value]);
+  const valid = /^#[0-9a-f]{6}$/i.test(value);
+
+  return (
+    <div className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+      <span>{field.label}</span>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={valid ? value : fallback}
+          onChange={(event) => onChange(event.target.value)}
+          aria-label={`${field.label} picker`}
+          className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-border bg-background p-1"
+        />
+        <input
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            const next = event.target.value.trim();
+            if (/^#[0-9a-f]{6}$/i.test(next)) onChange(next.toLowerCase());
+          }}
+          aria-label={`${field.label} hex code`}
+          spellCheck={false}
+          className={`${inputClass} min-h-10 font-mono`}
+        />
+        {value !== fallback ? (
+          <button type="button" onClick={() => onChange(fallback)} className={`${secondaryButton} shrink-0`}>
+            Reset
+          </button>
+        ) : null}
+      </div>
+      {field.hint ? <span className="font-normal">{field.hint}</span> : null}
+    </div>
   );
 }
 

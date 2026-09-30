@@ -31,6 +31,7 @@ import {
 } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
 import { ChallengeMcqPage } from "@/components/challenge-mcq-page";
+import { SubjectCompleteCelebration } from "@/components/subject-complete-celebration";
 import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
 import {
   StudyLanguageSwitch,
@@ -130,6 +131,29 @@ export function hubRows(challenges: StudentChallengeSummary[]) {
     })),
     ...standing.map((challenge) => ({ challenge, doneToday: [] as StudentChallengeSummary[] })),
   ];
+}
+
+/**
+ * Hub rows ordered by their subject's progress bar, furthest along first.
+ * Stable, so subjects on the same percentage keep the queue's order; subjects
+ * with no mapped topics go last. Exported for tests.
+ */
+export function byProgress<T extends { challenge: StudentChallengeSummary }>(
+  rows: T[],
+  progress: Map<string, { covered: number; total: number }>,
+) {
+  const percent = ({ challenge }: T) => {
+    const entry = progress.get(
+      `${challenge.courseId ?? "owner-private"}:${challenge.subjectSlug.trim().toLowerCase()}`,
+    );
+    const total = Number(entry?.total) || 0;
+    if (total <= 0) return -1;
+    return Math.min(Number(entry?.covered) || 0, total) / total;
+  };
+  return rows
+    .map((row, index) => ({ row, index, value: percent(row) }))
+    .sort((a, b) => b.value - a.value || a.index - b.index)
+    .map(({ row }) => row);
 }
 
 function challengeScore(challenge: StudentChallengeSummary) {
@@ -854,8 +878,10 @@ function ChallengeDetail({
       }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Could not open the next challenge.";
-      setError(message);
+      // Nothing left in the subject is the finish line, not an error: it is
+      // celebrated below, and the way on is another subject.
       if (message.includes("All currently extracted subtopics")) setNoNextAvailable(true);
+      else setError(message);
     } finally {
       setOpeningNext(false);
     }
@@ -1088,9 +1114,9 @@ function ChallengeDetail({
                   }}
                   onRetake={() => void refreshExam()}
                   onStalePaper={reloadPaper}
-                  onNext={() => void openNextChallenge()}
-                  nextLabel={openingNext ? "Opening…" : noNextAvailable ? "All challenges complete" : "Next challenge →"}
-                  nextDisabled={noNextAvailable || openingNext}
+                  onNext={() => (noNextAvailable ? onBack() : void openNextChallenge())}
+                  nextLabel={openingNext ? "Opening…" : noNextAvailable ? "Start another subject →" : "Next challenge →"}
+                  nextDisabled={openingNext}
                 />
               </div>
             ) : activeStep === 1 ? (
@@ -1732,6 +1758,14 @@ function ChallengeDetail({
             ) : null}
           </section>
 
+          {noNextAvailable ? (
+            <SubjectCompleteCelebration
+              className="mt-4"
+              subjectName={challenge.subjectName}
+              onStartAnother={onBack}
+            />
+          ) : null}
+
           {error ? (
             <p
               role="alert"
@@ -1823,11 +1857,11 @@ function ChallengeDetail({
                 ) : null}
                 <button
                   type="button"
-                  disabled={noNextAvailable || restarting || openingNext}
-                  onClick={() => void openNextChallenge()}
+                  disabled={restarting || openingNext}
+                  onClick={() => (noNextAvailable ? onBack() : void openNextChallenge())}
                   title={
                     noNextAvailable
-                      ? "All currently extracted subtopics are complete or already have challenges."
+                      ? "Every subtopic in this subject is done — pick another subject"
                       : nextChallenge
                         ? "Open the next available challenge"
                         : "Find and open the next available challenge"
@@ -1837,7 +1871,7 @@ function ChallengeDetail({
                   {openingNext
                     ? "Opening…"
                     : noNextAvailable
-                      ? "All challenges complete"
+                      ? "Start another subject →"
                       : "Next challenge →"}
                 </button>
               </div>
@@ -2072,6 +2106,8 @@ export function ChallengesDashboardClient({
   const openedInitialChallengeRef = useRef("");
   const [openingId, setOpeningId] = useState("");
   const [openError, setOpenError] = useState("");
+  /** A subject whose every subtopic is done — celebrated, not reported as an error. */
+  const [finishedSubject, setFinishedSubject] = useState<string | null>(null);
   const { setTitle } = useContext(AppShellContext);
 
   /**
@@ -2258,7 +2294,9 @@ export function ChallengesDashboardClient({
       setSelected(payload.challenge);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 402) setRefusedToday(true);
-      setOpenError(cause instanceof Error ? cause.message : "Could not open the next topic.");
+      const message = cause instanceof Error ? cause.message : "Could not open the next topic.";
+      if (message.includes("All currently extracted subtopics")) setFinishedSubject(done.subjectName);
+      else setOpenError(message);
     } finally {
       setOpeningId("");
     }
@@ -2485,7 +2523,7 @@ export function ChallengesDashboardClient({
           ) : dashboard.challenges.length ? (
             <div className={hubRowsClass}>
               {limitReached ? <DailyLimitNotice limit={allowance?.limit ?? 3} /> : null}
-              {hubRows(dashboard.challenges).map(({ challenge, doneToday }) => {
+              {byProgress(hubRows(dashboard.challenges), subjectProgress).map(({ challenge, doneToday }) => {
                 const completed = challenge.status === "completed";
                 const started = challenge.status === "started";
                 const coverage = (
@@ -2686,6 +2724,18 @@ export function ChallengesDashboardClient({
             </div>
           )}
         </section>
+
+        {finishedSubject !== null ? (
+          <SubjectCompleteCelebration
+            key={finishedSubject}
+            className="mt-4"
+            subjectName={finishedSubject}
+            onStartAnother={() => {
+              setFinishedSubject(null);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
+        ) : null}
 
         {openError ? (
           <p

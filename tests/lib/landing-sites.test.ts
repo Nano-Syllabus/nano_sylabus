@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LANDING_CONTENT, sanitizeLandingContent } from "@/lib/landing-content";
+import { DEFAULT_LANDING_CONTENT, landingColorVars, sanitizeLandingContent } from "@/lib/landing-content";
 import { siteSlugFromHost } from "@/lib/landing-site-host";
 
 describe("siteSlugFromHost", () => {
@@ -34,5 +34,26 @@ describe("sanitizeLandingContent", () => {
     expect(content.steps.items[0].title).toBe("Only one");
     expect(content.steps.items[1]).toEqual(DEFAULT_LANDING_CONTENT.steps.items[1]);
     expect(content.faq.items).toHaveLength(12);
+  });
+});
+
+describe("brand", () => {
+  it("keeps only safe logo URLs, hex colours and slug-shaped communities", () => {
+    const bad = sanitizeLandingContent({
+      brand: { logoUrl: "javascript:alert(1)", primaryColor: "red", accentColor: "#12345", communitySlug: "Bad Slug!" },
+    }).brand;
+    expect(bad).toEqual(DEFAULT_LANDING_CONTENT.brand);
+    const good = sanitizeLandingContent({
+      brand: { logoUrl: "https://x.supabase.co/logo.png", primaryColor: "#AA0000", accentColor: "#ffee00", communitySlug: "ioe-bct" },
+    }).brand;
+    expect(good).toEqual({ logoUrl: "https://x.supabase.co/logo.png", primaryColor: "#aa0000", accentColor: "#ffee00", communitySlug: "ioe-bct" });
+    expect(sanitizeLandingContent({ brand: { logoUrl: "//evil.com/x.png" } }).brand.logoUrl).toBe("");
+  });
+
+  it("derives the page's colour variables from the two brand colours", () => {
+    const vars = landingColorVars({ ...DEFAULT_LANDING_CONTENT.brand, primaryColor: "#000000" });
+    expect(vars["--lp-primary"]).toBe("#000000");
+    expect(vars["--lp-primary-soft"]).toBe("#e6e6e6");
+    expect(vars["--lp-accent"]).toBe("#dcfa72");
   });
 });

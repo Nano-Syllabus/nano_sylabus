@@ -14,6 +14,12 @@
  */
 
 export type LandingContent = {
+  /**
+   * Not text: the site's look and its one main action. Colours are `#rrggbb`;
+   * `communitySlug` sends every main button into that community's join +
+   * onboarding flow, and empty keeps the "pick your faculty" browse page.
+   */
+  brand: { logoUrl: string; primaryColor: string; accentColor: string; communitySlug: string };
   seo: { title: string; description: string };
   nav: { stepsLink: string; peopleLink: string; questionsLink: string };
   hero: {
@@ -102,6 +108,7 @@ export type LandingContent = {
 };
 
 export const DEFAULT_LANDING_CONTENT: LandingContent = {
+  brand: { logoUrl: "", primaryColor: "#3049ed", accentColor: "#dcfa72", communitySlug: "" },
   seo: {
     title: "NanoSyllabus — AI Study Companion for Nepal",
     description:
@@ -320,6 +327,8 @@ export type LandingField = {
   label: string;
   /** `long` = a paragraph (textarea); otherwise one line. */
   long?: boolean;
+  /** A non-text control; plain text when absent. */
+  kind?: "color" | "image" | "community";
   hint?: string;
 };
 
@@ -346,6 +355,18 @@ export const LANDING_LIST_LIMITS: Record<string, { min: number; max: number }> =
 };
 
 export const LANDING_SECTIONS: LandingSection[] = [
+  {
+    key: "brand",
+    title: "Brand & main button",
+    where: "Logo, colours, and where every main button leads",
+    hideable: false,
+    fields: [
+      { key: "communitySlug", label: "Main button opens", kind: "community", hint: "Visitors join this community and go straight into onboarding." },
+      { key: "logoUrl", label: "Logo", kind: "image", hint: "Replaces the nanosyllabus logo in the header and footer. PNG, SVG or WebP, up to 1 MB." },
+      { key: "primaryColor", label: "Primary colour", kind: "color", hint: "Buttons, ribbons and the blue sections. White text sits on it, so keep it dark enough." },
+      { key: "accentColor", label: "Accent colour", kind: "color", hint: "Highlights and the closing banner. Dark text sits on it, so keep it light." },
+    ],
+  },
   {
     key: "seo",
     title: "Search & browser tab",
@@ -640,5 +661,56 @@ function sanitizeNode(value: unknown, template: unknown, path: string): unknown 
  * lengths are held to what the design allows.
  */
 export function sanitizeLandingContent(value: unknown): LandingContent {
-  return sanitizeNode(value, DEFAULT_LANDING_CONTENT, "") as LandingContent;
+  const content = sanitizeNode(value, DEFAULT_LANDING_CONTENT, "") as LandingContent;
+  const fallback = DEFAULT_LANDING_CONTENT.brand;
+  const { logoUrl, primaryColor, accentColor, communitySlug } = content.brand;
+  content.brand = {
+    // Only our own paths or https images: this value lands in an <img src>.
+    logoUrl: /^(https:\/\/|\/(?!\/))\S+$/.test(logoUrl.trim()) ? logoUrl.trim() : "",
+    primaryColor: HEX_COLOR.test(primaryColor) ? primaryColor.toLowerCase() : fallback.primaryColor,
+    accentColor: HEX_COLOR.test(accentColor) ? accentColor.toLowerCase() : fallback.accentColor,
+    communitySlug: /^[a-z0-9][a-z0-9-]{0,80}$/.test(communitySlug) ? communitySlug : "",
+  };
+  return content;
+}
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/* ── Colours ──────────────────────────────────────────────────────────────── */
+
+function mix(hex: string, toward: "#000000" | "#ffffff", amount: number) {
+  const channel = (value: string, index: number) => parseInt(value.slice(1 + index * 2, 3 + index * 2), 16);
+  return `#${[0, 1, 2]
+    .map((index) => {
+      const from = channel(hex, index);
+      const to = channel(toward, index);
+      return Math.round(from + (to - from) * amount)
+        .toString(16)
+        .padStart(2, "0");
+    })
+    .join("")}`;
+}
+
+/**
+ * The landing page's colour variables, derived from the two brand colours.
+ * The design was drawn in one blue and one lime; every tint and shade it used
+ * is expressed here as a mix of those, so a new pair recolours the whole page
+ * consistently. With the default colours these reproduce the original hexes
+ * closely.
+ */
+export function landingColorVars(brand: LandingContent["brand"]): Record<string, string> {
+  const primary = HEX_COLOR.test(brand.primaryColor) ? brand.primaryColor : DEFAULT_LANDING_CONTENT.brand.primaryColor;
+  const accent = HEX_COLOR.test(brand.accentColor) ? brand.accentColor : DEFAULT_LANDING_CONTENT.brand.accentColor;
+  return {
+    "--lp-primary": primary,
+    "--lp-primary-hover": mix(primary, "#000000", 0.12),
+    "--lp-primary-dark": mix(primary, "#000000", 0.2),
+    "--lp-primary-deeper": mix(primary, "#000000", 0.35),
+    "--lp-primary-deepest": mix(primary, "#000000", 0.55),
+    "--lp-primary-soft": mix(primary, "#ffffff", 0.9),
+    "--lp-primary-line": mix(primary, "#ffffff", 0.75),
+    "--lp-accent": accent,
+    "--lp-accent-hover": mix(accent, "#ffffff", 0.3),
+    "--lp-accent-strong": mix(accent, "#000000", 0.14),
+  };
 }

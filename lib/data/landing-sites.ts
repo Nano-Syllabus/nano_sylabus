@@ -265,3 +265,16 @@ function refreshLiveSite(slug: string) {
   revalidateTag(landingSiteTag(slug));
   revalidatePath(slug === MAIN_SITE_SLUG ? "/" : `/sites/${slug}`);
 }
+
+export type CommunityChoice = { slug: string; name: string; faculty: string | null };
+
+/** Active communities a site's main button can lead into, for the editor's picker. */
+export async function listCommunityChoices(): Promise<CommunityChoice[]> {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("communities")
+    .select("slug, name, faculty")
+    .eq("status", "active")
+    .order("name");
+  if (error) throw error;
+  return (data ?? []) as CommunityChoice[];
+}

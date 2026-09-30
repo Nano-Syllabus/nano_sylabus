@@ -3,12 +3,21 @@ import Link from "next/link";
 import { DM_Sans, Manrope } from "next/font/google";
 import { LandingPrimaryCta } from "@/components/landing-primary-cta";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
-import type { LandingContent } from "@/lib/landing-content";
+import { landingColorVars, type LandingContent } from "@/lib/landing-content";
 
 const dmSans = DM_Sans({ subsets: ["latin"], display: "swap" });
 const manrope = Manrope({ subsets: ["latin"], display: "swap" });
 
-function Brand() {
+function Brand({ logoUrl = "" }: { logoUrl?: string }) {
+  if (logoUrl) {
+    return (
+      <Link href="/" className="inline-flex items-center" aria-label="Home">
+        {/* A site's own uploaded logo, of any size or host: a plain img, sized by height. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logoUrl} alt="" className="h-[38px] w-auto max-w-[200px] object-contain" />
+      </Link>
+    );
+  }
   return (
     <Link
       href="/"
@@ -16,7 +25,7 @@ function Brand() {
       aria-label="NanoSyllabus home"
     >
       <span
-        className={`${manrope.className} mr-2.5 grid size-[38px] place-items-center rounded-[10px] bg-[#1c1e1a] text-[20px] font-extrabold tracking-[-0.08em] text-[#dcfa72] shadow-xs group-hover:scale-105 transition-transform`}
+        className={`${manrope.className} mr-2.5 grid size-[38px] place-items-center rounded-[10px] bg-[#1c1e1a] text-[20px] font-extrabold tracking-[-0.08em] text-[var(--lp-accent)] shadow-xs group-hover:scale-105 transition-transform`}
       >
         n.
       </span>
@@ -50,9 +59,9 @@ function Cta({
 
   let colorClass = "bg-[#1c1e1a] text-white hover:bg-[#33362e] focus-visible:ring-[#1c1e1a]";
   if (blue) {
-    colorClass = "bg-[#3049ed] text-white hover:bg-[#2439d0] focus-visible:ring-[#3049ed]";
+    colorClass = "bg-[var(--lp-primary)] text-white hover:bg-[var(--lp-primary-hover)] focus-visible:ring-[var(--lp-primary)]";
   } else if (lime) {
-    colorClass = "bg-[#dcfa72] text-[#1c1e1a] hover:bg-[#e8ff9a] focus-visible:ring-[#dcfa72]";
+    colorClass = "bg-[var(--lp-accent)] text-[#1c1e1a] hover:bg-[var(--lp-accent-hover)] focus-visible:ring-[var(--lp-accent)]";
   }
 
   return (
@@ -81,11 +90,25 @@ const testimonialImages = [
  * admin editor's live preview, so what an admin sees while typing is the page
  * visitors get. Sections marked `hidden` are left out entirely.
  */
-export function LandingView({ content }: { content: LandingContent }) {
+export function LandingView({
+  content,
+  appOrigin = "",
+}: {
+  content: LandingContent;
+  /** Where the app lives: "" on the main site, the main domain on a subdomain. */
+  appOrigin?: string;
+}) {
+  const { brand } = content;
+  // The site's one main action: join its community and start onboarding.
+  const joinHref = brand.communitySlug
+    ? `${appOrigin}/communities/${encodeURIComponent(brand.communitySlug)}/join`
+    : undefined;
+  const ctaProps = { joinHref, appOrigin };
   const { nav, hero, features, ribbonOne, problems, steps, featured, ribbonTwo, testimonials, community, prize, faq, finalCta, footer } = content;
   return (
     <div
-      className={`${dmSans.className} min-h-screen overflow-x-hidden bg-[#fafbf7] text-[#1c1e1a] antialiased selection:bg-[#dcfa72] selection:text-[#1c1e1a]`}
+      style={landingColorVars(brand) as React.CSSProperties}
+      className={`${dmSans.className} min-h-screen overflow-x-hidden bg-[#fafbf7] text-[#1c1e1a] antialiased selection:bg-[var(--lp-accent)] selection:text-[#1c1e1a]`}
     >
       {/* ── Skip Link ── */}
       <a
@@ -98,32 +121,32 @@ export function LandingView({ content }: { content: LandingContent }) {
       {/* ── Top Navigation Bar ── */}
       <header className="border-b border-[#e5e8df] bg-[#fafbf7]/90 backdrop-blur-md sticky top-0 z-40">
         <div className="mx-auto flex h-[84px] max-w-[1320px] items-center justify-between px-5 2xl:px-0">
-          <Brand />
+          <Brand logoUrl={brand.logoUrl} />
           <nav
             aria-label="Main navigation"
             className="hidden items-center gap-9 text-[15px] font-medium text-[#1c1e1a] md:flex"
           >
             <a
               href="#steps"
-              className="transition-colors hover:text-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]"
+              className="transition-colors hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
             >
               {nav.stepsLink}
             </a>
             <a
               href="#discord-community"
-              className="transition-colors hover:text-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]"
+              className="transition-colors hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
             >
               {nav.peopleLink}
             </a>
             <a
               href="#questions"
-              className="transition-colors hover:text-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]"
+              className="transition-colors hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
             >
               {nav.questionsLink}
             </a>
           </nav>
           <div className="flex items-center gap-3">
-            <LandingPrimaryCta />
+            <LandingPrimaryCta {...ctaProps} />
           </div>
         </div>
       </header>
@@ -145,7 +168,7 @@ export function LandingView({ content }: { content: LandingContent }) {
 
   <div
     aria-hidden="true"
-    className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[550px] w-[800px] max-w-full -translate-x-1/2 rounded-full bg-[#dcfa72]/20 blur-[110px]"
+    className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[550px] w-[800px] max-w-full -translate-x-1/2 rounded-full bg-[var(--lp-accent)]/20 blur-[110px]"
   />
 
   <div className="mx-auto max-w-[1200px]">
@@ -158,7 +181,7 @@ export function LandingView({ content }: { content: LandingContent }) {
           {hero.titleHighlight}
           <span
             aria-hidden="true"
-            className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[#dcfa72]"
+            className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[var(--lp-accent)]"
           />
         </span>
       </h1>
@@ -168,13 +191,13 @@ export function LandingView({ content }: { content: LandingContent }) {
       </p>
 
       <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-5">
-        <LandingPrimaryCta blue size="hero" communityOnly>
+        <LandingPrimaryCta blue size="hero" communityOnly {...ctaProps}>
           {hero.primaryCta}
         </LandingPrimaryCta>
 
         <a
           href="#steps"
-          className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:border-[#3049ed] hover:text-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]"
+          className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:border-[var(--lp-primary)] hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
         >
           {hero.secondaryCta}
         </a>
@@ -212,7 +235,7 @@ export function LandingView({ content }: { content: LandingContent }) {
       <div className="relative mt-5 h-[238px] overflow-hidden rounded-[18px] border border-[#c5cac2] bg-[#fafbf8] shadow-[inset_0_1px_2px_rgba(28,30,26,0.04),0_10px_22px_-12px_rgba(28,30,26,0.20)]">
         {index === 0 && (
           <div className="p-4">
-            <div className="flex items-center justify-between rounded-xl bg-[#e6f99c] px-3 py-2.5">
+            <div className="flex items-center justify-between rounded-xl bg-[var(--lp-accent-hover)] px-3 py-2.5">
               <span className="text-sm font-bold text-[#263018]">
                 Physics
               </span>
@@ -230,7 +253,7 @@ export function LandingView({ content }: { content: LandingContent }) {
                     key={topic}
                     className="ns-reveal flex items-center gap-2.5 rounded-lg border border-[#e5eae2] bg-white px-3 py-2"
                   >
-                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#eaf0ff] text-[11px] font-bold text-[#3049ed]">
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--lp-primary-soft)] text-[11px] font-bold text-[var(--lp-primary)]">
                       {topicIndex + 1}
                     </span>
                     <span className="text-xs font-semibold text-[#273029]">
@@ -254,10 +277,10 @@ export function LandingView({ content }: { content: LandingContent }) {
                 What is delegation?
               </p>
 
-              <div className="mt-3 h-px bg-[#dce6fb]" />
+              <div className="mt-3 h-px bg-[var(--lp-primary-line)]" />
 
-              <div className="ns-reveal mt-3 rounded-lg bg-[#edf3ff] p-3">
-                <span className="text-xs font-bold text-[#3049ed]">
+              <div className="ns-reveal mt-3 rounded-lg bg-[var(--lp-primary-soft)] p-3">
+                <span className="text-xs font-bold text-[var(--lp-primary)]">
                   Solution ↗
                 </span>
                 <p className="mt-2 text-xs leading-snug text-[#303c35]">
@@ -279,7 +302,7 @@ export function LandingView({ content }: { content: LandingContent }) {
               </p>
             </div>
 
-            <div className="ns-reveal my-1 text-center text-sm font-bold leading-none text-[#3049ed]">
+            <div className="ns-reveal my-1 text-center text-sm font-bold leading-none text-[var(--lp-primary)]">
               ↓
             </div>
 
@@ -335,7 +358,7 @@ export function LandingView({ content }: { content: LandingContent }) {
           seamlessly); from `sm` up it is the static, centred row.
         */}
         {ribbonOne.hidden ? null : (
-        <div data-landing-section="ribbonOne" className="overflow-hidden bg-[#3049ed] py-4 text-white">
+        <div data-landing-section="ribbonOne" className="overflow-hidden bg-[var(--lp-primary)] py-4 text-white">
           <div
             className={`${manrope.className} ns-ribbon-track flex w-max items-center text-xs font-bold uppercase tracking-[0.1em] sm:mx-auto sm:w-auto sm:max-w-[1320px] sm:flex-wrap sm:justify-center sm:gap-y-3 sm:px-5`}
           >
@@ -398,7 +421,7 @@ export function LandingView({ content }: { content: LandingContent }) {
                   key={index}
                   className={`flex min-h-[320px] flex-col rounded-2xl border p-8 transition-all duration-300 ${
                     isLime
-                      ? "rotate-[1.5deg] border-[#bedb62] bg-[#dcfa72] shadow-md hover:rotate-0"
+                      ? "rotate-[1.5deg] border-[var(--lp-accent-strong)] bg-[var(--lp-accent)] shadow-md hover:rotate-0"
                       : "border-[#e5e8df] bg-[#fafbf7] shadow-xs hover:shadow-md"
                   }`}
                 >
@@ -410,7 +433,7 @@ export function LandingView({ content }: { content: LandingContent }) {
                   </h3>
                   <p
                     className={`mt-7 border-t pt-4 text-xs font-semibold uppercase tracking-wider ${
-                      isLime ? "border-[#bedb62] text-[#1c1e1a]" : "border-[#e5e8df] text-[#5b5e55]"
+                      isLime ? "border-[var(--lp-accent-strong)] text-[#1c1e1a]" : "border-[#e5e8df] text-[#5b5e55]"
                     }`}
                   >
                     {label}
@@ -447,7 +470,7 @@ export function LandingView({ content }: { content: LandingContent }) {
                   key={index}
                   className="flex min-h-[260px] flex-col border-b border-[#c8cec0] py-8 pr-5 md:border-r md:px-7 md:first:pl-0 md:last:border-r-0"
                 >
-                  <span className="text-sm font-extrabold text-[#3049ed]">0{index + 1}</span>
+                  <span className="text-sm font-extrabold text-[var(--lp-primary)]">0{index + 1}</span>
                   <h3
                     className={`${manrope.className} mt-6 text-xl font-bold tracking-tight text-[#1c1e1a]`}
                   >
@@ -466,7 +489,7 @@ export function LandingView({ content }: { content: LandingContent }) {
               <p className="text-sm font-medium text-[#5b5e55]">
                 {steps.footnote}
               </p>
-              <LandingPrimaryCta size="default">{steps.cta}</LandingPrimaryCta>
+              <LandingPrimaryCta size="default" {...ctaProps}>{steps.cta}</LandingPrimaryCta>
             </div>
           </div>
         </section>
@@ -482,7 +505,7 @@ export function LandingView({ content }: { content: LandingContent }) {
           <div className="grid overflow-hidden rounded-[28px] border border-[#e5e8df] bg-[#f5f7f1] lg:grid-cols-2">
             <div className="flex flex-col justify-between gap-8 p-8 sm:p-12 lg:p-14">
               <div>
-                <span className="inline-block rounded-full bg-[#ebf1ff] px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[#0a2ec3]">
+                <span className="inline-block rounded-full bg-[var(--lp-primary-soft)] px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[var(--lp-primary-dark)]">
                   {featured.badge}
                 </span>
                 <h2
@@ -494,7 +517,7 @@ export function LandingView({ content }: { content: LandingContent }) {
                     {featured.titleHighlight}
                     <span
                       aria-hidden="true"
-                      className="absolute inset-x-0 bottom-1 -z-10 h-3.5 bg-[#dcfa72]"
+                      className="absolute inset-x-0 bottom-1 -z-10 h-3.5 bg-[var(--lp-accent)]"
                     />
                   </span>{" "}
                   {featured.titleRest}
@@ -506,7 +529,7 @@ export function LandingView({ content }: { content: LandingContent }) {
 
               <div>
                 <div className="mb-6 flex items-center gap-3 text-sm">
-                  <span className="grid size-9 place-items-center rounded-full bg-[#dcfa72] text-sm font-bold text-[#1c1e1a]">
+                  <span className="grid size-9 place-items-center rounded-full bg-[var(--lp-accent)] text-sm font-bold text-[#1c1e1a]">
                     n.
                   </span>
                   <strong className="text-[#1c1e1a]">{featured.author}</strong>
@@ -517,14 +540,14 @@ export function LandingView({ content }: { content: LandingContent }) {
             </div>
 
             {/* Right Photo Frame */}
-            <div className="relative flex items-center justify-center bg-[#dcfa72] p-8 sm:p-12 lg:p-14">
+            <div className="relative flex items-center justify-center bg-[var(--lp-accent)] p-8 sm:p-12 lg:p-14">
               {/* Decorative rays */}
               <div className="absolute top-6 left-10 flex gap-1.5" aria-hidden="true">
                 <span className="h-5 w-1.5 -rotate-25 rounded-full bg-white/70" />
                 <span className="h-6 w-1.5 -rotate-10 rounded-full bg-white/70" />
                 <span className="h-4 w-1.5 rotate-15 rounded-full bg-white/70" />
               </div>
-              <div className="w-full max-w-[480px] rotate-[-4deg] rounded-xl border border-[#23251e]/15 bg-white p-5 shadow-[12px_12px_0_#bedb62] transition-transform duration-300 hover:rotate-0">
+              <div className="w-full max-w-[480px] rotate-[-4deg] rounded-xl border border-[#23251e]/15 bg-white p-5 shadow-[12px_12px_0_var(--lp-accent-strong)] transition-transform duration-300 hover:rotate-0">
                 <Image
                   src="/landing-new/notebook.png"
                   alt="Open study notebook beside a NanoSyllabus mug"
@@ -541,7 +564,7 @@ export function LandingView({ content }: { content: LandingContent }) {
         {/* ── Marquee Ribbon 2 ── */}
         {/* The same phone treatment as ribbon 1 (its `ns-ribbon-track` styles). */}
         {ribbonTwo.hidden ? null : (
-        <div data-landing-section="ribbonTwo" className="overflow-hidden bg-[#3049ed] py-5 text-white">
+        <div data-landing-section="ribbonTwo" className="overflow-hidden bg-[var(--lp-primary)] py-5 text-white">
           <div
             className={`${manrope.className} ns-ribbon-track flex w-max items-center text-xs font-bold uppercase tracking-[0.1em] sm:mx-auto sm:w-auto sm:max-w-[1320px] sm:flex-wrap sm:justify-center sm:gap-y-3 sm:px-5`}
           >
@@ -585,7 +608,7 @@ export function LandingView({ content }: { content: LandingContent }) {
               {testimonials.titleHighlight}
               <span
                 aria-hidden="true"
-                className="absolute inset-x-0 bottom-1 -z-10 h-4 bg-[#dcfa72]"
+                className="absolute inset-x-0 bottom-1 -z-10 h-4 bg-[var(--lp-accent)]"
               />
             </span>
           </h2>
@@ -601,7 +624,7 @@ export function LandingView({ content }: { content: LandingContent }) {
                   idx === 1 ? "md:-translate-y-1.5" : ""
                 }`}
               >
-                <span className="text-3xl font-extrabold text-[#99e218]" aria-hidden="true">
+                <span className="text-3xl font-extrabold text-[var(--lp-accent-strong)]" aria-hidden="true">
                   “
                 </span>
                 <blockquote className="mt-2 flex-1 text-sm leading-6 text-[#1c1e1a]">
@@ -632,7 +655,7 @@ export function LandingView({ content }: { content: LandingContent }) {
 <section
   id="discord-community"
   data-landing-section="community"
-  className="relative scroll-mt-24 overflow-hidden bg-[#3049ed] text-white"
+  className="relative scroll-mt-24 overflow-hidden bg-[var(--lp-primary)] text-white"
 >
   <div className="relative mx-auto flex min-h-[780px] max-w-[1460px] flex-col gap-12 px-6 py-20 sm:px-10 lg:block lg:min-h-[780px] lg:px-12 lg:py-0 2xl:min-h-[690px] 2xl:px-0">
     {/* Discord watermark */}
@@ -655,7 +678,7 @@ export function LandingView({ content }: { content: LandingContent }) {
       >
         {community.headingLine1}
         <br />
-        <em className="font-serif font-normal italic text-[#dcfa72]">
+        <em className="font-serif font-normal italic text-[var(--lp-accent)]">
           {community.headingLine2}
         </em>
       </h2>
@@ -676,7 +699,7 @@ export function LandingView({ content }: { content: LandingContent }) {
 
     {/* Community visual */}
     <div className="relative order-last mx-auto w-full max-w-[600px] lg:absolute lg:bottom-[190px] lg:left-[24%] lg:order-none lg:w-[500px] lg:max-w-none 2xl:bottom-[48px] 2xl:left-[27%] 2xl:w-[590px]">
-      <div className="absolute right-[19%] top-[5%] z-10 inline-flex items-center gap-2 rounded-full border border-white/20 bg-[#1830a4]/80 px-3 py-1.5 text-[11px] font-medium text-white shadow-[0_8px_20px_rgba(13,25,110,0.32)] backdrop-blur-sm">
+      <div className="absolute right-[19%] top-[5%] z-10 inline-flex items-center gap-2 rounded-full border border-white/20 bg-[var(--lp-primary-deeper)]/80 px-3 py-1.5 text-[11px] font-medium text-white shadow-[0_8px_20px_rgba(13,25,110,0.32)] backdrop-blur-sm">
         <span className="size-2 rounded-full bg-[#55dd9b]" />
         <span>{community.liveBadge}</span>
       </div>
@@ -697,7 +720,7 @@ export function LandingView({ content }: { content: LandingContent }) {
           key={index}
           className="grid grid-cols-[26px_minmax(0,1fr)] gap-4 border-t border-white/30 py-6 first:pt-6"
         >
-          <span className="pt-0.5 text-[13px] font-medium text-[#dcfa72]">
+          <span className="pt-0.5 text-[13px] font-medium text-[var(--lp-accent)]">
             0{index + 1}
           </span>
 
@@ -732,15 +755,15 @@ export function LandingView({ content }: { content: LandingContent }) {
   id="cash-prize"
   data-landing-section="prize"
   aria-labelledby="prize-title"
-  className="relative overflow-hidden bg-[#e9edff] text-[#1c1e1a]"
+  className="relative overflow-hidden bg-[var(--lp-primary-soft)] text-[#1c1e1a]"
 >
-  <div className="pointer-events-none absolute -right-24 -top-32 size-[420px] rounded-full bg-[#dcfa72]/50 blur-3xl" aria-hidden="true" />
-  <div className="pointer-events-none absolute -bottom-44 -left-24 size-[420px] rounded-full bg-[#3049ed]/15 blur-3xl" aria-hidden="true" />
+  <div className="pointer-events-none absolute -right-24 -top-32 size-[420px] rounded-full bg-[var(--lp-accent)]/50 blur-3xl" aria-hidden="true" />
+  <div className="pointer-events-none absolute -bottom-44 -left-24 size-[420px] rounded-full bg-[var(--lp-primary)]/15 blur-3xl" aria-hidden="true" />
 
   <div className="relative mx-auto grid max-w-[1320px] items-center gap-12 px-5 py-20 sm:px-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-[70px] lg:py-28 2xl:px-0">
     {/* Left copy */}
     <div>
-      <p className="inline-flex rounded-full bg-[#3049ed] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
+      <p className="inline-flex rounded-full bg-[var(--lp-primary)] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
         {prize.badge}
       </p>
 
@@ -752,7 +775,7 @@ export function LandingView({ content }: { content: LandingContent }) {
         <br />
         {prize.headingLine2}
         <br />
-        <em className="font-serif font-normal italic text-[#3049ed]">
+        <em className="font-serif font-normal italic text-[var(--lp-primary)]">
           {prize.headingLine3}
         </em>
       </h2>
@@ -761,14 +784,14 @@ export function LandingView({ content }: { content: LandingContent }) {
         {prize.body}
       </p>
 
-      <div className="mt-8 rounded-[20px] border border-[#cbd2fb] bg-white/80 p-5 sm:p-6">
+      <div className="mt-8 rounded-[20px] border border-[var(--lp-primary-line)] bg-white/80 p-5 sm:p-6">
         <h3 className={`${manrope.className} text-xl font-extrabold tracking-[-0.035em]`}>
           {prize.howToTitle}
         </h3>
         <ol className="mt-5 space-y-4">
           {prize.howToSteps.map((step, index) => (
             <li key={index} className="flex items-start gap-3 text-[15px] leading-[1.5] text-[#353944]">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#dcfa72] text-xs font-extrabold text-[#1c1e1a]">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--lp-accent)] text-xs font-extrabold text-[#1c1e1a]">
                 {index + 1}
               </span>
               <span>{step}</span>
@@ -779,14 +802,14 @@ export function LandingView({ content }: { content: LandingContent }) {
 
       <div className="mt-7 flex flex-wrap gap-3">
         <a
-          href="https://www.nanosyllabus.com/communities"
-          className="inline-flex min-h-12 items-center justify-center gap-5 rounded-xl bg-[#3049ed] px-6 py-3 font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3049ed]"
+          href={joinHref ?? `${appOrigin}/communities`}
+          className="inline-flex min-h-12 items-center justify-center gap-5 rounded-xl bg-[var(--lp-primary)] px-6 py-3 font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lp-primary)]"
         >
           {prize.primaryCta} <span aria-hidden="true">↗</span>
         </a>
         <a
           href={DISCORD_STUDY_ROOM_URL}
-          className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[#3049ed] px-6 py-3 font-semibold text-[#3049ed] transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3049ed]"
+          className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[var(--lp-primary)] px-6 py-3 font-semibold text-[var(--lp-primary)] transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lp-primary)]"
         >
           {prize.secondaryCta}
         </a>
@@ -797,37 +820,37 @@ export function LandingView({ content }: { content: LandingContent }) {
 
     {/* Prize board */}
     <div className="relative">
-      <div className="rounded-[28px] border border-[#243bc2] bg-[#3049ed] p-5 text-white shadow-[10px_12px_0_#17236d] sm:p-8">
+      <div className="rounded-[28px] border border-[var(--lp-primary-dark)] bg-[var(--lp-primary)] p-5 text-white shadow-[10px_12px_0_var(--lp-primary-deepest)] sm:p-8">
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.1em]">
           <span className="rounded-full border border-white/30 px-3 py-1.5">{prize.boardLabel}</span>
-          <span className="text-[#dcfa72]">{prize.winnersLabel}</span>
+          <span className="text-[var(--lp-accent)]">{prize.winnersLabel}</span>
         </div>
 
         <div className="mt-9 text-xs font-bold uppercase tracking-[0.16em] text-white/75">
           {prize.firstPrizeLabel}
         </div>
-        <div className={`${manrope.className} mt-2 text-[clamp(3.5rem,6vw,5.5rem)] font-extrabold leading-none tracking-[-0.075em] text-[#dcfa72]`}>
+        <div className={`${manrope.className} mt-2 text-[clamp(3.5rem,6vw,5.5rem)] font-extrabold leading-none tracking-[-0.075em] text-[var(--lp-accent)]`}>
           {prize.firstPrizeAmount}
         </div>
         <p className="mt-3 text-base font-semibold">{prize.firstPrizeExtra}</p>
 
         <div className="mt-9 grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
-            <span className="text-xs font-bold uppercase tracking-[0.1em] text-[#dcfa72]">{prize.secondPrizeLabel}</span>
+            <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--lp-accent)]">{prize.secondPrizeLabel}</span>
             <strong className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}>
               {prize.secondPrize}
             </strong>
           </div>
 
           <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
-            <span className="text-xs font-bold uppercase tracking-[0.1em] text-[#dcfa72]">{prize.thirdPrizeLabel}</span>
+            <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--lp-accent)]">{prize.thirdPrizeLabel}</span>
             <strong className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}>
               {prize.thirdPrize}
             </strong>
           </div>
         </div>
 
-        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#dcfa72] px-4 py-4 text-[#1c1e1a]">
+        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--lp-accent)] px-4 py-4 text-[#1c1e1a]">
           <span className="text-xs font-bold uppercase tracking-[0.1em]">{prize.resultsLabel}</span>
           <strong className={`${manrope.className} text-lg font-extrabold`}>{prize.resultsWhere}</strong>
         </div>
@@ -868,7 +891,7 @@ export function LandingView({ content }: { content: LandingContent }) {
   <div className="divide-y divide-[#d9ddd3] border-t border-[#d9ddd3]">
     {faq.items.map(({ question, answer }, index) => (
       <details key={index} className="group py-6">
-        <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-4 text-[16px] font-semibold text-[#1c1e1a] transition-colors hover:text-[#3049ed] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[#3049ed]">
+        <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-4 text-[16px] font-semibold text-[#1c1e1a] transition-colors hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]">
           <span>{question}</span>
 
           <span
@@ -891,7 +914,7 @@ export function LandingView({ content }: { content: LandingContent }) {
 
         {/* ── Final Call To Action Banner ── */}
         <section data-landing-section="finalCta" className="mx-auto max-w-[1320px] px-5 pb-16 2xl:px-0">
-          <div className="relative overflow-hidden rounded-[28px] bg-[#dcfa72] p-8 sm:p-14 lg:p-16 shadow-sm">
+          <div className="relative overflow-hidden rounded-[28px] bg-[var(--lp-accent)] p-8 sm:p-14 lg:p-16 shadow-sm">
        
             <h2
               className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.5vw,4.6rem)] font-extrabold leading-[1.05] tracking-[-0.055em] text-[#1c1e1a]`}
@@ -901,7 +924,7 @@ export function LandingView({ content }: { content: LandingContent }) {
               <em className="font-serif font-normal italic">{finalCta.headingLine2}</em>
             </h2>
             <div className="mt-9">
-              <LandingPrimaryCta size="hero">
+              <LandingPrimaryCta size="hero" {...ctaProps}>
                 {finalCta.cta}
               </LandingPrimaryCta>
             </div>
@@ -930,10 +953,10 @@ export function LandingView({ content }: { content: LandingContent }) {
             <a href="#steps" className="hover:text-[#1c1e1a] transition-colors">
               Product
             </a>
-            <Link href="/communities" className="hover:text-[#1c1e1a] transition-colors">
+            <Link href={`${appOrigin}/communities`} className="hover:text-[#1c1e1a] transition-colors">
               Communities
             </Link>
-            <Link href="/flow" className="hover:text-[#1c1e1a] transition-colors">
+            <Link href={`${appOrigin}/flow`} className="hover:text-[#1c1e1a] transition-colors">
               Resources
             </Link>
             <a href="#people" className="hover:text-[#1c1e1a] transition-colors">
@@ -942,7 +965,7 @@ export function LandingView({ content }: { content: LandingContent }) {
             <a href="#questions" className="hover:text-[#1c1e1a] transition-colors">
               Contact
             </a>
-            <Link href="/app" className="hover:text-[#1c1e1a] transition-colors">
+            <Link href={`${appOrigin}/app`} className="hover:text-[#1c1e1a] transition-colors">
               Blog
             </Link>
           </nav>
@@ -1001,11 +1024,11 @@ export function LandingView({ content }: { content: LandingContent }) {
 
         {/* Bottom Logo & App Link Row */}
         <div className="flex flex-col justify-between gap-6 border-t border-[#e5e8df] pt-8 sm:flex-row sm:items-center">
-          <Brand />
+          <Brand logoUrl={brand.logoUrl} />
           <p className="text-xs text-[#5b5e55]">{footer.tagline}</p>
           <Link
-            href="/app/community"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1c1e1a] hover:text-[#3049ed] transition-colors underline underline-offset-4"
+            href={`${appOrigin}/app/community`}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1c1e1a] hover:text-[var(--lp-primary)] transition-colors underline underline-offset-4"
           >
             <span>{footer.appLink}</span>
             <span aria-hidden="true">↗</span>

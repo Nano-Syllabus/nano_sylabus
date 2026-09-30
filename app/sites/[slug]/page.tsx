@@ -37,5 +37,9 @@ export default async function SiteLandingPage({ params }: Props) {
   const site = slug === MAIN_SITE_SLUG ? null : await getPublishedLandingSite(slug);
   // Unknown or hidden subdomains land on the main site instead of a 404.
   if (!site) redirect(siteOrigin(MAIN_SITE_SLUG));
-  return <LandingView content={site.content} />;
+  // Buttons lead to the main domain, so signing up and the app itself happen
+  // in one place and one session serves every subdomain. Locally they stay on
+  // this host, which is the dev server anyway.
+  const appOrigin = process.env.NODE_ENV === "production" ? siteOrigin(MAIN_SITE_SLUG) : "";
+  return <LandingView content={site.content} appOrigin={appOrigin} />;
 }
