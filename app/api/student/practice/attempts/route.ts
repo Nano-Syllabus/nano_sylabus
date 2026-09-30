@@ -6,6 +6,7 @@ import {
   listStudentCourseSubjects,
 } from "@/lib/student-courses";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ function publicEvaluation(value: unknown) {
 }
 
 /** The student's own graded practice sittings, newest first. */
-export async function GET() {
+async function handleGET() {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -74,3 +75,6 @@ export async function GET() {
     return NextResponse.json({ error: "Could not load your practice history." }, { status: 502 });
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);

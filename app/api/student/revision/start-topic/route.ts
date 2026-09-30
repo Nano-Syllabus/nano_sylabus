@@ -9,6 +9,7 @@ import { getStudentCourseSubjectAccessCached } from "@/lib/student-courses";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
  *
  * Returns the id of the assigned challenge; the client opens it in the hub.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -95,3 +96,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not start this topic. Try again." }, { status: 500 });
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

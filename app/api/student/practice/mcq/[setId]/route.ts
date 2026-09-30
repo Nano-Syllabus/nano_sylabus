@@ -9,10 +9,11 @@ import {
 import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
 import { safeMcqSet } from "../safe-set";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(
+async function handleGET(
   request: Request,
   { params }: { params: Promise<{ setId: string }> },
 ) {
@@ -38,3 +39,6 @@ export async function GET(
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);

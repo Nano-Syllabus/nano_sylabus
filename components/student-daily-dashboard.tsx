@@ -363,13 +363,13 @@ function SemesterProgress({
   compact?: boolean;
 }) {
   const community = dashboard.community;
-  const [semesterId, setSemesterId] = useState(community?.currentSemesterId ?? "");
-  useEffect(() => {
-    setSemesterId(community?.currentSemesterId ?? "");
-  }, [community?.currentSemesterId, community?.slug]);
+  // The running term is chosen once, on Micro-Topics; this map follows it rather than
+  // offering its own picker, so every page shows the same faculty and term.
   const semester = useMemo(
-    () => community?.semesters.find((item) => item.id === semesterId) ?? community?.semesters[0],
-    [community, semesterId],
+    () =>
+      community?.semesters.find((item) => item.id === community.currentSemesterId) ??
+      community?.semesters[0],
+    [community],
   );
   const rankedSubjects = useMemo(
     () => (semester ? rankSemesterSubjects(semester.subjects) : []),
@@ -411,31 +411,25 @@ function SemesterProgress({
             {termNoun ?? "Syllabus"} progress
           </h2>
         </div>
-        {/* Nothing to pick for one track (Entrance, License) or a single term. */}
-        {termNoun && community.semesters.length > 1 ? (
-          <label
-            className={cn(
-              "grid gap-1.5 text-xs font-medium text-text-secondary",
-              compact && "w-full",
-            )}
-          >
-            {termNoun}
-            <select
-              value={semester?.id ?? ""}
-              onChange={(event) => setSemesterId(event.target.value)}
+        {/* One track (Entrance, License) or a single term: nothing to name or change. */}
+        {termNoun && semester && community.semesters.length > 1 ? (
+          <div className={cn("min-w-0 text-sm", !compact && "sm:text-right")}>
+            <p className="truncate text-text-secondary">{community.name}</p>
+            <p
               className={cn(
-                "min-h-11 rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary",
-                compact ? "w-full min-w-0" : "min-w-[220px]",
-                focusRing,
+                "mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1",
+                !compact && "sm:justify-end",
               )}
             >
-              {community.semesters.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              <span className="font-semibold text-text-primary">{semester.label}</span>
+              <Link
+                href="/app/challenges"
+                className={cn("text-sm font-medium text-blue-600 hover:underline", focusRing)}
+              >
+                Change {termNoun.toLowerCase()}
+              </Link>
+            </p>
+          </div>
         ) : null}
       </div>
 
@@ -715,7 +709,7 @@ function DashboardDataSkeleton({
               <h2 className="type-student-section-title mt-2">Semester progress</h2>
               <div className={`mt-2 h-3 w-44 ${line}`} aria-hidden="true" />
             </div>
-            <div className={`h-11 w-full rounded-xl ${line}`} aria-hidden="true" />
+            <div className={`h-4 w-48 ${line}`} aria-hidden="true" />
           </div>
           <div className="mt-5 space-y-4" aria-hidden="true">
             {Array.from({ length: 4 }).map((_, index) => (

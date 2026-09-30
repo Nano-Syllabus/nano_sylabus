@@ -418,6 +418,8 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
             <ChatPageClient
               variant="floating"
               onRequestClose={closePanel}
+              // Over a challenge: no "Next: <another topic>" under replies (user, 2026-09-29).
+              hideFollowUps={onChallenge}
               user={user}
               defaultLanguage={bootstrap.profile.languagePref}
               profileBoard={bootstrap.profile.board}

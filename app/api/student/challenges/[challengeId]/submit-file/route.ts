@@ -24,6 +24,7 @@ import {
   answerSheetForGrading,
   markAnswerSheetSubmitted,
 } from "@/lib/data/challenge-answer-sheet";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -32,7 +33,7 @@ const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "ima
 /** Exams `submitStudentChallengeFile` can grade from a scan; see the check below. */
 const FILE_GRADED_EXAMS = new Set(["practice-paper-v1", "challenge-exam-v1"]);
 
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
 ) {
@@ -173,3 +174,6 @@ export async function POST(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

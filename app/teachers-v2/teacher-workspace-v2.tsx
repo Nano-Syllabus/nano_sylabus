@@ -53,6 +53,11 @@ import {
 import { teacherLegacySubjectHref, teacherSubjectsHref } from "@/lib/teacher-subject-navigation";
 import { CommunityDeleteControl } from "@/components/community-delete-control";
 import { CommunityTransferControl } from "@/components/community-transfer-control";
+import {
+  communityUsageBuckets,
+  FacultyTokenBreakdown,
+  FacultyTokenUsage,
+} from "@/app/teachers-v2/views/faculty-token-usage";
 import { CommunityNameEditor } from "@/components/community-name-editor";
 import { subjectAccessLabel, type SubjectCommunity } from "@/lib/teacher-subject-access";
 import {
@@ -2277,6 +2282,8 @@ export function CommunitiesView({
         </section>
       ) : null}
 
+      {admin && !subjectsMode ? <FacultyTokenUsage key={selected.slug} slug={selected.slug} /> : null}
+
       {/* Last on the tab, as GitHub keeps its danger zone. */}
       {!subjectsMode && selected.canManage ? (
         <section
@@ -2337,6 +2344,7 @@ function TodayView({
 }) {
   const [usage, setUsage] = useState<ApiRecord>({});
   const [usageState, setUsageState] = useState<WorkspaceState>("loading");
+  const [communityNames, setCommunityNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let active = true;
@@ -2348,6 +2356,7 @@ function TodayView({
       .then((payload) => {
         if (!active) return;
         setUsage(asRecord(payload.usage));
+        setCommunityNames(asRecord(payload.communityNames) as Record<string, string>);
         setUsageState("ready");
       })
       .catch(() => {
@@ -2569,6 +2578,9 @@ function TodayView({
             </p>
           </div>
         </div>
+        {usageState === "ready" ? (
+          <FacultyTokenBreakdown buckets={communityUsageBuckets(usage)} names={communityNames} />
+        ) : null}
       </section>
     </>
   );

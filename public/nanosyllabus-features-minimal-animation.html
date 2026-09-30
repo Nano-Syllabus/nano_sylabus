@@ -5,7 +5,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>NanoSyllabus — 30-second product demo</title>
+  <title>NanoSyllabus — product tour</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap" rel="stylesheet">
   <style>
     :root {
       font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -1195,272 +1197,381 @@
       }
     }
 
-    /* An explicit cursor travels across the interface and clicks once in every chapter. */
-    .cursor.c1 {
-      animation: c1 3s .1s both
-    }
 
-    .cursor.c2 {
-      animation: c2 3.5s .4s both
-    }
+    /* ───────── Full product tour: shell, navigation and new chapters ───────── */
+    .wrap { min-width: 0; max-width: 100% }
+    .hand { font-family: "Caveat", "Segoe Print", "Bradley Hand", cursive }
 
-    .cursor.c3 {
-      animation: c3 3.3s .5s both
-    }
+    .app { grid-template-columns: 186px 1fr }
+    .sidebar { padding: 18px 12px }
+    .app-brand { padding: 0 8px 16px }
+    .nav { padding: 9px 12px; margin: 1px 0; cursor: pointer; transition: background .25s, color .25s }
+    .nav:hover { color: #213719; background: #f3fbdc }
+    .nav.selected:hover { background: #e8fcae }
 
-    .cursor.c4 {
-      animation: c4 3s .5s both
-    }
+    /* in-stage arrows */
+    .step-btn { position: absolute; z-index: 14; top: 372px; width: 46px; height: 46px; border-radius: 50%; border: 1px solid #ffffffb0; background: #ffffffc4; color: #1e291d; font-size: 22px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 8px 22px #20351e26; opacity: .55; transition: opacity .25s, transform .25s, background .25s }
+    .step-btn.prev { left: 18px }
+    .step-btn.next { right: 18px }
+    .stage:hover .step-btn { opacity: 1 }
+    .step-btn:hover { background: #fff; transform: scale(1.07) }
+    .step-btn:focus-visible { outline: 3px solid #3868e9; outline-offset: 3px; opacity: 1 }
 
-    @keyframes c1 {
-      0% {
-        opacity: 0;
-        transform: translate(985px, 478px)
-      }
+    /* in-stage timeline: one segment per chapter, each one a jump target */
+    .timeline { position: absolute; z-index: 5; left: 81px; right: 81px; bottom: 18px; display: flex; align-items: center; gap: 14px }
+    .timeline .now { width: 128px; font-size: 11px; letter-spacing: .09em; font-weight: 860; color: #4c702a; white-space: nowrap; text-transform: uppercase }
+    .segments { flex: 1; display: flex; gap: 5px }
+    .seg { flex: 1; height: 22px; padding: 0; border: 0; background: none; display: flex; align-items: center }
+    .seg b { display: block; width: 100%; height: 4px; border-radius: 5px; background: #73965059; overflow: hidden; transition: height .2s }
+    .seg:hover b { height: 7px }
+    .seg b i { display: block; height: 100%; width: 0; background: #263b1f; border-radius: 5px }
+    .seg.done b i { width: 100% }
+    .seg:focus-visible { outline: 2px solid #3868e9; outline-offset: 2px; border-radius: 4px }
+    .clock { width: 86px }
 
-      20% {
-        opacity: 1
-      }
+    .cursor { opacity: 0; transform: translate(var(--x, 900px), var(--y, 520px)) scale(var(--s, 1)); transition: transform .72s cubic-bezier(.3, .7, .2, 1), opacity .3s }
+    .cursor.on { opacity: 1 }
+    .cursor.press { --s: .82; transition: transform .12s, opacity .3s }
+    .pulse { transform: translate(-50%, -50%) }
+    .pulse.go { animation: pulse-c .5s both }
+    @keyframes pulse-c { from { opacity: .75; transform: translate(-50%, -50%) scale(.45) } to { opacity: 0; transform: translate(-50%, -50%) scale(1.75) } }
 
-      60% {
-        opacity: 1;
-        transform: translate(949px, 416px)
-      }
+    /* shared */
+    .card { border: 1px solid #e1e9df; border-radius: 16px; background: #fff; box-shadow: 0 14px 30px #21381c12 }
+    .fade-up { opacity: 0; transform: translateY(18px) }
+    .tag { display: inline-flex; align-items: center; gap: 5px; border-radius: 99px; padding: 4px 9px; font-size: 10px; font-weight: 800; letter-spacing: .03em; background: #eef9cf; color: #4c7224; align-self: flex-start }
+    .btn { display: inline-grid; place-items: center; height: 32px; padding: 0 15px; border-radius: 9px; background: #2563eb; color: #fff; font-size: 12px; font-weight: 800 }
 
-      70% {
-        opacity: 1;
-        transform: translate(949px, 416px) scale(.82)
-      }
+    /* 01 · Faculty */
+    .search { position: absolute; left: 35px; top: 96px; width: 430px; height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 15px; font-size: 14px; font-weight: 650; color: #283528 }
+    .search svg { width: 17px; height: 17px; stroke: #87967f; fill: none; stroke-width: 2 }
+    .typed { display: inline-block; overflow: hidden; white-space: nowrap; width: 0; border-right: 2px solid #2563eb; padding-right: 2px }
+    .active .typed { animation: type-9 .9s .45s steps(9) both, caret .8s 1.35s 4 both }
+    @keyframes type-9 { to { width: 9.2ch } }
+    @keyframes caret { 50% { border-color: transparent } }
+    .faculties { position: absolute; left: 35px; right: 35px; top: 162px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px }
+    .faculty { height: 150px; padding: 18px; display: flex; flex-direction: column; opacity: 0; transform: translateY(26px) scale(.96) }
+    .faculty.pick { border-color: #acd268; background: #fbfef2 }
+    .fac-top { display: flex; align-items: center; gap: 11px }
+    .fac-logo { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-size: 11px; font-weight: 900; background: #e8f9b6; color: #4c7224 }
+    .faculty:nth-child(2) .fac-logo { background: #e6efff; color: #3563ce }
+    .faculty:nth-child(3) .fac-logo { background: #f2ebff; color: #854fc3 }
+    .faculty strong { font-size: 18px; letter-spacing: -.045em; display: block }
+    .faculty small { font-size: 11px; color: #8d9a8a; font-weight: 600 }
+    .fac-meta { margin-top: auto; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #758372; font-weight: 700 }
+    .join { position: relative; display: inline-block; width: 84px; height: 32px }
+    .join span { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 9px; font-size: 12px; font-weight: 800 }
+    .join .j1 { background: #2563eb; color: #fff }
+    .join .j2 { background: #e9f8d2; color: #3e7d35; opacity: 0 }
+    .faculty:not(.pick) .join .j1 { background: #fff; color: #2563eb; box-shadow: inset 0 0 0 1px #c9d6fb }
+    .active .faculty:nth-child(1) { animation: card-in .7s .8s both }
+    .active .faculty:nth-child(2) { animation: card-in .7s .98s both }
+    .active .faculty:nth-child(3) { animation: card-in .7s 1.16s both }
+    .active .pick .j2 { animation: rise .3s 2.65s both }
+    .active .pick .j1 { animation: vanish .3s 2.62s both }
+    @keyframes vanish { to { opacity: 0; transform: scale(.9) } }
+    .ready { position: absolute; left: 35px; top: 336px; display: flex; align-items: center; gap: 12px; padding: 12px 16px 12px 12px; font-size: 14px; font-weight: 750; letter-spacing: -.02em; opacity: 0; transform: translateY(14px) }
+    .ready b { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: #dff7b8; color: #3e7d35 }
+    .ready span { color: #6b8f47 }
+    .active .ready { animation: rise .6s 3.25s both }
 
-      100% {
-        opacity: 0;
-        transform: translate(949px, 416px)
-      }
-    }
+    /* 03 · Daily challenge */
+    .steps { position: absolute; left: 35px; top: 96px; display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 800; color: #8a9787 }
+    .steps span { display: flex; align-items: center; gap: 7px; padding: 7px 12px 7px 7px; border-radius: 99px; border: 1px solid #e3e9e1; background: #fff }
+    .steps span i { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 10px; background: #eef1ec }
+    .steps .s1 { color: #213719; border-color: #acd268; background: #f7fbe9 }
+    .steps .s1 i { background: #cdef7d }
+    .steps .line { width: 40px; height: 2px; background: #e1e7df; border-radius: 2px; padding: 0; border: 0 }
+    .active .steps .s1 { animation: step-done .4s 3.8s both }
+    .active .steps .s2 { animation: step-on .4s 3.9s both }
+    @keyframes step-done { to { color: #7c8b79; border-color: #e3e9e1; background: #fff } }
+    @keyframes step-on { to { color: #213719; border-color: #acd268; background: #f7fbe9 } }
+    .learn { position: absolute; left: 35px; right: 35px; top: 150px; display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px }
+    .learn .card { height: 178px; padding: 20px; display: flex; flex-direction: column }
+    .learn strong { font-size: 20px; letter-spacing: -.045em; margin-top: 12px }
+    .learn small { font-size: 12px; color: #8d9a8a; margin-top: 5px; font-weight: 600 }
+    .learn .go { margin-top: auto; font-size: 12px; font-weight: 800; color: #2563eb }
+    .years { margin-top: auto; display: flex; gap: 6px }
+    .years span { border: 1px solid #e3e9e1; border-radius: 8px; padding: 6px 9px; font-size: 11px; font-weight: 750; color: #5d6c5a }
+    .active .learn .card:nth-child(1) { animation: rise .55s .35s both }
+    .active .learn .card:nth-child(2) { animation: rise .55s .55s both }
+    .active .learn { animation: fade-away .4s 3.65s both }
+    @keyframes fade-away { to { opacity: 0; transform: translateY(-14px); visibility: hidden } }
+    .sheet { position: absolute; top: 0; right: 0; bottom: 0; width: 470px; z-index: 4; padding: 26px 30px 20px 58px; border-left: 1px solid #e3e8df; background: repeating-linear-gradient(to bottom, #fffefa 0, #fffefa 35px, #dce7f9 36px, #fffefa 37px); box-shadow: -24px 0 50px #1b2e1a24; transform: translateX(105%) }
+    .sheet:before { content: ""; position: absolute; left: 42px; top: 0; bottom: 0; border-left: 1px solid #f0cac6 }
+    .sheet-head { font-size: 11px; letter-spacing: .06em; font-weight: 850; color: #8b978c; display: flex; justify-content: space-between }
+    .sheet h3 { font-size: 34px; margin-top: 8px; color: #1f3350; font-weight: 700 }
+    .sheet ul { margin: 6px 0 0; padding: 0; list-style: none }
+    .sheet li { font-size: 25px; line-height: 36px; color: #22407a; opacity: 0; transform: translateX(-8px) }
+    .sheet li:before { content: "• "; color: #6c8c3c }
+    .active .sheet { animation: sheet-open .55s 1.4s cubic-bezier(.2, .8, .2, 1) both, sheet-close .45s 3.45s both }
+    @keyframes sheet-open { to { transform: none } }
+    @keyframes sheet-close { from { transform: none } to { transform: translateX(105%) } }
+    .active .sheet li:nth-child(1) { animation: rise .4s 1.9s both }
+    .active .sheet li:nth-child(2) { animation: rise .4s 2.25s both }
+    .active .sheet li:nth-child(3) { animation: rise .4s 2.6s both }
+    .mcq { position: absolute; left: 35px; right: 35px; top: 150px; padding: 20px 22px; opacity: 0; transform: translateY(20px) }
+    .mcq-top { display: flex; justify-content: space-between; font-size: 11px; font-weight: 800; letter-spacing: .05em; color: #8b978c }
+    .mcq h3 { font-size: 19px; letter-spacing: -.035em; margin-top: 10px }
+    .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 15px }
+    .opt { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border: 1px solid #e3e9e1; border-radius: 11px; font-size: 13px; font-weight: 650; color: #354235 }
+    .opt i { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 850; background: #f1f4ef; color: #6f7e6c }
+    .opt .ok { margin-left: auto; color: #3e7d35; font-weight: 900; opacity: 0 }
+    .active .mcq { animation: rise .55s 3.9s both }
+    .active .opt.right { animation: opt-right .35s 4.95s both }
+    .active .opt.right i { animation: opt-right-i .35s 4.95s both }
+    .active .opt.right .ok { animation: rise .3s 5.05s both }
+    @keyframes opt-right { to { border-color: #8fcb57; background: #f1fbe3; color: #213719 } }
+    @keyframes opt-right-i { to { background: #9fd660; color: #fff } }
+    .result { position: absolute; left: 35px; top: 392px; display: flex; gap: 10px; align-items: center; opacity: 0; transform: translateY(12px) }
+    .result .pass { padding: 9px 14px; border-radius: 99px; background: #1e2d1c; color: #dffa7a; font-size: 13px; font-weight: 850 }
+    .result span:last-child { font-size: 13px; font-weight: 750; color: #5f8a3c }
+    .active .result { animation: rise .5s 5.7s both }
 
-    @keyframes c2 {
-      0% {
-        opacity: 0;
-        transform: translate(1098px, 612px)
-      }
+    /* 07 · NanoAI tutor */
+    .reading { position: absolute; left: 35px; top: 96px; width: 360px; height: 340px; padding: 20px 22px }
+    .reading strong { font-size: 18px; letter-spacing: -.045em }
+    .reading i { display: block; height: 7px; border-radius: 5px; background: #e7ece4; margin-top: 16px }
+    .reading i:nth-of-type(2) { width: 88% } .reading i:nth-of-type(3) { width: 94% } .reading i:nth-of-type(4) { width: 70% }
+    .reading i:nth-of-type(6) { width: 83% } .reading i:nth-of-type(7) { width: 60% }
+    .reading .formula { margin: 18px 0 4px; padding: 10px 12px; border-radius: 10px; background: #f6f9f2; font: 700 16px/1 "Times New Roman", serif; font-style: italic; color: #2d3a2d; text-align: center }
+    .active .reading { animation: rise .5s .2s both }
+    .bubble { position: absolute; right: 35px; bottom: 28px; z-index: 3; width: 54px; height: 54px; border-radius: 50%; background: #2563eb; color: #fff; display: grid; place-items: center; font-size: 22px; box-shadow: 0 12px 26px #2563eb55; opacity: 0; transform: scale(.6) }
+    .active .bubble { animation: bubble-in .45s .3s both, bubble-out .3s 1.05s both }
+    @keyframes bubble-in { to { opacity: 1; transform: none } }
+    @keyframes bubble-out { from { opacity: 1; transform: none } to { opacity: 0; transform: scale(.6) } }
+    .chat { position: absolute; right: 35px; bottom: 28px; width: 452px; height: 368px; z-index: 2; display: flex; flex-direction: column; overflow: hidden; opacity: 0; transform: translateY(24px) scale(.92); transform-origin: bottom right }
+    .active .chat { animation: rise-scale .5s 1.05s cubic-bezier(.2, .8, .2, 1) both }
+    @keyframes rise-scale { to { opacity: 1; transform: none } }
+    .chat-head { display: flex; align-items: center; gap: 9px; padding: 12px 16px; border-bottom: 1px solid #edf1ea; font-size: 13px; font-weight: 850 }
+    .chat-head b { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: #2563eb; color: #fff; font-size: 12px }
+    .chat-head span { margin-left: auto; font-size: 10px; font-weight: 750; color: #8d9a8a }
+    .chat-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px }
+    .me { align-self: flex-end; max-width: 300px; padding: 9px 13px; border-radius: 14px 14px 4px 14px; background: #e8efff; color: #1d3b8f; font-size: 13px; font-weight: 700; opacity: 0; transform: translateY(10px) }
+    .active .me { animation: rise .4s 1.7s both }
+    .dots { display: flex; gap: 4px; padding: 10px 12px; width: 52px; border-radius: 12px; background: #f2f5f0; opacity: 0 }
+    .dots i { width: 6px; height: 6px; border-radius: 50%; background: #93a38f; animation: dot 1s infinite }
+    .dots i:nth-child(2) { animation-delay: .15s } .dots i:nth-child(3) { animation-delay: .3s }
+    @keyframes dot { 50% { transform: translateY(-3px); opacity: .4 } }
+    .active .dots { animation: show-hide 1s 2.15s both }
+    @keyframes show-hide { 0%, 90% { opacity: 1 } 100% { opacity: 0; height: 0; padding: 0; margin: -5px 0 } }
+    .ai { display: flex; flex-direction: column; gap: 7px }
+    .ai-step { display: grid; grid-template-columns: 22px 1fr; gap: 9px; align-items: center; font-size: 12.5px; font-weight: 650; color: #354235; opacity: 0; transform: translateY(8px) }
+    .ai-step i { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-style: normal; font-size: 10px; font-weight: 850; background: #e6efff; color: #3563ce }
+    .ai-step em { display: block; margin-top: 3px; font: italic 700 15px/1.2 "Times New Roman", serif; color: #1f2b1f }
+    .ai-final { font-size: 13px; font-weight: 800; color: #3e7d35; opacity: 0; transform: translateY(8px) }
+    .active .ai-step:nth-child(1) { animation: rise .4s 3.2s both }
+    .active .ai-step:nth-child(2) { animation: rise .4s 3.7s both }
+    .active .ai-step:nth-child(3) { animation: rise .4s 4.2s both }
+    .active .ai-final { animation: rise .4s 4.8s both }
 
-      20% {
-        opacity: 1
-      }
+    /* 08 · Revision */
+    .doc { position: absolute; left: 35px; top: 96px; width: 520px; height: 340px; padding: 20px 24px; opacity: 0; transform: translateY(18px) }
+    .doc h3 { font-size: 21px; letter-spacing: -.05em }
+    .doc label { display: block; margin-top: 16px; font-size: 10px; letter-spacing: .09em; font-weight: 850; color: #6c985b }
+    .doc p { font-size: 13px; font-weight: 620; color: #3a4739; margin-top: 7px; line-height: 1.4 }
+    .doc p:before { content: "•  "; color: #8dbd4f }
+    .solved { margin-top: 8px; display: flex; gap: 8px }
+    .solved span { flex: 1; border: 1px solid #e3e9e1; border-radius: 10px; padding: 9px 11px; font-size: 11.5px; font-weight: 700; color: #3a4739 }
+    .solved small { display: block; font-size: 10px; color: #8d9a8a; margin-top: 3px; font-weight: 650 }
+    .active .doc { animation: rise .55s .25s both }
+    .navigator { position: absolute; right: 35px; top: 96px; width: 300px; height: 340px; padding: 16px; opacity: 0; transform: translateX(22px) }
+    .active .navigator { animation: rise .55s .45s both }
+    .nav-sub { font-size: 14px; font-weight: 850; letter-spacing: -.035em }
+    .count-line { display: flex; justify-content: space-between; margin-top: 10px; font-size: 11px; font-weight: 750; color: #6b7a68 }
+    .count-line b { display: inline-block; height: 1.25em; line-height: 1.25em; overflow: hidden; vertical-align: bottom }
+    .count-line b span { display: block }
+    .active .count-line b span { animation: count-up .35s 2.2s both }
+    @keyframes count-up { to { transform: translateY(-50%) } }
+    .progress { height: 6px; border-radius: 5px; background: #edf1ec; overflow: hidden; margin-top: 7px }
+    .progress b { display: block; height: 100%; width: 25%; background: #a9dc65; border-radius: 5px }
+    .active .progress b { animation: grow-33 .6s 2.2s both }
+    @keyframes grow-33 { to { width: 33.3% } }
+    .unit { margin-top: 14px; font-size: 10px; letter-spacing: .08em; font-weight: 850; color: #8b978c }
+    .sub-item { display: flex; align-items: center; gap: 9px; margin-top: 6px; padding: 8px 10px; border-radius: 9px; font-size: 12px; font-weight: 700; color: #4b584a }
+    .sub-item i { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 9px; border: 1.5px solid #cfd8cc; color: transparent }
+    .sub-item.done i { background: #9fd660; border-color: #9fd660; color: #fff }
+    .sub-item.cur { background: #f1fbe3 }
+    .active .sub-item.cur i { animation: tick .35s 2.2s both }
+    @keyframes tick { to { background: #9fd660; border-color: #9fd660; color: #fff } }
+    .prize { position: absolute; left: 190px; top: 330px; z-index: 3; width: 370px; display: flex; align-items: center; gap: 13px; padding: 13px 15px; border-radius: 15px; background: #1e2d1c; color: #fff; box-shadow: 0 18px 40px #16241659; opacity: 0; transform: translateY(26px) scale(.95) }
+    .prize b { width: 40px; height: 40px; flex: none; border-radius: 11px; display: grid; place-items: center; background: #dffa7a }
+    .prize b svg { width: 22px; height: 22px; stroke: #1e2d1c; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round }
+    .prize strong { font-size: 14px; letter-spacing: -.02em; display: block }
+    .prize small { font-size: 11px; color: #c5d3b8; font-weight: 600 }
+    .active .prize { animation: rise-scale .55s 3.6s cubic-bezier(.2, .8, .2, 1) both }
 
-      59% {
-        opacity: 1;
-        transform: translate(1058px, 563px)
-      }
+    /* 09 · Cash Prize — mirrors the shipped weekly-campaign page. */
+    .cash-grid { position: absolute; left: 35px; right: 35px; top: 100px; display: grid; grid-template-columns: 1.25fr .75fr; gap: 14px }
+    .cash-card { min-height: 278px; padding: 23px; opacity: 0; transform: translateY(18px) }
+    .active .cash-card:first-child { animation: rise .55s .25s both }
+    .active .cash-card:last-child { animation: rise .55s .45s both }
+    .cash-kicker { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 99px; background: #edf7d8; color: #557b2e; font-size: 10px; font-weight: 850; letter-spacing: .06em }
+    .cash-kicker i { width: 7px; height: 7px; border-radius: 50%; background: #22c55e }
+    .cash-card h3 { margin-top: 18px; font-size: 27px; line-height: 1.05; letter-spacing: -.055em }
+    .cash-card>p { margin-top: 10px; max-width: 430px; color: #667064; font-size: 13px; font-weight: 650; line-height: 1.45 }
+    .streak { display: flex; gap: 7px; margin-top: 23px }
+    .streak span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: #1e2d1c; color: #dffa7a; font-size: 11px; font-weight: 850; opacity: 0; transform: translateY(8px) }
+    .active .streak span { animation: rise .3s both }
+    .active .streak span:nth-child(1) { animation-delay: 1s } .active .streak span:nth-child(2) { animation-delay: 1.12s }
+    .active .streak span:nth-child(3) { animation-delay: 1.24s } .active .streak span:nth-child(4) { animation-delay: 1.36s }
+    .active .streak span:nth-child(5) { animation-delay: 1.48s } .active .streak span:nth-child(6) { animation-delay: 1.6s }
+    .active .streak span:nth-child(7) { animation-delay: 1.72s }
+    .cash-side { background: #1e2d1c; color: #fff }
+    .cash-side h3 { color: #fff; font-size: 21px }
+    .cash-side ul { margin: 18px 0 0; padding: 0; list-style: none }
+    .cash-side li { display: grid; grid-template-columns: 24px 1fr; gap: 9px; align-items: start; margin-top: 13px; color: #dce6d7; font-size: 12px; font-weight: 650; line-height: 1.35 }
+    .cash-side li b { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 8px; background: #dffa7a; color: #1e2d1c; font-size: 10px }
 
-      67% {
-        opacity: 1;
-        transform: translate(1058px, 563px) scale(.82)
-      }
+    /* 09 · Summary */
+    .features { position: absolute; left: 35px; right: 35px; top: 100px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px }
+    .feature { height: 118px; padding: 15px; display: flex; flex-direction: column; justify-content: space-between; opacity: 0; transform: translateY(22px) scale(.95); cursor: pointer; transition: border-color .2s, box-shadow .2s }
+    .feature:hover { border-color: #acd268; box-shadow: 0 16px 32px #21381c1f }
+    .feature i { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 850; background: #e8f9b6; color: #4c7224 }
+    .feature:nth-child(4n+2) i { background: #e6efff; color: #3563ce }
+    .feature:nth-child(4n+3) i { background: #f2ebff; color: #854fc3 }
+    .feature:nth-child(4n+4) i { background: #fff2d5; color: #b07400 }
+    .feature strong { font-size: 14.5px; line-height: 1.2; letter-spacing: -.035em }
+    .active .feature { animation: card-in .55s both }
+    .active .feature:nth-child(1) { animation-delay: .3s } .active .feature:nth-child(2) { animation-delay: .42s }
+    .active .feature:nth-child(3) { animation-delay: .54s } .active .feature:nth-child(4) { animation-delay: .66s }
+    .active .feature:nth-child(5) { animation-delay: .78s } .active .feature:nth-child(6) { animation-delay: .9s }
+    .active .feature:nth-child(7) { animation-delay: 1.02s } .active .feature:nth-child(8) { animation-delay: 1.14s }
+    .outro { position: absolute; left: 35px; right: 35px; top: 380px; display: flex; align-items: center; justify-content: space-between; opacity: 0; transform: translateY(14px) }
+    .outro p { font-size: 17px; font-weight: 750; letter-spacing: -.035em }
+    .outro p span { color: #62923a }
+    .outro a { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 10px; background: #2563eb; color: #fff; font-size: 14px; font-weight: 800; text-decoration: none; box-shadow: 0 10px 22px #2563eb40 }
+    .outro a:hover { background: #1d4ed8 }
+    .active .outro { animation: rise .55s 1.8s both }
 
-      100% {
-        opacity: 0;
-        transform: translate(1058px, 563px)
-      }
-    }
+    /* real-size chapter bar under the stage (also shown on the landing embed) */
+    .tourbar { display: flex; align-items: center; gap: 8px; height: 56px; padding: 0 12px; background: #fff; border-top: 1px solid #e3e9dd }
+    .ctl { font-family: inherit; flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid #d6e0d3; background: #fff; color: #1f2a1f; display: grid; place-items: center; font-size: 15px; font-weight: 800 }
+    .ctl:hover { background: #f3f8ec }
+    .ctl.play { background: #1e291d; color: #dffa7a; border-color: #1e291d }
+    .ctl svg { width: 14px; height: 14px; fill: currentColor }
+    .chips { position: relative; flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 4px 2px; scroll-behavior: smooth }
+    .chips::-webkit-scrollbar { display: none }
+    .chip { font-family: inherit; position: relative; flex: none; height: 32px; padding: 0 13px; border-radius: 99px; border: 1px solid #e0e7dc; background: #fff; color: #5e6d5b; font-size: 12px; font-weight: 750; overflow: hidden; white-space: nowrap }
+    .chip:hover { color: #1f2a1f; border-color: #c4d4bc }
+    .chip.on { color: #1f2a1f; border-color: #acd268; background: #f4fbe2 }
+    .chip.on:after { content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: calc(var(--p, 0) * 100%); background: #7fb33c }
+    .ctl:focus-visible, .chip:focus-visible { outline: 3px solid #3868e9; outline-offset: 2px }
 
-    @keyframes c3 {
-      0% {
-        opacity: 0;
-        transform: translate(772px, 498px)
-      }
-
-      24% {
-        opacity: 1
-      }
-
-      63% {
-        opacity: 1;
-        transform: translate(727px, 424px)
-      }
-
-      70% {
-        opacity: 1;
-        transform: translate(727px, 424px) scale(.82)
-      }
-
-      100% {
-        opacity: 0;
-        transform: translate(727px, 424px)
-      }
-    }
-
-    @keyframes c4 {
-      0% {
-        opacity: 0;
-        transform: translate(505px, 598px)
-      }
-
-      23% {
-        opacity: 1
-      }
-
-      64% {
-        opacity: 1;
-        transform: translate(464px, 547px)
-      }
-
-      72% {
-        opacity: 1;
-        transform: translate(464px, 547px) scale(.82)
-      }
-
-      100% {
-        opacity: 0;
-        transform: translate(464px, 547px)
-      }
-    }
-
-    .controls {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 10px;
-      padding: 16px;
-      color: #667967;
-      font-size: 12px
-    }
-
-    .controls button {
-      background: white;
-      color: #1f2a1f;
-      padding: 8px 17px;
-      border: 1px solid #d6e0d3;
-      border-radius: 99px;
-      font-size: 12px;
-      font-weight: 750
-    }
-
-    .controls button:focus-visible {
-      outline: 3px solid #3868e9;
-      outline-offset: 3px
-    }
-
-    .capture .wrap {
-      width: 100%;
-      padding: 0
-    }
-
-    .capture .stage {
-      border-radius: 0;
-      box-shadow: none
-    }
-
-    .capture .controls {
-      display: none
-    }
-
-    .paused *,
-    .paused *:before,
-    .paused *:after {
-      animation-play-state: paused !important
-    }
-
-    @media(max-width:650px) {
-      .stage {
-        border-radius: 9px
-      }
-
-      .controls span {
-        display: none
-      }
-    }
-
-    @media(prefers-reduced-motion:reduce) {
-
-      .window,
-      .scene,
-      .active .source,
-      .active .topic,
-      .active .topic-payoff,
-      .active .question,
-      .active .paper,
-      .active .paper p,
-      .active .reveal,
-      .active .language,
-      .active .switch,
-      .active .answer-sheet,
-      .active .phone,
-      .active .scan,
-      .active .report {
-        animation-duration: .01ms !important;
-        animation-delay: 0ms !important;
-        transition: none !important
-      }
-
-      .cursor {
-        display: none
-      }
+    .capture .wrap { width: 100%; padding: 0 }
+    .capture .stage { border-radius: 0; box-shadow: none }
+    .wrap .tourbar { border-radius: 0 0 22px 22px; border: 1px solid #e3e9dd; border-top: 0 }
+    .wrap .stage { border-radius: 22px 22px 0 0 }
+    .capture .tourbar { border-radius: 0; border: 0; border-top: 1px solid #e3e9dd }
+    .capture .stage { border-radius: 0 }
+    .paused *, .paused *:before, .paused *:after { animation-play-state: paused !important }
+    @media (max-width: 520px) { .tourbar { gap: 6px; padding: 0 8px } .ctl { width: 32px; height: 32px } }
+    @media (prefers-reduced-motion: reduce) {
+      .art *, .art *:before, .art *:after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition: none !important }
+      .cursor, .pulse { display: none }
     }
   </style>
 </head>
 
 <body>
   <main class="wrap">
-    <div class="stage" id="stage" role="img"
-      aria-label="NanoSyllabus product demo: micro-topics, solved past questions, English and Romanized Nepali, and feedback on a photographed handwritten answer">
+    <div class="stage" id="stage" role="region" aria-roledescription="product tour"
+      aria-label="NanoSyllabus product tour: communities, micro-topics, the challenge loop, past-question solutions, Roman Nepali, handwritten exams, Library and NanoAI, Revision, and Cash Prize">
       <div class="art" id="art">
-        <div class="brand-top"><b>n.</b> NanoSyllabus</div>
-        <div class="count" id="count">01 / 04</div>
-        <div class="headline">
-          <h1 id="headline">Big syllabus. Small steps.</h1>
-          <p id="headline-note">Turn a course into a clear next step.</p>
-        </div>
+        <div class="brand-top"><b>n.</b> Nano Syllabus</div>
+        <div class="count" id="count">01 / 09</div>
         <div class="window">
-          <div class="chrome"><i></i><i></i><i></i><span class="url">app.nanosyllabus.com</span></div>
+          <div class="chrome"><i></i><i></i><i></i><span class="url">nanosyllabus.com/app</span></div>
           <div class="app">
-            <aside class="sidebar" aria-hidden="true">
+            <nav class="sidebar" aria-label="Jump to a part of the tour">
               <div class="app-brand"><b>n.</b> Nano Syllabus</div>
-              <div class="nav selected"><svg viewBox="0 0 24 24">
-                  <path d="M4 7h16M4 12h16M4 17h11" />
-                </svg>Study</div>
-              <div class="nav"><svg viewBox="0 0 24 24">
-                  <path d="M5 4h14v16H5zM8 8h8M8 12h7" />
-                </svg>Past papers</div>
-              <div class="nav"><svg viewBox="0 0 24 24">
-                  <path d="M4 7h16M12 4v16M6 17h13" />
-                </svg>Languages</div>
-              <div class="nav"><svg viewBox="0 0 24 24">
-                  <path d="M5 18V6h14v12zM8 14l3 2 5-6" />
-                </svg>AI grader</div>
-              <div class="side-foot">Your learning, in one place.</div>
-            </aside>
+              <div class="nav" data-go="1"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Micro-Topics</div>
+              <div class="nav" data-go="6"><svg viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5zM8 7h8M8 11h6"/></svg>Library</div>
+              <div class="nav" data-go="7"><svg viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16h16V7.5zM14 2v6h6M8 13h8M8 17h8" /></svg>Revision</div>
+              <div class="nav"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c0 2 1.5 3.5 3.5 3.5s3.5-1.5 3.5-3.5c0-1.5-.8-2.5-2-3.5.1 1.3-.5 2.1-1.4 2.6.1-2.7-1.4-4.7-3.1-6.1"/></svg>Performance</div>
+              <div class="nav" data-go="0"><svg viewBox="0 0 24 24"><path d="M3 21h18M6 21V7l6-4 6 4v14M9 10h1M14 10h1M10 21v-3h4v3"/></svg>Community</div>
+              <div class="nav" data-go="8"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4" /></svg>Cash Prize</div>
+              <div class="nav"><svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg>Pricing</div>
+              <div class="side-foot">Discord Study Room</div>
+            </nav>
             <div class="content">
-              <section class="scene active" aria-label="Syllabus breaks into micro-topics">
-                <div class="crumb"></div>
+
+              <!-- 01 · Community -->
+              <section class="scene" aria-label="Find and join your study community">
+                <h2>Find your community.</h2>
+                <span class="pill">Community</span>
+                <div class="search card"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg><span class="typed">IOE Civil</span></div>
+                <div class="faculties">
+                  <div class="faculty card pick">
+                    <div class="fac-top"><span class="fac-logo">IOE</span><div><strong>Engineering</strong><small>Faculty and semester study space</small></div></div>
+                    <div class="fac-meta">Choose your faculty<span class="join"><span class="j1">Join</span><span class="j2">Joined ✓</span></span></div>
+                  </div>
+                  <div class="faculty card">
+                    <div class="fac-top"><span class="fac-logo">TU</span><div><strong>University community</strong><small>Browse available courses</small></div></div>
+                    <div class="fac-meta">Choose your course<span class="join"><span class="j1">Join</span></span></div>
+                  </div>
+                  <div class="faculty card">
+                    <div class="fac-top"><span class="fac-logo">+</span><div><strong>Your institution</strong><small>Search the community catalogue</small></div></div>
+                    <div class="fac-meta">See what is available<span class="join"><span class="j1">Browse</span></span></div>
+                  </div>
+                </div>
+                <div class="ready card"><b>✓</b>Community joined. <span>Your available semesters and subjects are ready.</span></div>
+              </section>
+
+              <!-- 02 · Micro-topics -->
+              <section class="scene" aria-label="Syllabus breaks into micro-topics">
                 <h2>A course, made manageable.</h2>
-                <p class="sub"></p><span class="pill">Year 1 · Semester 1</span>
+                <span class="pill">Year 1 · Semester 1</span>
                 <div class="source">
-                  <div class="book"><svg viewBox="0 0 48 48">
-                      <path d="M24 12C18 9 12 10 7 11v26c7-2 12-1 17 2 5-3 10-4 17-2V11c-5-1-11-2-17 1Zm0 0v27" />
-                    </svg></div>
-                  <div><strong>Applied Mechanics</strong><small>Your complete syllabus</small></div><span
-                    class="arrow">↗</span>
+                  <div class="book"><svg viewBox="0 0 48 48"><path d="M24 12C18 9 12 10 7 11v26c7-2 12-1 17 2 5-3 10-4 17-2V11c-5-1-11-2-17 1Zm0 0v27" /></svg></div>
+                  <div><strong>Applied Mechanics</strong><small>Topics from your course syllabus</small></div><span class="arrow">↗</span>
                 </div>
                 <div class="topics">
-                  <div class="topic"><i>01</i><strong>Forces &amp;<br>equilibrium</strong><small>8 minute lesson</small>
-                  </div>
-                  <div class="topic"><i>02</i><strong>Motion &amp;<br>speed</strong><small>6 minute lesson</small></div>
-                  <div class="topic"><i>03</i><strong>Energy &amp;<br>power</strong><small>9 minute lesson</small></div>
+                  <div class="topic"><i>01</i><strong>Forces &amp;<br>equilibrium</strong><small>Focused topic</small></div>
+                  <div class="topic"><i>02</i><strong>Motion &amp;<br>speed</strong><small>Focused topic</small></div>
+                  <div class="topic"><i>03</i><strong>Energy &amp;<br>power</strong><small>Focused topic</small></div>
                 </div>
                 <p class="topic-payoff">Start with one topic. <span>Keep going from there.</span></p>
               </section>
-              <section class="scene" aria-label="Past question and worked solution in management">
-                <div class="crumb"></div>
-                <h2>Past Question Solutions</h2>
-                <p class="sub"></p><span class="pill">Business Studies</span>
+
+              <!-- 03 · Daily challenge -->
+              <section class="scene" aria-label="The shipped challenge loop: learn, take a handwritten exam, and receive an AI grade">
+                <h2>One topic. One result.</h2>
+                <span class="pill">Applied Mechanics · Topic 01</span>
+                <div class="steps"><span class="s1"><i>1</i>Learn</span><span class="line"></span><span class="s2"><i>2</i>Handwritten exam</span><span class="line"></span><span><i>3</i>AI grade</span></div>
+                <div class="learn">
+                  <div class="card concepts"><span class="tag">STEP 1</span><strong>Concepts</strong><small>Forces &amp; equilibrium · 3 key ideas</small><span class="go">Open reading →</span></div>
+                  <div class="card"><span class="tag">PAST PAPERS</span><strong>Solved Old Questions</strong><small>Asked on this topic</small><div class="years"><span>2081</span><span>2079</span><span>2078</span></div></div>
+                </div>
+                <div class="sheet">
+                  <div class="sheet-head">CONCEPTS <span>FORCES &amp; EQUILIBRIUM</span></div>
+                  <h3 class="hand">Forces in balance</h3>
+                  <ul class="hand">
+                    <li>A force is a push or a pull.</li>
+                    <li>At rest ⇒ ΣF = 0 in every direction.</li>
+                    <li>No turning ⇒ ΣM = 0 about any point.</li>
+                  </ul>
+                </div>
+                <div class="mcq card">
+                  <div class="mcq-top">QUICK CHECK <span>1 MARK</span></div>
+                  <h3>A body is in equilibrium when the net force on it is…</h3>
+                  <div class="opts">
+                    <div class="opt"><i>A</i>At its maximum</div>
+                    <div class="opt right"><i>B</i>Zero<span class="ok">✓</span></div>
+                    <div class="opt"><i>C</i>Equal to its weight</div>
+                    <div class="opt"><i>D</i>Increasing steadily</div>
+                  </div>
+                </div>
+                <div class="result"><span class="pass">Learn complete</span><span>Continue to handwritten exam →</span></div>
+              </section>
+
+              <!-- 04 · Past questions -->
+              <section class="scene" aria-label="Past question and worked solution">
+                <h2>Past questions, worked.</h2>
+                <span class="pill">Business Studies</span>
                 <div class="questions">
-                  <div class="question"><i>01</i>
-                    <div><strong>What is delegation? Why is it important?</strong><small>2024 · 5 marks</small></div>
-                  </div>
-                  <div class="question"><i>02</i>
-                    <div><strong>Explain the functions of management.</strong><small>2023 · 8 marks</small></div>
-                  </div>
+                  <div class="question"><i>01</i><div><strong>What is delegation? Why is it important?</strong><small>2024 · 5 marks</small></div></div>
+                  <div class="question"><i>02</i><div><strong>Explain the functions of management.</strong><small>2023 · 8 marks</small></div></div>
                 </div>
                 <div class="paper">
                   <div class="paper-head">WORKED ANSWER <span>QUESTION 01 · 5 MARKS</span></div>
@@ -1470,36 +1581,33 @@
                   <div class="reveal">Reveal solution ↗</div>
                 </div>
               </section>
-              <section class="scene" aria-label="English text translated into Romanized Nepali">
-                <div class="crumb"></div>
+
+              <!-- 05 · Languages -->
+              <section class="scene" aria-label="Study concepts and worked answers in English or Roman Nepali">
                 <h2>Understand it in your language.</h2>
-                <p class="sub"></p><span class="pill">Language · EN / NP</span>
+                <span class="pill">EN | RN</span>
                 <div class="languages">
                   <div class="language english"><label>ENGLISH</label>
-                    <p><mark>Power</mark> is the rate at which <mark>energy</mark> is transferred.</p><small>WORKED
-                      EXAMPLE 01</small>
+                    <p><mark>Power</mark> is the rate at which <mark>energy</mark> is transferred.</p><small>WORKED EXAMPLE 01</small>
                   </div>
                   <div class="switch">⇄</div>
-                  <div class="language nepali"><label>ROMANIZED NEPALI</label>
-                    <p><mark>Power</mark> bhaneko <mark>energy</mark> transfer hune rate ho.</p><small>SAME IDEA ·
-                      CLEARER LANGUAGE</small>
+                  <div class="language nepali"><label>ROMAN NEPALI</label>
+                    <p><mark>Power</mark> bhaneko <mark>energy</mark> transfer hune rate ho.</p><small>SAME IDEA · CLEARER LANGUAGE</small>
                   </div>
                 </div>
               </section>
-              <section class="scene" aria-label="Photograph a handwritten answer to get AI feedback">
-                <div class="crumb"></div>
-                <h2>Write it. Snap it. Improve it.</h2>
-                <p class="sub"></p><span class="pill">Business Studies · Practice</span>
-                <div class="answer-sheet"><strong>Explain working capital.</strong><i></i><i></i><i></i><i></i><i></i>
-                </div>
+
+              <!-- 06 · AI grader -->
+              <section class="scene" aria-label="Upload a handwritten exam for marks and feedback">
+                <h2>Upload for marks and feedback.</h2>
+                <span class="pill">Handwritten exam</span>
+                <div class="answer-sheet"><strong>Explain working capital.</strong><i></i><i></i><i></i><i></i><i></i></div>
                 <div class="phone">
                   <div class="view"><i></i><i></i><i></i><i></i></div>
                   <div class="shutter"></div>
                   <div class="flash"></div>
                 </div>
-                <div class="scan">
-                  <div><b>✦</b>Reviewing<br>your answer</div>
-                </div>
+                <div class="scan"><div><b>✦</b>Reviewing<br>your answer</div></div>
                 <div class="report">
                   <div class="report-top">AI FEEDBACK <span class="check">✓</span></div>
                   <div class="grade">7<small> / 8</small></div>
@@ -1508,80 +1616,225 @@
                   <p class="report-note">Define liquidity before your example.</p>
                 </div>
               </section>
+
+              <!-- 07 · NanoAI tutor -->
+              <section class="scene" aria-label="Use uploaded course material in Library and ask NanoAI">
+                <h2>Your Library, with NanoAI.</h2>
+                <span class="pill">Library</span>
+                <div class="reading card fade-up"><strong>Forces &amp; equilibrium</strong><i></i><i></i><i></i><i></i>
+                  <div class="formula">ΣF<sub>x</sub> = 0 , ΣF<sub>y</sub> = 0</div><i></i><i></i><i></i></div>
+                <div class="bubble">✦</div>
+                <div class="chat card">
+                  <div class="chat-head"><b>✦</b>NanoAI<span>Forces &amp; equilibrium</span></div>
+                  <div class="chat-body">
+                    <div class="me">Why is ΣF = 0 when a body is at rest?</div>
+                    <div class="dots"><i></i><i></i><i></i></div>
+                    <div class="ai">
+                      <div class="ai-step"><i>1</i><div>Start from Newton's second law<em>ΣF = m · a</em></div></div>
+                      <div class="ai-step"><i>2</i><div>A body at rest does not accelerate<em>a = 0</em></div></div>
+                      <div class="ai-step"><i>3</i><div>Substitute into step 1<em>ΣF = m · 0 = 0</em></div></div>
+                    </div>
+                    <div class="ai-final">✓ So every force on it is balanced.</div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 08 · Revision -->
+              <section class="scene" aria-label="Opened challenge topics are filed under their semester, subject and unit for revision">
+                <h2>Revise it all, anytime.</h2>
+                <span class="pill">Revision</span>
+                <div class="doc card">
+                  <h3>Forces &amp; equilibrium</h3>
+                  <label>CONCEPTS</label>
+                  <p>At rest, the forces in every direction add up to zero.</p>
+                  <p>Take moments about a point where unknown forces meet.</p>
+                  <label>SOLVED OLD QUESTIONS</label>
+                  <div class="solved"><span>Find the tension in each cable.<small>2081 · 6 marks</small></span><span>State Lami's theorem.<small>2079 · 4 marks</small></span></div>
+                </div>
+                <div class="navigator card">
+                  <div class="nav-sub">Applied Mechanics</div>
+                  <div class="count-line"><span><b><span>3<br>4</span></b> of 12 subtopics</span><span>Unit 1</span></div>
+                  <div class="progress"><b></b></div>
+                  <div class="unit">UNIT 1 · STATICS</div>
+                  <div class="sub-item done"><i>✓</i>Introduction to statics</div>
+                  <div class="sub-item done"><i>✓</i>Resultant of forces</div>
+                  <div class="sub-item done"><i>✓</i>Moments &amp; couples</div>
+                  <div class="sub-item cur"><i>✓</i>Forces &amp; equilibrium</div>
+                  <div class="unit">UNIT 2 · DYNAMICS</div>
+                  <div class="sub-item"><i></i>Motion &amp; speed</div>
+                </div>
+              </section>
+
+              <!-- 09 · Cash Prize -->
+              <section class="scene" aria-label="The active weekly Cash Prize draw and its qualification rules">
+                <h2>Earn while you learn.</h2>
+                <span class="pill">Cash Prize</span>
+                <div class="cash-grid">
+                  <div class="cash-card card">
+                    <span class="cash-kicker"><i></i>1 ACTIVE CAMPAIGN</span>
+                    <h3>Complete challenges.<br>Build a 7-day streak.</h3>
+                    <p>This week's draw is open to BCT students. Finish a challenge on seven consecutive days to qualify.</p>
+                    <div class="streak"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span></div>
+                  </div>
+                  <div class="cash-card cash-side card">
+                    <span class="cash-kicker">WEEKLY DRAW</span>
+                    <h3>How entries work</h3>
+                    <ul>
+                      <li><b>✓</b><span>Complete the required 7-day challenge streak.</span></li>
+                      <li><b>+</b><span>Verified referrals can add entries after you qualify.</span></li>
+                      <li><b>i</b><span>Read the current campaign rules before participating.</span></li>
+                    </ul>
+                  </div>
+                </div>
+              </section>
+
             </div>
           </div>
         </div>
-        <svg class="cursor" id="cursor" viewBox="0 0 29 39" aria-hidden="true">
-          <path d="M1.5 1.5v29l8-7 5 13 6-3-5-12H27Z" />
-        </svg>
+        <button type="button" class="step-btn prev" id="prev-in" aria-label="Previous chapter">‹</button>
+        <button type="button" class="step-btn next" id="next-in" aria-label="Next chapter">›</button>
+        <svg class="cursor" id="cursor" viewBox="0 0 29 39" aria-hidden="true"><path d="M1.5 1.5v29l8-7 5 13 6-3-5-12H27Z" /></svg>
         <div class="pulse" id="pulse" aria-hidden="true"></div>
-        <div class="floor" aria-hidden="true"><label id="floor-label">MICRO-TOPICS</label>
-          <div class="track"><b id="fill"></b></div><span class="clock" id="clock">00:00</span>
+        <div class="timeline"><span class="now" id="now"></span>
+          <div class="segments" id="segments"></div><span class="clock" id="clock">00:00</span>
         </div>
       </div>
     </div>
-    <div class="controls"><button type="button" id="toggle">Pause</button><button type="button"
-        id="replay">Replay</button><span>30-second product demo · loops automatically</span></div>
+    <div class="tourbar">
+      <button type="button" class="ctl" id="prev" aria-label="Previous chapter">‹</button>
+      <button type="button" class="ctl play" id="toggle" aria-label="Pause tour"><svg viewBox="0 0 24 24" id="toggle-icon"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg></button>
+      <button type="button" class="ctl" id="next" aria-label="Next chapter">›</button>
+      <div class="chips" id="chips" role="tablist" aria-label="Tour chapters"></div>
+    </div>
   </main>
   <script>
     (() => {
       const stage = document.getElementById('stage'), art = document.getElementById('art');
-      const scenes = [...document.querySelectorAll('.scene')], nav = [...document.querySelectorAll('.nav')];
+      const scenes = [...document.querySelectorAll('.scene')], navItems = [...document.querySelectorAll('.nav')];
       const cursor = document.getElementById('cursor'), pulse = document.getElementById('pulse');
-      const fill = document.getElementById('fill'), clock = document.getElementById('clock');
+      const clock = document.getElementById('clock'), chipsBox = document.getElementById('chips'), segBox = document.getElementById('segments');
 
+      // dur = seconds on screen; clicks = [selector, second] the cursor presses; nav = highlighted sidebar item
       const chapters = [
-        {title: '', note: '', label: '', pointer: 'c1', click: 2, ring: [932, 400]},
-        {title: '', note: '', label: '', pointer: 'c2', click: 2.7, ring: [1041, 546]},
-        {title: '', note: '', label: '', pointer: 'c3', click: 2.6, ring: [710, 408]},
-        {title: '', note: '', label: '', pointer: 'c4', click: 2.55, ring: [447, 531]}
+        {label: 'Community', dur: 6.5, nav: 4, clicks: [['.pick .join', 2.6]]},
+        {label: 'Micro-Topics', dur: 6.5, nav: 0, clicks: [['.source .arrow', 1.75]]},
+        {label: 'Challenge: Learn', dur: 8, nav: 0, clicks: [['.concepts', 1.3], ['.opt.right', 4.9]]},
+        {label: 'Past questions', dur: 6.5, nav: 0, clicks: [['.reveal', 2.8]]},
+        {label: 'Roman Nepali', dur: 6, nav: 0, clicks: [['.switch', 2.25]]},
+        {label: 'Handwritten exam', dur: 7, nav: 0, clicks: [['.shutter', 2.4]]},
+        {label: 'Library & NanoAI', dur: 7.5, nav: 1, clicks: [['.bubble', 0.95]], hover: ['.ai-final', 4.7]},
+        {label: 'Revision', dur: 7.5, nav: 2, clicks: [['.sub-item.cur', 1.9]]},
+        {label: 'Cash Prize', dur: 7, nav: 5, clicks: [], hover: ['.cash-side', 2.6]}
       ];
-      const DURATION = 30, STEP = 7.5, reduced = matchMedia('(prefers-reduced-motion: reduce)');
-      let elapsed = 0, last = 0, index = -1, paused = false, clicked = false;
+      const starts = [], TOTAL = chapters.reduce((sum, c) => (starts.push(sum), sum + c.dur), 0);
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+      const pad = n => String(n).padStart(2, '0'), mmss = s => pad(Math.floor(s / 60)) + ':' + pad(Math.floor(s % 60));
+
+      const chips = chapters.map((c, i) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'chip'; b.setAttribute('role', 'tab'); b.textContent = (i + 1) + '. ' + c.label;
+        b.addEventListener('click', () => jump(i)); chipsBox.appendChild(b); return b;
+      });
+      const segs = chapters.map((c, i) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'seg'; b.setAttribute('aria-label', 'Go to ' + c.label); b.innerHTML = '<b><i></i></b>';
+        b.addEventListener('click', () => jump(i)); segBox.appendChild(b); return b;
+      });
+
+      let elapsed = 0, last = 0, index = -1, paused = false, hidden = false, fired = [];
       function resize() {art.style.transform = 'scale(' + stage.clientWidth / 1280 + ')'}
       if ('ResizeObserver' in window) new ResizeObserver(resize).observe(stage); else addEventListener('resize', resize);
       resize();
-      function show(n) {
+
+      // Layout position (ignores transforms, so it is the element's resting place) in 1280×720 art space.
+      function spot(el) {
+        let x = el.offsetWidth / 2, y = el.offsetHeight / 2;
+        for (let node = el; node && node !== art; node = node.offsetParent) {x += node.offsetLeft; y += node.offsetTop}
+        return [x, y];
+      }
+      function moveCursor(sel) {
+        const el = scenes[index].querySelector(sel); if (!el) return;
+        const [x, y] = spot(el);
+        cursor.style.setProperty('--x', (x - 4) + 'px'); cursor.style.setProperty('--y', (y - 3) + 'px');
+        cursor.classList.add('on');
+        return [x, y];
+      }
+      function press(sel) {
+        const at = moveCursor(sel); if (!at) return;
+        cursor.classList.add('press'); setTimeout(() => cursor.classList.remove('press'), 140);
+        pulse.style.left = at[0] + 'px'; pulse.style.top = at[1] + 'px';
+        pulse.classList.remove('go'); void pulse.offsetWidth; pulse.classList.add('go');
+      }
+
+      function show(n, restart) {
         const old = index;
+        if (restart) scenes[n].classList.remove('active');
+        void art.offsetWidth;
         scenes.forEach((scene, i) => {scene.classList.toggle('active', i === n); scene.classList.toggle('exit', i === old && i !== n)});
-        nav.forEach((item, i) => item.classList.toggle('selected', i === n));
-        index = n;
-        document.getElementById('headline').textContent = chapters[n].title;
-        document.getElementById('headline-note').textContent = chapters[n].note;
-        document.getElementById('count').textContent = '0' + (n + 1) + ' / 04';
-        document.getElementById('floor-label').textContent = chapters[n].label;
-        cursor.setAttribute('class', 'cursor');
-        pulse.className = 'pulse';
-        void cursor.getBoundingClientRect();
-        cursor.classList.add(chapters[n].pointer);
-        clicked = false;
+        navItems.forEach((item, i) => item.classList.toggle('selected', i === chapters[n].nav));
+        chips.forEach((chip, i) => {chip.classList.toggle('on', i === n); chip.setAttribute('aria-selected', i === n)});
+        segs.forEach((seg, i) => {seg.classList.toggle('done', i < n); seg.querySelector('i').style.width = i < n ? '100%' : '0'});
+        document.getElementById('count').textContent = pad(n + 1) + ' / ' + pad(chapters.length);
+        document.getElementById('now').textContent = chapters[n].label;
+        const chip = chips[n]; chipsBox.scrollLeft = chip.offsetLeft - (chipsBox.clientWidth - chip.offsetWidth) / 2;
+        index = n; fired = [];
+        cursor.classList.remove('on');
+        const first = chapters[n].clicks[0];
+        const firstTarget = first ? scenes[n].querySelector(first[0]) : null;
+        const [x, y] = spot(firstTarget || scenes[n]);
+        cursor.style.transition = 'none';
+        cursor.style.setProperty('--x', (x + 70) + 'px'); cursor.style.setProperty('--y', (y + 90) + 'px');
+        void cursor.offsetWidth; cursor.style.transition = '';
       }
-      function animate(now) {
-        if (!last) last = now;
-        if (!paused) {
-          elapsed = (elapsed + Math.min((now - last) / 1000, .12)) % DURATION;
-          const current = Math.min(3, Math.floor(elapsed / STEP));
-          if (current !== index) show(current);
-          fill.style.width = (elapsed / DURATION * 100) + '%';
-          clock.textContent = '00:' + String(Math.floor(elapsed)).padStart(2, '0');
-          if (!clicked && elapsed - current * STEP > chapters[current].click && !reduced.matches) {
-            const [x, y] = chapters[current].ring;
-            pulse.style.left = x + 'px'; pulse.style.top = y + 'px';
-            pulse.classList.remove('go'); void pulse.offsetWidth; pulse.classList.add('go'); clicked = true;
-          }
-        }
-        last = now; requestAnimationFrame(animate);
+      function jump(n) {
+        n = (n + chapters.length) % chapters.length;
+        elapsed = starts[n]; show(n, true); tick(0);
       }
-      const toggle = document.getElementById('toggle');
-      toggle.addEventListener('click', () => {paused = !paused; art.classList.toggle('paused', paused); toggle.textContent = paused ? 'Play' : 'Pause'; last = 0});
-      document.getElementById('replay').addEventListener('click', () => {
-        elapsed = 0; last = 0; paused = false; art.classList.remove('paused'); toggle.textContent = 'Pause';
-        scenes.forEach(scene => scene.classList.remove('active', 'exit'));
-        void art.offsetWidth; index = -1; show(0); fill.style.width = '0%'; clock.textContent = '00:00';
+
+      function tick(dt) {
+        elapsed = (elapsed + dt) % TOTAL;
+        let n = chapters.length - 1; while (n > 0 && elapsed < starts[n]) n--;
+        if (n !== index) show(n);
+        const c = chapters[n], t = elapsed - starts[n], p = t / c.dur;
+        segs[n].querySelector('i').style.width = (p * 100) + '%';
+        chips[n].style.setProperty('--p', p);
+        clock.textContent = mmss(elapsed) + ' / ' + mmss(TOTAL);
+        if (reduced.matches) return;
+        c.clicks.forEach(([sel, at], k) => {
+          if (t >= at - .8 && !fired[k * 2]) {fired[k * 2] = true; moveCursor(sel)}
+          if (t >= at && !fired[k * 2 + 1]) {fired[k * 2 + 1] = true; press(sel)}
+        });
+        if (c.hover && t >= c.hover[1] && !fired.hover) {fired.hover = true; moveCursor(c.hover[0])}
+        if (t > c.dur - .55) cursor.classList.remove('on');
+      }
+      function frame(now) {
+        const dt = last ? Math.min((now - last) / 1000, .12) : 0; last = now;
+        if (!paused && !hidden) tick(dt);
+        requestAnimationFrame(frame);
+      }
+
+      const toggle = document.getElementById('toggle'), icon = document.getElementById('toggle-icon');
+      function setPaused(value) {
+        paused = value; art.classList.toggle('paused', paused || hidden);
+        toggle.setAttribute('aria-label', paused ? 'Play tour' : 'Pause tour');
+        icon.innerHTML = paused ? '<path d="M8 5v14l11-7z"/>' : '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>';
+      }
+      toggle.addEventListener('click', () => setPaused(!paused));
+      for (const id of ['prev', 'prev-in']) document.getElementById(id).addEventListener('click', () => jump(index - 1));
+      for (const id of ['next', 'next-in']) document.getElementById(id).addEventListener('click', () => jump(index + 1));
+      document.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => jump(+el.dataset.go)));
+      document.addEventListener('keydown', event => {
+        if (event.code === 'ArrowRight') jump(index + 1);
+        else if (event.code === 'ArrowLeft') jump(index - 1);
+        else if (event.code === 'Space' && document.activeElement.tagName !== 'BUTTON') {event.preventDefault(); setPaused(!paused)}
       });
-      document.addEventListener('keydown', event => {if (event.code === 'Space' && document.activeElement.tagName !== 'BUTTON') {event.preventDefault(); toggle.click()} });
+      // Hold the tour while it is scrolled out of view, so visitors meet it from the start of a chapter.
+      if ('IntersectionObserver' in window) new IntersectionObserver(([entry]) => {
+        hidden = !entry.isIntersecting; art.classList.toggle('paused', paused || hidden);
+      }, {threshold: .35}).observe(stage);
+
       if (new URLSearchParams(location.search).has('capture')) document.body.classList.add('capture');
-      show(0); requestAnimationFrame(animate);
+      show(0); tick(0); requestAnimationFrame(frame);
     })();
   </script>
 </body>

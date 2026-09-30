@@ -246,7 +246,7 @@ export function CommunityStudySpaceClient({
                     aria-label={`Add subject to ${termName(term)}`}
                     onClick={() => onCreateSubject?.(term.id)}
                     disabled={!onCreateSubject}
-                    className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full bg-text-primary px-4 text-sm font-medium text-text-inverse hover:opacity-90 disabled:opacity-50 ${focusRing}`}
+                    className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 ${focusRing}`}
                   >
                     <Plus className="size-4" aria-hidden="true" />
                     Add subject
@@ -387,7 +387,7 @@ export function CommunityStudySpaceClient({
                             term.id,
                           )}
                           aria-label={`Open ${titleCase(subject.name)}`}
-                          className={`inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-4 text-sm font-medium hover:bg-bg-secondary ${focusRing}`}
+                          className={`inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-bg-secondary ${focusRing}`}
                         >
                           Open
                           <ArrowRight className="size-4" aria-hidden="true" />

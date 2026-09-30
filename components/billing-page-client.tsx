@@ -167,8 +167,14 @@ export function BillingPageClient({
       : activePlan?.productType === "group"
         ? "Group"
         : "Pro";
-  const plusIsCurrent = Boolean(activePlan && plans.plus && activePlan.id === plans.plus.id);
-  const proIsCurrent = Boolean(activePlan && plans.pro && activePlan.id === plans.pro.id);
+  // No live subscription row can still mean a paid tier: admins are Pro by role
+  // (lib/auth.ts). Use the same tier the sidebar shows, unless a plan was just cancelled here.
+  const roleTier = !activePlan && cancelledSubscriptionIds.length === 0 ? user.activePlanTier : undefined;
+  const plusIsCurrent =
+    Boolean(activePlan && plans.plus && activePlan.id === plans.plus.id) || roleTier === "plus";
+  const proIsCurrent =
+    Boolean(activePlan && plans.pro && activePlan.id === plans.pro.id) || roleTier === "pro";
+  const hasPaidPlan = Boolean(activePlan) || Boolean(roleTier);
 
   const hasUnlimitedAccess =
     cancelledSubscriptionIds.length > 0
@@ -351,11 +357,11 @@ export function BillingPageClient({
         >
           <PricingCard
             title="Free"
-            eyebrow={activePlan ? "Base plan" : "Current Plan"}
+            eyebrow={hasPaidPlan ? "Base plan" : "Current Plan"}
             price="Rs. 0"
             includes="Everything in Free"
             features={FREE_FEATURES}
-            actionLabel={activePlan ? "Included in your plan" : "Current plan"}
+            actionLabel={hasPaidPlan ? "Included in your plan" : "Current plan"}
             onAction={() => router.push("/app/today")}
             disabled
           />
@@ -482,7 +488,7 @@ export function BillingPageClient({
         </section>
 
         {/* Bottom CTA Card */}
-        {!activePlan ? (
+        {!hasPaidPlan ? (
           <section className="student-page-width mt-14 sm:mt-16">
             <div className="relative overflow-hidden rounded-[20px] bg-[#3049ed] px-8 py-9 sm:px-12 sm:py-10 text-white shadow-md">
               <Image

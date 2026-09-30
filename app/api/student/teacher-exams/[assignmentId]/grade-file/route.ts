@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { gradeTeacherPracticePaperFile, TeacherApiError } from "@/lib/teacher-app/client";
 import { recordTeacherClassroomActivity } from "@/lib/teacher-classroom-activity";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,7 +19,7 @@ const ACCEPTED = new Set(["application/pdf", "image/png", "image/jpeg", "image/j
  * The tenant transcribes the sheet, matches each answer to its question, then
  * grades it against the paper's cached reference answers.
  */
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ assignmentId: string }> },
 ) {
@@ -161,3 +162,6 @@ export async function POST(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

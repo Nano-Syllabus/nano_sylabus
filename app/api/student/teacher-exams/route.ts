@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { studentVisibleGrade, submissionReviewStatus } from "@/lib/teacher-submission-review";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 type SubmittedAttempt = { id: string; assignment_id: string; attempt_no: number; grade: unknown; created_at: string };
 
@@ -34,7 +35,7 @@ function studentPaper(value: unknown) {
   return { ...safePaper, questions };
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await getVerifiedUser(supabase);
@@ -154,3 +155,6 @@ export async function GET(request: Request) {
     return errorJson("Could not load teacher exams.", 502);
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);

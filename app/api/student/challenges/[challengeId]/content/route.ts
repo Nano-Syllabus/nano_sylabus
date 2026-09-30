@@ -4,6 +4,7 @@ import { getStudentChallengeContent } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
  * check, no upstream call, safe to poll every couple of seconds while the
  * student reads. `?retry=1` is the student pressing retry after a build failed.
  */
-export async function GET(
+async function handleGET(
   request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
 ) {
@@ -55,3 +56,6 @@ export async function GET(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);

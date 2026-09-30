@@ -509,6 +509,7 @@ export function ChatPageClient({
   initialLibrarySelection,
   variant = "page",
   onRequestClose,
+  hideFollowUps = false,
 }: {
   user: AppUser;
   defaultLanguage: Language;
@@ -528,6 +529,9 @@ export function ChatPageClient({
   variant?: ChatVariant;
   /** Floating only: the header's close button. */
   onRequestClose?: () => void;
+  /** No "↳ Next: …" suggestions under replies — the bubble over a challenge,
+   *  where the student is on one topic and a next one only pulls them away. */
+  hideFollowUps?: boolean;
 }) {
   const isFloating = variant === "floating";
   const chatEvents = isFloating ? FLOATING_CHAT_EVENTS : PAGE_CHAT_EVENTS;
@@ -3013,6 +3017,7 @@ export function ChatPageClient({
 
                         {message.role === "assistant" &&
                           !isLoading &&
+                          !hideFollowUps &&
                           (message.followUpSuggestions?.length ?? 0) > 0 && (
                             <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[13px] leading-6 text-text-primary sm:text-[14px]">
                               {message.followUpSuggestions?.map((suggestion) => (

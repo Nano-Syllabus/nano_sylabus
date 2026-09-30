@@ -10,12 +10,6 @@ export const userCreditAdjustmentSchema = z.object({
   description: z.string().trim().min(1).max(180),
 });
 
-export const bulkUserActionSchema = z.object({
-  action: z.literal("set_role"),
-  role: z.enum(["student", "admin", "super_admin"]),
-  userIds: z.array(z.string().uuid()).min(1).max(200),
-});
-
 export const answerReviewUpdateSchema = z.object({
   reviewed: z.boolean().optional(),
   adminReviewNote: z.string().trim().max(4000).nullable().optional(),

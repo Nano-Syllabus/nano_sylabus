@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CheckCircle2, Clock3, CreditCard, ExternalLink, XCircle } from "lucide-react";
-import { AdminBillingFrame } from "@/components/admin-billing-frame";
+import { AdminBillingFrame, AdminPageHeader } from "@/components/admin-billing-frame";
 import { assertAdminRequest } from "@/lib/admin-access";
 import { listAdminPaymentSubmissions } from "@/lib/data/billing";
 import type { PaymentSubmissionStatus } from "@/lib/types";
@@ -47,34 +47,18 @@ export default async function AdminBillingPage({
   const rejected = submissions.filter((submission) => submission.status === "rejected").length;
 
   return (
-    <AdminBillingFrame>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-            Billing operations
-          </p>
-          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">
-            Payment reviews
-          </h1>
-          <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Receipt submissions activate access automatically. Review the proof here and revoke
-            access if a submission is invalid.
-          </p>
-        </div>
-        <Link
-          href="/admin/billing"
-          className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-card px-4 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          Refresh queue
-        </Link>
-      </div>
+    <AdminBillingFrame active="billing">
+      <AdminPageHeader
+        title="Payments"
+        description="Students who paid by uploading a receipt get access straight away. Check each receipt here and turn access off if it is fake."
+      />
 
       <section
         aria-label="Payment totals"
         className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
       >
         <Metric
-          label="Total submissions"
+          label="All receipts"
           value={submissions.length}
           icon={<CreditCard size={18} />}
         />

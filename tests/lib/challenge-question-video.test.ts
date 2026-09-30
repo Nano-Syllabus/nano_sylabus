@@ -8,6 +8,7 @@ vi.mock("@/lib/teacher-app/client", () => ({
 import {
   prepareQuestionVideos,
   questionHintSpec,
+  subjectWords,
   questionVideoSpec,
   requestQuestionVideo,
 } from "@/lib/data/challenge-question-video";
@@ -28,14 +29,23 @@ beforeEach(() => {
 });
 
 describe("question videos", () => {
+  it("names the subject, not the creator's collection slug in front of it", () => {
+    expect(subjectWords("9165prashant_a9973_teacher_project_planning_design_and_implementation")).toBe(
+      "project planning design and implementation",
+    );
+    expect(subjectWords("digital-logic")).toBe("digital logic");
+  });
+
   it("builds one spec per question, the same every time — so it is one cached render", () => {
     expect(questionVideoSpec("digital-logic", question)).toEqual(questionVideoSpec("digital-logic", question));
     const spec = questionVideoSpec("digital-logic", question);
-    expect(spec.seconds).toBeLessThanOrEqual(20);
+    // a ceiling: the renderer picks the shortest clear length under it
+    expect(spec.seconds).toBe(30);
+    expect(spec.memory).toBe(true);
     expect(spec.subject).toBe("digital logic");
     expect(spec).not.toHaveProperty("fresh");
     expect(spec.notes).toContain("never show or say it): A) 0");
-    expect(spec.notes).toContain("about 30% of the way");
+    expect(spec.notes).toContain("never state or imply the correct answer");
   });
 
   it("asks urgently for a video a student is waiting on", async () => {
@@ -66,7 +76,7 @@ describe("question videos", () => {
     expect(text).not.toContain("Correct answer");
     expect(text).not.toContain(question.explanation);
     expect(spec.notes).toContain("Do NOT answer the question");
-    expect(spec.notes).toContain("about 30% of the way");
+    expect(spec.memory).toBe(true);
     expect(questionHintSpec("digital-logic", question)).toEqual(spec);
   });
 });

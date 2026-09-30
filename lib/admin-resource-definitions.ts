@@ -10,15 +10,6 @@ export interface AdminCollectionDefinition<TFilter extends string = string> {
   filters?: Array<{ value: TFilter; label: string }>;
 }
 
-export const USER_COLLECTION = {
-  key: "users",
-  label: "Students",
-  singularLabel: "Student",
-  subtitle: "Student and admin directory.",
-  searchPlaceholder: "Search by email, name, college...",
-  emptyMessage: "No users found.",
-} satisfies AdminCollectionDefinition;
-
 export const ANSWER_FILTERS: Array<{ value: "all" | AdminAnswerState; label: string }> = [
   { value: "flagged", label: "Flagged" },
   { value: "all", label: "All" },

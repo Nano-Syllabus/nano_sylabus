@@ -1,3 +1,4 @@
+import { usageCommunityHeader } from "@/lib/usage-community-context";
 import { getTenantApiEnv } from "@/lib/env";
 import { agentFor, transportFor } from "@/lib/http-agents";
 import { trackApiRequest } from "@/lib/api-request-tracking";
@@ -354,6 +355,7 @@ async function teacherRequestOnce<T>(
             agent: agentFor(url),
             headers: {
               Authorization: `Bearer ${collectionSk}`,
+              ...usageCommunityHeader(),
               Accept: "application/json",
               ...(serializedBody
                 ? {
@@ -561,6 +563,7 @@ async function teacherStreamRequest(
             agent: agentFor(url),
             headers: {
               Authorization: `Bearer ${collectionSk}`,
+              ...usageCommunityHeader(),
               Accept: "text/event-stream",
               "Content-Type": "application/json",
               "Content-Length": Buffer.byteLength(serializedBody),
@@ -802,7 +805,7 @@ export function fetchTeacherDocumentRaw(key: string, documentId: string) {
           const transport = transportFor(url);
           const request = transport.request(
             url,
-            { method: "GET", rejectUnauthorized, agent: agentFor(url), headers: { Authorization: `Bearer ${key}` } },
+            { method: "GET", rejectUnauthorized, agent: agentFor(url), headers: { Authorization: `Bearer ${key}`, ...usageCommunityHeader() } },
             (response) => {
               const chunks: Buffer[] = [];
               response.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -1246,6 +1249,9 @@ export const requestTeacherExplainerAnimation = (
     notes: string;
     seconds: number;
     style: "card";
+    /** A memory video (renderer `memory` mode): the length is the planner's
+     *  pick up to `seconds`, and it ends on a still recall card. */
+    memory?: boolean;
     /** When, not what: `urgent` jumps a waiting render forward; `background`
      *  is prepared ahead and declined first when the renderer is busy. */
     priority?: "urgent" | "normal" | "background";
@@ -1377,6 +1383,7 @@ export async function submitTeacherChallengeExamFile(
             agent: agentFor(url),
             headers: {
               Authorization: `Bearer ${key}`,
+              ...usageCommunityHeader(),
               Accept: "application/json",
               "Content-Type": `multipart/form-data; boundary=${boundary}`,
               "Content-Length": body.length,
@@ -1539,6 +1546,7 @@ export async function gradeTeacherPracticePaperFile(
             agent: agentFor(url),
             headers: {
               Authorization: `Bearer ${key}`,
+              ...usageCommunityHeader(),
               Accept: "application/json",
               "Content-Type": `multipart/form-data; boundary=${boundary}`,
               "Content-Length": body.length,

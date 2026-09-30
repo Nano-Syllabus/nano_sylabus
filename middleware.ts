@@ -1,7 +1,18 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { siteSlugFromHost } from "@/lib/landing-site-host";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
+  // highschool.nanosyllabus.com/ → that site's landing page. Only the home
+  // page differs per subdomain; every other path is the same app.
+  if (request.nextUrl.pathname === "/") {
+    const slug = siteSlugFromHost(request.headers.get("host"));
+    if (slug) {
+      const url = request.nextUrl.clone();
+      url.pathname = `/sites/${slug}`;
+      return NextResponse.rewrite(url);
+    }
+  }
   return updateSession(request);
 }
 

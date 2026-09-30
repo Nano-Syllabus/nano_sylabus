@@ -4,6 +4,7 @@ import { getChallengeFundamentals } from "@/lib/data/challenge-fundamentals";
 import { TeacherApiError } from "@/lib/teacher-app/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 // The first student on a topic waits for the set to be written upstream.
@@ -11,7 +12,7 @@ export const maxDuration = 120;
 
 /** The challenge's fundamentals MCQs, without their answers — see
  *  `lib/data/challenge-fundamentals.ts`. */
-export async function GET(
+async function handleGET(
   _request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
 ) {
@@ -43,3 +44,6 @@ export async function GET(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);

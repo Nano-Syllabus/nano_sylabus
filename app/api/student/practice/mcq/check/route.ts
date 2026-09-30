@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { checkMcqItems, type McqCheckResult } from "@/lib/tenant/client";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ function feedback(result: McqCheckResult) {
     .filter(Boolean).join(" ");
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await getVerifiedUser(supabase);
@@ -67,3 +68,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

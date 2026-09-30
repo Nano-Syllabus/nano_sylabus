@@ -4,6 +4,7 @@ import { z } from "zod";
 import { FundamentalsChangedError, explainChallengeFundamental } from "@/lib/data/challenge-fundamentals";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ const lastRequest = new Map<string, number>();
 
 /** A short video, made now for this one wrong answer — see
  *  `explainChallengeFundamental`. */
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
 ) {
@@ -72,3 +73,6 @@ export async function POST(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

@@ -7,6 +7,7 @@ import {
   getStudentCourseSubjectAccessForCourse,
 } from "@/lib/student-courses";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -142,7 +143,7 @@ async function readNormalizedDetails(input: {
   };
 }
 
-export async function GET(
+async function handleGET(
   _request: Request,
   { params }: { params: Promise<{ attemptId: string }> },
 ) {
@@ -256,3 +257,6 @@ export async function GET(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);

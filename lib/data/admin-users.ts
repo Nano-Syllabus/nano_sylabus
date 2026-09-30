@@ -1,4 +1,5 @@
 import { isProfileComplete } from "@/lib/access";
+import { isAdminRole } from "@/lib/admin-role";
 import {
   normalizeBoard,
   normalizeBoardScore,
@@ -186,7 +187,7 @@ async function loadAdminUserAggregates(userIds: string[]) {
     return {
       profilesByUserId: new Map<string, StudentProfile>(),
       latestLedgerByUserId: new Map<string, CreditsLedgerEntry>(),
-      activePlanByUserId: new Map<string, string>(),
+      activePlanByUserId: new Map<string, { name: string; endsAt: string | null }>(),
       sessionCountByUserId: new Map<string, number>(),
       noteCountByUserId: new Map<string, number>(),
     };
@@ -242,11 +243,18 @@ async function loadAdminUserAggregates(userIds: string[]) {
   }
 
   const plansById = new Map((planRows ?? []).map((plan) => [plan.id, normalizePlan(plan)]));
-  const activePlanByUserId = new Map<string, string>();
+  // Match what the student sees (lib/auth.ts): a row still marked "active" past its
+  // ends_at has lapsed — nothing flips its status — so it is not their plan any more.
+  const now = Date.now();
+  const activePlanByUserId = new Map<string, { name: string; endsAt: string | null }>();
   for (const row of subscriptionRows ?? []) {
     const subscription = normalizeSubscription(row);
+    if (subscription.endsAt && new Date(subscription.endsAt).getTime() <= now) continue;
     if (!activePlanByUserId.has(subscription.userId)) {
-      activePlanByUserId.set(subscription.userId, plansById.get(subscription.planId)?.name ?? "Active plan");
+      activePlanByUserId.set(subscription.userId, {
+        name: plansById.get(subscription.planId)?.name ?? "Active plan",
+        endsAt: subscription.endsAt,
+      });
     }
   }
 
@@ -268,7 +276,7 @@ function buildUserSummaries(
   aggregates: {
     profilesByUserId: Map<string, StudentProfile>;
     latestLedgerByUserId: Map<string, CreditsLedgerEntry>;
-    activePlanByUserId: Map<string, string>;
+    activePlanByUserId: Map<string, { name: string; endsAt: string | null }>;
     sessionCountByUserId: Map<string, number>;
     noteCountByUserId: Map<string, number>;
   },
@@ -298,7 +306,9 @@ function buildUserSummaries(
       role: profile?.role ?? "student",
       onboarded: isProfileComplete(profile),
       creditBalance: balance,
-      activePlanName: activePlanByUserId.get(user.id) ?? null,
+      // Admins are Pro by role (lib/data/platform-admin.ts), with or without a subscription row.
+      activePlanName: isAdminRole(profile?.role) ? "Pro" : (activePlanByUserId.get(user.id)?.name ?? null),
+      activePlanEndsAt: isAdminRole(profile?.role) ? null : (activePlanByUserId.get(user.id)?.endsAt ?? null),
       chatSessionCount: sessionCountByUserId.get(user.id) ?? 0,
       noteCount: noteCountByUserId.get(user.id) ?? 0,
       createdAt: user.created_at,
@@ -311,15 +321,19 @@ export async function listAdminUsers(filters?: {
   q?: string;
   page?: number;
   pageSize?: number;
+  /** "admins" = admin + super_admin; "students" = everyone else. */
+  role?: "students" | "admins";
 }): Promise<AdminListPage<AdminUserSummary>> {
   const page = normalizePage(filters?.page);
   const pageSize = normalizePageSize(filters?.pageSize);
-  const q = filters?.q?.trim().toLowerCase();
+  const q = filters?.q?.trim().toLowerCase() ?? "";
+  const role = filters?.role;
 
-  if (q) {
+  if (q || role) {
     const users = await listAllAuthUsers();
     const aggregates = await loadAdminUserAggregates(users.map((user) => user.id));
     const filtered = buildUserSummaries(users, aggregates)
+      .filter((user) => !role || (user.role === "student") === (role === "students"))
       .filter((user) =>
         [user.email, user.fullName, user.college, user.board, user.grade, user.activePlanName ?? ""]
           .join(" ")
@@ -442,30 +456,6 @@ export async function updateAdminUserRole(input: {
   });
   if (error) throw new Error(error.message);
   return getAdminUserDetail(input.userId);
-}
-
-export async function bulkUpdateAdminUserRoles(input: {
-  actorUserId: string;
-  userIds: string[];
-  role: AppRole;
-}) {
-  const userIds = [...new Set(input.userIds.map((id) => id.trim()).filter(Boolean))];
-  if (!userIds.length) {
-    throw new Error("No user ids were provided for bulk role update.");
-  }
-
-  const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase.rpc("set_platform_user_roles", {
-    p_actor_user_id: input.actorUserId,
-    p_target_user_ids: userIds,
-    p_role: input.role,
-  });
-  if (error) throw new Error(error.message);
-
-  return {
-    updatedCount: typeof data === "number" ? data : userIds.length,
-    userIds,
-  };
 }
 
 export async function adjustAdminUserCredits(input: {

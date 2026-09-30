@@ -1,3 +1,4 @@
+import { usageCommunityHeader } from "@/lib/usage-community-context";
 import { randomUUID } from "node:crypto";
 import { collectionKeyForTeacher } from "@/lib/data/challenge-collection-key";
 import { getTenantApiEnv } from "@/lib/env";
@@ -201,6 +202,7 @@ async function triage(
     120_000,
     {
       Authorization: `Bearer ${collectionKey}`,
+      ...usageCommunityHeader(),
       "Content-Type": `multipart/form-data; boundary=${boundary}`,
       "Content-Length": body.length,
     },

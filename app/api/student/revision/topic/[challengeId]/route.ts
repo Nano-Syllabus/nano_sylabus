@@ -2,6 +2,7 @@ import { getStudentRevisionTopic } from "@/lib/data/student-revision-docs";
 import { errorJson, privateJson } from "@/lib/http/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
  * kept in the browser cache under its own key, so a page read once opens from
  * memory from then on. See `revisionDocsIndex` for why it is not in the index.
  */
-export async function GET(
+async function handleGET(
   request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
 ) {
@@ -34,3 +35,6 @@ export async function GET(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);

@@ -8,10 +8,11 @@ import {
 } from "@/lib/tenant/client";
 import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -100,3 +101,6 @@ export async function GET(request: Request) {
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);

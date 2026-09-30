@@ -16,6 +16,7 @@ export async function GET(request: Request) {
       q: query.q,
       page: query.page,
       pageSize: query.pageSize,
+      role: (["students", "admins"] as const).find((value) => value === searchParams.get("role")),
     });
     return NextResponse.json(result);
   } catch (error) {

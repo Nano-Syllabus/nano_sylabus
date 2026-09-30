@@ -1,3 +1,4 @@
+import { usageCommunityHeader } from "@/lib/usage-community-context";
 import { getTenantApiEnv } from "@/lib/env";
 import { agentFor, transportFor } from "@/lib/http-agents";
 import { trackApiRequest } from "@/lib/api-request-tracking";
@@ -446,6 +447,7 @@ function requestJson<T>(
         agent,
         headers: {
           Authorization: `Bearer ${token}`,
+          ...usageCommunityHeader(),
           Accept: "application/json",
           ...(serializedBody
             ? {
@@ -671,7 +673,7 @@ export function fetchTenantDocumentRaw(documentId: string) {
   return trackApiRequest("tenant", () => new Promise<{ body: Buffer; contentType: string }>((resolve, reject) => {
     const request = transport.request(
       url,
-      { method: "GET", rejectUnauthorized, agent: agentFor(url), headers: { Authorization: `Bearer ${token}` } },
+      { method: "GET", rejectUnauthorized, agent: agentFor(url), headers: { Authorization: `Bearer ${token}`, ...usageCommunityHeader() } },
       (response) => {
         const chunks: Buffer[] = [];
         response.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -884,6 +886,7 @@ export async function gradeTeacherPaperFile(
         agent: agentFor(url),
         headers: {
           Authorization: `Bearer ${token}`,
+          ...usageCommunityHeader(),
           Accept: "application/json",
           "Content-Type": multipartBody.contentType,
           "Content-Length": multipartBody.body.length,
@@ -1136,6 +1139,7 @@ export async function chatTenantStream(
         agent: agentFor(url),
         headers: {
           Authorization: `Bearer ${token}`,
+          ...usageCommunityHeader(),
           Accept: "text/event-stream",
           "Content-Type": multipartBody?.contentType ?? "application/json",
           "Content-Length": Buffer.isBuffer(serializedBody)

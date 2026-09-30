@@ -9,6 +9,7 @@ import {
 import { getStudentCourseSubjectAccessCached } from "@/lib/student-courses";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 // Triage is seconds; an accepted file is then indexed before this answers,
@@ -40,7 +41,7 @@ const PER_WINDOW = 20;
 const recent = new Map<string, number[]>();
 
 /** This student's files for the subject that are still being checked. */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -66,7 +67,7 @@ export async function GET(request: Request) {
  * signed upload URL, `complete` triages the uploaded file and, if it belongs to
  * the subject, indexes it for the community. See lib/data/material-contributions.ts.
  */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -121,3 +122,7 @@ export async function POST(request: Request) {
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);
+export const POST = withUsageCommunity(handlePOST);

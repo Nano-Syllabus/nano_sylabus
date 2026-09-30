@@ -5,6 +5,7 @@ import { checkExamChoice, StalePaperError } from "@/lib/data/challenge-exam-pick
 import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ const bodySchema = z.object({
 });
 
 /** Answer one question of an MCQ community's paper: final, and marked at once. */
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
 ) {
@@ -43,3 +44,6 @@ export async function POST(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

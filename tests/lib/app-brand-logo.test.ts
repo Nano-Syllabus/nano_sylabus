@@ -6,7 +6,6 @@ const logoConsumers = [
   "components/landing-header.tsx",
   "components/app-sidebar.tsx",
   "components/mobile-receipt-upload.tsx",
-  "components/admin-analytics-dashboard.tsx",
   "components/admin-billing-frame.tsx",
   "components/saas-flow-client.tsx",
   "components/community-catalog-client.tsx",

@@ -61,17 +61,12 @@ describe("practice calendar exam planning", () => {
     expect(source).toContain("<SemesterProgress dashboard={dashboard} compact />");
   });
 
-  it("lets semester progress browse temporarily and resets to the saved running semester", () => {
+  it("shows the joined faculty's running semester, changed only on Micro-Topics", () => {
     const source = readFileSync("components/student-daily-dashboard.tsx", "utf8");
 
-    expect(source).toContain(
-      'const [semesterId, setSemesterId] = useState(community?.currentSemesterId ?? "")',
-    );
-    expect(source).toContain('setSemesterId(community?.currentSemesterId ?? "")');
-    expect(source).toContain(
-      "[community?.currentSemesterId, community?.slug]",
-    );
-    expect(source).toContain("onChange={(event) => setSemesterId(event.target.value)}");
+    expect(source).toContain("item.id === community.currentSemesterId");
+    expect(source).toContain('href="/app/challenges"');
+    expect(source).not.toContain("setSemesterId");
   });
 
   it("uses the available 60% width for readable upcoming-exam rows", () => {

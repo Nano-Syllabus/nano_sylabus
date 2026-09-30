@@ -41,6 +41,7 @@ import {
 import { deriveSessionTitle } from "@/lib/utils";
 import type { AssistantAnswerTrace, AssistantCitation } from "@/lib/types";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 type RetrievalMode = "default" | "web";
 type ResponseLanguage = "EN" | "RN";
@@ -696,7 +697,7 @@ async function resolveChatSession({
   };
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const requestStartedAt = Date.now();
   const requestId = `chat_${requestStartedAt}_${Math.random().toString(36).slice(2, 8)}`;
   let generationMs = 0;
@@ -1598,3 +1599,6 @@ export async function POST(request: Request) {
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

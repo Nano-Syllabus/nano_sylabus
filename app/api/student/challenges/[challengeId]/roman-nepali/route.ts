@@ -3,6 +3,7 @@ import { getStudentChallengeRomanNepali } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 // A first translation of a long reading is a few model calls upstream.
@@ -13,7 +14,7 @@ export const maxDuration = 300;
  * choice of language for what they study from. See
  * `getStudentChallengeRomanNepali`.
  */
-export async function GET(
+async function handleGET(
   _request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
 ) {
@@ -38,3 +39,6 @@ export async function GET(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);

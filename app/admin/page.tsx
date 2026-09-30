@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { assertAdminRequest } from "@/lib/admin-access";
 import { AdminAnalyticsDashboard } from "@/components/admin-analytics-dashboard";
+import { AdminBillingFrame } from "@/components/admin-billing-frame";
+import { listAdminPaymentSubmissions } from "@/lib/data/billing";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Platform overview · Nano Syllabus Admin",
+  title: "Overview · Nano Syllabus Admin",
   robots: { index: false, follow: false },
 };
 
@@ -16,5 +18,14 @@ export default async function AdminPage() {
     if (access.status === 403) redirect("/app/today");
     throw new Error("Admin access could not be verified. Please retry.");
   }
-  return <AdminAnalyticsDashboard />;
+  // The review queue is the one thing an admin must act on; a failed read hides the banner, not the page.
+  const pendingPayments = await listAdminPaymentSubmissions()
+    .then((rows) => rows.filter((row) => row.status === "submitted").length)
+    .catch(() => null);
+
+  return (
+    <AdminBillingFrame active="overview">
+      <AdminAnalyticsDashboard pendingPayments={pendingPayments} />
+    </AdminBillingFrame>
+  );
 }

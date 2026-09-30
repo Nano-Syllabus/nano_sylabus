@@ -4,6 +4,7 @@ import { z } from "zod";
 import { FundamentalsChangedError, checkChallengeFundamental } from "@/lib/data/challenge-fundamentals";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ const bodySchema = z.object({
 
 /** Checks one answer and reveals the correct option — the key is only ever sent
  *  after the student has committed to an answer. */
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
 ) {
@@ -47,3 +48,6 @@ export async function POST(
     return NextResponse.json({ error: "That answer couldn't be checked. Try again." }, { status: 502 });
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

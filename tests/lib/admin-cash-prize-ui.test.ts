@@ -22,8 +22,8 @@ function entry(studentName: string, count: number): AdminWeeklyEntry {
 
 describe("admin cash prize entries", () => {
   it("adds a restricted prize-entry section beside billing operations", () => {
-    expect(frame).toContain('href="/admin/cash-prize"');
-    expect(frame).toContain("Prize entries");
+    expect(frame).toContain('href: "/admin/cash-prize"');
+    expect(frame).toContain('"Prize draw"');
     expect(page).toContain("assertAdminRequest()");
     expect(page).toContain('active="cash-prize"');
   });

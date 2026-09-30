@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const landingSource = readFileSync("app/page.tsx", "utf8");
+// The landing markup lives in LandingView; its words live in landing-content
+// (editable per site from /admin/sites).
+const landingSource = readFileSync("components/landing-view.tsx", "utf8");
+const landingContentSource = readFileSync("lib/landing-content.ts", "utf8");
 const primaryCtaSource = readFileSync("components/landing-primary-cta.tsx", "utf8");
 
 describe("landing page calls to action", () => {
@@ -16,7 +19,7 @@ describe("landing page calls to action", () => {
 
   it("keeps the blue hero action auth-independent and routes it to communities", () => {
     expect(landingSource).toContain('<LandingPrimaryCta blue size="hero" communityOnly>');
-    expect(landingSource).toContain("Find your faculty");
+    expect(landingContentSource).toContain('primaryCta: "Find your faculty"');
     expect(primaryCtaSource).toContain('communityOnly ? "/communities"');
     expect(landingSource).not.toContain("Get Started");
   });

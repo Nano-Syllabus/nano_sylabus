@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handleMcqSetCheck } from "../check-set-handler";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
 
 const requestSchema = z.object({ setId: z.string().trim().min(1) }).passthrough();
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const payload = requestSchema.parse(await request.json());
     return handleMcqSetCheck(payload.setId, payload);
@@ -18,3 +19,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

@@ -85,7 +85,7 @@ describe("Escape with the concepts sheet open", () => {
     expect(sheet).toContain('window.addEventListener("keydown", onKeyDown, true);');
     expect(sheet).toContain("event.stopPropagation();");
     // ...and focus mode ignores an Escape something on top already used.
-    expect(challengeScreen).toContain('if (event.key === "Escape" && !event.defaultPrevented) onBack();');
+    expect(challengeScreen).toContain('if (event.key !== "Escape" || event.defaultPrevented) return;');
   });
 });
 

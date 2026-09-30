@@ -1,482 +1,625 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useState } from "react";
-import { AdminEntityListPanel } from "@/components/admin/entity-list-panel";
-import { USER_COLLECTION } from "@/lib/admin-resource-definitions";
-import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/field";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin-billing-frame";
 import type { AdminListPage, AdminUserDetail, AdminUserSummary, AppRole } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
+type RoleFilter = "all" | "students" | "admins";
+
+const roleLabel: Record<AppRole, string> = {
+  student: "Student",
+  admin: "Admin",
+  super_admin: "Super admin",
+};
+
+const primaryButton =
+  "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50";
+const inputClass =
+  "min-h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-600/40";
+
 export function AdminUserManager({
-  initialUsers,
   initialPage,
   viewerRole,
   viewerUserId,
 }: {
-  initialUsers: AdminUserSummary[];
+  initialUsers?: AdminUserSummary[];
   initialPage: AdminListPage<AdminUserSummary>;
   viewerRole: Extract<AppRole, "admin" | "super_admin">;
   viewerUserId: string;
 }) {
-  const canManageRoles = viewerRole === "super_admin";
-  const [users, setUsers] = useState(initialUsers);
-  const [selectedId, setSelectedId] = useState<string>(initialUsers[0]?.userId ?? "");
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [detail, setDetail] = useState<AdminUserDetail | null>(null);
+  const [list, setList] = useState(initialPage);
   const [query, setQuery] = useState("");
-  const [page, setPage] = useState(initialPage.page);
-  const [pageSize, setPageSize] = useState(initialPage.pageSize);
-  const [total, setTotal] = useState(initialPage.total);
-  const [totalPages, setTotalPages] = useState(initialPage.totalPages);
-  const [listLoading, setListLoading] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"idle" | "loading" | "saving-role" | "adjusting-credits">("idle");
-  const [nextRole, setNextRole] = useState<AppRole>("student");
-  const [creditAmount, setCreditAmount] = useState("20");
-  const [creditReason, setCreditReason] = useState("Manual admin adjustment");
-  const [bulkRole, setBulkRole] = useState<AppRole>("student");
+  const [filter, setFilter] = useState<RoleFilter>("all");
+  const [loading, setLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const firstRun = useRef(true);
+  const pending = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    let ignore = false;
-
-    async function loadDetail(userId: string) {
-      if (!userId) {
-        setDetail(null);
-        return;
-      }
-
-      setBusy("loading");
-      setFeedback(null);
+  const load = useCallback(
+    async (page: number) => {
+      pending.current?.abort();
+      const controller = new AbortController();
+      pending.current = controller;
+      const params = new URLSearchParams({ page: String(page), pageSize: String(list.pageSize) });
+      if (query.trim()) params.set("q", query.trim());
+      if (filter !== "all") params.set("role", filter);
+      setLoading(true);
+      setListError(null);
       try {
-        const response = await fetch(`/api/admin/users/${userId}`);
+        const response = await fetch(`/api/admin/users?${params}`, { signal: controller.signal });
         const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.error || "Failed to load user detail.");
-        }
-        if (ignore) return;
-        setDetail(payload.user);
-        setNextRole(payload.user.role);
+        if (!response.ok) throw new Error(payload.error || "Students could not be loaded.");
+        setList(payload);
       } catch (error) {
-        if (!ignore) {
-          setFeedback(error instanceof Error ? error.message : "Failed to load user detail.");
-        }
+        if (!controller.signal.aborted)
+          setListError(error instanceof Error ? error.message : "Students could not be loaded.");
       } finally {
-        if (!ignore) setBusy("idle");
+        if (pending.current === controller) setLoading(false);
       }
-    }
-
-    void loadDetail(selectedId);
-
-    return () => {
-      ignore = true;
-    };
-  }, [selectedId]);
-
-  const refreshUsers = useCallback(async (nextSelectedId?: string, requestedPage?: number) => {
-    const targetPage = requestedPage ?? page;
-    const params = new URLSearchParams();
-    params.set("page", String(targetPage));
-    params.set("pageSize", String(pageSize));
-    if (query.trim()) {
-      params.set("q", query.trim());
-    }
-
-    setListLoading(true);
-    const response = await fetch(`/api/admin/users?${params.toString()}`);
-    const payload = await response.json();
-    setListLoading(false);
-    if (!response.ok) {
-      throw new Error(payload.error || "Failed to refresh users.");
-    }
-
-    setUsers(payload.items);
-    setTotal(payload.total);
-    setPage(payload.page);
-    setPageSize(payload.pageSize);
-    setTotalPages(payload.totalPages);
-    setSelectedId((currentSelectedId) => {
-      if (nextSelectedId) return nextSelectedId;
-      return payload.items.some((user: AdminUserSummary) => user.userId === currentSelectedId)
-        ? currentSelectedId
-        : (payload.items[0]?.userId ?? "");
-    });
-  }, [page, pageSize, query]);
+    },
+    [filter, list.pageSize, query],
+  );
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void refreshUsers(undefined, 1);
-    }, 250);
-
+    // The server already rendered page 1 with no search; only refetch once the admin changes something.
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    const timer = setTimeout(() => void load(1), 250);
     return () => clearTimeout(timer);
-  }, [query, refreshUsers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, filter]);
+
+  const patchRow = (user: AdminUserSummary) =>
+    setList((current) => ({
+      ...current,
+      items: current.items.map((item) => (item.userId === user.userId ? { ...item, ...user } : item)),
+    }));
+
+  const from = list.total ? (list.page - 1) * list.pageSize + 1 : 0;
+  const to = Math.min(list.total, from + list.items.length - 1);
+
+  return (
+    <>
+      <AdminPageHeader
+        title="Students"
+        description="Find anyone who signed up. Click a person to see their plan, give them credits or change their access."
+      />
+
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <label className="relative flex-1">
+          <span className="sr-only">Search</span>
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by name, email or college"
+            className={`${inputClass} pl-9`}
+          />
+        </label>
+        <div className="flex gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Show">
+          {(
+            [
+              ["all", "Everyone"],
+              ["students", "Students"],
+              ["admins", "Admins"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={filter === value}
+              onClick={() => setFilter(value)}
+              className={`min-h-9 flex-1 rounded-md px-3 text-sm font-medium sm:flex-none ${
+                filter === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <section className="mt-4 overflow-hidden rounded-xl border border-border bg-card" aria-busy={loading}>
+        {listError ? (
+          <p role="alert" className="px-5 py-10 text-center text-sm text-destructive">
+            {listError}
+          </p>
+        ) : list.items.length === 0 ? (
+          <p className="px-5 py-16 text-center text-sm text-muted-foreground">
+            {loading ? "Searching…" : "No one matches that search."}
+          </p>
+        ) : (
+          <table className={`w-full text-left text-sm ${loading ? "opacity-60" : ""}`}>
+            <thead className="border-b border-border text-xs text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 font-medium">Name</th>
+                <th className="hidden px-4 py-3 font-medium md:table-cell">Plan</th>
+                <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">Credits</th>
+                <th className="hidden px-4 py-3 font-medium lg:table-cell">Joined</th>
+                <th className="hidden px-4 py-3 font-medium md:table-cell">Last seen</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {list.items.map((user) => (
+                <tr
+                  key={user.userId}
+                  onClick={() => setOpenId(user.userId)}
+                  className={`cursor-pointer hover:bg-muted/50 ${openId === user.userId ? "bg-muted/60" : ""}`}
+                >
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setOpenId(user.userId);
+                      }}
+                      className="flex min-w-0 items-center gap-3 text-left"
+                    >
+                      <Avatar name={user.fullName} />
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-2 font-medium">
+                          <span className="truncate">{user.fullName || "No name"}</span>
+                          {user.role !== "student" ? <RoleBadge role={user.role} /> : null}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+                      </span>
+                    </button>
+                  </td>
+                  <td className="hidden px-4 py-3 md:table-cell">
+                    <PlanBadge plan={user.activePlanName} />
+                  </td>
+                  <td className="hidden px-4 py-3 text-right tabular-nums sm:table-cell">{user.creditBalance}</td>
+                  <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">{formatDate(user.createdAt)}</td>
+                  <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">{timeAgo(user.lastSignInAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2 text-sm text-muted-foreground">
+          <span>{list.total ? `${from}–${to} of ${list.total}` : "0 people"}</span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              aria-label="Previous page"
+              disabled={list.page <= 1 || loading}
+              onClick={() => void load(list.page - 1)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-muted disabled:opacity-40"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <button
+              type="button"
+              aria-label="Next page"
+              disabled={list.page >= list.totalPages || loading}
+              onClick={() => void load(list.page + 1)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-muted disabled:opacity-40"
+            >
+              <ChevronRight size={17} />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {openId ? (
+        <StudentPanel
+          key={openId}
+          userId={openId}
+          summary={list.items.find((user) => user.userId === openId) ?? null}
+          canManageRoles={viewerRole === "super_admin"}
+          isSelf={openId === viewerUserId}
+          onClose={() => setOpenId(null)}
+          onChanged={patchRow}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function StudentPanel({
+  userId,
+  summary,
+  canManageRoles,
+  isSelf,
+  onClose,
+  onChanged,
+}: {
+  userId: string;
+  summary: AdminUserSummary | null;
+  canManageRoles: boolean;
+  isSelf: boolean;
+  onClose: () => void;
+  onChanged: (user: AdminUserSummary) => void;
+}) {
+  const [detail, setDetail] = useState<AdminUserDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"credits" | "role" | null>(null);
+  const [amount, setAmount] = useState("20");
+  const [reason, setReason] = useState("");
+  const [role, setRole] = useState<AppRole>(summary?.role ?? "student");
 
   useEffect(() => {
-    setSelectedUserIds((current) =>
-      current.filter((userId) => users.some((user) => user.userId === userId)),
-    );
-  }, [users]);
+    const controller = new AbortController();
+    fetch(`/api/admin/users/${userId}`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "This person could not be loaded.");
+        setDetail(payload.user);
+        setRole(payload.user.role);
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted)
+          setError(cause instanceof Error ? cause.message : "This person could not be loaded.");
+      });
+    return () => controller.abort();
+  }, [userId]);
 
-  async function handleBulkRoleSave() {
-    if (!canManageRoles) {
-      setFeedback("Only a super admin can change platform roles.");
-      return;
-    }
-    if (!selectedUserIds.length) {
-      setFeedback("Select at least one student first.");
-      return;
-    }
-    if (bulkRole !== "super_admin" && selectedUserIds.includes(viewerUserId)) {
-      setFeedback("Remove your own account from this selection before applying a lower role.");
-      return;
-    }
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
-    setBusy("saving-role");
-    setFeedback(null);
+  const person = detail ?? summary;
+  const credits = Number(amount);
+  const creditsValid = Number.isInteger(credits) && credits !== 0;
+
+  async function saveCredits() {
+    if (!creditsValid) return;
+    setBusy("credits");
+    setMessage(null);
     try {
-      const response = await fetch("/api/admin/users/actions", {
+      const response = await fetch(`/api/admin/users/${userId}/credits`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "set_role",
-          role: bulkRole,
-          userIds: selectedUserIds,
-        }),
+        body: JSON.stringify({ amount: credits, description: reason.trim() || "Manual admin adjustment" }),
       });
       const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "Failed to update selected user roles.");
-      }
-
-      await refreshUsers(selectedId, page);
-      setSelectedUserIds([]);
-      if (detail && selectedUserIds.includes(detail.userId)) {
-        const refreshedDetail = await fetch(`/api/admin/users/${detail.userId}`);
-        const detailPayload = await refreshedDetail.json();
-        if (refreshedDetail.ok) {
-          setDetail(detailPayload.user);
-          setNextRole(detailPayload.user.role);
-        }
-      }
-      setFeedback(`${payload.updatedCount} users updated to role "${bulkRole}".`);
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Failed to update selected user roles.");
+      if (!response.ok) throw new Error(payload.error || "Credits could not be changed.");
+      setDetail(payload.user);
+      onChanged(payload.user);
+      setReason("");
+      setMessage(`${credits > 0 ? "Added" : "Removed"} ${Math.abs(credits)} credits. New balance: ${payload.user.creditBalance}.`);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Credits could not be changed.");
     } finally {
-      setBusy("idle");
+      setBusy(null);
     }
   }
 
-  async function handleRoleSave() {
-    if (!detail) return;
-    if (!canManageRoles) {
-      setFeedback("Only a super admin can change platform roles.");
-      return;
-    }
-    setBusy("saving-role");
-    setFeedback(null);
+  async function saveRole() {
+    setBusy("role");
+    setMessage(null);
     try {
-      const response = await fetch(`/api/admin/users/${detail.userId}`, {
+      const response = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: nextRole }),
+        body: JSON.stringify({ role }),
       });
       const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "Failed to update role.");
-      }
-
+      if (!response.ok) throw new Error(payload.error || "Access could not be changed.");
       setDetail(payload.user);
-      await refreshUsers(payload.user.userId, page);
-      setFeedback(`Role updated to ${payload.user.role}.`);
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Failed to update role.");
+      onChanged(payload.user);
+      setMessage(`Access changed to ${roleLabel[payload.user.role as AppRole]}.`);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Access could not be changed.");
     } finally {
-      setBusy("idle");
-    }
-  }
-
-  async function handleCreditAdjustment() {
-    if (!detail) return;
-    const amount = Number(creditAmount);
-    if (!Number.isInteger(amount) || amount === 0) {
-      setFeedback("Use a whole number for the credit adjustment, and it cannot be zero.");
-      return;
-    }
-
-    setBusy("adjusting-credits");
-    setFeedback(null);
-    try {
-      const response = await fetch(`/api/admin/users/${detail.userId}/credits`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          description: creditReason,
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "Failed to adjust credits.");
-      }
-
-      setDetail(payload.user);
-      await refreshUsers(payload.user.userId, page);
-      setFeedback(`Credits adjusted by ${amount > 0 ? "+" : ""}${amount}.`);
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Failed to adjust credits.");
-    } finally {
-      setBusy("idle");
+      setBusy(null);
     }
   }
 
   return (
-    <div className="mx-auto grid max-w-[1600px] gap-6 px-5 py-6 md:px-8 xl:grid-cols-[320px_minmax(0,1fr)]">
-      <aside className="space-y-4">
-        <AdminEntityListPanel
-          title={USER_COLLECTION.label}
-          subtitle={USER_COLLECTION.subtitle}
-          searchPlaceholder={USER_COLLECTION.searchPlaceholder}
-          emptyMessage={USER_COLLECTION.emptyMessage}
-          query={query}
-          onQueryChange={setQuery}
-          listLoading={listLoading}
-          items={users}
-          getId={(user) => user.userId}
-          getItemView={(user) => ({
-            title: user.fullName,
-            subtitle: user.email,
-            meta: `${user.role} · ${user.creditBalance} credits · ${user.grade || "Not onboarded"}`,
-          })}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          selectedIds={selectedUserIds}
-          onSelectedIdsChange={setSelectedUserIds}
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          pageSize={pageSize}
-          onPrevPage={() => void refreshUsers(undefined, Math.max(1, page - 1))}
-          onNextPage={() => void refreshUsers(undefined, Math.min(totalPages, page + 1))}
-          disabled={busy !== "idle"}
-          secondaryControls={canManageRoles ? (
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-              <select
-                value={bulkRole}
-                onChange={(event) => setBulkRole(event.target.value as AppRole)}
-                className="h-9 rounded-md border border-border bg-bg-primary px-2 text-sm text-text-primary"
-              >
-                <option value="student">student</option>
-                <option value="admin">admin</option>
-                <option value="super_admin">super admin</option>
-              </select>
-              <Button size="sm" onClick={handleBulkRoleSave} disabled={!selectedUserIds.length || busy !== "idle"}>
-                Apply role
-              </Button>
-            </div>
-          ) : undefined}
-        />
-      </aside>
-
-      <section className="space-y-6">
-        <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
-          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-5 py-4">
-            <div>
-              <p className="font-display text-3xl">{detail?.fullName ?? "Select a user"}</p>
-              <p className="mt-2 text-sm text-text-secondary">
-                {detail?.email ?? "Choose a user from the left to inspect profile, role, and credit activity."}
+    <div className="fixed inset-0 z-40">
+      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/30" />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label={person?.fullName || "Student"}
+        className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border bg-background shadow-xl"
+      >
+        <div className="flex items-start gap-3 border-b border-border p-5">
+          <Avatar name={person?.fullName ?? ""} large />
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-lg font-semibold">{person?.fullName || "No name"}</h2>
+            <p className="truncate text-sm text-muted-foreground">{person?.email}</p>
+            {person ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {roleLabel[person.role]} · joined {formatDate(person.createdAt)} · last seen {timeAgo(person.lastSignInAt)}
               </p>
-            </div>
-            {detail ? (
-              <div className="text-right text-sm text-text-secondary">
-                <div>Joined {formatDate(detail.createdAt)}</div>
-                <div>{detail.lastSignInAt ? `Last sign-in ${formatDate(detail.lastSignInAt)}` : "No sign-in yet"}</div>
-              </div>
             ) : null}
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
-          {feedback ? (
-            <div aria-live="polite" className="mx-5 mt-4 rounded-md border border-border bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
-              {feedback}
-            </div>
+        <div className="flex-1 space-y-6 overflow-y-auto p-5">
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
           ) : null}
+          {message ? (
+            <p aria-live="polite" className="rounded-lg bg-muted px-3 py-2 text-sm">
+              {message}
+            </p>
+          ) : null}
+
+          {person ? (
+            <dl className="grid grid-cols-4 gap-2 text-center">
+              <Stat label="Plan" value={person.activePlanName ?? "Free"} />
+              <Stat label="Credits" value={String(person.creditBalance)} />
+              <Stat label="Chats" value={String(person.chatSessionCount)} />
+              <Stat label="Notes" value={String(person.noteCount)} />
+              {person.activePlanEndsAt ? (
+                <div className="col-span-4 text-left text-xs text-muted-foreground">
+                  {person.activePlanName} until {formatDate(person.activePlanEndsAt)}
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+
+          <Section title="Give or take credits">
+            <div className="flex flex-wrap gap-2">
+              {[-10, 10, 20, 50, 100].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setAmount(String(value))}
+                  className={`min-h-9 rounded-lg border px-3 text-sm font-medium tabular-nums ${
+                    amount === String(value) ? "border-blue-600 text-blue-600" : "border-border hover:bg-muted"
+                  }`}
+                >
+                  {value > 0 ? `+${value}` : value}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 grid grid-cols-[6rem_minmax(0,1fr)] gap-2">
+              <input
+                inputMode="numeric"
+                aria-label="Credits"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                className={`${inputClass} tabular-nums`}
+              />
+              <input
+                aria-label="Reason"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Reason (optional)"
+                className={inputClass}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void saveCredits()}
+              disabled={!creditsValid || busy !== null || !detail}
+              className={`${primaryButton} mt-3 w-full`}
+            >
+              {busy === "credits"
+                ? "Saving…"
+                : !creditsValid
+                  ? "Enter a whole number"
+                  : credits > 0
+                    ? `Give ${credits} credits`
+                    : `Take away ${Math.abs(credits)} credits`}
+            </button>
+          </Section>
+
+          <Section title="Access">
+            {canManageRoles ? (
+              <>
+                <div className="flex gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Access">
+                  {(["student", "admin", "super_admin"] as AppRole[]).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      disabled={isSelf}
+                      aria-pressed={role === value}
+                      onClick={() => setRole(value)}
+                      className={`min-h-9 flex-1 rounded-md px-2 text-sm font-medium disabled:cursor-not-allowed ${
+                        role === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {roleLabel[value]}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  {isSelf
+                    ? "You can’t change your own access."
+                    : "Admins can use this admin area. Super admins can also change other people’s access."}
+                </p>
+                {detail && role !== detail.role ? (
+                  <button
+                    type="button"
+                    onClick={() => void saveRole()}
+                    disabled={busy !== null}
+                    className={`${primaryButton} mt-3 w-full`}
+                  >
+                    {busy === "role" ? "Saving…" : `Make ${roleLabel[role]}`}
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {person ? roleLabel[person.role] : "—"}. Only a super admin can change access.
+              </p>
+            )}
+          </Section>
 
           {detail ? (
             <>
-              <div className="grid gap-0 border-b border-border md:grid-cols-4">
-                <MetricCard label="Credits" value={String(detail.creditBalance)} />
-                <MetricCard label="Sessions" value={String(detail.chatSessionCount)} />
-                <MetricCard label="Notes" value={String(detail.noteCount)} />
-                <MetricCard label="Plan" value={detail.activePlanName ?? "Free"} />
-              </div>
+              <Section title="Profile">
+                <dl className="divide-y divide-border rounded-lg border border-border text-sm">
+                  <Detail label="College" value={detail.college} />
+                  <Detail label="Board" value={detail.board} />
+                  <Detail label="Class" value={detail.grade} />
+                  <Detail label="Subjects" value={detail.subjects.join(", ")} />
+                  <Detail label="Language" value={detail.languagePref} />
+                  <Detail label="Finished setup" value={detail.onboarded ? "Yes" : "No"} />
+                </dl>
+              </Section>
 
-              <div className="grid gap-4 px-5 py-5 md:grid-cols-2 xl:grid-cols-3">
-                <DetailBlock title="Academic profile">
-                  <Row label="College" value={detail.college || "—"} />
-                  <Row label="Board" value={detail.board || "—"} />
-                  <Row label="Grade" value={detail.grade || "—"} />
-                  <Row label="Score" value={detail.boardScore || "—"} />
-                  <Row label="Target" value={detail.targetGrade || "—"} />
-                  <Row label="Language" value={detail.languagePref} />
-                  <Row label="Subjects" value={detail.subjects.length ? detail.subjects.join(", ") : "—"} />
-                  <Row label="Onboarded" value={detail.onboarded ? "Yes" : "No"} />
-                </DetailBlock>
-
-                <DetailBlock title="Role access">
-                  {canManageRoles ? (
-                    <>
-                      <p className="text-sm leading-5 text-text-secondary">
-                        Admins can operate the admin workspace. Super admins can also grant or revoke platform roles.
-                      </p>
-                      <Field label="Role">
-                        <select
-                          value={nextRole}
-                          onChange={(event) => setNextRole(event.target.value as AppRole)}
-                          disabled={detail.userId === viewerUserId}
-                          className="block h-11 w-full rounded-md border border-border bg-bg-primary px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-border-strong/40 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <option value="student">student</option>
-                          <option value="admin">admin</option>
-                          <option value="super_admin">super admin</option>
-                        </select>
-                      </Field>
-                      {detail.userId === viewerUserId ? (
-                        <p className="text-xs leading-5 text-text-muted">
-                          Your own super-admin role is locked to prevent accidental lockout.
-                        </p>
-                      ) : null}
-                      <Button
-                        onClick={handleRoleSave}
-                        disabled={busy !== "idle" || detail.userId === viewerUserId || nextRole === detail.role}
-                      >
-                        {busy === "saving-role" ? "Saving..." : "Save role"}
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Row label="Current role" value={detail.role.replace("_", " ")} />
-                      <p className="text-sm leading-5 text-text-secondary">
-                        Role changes are restricted to super admins. You can still inspect users and manage credits.
-                      </p>
-                    </>
-                  )}
-                </DetailBlock>
-
-                <DetailBlock title="Credit adjustment">
-                  <Field label="Amount">
-                    <Input
-                      value={creditAmount}
-                      onChange={(event) => setCreditAmount(event.target.value)}
-                      placeholder="20 or -10"
-                    />
-                  </Field>
-                  <Field label="Reason">
-                    <Input
-                      value={creditReason}
-                      onChange={(event) => setCreditReason(event.target.value)}
-                    />
-                  </Field>
-                  <Button onClick={handleCreditAdjustment} disabled={busy !== "idle"}>
-                    {busy === "adjusting-credits" ? "Applying..." : "Apply adjustment"}
-                  </Button>
-                </DetailBlock>
-              </div>
+              <History title="Credit history" empty="No credit changes yet.">
+                {detail.recentLedger.map((entry) => (
+                  <HistoryRow
+                    key={entry.id}
+                    left={entry.description || entry.type}
+                    sub={formatDate(entry.createdAt)}
+                    right={`${entry.amount > 0 ? "+" : ""}${entry.amount}`}
+                  />
+                ))}
+              </History>
+              <History title="Plans" empty="Never had a paid plan.">
+                {detail.recentSubscriptions.map((subscription) => (
+                  <HistoryRow
+                    key={subscription.id}
+                    left={subscriptionState(subscription)}
+                    sub={`${formatDate(subscription.startsAt)}${subscription.endsAt ? ` – ${formatDate(subscription.endsAt)}` : ""}`}
+                  />
+                ))}
+              </History>
+              <History title="Recent chats" empty="No chats yet.">
+                {detail.recentSessions.map((session) => (
+                  <HistoryRow key={session.id} left={session.title} sub={formatDate(session.updatedAt)} />
+                ))}
+              </History>
             </>
+          ) : !error ? (
+            <div className="space-y-3 motion-safe:animate-pulse" aria-label="Loading">
+              <div className="h-4 w-24 rounded bg-border" />
+              <div className="h-40 rounded-lg bg-border/60" />
+            </div>
           ) : null}
         </div>
-
-        {detail ? (
-          <div className="grid gap-4 lg:grid-cols-3">
-            <ListBlock
-              title="Recent credit ledger"
-              items={detail.recentLedger.map((entry) => ({
-                title: `${entry.amount > 0 ? "+" : ""}${entry.amount} · balance ${entry.balanceAfter}`,
-                meta: `${entry.type} · ${formatDate(entry.createdAt)}`,
-                body: entry.description ?? "No description",
-              }))}
-              empty="No ledger entries yet."
-            />
-            <ListBlock
-              title="Recent subscriptions"
-              items={detail.recentSubscriptions.map((subscription) => ({
-                title: subscription.status,
-                meta: `Started ${formatDate(subscription.startsAt)}`,
-                body: subscription.endsAt ? `Ends ${formatDate(subscription.endsAt)}` : "No end date",
-              }))}
-              empty="No subscriptions found."
-            />
-            <ListBlock
-              title="Recent chat sessions"
-              items={detail.recentSessions.map((session) => ({
-                title: session.title,
-                meta: `Updated ${formatDate(session.updatedAt)}`,
-                body: session.id,
-              }))}
-              empty="No chat sessions yet."
-            />
-          </div>
-        ) : null}
-      </section>
+      </aside>
     </div>
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="border-r border-b border-border bg-bg-secondary px-4 py-4 last:border-r-0">
-      <p className="text-[11px] font-mono-ui uppercase text-text-muted">{label}</p>
-      <p className="mt-2 font-display text-3xl">{value}</p>
-    </div>
+    <section>
+      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+      {children}
+    </section>
   );
 }
 
-function DetailBlock({ title, children }: { title: string; children: ReactNode }) {
+function History({ title, empty, children }: { title: string; empty: string; children: ReactNode[] }) {
   return (
-    <div className="rounded-none border border-border bg-bg-primary p-4">
-      <p className="font-medium">{title}</p>
-      <div className="mt-4 space-y-3">{children}</div>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[11px] font-mono-ui uppercase text-text-muted">{label}</p>
-      <p className="mt-1 text-sm text-text-secondary">{value}</p>
-    </div>
-  );
-}
-
-function ListBlock({
-  title,
-  items,
-  empty,
-}: {
-  title: string;
-  items: Array<{ title: string; meta: string; body: string }>;
-  empty: string;
-}) {
-  return (
-    <div className="overflow-hidden rounded-none border border-border bg-bg-primary">
-      <div className="border-b border-border px-4 py-3">
-        <p className="font-semibold">{title}</p>
+    <details className="group rounded-lg border border-border">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-sm font-semibold">
+        {title}
+        <span className="text-xs font-normal text-muted-foreground">
+          {children.length ? `${children.length} recent` : "None"}
+          <ChevronRight size={14} className="ml-1 inline transition-transform group-open:rotate-90" />
+        </span>
+      </summary>
+      <div className="divide-y divide-border border-t border-border">
+        {children.length ? children : <p className="px-3 py-3 text-sm text-muted-foreground">{empty}</p>}
       </div>
-      <div className="divide-y divide-border">
-        {items.length ? (
-          items.map((item, index) => (
-            <div key={`${item.title}-${index}`} className="bg-bg-primary px-4 py-4">
-              <p className="text-sm font-medium">{item.title}</p>
-              <p className="mt-1 text-[11px] text-text-muted">{item.meta}</p>
-              <p className="mt-2 text-sm text-text-secondary">{item.body}</p>
-            </div>
-          ))
-        ) : (
-          <div className="px-4 py-8 text-center text-sm text-text-secondary">
-            {empty}
-          </div>
-        )}
+    </details>
+  );
+}
+
+function HistoryRow({ left, sub, right }: { left: string; sub: string; right?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 py-2">
+      <div className="min-w-0">
+        <p className="truncate text-sm first-letter:uppercase">{left}</p>
+        <p className="text-xs text-muted-foreground">{sub}</p>
       </div>
+      {right ? <span className="text-sm font-medium tabular-nums">{right}</span> : null}
     </div>
   );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-muted px-2 py-2">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 truncate text-sm font-semibold">{value}</dd>
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4 px-3 py-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="text-right">{value || "—"}</dd>
+    </div>
+  );
+}
+
+function Avatar({ name, large = false }: { name: string; large?: boolean }) {
+  const initials =
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]!.toUpperCase())
+      .join("") || "?";
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground ${
+        large ? "h-11 w-11 text-sm" : "h-8 w-8 text-xs"
+      }`}
+    >
+      {initials}
+    </span>
+  );
+}
+
+function RoleBadge({ role }: { role: AppRole }) {
+  return (
+    <span className="shrink-0 rounded-full bg-blue-600/10 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:text-blue-300">
+      {roleLabel[role]}
+    </span>
+  );
+}
+
+function PlanBadge({ plan }: { plan: string | null }) {
+  return plan ? (
+    <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+      {plan}
+    </span>
+  ) : (
+    <span className="text-xs text-muted-foreground">Free</span>
+  );
+}
+
+function timeAgo(iso: string | null) {
+  if (!iso) return "never";
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutes < 60) return minutes <= 1 ? "just now" : `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return days === 1 ? "yesterday" : `${days} days ago`;
+  return formatDate(iso);
+}
+
+
+/** A row can stay "active" after its end date; say what it really is. */
+function subscriptionState(subscription: AdminUserDetail["recentSubscriptions"][number]) {
+  if (subscription.status === "active" && subscription.endsAt && new Date(subscription.endsAt).getTime() <= Date.now())
+    return "ended";
+  return subscription.status;
 }

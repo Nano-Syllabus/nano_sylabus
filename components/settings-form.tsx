@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
@@ -21,9 +21,11 @@ import { ThemeSetting } from "@/components/theme-setting";
 export function SettingsForm({
   user,
   profile,
+  planCard,
 }: {
   user: AppUser;
   profile: StudentProfile;
+  planCard?: ReactNode;
 }) {
   const router = useRouter();
   const [fullName, setFullName] = useState(profile.fullName);
@@ -117,6 +119,7 @@ export function SettingsForm({
 
   return (
     <div className="student-reading-frame">
+      {planCard}
       <ThemeSetting />
 
       <div className="rounded-lg border border-border bg-bg-primary">

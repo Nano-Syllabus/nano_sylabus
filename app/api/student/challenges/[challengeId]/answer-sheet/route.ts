@@ -7,6 +7,7 @@ import {
 } from "@/lib/data/challenge-answer-sheet";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ function failure(error: unknown, fallback: string) {
  * The upload screen's sheet, with a fresh token for its QR. The token also
  * authorises this desktop's own uploads, through the same routes the phone uses.
  */
-export async function POST(request: Request, { params }: { params: Promise<{ challengeId: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ challengeId: string }> }) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -41,7 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cha
 }
 
 /** Polled by the desktop, so a page added on the phone appears here. */
-export async function GET(request: Request, { params }: { params: Promise<{ challengeId: string }> }) {
+async function handleGET(request: Request, { params }: { params: Promise<{ challengeId: string }> }) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -57,3 +58,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ chal
     return failure(error, "Could not check the answer sheet.");
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);
+export const GET = withUsageCommunity(handleGET);

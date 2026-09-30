@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { AdminBillingFrame } from "@/components/admin-billing-frame";
+import { AdminBillingFrame, AdminPageHeader } from "@/components/admin-billing-frame";
 import { AdminCashPrizeEntries } from "@/components/admin-cash-prize-entries";
 import { assertAdminRequest } from "@/lib/admin-access";
 import { getNepalDateKey, isNepalDateKey } from "@/lib/data/cash-prize";
@@ -30,20 +30,11 @@ export default async function AdminCashPrizePage({
   const entries = await listAdminWeeklyEntries(drawDate);
 
   return (
-    <AdminBillingFrame active="cash-prize" title="Prize entries">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
-            Weekly draw operations
-          </p>
-          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">
-            Cash prize entries
-          </h1>
-          <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Students who confirmed participation with a 7-day streak, weighted by their wheel
-            entries: one for the streak, plus one per 5 verified referrals.
-          </p>
-        </div>
+    <AdminBillingFrame active="cash-prize">
+      <AdminPageHeader
+        title="Prize draw"
+        description="Students who joined this week’s draw with a 7-day streak. Each 5 verified referrals adds one more entry."
+        actions={
         <form method="get" className="flex flex-wrap items-end gap-2">
           <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
             Draw (Friday)
@@ -61,7 +52,8 @@ export default async function AdminCashPrizePage({
             View draw
           </button>
         </form>
-      </div>
+        }
+      />
 
       <AdminCashPrizeEntries entries={entries} drawDate={drawDate} />
     </AdminBillingFrame>

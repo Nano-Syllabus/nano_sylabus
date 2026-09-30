@@ -4,6 +4,7 @@ import { getStudentRevisionDocs, revisionDocsIndex } from "@/lib/data/student-re
 import { errorJson, privateJson } from "@/lib/http/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export const dynamic = "force-dynamic";
  * The plan (which topics are startable) and the active faculty are read
  * alongside the challenge rows, not in front of them.
  */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -41,3 +42,6 @@ export async function GET(request: Request) {
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const GET = withUsageCommunity(handleGET);

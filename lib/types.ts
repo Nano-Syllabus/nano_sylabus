@@ -350,6 +350,8 @@ export interface AdminUserSummary {
   onboarded: boolean;
   creditBalance: number;
   activePlanName: string | null;
+  /** When the current plan stops; null for plans without an end and for admins (Pro by role). */
+  activePlanEndsAt: string | null;
   chatSessionCount: number;
   noteCount: number;
   createdAt: string;

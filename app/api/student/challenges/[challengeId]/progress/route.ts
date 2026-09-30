@@ -4,10 +4,11 @@ import { markStudentChallengeStep } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 const schema = z.object({ step: z.enum(["lesson", "examples"]) });
 
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
 ) {
@@ -35,3 +36,6 @@ export async function POST(
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

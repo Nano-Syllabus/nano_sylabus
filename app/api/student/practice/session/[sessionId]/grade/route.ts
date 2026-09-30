@@ -10,6 +10,7 @@ import {
 } from "@/lib/tenant/client";
 import { getStudentCourseSubjectAccess } from "@/lib/student-courses";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -28,7 +29,7 @@ const requestSchema = z.object({
     .min(1),
 });
 
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
@@ -118,3 +119,6 @@ export async function POST(
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

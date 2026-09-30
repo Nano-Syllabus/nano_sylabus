@@ -40,8 +40,11 @@ export type QuestionVideo = {
   error: string;
 };
 
-/** Long enough for one idea and its first step; short enough that it stays a hint. */
-const VIDEO_SECONDS = 15;
+/**
+ * The CEILING, not the length (user, 2026-09-29): a memory video is as short as
+ * makes the idea clear — the renderer's planner picks 10-30s and aims for 12-20.
+ */
+const VIDEO_SECONDS = 30;
 /** Requests to the course API at once while preparing a paper's videos. The
  *  renderer queues and plans in parallel itself; this only bounds our fan-out. */
 const PREPARE_CONCURRENCY = 4;
@@ -51,30 +54,28 @@ function clip(text: string, limit: number) {
   return clean.length <= limit ? clean : `${clean.slice(0, limit - 1).trimEnd()}…`;
 }
 
-/** A subject slug read as words, for the planner ("digital-logic" → "digital logic"). */
-function subjectWords(subject: string) {
-  return subject.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+/**
+ * A subject slug read as words, for the planner and the video's corner chip.
+ * A creator's subject slug carries their collection in front of it
+ * ("9165prashant_a9973_teacher_project_planning_…"), which the video printed
+ * as its subject; only the part after `_teacher_` is the subject's name.
+ */
+export function subjectWords(subject: string) {
+  const name = subject.includes("_teacher_") ? subject.slice(subject.indexOf("_teacher_") + 9) : subject;
+  return name.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /**
- * HINTS, NOT ANSWERS (2026-09-29). Both videos give away only about 30% of the
- * way to the answer — the idea the question rests on and the first move — and
- * then hand the rest to the student. A video that walks the whole solution is
- * one the student watches instead of thinking; a nudge is one they finish.
- *
- * These lines lead the planner's `notes` because the renderer's own brief tells
- * it to "answer" the concept and to close by answering its hook.
+ * MEMORY VIDEOS (user, 2026-09-29). Both videos are pre-recorded visual hints
+ * for the MCQ game, planned in the renderer's `memory` mode: a concept brief
+ * first (key terms, core idea, the one object that changes, a memory line),
+ * the object animated cause-to-effect in place, and a still recall card to end
+ * on. The rules for that live in the renderer (ioevid prompts.MEMORY_BRIEF);
+ * these lines only restate the two that must never slip, and give the inputs.
  */
 const HINT_RULES = [
-  "THIS VIDEO IS A HINT, NOT A SOLUTION. Never state the answer on screen or in the narration: no option letter, no option text, no final value, nothing a student could copy.",
-  "Give only about 30% of the way to the answer: the one idea the question rests on and the FIRST step of using it. Stop there. Do not carry the working through, do not reach a result, do not show the last steps.",
-  "Make it intuitive before it is formal: open on a picture, an everyday analogy or a tiny example the eye can follow, then name the idea in one plain sentence.",
-  'End by handing the next step to the student — one short line such as "Now try that on the question" or a question that points where to look — instead of closing with a conclusion.',
-];
-
-const STYLE_RULES = [
-  "Plain words a first-year student understands. Define a symbol the moment it appears. Short on-screen text, large and readable.",
-  "Three beats, one idea each. No quiz, no recap, no title card, no 'in this video'.",
+  "THIS VIDEO IS A HINT, NOT A SOLUTION. Never read out the question, never mention or discuss an option, never show an option letter, and never state or imply the correct answer — no 'therefore the answer is'.",
+  "Teach the one foundational idea a beginner needs to try the question again, defining the key terms through the visual. The student makes the final connection.",
 ];
 
 /** The request for a question's video. Exported for the test that pins it. */
@@ -87,17 +88,13 @@ export function questionVideoSpec(subject: string, question: QuestionVideoQuesti
     notes: clip(
       [
         ...HINT_RULES,
-        `A student revising ${topic || "their course"} got this multiple-choice question wrong and wants a nudge, not the full working.`,
+        `Subject and level: ${topic || "their course"}, first- or second-year engineering student, beginner on this topic. They got this multiple-choice question wrong and will try it again.`,
         `Question: ${question.text}`,
-        `Options: ${question.options.map((option) => `${option.key}) ${option.text}`).join("  ")}`,
-        // Given so the planner steers the right way — it must never be shown.
-        `Correct answer (for your direction only, never show or say it): ${question.correct}) ${correctText}`,
-        question.explanation ? `Why it is correct (for your direction only): ${question.explanation}` : "",
-        `Make the nudge clear within ${VIDEO_SECONDS + 2} seconds:`,
-        "1. Show the slip that makes the most tempting wrong choice look right, as a picture or tiny example — without naming the option or its value.",
-        "2. Show the idea that fixes it and take the FIRST step of the right reasoning, on a different small example rather than this question's own values.",
-        "3. Hand the student the rest: point at what to check next in the question, and stop.",
-        ...STYLE_RULES,
+        `Options (context only — never shown, read or discussed): ${question.options.map((option) => `${option.key}) ${option.text}`).join("  ")}`,
+        // Given so the planner checks its accuracy — it must never be shown.
+        `Correct answer, for your internal accuracy check only (never show or say it): ${question.correct}) ${correctText}`,
+        question.explanation ? `Why it is correct (for your accuracy check only): ${question.explanation}` : "",
+        "Aim the visual at the misunderstanding that makes the most tempting wrong option look right, without naming that option.",
       ]
         .filter(Boolean)
         .join("\n"),
@@ -105,6 +102,7 @@ export function questionVideoSpec(subject: string, question: QuestionVideoQuesti
     ),
     seconds: VIDEO_SECONDS,
     style: "card" as const,
+    memory: true,
   };
 }
 
@@ -126,19 +124,15 @@ export function questionHintSpec(subject: string, question: Pick<QuestionVideoQu
     notes: clip(
       [
         ...HINT_RULES,
-        `A student revising ${topic || "their course"} is about to answer this multiple-choice question and wants a hint first.`,
+        `Subject and level: ${topic || "their course"}, first- or second-year engineering student, beginner on this topic. They are about to answer this multiple-choice question and want a hint first.`,
         `Question: ${question.text}`,
-        "Do NOT answer the question, do NOT solve it, do NOT state or imply the final result, and do NOT mention any option.",
-        `Make the hint clear within ${VIDEO_SECONDS + 2} seconds:`,
-        "1. Open on the core idea as a picture, analogy or tiny worked number — something the student already knows.",
-        "2. Show the FIRST step of applying it, on a different small example (not this question's own values or wording).",
-        "3. Point at what to look for in this question next, and stop — the student works out the rest.",
-        ...STYLE_RULES,
+        "Do NOT answer the question, do NOT solve it, and do NOT state or imply the final result.",
       ].join("\n"),
       2000,
     ),
     seconds: VIDEO_SECONDS,
     style: "card" as const,
+    memory: true,
   };
 }
 

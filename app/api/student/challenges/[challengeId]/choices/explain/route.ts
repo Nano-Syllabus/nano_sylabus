@@ -4,6 +4,7 @@ import { z } from "zod";
 import { explainExamChoice } from "@/lib/data/challenge-exam-picks";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ const PER_WINDOW = 12;
 const recent = new Map<string, number[]>();
 
 /** The short video for one MCQ whose answer is open: on the paper, or in Revision. */
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
 ) {
@@ -68,3 +69,6 @@ export async function POST(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);

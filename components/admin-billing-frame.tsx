@@ -1,146 +1,139 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowLeft, BarChart3, CreditCard, ShieldCheck, Trophy, UserCog } from "lucide-react";
+import { ArrowLeft, CreditCard, Globe, LayoutDashboard, Trophy, Users } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-type AdminSection = "billing" | "cash-prize" | "users";
+type AdminSection = "overview" | "users" | "billing" | "cash-prize" | "sites";
 
+const sections: Array<{ id: AdminSection; href: string; label: string; icon: typeof Users }> = [
+  { id: "overview", href: "/admin", label: "Overview", icon: LayoutDashboard },
+  { id: "users", href: "/admin/users", label: "Students", icon: Users },
+  { id: "billing", href: "/admin/billing", label: "Payments", icon: CreditCard },
+  { id: "cash-prize", href: "/admin/cash-prize", label: "Prize draw", icon: Trophy },
+  { id: "sites", href: "/admin/sites", label: "Websites", icon: Globe },
+];
+
+/** The one frame every admin page sits in: five places, nothing else. */
 export function AdminBillingFrame({
   children,
   active = "billing",
-  title = "Payment reviews",
+  wide = false,
 }: {
   children: ReactNode;
   active?: AdminSection;
+  /** Full width, for side-by-side work such as the website editor. */
+  wide?: boolean;
+  /** Kept for existing callers; the page heading carries the title now. */
   title?: string;
 }) {
-  const navClass = (section: AdminSection) =>
-    `flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium ${active === section ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`;
+  const linkClass = (section: AdminSection) =>
+    `flex min-h-10 shrink-0 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${
+      active === section
+        ? "bg-muted text-foreground"
+        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+    }`;
 
   return (
-    <div className="min-h-screen bg-muted/45 text-foreground">
+    <div className="min-h-screen bg-background text-foreground">
       <a
         href="#admin-workspace-content"
         className="sr-only z-50 rounded-md bg-card p-3 focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
       >
         Skip to admin content
       </a>
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border bg-card lg:flex">
-        <Link
-          href="/admin"
-          className="flex h-[73px] items-center gap-2.5 border-b border-border px-5 focus-visible:outline-2 focus-visible:outline-ring"
-        >
-          <Image
-            src="/nanologo.png"
-            alt=""
-            width={32}
-            height={32}
-            className="h-8 w-8 object-contain"
-          />
-          <span className="font-display text-lg font-semibold tracking-tight">Nano Syllabus</span>
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-56 flex-col border-r border-border bg-card lg:flex">
+        <Link href="/admin" className="flex h-16 items-center gap-2.5 px-5">
+          <Image src="/nanologo.png" alt="" width={28} height={28} className="h-7 w-7 object-contain" />
+          <span className="font-display text-base font-semibold tracking-tight">Admin</span>
         </Link>
-        <p className="px-6 pb-3 pt-7 text-[11px] font-medium tracking-widest text-muted-foreground uppercase">
-          Administration
-        </p>
-        <nav aria-label="Admin navigation" className="space-y-1 px-3">
-          <Link
-            href="/admin"
-            className="flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <BarChart3 size={17} strokeWidth={1.7} />
-            Platform analytics
-          </Link>
-          <Link
-            href="/admin/billing"
-            aria-current={active === "billing" ? "page" : undefined}
-            className={navClass("billing")}
-          >
-            <CreditCard size={17} strokeWidth={1.7} />
-            Payment reviews
-          </Link>
-          <Link
-            href="/admin/cash-prize"
-            aria-current={active === "cash-prize" ? "page" : undefined}
-            className={navClass("cash-prize")}
-          >
-            <Trophy size={17} strokeWidth={1.7} />
-            Prize entries
-          </Link>
-          <Link
-            href="/admin/users"
-            aria-current={active === "users" ? "page" : undefined}
-            className={navClass("users")}
-          >
-            <UserCog size={17} strokeWidth={1.7} />
-            User access
-          </Link>
+        <nav aria-label="Admin navigation" className="mt-2 space-y-1 px-3">
+          {sections.map(({ id, href, label, icon: Icon }) => (
+            <Link
+              key={id}
+              href={href}
+              aria-current={active === id ? "page" : undefined}
+              className={linkClass(id)}
+            >
+              <Icon size={17} strokeWidth={1.8} aria-hidden="true" />
+              {label}
+            </Link>
+          ))}
         </nav>
-        <div className="mt-auto border-t border-border p-3">
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-border p-3">
           <Link
             href="/app/today"
-            className="flex min-h-10 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground"
           >
-            <ArrowLeft size={17} />
+            <ArrowLeft size={16} />
             Back to app
           </Link>
-          <div className="mt-3 flex items-center gap-3 rounded-md bg-muted/60 px-3 py-3">
-            <ShieldCheck size={18} className="shrink-0" />
-            <div>
-              <p className="text-xs font-medium">Administrator</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">Restricted workspace</p>
-            </div>
-          </div>
+          <ThemeToggle className="rounded-md bg-card" />
         </div>
       </aside>
 
-      <div className="min-w-0 lg:pl-60">
-        <header className="border-b border-border bg-card">
-          <div className="flex h-[72px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-            <div className="flex min-w-0 items-center gap-2 text-xs">
-              <ShieldCheck size={17} className="lg:hidden" />
-              <Link href="/admin" className="text-muted-foreground hover:text-foreground">
-                Admin
+      <div className="min-w-0 lg:pl-56">
+        <header className="border-b border-border bg-card lg:hidden">
+          <div className="flex h-14 items-center justify-between gap-3 px-4">
+            <Link href="/admin" className="flex items-center gap-2">
+              <Image src="/nanologo.png" alt="" width={24} height={24} className="h-6 w-6 object-contain" />
+              <span className="font-display text-sm font-semibold">Admin</span>
+            </Link>
+            <div className="flex items-center gap-1">
+              <Link
+                href="/app/today"
+                aria-label="Back to app"
+                className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+              >
+                <ArrowLeft size={17} />
               </Link>
-              <span className="text-muted-foreground">/</span>
-              <span className="truncate font-medium">{title}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex">
-                <ShieldCheck size={14} />
-                Admin access
-              </span>
               <ThemeToggle className="rounded-md bg-card" />
             </div>
           </div>
+          <nav aria-label="Mobile admin navigation" className="flex gap-1 overflow-x-auto px-3 pb-2">
+            {sections.map(({ id, href, label, icon: Icon }) => (
+              <Link
+                key={id}
+                href={href}
+                aria-current={active === id ? "page" : undefined}
+                className={`${linkClass(id)} min-h-9 text-xs`}
+              >
+                <Icon size={15} aria-hidden="true" />
+                {label}
+              </Link>
+            ))}
+          </nav>
         </header>
-        <nav
-          aria-label="Mobile admin navigation"
-          className="flex gap-1 overflow-x-auto border-b border-border bg-card px-4 py-2 lg:hidden"
+        <main
+          id="admin-workspace-content"
+          className={`mx-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8 ${wide ? "max-w-none" : "max-w-6xl"}`}
         >
-          <Link
-            href="/admin"
-            className="flex min-h-9 shrink-0 items-center gap-2 rounded-md px-3 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <BarChart3 size={15} /> Analytics
-          </Link>
-          <Link href="/admin/billing" className={`${navClass("billing")} min-h-9 shrink-0 text-xs`}>
-            <CreditCard size={15} /> Payments
-          </Link>
-          <Link
-            href="/admin/cash-prize"
-            className={`${navClass("cash-prize")} min-h-9 shrink-0 text-xs`}
-          >
-            <Trophy size={15} /> Prize entries
-          </Link>
-          <Link href="/admin/users" className={`${navClass("users")} min-h-9 shrink-0 text-xs`}>
-            <UserCog size={15} /> User access
-          </Link>
-        </nav>
-        <main id="admin-workspace-content" className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           {children}
         </main>
       </div>
+    </div>
+  );
+}
+
+/** Plain page heading: what this page is, in one sentence, with its actions on the right. */
+export function AdminPageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
+        {description ? (
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
   );
 }

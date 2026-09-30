@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { gradeTeacherPracticePaper, TeacherApiError } from "@/lib/teacher-app/client";
 import { recordTeacherClassroomActivity } from "@/lib/teacher-classroom-activity";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { withUsageCommunity } from "@/lib/usage-community";
 
 const schema = z.object({
   answers: z.array(z.object({
@@ -14,7 +15,7 @@ const schema = z.object({
   })).min(1).max(100),
 });
 
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ assignmentId: string }> },
 ) {
@@ -103,3 +104,6 @@ export async function POST(
     );
   }
 }
+
+// Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
+export const POST = withUsageCommunity(handlePOST);
