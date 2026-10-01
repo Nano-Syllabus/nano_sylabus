@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  X,
 } from "lucide-react";
 import NepaliDateConverter from "nepali-date-converter";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -205,8 +206,9 @@ export function daysUntilExam(date: string, today: string) {
   return Math.round((exam - now) / 86_400_000);
 }
 
-function ExamDialog({ title, busy, onClose, children }: {
+function ExamDialog({ title, subtitle, busy, onClose, children }: {
   title: string;
+  subtitle?: string;
   busy: boolean;
   onClose: () => void;
   children: ReactNode;
@@ -227,11 +229,37 @@ function ExamDialog({ title, busy, onClose, children }: {
   return (
     <dialog ref={ref} aria-label={title} aria-busy={busy}
       onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}
-      className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-border bg-card p-5 text-text-primary shadow-xl backdrop:bg-black/60">
-      <h3 className="type-student-section-title">{title}</h3>
+      className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto overflow-x-hidden rounded-2xl border border-border bg-card p-5 text-text-primary shadow-2xl backdrop:bg-black/60 sm:p-6">
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-600/10 text-blue-600 dark:text-blue-400">
+          <GraduationCap className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="type-student-section-title">{title}</h3>
+          {subtitle ? <p className="mt-0.5 text-sm text-text-secondary">{subtitle}</p> : null}
+        </div>
+        <button type="button" onClick={onClose} disabled={busy} aria-label="Close"
+          className={cn("-mr-1 -mt-1 grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg text-text-muted transition hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed", focusRing)}>
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      </div>
       {children}
     </dialog>
   );
+}
+
+/** "Today", "Tomorrow", "In 12 days", or how long ago. */
+function countdownLabel(days: number) {
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days > 1) return `In ${days} days`;
+  return days === -1 ? "Yesterday" : `${-days} days ago`;
+}
+
+function addDays(date: string, days: number) {
+  const next = new Date(`${date}T12:00:00.000Z`);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next.toISOString().slice(0, 10);
 }
 
 export function PracticeCalendar({
@@ -679,71 +707,140 @@ export function PracticeCalendar({
 
       {/* ── Add / Edit Exam Form ── */}
       {examFormOpen ? (
-        <ExamDialog title={editingExamId ? "Edit exam" : "Add exam"} busy={examSaving} onClose={() => setExamFormOpen(false)}>
+        <ExamDialog
+          title={editingExamId ? "Edit exam" : "Add exam"}
+          subtitle="Pick the day and subject. We count down and track your readiness."
+          busy={examSaving}
+          onClose={() => setExamFormOpen(false)}
+        >
         <form
           ref={formRef}
           onSubmit={submitExamDate}
-          className="mt-4 grid gap-4 rounded-2xl border border-border bg-bg-secondary p-4 sm:grid-cols-2 sm:p-5"
+          className="mt-5 grid gap-5"
           aria-busy={examSaving}
         >
-          <label
-            htmlFor="exam-date-input"
-            className="grid gap-1.5 text-xs font-semibold text-text-secondary"
-          >
-            Exam date (AD / Calendar)
+          {/* Countdown preview: what the exam will look like once saved. */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 p-4 text-white shadow-sm">
+            <div aria-hidden="true" className="pointer-events-none absolute -right-8 -top-10 size-36 rounded-full bg-white/10" />
+            <div aria-hidden="true" className="pointer-events-none absolute -bottom-12 right-16 size-28 rounded-full bg-white/5" />
+            <div className="relative flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-white/70">
+                  {examDate ? countdownLabel(daysUntilExam(examDate, todayDate)) : "Choose a date"}
+                </p>
+                <p className="mt-1 truncate text-lg font-semibold">
+                  {examTitle || "Select a subject"}
+                </p>
+                <p className="mt-0.5 text-sm text-white/80">
+                  {examDate ? `${formatNepaliDate(adToBs(examDate))} · ${compactDate(examDate)}` : "—"}
+                </p>
+              </div>
+              {examDate && daysUntilExam(examDate, todayDate) > 0 ? (
+                <div className="shrink-0 text-right">
+                  <p className="text-3xl font-bold tabular-nums leading-none">{daysUntilExam(examDate, todayDate)}</p>
+                  <p className="mt-1 text-[11px] font-medium text-white/70">days left</p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <label htmlFor="exam-date-input" className="text-xs font-semibold text-text-secondary">
+              Exam date
+            </label>
             <input
               id="exam-date-input"
               type="date"
               value={examDate}
+              min={editingExamId ? undefined : todayDate}
               onChange={(event) => setExamDate(event.target.value)}
               autoComplete="off"
               required
               className={cn(
-                "min-h-11 rounded-xl border border-border bg-bg-tertiary px-3.5 text-sm font-normal text-text-primary shadow-xs",
+                "min-h-11 w-full rounded-xl border border-border bg-bg-tertiary px-3.5 text-sm text-text-primary shadow-xs",
                 focusRing,
               )}
             />
-            {examDate ? (
-              <span className="text-[11px] font-semibold text-[#0066ff]">
-                Nepali: {formatNepaliDate(adToBs(examDate))}
-              </span>
-            ) : null}
-          </label>
+            <div className="flex flex-wrap gap-1.5">
+              {([["1 week", 7], ["2 weeks", 14], ["1 month", 30], ["2 months", 60]] as const).map(([label, days]) => {
+                const value = addDays(todayDate, days);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setExamDate(value)}
+                    aria-pressed={examDate === value}
+                    className={cn(
+                      "cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition",
+                      examDate === value
+                        ? "border-blue-600 bg-blue-600/10 text-blue-700 dark:text-blue-300"
+                        : "border-border text-text-secondary hover:border-blue-600/50 hover:text-text-primary",
+                      focusRing,
+                    )}
+                  >
+                    In {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-          <label
-            htmlFor="exam-title-input"
-            className="grid gap-1.5 text-xs font-semibold text-text-secondary"
-          >
-            Subject
-            <select
-              id="exam-title-input"
-              value={examTitle}
-              onChange={(event) => setExamTitle(event.target.value)}
-              autoComplete="off"
-              required
-              className={cn(
-                "min-h-11 rounded-xl border border-border bg-bg-tertiary px-3.5 text-sm font-normal text-text-primary shadow-xs placeholder:text-text-muted",
-                focusRing,
-              )}
-            >
-              <option value="">Select a subject</option>
-              {examTitle && !allSubjects.some((subject) => subject.name === examTitle) ? <option value={examTitle}>{examTitle}</option> : null}
-              {allSubjects.map((subject) => (
-                <option key={subject.id} value={subject.name}>{subject.name}</option>
-              ))}
-            </select>
-            <span className="text-[11px] font-normal text-text-muted">
-              Choose the subject for this exam.
-            </span>
-          </label>
+          <fieldset className="grid gap-2">
+            <legend className="mb-2 text-xs font-semibold text-text-secondary">Subject</legend>
+            {allSubjects.length ? (
+              <div role="radiogroup" aria-label="Subject" className="-mx-1 grid max-h-52 gap-1.5 overflow-y-auto px-1 py-0.5 sm:grid-cols-2">
+                {[
+                  ...(examTitle && !allSubjects.some((subject) => subject.name === examTitle)
+                    ? [{ id: `custom:${examTitle}`, name: examTitle }]
+                    : []),
+                  ...allSubjects,
+                ].map((subject) => {
+                  const selected = examTitle === subject.name;
+                  return (
+                    <button
+                      key={subject.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setExamTitle(subject.name)}
+                      className={cn(
+                        "flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-sm transition",
+                        selected
+                          ? "border-blue-600 bg-blue-600/10 font-semibold text-text-primary"
+                          : "border-border text-text-secondary hover:border-blue-600/40 hover:bg-bg-tertiary hover:text-text-primary",
+                        focusRing,
+                      )}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "grid size-4 shrink-0 place-items-center rounded-full border-2",
+                          selected ? "border-blue-600" : "border-border",
+                        )}
+                      >
+                        {selected ? <span className="size-1.5 rounded-full bg-blue-600" /> : null}
+                      </span>
+                      <span className="min-w-0 truncate">{subject.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-text-muted">
+                No subjects available. Join a programme to schedule an exam.
+              </p>
+            )}
+          </fieldset>
 
-          <div className="flex flex-wrap gap-2 sm:col-span-2 sm:justify-end mt-1">
+          {examError ? <p role="alert" className="text-sm text-rose-600">{examError}</p> : null}
+
+          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
             <button
               type="button"
               onClick={() => setExamFormOpen(false)}
               disabled={examSaving}
               className={cn(
-                "inline-flex min-h-10 cursor-pointer items-center rounded-xl border border-border px-4 text-xs font-semibold text-text-secondary transition hover:bg-bg-tertiary hover:text-text-primary",
+                "inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-border px-4 text-sm font-semibold text-text-secondary transition hover:bg-bg-tertiary hover:text-text-primary",
                 focusRing,
               )}
             >
@@ -754,7 +851,7 @@ export function PracticeCalendar({
               disabled={examSaving || !examDate || !examTitle.trim()}
               aria-busy={examSaving}
               className={cn(
-                "inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl bg-[#2563eb] px-5 text-xs font-semibold text-white transition hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-60",
+                "inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60",
                 focusRing,
               )}
             >
@@ -767,8 +864,6 @@ export function PracticeCalendar({
               {examSaving ? "Saving…" : editingExamId ? "Update exam" : "Save exam"}
             </button>
           </div>
-          {examError ? <p role="alert" className="text-sm text-rose-600 sm:col-span-2">{examError}</p> : null}
-          {!allSubjects.length ? <p className="text-sm text-text-muted sm:col-span-2">No subjects available. Join a programme to schedule an exam.</p> : null}
         </form>
         </ExamDialog>
       ) : null}

@@ -2818,6 +2818,7 @@ export function ChatPageClient({
                   initialSelection={initialLibrarySelection}
                   onSubjectSelect={handleWorkspaceSubjectSelect}
                   onMaterialOpen={handleWorkspaceMaterialOpen}
+                  unlockAllTopics={user.activePlanTier === "plus" || user.activePlanTier === "pro"}
                 />
               )
             ) : (

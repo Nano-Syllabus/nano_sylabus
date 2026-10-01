@@ -11,7 +11,7 @@ const manrope = Manrope({ subsets: ["latin"], display: "swap" });
 function Brand({ logoUrl = "" }: { logoUrl?: string }) {
   if (logoUrl) {
     return (
-      <Link href="/" className="inline-flex items-center" aria-label="Home">
+      <Link href="/" data-landing-section="brand" className="inline-flex items-center" aria-label="Home">
         {/* A site's own uploaded logo, of any size or host: a plain img, sized by height. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={logoUrl} alt="" className="h-[38px] w-auto max-w-[200px] object-contain" />
@@ -21,6 +21,7 @@ function Brand({ logoUrl = "" }: { logoUrl?: string }) {
   return (
     <Link
       href="/"
+      data-landing-section="brand"
       className="inline-flex items-center text-[#1c1e1a] group"
       aria-label="NanoSyllabus home"
     >
@@ -119,7 +120,7 @@ export function LandingView({
       </a>
 
       {/* ── Top Navigation Bar ── */}
-      <header className="border-b border-[#e5e8df] bg-[#fafbf7]/90 backdrop-blur-md sticky top-0 z-40">
+      <header data-landing-section="nav" className="border-b border-[#e5e8df] bg-[#fafbf7]/90 backdrop-blur-md sticky top-0 z-40">
         <div className="mx-auto flex h-[84px] max-w-[1320px] items-center justify-between px-5 2xl:px-0">
           <Brand logoUrl={brand.logoUrl} />
           <nav

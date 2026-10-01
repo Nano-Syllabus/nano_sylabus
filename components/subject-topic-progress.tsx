@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Target } from "lucide-react";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
 import { unitsStartAtOne } from "@/lib/unit-numbering";
@@ -47,13 +51,43 @@ function TopicProgressRing({ percentage }: { percentage: number | null }) {
 }
 
 
-export function SubjectTopicProgress({ insight, courseId, subjectSlug, communitySlug }: {
+const actionClass =
+  "shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-success hover:bg-success/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success disabled:cursor-wait disabled:opacity-60";
+
+export function SubjectTopicProgress({ insight, courseId, subjectSlug, communitySlug, unlockAll = false }: {
   insight?: CommunitySubjectExplorerInsight;
   courseId?: string | null;
   subjectSlug?: string | null;
   communitySlug?: string;
+  /** Plus and Pro: every unpractised topic can be started, not only the next one. */
+  unlockAll?: boolean;
 }) {
-  const firstRed = insight?.topics.findIndex((topic) => (topic.percentage ?? 0) < 40) ?? -1;
+  const router = useRouter();
+  const [starting, setStarting] = useState<string | null>(null);
+  const [startError, setStartError] = useState("");
+  // Any practised topic (a score at all) is revisable. On Free only the first
+  // unpractised topic can be started, the queue's order; Plus/Pro start any.
+  const practised = (topic: CommunitySubjectExplorerInsight["topics"][number]) => (topic.percentage ?? 0) > 0;
+  const firstUnpractised = insight?.topics.findIndex((topic) => !practised(topic)) ?? -1;
+  async function startTopic(topic: CommunitySubjectExplorerInsight["topics"][number]) {
+    setStarting(topic.key);
+    setStartError("");
+    try {
+      const response = await fetch("/api/student/revision/start-topic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId, subjectSlug, topicKey: topic.key }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { challengeId?: string; error?: string };
+      if (!response.ok || !payload.challengeId) {
+        throw new Error(payload.error || "Could not start this topic. Try again.");
+      }
+      router.push(`/app/challenges?challenge=${encodeURIComponent(payload.challengeId)}`);
+    } catch (cause) {
+      setStartError(cause instanceof Error ? cause.message : "Could not start this topic. Try again.");
+      setStarting(null);
+    }
+  }
   function actionHref(topic: CommunitySubjectExplorerInsight["topics"][number], revise: boolean) {
     const params = new URLSearchParams({ courseId: courseId!, subject: subjectSlug!, topic: topic.key, topicTitle: topic.title });
     if (communitySlug) params.set("community", communitySlug);
@@ -88,16 +122,25 @@ export function SubjectTopicProgress({ insight, courseId, subjectSlug, community
                   </p>
                 ) : null}
               </div>
-              {courseId && subjectSlug && ((topic.percentage ?? 0) >= 70 || index === firstRed) ? (
-                <Link href={actionHref(topic, (topic.percentage ?? 0) >= 70)}
-                  className="shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-success hover:bg-success/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success">
-                  {(topic.percentage ?? 0) >= 70 ? "Revise" : "Start"}
-                </Link>
+              {!courseId || !subjectSlug ? (
+                <span className="shrink-0 px-3 text-xs text-text-muted">Locked</span>
+              ) : practised(topic) ? (
+                <Link href={actionHref(topic, true)} className={actionClass}>Revise</Link>
+              ) : index === firstUnpractised ? (
+                <Link href={actionHref(topic, false)} className={actionClass}>Start</Link>
+              ) : unlockAll ? (
+                <button type="button" className={actionClass} disabled={starting !== null}
+                  onClick={() => void startTopic(topic)}>
+                  {starting === topic.key ? "Starting…" : "Start"}
+                </button>
               ) : (
                 <span className="shrink-0 px-3 text-xs text-text-muted">Locked</span>
               )}
             </div>
           ))}
+          {startError ? (
+            <p role="alert" className="py-3 text-xs text-destructive">{startError}</p>
+          ) : null}
         </div>
       ) : (
         <div className="mt-3 rounded-xl border border-dashed border-border bg-bg-secondary p-8 text-center">

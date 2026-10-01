@@ -375,10 +375,10 @@ export function BillingPageClient({
             price={formatPlanPrice(plans.plus, billingMonths, 450)}
             includes={PLAN_COPY.plus.description}
             features={[...PLAN_COPY.plus.fallbackFeatures]}
-            actionLabel={plusIsCurrent ? "Current plan" : "Choose Plus"}
+            actionLabel={plusIsCurrent ? "Current plan" : proIsCurrent ? "Included in your plan" : "Choose Plus"}
             loading={creatingPlanId === plans.plus?.id}
             onAction={() => startPlan(plans.plus)}
-            disabled={plusIsCurrent}
+            disabled={plusIsCurrent || proIsCurrent}
             current={plusIsCurrent}
             accessEndsAt={plusIsCurrent ? activeSubscription?.endsAt : null}
             featured
@@ -698,7 +698,7 @@ function PricingCard({
           type="button"
           className={cn(
             "flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-text-primary px-4 py-2 text-sm font-semibold text-text-inverse transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-bg-tertiary disabled:text-text-muted disabled:opacity-100",
-            featured && !current && "bg-[#3548f5] !text-white",
+            featured && !current && !disabled && "bg-[#3548f5] !text-white",
             current && "bg-[#e8f6ee] text-[#187a42] dark:bg-emerald-500/15 dark:text-emerald-300",
           )}
           onClick={onAction}

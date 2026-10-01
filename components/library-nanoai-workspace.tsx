@@ -80,7 +80,10 @@ const focusRing =
 const libraryPageClass = "student-page-frame min-h-full flex-1 bg-bg-primary text-text-primary";
 const libraryPanelClass = "min-w-0 rounded-2xl border border-border bg-card p-5";
 const subjectCardClass =
-  "group flex min-h-[96px] w-full items-center rounded-2xl border bg-card p-4 text-left transition-colors sm:w-52";
+  "group flex min-h-[96px] w-full items-center rounded-2xl border bg-card p-4 text-left transition-colors";
+/** Cards share the full row: as many ~13rem columns as fit, each stretched to fill. */
+const subjectGridClass =
+  "mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] sm:gap-3.5";
 const materialRowClass =
   "group flex min-h-20 w-full items-center gap-3 rounded-2xl bg-bg-secondary px-4 py-4 text-left transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none";
 /** Placeholder fill is `bg-border`: `bg-bg-secondary` vanishes inside the cards,
@@ -324,12 +327,15 @@ export function LibraryNanoAiWorkspace({
   initialSelection,
   onSubjectSelect,
   onMaterialOpen,
+  unlockAllTopics = false,
 }: {
   community: CommunityDetail | null;
   insights: Record<string, CommunitySubjectExplorerInsight>;
   initialSelection: LibraryNanoAiSelection;
   onSubjectSelect: (subject: LibraryNanoAiSubject) => void;
   onMaterialOpen: (material: LibraryNanoAiMaterial, subject: LibraryNanoAiSubject) => void;
+  /** Plus and Pro start any topic; the start-topic route checks again. */
+  unlockAllTopics?: boolean;
 }) {
   const orderedTerms = useMemo(
     () => [...(community?.terms ?? [])].sort((a, b) => a.position - b.position),
@@ -605,7 +611,7 @@ export function LibraryNanoAiWorkspace({
           </h2>
         </div>
         {selectedTerm && visibleSubjects.length ? (
-          <div className="mt-3 flex flex-wrap gap-3 sm:gap-3.5">
+          <div className={subjectGridClass}>
             {visibleSubjects.map((subject) => {
               const active = selectedSubject?.id === subject.id;
               return (
@@ -810,6 +816,7 @@ export function LibraryNanoAiWorkspace({
               courseId={community?.studyCourseId}
               subjectSlug={selectedSubject.externalSubjectSlug}
               communitySlug={community?.slug}
+              unlockAll={unlockAllTopics}
             />
           ) : (
             <>
@@ -854,7 +861,7 @@ export function LibraryWorkspaceSkeleton() {
 
       <section className="mt-7">
         <h2 className="type-student-section-title text-text-primary">2. Choose Subject</h2>
-        <div className="mt-3 flex flex-wrap gap-3 sm:gap-3.5">
+        <div className={subjectGridClass}>
           {Array.from({ length: 4 }).map((_, index) => (
             <div key={index} className={cn(subjectCardClass, "border-border")}>
               <div className="flex min-w-0 flex-1 items-center gap-3">
