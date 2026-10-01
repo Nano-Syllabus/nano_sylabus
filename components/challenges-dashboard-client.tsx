@@ -1,5 +1,6 @@
 "use client";
 
+import { calculateExamReadiness } from "@/lib/exam-readiness";
 import { publishNanoAiTopic } from "@/lib/nanoai-topic";
 import { unitShownAlone } from "@/lib/unit-numbering";
 import {
@@ -2143,6 +2144,7 @@ export function ChallengesDashboardClient({
     }
     return byKey;
   }, [dashboard.subjects]);
+  const examReadiness = calculateExamReadiness(dashboard.subjects);
   const weeklyProgress = Math.min(100, (dashboard.passedThisWeek / WEEKLY_CHALLENGE_TARGET) * 100);
   const weeklyLeaderTotal = Math.round((dashboard.leaderboard?.topPracticePerDay ?? 0) * 7);
   const challengesBehind = Math.max(0, weeklyLeaderTotal - dashboard.passedThisWeek);
@@ -2377,7 +2379,7 @@ export function ChallengesDashboardClient({
 
         <StarterChallengeBanner dashboard={dashboard} />
 
-        {/* 3 Metrics Cards */}
+        {/* Summary metrics */}
         <section
           className={`${hubMetricsClass} challenge-hub-reveal challenge-hub-reveal-delay-1`}
           aria-label="Challenge summary metrics"
@@ -2446,6 +2448,14 @@ export function ChallengesDashboardClient({
             <p className="type-student-metric mt-2 text-text-primary">
               {Math.max(0, dashboard.passedThisWeek / 7).toFixed(1)}
             </p>
+          </article>
+          <article className={hubMetricCardClass}>
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">EXAM READINESS</p>
+            <p className="type-student-metric mt-2 text-text-primary">{Math.round(examReadiness)}%</p>
+            <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-bg-tertiary" aria-hidden="true">
+              <div className="h-full rounded-full bg-[#84cc16]" style={{ width: `${examReadiness}%` }} />
+            </div>
+            <p className="mt-2 text-xs text-text-muted">Average progress across {dashboard.subjects.length} subjects</p>
           </article>
         </section>
 

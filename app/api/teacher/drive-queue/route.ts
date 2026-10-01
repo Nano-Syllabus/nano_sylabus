@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { reconcileDriveIndexes } from "@/lib/teacher-index-reconcile";
+import { after, NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import {
   clearFinishedDriveImports,
@@ -35,11 +36,15 @@ export const maxDuration = 300;
 export async function GET() {
   const teacher = await getTeacherProfile();
   if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  await reconcileDriveIndexes(teacher.collection_sk, teacher.id);
   const { items, unavailable } = await listDriveImports(teacher.id);
+  if (items.some((item) => ["queued", "retry_wait"].includes(item.status))) {
+    after(() => drainDriveQueue(teacher.collection_sk, teacher.id).then(() => undefined));
+  }
   return NextResponse.json({
     items,
     unavailable,
-    pending: items.filter((item) => item.status === "queued" || item.status === "importing").length,
+    pending: items.filter((item) => ["queued", "importing", "indexing", "retry_wait"].includes(item.status)).length,
   });
 }
 
@@ -87,9 +92,9 @@ export async function POST(request: Request) {
     // this one never runs. Awaiting it would hold the response for the length of
     // the import the creator just asked to happen in the background.
     if (retried) {
-      void drainDriveQueue(teacher.collection_sk, teacher.id).catch((cause) => {
+      after(() => drainDriveQueue(teacher.collection_sk, teacher.id).then(() => undefined).catch((cause) => {
         console.error("Drive queue drain (retry) error:", cause);
-      });
+      }));
     }
     const { items } = await listDriveImports(teacher.id);
     return NextResponse.json({ items, retried });

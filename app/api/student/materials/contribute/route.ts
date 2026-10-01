@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server";
+import { completeContribution, listPendingContributions, drainContributions } from "@/lib/data/material-contribution-queue";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  completeContribution,
   ContributionError,
-  listPendingContributions,
   prepareContribution,
 } from "@/lib/data/material-contributions";
 import { getStudentCourseSubjectAccessCached } from "@/lib/student-courses";
@@ -12,8 +11,7 @@ import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { withUsageCommunity } from "@/lib/usage-community";
 
 export const dynamic = "force-dynamic";
-// Triage is seconds; an accepted file is then indexed before this answers,
-// which on a long scan is minutes.
+// The response only queues a saved file. after() runs a bounded background drain.
 export const maxDuration = 300;
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0" };
@@ -56,6 +54,7 @@ async function handleGET(request: Request) {
     subject,
   ).catch(() => null);
   if (!access) return NextResponse.json({ pending: [] }, { headers: NO_STORE });
+  after(() => drainContributions(user.id).catch((error) => console.error("Contribution recovery failed", error)));
   return NextResponse.json(
     { pending: await listPendingContributions(user.id, access) },
     { headers: NO_STORE },
@@ -110,6 +109,7 @@ async function handlePOST(request: Request) {
       storagePath: input.storagePath,
       fileName: input.fileName,
     });
+    after(() => drainContributions(user.id).catch((error) => console.error("Contribution worker failed", error)));
     return NextResponse.json(verdict, { headers: NO_STORE });
   } catch (error) {
     if (error instanceof ContributionError) {

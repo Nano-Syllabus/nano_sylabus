@@ -214,8 +214,8 @@ function indexingJobState(payload: ApiRecord): "pending" | "complete" | "error" 
       status,
     )
   )
-    return "complete";
-  if (["failed", "error", "cancelled", "canceled"].includes(status)) return "error";
+    return numberValue(job.chunks_indexed ?? payload.chunks_indexed) > 0 ? "complete" : "error";
+  if (["failed", "error", "cancelled", "canceled", "expired"].includes(status)) return "error";
   return "pending";
 }
 
@@ -278,16 +278,15 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
         : "Other";
     const rawStatus = text(document.status).toLowerCase();
     const status: TeacherDocument["status"] =
-      document.indexed ||
-      ["ok", "ready", "indexed", "complete", "completed", "success"].includes(rawStatus)
+      numberValue(document.chunk_count || document.chunks_indexed || document.chunks) > 0
         ? "ready"
         : // `empty` is the indexer's verdict that there was nothing readable in
           // the file. It is an outcome, not a stage, and waiting will not change
           // it — so it belongs with the failures.
-          ["failed", "error", "cancelled", "canceled", "empty"].includes(rawStatus)
+          ["failed", "error", "cancelled", "canceled", "empty", "expired"].includes(rawStatus)
           ? "error"
           : // Only a status that NAMES work in progress reads as in progress.
-            ["queued", "running", "processing", "pending", "indexing"].includes(rawStatus)
+            ["queued", "running", "processing", "pending", "indexing", "retry_wait"].includes(rawStatus)
             ? "processing"
             : "unindexed";
     return [
@@ -302,6 +301,9 @@ function normalizeWorkspace(payload: ApiRecord): Workspace {
         shelf,
         sizeBytes: numberValue(document.size_bytes || document.size),
         status,
+        queuedAt: numberValue(document.queued_at) * 1000 || undefined,
+        indexingStartedAt: numberValue(document.indexing_started_at) * 1000 || undefined,
+        indexingDetail: text(document.indexing_detail),
         chunks: numberValue(document.chunk_count || document.chunks_indexed || document.chunks),
         previewAvailable: previewPaths.has(path) || previewPaths.has(id),
       },
@@ -517,13 +519,13 @@ function UploadActivityList({
       key: entry.jobId,
       name: entry.fileName,
       state: entry.state as UploadActivity["state"] | TeacherDocument["status"],
-      detail: new Date(entry.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      detail: new Date(entry.at).toLocaleString(),
     })),
     ...pending.map((document) => ({
       key: document.path,
       name: document.name,
       state: document.status as UploadActivity["state"] | TeacherDocument["status"],
-      detail: document.shelf === "Other" ? "" : document.shelf,
+      detail: [document.queuedAt ? `Queued: ${new Date(document.queuedAt).toLocaleString()}` : "", document.indexingStartedAt ? `Started: ${new Date(document.indexingStartedAt).toLocaleString()}` : "", document.indexingDetail].filter(Boolean).join(" · "),
     })),
   ];
 

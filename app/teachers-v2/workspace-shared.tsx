@@ -38,6 +38,9 @@ export type TeacherSubject = {
 };
 
 export type TeacherDocument = {
+  queuedAt?: number;
+  indexingStartedAt?: number;
+  indexingDetail?: string;
   id: string;
   name: string;
   path: string;
@@ -239,9 +242,12 @@ export type DriveQueueItem = {
   /** The link this file was pasted from. Carried to the browser so a failed row
    *  can offer the creator the way back to it, not only the retry button. */
   sourceLink: string;
-  status: "queued" | "importing" | "done" | "failed";
+  status: "queued" | "importing" | "indexing" | "retry_wait" | "done" | "failed" | "expired";
   error: string;
   warning: string;
+  queuedAt: string;
+  startedAt: string;
+  finishedAt: string;
 };
 
 export function toQueueItem(value: unknown): DriveQueueItem {
@@ -253,11 +259,14 @@ export function toQueueItem(value: unknown): DriveQueueItem {
     shelf: text(record.shelf),
     destinationPath: text(record.destinationPath),
     sourceLink: text(record.sourceLink),
-    status: (["queued", "importing", "done", "failed"].includes(status)
+    status: (["queued", "importing", "indexing", "retry_wait", "done", "failed", "expired"].includes(status)
       ? status
       : "queued") as DriveQueueItem["status"],
     error: text(record.error),
     warning: text(record.warning),
+    queuedAt: text(record.queuedAt) || text(record.createdAt),
+    startedAt: text(record.indexingStartedAt),
+    finishedAt: text(record.finishedAt),
   };
 }
 
@@ -362,7 +371,7 @@ export function DriveImportQueue({
         if (missing) return; // Nothing to poll for on a deployment without the table.
 
         const pending = next.filter(
-          (item) => item.status === "queued" || item.status === "importing",
+          (item) => ["queued", "importing", "indexing", "retry_wait"].includes(item.status),
         ).length;
         const settled = next.length - pending;
         // Refresh the shelf only when something new actually landed, rather than
@@ -373,7 +382,7 @@ export function DriveImportQueue({
         if (pending) {
           // Two quiet rounds with work still queued means no drain is running —
           // its function was cut short, or the enqueue's never started. Start one.
-          idleRounds = next.some((item) => item.status === "importing") ? 0 : idleRounds + 1;
+          idleRounds += 1;
           if (idleRounds >= 2) {
             nudgeDriveQueue();
             idleRounds = 0;
@@ -468,9 +477,9 @@ export function DriveImportQueue({
   }
 
   const pending = items.filter(
-    (item) => item.status === "queued" || item.status === "importing",
+    (item) => ["queued", "importing", "indexing", "retry_wait"].includes(item.status),
   ).length;
-  const failedIds = items.filter((item) => item.status === "failed").map((item) => item.id);
+  const failedIds = items.filter((item) => ["failed", "expired"].includes(item.status)).map((item) => item.id);
   const failed = failedIds.length;
   const indexed = items.filter((item) => item.status === "done").length;
   /**
@@ -482,11 +491,8 @@ export function DriveImportQueue({
    * bottom-up, and a failure sat wherever its file happened to be queued. The
    * queue runs oldest first (see `claim_teacher_drive_import`), hence the reverse.
    */
-  const rank = { importing: 0, queued: 1, failed: 2, done: 3 } as const;
-  const ordered = [
-    ...items.filter((item) => item.status === "importing" || item.status === "queued").reverse(),
-    ...items.filter((item) => item.status === "failed" || item.status === "done"),
-  ].sort((a, b) => rank[a.status] - rank[b.status]);
+  const rank = { importing: 0, indexing: 1, queued: 2, retry_wait: 3, failed: 4, expired: 5, done: 6 } as const;
+  const ordered = [...items].sort((a, b) => rank[a.status] - rank[b.status] || a.queuedAt.localeCompare(b.queuedAt));
 
   return (
     <section
@@ -512,14 +518,14 @@ export function DriveImportQueue({
                   "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs",
                   item.status === "done"
                     ? "bg-success/15 text-success"
-                    : item.status === "failed"
+                    : ["failed", "expired"].includes(item.status)
                       ? "bg-destructive/15 text-destructive"
                       : "bg-border text-text-muted",
                 )}
               >
                 {item.status === "done" ? (
                   "✓"
-                ) : item.status === "failed" ? (
+                ) : ["failed", "expired"].includes(item.status) ? (
                   "!"
                 ) : item.status === "importing" ? (
                   <span className="size-3.5 animate-spin rounded-full border-2 border-text-muted border-t-transparent motion-reduce:animate-none" />
@@ -529,18 +535,12 @@ export function DriveImportQueue({
               </span>
               <span className="min-w-0 flex-1 truncate text-sm">{item.fileName}</span>
               <span className="shrink-0 text-xs text-text-muted">
-                {item.status === "queued"
-                  ? "Queued"
-                  : item.status === "importing"
-                    ? "Importing…"
-                    : item.status === "done"
-                      ? "Indexed"
-                      : "Failed"}
+                {{ queued: "Queued", importing: "Saving file…", indexing: item.startedAt ? "Indexing…" : "Queued for indexing", retry_wait: "Waiting to retry", done: "Indexed", failed: "Needs retry", expired: "Expired" }[item.status]}
               </span>
               {/* A timeout and a half-finished index say nothing about the file,
                   only about the run — so the row that reports one also offers
                   another go, rather than sending the creator back to the link. */}
-              {item.status === "failed" ? (
+              {["failed", "expired"].includes(item.status) ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -553,8 +553,13 @@ export function DriveImportQueue({
                 </Button>
               ) : null}
             </div>
+            <div className="mt-1 space-y-0.5 pl-9 text-xs text-text-muted">
+              {item.queuedAt ? <p>Queued: <time dateTime={item.queuedAt}>{new Date(item.queuedAt).toLocaleString()}</time></p> : null}
+              {item.startedAt ? <p>Indexing started: <time dateTime={item.startedAt}>{new Date(item.startedAt).toLocaleString()}</time></p> : null}
+              {item.finishedAt ? <p>Finished: <time dateTime={item.finishedAt}>{new Date(item.finishedAt).toLocaleString()}</time></p> : null}
+            </div>
             {item.error ? <p className="mt-1 pl-9 text-xs text-destructive">{item.error}</p> : null}
-            {item.status === "failed" && item.sourceLink ? (
+            {["failed", "expired"].includes(item.status) && item.sourceLink ? (
               <p className="mt-1 pl-9 text-xs text-text-muted">
                 <a
                   href={item.sourceLink}
@@ -564,7 +569,7 @@ export function DriveImportQueue({
                 >
                   Open the Drive link
                 </a>{" "}
-                — Retry re-reads it, and pasting it above again works too.
+                — Retry uses the saved file when available.
               </p>
             ) : null}
             {item.warning ? (

@@ -1,0 +1,10 @@
+[Unit]
+Description=Keep document queues moving without an open browser
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

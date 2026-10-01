@@ -14,7 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import NepaliDateConverter from "nepali-date-converter";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   DailyActivityDay,
   DailyExamDate,
@@ -205,6 +205,35 @@ export function daysUntilExam(date: string, today: string) {
   return Math.round((exam - now) / 86_400_000);
 }
 
+function ExamDialog({ title, busy, onClose, children }: {
+  title: string;
+  busy: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    const previous = document.activeElement as HTMLElement | null;
+    dialog?.showModal();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog?.close();
+      document.body.style.overflow = overflow;
+      previous?.focus();
+    };
+  }, []);
+  return (
+    <dialog ref={ref} aria-label={title} aria-busy={busy}
+      onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}
+      className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-border bg-card p-5 text-text-primary shadow-xl backdrop:bg-black/60">
+      <h3 className="type-student-section-title">{title}</h3>
+      {children}
+    </dialog>
+  );
+}
+
 export function PracticeCalendar({
   initialDays,
   examDates,
@@ -354,10 +383,20 @@ export function PracticeCalendar({
     setDeleteTarget(null);
     setActiveMenuId(null);
     setExamFormOpen(true);
-    window.setTimeout(
-      () => formRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
-      0,
-    );
+
+  }
+
+  function selectCalendarDate(date: string) {
+    setSelectedDate(date);
+    setExamError("");
+    const exam = examByDate.get(date);
+    if (exam) {
+      setExamFormOpen(false);
+      setActiveMenuId(null);
+      setDeleteTarget(exam);
+    } else {
+      openNewExamForm(date);
+    }
   }
 
   function openEditExamForm(exam: DailyExamDate) {
@@ -374,10 +413,7 @@ export function PracticeCalendar({
     setVisibleBsMonth(examBs.month);
     setSelectedDate(exam.date);
 
-    window.setTimeout(
-      () => formRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
-      0,
-    );
+
   }
 
   function patchCachedExamDates(nextExamDates: DailyExamDate[]) {
@@ -643,6 +679,7 @@ export function PracticeCalendar({
 
       {/* ── Add / Edit Exam Form ── */}
       {examFormOpen ? (
+        <ExamDialog title={editingExamId ? "Edit exam" : "Add exam"} busy={examSaving} onClose={() => setExamFormOpen(false)}>
         <form
           ref={formRef}
           onSubmit={submitExamDate}
@@ -677,29 +714,26 @@ export function PracticeCalendar({
             htmlFor="exam-title-input"
             className="grid gap-1.5 text-xs font-semibold text-text-secondary"
           >
-            Subject or exam name
-            <input
+            Subject
+            <select
               id="exam-title-input"
-              type="text"
               value={examTitle}
               onChange={(event) => setExamTitle(event.target.value)}
-              placeholder="e.g. Engineering Mathematics"
-              list="exam-subject-options"
               autoComplete="off"
               required
-              maxLength={120}
               className={cn(
                 "min-h-11 rounded-xl border border-border bg-bg-tertiary px-3.5 text-sm font-normal text-text-primary shadow-xs placeholder:text-text-muted",
                 focusRing,
               )}
-            />
-            <datalist id="exam-subject-options">
+            >
+              <option value="">Select a subject</option>
+              {examTitle && !allSubjects.some((subject) => subject.name === examTitle) ? <option value={examTitle}>{examTitle}</option> : null}
               {allSubjects.map((subject) => (
-                <option key={subject.id} value={subject.name} />
+                <option key={subject.id} value={subject.name}>{subject.name}</option>
               ))}
-            </datalist>
+            </select>
             <span className="text-[11px] font-normal text-text-muted">
-              Choose a listed subject to show automatic readiness.
+              Choose the subject for this exam.
             </span>
           </label>
 
@@ -707,6 +741,7 @@ export function PracticeCalendar({
             <button
               type="button"
               onClick={() => setExamFormOpen(false)}
+              disabled={examSaving}
               className={cn(
                 "inline-flex min-h-10 cursor-pointer items-center rounded-xl border border-border px-4 text-xs font-semibold text-text-secondary transition hover:bg-bg-tertiary hover:text-text-primary",
                 focusRing,
@@ -732,7 +767,23 @@ export function PracticeCalendar({
               {examSaving ? "Saving…" : editingExamId ? "Update exam" : "Save exam"}
             </button>
           </div>
+          {examError ? <p role="alert" className="text-sm text-rose-600 sm:col-span-2">{examError}</p> : null}
+          {!allSubjects.length ? <p className="text-sm text-text-muted sm:col-span-2">No subjects available. Join a programme to schedule an exam.</p> : null}
         </form>
+        </ExamDialog>
+      ) : null}
+
+      {deleteTarget ? (
+        <ExamDialog title="Scheduled exam" busy={examSaving} onClose={() => setDeleteTarget(null)}>
+          <p className="mt-4 font-semibold">{deleteTarget.title}</p>
+          <p className="mt-1 text-sm text-text-secondary">{formatNepaliDate(adToBs(deleteTarget.date))} · {compactDate(deleteTarget.date)}</p>
+          {examError ? <p role="alert" className="mt-3 text-sm text-rose-600">{examError}</p> : null}
+          <div className="mt-6 flex flex-wrap justify-end gap-2">
+            <button type="button" disabled={examSaving} onClick={() => setDeleteTarget(null)} className="rounded-xl border border-border px-4 py-2 text-sm">Cancel</button>
+            <button type="button" disabled={examSaving} onClick={() => openEditExamForm(deleteTarget)} className="rounded-xl border border-border px-4 py-2 text-sm">Edit exam</button>
+            <button type="button" disabled={examSaving} onClick={() => void deleteExam(deleteTarget)} className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{examSaving ? "Deleting…" : "Delete exam"}</button>
+          </div>
+        </ExamDialog>
       ) : null}
 
       {examError ? (
@@ -811,7 +862,7 @@ export function PracticeCalendar({
                 <button
                   type="button"
                   key={`day-${dayNum}`}
-                  onClick={() => setSelectedDate(currentAdDateStr)}
+                  onClick={() => selectCalendarDate(currentAdDateStr)}
                   title={`${formatNepaliDate(currentBsDate)} (${compactDate(currentAdDateStr)})`}
                   className={cn(
                     "flex h-[52px] w-full cursor-pointer items-center justify-center overflow-hidden rounded-[10px] border border-border bg-bg-secondary transition hover:border-border-strong sm:h-[58px]",
@@ -849,12 +900,12 @@ export function PracticeCalendar({
             }
 
             // Today Cell (Blue border + dot + number + "आज" pill)
-            if (isToday) {
+            if (isToday && !exam) {
               return (
                 <button
                   type="button"
                   key={`day-${dayNum}`}
-                  onClick={() => setSelectedDate(currentAdDateStr)}
+                  onClick={() => selectCalendarDate(currentAdDateStr)}
                   title={`Today: ${formatNepaliDate(currentBsDate)} (${compactDate(currentAdDateStr)})`}
                   className={cn(
                     "relative flex h-[52px] w-full cursor-pointer flex-col items-center justify-center rounded-[10px] border-[1.5px] border-[#0066ff] bg-bg-tertiary shadow-xs transition sm:h-[58px]",
@@ -878,7 +929,7 @@ export function PracticeCalendar({
                 <button
                   type="button"
                   key={`day-${dayNum}`}
-                  onClick={() => setSelectedDate(currentAdDateStr)}
+                  onClick={() => selectCalendarDate(currentAdDateStr)}
                   title={`Exam: ${exam.title} on ${formatNepaliDate(currentBsDate)}`}
                   className={cn(
                     "relative flex h-[52px] w-full cursor-pointer flex-col items-center justify-center rounded-[10px] border border-rose-300 bg-rose-50 transition hover:bg-rose-100/60 dark:border-rose-400/35 dark:bg-rose-500/10 dark:hover:bg-rose-500/15 sm:h-[58px]",
@@ -901,7 +952,7 @@ export function PracticeCalendar({
               <button
                 type="button"
                 key={`day-${dayNum}`}
-                onClick={() => setSelectedDate(currentAdDateStr)}
+                onClick={() => selectCalendarDate(currentAdDateStr)}
                 title={`${formatNepaliDate(currentBsDate)} (${compactDate(currentAdDateStr)})`}
                 className={cn(
                   "relative flex h-[52px] w-full cursor-pointer flex-col items-center justify-center rounded-[10px] border border-border bg-bg-secondary transition hover:border-border-strong hover:bg-bg-tertiary hover:shadow-xs sm:h-[58px]",
@@ -1030,31 +1081,7 @@ export function PracticeCalendar({
                     </div>
                   </div>
 
-                  {/* Delete Confirmation Inline */}
-                  {deleteTarget?.id === exam.id && (
-                    <div className="mt-2.5 flex w-full items-center justify-between rounded-xl bg-rose-50 p-3 text-xs dark:bg-rose-500/10">
-                      <span className="font-semibold text-rose-800 dark:text-rose-200">
-                        Delete &ldquo;{exam.title}&rdquo;?
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(null)}
-                          className="cursor-pointer rounded-lg border border-border bg-bg-tertiary px-3 py-1 font-semibold text-text-secondary hover:text-text-primary"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void deleteExam(exam)}
-                          disabled={examSaving}
-                          className="rounded-lg bg-rose-600 px-3 py-1 font-semibold text-white hover:bg-rose-700 disabled:opacity-60 cursor-pointer"
-                        >
-                          {examSaving ? "Deleting…" : "Delete"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+
                 </div>
               );
             })}

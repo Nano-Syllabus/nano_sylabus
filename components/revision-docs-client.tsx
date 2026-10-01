@@ -2,7 +2,7 @@
 
 import { ArrowRight, BookOpen, Check, ChevronsUpDown, Lock, Menu, Search, X } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -885,6 +885,7 @@ export function RevisionDocsView({ community }: { community: string }) {
 }
 
 export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
+  const linkParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [navOpen, setNavOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -898,6 +899,14 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
   const prefetchTopic = usePrefetchRevisionTopic();
 
   const subjects = useMemo(() => listSubjects(docs.semesters), [docs.semesters]);
+  useEffect(() => {
+    const entry = subjects.find(({ subject }) => subject.courseId === linkParams.get("courseId") && subject.subjectSlug === linkParams.get("subject"));
+    const topic = entry?.subject.units.flatMap((unit) => unit.topics).find((topic) => topic.topicKey === linkParams.get("topic") || topic.title === linkParams.get("topicTitle"));
+    if (entry && topic && canOpen(topic)) {
+      setRememberedSubject(entry.key);
+      setSelectedId(topicId(topic));
+    }
+  }, [subjects, linkParams, setRememberedSubject]);
   // A remembered subject that is gone (left the community, another account on
   // this browser) falls back to the first one rather than an empty navigator.
   const active = subjects.find((entry) => entry.key === rememberedSubject) ?? subjects[0] ?? null;

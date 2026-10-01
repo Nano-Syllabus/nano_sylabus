@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Target } from "lucide-react";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
 import { unitsStartAtOne } from "@/lib/unit-numbering";
@@ -46,7 +47,18 @@ function TopicProgressRing({ percentage }: { percentage: number | null }) {
 }
 
 
-export function SubjectTopicProgress({ insight }: { insight?: CommunitySubjectExplorerInsight }) {
+export function SubjectTopicProgress({ insight, courseId, subjectSlug, communitySlug }: {
+  insight?: CommunitySubjectExplorerInsight;
+  courseId?: string | null;
+  subjectSlug?: string | null;
+  communitySlug?: string;
+}) {
+  const firstRed = insight?.topics.findIndex((topic) => (topic.percentage ?? 0) < 40) ?? -1;
+  function actionHref(topic: CommunitySubjectExplorerInsight["topics"][number], revise: boolean) {
+    const params = new URLSearchParams({ courseId: courseId!, subject: subjectSlug!, topic: topic.key, topicTitle: topic.title });
+    if (communitySlug) params.set("community", communitySlug);
+    return `${revise ? "/app/notes" : "/app/challenges"}?${params}`;
+  }
   const showUnits = unitsStartAtOne((insight?.topics ?? []).map((topic) => topic.unitNumber));
   return (
     <div>
@@ -76,6 +88,14 @@ export function SubjectTopicProgress({ insight }: { insight?: CommunitySubjectEx
                   </p>
                 ) : null}
               </div>
+              {courseId && subjectSlug && ((topic.percentage ?? 0) >= 70 || index === firstRed) ? (
+                <Link href={actionHref(topic, (topic.percentage ?? 0) >= 70)}
+                  className="shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-success hover:bg-success/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success">
+                  {(topic.percentage ?? 0) >= 70 ? "Revise" : "Start"}
+                </Link>
+              ) : (
+                <span className="shrink-0 px-3 text-xs text-text-muted">Locked</span>
+              )}
             </div>
           ))}
         </div>

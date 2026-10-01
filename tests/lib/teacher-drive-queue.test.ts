@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   claim: vi.fn(),
+  checkpoint: vi.fn(),
+  index: vi.fn(),
   complete: vi.fn(),
   fail: vi.fn(),
   download: vi.fn(),
@@ -12,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/data/teacher-drive-queue", () => ({
   claimNextDriveImport: mocks.claim,
+  checkpointDriveImport: mocks.checkpoint,
   completeDriveImport: mocks.complete,
   failDriveImport: mocks.fail,
 }));
@@ -19,7 +22,9 @@ vi.mock("@/lib/google-drive", async (original) => ({
   ...(await original<typeof import("@/lib/google-drive")>()),
   downloadDriveFile: mocks.download,
 }));
-vi.mock("@/lib/teacher-document-import", () => ({
+vi.mock("@/lib/teacher-app/client", () => ({ indexTeacherDocument: mocks.index }));
+vi.mock("@/lib/teacher-document-import", async (original) => ({
+  ...(await original<typeof import("@/lib/teacher-document-import")>()),
   indexedDocumentId: () => "doc-1",
   jobId: () => "job-1",
   safeFilename: (name: string) => name,
@@ -54,6 +59,7 @@ function item(overrides: Record<string, unknown> = {}) {
     jobId: "",
     createdAt: "2026-09-14T10:00:00.000Z",
     finishedAt: "",
+    claimedAt: "2026-10-01T10:00:00.000Z",
     ...overrides,
   };
 }
@@ -73,10 +79,11 @@ describe("draining the Drive import queue", () => {
       fileName: "notes.pdf",
       mimeType: "application/pdf",
     });
-    mocks.uploadAndIndex.mockResolvedValue({
-      upload: {},
-      index: {},
-      collectionPath: "Nims/Notes/notes.pdf",
+    mocks.checkpoint.mockResolvedValue(undefined);
+    mocks.index.mockResolvedValue({});
+    mocks.uploadAndIndex.mockImplementation(async (input) => {
+      await input.onUploaded?.("Nims/Notes/notes.pdf", {});
+      return { upload: {}, index: {}, collectionPath: "Nims/Notes/notes.pdf" };
     });
     mocks.savePreview.mockResolvedValue(undefined);
   });
@@ -88,12 +95,17 @@ describe("draining the Drive import queue", () => {
 
     expect(result).toEqual({ imported: 2, failed: 0 });
     expect(mocks.uploadAndIndex).toHaveBeenCalledTimes(2);
-    expect(mocks.complete).toHaveBeenCalledWith("row-1", {
-      documentId: "doc-1",
-      jobId: "job-1",
-      fileName: "notes.pdf",
-      warning: "",
-    });
+    expect(mocks.complete).toHaveBeenCalledWith(
+      "row-1",
+      {
+        documentId: "doc-1",
+        jobId: "job-1",
+        fileName: "notes.pdf",
+        warning: "",
+      },
+      1,
+      "2026-10-01T10:00:00.000Z",
+    );
     expect(mocks.fail).not.toHaveBeenCalled();
   });
 
@@ -104,11 +116,20 @@ describe("draining the Drive import queue", () => {
     const result = await drainDriveQueue("collection-secret", "teacher-1");
 
     expect(result).toEqual({ imported: 1, failed: 1 });
-    expect(mocks.fail).toHaveBeenCalledWith("row-1", "That file is not shared.", "notes.pdf");
+    expect(mocks.fail).toHaveBeenCalledWith(
+      "row-1",
+      "That file is not shared.",
+      "notes.pdf",
+      1,
+      true,
+      "2026-10-01T10:00:00.000Z",
+    );
     // The one behind it still landed — the whole point of a per-row verdict.
     expect(mocks.complete).toHaveBeenCalledWith(
       "row-2",
       expect.objectContaining({ documentId: "doc-1" }),
+      1,
+      "2026-10-01T10:00:00.000Z",
     );
   });
 
@@ -116,7 +137,6 @@ describe("draining the Drive import queue", () => {
     queue([item()]);
     mocks.validateDestination.mockResolvedValue(
       "Choose a folder inside one of this creator's subject shelves.",
-      "notes.pdf",
     );
 
     const result = await drainDriveQueue("collection-secret", "teacher-1");
@@ -129,6 +149,9 @@ describe("draining the Drive import queue", () => {
       "row-1",
       "Choose a folder inside one of this creator's subject shelves.",
       "notes.pdf",
+      1,
+      false,
+      "2026-10-01T10:00:00.000Z",
     );
   });
 
@@ -142,6 +165,8 @@ describe("draining the Drive import queue", () => {
     expect(mocks.complete).toHaveBeenCalledWith(
       "row-1",
       expect.objectContaining({ warning: expect.stringContaining("private preview") }),
+      1,
+      "2026-10-01T10:00:00.000Z",
     );
   });
 
@@ -165,6 +190,9 @@ describe("draining the Drive import queue", () => {
       "row-1",
       expect.stringContaining("course-pack.zip"),
       "course-pack.zip",
+      1,
+      false,
+      "2026-10-01T10:00:00.000Z",
     );
   });
 
@@ -176,7 +204,14 @@ describe("draining the Drive import queue", () => {
 
     expect(result).toEqual({ imported: 0, failed: 1 });
     expect(mocks.download).not.toHaveBeenCalled();
-    expect(mocks.fail).toHaveBeenCalledWith("row-1", expect.stringContaining("50 MB"), "notes.pdf");
+    expect(mocks.fail).toHaveBeenCalledWith(
+      "row-1",
+      expect.stringContaining("50 MB"),
+      "notes.pdf",
+      1,
+      false,
+      "2026-10-01T10:00:00.000Z",
+    );
   });
 
   it("still fetches when Drive reports no size, since 0 means unknown", async () => {
@@ -200,7 +235,9 @@ describe("draining the Drive import queue", () => {
       fileName: "Basic Electrical Engineering.pdf",
       mimeType: "application/pdf",
     });
-    mocks.uploadAndIndex.mockRejectedValue(new Error("The document service dropped the connection."));
+    mocks.uploadAndIndex.mockRejectedValue(
+      new Error("The document service dropped the connection."),
+    );
 
     await drainDriveQueue("collection-secret", "teacher-1");
 
@@ -208,6 +245,9 @@ describe("draining the Drive import queue", () => {
       "row-1",
       "The document service dropped the connection.",
       "Basic Electrical Engineering.pdf",
+      1,
+      true,
+      "2026-10-01T10:00:00.000Z",
     );
   });
 
@@ -217,6 +257,41 @@ describe("draining the Drive import queue", () => {
     const result = await drainDriveQueue("collection-secret", "teacher-1");
 
     expect(result).toEqual({ imported: 0, failed: 0 });
-    expect(mocks.claim).toHaveBeenCalledTimes(1);
+    expect(mocks.claim).toHaveBeenCalledTimes(3);
+  });
+  it("retries indexing the saved path without downloading or uploading again", async () => {
+    queue([item({ collectionPath: "Nims/Notes/saved.pdf", attempts: 2 })]);
+    await drainDriveQueue("collection-secret", "teacher-1");
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(mocks.uploadAndIndex).not.toHaveBeenCalled();
+    expect(mocks.index).toHaveBeenCalledWith("collection-secret", { path: "Nims/Notes/saved.pdf" });
+    expect(mocks.complete).toHaveBeenCalledWith(
+      "row-1",
+      expect.any(Object),
+      2,
+      "2026-10-01T10:00:00.000Z",
+    );
+  });
+
+  it("saves a checkpoint before admission to the indexing queue", async () => {
+    queue([item()]);
+    mocks.uploadAndIndex.mockImplementationOnce(async (input) => {
+      await input.onUploaded("Nims/Notes/saved.pdf", {});
+      throw Object.assign(new Error("Gemini unavailable"), { status: 503 });
+    });
+    await drainDriveQueue("collection-secret", "teacher-1");
+    expect(mocks.checkpoint).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "row-1" }),
+      "Nims/Notes/saved.pdf",
+    );
+    expect(mocks.savePreview).toHaveBeenCalled();
+    expect(mocks.fail).toHaveBeenCalledWith(
+      "row-1",
+      "Gemini unavailable",
+      "notes.pdf",
+      1,
+      true,
+      "2026-10-01T10:00:00.000Z",
+    );
   });
 });

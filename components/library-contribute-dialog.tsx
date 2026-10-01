@@ -19,13 +19,15 @@ export type ContributedMaterial = {
 };
 
 type Verdict = {
-  status: "accepted" | "rejected";
+  status: "accepted" | "rejected" | "queued";
   reason: string;
   matchedTopics: string[];
   pagesChecked: number[];
   pageCount: number;
   material?: ContributedMaterial;
 };
+
+type PendingItem = { name: string; storagePath: string; status: string; error: string; queuedAt: string; startedAt: string };
 
 type Phase =
   | { kind: "idle" }
@@ -79,7 +81,7 @@ export function LibraryContributeDialog({
 
   // Files already being checked from an earlier upload. Polled while any are
   // left; when one finishes the list behind the dialog is reloaded.
-  const [pending, setPending] = useState<Array<{ name: string; startedAt: string }>>([]);
+  const [pending, setPending] = useState<PendingItem[]>([]);
   const settledRef = useRef(onPendingSettled);
   settledRef.current = onPendingSettled;
   useEffect(() => {
@@ -94,14 +96,14 @@ export function LibraryContributeDialog({
           cache: "no-store",
         });
         const payload = (await response.json().catch(() => ({}))) as {
-          pending?: Array<{ name: string; startedAt: string }>;
+          pending?: PendingItem[];
         };
         if (cancelled) return;
         const next = Array.isArray(payload.pending) ? payload.pending : [];
         if (previous > next.length) settledRef.current?.();
         previous = next.length;
         setPending(next);
-        if (next.length) timer = window.setTimeout(poll, 5000);
+        if (next.some((item) => !["expired", "failed"].includes(item.status))) timer = window.setTimeout(poll, 5000);
       } catch {
         // No list is better than a broken dialog; the upload still works.
       }
@@ -111,7 +113,7 @@ export function LibraryContributeDialog({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [subject, courseId]);
+  }, [subject, courseId, phase.kind]);
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -131,6 +133,19 @@ export function LibraryContributeDialog({
       opener?.focus();
     };
   }, [onClose]);
+
+  async function retrySaved(item: PendingItem) {
+    setPhase({ kind: "checking" });
+    try {
+      const verdict = await readJson(await fetch("/api/student/materials/contribute", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete", subject, courseId, fileName: item.name, storagePath: item.storagePath }),
+      })) as unknown as Verdict;
+      setPhase({ kind: "done", verdict });
+    } catch (error) {
+      setPhase({ kind: "error", message: error instanceof Error ? error.message : "Could not retry. Your file is saved." });
+    }
+  }
 
   async function submit() {
     if (!file || busy) return;
@@ -216,12 +231,19 @@ export function LibraryContributeDialog({
 
         {pending.length && !busy ? (
           <div role="status" className="mt-5 rounded-2xl border border-border bg-bg-secondary p-4">
-            <p className="text-sm font-semibold text-text-primary">Still being checked</p>
+            <p className="text-sm font-semibold text-text-primary">Saved uploads</p>
             <ul className="mt-2 space-y-1.5">
               {pending.map((item) => (
-                <li key={`${item.name}:${item.startedAt}`} className="flex items-center gap-2 text-sm text-text-secondary">
-                  <LoaderCircle className="size-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                  <span className="min-w-0 truncate">{item.name}</span>
+                <li key={item.storagePath} className="text-sm text-text-secondary">
+                  <div className="flex items-center gap-2">
+                    {!["expired", "failed"].includes(item.status) ? <LoaderCircle className="size-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
+                    <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                    <span className="text-xs">{{ uploading: "Waiting for upload", queued: "Queued", checking: "Checking", retry_wait: "Waiting to retry", indexing: "Indexing", expired: "Expired", failed: "Needs retry" }[item.status as "queued"] || item.status}</span>
+                    {["expired", "failed"].includes(item.status) ? <button type="button" onClick={() => void retrySaved(item)} className="rounded border border-border px-2 py-1 text-xs font-semibold">Retry</button> : null}
+                  </div>
+                  <p className="mt-1 text-xs">Queued: {new Date(item.queuedAt).toLocaleString()}</p>
+                  {item.startedAt ? <p className="text-xs">Started: {new Date(item.startedAt).toLocaleString()}</p> : null}
+                  {item.error ? <p className="mt-1 text-xs">{item.error}</p> : null}
                 </li>
               ))}
             </ul>
@@ -236,20 +258,20 @@ export function LibraryContributeDialog({
             role="status"
             className={cn(
               "mt-5 rounded-2xl border p-4",
-              verdict.status === "accepted"
+              verdict.status !== "rejected"
                 ? "border-emerald-500/30 bg-emerald-500/10"
                 : "border-destructive/30 bg-destructive/10",
             )}
           >
             <div className="flex items-start gap-3">
-              {verdict.status === "accepted" ? (
+              {verdict.status !== "rejected" ? (
                 <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
               ) : (
                 <XCircle className="mt-0.5 size-5 shrink-0 text-destructive" aria-hidden="true" />
               )}
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-text-primary">
-                  {verdict.status === "accepted"
+                  {verdict.status === "queued" ? "File saved and queued" : verdict.status === "accepted"
                     ? "Added to Learning Resources"
                     : "Not added: this doesn't look like material for this subject"}
                 </p>

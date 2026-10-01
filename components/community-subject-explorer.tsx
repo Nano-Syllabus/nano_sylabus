@@ -200,7 +200,7 @@ function SubjectProgressModal({
             </dl>
 
             <div className="mt-7">
-              <SubjectTopicProgress insight={insight} />
+              <SubjectTopicProgress insight={insight} courseId={community.studyCourseId} subjectSlug={subject.externalSubjectSlug} communitySlug={community.slug} />
             </div>
           </div>
         </div>

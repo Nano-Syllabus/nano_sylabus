@@ -16,7 +16,7 @@ export const hubMainClass =
   "min-h-screen w-full bg-[#f8f9fa] dark:bg-bg-secondary text-text-primary";
 export const hubContainerClass = "mx-auto max-w-[1060px] px-4 sm:px-6 md:px-8 py-8 pb-24";
 export const hubTitleClass = "type-student-page-title mb-6 text-text-primary";
-export const hubMetricsClass = "mt-6 grid gap-4 md:grid-cols-3";
+export const hubMetricsClass = "mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4";
 export const hubMetricCardClass =
   "rounded-[20px] border border-[#e5e7eb] dark:border-border bg-white dark:bg-card p-6 shadow-[0_1px_3px_rgba(0,0,0,0.02)]";
 export const hubListCardClass =

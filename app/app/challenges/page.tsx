@@ -21,6 +21,8 @@ export default async function ChallengesPage({
     subject?: string;
     community?: string;
     challenge?: string;
+    topic?: string;
+    topicTitle?: string;
   }>;
 }) {
   const { user } = await requireOnboardedUser();
@@ -48,7 +50,12 @@ export default async function ChallengesPage({
   // topic started from Revision, or the queue's card on a subject that already
   // has one open (the hub shows one per subject), or another term's subject.
   // `getStudentChallenge` re-checks access.
-  const requestedChallengeId = String(params.challenge || "").trim();
+  const requestedChallengeId = String(params.challenge || "").trim() || (
+    params.topic ? dashboard.challenges.find((challenge) =>
+      challenge.subjectSlug === subjectSlug &&
+      (challenge.topicKey === params.topic || challenge.topicTitle === params.topicTitle)
+    )?.id ?? "" : ""
+  );
   if (
     requestedChallengeId &&
     !dashboard.challenges.some((challenge) => challenge.id === requestedChallengeId)

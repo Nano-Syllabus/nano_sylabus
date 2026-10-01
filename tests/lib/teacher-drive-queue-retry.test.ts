@@ -64,6 +64,7 @@ function fakeAdmin(respond: (op: Op) => { data?: unknown; error?: unknown }) {
       order: () => builder,
       limit: () => builder,
       single: async () => settle(),
+      maybeSingle: async () => settle(),
       then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
         Promise.resolve(settle()).then(resolve, reject),
     };
@@ -102,8 +103,8 @@ describe("retrying failed Drive imports", () => {
     expect(update?.filters).toMatchObject({
       id: "row-1",
       teacher_id: "teacher-1",
-      status: "failed",
     });
+    expect(update?.inFilters.status).toEqual(["failed", "expired"]);
   });
 
   it("retries every failure when no ids are given", async () => {
@@ -144,31 +145,18 @@ describe("retrying failed Drive imports", () => {
     });
   });
 
-  it("queuing a file again clears the failed row it replaces", async () => {
-    const ops = fakeAdmin((op) => (op.action === "insert" ? { data: { id: "row-9" } } : {}));
-
-    await enqueueDriveImports("teacher-1", [
-      {
-        driveFileId: "drive-file-aaaaaaaaaa",
-        fileName: "Data Communication.pdf",
-        mimeType: "application/pdf",
-        sizeBytes: 2048,
-        destinationPath: "Engineering Economics/Question Bank",
-        shelf: "Question Bank",
-        sourceLink: "https://drive.google.com/file/d/drive-file-aaaaaaaaaa/view",
-      },
-    ]);
-
-    // Pasting the link again is the other way to retry, and it must not leave
-    // the same document in the queue twice — once Failed, once Queued.
-    const cleared = ops[0];
-    expect(cleared.action).toBe("delete");
-    expect(cleared.filters).toMatchObject({
-      teacher_id: "teacher-1",
-      destination_path: "Engineering Economics/Question Bank",
-      status: "failed",
+  it("re-pasting a failed file keeps its uploaded path instead of deleting it", async () => {
+    let reads = 0;
+    const ops = fakeAdmin((op) => {
+      if (op.action === "select") {
+        reads += 1;
+        return { data: reads === 1 ? { id: "row-9", collection_path: "Notes/saved.pdf", status: "failed" } : [{ id: "row-9" }] };
+      }
+      return {};
     });
-    expect(cleared.inFilters.drive_file_id).toEqual(["drive-file-aaaaaaaaaa"]);
-    expect(ops[1].action).toBe("insert");
+    const result = await enqueueDriveImports("teacher-1", [{ driveFileId: "drive-file-aaaaaaaaaa", fileName: "Notes.pdf", mimeType: "application/pdf", sizeBytes: 2048, destinationPath: "Notes", shelf: "Notes", sourceLink: "https://drive.google.com/file/d/drive-file-aaaaaaaaaa/view" }]);
+    expect(result.queued[0].collectionPath).toBe("Notes/saved.pdf");
+    expect(ops.some((op) => op.action === "delete" || op.action === "insert")).toBe(false);
+    expect(ops.find((op) => op.action === "update")?.payload).not.toHaveProperty("collection_path");
   });
 });

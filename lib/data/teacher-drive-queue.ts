@@ -10,7 +10,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
  * next few minutes whether or not the tab is open.
  *
  * See supabase/migrations/20260914120000_teacher_drive_import_queue.sql for the
- * claim semantics — one worker per row, stale claims reclaimed, three strikes.
+ * claim semantics — one worker per row, stale leases reclaimed, 24-hour expiry.
  */
 
 /** Postgres codes for "the migration has not been run here". */
@@ -30,7 +30,14 @@ export function isMissingDriveQueue(error: { code?: string } | null) {
   );
 }
 
-export type DriveImportStatus = "queued" | "importing" | "done" | "failed";
+export type DriveImportStatus =
+  | "queued"
+  | "importing"
+  | "indexing"
+  | "retry_wait"
+  | "done"
+  | "failed"
+  | "expired";
 
 export type DriveImportItem = {
   id: string;
@@ -49,6 +56,12 @@ export type DriveImportItem = {
   jobId: string;
   createdAt: string;
   finishedAt: string;
+  queuedAt: string;
+  claimedAt: string;
+  indexingStartedAt: string;
+  collectionPath: string;
+  nextAttemptAt: string;
+  expiresAt: string;
 };
 
 export type DriveImportEnqueueInput = {
@@ -85,12 +98,18 @@ function toItem(row: QueueRow): DriveImportItem {
     jobId: text(row.job_id),
     createdAt: text(row.created_at),
     finishedAt: text(row.finished_at),
+    queuedAt: text(row.queued_at),
+    claimedAt: text(row.claimed_at),
+    indexingStartedAt: text(row.indexing_started_at),
+    collectionPath: text(row.collection_path),
+    nextAttemptAt: text(row.next_attempt_at),
+    expiresAt: text(row.expires_at),
   };
 }
 
 const COLUMNS =
   "id,drive_file_id,file_name,mime_type,size_bytes,destination_path,shelf,source_link," +
-  "status,attempts,error,warning,document_id,job_id,created_at,finished_at";
+  "status,attempts,error,warning,document_id,job_id,created_at,finished_at,queued_at,claimed_at,indexing_started_at,collection_path,next_attempt_at,expires_at";
 
 /**
  * Add files to the queue. Returns what is now queued for this creator.
@@ -107,38 +126,29 @@ export async function enqueueDriveImports(
   const admin = createSupabaseAdminClient();
   const queued: DriveImportItem[] = [];
 
-  /**
-   * A file being queued again REPLACES its own failed row.
-   *
-   * Re-pasting the link is the other way a creator retries — the one they reach
-   * for when the dialog has long since closed — and without this the queue then
-   * shows the same document twice, once Failed and once Queued, with no way to
-   * tell that the failure is the stale one. The partial unique index only covers
-   * rows still in flight, so the insert below would happily go through; it is
-   * the reading of it that would mislead.
-   */
-  const byPath = new Map<string, string[]>();
-  for (const item of items) {
-    const list = byPath.get(item.destinationPath) ?? [];
-    list.push(item.driveFileId);
-    byPath.set(item.destinationPath, list);
-  }
-  for (const [path, fileIds] of byPath) {
-    const { error } = await admin
-      .from("teacher_drive_imports")
-      .delete()
-      .eq("teacher_id", teacherId)
-      .eq("destination_path", path)
-      .eq("status", "failed")
-      .in("drive_file_id", fileIds);
-    if (isMissingDriveQueue(error)) return { queued: [], unavailable: true };
-    if (error) throw error;
-  }
-
   // One insert per row rather than one batch: a batch that trips the "already in
   // flight" index fails whole, which would turn one duplicate into nineteen
   // files that never got queued.
   for (const item of items) {
+    // Reuse a failed instruction rather than deleting its uploaded-file checkpoint.
+    const previous = await admin
+      .from("teacher_drive_imports")
+      .select(COLUMNS)
+      .eq("teacher_id", teacherId)
+      .eq("drive_file_id", item.driveFileId)
+      .eq("destination_path", item.destinationPath)
+      .in("status", ["failed", "expired"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (isMissingDriveQueue(previous.error)) return { queued: [], unavailable: true };
+    if (previous.error) throw previous.error;
+    if (previous.data) {
+      const saved = previous.data as unknown as QueueRow;
+      await retryDriveImports(teacherId, [text(saved.id)]);
+      queued.push({ ...toItem(saved), status: "queued" });
+      continue;
+    }
     const { data, error } = await admin
       .from("teacher_drive_imports")
       .insert({
@@ -174,6 +184,7 @@ export async function listDriveImports(
     target_teacher_id: teacherId,
   });
   if (isMissingDriveQueue(expired.error)) return { items: [], unavailable: true };
+  if (expired.error) throw expired.error;
 
   const { data, error } = await admin
     .from("teacher_drive_imports")
@@ -201,41 +212,60 @@ export async function claimNextDriveImport(teacherId: string): Promise<DriveImpo
 export async function completeDriveImport(
   id: string,
   outcome: { documentId: string; jobId: string; fileName: string; warning: string },
+  attempt?: number,
+  claimedAt?: string,
 ) {
   const admin = createSupabaseAdminClient();
   const { error } = await admin
     .from("teacher_drive_imports")
     .update({
-      status: "done",
-      error: "",
+      // Queue acceptance is not proof that any chunks exist yet.
+      status: outcome.jobId ? "indexing" : "failed",
+      error: outcome.jobId ? "" : "File saved, but indexing was not queued. Retry indexing.",
       warning: outcome.warning,
       document_id: outcome.documentId,
       job_id: outcome.jobId,
       // Drive only names the file once the bytes arrive on the keyless path, so
       // the row's name is corrected here rather than left as the placeholder.
       file_name: outcome.fileName,
-      finished_at: new Date().toISOString(),
+      finished_at: null,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("status", "importing")
+    .eq("attempts", attempt ?? 1)
+    .eq("claimed_at", claimedAt ?? "");
   if (!isMissingDriveQueue(error) && error) throw error;
 }
 
-export async function failDriveImport(id: string, message: string, fileName = "") {
+export async function failDriveImport(
+  id: string,
+  message: string,
+  fileName = "",
+  attempt = 1,
+  retryable = false,
+  claimedAt = "",
+) {
   const admin = createSupabaseAdminClient();
   const { error } = await admin
     .from("teacher_drive_imports")
     .update({
-      status: "failed",
+      status: retryable ? "retry_wait" : "failed",
+      next_attempt_at: new Date(
+        Date.now() + Math.min(900_000, 30_000 * 2 ** Math.min(attempt - 1, 5)),
+      ).toISOString(),
       error: message.slice(0, 500),
       // Whatever name the worker learned before failing, for the same reason
       // `completeDriveImport` corrects it: a failed row is the one a creator
       // most needs to recognise.
       ...(fileName ? { file_name: fileName } : {}),
-      finished_at: new Date().toISOString(),
+      finished_at: retryable ? null : new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("status", "importing")
+    .eq("attempts", attempt)
+    .eq("claimed_at", claimedAt);
   if (!isMissingDriveQueue(error) && error) throw error;
 }
 
@@ -248,9 +278,8 @@ export async function failDriveImport(id: string, message: string, fileName = ""
  * point — the failures worth retrying are timeouts and half-finished indexes,
  * and those are discovered long after the dialog has closed.
  *
- * `attempts` goes back to 0 deliberately. It is the strike count the claim
- * function reads, and a row that reached three strikes would otherwise be
- * ineligible for the very reclaim that a retry is asking for.
+ * A manual retry starts a new 24-hour activity. The claim timestamp fences off
+ * older workers even though the attempt counter resets.
  */
 export async function retryDriveImports(
   teacherId: string,
@@ -261,7 +290,7 @@ export async function retryDriveImports(
     .from("teacher_drive_imports")
     .select("id")
     .eq("teacher_id", teacherId)
-    .eq("status", "failed");
+    .in("status", ["failed", "expired"]);
   // No ids means "everything that failed" — the one-button retry on the panel.
   if (ids?.length) query = query.in("id", ids);
   const { data, error } = await query;
@@ -279,6 +308,11 @@ export async function retryDriveImports(
         attempts: 0,
         error: "",
         warning: "",
+        queued_at: new Date().toISOString(),
+        next_attempt_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+        indexing_started_at: null,
+        job_id: "",
         claimed_at: null,
         finished_at: null,
         updated_at: new Date().toISOString(),
@@ -288,7 +322,7 @@ export async function retryDriveImports(
       // Only from `failed`: a drain may have picked this row up between the read
       // above and here, and resetting a live import would hand it to a second
       // worker and upload the document twice.
-      .eq("status", "failed");
+      .in("status", ["failed", "expired"]);
     if (requeueError?.code === UNIQUE_VIOLATION) {
       // The same file is already in flight to the same folder — a re-pasted link
       // got there first. That import covers this row, so the stale failure goes
@@ -307,11 +341,36 @@ export async function retryDriveImports(
 /** Clear finished rows the creator has read. Failures are kept until asked. */
 export async function clearFinishedDriveImports(teacherId: string, includeFailed: boolean) {
   const admin = createSupabaseAdminClient();
-  const statuses = includeFailed ? ["done", "failed"] : ["done"];
+  const statuses = includeFailed ? ["done", "failed", "expired"] : ["done"];
   const { error } = await admin
     .from("teacher_drive_imports")
     .delete()
     .eq("teacher_id", teacherId)
     .in("status", statuses);
   if (!isMissingDriveQueue(error) && error) throw error;
+}
+
+/** Save the uploaded destination before queueing indexing, so a retry reuses it. */
+export async function checkpointDriveImport(item: DriveImportItem, path: string) {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("teacher_drive_imports")
+    .update({ collection_path: path, updated_at: new Date().toISOString() })
+    .eq("id", item.id)
+    .eq("status", "importing")
+    .eq("attempts", item.attempts)
+    .eq("claimed_at", item.claimedAt)
+    .select("id");
+  if (error) throw error;
+  if (!data?.length) throw new Error("Import lease expired; the uploaded file is still saved.");
+}
+
+/** Compare-and-set: an old poll must never overwrite a newer retry. */
+export async function updateDriveIndexState(item: DriveImportItem, patch: Record<string, unknown>) {
+  const { error } = await createSupabaseAdminClient()
+    .from("teacher_drive_imports")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", item.id)
+    .eq("job_id", item.jobId)
+    .eq("status", item.status);
+  if (error) throw error;
 }

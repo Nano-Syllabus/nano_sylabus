@@ -48,11 +48,9 @@ export function StarterChallengeBanner({
       </svg>
 
       <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-        <div className="max-w-xl">
-          <h2 id="starter-challenge-heading" className="type-student-page-title text-black">
-            One topic.
-            <br />
-            One small win.
+        <div className="min-w-0">
+          <h2 id="starter-challenge-heading" className="whitespace-nowrap font-display text-[clamp(1rem,3.2vw,2.25rem)] font-semibold tracking-tight text-black">
+            One topic. One small win.
           </h2>
 
           <div className="mt-2.5 max-w-md text-xs font-medium leading-relaxed text-black/80 sm:text-sm">
@@ -132,10 +130,9 @@ export function StarterChallengeBannerSkeleton() {
       className="relative mt-5 overflow-hidden rounded-[24px] border border-black/10 bg-[#cbf738] px-6 py-5 shadow-sm sm:px-8 sm:py-6 lg:px-9 lg:py-6"
       aria-hidden="true"
     >
-      <div className="relative min-h-[150px] lg:min-h-[164px] lg:max-w-[58%]">
+      <div className="relative min-h-[92px] lg:max-w-[58%]">
         <div>
-          <div className="h-8 w-40 rounded bg-black/15" />
-          <div className="mt-2 h-8 w-36 rounded bg-black/15" />
+          <div className="h-8 w-96 max-w-full rounded bg-black/15" />
           <div className="mt-4 h-4 w-64 max-w-full rounded bg-black/10" />
         </div>
       </div>

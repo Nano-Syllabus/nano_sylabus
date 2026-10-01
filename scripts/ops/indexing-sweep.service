@@ -1,0 +1,11 @@
+[Unit]
+Description=Recover and drain saved uploads and Drive imports
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/nano-syllabus/indexing-sweep.env
+ExecStart=/usr/local/bin/indexing-sweep
+TimeoutStartSec=320
+NoNewPrivileges=true
+PrivateTmp=true

@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   drainDriveQueue: vi.fn(),
 }));
 
+vi.mock("next/server", async (original) => ({ ...(await original<typeof import("next/server")>()), after: (work: () => unknown) => work() }));
+vi.mock("@/lib/teacher-index-reconcile", () => ({ reconcileDriveIndexes: vi.fn() }));
 vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile }));
 vi.mock("@/lib/data/teacher-drive-queue", () => ({
   listDriveImports: mocks.listDriveImports,

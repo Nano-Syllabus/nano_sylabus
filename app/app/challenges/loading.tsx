@@ -77,6 +77,10 @@ export default function ChallengesLoading() {
             </p>
             <div className={`mt-2 h-7 w-16 ${skeleton}`} />
           </article>
+          <article className={hubMetricCardClass}>
+            <p className="type-student-eyebrow text-text-muted">EXAM READINESS</p>
+            <div className={`mt-2 h-7 w-16 ${skeleton}`} />
+          </article>
         </section>
 
         <section className={hubListCardClass}>

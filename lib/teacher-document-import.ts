@@ -21,10 +21,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type ApiRecord = Record<string, unknown>;
 
-// Uploading the bytes is quick, but PDF/OCR indexing is currently synchronous in
-// the tenant service. Large notes and question banks routinely need longer than
-// the general API timeout, so keep this below the route's five-minute ceiling.
-const DOCUMENT_INDEX_TIMEOUT_MS = 270_000;
+// Index admission returns a job id; actual OCR runs on the durable backend queue.
+const DOCUMENT_INDEX_TIMEOUT_MS = 30_000;
 
 export class UpstreamUploadError extends Error {
   constructor(
@@ -138,13 +136,20 @@ export async function sendTenantRequest(
   headers: Record<string, string | number>,
   body: Buffer | string,
 ) {
+  const deadline = Date.now() + timeoutMs;
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await sendTenantRequestOnce(url, rejectUnauthorized, timeoutMs, headers, body);
+      const remaining = deadline - Date.now();
+      if (remaining <= 0)
+        throw new UpstreamUploadError(
+          "Document service timed out; the saved file can be retried.",
+          504,
+        );
+      return await sendTenantRequestOnce(url, rejectUnauthorized, remaining, headers, body);
     } catch (cause) {
       if (!isDroppedConnection(cause)) throw cause;
       const delay = DROPPED_CONNECTION_RETRY_DELAYS_MS[attempt];
-      if (delay === undefined) {
+      if (delay === undefined || Date.now() + delay >= deadline) {
         throw new UpstreamUploadError(
           "The document service dropped the connection. Retry in a minute — the file itself is fine.",
           502,
@@ -177,6 +182,15 @@ function sendTenantRequestOnce(
         let raw = "";
         response.setEncoding("utf-8");
         response.on("data", (chunk: string) => (raw += chunk));
+        response.on("aborted", () =>
+          reject(
+            new UpstreamUploadError(
+              "Document service response was interrupted; the saved file can be retried.",
+              502,
+            ),
+          ),
+        );
+        response.on("error", reject);
         response.on("end", () => {
           let parsed: unknown = {};
           try {
@@ -206,9 +220,15 @@ function sendTenantRequestOnce(
         });
       },
     );
-    request.setTimeout(timeoutMs, () => {
-      request.destroy(new Error(`Document service timed out after ${timeoutMs}ms.`));
-    });
+    const deadline = setTimeout(() => {
+      request.destroy(
+        new UpstreamUploadError(
+          "Document service is taking too long; the saved file can be retried.",
+          504,
+        ),
+      );
+    }, timeoutMs);
+    request.on("close", () => clearTimeout(deadline));
     request.on("error", reject);
     request.write(body);
     request.end();
@@ -222,6 +242,7 @@ export async function uploadAndIndex(input: {
   mimeType: string;
   path: string;
   metadata?: string;
+  onUploaded?: (collectionPath: string, upload: ApiRecord) => Promise<void>;
 }) {
   const { baseUrl, rejectUnauthorized, timeoutMs } = getTenantApiEnv();
   const uploadTimeoutMs = Math.max(timeoutMs, 180_000);
@@ -263,6 +284,7 @@ export async function uploadAndIndex(input: {
   if (!collectionPath) {
     throw new Error("The document uploaded, but its collection path was not returned.");
   }
+  await input.onUploaded?.(collectionPath, upload);
   const indexBody = JSON.stringify({ path: collectionPath });
   const index = await sendTenantRequest(
     new URL("/v1/collection/index-document", baseUrl),

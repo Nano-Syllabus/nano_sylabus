@@ -3,9 +3,10 @@ import { randomUUID } from "node:crypto";
 import { collectionKeyForTeacher } from "@/lib/data/challenge-collection-key";
 import { getTenantApiEnv } from "@/lib/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getTeacherPracticeTopics } from "@/lib/teacher-app/client";
+import { indexTeacherDocument, getTeacherPracticeTopics } from "@/lib/teacher-app/client";
 import {
   indexedDocumentId,
+  jobId,
   safeFilename,
   savePreview,
   sendTenantRequest,
@@ -38,7 +39,10 @@ export const CONTRIBUTED_FOLDER = "Community Contributed";
 const STAGING_BUCKET = "teacher-documents";
 
 export class ContributionError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
     super(message);
     this.name = "ContributionError";
   }
@@ -46,6 +50,7 @@ export class ContributionError extends Error {
 
 export type ContributionVerdict = {
   status: "accepted" | "rejected";
+  jobId?: string;
   reason: string;
   matchedTopics: string[];
   pagesChecked: number[];
@@ -94,6 +99,18 @@ export async function prepareContribution(
     .storage.from(STAGING_BUCKET)
     .createSignedUploadUrl(storagePath);
   if (error || !data?.token) throw new Error(error?.message || "Could not prepare the upload.");
+  const { error: queueError } = await createSupabaseAdminClient()
+    .from("material_contribution_jobs")
+    .insert({
+      user_id: userId,
+      teacher_id: access.teacherId,
+      course_id: access.courseId,
+      subject: access.subjectSlug,
+      file_name: name,
+      storage_path: storagePath,
+      status: "uploading",
+    });
+  if (queueError) throw queueError;
   return {
     bucket: STAGING_BUCKET,
     storagePath,
@@ -101,56 +118,6 @@ export async function prepareContribution(
     maxBytes: TEACHER_UPLOAD_MAX_BYTES,
     maxLabel: TEACHER_UPLOAD_MAX_LABEL,
   };
-}
-
-/** A staged file older than this is not being checked any more: the request
- *  that would check it is long past its 300s budget. */
-const PENDING_MAX_AGE_MS = 10 * 60_000;
-
-export type PendingContribution = { name: string; startedAt: string };
-
-/**
- * This student's files still being checked for this subject.
- *
- * There is no status row: a file is "being checked" exactly while its staged
- * copy exists, since `completeContribution` removes it once it has a verdict.
- * So a student who closed the tab mid-check, or opens the dialog on another
- * device, still sees the file instead of uploading it a second time.
- */
-export async function listPendingContributions(
-  userId: string,
-  access: StudentCourseSubjectAccess,
-): Promise<PendingContribution[]> {
-  const admin = createSupabaseAdminClient();
-  const prefix = stagingPrefix(access, userId).replace(/\/$/, "");
-  const { data, error } = await admin
-    .storage.from(STAGING_BUCKET)
-    .list(prefix, { limit: 50, sortBy: { column: "created_at", order: "desc" } });
-  if (error) return [];
-  const now = Date.now();
-  const recent = (data ?? []).filter((object) => {
-    const time = Date.parse(String(object.created_at || ""));
-    return object.name && Number.isFinite(time) && now - time <= PENDING_MAX_AGE_MS;
-  });
-  if (!recent.length) return [];
-  // An ACCEPTED file keeps its staged copy as its preview, so a staged file
-  // with a Library row is finished, not pending.
-  const { data: kept } = await admin
-    .from("teacher_document_files")
-    .select("storage_path")
-    .eq("teacher_id", access.teacherId)
-    .in(
-      "storage_path",
-      recent.map((object) => `${prefix}/${object.name}`),
-    );
-  const finished = new Set((kept ?? []).map((row) => String(row.storage_path || "")));
-  return recent.flatMap((object) => {
-    if (finished.has(`${prefix}/${object.name}`)) return [];
-    const startedAt = String(object.created_at || "");
-    // Staged as "<uuid>-<file name>".
-    const name = object.name.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i, "");
-    return [{ name, startedAt }];
-  });
 }
 
 /** Unit titles and their bullets: what "belongs to this subject" is checked against. */
@@ -162,7 +129,9 @@ async function microTopics(collectionKey: string, subjectSlug: string) {
     for (const topic of topics) {
       const title = String(topic.title || "").trim();
       if (title) titles.push(title);
-      const bullets = Array.isArray(topic.sub_topics) ? (topic.sub_topics as Record<string, unknown>[]) : [];
+      const bullets = Array.isArray(topic.sub_topics)
+        ? (topic.sub_topics as Record<string, unknown>[])
+        : [];
       for (const bullet of bullets) {
         const text = String(bullet.text || "").trim();
         if (text) titles.push(text);
@@ -186,7 +155,9 @@ async function triage(
   const { baseUrl, rejectUnauthorized } = getTenantApiEnv();
   const boundary = `----NanoTriage${randomUUID()}`;
   const field = (name: string, value: string) =>
-    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`);
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+    );
   const body = Buffer.concat([
     field("subject", subject),
     field("topics", JSON.stringify(topics)),
@@ -219,7 +190,13 @@ async function freeName(teacherId: string, folder: string, name: string) {
     .eq("teacher_id", teacherId)
     .ilike("collection_path", `${folder}/%`);
   const taken = new Set(
-    (data ?? []).map((row) => String(row.collection_path || "").split("/").pop()?.toLowerCase() ?? ""),
+    (data ?? []).map(
+      (row) =>
+        String(row.collection_path || "")
+          .split("/")
+          .pop()
+          ?.toLowerCase() ?? "",
+    ),
   );
   const stem = name.replace(/\.pdf$/i, "");
   let candidate = name;
@@ -229,20 +206,31 @@ async function freeName(teacherId: string, folder: string, name: string) {
   return candidate;
 }
 
-export async function completeContribution(
+export async function processContribution(
   userId: string,
   access: StudentCourseSubjectAccess,
-  input: { storagePath: string; fileName: string },
+  input: {
+    storagePath: string;
+    fileName: string;
+    verdict?: Record<string, unknown> | null;
+    collectionPath?: string;
+    onTriaged?: (verdict: Record<string, unknown>) => Promise<void>;
+    onUploaded?: (path: string) => Promise<void>;
+  },
 ): Promise<ContributionVerdict> {
   const admin = createSupabaseAdminClient();
   const name = safeFilename(input.fileName.trim());
   if (!input.storagePath.startsWith(stagingPrefix(access, userId)) || !isPdfName(name)) {
     throw new ContributionError("Invalid upload.", 400);
   }
-  const discard = () => admin.storage.from(STAGING_BUCKET).remove([input.storagePath]).then(
-    () => undefined,
-    () => undefined,
-  );
+  const discard = () =>
+    admin.storage
+      .from(STAGING_BUCKET)
+      .remove([input.storagePath])
+      .then(
+        () => undefined,
+        () => undefined,
+      );
 
   const download = await admin.storage.from(STAGING_BUCKET).download(input.storagePath);
   if (download.error || !download.data) {
@@ -257,7 +245,6 @@ export async function completeContribution(
 
   const collectionKey = await collectionKeyForTeacher(access.teacherId);
   if (!collectionKey) {
-    await discard();
     throw new ContributionError("This subject's library isn't ready for uploads yet.", 409);
   }
   // THE SLUG, as every other upstream call: display names drift.
@@ -266,9 +253,10 @@ export async function completeContribution(
 
   let verdict: Record<string, unknown>;
   try {
-    verdict = await triage(collectionKey, access.subjectName || subjectSlug, topics, name, buffer);
+    verdict =
+      input.verdict ??
+      (await triage(collectionKey, access.subjectName || subjectSlug, topics, name, buffer));
   } catch (error) {
-    await discard();
     const status = (error as { status?: number })?.status;
     if (status === 422 && error instanceof Error) throw new ContributionError(error.message, 422);
     throw new ContributionError("The file couldn't be checked right now. Try again shortly.", 502);
@@ -281,7 +269,6 @@ export async function completeContribution(
     pageCount: Number(verdict.page_count || 0),
   };
   if (verdict.status === "error") {
-    await discard();
     throw new ContributionError(summary.reason || "The file couldn't be checked right now.", 502);
   }
   if (verdict.status !== "accepted") {
@@ -289,21 +276,40 @@ export async function completeContribution(
     return { status: "rejected", ...summary };
   }
 
+  await input.onTriaged?.(verdict);
   const folder = contributedFolder(access);
-  const finalName = await freeName(access.teacherId, folder, name);
+  const finalName =
+    input.collectionPath?.split("/").pop() || (await freeName(access.teacherId, folder, name));
   try {
-    const result = await uploadAndIndex({
-      collectionKey,
-      fileBuffer: buffer,
-      fileName: finalName,
-      mimeType: "application/pdf",
-      path: folder,
-      metadata: JSON.stringify({
-        contributed_by: userId,
-        community_id: access.community?.id ?? null,
-        triage_pages: summary.pagesChecked,
-      }),
-    });
+    const result = input.collectionPath
+      ? {
+          collectionPath: input.collectionPath,
+          index: await indexTeacherDocument(collectionKey, { path: input.collectionPath }),
+        }
+      : await uploadAndIndex({
+          collectionKey,
+          fileBuffer: buffer,
+          fileName: finalName,
+          mimeType: "application/pdf",
+          path: folder,
+          onUploaded: async (path) => {
+            await input.onUploaded?.(path);
+            await savePreview({
+              teacherId: access.teacherId,
+              storagePath: input.storagePath,
+              collectionPath: path,
+              fileName: finalName,
+              mimeType: "application/pdf",
+              sizeBytes: buffer.length,
+              documentId: "",
+            });
+          },
+          metadata: JSON.stringify({
+            contributed_by: userId,
+            community_id: access.community?.id ?? null,
+            triage_pages: summary.pagesChecked,
+          }),
+        });
     const documentId = indexedDocumentId(result.index);
     // The staged copy becomes the preview copy: the same bytes, already stored.
     await savePreview({
@@ -324,12 +330,13 @@ export async function completeContribution(
       .maybeSingle();
     return {
       status: "accepted",
+      jobId: jobId(result.index),
       ...summary,
       material: {
         name: finalName,
         shelf: "Notes",
         path: result.collectionPath,
-        indexed: Boolean(documentId),
+        indexed: false,
         documentId: String(row?.id || ""),
         sizeBytes: buffer.length,
         mimeType: "application/pdf",
@@ -338,7 +345,7 @@ export async function completeContribution(
       },
     };
   } catch (error) {
-    await discard();
+    // An outage changes the attempt, never ownership of the saved source.
     throw error;
   }
 }

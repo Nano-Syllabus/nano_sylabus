@@ -1,9 +1,11 @@
 import {
   claimNextDriveImport,
+  checkpointDriveImport,
   completeDriveImport,
   failDriveImport,
   type DriveImportItem,
 } from "@/lib/data/teacher-drive-queue";
+import { indexTeacherDocument } from "@/lib/teacher-app/client";
 import {
   downloadDriveFile,
   DriveLinkError,
@@ -11,6 +13,7 @@ import {
   type DriveEntry,
 } from "@/lib/google-drive";
 import {
+  UpstreamUploadError,
   indexedDocumentId,
   jobId,
   safeFilename,
@@ -55,7 +58,17 @@ async function importOne(
   // subject can be renamed or removed between the two, and this row's path is
   // about to be written to.
   const destinationError = await validateDestination(collectionKey, item.destinationPath);
-  if (destinationError) throw new Error(destinationError);
+  if (destinationError) throw new UpstreamUploadError(destinationError, 400);
+
+  if (item.collectionPath) {
+    const index = await indexTeacherDocument(collectionKey, { path: item.collectionPath });
+    return {
+      documentId: indexedDocumentId(index),
+      jobId: jobId(index),
+      fileName: item.fileName,
+      warning: "",
+    };
+  }
 
   /**
    * Refuse an oversize file BEFORE fetching it, when Drive told us the size.
@@ -102,7 +115,7 @@ async function importOne(
 
   if (known.sizeBytes > 0) {
     const knownSizeError = teacherUploadSizeError(known.sizeBytes);
-    if (knownSizeError) throw new Error(knownSizeError);
+    if (knownSizeError) throw new UpstreamUploadError(knownSizeError, 413);
   }
 
   const entry: DriveEntry = {
@@ -117,33 +130,37 @@ async function importOne(
   learned.fileName = fileName;
   const shelf = teacherUploadShelf(item.destinationPath);
   if (!isTeacherUploadFileSupported(fileName, shelf)) {
-    throw new Error(`${shelf} cannot read "${fileName}". Convert it to PDF first.`);
+    throw new UpstreamUploadError(
+      `${shelf} cannot read "${fileName}". Convert it to PDF first.`,
+      400,
+    );
   }
   const sizeError = teacherUploadSizeError(download.buffer.length);
-  if (sizeError) throw new Error(sizeError);
+  if (sizeError) throw new UpstreamUploadError(sizeError, 413);
 
+  let warning = "";
   const result = await uploadAndIndex({
     collectionKey,
     fileBuffer: download.buffer,
     fileName,
     mimeType: download.mimeType,
     path: item.destinationPath,
+    onUploaded: async (collectionPath) => {
+      await checkpointDriveImport(item, collectionPath);
+      try {
+        await savePreviewFromBuffer({
+          teacherId,
+          fileBuffer: download.buffer,
+          fileName,
+          mimeType: download.mimeType,
+          collectionPath,
+          documentId: "",
+        });
+      } catch {
+        warning = "Original file saved in the collection; private preview is unavailable.";
+      }
+    },
   });
-
-  let warning = "";
-  try {
-    await savePreviewFromBuffer({
-      teacherId,
-      fileBuffer: download.buffer,
-      fileName,
-      mimeType: download.mimeType,
-      collectionPath: result.collectionPath,
-      documentId: indexedDocumentId(result.index),
-    });
-  } catch {
-    warning =
-      "The document was indexed, but its private preview could not be saved. Check the latest database migration.";
-  }
 
   return {
     documentId: indexedDocumentId(result.index),
@@ -163,24 +180,38 @@ export async function drainDriveQueue(collectionKey: string, teacherId: string) 
   let imported = 0;
   let failed = 0;
 
-  while (Date.now() < deadline) {
-    const item = await claimNextDriveImport(teacherId);
-    if (!item) break;
-    const learned = { fileName: item.fileName };
-    try {
-      const outcome = await importOne(collectionKey, teacherId, item, learned);
-      await completeDriveImport(item.id, outcome);
-      imported += 1;
-    } catch (cause) {
-      const message =
-        cause instanceof DriveLinkError
-          ? cause.message
-          : cause instanceof Error
+  async function worker() {
+    while (Date.now() < deadline) {
+      const item = await claimNextDriveImport(teacherId);
+      if (!item) break;
+      const learned = { fileName: item.fileName };
+      try {
+        const outcome = await importOne(collectionKey, teacherId, item, learned);
+        await completeDriveImport(item.id, outcome, item.attempts, item.claimedAt);
+        imported += 1;
+      } catch (cause) {
+        const message =
+          cause instanceof DriveLinkError
             ? cause.message
-            : "This file could not be imported from Drive.";
-      await failDriveImport(item.id, message, learned.fileName);
-      failed += 1;
+            : cause instanceof Error
+              ? cause.message
+              : "This file could not be imported from Drive.";
+        const status = (cause as { status?: number })?.status;
+        const retryable = !status || [408, 429, 500, 502, 503, 504].includes(status);
+        await failDriveImport(
+          item.id,
+          message,
+          learned.fileName,
+          item.attempts,
+          retryable,
+          item.claimedAt,
+        );
+        failed += 1;
+      }
     }
   }
+  const results = await Promise.allSettled(Array.from({ length: 3 }, () => worker()));
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
   return { imported, failed };
 }

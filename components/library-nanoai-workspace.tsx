@@ -807,6 +807,9 @@ export function LibraryNanoAiWorkspace({
           {selectedSubject ? (
             <SubjectTopicProgress
               insight={insights[selectedSubject.id] ?? selectedSubject.progress}
+              courseId={community?.studyCourseId}
+              subjectSlug={selectedSubject.externalSubjectSlug}
+              communitySlug={community?.slug}
             />
           ) : (
             <>

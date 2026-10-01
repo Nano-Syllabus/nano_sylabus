@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import { TeacherApiError } from "@/lib/teacher-app/client";
 import {
@@ -157,6 +157,7 @@ export async function POST(request: Request) {
             mimeType,
             path,
             metadata: text(input?.metadata),
+            onUploaded: (collectionPath) => savePreview({ teacherId: teacher.id, storagePath, collectionPath, fileName, mimeType, sizeBytes: fileBuffer.length, documentId: "" }),
           });
           await savePreview({
             teacherId: teacher.id,
@@ -174,7 +175,7 @@ export async function POST(request: Request) {
             previewWarning: "",
           });
         } catch (error) {
-          await admin.storage.from("teacher-documents").remove([storagePath]);
+          // Keep staged bytes: a provider outage must never delete the upload.
           throw error;
         }
       }
@@ -288,9 +289,9 @@ export async function POST(request: Request) {
          * whenever it sees pending work. That is why the rejection is swallowed
          * rather than reported: there is no failure here to report.
          */
-        void drainDriveQueue(teacher.collection_sk, teacher.id).catch((cause) => {
+        after(() => drainDriveQueue(teacher.collection_sk, teacher.id).then(() => undefined).catch((cause) => {
           console.error("Drive queue drain (background) error:", cause);
-        });
+        }));
 
         return NextResponse.json({ queued, queuedCount: queued.length });
       }
