@@ -404,7 +404,7 @@ export function Explainer({
   questionId,
   selected,
   endpoint,
-  label = "Hint",
+  label = "Memorize trick",
   besideQuestion = false,
   mode,
   inSheet = false,
@@ -529,25 +529,30 @@ export function Explainer({
           className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-bg-primary px-3 text-sm font-semibold hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
           <Lightbulb className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-          {video.status === "error" ? "Try hint again" : label}
+          {video.status === "error" ? "Try trick again" : label}
         </button>
         {sheetOpen && typeof document !== "undefined"
           ? createPortal(
-              <VideoSheet title={mode === "hint" ? "Hint" : "Explanation"} onClose={closeSheet}>
-                <div className="mb-5 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
-                  <p className="flex items-start gap-2 text-sm leading-6 text-text-primary">
-                    <Lightbulb className="mt-1 size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-                    {mode === "hint"
-                      ? "Watch the idea this question is built on, shown with a different example. It won't tell you which option is right — work that out yourself, then pick your answer."
-                      : "Why the correct option is right, and the slip that leads to the most tempting wrong one."}
-                  </p>
-                  {questionText ? (
-                    <MathText
-                      text={questionText}
-                      className="mt-3 block border-t border-border pt-3 text-sm font-semibold leading-6 text-text-secondary"
-                    />
-                  ) : null}
-                </div>
+              <VideoSheet title={mode === "hint" ? "Memorize trick" : "Explanation"} onClose={closeSheet}>
+                {mode !== "hint" || questionText ? (
+                  <div className="mb-5 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+                    {mode !== "hint" ? (
+                      <p className="flex items-start gap-2 text-sm leading-6 text-text-primary">
+                        <Lightbulb className="mt-1 size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                        Why the correct option is right, and the slip that leads to the most tempting wrong one.
+                      </p>
+                    ) : null}
+                    {questionText ? (
+                      <MathText
+                        text={questionText}
+                        className={cn(
+                          "block text-sm font-semibold leading-6 text-text-secondary",
+                          mode !== "hint" && "mt-3 border-t border-border pt-3",
+                        )}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
                 {video.status === "error" ? (
                   <div className="space-y-3">
                     <p className="text-sm text-text-secondary">{video.message}</p>
@@ -579,7 +584,7 @@ export function Explainer({
           className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-bg-primary px-3 text-sm font-semibold hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
           <Lightbulb className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-          {video.status === "error" ? "Try hint again" : label}
+          {video.status === "error" ? "Try trick again" : label}
         </button>
         {video.status === "error" ? <p className="mt-2 text-xs text-text-secondary">{video.message}</p> : null}
       </div>

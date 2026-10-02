@@ -5,10 +5,7 @@ import {
   ArrowUp,
   BookOpen,
   GraduationCap,
-  History,
   LibraryBig,
-  Maximize2,
-  SquarePen,
   X,
 } from "lucide-react";
 import {
@@ -46,7 +43,8 @@ import { CompactSelect } from "@/components/ui/compact-select";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { dedupeCitationsForDisplay } from "@/lib/citations";
 import { useTenantSubjects } from "@/lib/query/catalog";
-import { topicStarters, useNanoAiTopic } from "@/lib/nanoai-topic";
+import { useNanoAiTopic } from "@/lib/nanoai-topic";
+import { readNanoAiPageContext } from "@/lib/nanoai-page-context";
 import { normalizeBoard, normalizeGrade, normalizeSubjectLabel } from "@/lib/profile-normalization";
 import type {
   AppUser,
@@ -544,7 +542,6 @@ export function ChatPageClient({
     [isFloating],
   );
   const [sessions, setSessions] = useState(initialSessions);
-  const [floatingHistoryOpen, setFloatingHistoryOpen] = useState(false);
   const [hasMoreSessions, setHasMoreSessions] = useState(initialHasMore);
   const [historySearch, setHistorySearch] = useState("");
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1772,6 +1769,9 @@ export function ChatPageClient({
           subjectContext: resolvedSubjectContext,
           tenantSubject: resolvedTenantSubject,
           truncateFromId,
+          // The bubble answers about what is on screen: the topic page, the
+          // challenge, the open Concepts sheet — read as it is drawn now.
+          pageContext: isFloating && screenTopic ? readNanoAiPageContext() || undefined : undefined,
           messages: nextMessages.map((message) => ({
             role: message.role,
             content: message.content,
@@ -2318,7 +2318,6 @@ export function ChatPageClient({
     if (currentSessionIdRef.current || messages.length > 0 || isLoading) return;
     setSubjectContext(topicSubject);
   }, [topicSubject, messages.length, isLoading]);
-  const starters = floatingTopic && topicSubject ? topicStarters(floatingTopic) : null;
 
   function applySuggestedPrompt(prompt: string) {
     setInput(prompt);
@@ -2556,40 +2555,6 @@ export function ChatPageClient({
         <button
           type="button"
           data-no-drag
-          onClick={() => setFloatingHistoryOpen((open) => !open)}
-          className={cn(headerButton, floatingHistoryOpen && "bg-bg-tertiary text-text-primary")}
-          aria-label="Chat history"
-          aria-expanded={floatingHistoryOpen}
-          title="Chat history"
-        >
-          <History className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          data-no-drag
-          onClick={() => {
-            setFloatingHistoryOpen(false);
-            window.dispatchEvent(new Event(chatEvents.newChat));
-          }}
-          className={headerButton}
-          aria-label="New chat"
-          title="New chat"
-        >
-          <SquarePen className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <Link
-          data-no-drag
-          href={currentSessionId ? `/app/chat?session=${currentSessionId}` : "/app/chat"}
-          onClick={() => onRequestClose?.()}
-          className={headerButton}
-          aria-label="Open in full chat"
-          title="Open in full chat"
-        >
-          <Maximize2 className="h-4 w-4" aria-hidden="true" />
-        </Link>
-        <button
-          type="button"
-          data-no-drag
           onClick={() => onRequestClose?.()}
           className={headerButton}
           aria-label="Close NanoAI"
@@ -2598,69 +2563,6 @@ export function ChatPageClient({
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
 
-        {floatingHistoryOpen ? (
-          <div
-            data-no-drag
-            className="absolute inset-x-2 top-[calc(100%+4px)] z-30 flex max-h-[min(60vh,420px)] cursor-default flex-col overflow-hidden rounded-xl border border-border bg-bg-primary shadow-[0_12px_32px_rgba(0,0,0,0.18)]"
-          >
-            <div className="border-b border-border p-2">
-              <Input
-                value={historySearch}
-                onChange={(event) => setHistorySearch(event.target.value)}
-                placeholder="Search chats"
-                aria-label="Search chats"
-                className="h-9 text-sm"
-              />
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-1">
-              {sessions.length === 0 ? (
-                <p className="px-3 py-6 text-center text-sm text-text-muted">
-                  {historyLoading ? "Loading chats..." : historyError || "No chats yet."}
-                </p>
-              ) : (
-                sessions.map((session) => (
-                  <button
-                    key={session.id}
-                    type="button"
-                    onClick={() => {
-                      setFloatingHistoryOpen(false);
-                      window.dispatchEvent(
-                        new CustomEvent<ChatSwitchSessionDetail>(chatEvents.switchSession, {
-                          detail: {
-                            sessionId: session.id,
-                            title: session.title,
-                            subjectContext: session.subjectContext,
-                          },
-                        }),
-                      );
-                    }}
-                    className={cn(
-                      "flex w-full flex-col items-start rounded-lg px-3 py-2 text-left transition-colors duration-100 hover:bg-bg-secondary motion-reduce:transition-none",
-                      session.id === currentSessionId && "bg-bg-secondary",
-                    )}
-                  >
-                    <span className="w-full truncate text-sm font-medium text-text-primary">{session.title}</span>
-                    <span className="w-full truncate text-xs text-text-muted">
-                      {[stripSubjectChapter(session.subjectContext), formatDate(session.updatedAt)]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  </button>
-                ))
-              )}
-              {hasMoreSessions && sessions.length > 0 ? (
-                <button
-                  type="button"
-                  disabled={historyLoading}
-                  onClick={() => void fetchSessions({ reset: false, offset: sessions.length })}
-                  className="w-full rounded-lg px-3 py-2 text-center text-xs font-medium text-text-muted hover:bg-bg-secondary disabled:opacity-60"
-                >
-                  {historyLoading ? "Loading..." : "Load more"}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
       </header>
     );
   };
@@ -2739,11 +2641,13 @@ export function ChatPageClient({
               isFloating ? (
                 <div className="flex w-full flex-1 flex-col justify-end gap-3 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2 text-left">
                   {/* Starts from what the student is reading: the topic is
-                      named, and each starter is a whole question sent on tap. */}
+                      named and the box is ready for the question. */}
                   <div key={floatingTopic?.topicTitle ?? "none"} className="nanoai-intro">
-                    <p className="text-xs font-medium text-text-muted">
-                      {subjectDisplayName(stripSubjectChapter(subjectContext)) ?? "Open a topic in Revision to ask about it"}
-                    </p>
+                    {subjectDisplayName(stripSubjectChapter(subjectContext)) ? (
+                      <p className="text-xs font-medium text-text-muted">
+                        {subjectDisplayName(stripSubjectChapter(subjectContext))}
+                      </p>
+                    ) : null}
                     <h2 className="mt-1 font-display text-lg font-semibold leading-snug">
                       {floatingTopic ? (
                         <>
@@ -2755,26 +2659,7 @@ export function ChatPageClient({
                       )}
                     </h2>
                   </div>
-                  {starters ? (
-                    <ul className="flex flex-col items-start gap-2">
-                      {starters.map((prompt, index) => (
-                        <li
-                          key={prompt}
-                          className="nanoai-intro"
-                          style={{ animationDelay: `${80 + index * 60}ms` }}
-                        >
-                          <button
-                            type="button"
-                            disabled={isLoading}
-                            onClick={() => void sendCurrentMessage(prompt)}
-                            className="rounded-2xl border border-border bg-bg-primary px-3.5 py-2 text-left text-sm leading-5 text-text-primary transition-colors hover:border-blue-500/50 hover:bg-blue-500/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
-                          >
-                            {prompt}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
+                  {floatingTopic ? null : (
                     <p className="nanoai-intro text-sm leading-6 text-text-secondary" style={{ animationDelay: "80ms" }}>
                       Ask for an explanation, a summary or a quick quiz. Answers come from your course material.
                     </p>

@@ -80,6 +80,8 @@ const requestSchema = z.object({
     .nullable()
     .optional(),
   truncateFromId: z.string().optional(),
+  /** What the Ask AI bubble's page shows right now (lib/nanoai-page-context.ts). */
+  pageContext: z.string().max(16_000).optional(),
   messages: z
     .array(
       z.object({
@@ -967,13 +969,28 @@ async function handlePOST(request: Request) {
       "Read the attached image and explain the visible content clearly. If it contains notes, a diagram, or a question, answer based on that image.";
     const tenantQuestionHash = hashDebugValue(tenantQuestion);
 
-    const answerInstruction = buildAnswerInstruction({
-      language: resolvedLanguage,
-      subjectName: tenantSubject.name,
-      grade: profile.grade,
-      board: profile.board,
-      hasAttachments,
-    });
+    const pageContext = parsed.pageContext?.trim() ?? "";
+    const answerInstruction = [
+      buildAnswerInstruction({
+        language: resolvedLanguage,
+        subjectName: tenantSubject.name,
+        grade: profile.grade,
+        board: profile.board,
+        hasAttachments,
+      }),
+      // Asked from the Ask AI bubble: the student can see this page as they ask.
+      // "This", "this example", "question 2" and "explain the formula" refer to it.
+      pageContext
+        ? [
+            "The student is asking while looking at the page below in the app. When the question refers to what is on screen (this, this example, this question, the formula, the second point), answer about that content directly — quote or work from it — and use the course material to explain further. Do not say you cannot see their screen.",
+            "<page_on_screen>",
+            pageContext,
+            "</page_on_screen>",
+          ].join("\n")
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     const chatRoutePath = usesCreatorCollectionStream
       ? isCommunitySubject
         ? "community_collection_chat"

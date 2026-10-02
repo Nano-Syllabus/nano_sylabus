@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  communityLevel,
+  communityLevelStructure,
   communitySlug,
   mapCommunitySummary,
+  type CommunityLevel,
   type CommunityDetail,
   type CommunityInput,
   type CommunitySubject,
@@ -521,6 +524,62 @@ async function updateOwnedCommunityNameWrite(
   return community;
 }
 
+export type CommunityDetailsInput = {
+  university?: string;
+  faculty?: string;
+  level?: CommunityLevel;
+};
+
+/**
+ * The faculty header's other fields: university, programme and level. Only
+ * the creator may change them. Level may only move within the same layout
+ * (Entrance ↔ License, Bachelor ↔ Master): another layout means different
+ * terms, and the subjects filed under them would have nowhere to go.
+ */
+async function updateOwnedCommunityDetailsWrite(
+  userId: string,
+  slug: string,
+  details: CommunityDetailsInput,
+  admin: SupabaseClient = createSupabaseAdminClient(),
+) {
+  const { data: row, error } = await admin
+    .from("communities")
+    .select("id,creator_id,name,faculty,level")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) throw error;
+  if (!row) throw new CommunityError("Community not found.", 404);
+  if (String(row.creator_id) !== userId) {
+    throw new CommunityError("Only the community creator can edit this community.", 403);
+  }
+
+  const update: Record<string, string> = {};
+  if (details.university !== undefined) update.university = details.university;
+  if (details.faculty !== undefined) update.faculty = details.faculty;
+  if (details.level !== undefined) {
+    const current = communityLevel({
+      level: row.level as string | null,
+      name: String(row.name ?? ""),
+      faculty: String(row.faculty ?? ""),
+    });
+    if (communityLevelStructure(details.level) !== communityLevelStructure(current)) {
+      throw new CommunityError(
+        `A ${current} faculty can't become ${details.level}: its terms are laid out differently. Create a new faculty instead.`,
+        400,
+      );
+    }
+    update.level = details.level;
+  }
+  if (Object.keys(update).length) {
+    const result = await admin.from("communities").update(update).eq("id", row.id);
+    if (result.error) throw result.error;
+  }
+
+  const community = await getCommunity(slug, userId, admin);
+  if (!community) throw new CommunityError("Community not found.", 404);
+  return community;
+}
+
 async function joinCommunityWrite(
   userId: string,
   slug: string,
@@ -893,6 +952,8 @@ export function communityStorageError(error: unknown) {
 export const createCommunity = invalidatesPublicCatalog(createCommunityWrite);
 
 export const updateOwnedCommunityName = invalidatesPublicCatalog(updateOwnedCommunityNameWrite);
+
+export const updateOwnedCommunityDetails = invalidatesPublicCatalog(updateOwnedCommunityDetailsWrite);
 
 export const joinCommunity = invalidatesPublicCatalog(joinCommunityWrite);
 

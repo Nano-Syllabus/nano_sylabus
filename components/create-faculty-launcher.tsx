@@ -4,7 +4,9 @@ import dynamic from "next/dynamic";
 import { DM_Sans, Plus_Jakarta_Sans } from "next/font/google";
 
 // The dialog's type pairing, the same faces the Browse page loads for it.
-const dmSans = DM_Sans({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-dm-sans" });
+// No `weight` list: DM Sans is variable, and the static-weight request makes Google
+// serve `/l/font?kit=…&skey=…` files whose `&` breaks Turbopack's font loader.
+const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" });
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["700", "800"], variable: "--font-jakarta" });
 
 const loadCatalog = () => import("@/components/community-catalog-client");

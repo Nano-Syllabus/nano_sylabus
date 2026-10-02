@@ -9,6 +9,7 @@ import { getStudentChallenge } from "@/lib/data/student-challenges";
 import { getActiveCommunity } from "@/lib/data/active-community";
 import { mayRestartChallenges } from "@/lib/challenge-refetch";
 import { challengeAllowance } from "@/lib/data/challenge-daily-limit";
+import { getNextExamDate } from "@/lib/data/next-exam-date";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export default async function ChallengesPage({
     user.id,
     String(params.community || "").trim() || undefined,
   );
-  const [initialDashboard, allowance] = await Promise.all([
+  const [initialDashboard, allowance, nextExam] = await Promise.all([
     getStudentChallengeDashboard(
       user.id,
       Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1,
@@ -44,6 +45,8 @@ export default async function ChallengesPage({
     // Never costs the hub: unknown means unlimited here, and the server's
     // start route still enforces the limit.
     challengeAllowance(user.id).catch(() => undefined),
+    // The countdown card and the daily target; never fails the hub.
+    getNextExamDate(user.id).catch(() => null),
   ]);
   let dashboard = initialDashboard;
   // A challenge linked by id is opened even when the hub would not list it: a
@@ -77,6 +80,7 @@ export default async function ChallengesPage({
         // route enforces it again; this only decides whether to draw the button.
         canRestartChallenge={mayRestartChallenges(user.email)}
         allowance={allowance}
+        nextExam={nextExam}
       />
     </>
   );

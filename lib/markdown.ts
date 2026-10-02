@@ -632,8 +632,12 @@ function applyInlineStyles(value: string): string {
     .replace(/(?<=[\d)\]])\*(?=[\d(\[])/g, "×")
     // A quantity named in prose without its dollars — "the constant P_0" — is
     // subscripted. Narrowly: one standalone letter, then digits or at most three
-    // letters, so `file_name` and `@@TOKEN_3@@` are never touched.
-    .replace(/(?<![\w@])([A-Za-z])_(\d{1,2}|[A-Za-z]{1,3})(?![\w@])/g, "$1<sub>$2</sub>");
+    // letters, so `file_name` and `@@TOKEN_3@@` are never touched. The LaTeX
+    // spelling `I_{N}` (a reading's example written without its dollars) too.
+    .replace(
+      /(?<![\w@])([A-Za-z])_(?:\{([A-Za-z0-9]{1,6})\}|(\d{1,2}|[A-Za-z]{1,3})(?![\w@]))/g,
+      (_match, base: string, braced?: string, bare?: string) => `${base}<sub>${braced ?? bare}</sub>`,
+    );
 
   return withFormatting.replace(/@@TOKEN_(\d+)@@/g, (_, index) => tokens[Number(index)] ?? "");
 }

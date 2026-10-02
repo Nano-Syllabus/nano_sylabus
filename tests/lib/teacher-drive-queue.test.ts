@@ -197,8 +197,8 @@ describe("draining the Drive import queue", () => {
   });
 
   it("refuses a file Drive already said is oversize, without fetching it", async () => {
-    // 71.9 MB, the size Drive reports for a real PDF that was pasted in testing.
-    queue([item({ sizeBytes: 75_387_542 })]);
+    // Past the 100 MB ceiling (a 71.9 MB PDF first found this path; the limit was 50 MB then).
+    queue([item({ sizeBytes: 120_000_000 })]);
 
     const result = await drainDriveQueue("collection-secret", "teacher-1");
 
@@ -206,7 +206,7 @@ describe("draining the Drive import queue", () => {
     expect(mocks.download).not.toHaveBeenCalled();
     expect(mocks.fail).toHaveBeenCalledWith(
       "row-1",
-      expect.stringContaining("50 MB"),
+      expect.stringContaining("100 MB"),
       "notes.pdf",
       1,
       false,

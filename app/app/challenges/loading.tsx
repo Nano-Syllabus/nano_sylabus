@@ -51,10 +51,9 @@ export default function ChallengesLoading() {
               TODAY&apos;S QUOTA
             </p>
             <div className="mt-2 flex items-baseline gap-1.5">
-              {/* Today's count is unknown; the free plan's three it is out of is
-                  everyone's target (paid plans may go past it). */}
-              <span className={`inline-block h-7 w-8 align-middle ${skeleton}`} />
-              <span className="type-student-metric text-[#84cc16]">/ 3</span>
+              {/* Today's count and the target (topics left ÷ days to the exam)
+                  are both unknown until the page reads them. */}
+              <span className={`inline-block h-7 w-16 align-middle ${skeleton}`} />
             </div>
             <div
               className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
@@ -64,16 +63,12 @@ export default function ChallengesLoading() {
 
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">TOPICS PASSED</p>
-            <div className={`mt-2 h-7 w-20 ${skeleton}`} />
-            <div
-              className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
-              aria-hidden="true"
-            />
+            <div className={`mt-2 h-7 w-12 ${skeleton}`} />
           </article>
 
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
-              7-DAY AVERAGE
+              EXAM DAYS REMAINING
             </p>
             <div className={`mt-2 h-7 w-16 ${skeleton}`} />
           </article>

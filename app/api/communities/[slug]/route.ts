@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
-import { communityNameSchema } from "@/lib/communities";
+import { communityInputSchema, communityNameSchema } from "@/lib/communities";
 import {
   communityStorageError,
   deleteOwnedCommunity,
   getCommunity,
+  updateOwnedCommunityDetails,
   updateOwnedCommunityName,
 } from "@/lib/data/communities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
 type RouteContext = { params: Promise<{ slug: string }> };
+
+const detailsSchema = communityInputSchema
+  .innerType()
+  .pick({ faculty: true })
+  .partial();
 
 export const dynamic = "force-dynamic";
 
@@ -23,21 +29,48 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Sign in to edit your community." }, { status: 401 });
 
     const { slug } = await context.params;
-    const body = await request.json().catch(() => null);
-    const parsed = communityNameSchema.safeParse(
-      body && typeof body === "object" ? body.name : null,
-    );
-    if (!parsed.success) {
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Nothing to save." }, { status: 400 });
+    }
+
+    // University and level are fixed once the faculty exists (user, 2026-10-02):
+    // only the name and the short name change here.
+    if (body.university !== undefined || body.level !== undefined) {
       return NextResponse.json(
-        {
-          error: parsed.error.issues[0]?.message || "Enter a valid community name.",
-          field: "name",
-        },
+        { error: "A faculty's university and level can't be changed." },
         { status: 400 },
       );
     }
-
-    const community = await updateOwnedCommunityName(user.id, slug, parsed.data);
+    const details = detailsSchema.safeParse({ faculty: body.faculty });
+    if (!details.success) {
+      const issue = details.error.issues[0];
+      return NextResponse.json(
+        { error: issue?.message || "Check the details and try again.", field: issue?.path[0] },
+        { status: 400 },
+      );
+    }
+    const hasDetails = Object.values(details.data).some((value) => value !== undefined);
+    if (body.name === undefined && !hasDetails) {
+      return NextResponse.json({ error: "Enter a valid community name.", field: "name" }, { status: 400 });
+    }
+    let community = null;
+    if (body.name !== undefined) {
+      const parsed = communityNameSchema.safeParse(body.name);
+      if (!parsed.success) {
+        return NextResponse.json(
+          {
+            error: parsed.error.issues[0]?.message || "Enter a valid community name.",
+            field: "name",
+          },
+          { status: 400 },
+        );
+      }
+      community = await updateOwnedCommunityName(user.id, slug, parsed.data);
+    }
+    if (hasDetails) {
+      community = await updateOwnedCommunityDetails(user.id, slug, details.data);
+    }
     return NextResponse.json({ community });
   } catch (error) {
     const mapped = communityStorageError(error);

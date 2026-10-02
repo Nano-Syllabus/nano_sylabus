@@ -177,6 +177,35 @@ const SHOW_PERF_HUD =
 /** Constant-folded, so the script above is dropped from a production build. */
 const STRIP_EXTENSION_ATTRIBUTES = process.env.NODE_ENV === "development";
 
+/**
+ * Dev only: errors thrown by browser extensions never reach the dev overlay.
+ *
+ * Next's overlay listens for every `error` / `unhandledrejection` on the page,
+ * so an extension's own bug (one reported 2026-10-01: "Cannot read properties of
+ * undefined (reading 'M_ID')" from chrome-extension://…/executors/200.js) shows
+ * as if the app had crashed. This runs before Next's client code, so its
+ * capture listener is first and can stop the event for those sources only.
+ * Errors from our own code are untouched.
+ */
+const extensionErrorFilterScript = `
+(function(){try{
+  var fromExtension=function(text){return /(chrome|moz|safari(-web)?)-extension:\/\//.test(String(text||''));};
+  window.addEventListener('error',function(event){
+    var stack=event.error&&event.error.stack;
+    if(fromExtension(event.filename)||(!event.filename&&fromExtension(stack))||(stack&&!/https?:\/\//.test(stack)&&fromExtension(stack))){
+      event.stopImmediatePropagation();event.preventDefault();
+    }
+  },true);
+  window.addEventListener('unhandledrejection',function(event){
+    var reason=event.reason;
+    var stack=reason&&reason.stack;
+    if(stack&&fromExtension(stack)&&!/https?:\/\//.test(stack)){
+      event.stopImmediatePropagation();event.preventDefault();
+    }
+  },true);
+}catch(e){}})();
+`;
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -205,6 +234,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         className={`${outfit.variable} ${inter.variable} ${poppins.variable} ${dmMono.variable} font-sans antialiased`}
       >
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        {process.env.NODE_ENV === "development" ? (
+          <script dangerouslySetInnerHTML={{ __html: extensionErrorFilterScript }} />
+        ) : null}
         {STRIP_EXTENSION_ATTRIBUTES ? (
           <script dangerouslySetInnerHTML={{ __html: extensionAttributeStripScript }} />
         ) : null}

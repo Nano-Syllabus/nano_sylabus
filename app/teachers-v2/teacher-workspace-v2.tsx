@@ -59,6 +59,7 @@ import {
   FacultyTokenUsage,
 } from "@/app/teachers-v2/views/faculty-token-usage";
 import { CommunityNameEditor } from "@/components/community-name-editor";
+import { CommunityHeaderEditor } from "@/components/community-header-editor";
 import { subjectAccessLabel, type SubjectCommunity } from "@/lib/teacher-subject-access";
 import {
   communityLevel,
@@ -1935,7 +1936,7 @@ function FacultyCard({
           </span>
         ) : null}
       </div>
-      <h2 className="mt-3 font-display text-xl font-semibold">{titleCase(community.name)}</h2>
+      <h2 className="mt-3 font-display text-xl font-semibold">{community.name}</h2>
       {/* Two lines reserved, so a one-line programme keeps the cards level. */}
       <p className="mt-1 line-clamp-2 min-h-12 text-sm leading-6 text-text-secondary">
         {community.faculty}
@@ -2137,17 +2138,18 @@ export function CommunitiesView({
         <div className="bg-[var(--community-banner)] px-5 pt-6 text-white sm:px-6">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
-                {selectedLevel} · {selected.university}
-              </p>
-              <CommunityNameEditor
+              <CommunityHeaderEditor
                 slug={selected.slug}
-                name={titleCase(selected.name)}
+                details={{
+                  // As the creator typed it: Title Case turned "BCT/BEI" into "Bct/bei".
+                  name: selected.name,
+                  level: selectedLevel,
+                  university: selected.university,
+                  faculty: selected.faculty,
+                }}
+                structureText={selectedStructure.text}
                 onSaved={onRefresh}
               />
-              <p className="mt-2 text-sm text-white/65">
-                {selected.faculty} · {selectedStructure.text}
-              </p>
             </div>
             <Link
               href={`/app/communities/${encodeURIComponent(selected.slug)}`}

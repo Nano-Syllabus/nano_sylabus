@@ -177,6 +177,7 @@ export function ConceptsDrawer({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
+        data-nanoai-context="Concepts sheet open on screen"
         aria-labelledby={titleId}
         className="absolute inset-y-0 right-0 flex w-full max-w-[52.5rem] flex-col border-l border-border bg-bg-primary shadow-2xl animate-in slide-in-from-right duration-200 motion-reduce:animate-none"
       >

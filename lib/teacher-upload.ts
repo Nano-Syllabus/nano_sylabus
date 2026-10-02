@@ -1,5 +1,7 @@
-export const TEACHER_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
-export const TEACHER_UPLOAD_MAX_LABEL = "50 MB";
+// 100 MB for now (user, 2026-10-01). The `teacher-documents` bucket limit must
+// match (migration 20261001120000); the backend allows 200 MB.
+export const TEACHER_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+export const TEACHER_UPLOAD_MAX_LABEL = "100 MB";
 export const TEACHER_SYLLABUS_FILE_ACCEPT =
   ".pdf,.doc,.docx,.txt,.md,.png,.jpg,.jpeg,.webp";
 export const TEACHER_MATERIAL_FILE_ACCEPT =

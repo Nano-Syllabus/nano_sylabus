@@ -3,6 +3,8 @@
 import { useId, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { LoaderCircle } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { keys } from "@/lib/query/keys";
 import type { CommunitySwitchOption } from "@/lib/community-switch";
 
 export function CommunitySwitcher({
@@ -17,6 +19,7 @@ export function CommunitySwitcher({
   const id = useId();
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   if (!options.length) return null;
@@ -34,6 +37,9 @@ export function CommunitySwitcher({
         const result = await response.json();
         if (!response.ok)
           throw new Error(result.error || "Could not switch communities. Try again.");
+        // "My community" (no ?community=) now means a different one: forget
+        // the dashboard cached under that default so Today reads the new one.
+        queryClient.removeQueries({ queryKey: keys.student.dashboard(), exact: true });
         // Drop the previous community's filters and reset its client state.
         router.replace(`${pathname}?community=${encodeURIComponent(result.slug)}`);
         router.refresh();

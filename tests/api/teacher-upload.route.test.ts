@@ -112,7 +112,7 @@ describe("POST /api/teacher/upload", () => {
     expect(payload).toMatchObject({
       bucket: "teacher-documents",
       token: "upload-token",
-      maxLabel: "50 MB",
+      maxLabel: "100 MB",
     });
     expect(payload.storagePath).toMatch(/^teacher-1\/staged\/.+-chemistry\.pdf$/);
     expect(mocks.createSignedUploadUrl).toHaveBeenCalledWith(payload.storagePath);
@@ -294,14 +294,14 @@ describe("POST /api/teacher/upload", () => {
           path: "Physics/Syllabus",
           fileName: "large.pdf",
           mimeType: "application/pdf",
-          sizeBytes: 50 * 1024 * 1024 + 1,
+          sizeBytes: 100 * 1024 * 1024 + 1,
         }),
       }),
     );
     const payload = await response.json();
 
     expect(response.status).toBe(413);
-    expect(payload.error).toContain("50 MB");
+    expect(payload.error).toContain("100 MB");
     expect(mocks.getTenantApiEnv).not.toHaveBeenCalled();
   });
 });

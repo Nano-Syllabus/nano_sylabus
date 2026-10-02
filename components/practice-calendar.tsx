@@ -270,6 +270,7 @@ export function PracticeCalendar({
   semesters,
   currentSemesterId,
   onExamDatesChange,
+  singleExam = false,
 }: {
   initialDays: DailyActivityDay[];
   examDates: DailyExamDate[];
@@ -278,6 +279,12 @@ export function PracticeCalendar({
   semesters: DailySemester[];
   currentSemesterId?: string;
   onExamDatesChange: (examDates: DailyExamDate[]) => void;
+  /**
+   * An MCQ faculty (Entrance, License) sits ONE exam on ONE day, with no
+   * subjects to pick: the card sets that day inline, in Nepali dates, with no
+   * dialog. QnA faculties keep per-subject exams.
+   */
+  singleExam?: boolean;
 }) {
   const todayDate = currentKathmanduDate();
   const todayBs = useMemo(() => adToBs(todayDate), [todayDate]);
@@ -308,6 +315,7 @@ export function PracticeCalendar({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [examFormOpen, setExamFormOpen] = useState(false);
+  const [examDayDialogDate, setExamDayDialogDate] = useState<string | null>(null);
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
   const [examDate, setExamDate] = useState("");
   const [examTitle, setExamTitle] = useState("");
@@ -417,6 +425,11 @@ export function PracticeCalendar({
   function selectCalendarDate(date: string) {
     setSelectedDate(date);
     setExamError("");
+    // One-exam faculties: a day tapped on or after today opens the exam-day dialog on it.
+    if (singleExam) {
+      if (date >= todayDate) setExamDayDialogDate(date);
+      return;
+    }
     const exam = examByDate.get(date);
     if (exam) {
       setExamFormOpen(false);
@@ -460,8 +473,11 @@ export function PracticeCalendar({
 
   async function submitExamDate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const title = examTitle.trim();
-    if (!examDate || !title || examSaving) return;
+    await saveExam(examDate, examTitle.trim(), editingExamId);
+  }
+
+  async function saveExam(examDate: string, title: string, editingExamId: string | null) {
+    if (!examDate || !title || examSaving) return false;
     setExamSaving(true);
     setExamError("");
     try {
@@ -522,8 +538,10 @@ export function PracticeCalendar({
       setVisibleBsYear(resultBs.year);
       setVisibleBsMonth(resultBs.month);
       setSelectedDate(result.date);
+      return true;
     } catch (error) {
       setExamError(error instanceof Error ? error.message : "Could not save the exam date.");
+      return false;
     } finally {
       setExamSaving(false);
     }
@@ -689,8 +707,8 @@ export function PracticeCalendar({
             Today
           </button>
 
-          {/* Add Exam Button */}
-          <button
+          {/* Add Exam Button — one-exam (MCQ) faculties set their day in the card below */}
+          {singleExam ? null : <button
             type="button"
             onClick={() => (examFormOpen ? setExamFormOpen(false) : openNewExamForm())}
             aria-expanded={examFormOpen}
@@ -701,7 +719,7 @@ export function PracticeCalendar({
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
             {examFormOpen ? "Close" : "Add exam"}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -1080,6 +1098,25 @@ export function PracticeCalendar({
         </div>
       </div>
 
+      {singleExam ? (
+        <ExamDayCard
+          exam={upcomingExams[0] ?? null}
+          todayDate={todayDate}
+          subjects={allSubjects}
+          busy={examSaving}
+          error={examError}
+          dialogDate={examDayDialogDate}
+          onDialogDate={(date) => {
+            setExamError("");
+            setExamDayDialogDate(date);
+          }}
+          onSave={(date) => saveExam(date, upcomingExams[0]?.title || "Exam day", upcomingExams[0]?.id ?? null)}
+          onRemove={async () => {
+            if (upcomingExams[0]) await deleteExam(upcomingExams[0]);
+          }}
+        />
+      ) : (
+      <>
       {/* ── Upcoming Exams Section ── */}
       <section
         className="mt-6 rounded-[20px] border border-border bg-bg-secondary p-5 shadow-xs sm:p-6"
@@ -1201,6 +1238,285 @@ export function PracticeCalendar({
           </div>
         )}
       </section>
+      </>
+      )}
     </section>
+  );
+}
+
+/** Topics not yet covered, from each subject's topic count and readiness. */
+function topicsLeft(subjects: DailySemesterSubject[]) {
+  let known = false;
+  let left = 0;
+  for (const subject of subjects) {
+    if (!subject.topicCount) continue;
+    known = true;
+    const ready = Math.max(0, Math.min(100, subject.readiness ?? 0));
+    left += Math.round(subject.topicCount * (1 - ready / 100));
+  }
+  return known ? left : null;
+}
+
+/** "About 4 topics a day" — what the chosen day asks of the student. */
+function paceLine(left: number | null, days: number) {
+  if (left === null || days <= 0) return null;
+  if (left === 0) return "Every topic is covered — keep revising.";
+  const perDay = Math.ceil(left / days);
+  return `${left} topic${left === 1 ? "" : "s"} left · about ${perDay} a day to cover them all`;
+}
+
+/**
+ * The one exam an MCQ faculty sits. The page shows a small card (a prompt, or
+ * the countdown); setting or changing the day happens in a dialog, in Nepali
+ * dates the way exam notices give them, with what that day means for pace.
+ */
+function ExamDayCard({
+  exam,
+  todayDate,
+  subjects,
+  busy,
+  error,
+  dialogDate,
+  onDialogDate,
+  onSave,
+  onRemove,
+}: {
+  exam: DailyExamDate | null;
+  todayDate: string;
+  subjects: DailySemesterSubject[];
+  busy: boolean;
+  error: string;
+  /** The dialog is open, starting on this AD date; null = closed. */
+  dialogDate: string | null;
+  onDialogDate: (date: string | null) => void;
+  onSave: (date: string) => Promise<boolean>;
+  onRemove: () => Promise<void>;
+}) {
+  const left = topicsLeft(subjects);
+  const defaultDate = exam?.date ?? addDays(todayDate, 30);
+
+  if (!exam) {
+    return (
+      <section className="mt-6 flex flex-wrap items-center gap-4 rounded-[20px] border border-border bg-bg-secondary p-5 shadow-xs sm:p-6">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-600/10 text-blue-600 dark:text-blue-400">
+          <GraduationCap className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="type-student-section-title">When is your exam?</h3>
+          <p className="mt-0.5 text-sm text-text-secondary">Set the day — we count down and pace your topics.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onDialogDate(defaultDate)}
+          className={cn(
+            "inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700",
+            focusRing,
+          )}
+        >
+          <Plus className="size-4" aria-hidden="true" /> Set exam day
+        </button>
+        {dialogDate ? (
+          <ExamDayDialog
+            initialDate={dialogDate}
+            todayDate={todayDate}
+            left={left}
+            busy={busy}
+            error={error}
+            onClose={() => onDialogDate(null)}
+            onSave={onSave}
+          />
+        ) : null}
+      </section>
+    );
+  }
+
+  const remaining = daysUntilExam(exam.date, todayDate);
+  const pace = paceLine(left, remaining);
+  return (
+    <section
+      className="relative mt-6 overflow-hidden rounded-[20px] bg-gradient-to-br from-blue-600 to-indigo-600 p-5 text-white shadow-sm sm:p-6"
+      aria-labelledby="exam-day-heading"
+    >
+      <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-12 size-44 rounded-full bg-white/10" />
+      <div className="relative flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <h3 id="exam-day-heading" className="text-[11px] font-semibold uppercase tracking-widest text-white/70">
+            Exam day
+          </h3>
+          <p className="mt-1.5 font-display text-2xl font-semibold">{formatNepaliDate(adToBs(exam.date))}</p>
+          <p className="mt-0.5 text-sm text-white/80">{compactDate(exam.date)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-4xl font-bold leading-none tabular-nums">{remaining === 0 ? "Today" : remaining}</p>
+          {remaining > 0 ? (
+            <p className="mt-1 text-xs font-medium text-white/75">{remaining === 1 ? "day to go" : "days to go"}</p>
+          ) : null}
+        </div>
+      </div>
+      <div className="relative mt-4 flex flex-wrap items-center justify-between gap-3">
+        {pace ? <p className="text-sm text-white/85">{pace}</p> : <span />}
+        <button
+          type="button"
+          onClick={() => onDialogDate(exam.date)}
+          className={cn("inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-white/15 px-3 text-xs font-semibold hover:bg-white/25", focusRing)}
+        >
+          <Pencil className="size-3.5" aria-hidden="true" /> Change
+        </button>
+      </div>
+      {dialogDate ? (
+        <ExamDayDialog
+          initialDate={dialogDate}
+          todayDate={todayDate}
+          left={left}
+          busy={busy}
+          error={error}
+          onClose={() => onDialogDate(null)}
+          onSave={onSave}
+          onRemove={onRemove}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function ExamDayDialog({
+  initialDate,
+  todayDate,
+  left,
+  busy,
+  error,
+  onClose,
+  onSave,
+  onRemove,
+}: {
+  initialDate: string;
+  todayDate: string;
+  left: number | null;
+  busy: boolean;
+  error: string;
+  onClose: () => void;
+  onSave: (date: string) => Promise<boolean>;
+  onRemove?: () => Promise<void>;
+}) {
+  const todayBs = adToBs(todayDate);
+  const initial = adToBs(initialDate < todayDate ? todayDate : initialDate);
+  const [year, setYear] = useState(initial.year);
+  const [month, setMonth] = useState(initial.month);
+  const [day, setDay] = useState(initial.day);
+
+  const days = getDaysInBsMonth(year, month);
+  const chosenDay = Math.min(day, days);
+  const chosenBs = { year, month, day: chosenDay };
+  const chosenDate = bsToAd(chosenBs).toISOString().slice(0, 10);
+  const remaining = daysUntilExam(chosenDate, todayDate);
+  const inPast = remaining < 0;
+  const pace = paceLine(left, remaining);
+  const select = cn(
+    "min-h-11 w-full cursor-pointer rounded-xl border border-border bg-bg-tertiary px-3 text-sm font-semibold text-text-primary shadow-xs",
+    focusRing,
+  );
+
+  return (
+    <ExamDialog title="Your exam day" subtitle="One sitting covers every subject." busy={busy} onClose={onClose}>
+      <form
+        className="mt-5 grid gap-5"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (await onSave(chosenDate)) onClose();
+        }}
+      >
+        <div className="grid grid-cols-[1fr_1.4fr_1fr] gap-2">
+          <label className="grid gap-1.5 text-xs font-semibold text-text-secondary">
+            Year
+            <select value={year} onChange={(event) => setYear(Number(event.target.value))} className={select}>
+              {[todayBs.year, todayBs.year + 1, todayBs.year + 2].map((option) => (
+                <option key={option} value={option}>{toDevanagariDigits(option)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1.5 text-xs font-semibold text-text-secondary">
+            Month
+            <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className={select}>
+              {NEPALI_MONTH_NAMES.map((name, index) => (
+                <option key={name} value={index + 1}>{name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1.5 text-xs font-semibold text-text-secondary">
+            Day
+            <select value={chosenDay} onChange={(event) => setDay(Number(event.target.value))} className={select}>
+              {Array.from({ length: days }, (_, index) => index + 1).map((option) => (
+                <option key={option} value={option}>{toDevanagariDigits(option)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {/* What the chosen day means — said once. */}
+        <div
+          className={cn(
+            "rounded-2xl p-4",
+            inPast ? "border border-rose-500/30 bg-rose-500/5" : "bg-gradient-to-br from-blue-600 to-indigo-600 text-white",
+          )}
+          aria-live="polite"
+        >
+          {inPast ? (
+            <p className="text-sm font-medium text-rose-600">That day has already passed. Pick a later one.</p>
+          ) : (
+            <>
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-lg font-semibold">{formatNepaliDate(chosenBs)}</p>
+                  <p className="mt-0.5 text-sm text-white/80">{compactDate(chosenDate)}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-3xl font-bold leading-none tabular-nums">{remaining === 0 ? "Today" : remaining}</p>
+                  {remaining > 0 ? <p className="mt-1 text-[11px] font-medium text-white/75">days to go</p> : null}
+                </div>
+              </div>
+              {pace ? <p className="mt-3 border-t border-white/20 pt-3 text-sm text-white/90">{pace}</p> : null}
+            </>
+          )}
+        </div>
+
+        {error ? <p role="alert" className="text-sm text-rose-600">{error}</p> : null}
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+          {onRemove ? (
+            <button
+              type="button"
+              onClick={async () => {
+                await onRemove();
+                onClose();
+              }}
+              disabled={busy}
+              className={cn("inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-rose-600 hover:bg-rose-500/10 disabled:opacity-60", focusRing)}
+            >
+              <Trash2 className="size-4" aria-hidden="true" /> Remove
+            </button>
+          ) : null}
+          <span className="flex-1" />
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className={cn("inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-border px-4 text-sm font-semibold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary", focusRing)}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={busy || inPast}
+            className={cn(
+              "inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60",
+              focusRing,
+            )}
+          >
+            {busy ? <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
+            {busy ? "Saving…" : "Save exam day"}
+          </button>
+        </div>
+      </form>
+    </ExamDialog>
   );
 }

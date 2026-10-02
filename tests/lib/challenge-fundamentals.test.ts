@@ -110,7 +110,7 @@ describe("the fundamentals check", () => {
     const [, request] = mocks.animation.mock.calls[0];
     expect(request.fresh).toBeUndefined();
     expect(request.priority).toBe("urgent");
-    expect(request.seconds).toBeLessThanOrEqual(20);
+    expect(request.seconds).toBe(30);
     expect(request.concept.length).toBeLessThanOrEqual(200);
     expect(request.notes.length).toBeLessThanOrEqual(2000);
     expect(request.notes).toContain("never show or say it): B) Kirchhoff's voltage law");

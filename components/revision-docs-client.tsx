@@ -114,7 +114,9 @@ type SubjectEntry = {
 };
 
 function listSubjects(semesters: RevisionDocSemester[]): SubjectEntry[] {
-  return semesters.flatMap((semester) =>
+  // Subjects outside any faculty term (a creator's own private shelf) are not
+  // part of Revision: the list is the student's faculty only (user, 2026-10-01).
+  return semesters.filter((semester) => !semester.id.startsWith("unscheduled:")).flatMap((semester) =>
     semester.subjects.map((subject) => ({
       key: `${semester.id}:${subject.courseId}:${subject.subjectSlug}`,
       semesterLabel: semester.label,
@@ -286,7 +288,7 @@ function SubjectPicker({
     for (const entry of subjects) {
       let community = byCommunity.get(entry.communityId);
       if (!community) {
-        community = { name: entry.communityName || "Your own material", terms: new Map() };
+        community = { name: entry.communityName || "Your faculty", terms: new Map() };
         byCommunity.set(entry.communityId, community);
       }
       community.terms.set(entry.semesterLabel, [...(community.terms.get(entry.semesterLabel) ?? []), entry]);
@@ -528,7 +530,7 @@ function McqReview({ challengeId, mcqs }: { challengeId: string; mcqs: RevisionD
                         questionId={item.id}
                         selected={item.picked ?? ""}
                         endpoint={`/api/student/challenges/${encodeURIComponent(challengeId)}/choices/explain`}
-                        label={missed ? "Why? Understand it with a video" : "Watch the 20-second explainer"}
+                        label={missed ? "Why? Understand it with a video" : "Watch the 30-second explainer"}
                       />
                     </div>
                   ) : null}
@@ -560,7 +562,7 @@ function TopicPage({ topic }: { topic: RevisionDocTopic }) {
     />
   );
   return (
-    <article className="student-reading-frame">
+    <article className="student-reading-frame" data-nanoai-context="Revision page on screen">
       {/* With no solved questions there is no font row to sit beside. */}
       {topic.solvedExamples.length ? null : <div className="mb-4">{languageSwitch}</div>}
       {/* No title, status or dates (user, 2026-09-24): the navigator already

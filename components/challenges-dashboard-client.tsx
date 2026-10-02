@@ -1,7 +1,7 @@
 "use client";
 
 import { calculateExamReadiness } from "@/lib/exam-readiness";
-import { publishNanoAiTopic } from "@/lib/nanoai-topic";
+import { openNanoAi, publishNanoAiTopic } from "@/lib/nanoai-topic";
 import { unitShownAlone } from "@/lib/unit-numbering";
 import {
   AlertTriangle,
@@ -73,6 +73,7 @@ import {
 import { mergeLearnQuestions } from "@/lib/challenge-learn-questions";
 import { communityTermName, communityTermNoun } from "@/lib/communities";
 import type { StudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
+import type { NextExamDate } from "@/lib/data/next-exam-date";
 import type { ChallengeAllowance } from "@/lib/data/challenge-daily-limit";
 import type {
   StudentChallengeDetail,
@@ -518,10 +519,16 @@ function ChallengeDetail({
   useEffect(() => {
     publishNanoAiTopic(
       askAiAllowed && askAiTopic
-        ? { subjectName: challenge.subjectName, topicTitle: askAiTopic, surface: "challenge" }
+        ? {
+            subjectName: challenge.subjectName,
+            topicTitle: askAiTopic,
+            surface: "challenge",
+            // In focus mode Ask AI sits in the bar beside Exit, not floating.
+            launcher: focusMode ? "page" : undefined,
+          }
         : null,
     );
-  }, [askAiAllowed, askAiTopic, challenge.subjectName]);
+  }, [askAiAllowed, askAiTopic, challenge.subjectName, focusMode]);
   useEffect(() => () => publishNanoAiTopic(null), []);
 
   useEffect(() => {
@@ -1014,7 +1021,23 @@ function ChallengeDetail({
           aria-label="Challenge"
           className="sticky top-0 z-30 grid min-h-[53px] grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)] items-center gap-3 border-b border-border bg-bg-secondary/95 px-4 backdrop-blur md:px-6"
         >
-          <div className="flex min-w-0 items-center">{focusToggle}</div>
+          <div className="flex min-w-0 items-center gap-2">
+            {focusToggle}
+            {askAiAllowed && askAiTopic ? (
+              <button
+                type="button"
+                data-nanoai-launcher=""
+                onClick={(event) => openNanoAi(event.currentTarget)}
+                onPointerEnter={() => void import("@/components/chat-page-client")}
+                aria-label="Ask AI"
+                title="Ask NanoAI about this topic"
+                className={`${focusButtonClass} inline-flex items-center justify-center gap-2 bg-[var(--challenge-banner)] px-3 text-[#111827] hover:brightness-95`}
+              >
+                <span className="whitespace-nowrap">Ask AI</span>
+                <Sparkles className="size-4" aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
           <div className="min-w-0 max-w-[min(56vw,720px)] text-center">
             <p className="truncate text-xs text-text-muted">{challengeEyebrow}</p>
             <p className="truncate font-sans text-sm font-semibold text-text-primary">
@@ -1026,6 +1049,8 @@ function ChallengeDetail({
       ) : null}
 
       <div
+        // What Ask AI reads when asked about "this" (lib/nanoai-page-context.ts).
+        data-nanoai-context="Challenge page on screen"
         className={
           focusMode
             ? // The same column as outside focus mode, under the bar.
@@ -2042,10 +2067,14 @@ export function ChallengesDashboardClient({
   initialChallengeId,
   canRestartChallenge = false,
   allowance,
+  nextExam = null,
 }: {
   dashboard: StudentChallengeDashboard;
   /** Today's free-plan challenges (see challenge-daily-limit.ts); absent = no limit. */
   allowance?: ChallengeAllowance;
+  /** The nearest exam set on Today's calendar: the countdown card, and what the
+   *  daily target spreads the remaining topics over. */
+  nextExam?: NextExamDate | null;
   /** Opened straight away, so the dashboard's starter card lands the student
    *  inside the challenge rather than on the hub they came from. */
   initialChallengeId?: string;
@@ -2239,8 +2268,8 @@ export function ChallengesDashboardClient({
   };
 
   /**
-   * THE FREE PLAN'S THREE A DAY: the lock follows the "Today's quota" card —
-   * three challenges COMPLETED today — so it appears exactly at 3 / 3. The
+   * THE FREE PLAN'S THREE A DAY: the lock counts what the "Today's quota" card
+   * counts — challenges COMPLETED today — and appears at the third. The
    * server refuses a Start past it regardless (402), and a 402 locks the rest.
    * Continue locks too (user, 2026-09-28): at the limit every card is Upgrade.
    */
@@ -2249,8 +2278,15 @@ export function ChallengesDashboardClient({
   const limitReached = Boolean(
     allowance && !allowance.paid && (refusedToday || completedToday >= allowance.limit),
   );
-  /** A free student cannot pass the daily lock, so their target is the lock. */
-  const dailyTarget = allowance && !allowance.paid ? allowance.limit : DAILY_CHALLENGE_TARGET;
+  /**
+   * THE DAILY TARGET (user, 2026-10-02): the topics still to pass, spread over
+   * the days left to the exam — counting today, so the exam day itself still
+   * has one. Without an exam date it falls back to the flat three.
+   */
+  const topicsRemaining = Math.max(0, topicsPassed.total - topicsPassed.covered);
+  const dailyTarget = nextExam
+    ? Math.ceil(topicsRemaining / Math.max(1, nextExam.daysLeft))
+    : DAILY_CHALLENGE_TARGET;
   const extraToday = Math.max(0, completedToday - dailyTarget);
 
   const openChallenge = async (challenge: StudentChallengeSummary) => {
@@ -2404,50 +2440,48 @@ export function ChallengesDashboardClient({
             >
               <div
                 className="h-full rounded-full bg-[#2563eb] transition-[width] duration-300 motion-reduce:transition-none"
-                style={{ width: `${Math.min(100, (completedToday / dailyTarget) * 100)}%` }}
+                style={{
+                  width: `${dailyTarget > 0 ? Math.min(100, (completedToday / dailyTarget) * 100) : 100}%`,
+                }}
               />
             </div>
           </article>
 
-          {/* Card 2: Topics passed — how far through the syllabus the student is,
-              over the same subjects (and the same counts) as the rows below, so
-              a pass moves both at once. It replaced a "Daily target" that only
-              repeated the quota's denominator. */}
+          {/* Card 2: Topics passed — just the count (user, 2026-10-01). The
+              "/ total" and its % were syllabus coverage, which rounded to 0%
+              for a new student and only repeated Exam readiness beside it. */}
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">TOPICS PASSED</p>
             {topicsPassed.total > 0 ? (
-              <>
-                <div className="mt-2 flex items-baseline gap-1.5">
-                  <span className="type-student-metric text-text-primary">{topicsPassed.covered}</span>
-                  <span className="type-student-metric text-text-muted">/ {topicsPassed.total}</span>
-                  <span className="ml-auto text-[13px] font-semibold tabular-nums text-text-secondary">
-                    {Math.round((topicsPassed.covered / topicsPassed.total) * 100)}%
-                  </span>
-                </div>
-                <div
-                  className="mt-3.5 h-1.5 w-full overflow-hidden rounded-full bg-[#f1f3f5] dark:bg-bg-tertiary"
-                  aria-hidden="true"
-                >
-                  <div
-                    className="h-full rounded-full bg-[#84cc16] transition-[width] duration-300 motion-reduce:transition-none"
-                    style={{ width: `${(topicsPassed.covered / topicsPassed.total) * 100}%` }}
-                  />
-                </div>
-              </>
+              <p className="type-student-metric mt-2 text-text-primary">{topicsPassed.covered}</p>
             ) : (
               <p className="mt-2 text-[13px] text-text-muted">Topics not mapped yet</p>
             )}
           </article>
 
-          {/* Card 3: 7-Day Average — challenges completed a day over the last
-              seven days, always in that one unit. */}
+          {/* Card 3: Exam countdown (user, 2026-10-02) — days to the nearest
+              exam set on Today's calendar, which the daily target divides by. */}
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
-              7-DAY AVERAGE
+              EXAM DAYS REMAINING
             </p>
-            <p className="type-student-metric mt-2 text-text-primary">
-              {Math.max(0, dashboard.passedThisWeek / 7).toFixed(1)}
-            </p>
+            {nextExam ? (
+              <>
+                <p className="type-student-metric mt-2 text-text-primary">
+                  {nextExam.daysLeft === 0 ? "Today" : nextExam.daysLeft}
+                </p>
+                <p className="mt-2 truncate text-xs text-text-muted" title={nextExam.title}>
+                  {nextExam.title}
+                </p>
+              </>
+            ) : (
+              <Link
+                href="/app/today"
+                className="mt-2 inline-block text-[13px] font-medium text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Set your exam date
+              </Link>
+            )}
           </article>
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">EXAM READINESS</p>

@@ -1,3 +1,5 @@
+import { cookies } from "next/headers";
+import { ACTIVE_COMMUNITY_COOKIE, savedCommunitySlug } from "@/lib/community-switch";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { getStudentDailyDashboard } from "@/lib/data/student-daily-dashboard";
@@ -37,7 +39,13 @@ export async function GET(request: Request) {
     if (!user) return errorJson("Unauthorized", 401);
 
     const params = new URL(request.url).searchParams;
-    const community = params.get("community") || undefined;
+    // No `?community=` means "the community I'm in": the one the switcher saved,
+    // exactly as the page shell resolves it. Falling back to the first joined
+    // community showed a BEI programme map to someone switched to Licence.
+    const community =
+      params.get("community") ||
+      savedCommunitySlug((await cookies()).get(ACTIVE_COMMUNITY_COOKIE)?.value, user.id) ||
+      undefined;
     const month = params.get("month") || undefined;
     const dashboard = await getStudentDailyDashboard(user.id, undefined, community, month);
 

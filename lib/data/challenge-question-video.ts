@@ -40,10 +40,7 @@ export type QuestionVideo = {
   error: string;
 };
 
-/**
- * The CEILING, not the length (user, 2026-09-29): a memory video is as short as
- * makes the idea clear — the renderer's planner picks 10-30s and aims for 12-20.
- */
+/** The length every question video runs (user, 2026-10-02): 30 seconds. */
 const VIDEO_SECONDS = 30;
 /** Requests to the course API at once while preparing a paper's videos. The
  *  renderer queues and plans in parallel itself; this only bounds our fan-out. */

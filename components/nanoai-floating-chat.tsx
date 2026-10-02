@@ -13,7 +13,7 @@ import {
 } from "react";
 import type { AppUser, Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useNanoAiTopic } from "@/lib/nanoai-topic";
+import { onNanoAiOpen, useNanoAiTopic } from "@/lib/nanoai-topic";
 
 /*
  * The NanoAI bubble: the full Library chat (ChatPageClient in its "floating"
@@ -167,6 +167,8 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
   // while the student is reading — never while answering the graded paper.
   const onChallenge = topic?.surface === "challenge";
   const hidden = offRevision && !onChallenge;
+  // A challenge's focus bar has its own Ask AI beside Exit (user, 2026-10-02).
+  const pageLauncher = topic?.launcher === "page";
   // Above the challenge's focus overlay (z-[60]), below its sheets (z-[70]).
   const layer = onChallenge ? "z-[65]" : "z-40";
   const [nudge, setNudge] = useState("");
@@ -239,9 +241,27 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
     void loadBootstrap();
   }, [button, loadBootstrap]);
 
+  // Opened from the page's own button: the panel drops just under it.
+  useEffect(
+    () =>
+      onNanoAiOpen(({ anchor }) => {
+        const { width } = panelSize();
+        const onRight = anchor.left + (anchor.right - anchor.left) / 2 >= window.innerWidth / 2;
+        setPanel(clampPanel({ x: onRight ? anchor.right - width : anchor.left, y: anchor.bottom + 8 }));
+        setMounted(true);
+        setOpen(true);
+        setNudge("");
+        everOpened.current = true;
+        void loadBootstrap();
+      }),
+    [loadBootstrap],
+  );
+
   const closePanel = useCallback(() => {
     setOpen(false);
-    window.requestAnimationFrame(() => buttonRef.current?.focus());
+    window.requestAnimationFrame(() =>
+      (buttonRef.current ?? document.querySelector<HTMLElement>("[data-nanoai-launcher]"))?.focus(),
+    );
   }, []);
 
   useEffect(() => {
@@ -333,7 +353,7 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
 
   return (
     <>
-      {!open && !hidden ? (
+      {!open && !hidden && !pageLauncher ? (
         <button
           ref={buttonRef}
           type="button"
@@ -368,7 +388,7 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
           </span>
         </button>
       ) : null}
-      {nudge && !open && !hidden && !draggingButton ? (
+      {nudge && !open && !hidden && !pageLauncher && !draggingButton ? (
         <button
           type="button"
           onClick={openPanel}

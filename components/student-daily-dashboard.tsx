@@ -436,11 +436,11 @@ function SemesterProgress({
       {semester ? (
         <div className="p-5 sm:p-6">
           {rankedSubjects.length ? (
-            <div className="divide-y divide-border border-y border-border">
+            <div className="divide-y divide-border">
               {rankedSubjects.map((subject) => (
                 <article
                   key={subject.id}
-                  className="grid gap-4 py-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                  className="grid gap-4 py-5 first:pt-0 last:pb-0 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -807,6 +807,8 @@ function DashboardContent({
           semesters={community?.semesters ?? []}
           currentSemesterId={community?.currentSemesterId}
           onExamDatesChange={handleExamDatesChange}
+          // One track (Entrance, License) = one MCQ exam day, no subjects.
+          singleExam={community?.termNoun === null}
         />
         <SemesterProgress dashboard={dashboard} compact />
       </div>
