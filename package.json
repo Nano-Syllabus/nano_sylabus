@@ -2,7 +2,14 @@
   "name": "nano-syllabus",
   "private": true,
   "scripts": {
-    "dev": "NEXT_DIST_DIR=.next-dev node node_modules/next/dist/bin/next dev --turbopack --port 3000",
+    "dev": "NEXT_DIST_DIR=.next-dev node --env-file=.env.development.local node_modules/next/dist/bin/next dev --turbopack --port 3000",
+    "dev:staging": "NEXT_DIST_DIR=.next-staging node --env-file=.env.staging.local node_modules/next/dist/bin/next dev --turbopack --port 3001",
+    "build:staging": "NEXT_DIST_DIR=.next-staging-build node --env-file=.env.staging.local node_modules/next/dist/bin/next build",
+    "start:staging": "NEXT_DIST_DIR=.next-staging-build node --env-file=.env.staging.local node_modules/next/dist/bin/next start --port 3001",
+    "db:dev:start": "node scripts/development-db.mjs start",
+    "db:dev:stop": "node scripts/development-db.mjs stop",
+    "auth:google:staging": "node --env-file=.env.staging.local --env-file=.env.google.local scripts/configure-google-auth.mjs staging --apply",
+    "auth:google:dev": "node --env-file=.env.google.local scripts/configure-google-auth.mjs development --apply",
     "build": "node node_modules/next/dist/bin/next build",
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "eslint .",
@@ -19,7 +26,7 @@
     "perf:ui": "node scripts/perf/ui-profile.mjs",
     "dev:nologin": "DEV_AUTH_BYPASS=1 npm run dev",
     "perf:security": "node scripts/perf/security-audit.mjs",
-    "dev:webpack": "NEXT_DIST_DIR=.next-dev-webpack node node_modules/next/dist/bin/next dev --port 3000"
+    "dev:webpack": "NEXT_DIST_DIR=.next-dev-webpack node --env-file=.env.development.local node_modules/next/dist/bin/next dev --port 3000"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

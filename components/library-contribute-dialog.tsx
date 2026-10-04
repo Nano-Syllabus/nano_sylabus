@@ -2,7 +2,7 @@
 
 import { CheckCircle2, FileUp, LoaderCircle, X, XCircle } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { uploadVpsFile } from "@/lib/vps-storage-upload";
 import { TEACHER_UPLOAD_MAX_LABEL, teacherUploadSizeError } from "@/lib/teacher-upload";
 import { cn } from "@/lib/utils";
 
@@ -165,12 +165,8 @@ export function LibraryContributeDialog({
         }),
       );
       const storagePath = String(prepared.storagePath || "");
-      const { error } = await createSupabaseBrowserClient()
-        .storage.from(String(prepared.bucket || ""))
-        .uploadToSignedUrl(storagePath, String(prepared.token || ""), file, {
-          contentType: "application/pdf",
-        });
-      if (error) throw new Error(`The file could not be uploaded: ${error.message}`);
+      const uploadUrl = String(prepared.uploadUrl || "");
+      await uploadVpsFile(uploadUrl, file, "application/pdf");
 
       setPhase({ kind: "checking" });
       const verdict = (await readJson(

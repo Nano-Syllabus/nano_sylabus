@@ -15,6 +15,7 @@ catalogs and answer generation come from the external tenant API.
   local model answering, or local knowledge chunk retrieval.
 - Chat history, notes, feedback, credits, and admin review still persist in
   Supabase.
+- Binary uploads live on the Nano Syllabus VPS; Supabase Storage is not required.
 
 ## Repository Structure
 
@@ -35,6 +36,8 @@ docs/        Product and operations notes
 - `TENANT_API_BASE_URL`
 - `TENANT_API_TOKEN`
 - `TEACHER_APP_API_TOKEN` required for creating teacher workspaces
+- `VPS_STORAGE_URL`, `VPS_STORAGE_TOKEN`, and `VPS_STORAGE_SIGNING_SECRET`
+  optionally override the tenant API URL/token used by VPS object storage.
 - `TENANT_API_REJECT_UNAUTHORIZED` optional, defaults to `0`
 - `TENANT_API_TIMEOUT_MS` optional, minimum enforced timeout is `30000`
 - `GOOGLE_DRIVE_API_KEY` optional. A Google Cloud API key with the Drive API

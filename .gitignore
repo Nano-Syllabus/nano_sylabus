@@ -40,6 +40,12 @@ playwright-report/
 .vercel
 .env
 .env.production
+.env.staging
+.env.development
+development/supabase/.temp/
+development/supabase/.branches/
+supabase/.temp/
+supabase/.branches/
 .env.vercel.check
 .env*.bak*
 local_keys.txt

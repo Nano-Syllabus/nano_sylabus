@@ -123,6 +123,7 @@ export async function POST(request: Request) {
           bucket: "teacher-documents",
           storagePath,
           token: data.token,
+          uploadUrl: data.signedUrl,
           maxBytes: TEACHER_UPLOAD_MAX_BYTES,
           maxLabel: TEACHER_UPLOAD_MAX_LABEL,
         });

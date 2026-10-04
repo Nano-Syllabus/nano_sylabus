@@ -1,4 +1,5 @@
 import { compressAnswerPhoto } from "@/lib/answer-sheet-photo";
+import { uploadVpsFile } from "@/lib/vps-storage-upload";
 
 /**
  * Add files to an answer sheet from a browser — the desktop's picker and the
@@ -62,12 +63,7 @@ export async function addFilesToSheet(
       }),
       "Could not start the upload.",
     );
-    // The same body storage-js sends to a signed upload URL.
-    const body = new FormData();
-    body.append("cacheControl", "3600");
-    body.append("", new File([prepared.blob], prepared.name, { type: prepared.mimeType }));
-    const stored = await fetch(uploadUrl, { method: "PUT", headers: { "x-upsert": "false" }, body });
-    if (!stored.ok) throw new Error(`${prepared.name} did not upload. Check your connection and try again.`);
+    await uploadVpsFile(uploadUrl, prepared.blob, prepared.mimeType);
     await json(await fetch(`${base}/pages/${pageId}`, { method: "POST" }), "The page could not be saved.");
     done += 1;
     onProgress?.(done, files.length);

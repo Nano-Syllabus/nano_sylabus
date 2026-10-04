@@ -11,6 +11,21 @@ const nextConfig: NextConfig = {
   // nothing in return.
   poweredByHeader: false,
 
+  async rewrites() {
+    const configured = process.env.VPS_STORAGE_PROXY_ORIGIN || process.env.TENANT_API_BASE_URL;
+    if (!configured) return [];
+    const origin = new URL(configured);
+    if (!process.env.VPS_STORAGE_PROXY_ORIGIN && process.env.TENANT_API_REJECT_UNAUTHORIZED !== "1") {
+      origin.protocol = "http:";
+    }
+    return [
+      {
+        source: "/vps-storage/:path*",
+        destination: `${origin.origin}/v1/object-storage/:path*`,
+      },
+    ];
+  },
+
   /**
    * Security response headers.
    *

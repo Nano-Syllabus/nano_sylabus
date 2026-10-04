@@ -1,3 +1,23 @@
+function assertSupabaseDatabaseEnvironment(url: string) {
+  const environment = process.env.NEXT_PUBLIC_APP_ENV;
+  if (environment !== "development" && environment !== "staging") return;
+
+  const development = process.env.NEXT_PUBLIC_DEVELOPMENT_SUPABASE_URL;
+  const staging = process.env.NEXT_PUBLIC_STAGING_SUPABASE_URL;
+  if (!development || !staging) {
+    throw new Error("Set separate development and staging Supabase URLs before starting the app.");
+  }
+  const developmentOrigin = new URL(development).origin;
+  const stagingOrigin = new URL(staging).origin;
+  if (developmentOrigin === stagingOrigin) {
+    throw new Error("Development and staging must use different Supabase databases.");
+  }
+  const expectedOrigin = environment === "development" ? developmentOrigin : stagingOrigin;
+  if (new URL(url).origin !== expectedOrigin) {
+    throw new Error(`The Supabase URL does not match the selected ${environment} environment.`);
+  }
+}
+
 export function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -8,6 +28,7 @@ export function getSupabaseEnv() {
     );
   }
 
+  assertSupabaseDatabaseEnvironment(url);
   return { url, key };
 }
 
@@ -21,6 +42,7 @@ export function getSupabaseServiceRoleEnv() {
     );
   }
 
+  assertSupabaseDatabaseEnvironment(url);
   return { url, serviceRoleKey };
 }
 

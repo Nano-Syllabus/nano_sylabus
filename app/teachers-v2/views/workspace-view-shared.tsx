@@ -2,7 +2,7 @@
 
 import { useEffect, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { uploadVpsFile } from "@/lib/vps-storage-upload";
 import { cn } from "@/lib/utils";
 import { teacherUploadSizeError } from "@/lib/teacher-upload";
 import {
@@ -561,18 +561,12 @@ export async function uploadTeacherDocument(file: File, path: string) {
   );
   const bucket = text(prepared.bucket);
   const storagePath = text(prepared.storagePath);
-  const token = text(prepared.token);
-  if (!bucket || !storagePath || !token) {
+  const uploadUrl = text(prepared.uploadUrl);
+  if (!bucket || !storagePath || !uploadUrl) {
     throw new Error("Private upload storage was not prepared correctly.");
   }
 
-  const supabase = createSupabaseBrowserClient();
-  const { error } = await supabase.storage
-    .from(bucket)
-    .uploadToSignedUrl(storagePath, token, file, {
-      contentType: file.type || "application/octet-stream",
-    });
-  if (error) throw new Error(`The file could not be uploaded: ${error.message}`);
+  await uploadVpsFile(uploadUrl, file, file.type || "application/octet-stream");
 
   return responsePayload(
     await fetch("/api/teacher/upload", {

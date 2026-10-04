@@ -115,6 +115,7 @@ export async function prepareContribution(
     bucket: STAGING_BUCKET,
     storagePath,
     token: data.token,
+    uploadUrl: data.signedUrl,
     maxBytes: TEACHER_UPLOAD_MAX_BYTES,
     maxLabel: TEACHER_UPLOAD_MAX_LABEL,
   };
