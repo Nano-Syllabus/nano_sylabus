@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState, FormEvent, MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { aheadOfCount, gradeTopicEvaluation, scoreDistribution } from "@/lib/teacher-score-insights";
@@ -2064,10 +2065,13 @@ export function SubmissionReviewCard({
                 aria-label={`Place ${annotationTool} annotation on page ${annotationPage}`}
               >
                 {submission.answerSheetMimeType.startsWith("image/") ? (
-                  <img
-                    src={submission.answerSheetUrl}
-                    alt="Student answer sheet"
-                    className="h-full w-full object-contain"
+                      <Image
+                        src={submission.answerSheetUrl}
+                        alt="Student answer sheet"
+                        fill
+                        unoptimized
+                        sizes="(min-width: 768px) 50vw, 100vw"
+                        className="object-contain"
                   />
                 ) : (
                   <iframe

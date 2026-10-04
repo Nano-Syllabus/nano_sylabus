@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TEACHER_UPLOAD_MAX_BYTES, TEACHER_UPLOAD_MAX_LABEL } from "@/lib/teacher-upload";
 import {
   downloadDriveFile,
   driveContentType,
@@ -243,12 +244,26 @@ describe("downloadDriveFile", () => {
    * exhaust this process before any size check ran.
    */
   it("stops reading once a file passes the upload ceiling", async () => {
-    const oversized = 51 * 1024 * 1024;
-    fetchMock.mockResolvedValueOnce(bytesResponse(oversized));
-    const caught = await downloadDriveFile(pdf).catch((error) => error);
-    expect(caught).toBeInstanceOf(DriveLinkError);
-    expect(caught.kind).toBe("too-large");
-    expect(caught.message).toContain("50 MB");
+    const cancel = vi.fn();
+    let emittedBytes = 0;
+    const chunk = new Uint8Array(1024 * 1024);
+    const body = new ReadableStream({
+      pull(controller) {
+        emittedBytes += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      cancel,
+    });
+    fetchMock.mockResolvedValueOnce(new Response(body, {
+      headers: { "content-type": "application/pdf" },
+    }));
+    await expect(downloadDriveFile(pdf)).rejects.toMatchObject({
+      kind: "too-large",
+      message: expect.stringContaining(TEACHER_UPLOAD_MAX_LABEL),
+    });
+    expect(emittedBytes).toBeGreaterThan(TEACHER_UPLOAD_MAX_BYTES);
+    expect(emittedBytes).toBeLessThanOrEqual(TEACHER_UPLOAD_MAX_BYTES + 2 * chunk.byteLength);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("reads an HTML interstitial on the keyless path as a sharing problem", async () => {

@@ -37,15 +37,15 @@ describe("the teachers workspace is code split", () => {
 
   it("loads every non-default view lazily, never with a static import", () => {
     const entry = read("teacher-workspace-v2.tsx");
-    for (const module of HEAVY) {
-      const specifier = `./${module.replace("views/", "views/")}`;
+    for (const modulePath of HEAVY) {
+      const specifier = `./${modulePath.replace("views/", "views/")}`;
       expect(
         entry.includes(`from "${specifier}"`),
-        `${module} is statically imported — that puts it back in the first load`,
+        `${modulePath} is statically imported — that puts it back in the first load`,
       ).toBe(false);
       expect(
         entry.includes(`import("${specifier}")`),
-        `${module} should be reached through dynamic()`,
+        `${modulePath} should be reached through dynamic()`,
       ).toBe(true);
     }
   });

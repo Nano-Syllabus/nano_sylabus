@@ -21,7 +21,7 @@ const validCourse = {
   level: "Advanced" as const,
   languageModes: ["English" as const],
   accessModel: "free" as const,
-  priceNpr: 0,
+  priceNpr: 0 as const,
   visibility: "public" as const,
   diagnosticQuestionCount: 10,
   dailyMinutes: 20,

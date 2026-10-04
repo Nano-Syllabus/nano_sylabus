@@ -2289,7 +2289,7 @@ export function ChallengesDashboardClient({
     : DAILY_CHALLENGE_TARGET;
   const extraToday = Math.max(0, completedToday - dailyTarget);
 
-  const openChallenge = async (challenge: StudentChallengeSummary) => {
+  const openChallenge = useCallback(async (challenge: StudentChallengeSummary) => {
     setOpeningId(challenge.id);
     setOpenError("");
     try {
@@ -2311,7 +2311,7 @@ export function ChallengesDashboardClient({
     } finally {
       setOpeningId("");
     }
-  };
+  }, [patchHub]);
 
   /**
    * From a finished subject's row to its next topic: the server tops the
@@ -2348,7 +2348,7 @@ export function ChallengesDashboardClient({
     if (!initialChallenge) return;
     openedInitialChallengeRef.current = initialChallengeId;
     void openChallenge(initialChallenge);
-  }, [dashboard.challenges, initialChallengeId]);
+  }, [dashboard.challenges, initialChallengeId, openChallenge]);
 
   // The open challenge is in the address bar, `?challenge=<id>`, however it was
   // opened — a card, Next, the next topic — so a refresh reopens it and the link

@@ -9,3 +9,14 @@ test-results/
 playwright-report/
 perf-results/
 final_ui_nano (1).html
+
+# Private configuration is supplied through Vercel project environments.
+.env
+.env.*.local
+.env.production
+.env.development
+.env.staging
+.env.vercel.check
+.env*.bak*
+local_keys.txt
+vercel_keys.txt

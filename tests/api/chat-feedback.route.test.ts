@@ -44,16 +44,16 @@ describe("PATCH /api/chat/messages/[messageId]/feedback", () => {
     sessionChain.eq.mockReturnValue(sessionChain);
 
     const updateMaybeSingle = vi.fn(async function updateFeedbackResult() {
-      const payload = update.mock.calls.at(-1)?.[0] as { feedback?: "up" | "down" | null };
+      const payload = update.mock.calls.at(-1)?.[0];
       return {
-        data: { id: "message-1", feedback: payload.feedback ?? null },
+        data: { id: "message-1", feedback: payload?.feedback ?? null },
         error: null,
       };
     });
     const updateSelect = vi.fn(() => ({ maybeSingle: updateMaybeSingle }));
     const updateEqSecond = vi.fn(() => ({ select: updateSelect }));
     const updateEqFirst = vi.fn(() => ({ eq: updateEqSecond }));
-    const update = vi.fn(() => ({ eq: updateEqFirst }));
+    const update = vi.fn((_payload: { feedback: "up" | "down" | null }) => ({ eq: updateEqFirst }));
     const chatMessagesTable = {
       select: vi.fn(() => messageChain),
     };

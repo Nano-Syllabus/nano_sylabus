@@ -1,9 +1,12 @@
 # Google sign-in, VPS files and separate databases — 2026-10-04
 
 Development now uses local Supabase. The migrated hosted project is treated as
-staging. Google sign-in remains pending real OAuth credentials and access to
-staging Auth configuration; neither provider has been enabled with placeholder
-credentials. Google buttons are disabled until configuration is verified.
+staging. The existing Google login and signup buttons have been restored in
+`.env`, `.env.staging.local` and `.env.development.local` at the user's request.
+The login components, OAuth callback, PKCE flow and return-path handling are
+unchanged. The existing Google credentials are now saved privately in
+`.env.google.local`, and both Auth services report Google enabled. Staging and
+local development both reach Google's sign-in page using the existing client.
 
 ## Environment selection
 
@@ -71,7 +74,29 @@ Storage must be uploaded to the VPS again if they are needed.
 An audit of all staging public-table fields found zero saved URLs referencing
 `*.supabase.co/storage/v1/`; no URL-rewrite database mutation was necessary.
 
-## Google credentials and callback setup still required
+## Google credentials and remaining callback setup
+
+Reuse the Google OAuth Web application client that powered the original login;
+do not create a replacement client or remove its existing redirect URIs. The
+user supplied its credentials, which are saved in `.env.google.local` with mode
+`0600`. The staging provider was already enabled when rechecked; its settings
+were preserved. `npm run auth:google:dev` enabled the development provider and
+restarted local services while retaining database volumes.
+
+Google accepts both the hosted staging callback and the development callback
+`http://127.0.0.1:54321/auth/v1/callback`. Development initially returned
+`redirect_uri_mismatch`; after the user registered that URI on the existing
+Google client, a headless browser reached Google's sign-in page successfully.
+
+Staging accepts the app callbacks on `http://localhost:3001` and
+`http://127.0.0.1:3001`. A cancellation test from `https://nanosyllabus.com` and
+`https://www.nanosyllabus.com` instead returned to `http://localhost:3000/`.
+Before using the new staging project on those domains, add their exact
+`/auth/callback` URLs to Supabase's redirect allowlist and select the appropriate
+hosted Site URL. This hosted configuration was not changed: the private
+Management API token remains empty, and the current MCP login lacks Auth
+configuration permissions. These checks concern the new staging project, not
+the currently deployed site's environment.
 
 Fill private `.env.google.local` from `.env.google.local.example`:
 
@@ -106,7 +131,9 @@ Google returns to Supabase, which returns to the same app origin where
 sign-in started. The existing PKCE code exchange and host-only return cookie
 are retained.
 
-After supplying credentials and registering the redirect URIs, run:
+Development setup has already been applied. For future reconfiguration, run
+the appropriate command below; staging requires the Management API token and
+the intended Site URL/redirect configuration:
 
 ```sh
 npm run auth:google:dev
@@ -128,6 +155,28 @@ of the database transfer and Google OAuth does not require SMTP.
 
 ## Verification
 
+- Before the GitHub push, repository ESLint, the production Next.js build and
+  application source type-check passed. The full API/library test suite still
+  reports 12 failures; all 12 reproduced against the previous GitHub `main`
+  commit in an isolated checkout. Full-project `tsc` also reports existing
+  errors in unchanged test fixtures. Private environment files and Google
+  credentials are excluded from the commit.
+- Both Auth settings endpoints return HTTP 200 with Google enabled. Both
+  authorization endpoints return HTTP 302 to Google using the existing client.
+  A headless browser reaches Google's sign-in page for both staging and
+  development after the callback registration. Simulated consent cancellation
+  returns to the correct `/auth/callback` on development port 3000 and both local
+  staging origins on port 3001. The live-domain staging callback mismatch is
+  recorded above. No Google account login or session creation was performed.
+  All 14 existing OAuth redirect, post-auth and environment tests pass.
+- After restoring the existing feature flags, `/login` (with the community join
+  return path) and `/signup` returned HTTP 200 and rendered `Continue with Google`
+  on both development port 3000 and staging port 3001. All 14 existing tests in
+  `auth-redirect`, `post-auth` and `environment-databases` passed. File hashes
+  confirmed the login/signup components, OAuth helpers, callback route, private
+  Google credential file and local provider config were unchanged at that step.
+  The credentials and local provider config were subsequently updated as
+  described above. No hosted deployment was performed.
 - 42 focused tests passed across seven files: VPS transport/signatures/path
   isolation, rejection of non-VPS browser uploads, environment selection,
   OAuth return origins, post-auth destinations and teacher/library uploads.
@@ -138,13 +187,14 @@ of the database transfer and Google OAuth does not require SMTP.
   errors were not resolved by this configuration task.
 - Development Auth creation, password login, profile write/RLS read and logout
   worked. The temporary account and its profile were deleted.
-- Both environment Auth settings endpoints returned HTTP 200; both report
-  Google disabled while real credentials are missing.
+- Before the credentials were supplied, both environment Auth settings
+  endpoints returned HTTP 200 with Google disabled.
 - A unique development VPS probe uploaded and read back through a signed URL;
   it was deleted afterward. Staging's Supabase bucket listing remained empty.
 - Development function grants match the source; every application table has
   RLS enabled. No staging data was modified by these probes.
 
-Private JSON verification records are in the existing October 4 rollback
-directory. Google Management API application and browser consent have not
-been tested because the required credentials have not been supplied.
+Private JSON verification records are in the October 4 rollback directories.
+Google Management API application remains untested because its token is absent.
+Interactive Google consent and session creation remain to be verified with a
+Google account.
