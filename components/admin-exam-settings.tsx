@@ -13,7 +13,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { AdminExamBillingDialog } from "@/components/admin-exam-billing-dialog";
+import { AdminPaymentQrField } from "@/components/admin-payment-qr-field";
 import { AdminFacultyCreate } from "@/components/admin-faculty-create";
 import type { CommunityChoice } from "@/lib/data/landing-sites";
 import type { ExamConfig } from "@/lib/exam-enrollment";
@@ -43,7 +43,6 @@ export function AdminExamSettings({
   const [config, setConfig] = useState(initialConfig);
   const [communities, setCommunities] = useState(initialCommunities);
   const [addingFaculty, setAddingFaculty] = useState(false);
-  const [billingOpen, setBillingOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
@@ -389,38 +388,6 @@ export function AdminExamSettings({
               ))}
           </div>
           <fieldset>
-            <legend className="mb-2 text-sm font-semibold">Payment plans</legend>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Leave all unchecked to use every active individual plan. Set each plan’s monthly price
-              right here.
-            </p>
-            {plans
-              .filter(
-                (p) => p.productType === "individual" && p.billingType === "monthly" && p.price > 0,
-              )
-              .map((p) => (
-                <div key={p.id} className="mb-2 flex items-center gap-3 text-sm">
-                  <label className="flex min-w-0 flex-1 items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={config.planIds.includes(p.id)}
-                      onChange={() =>
-                        setConfig({
-                          ...config,
-                          planIds: config.planIds.includes(p.id)
-                            ? config.planIds.filter((id) => id !== p.id)
-                            : [...config.planIds, p.id],
-                        })
-                      }
-                      className="size-4 accent-blue-600"
-                    />
-                    {p.name}
-                  </label>
-                  <PlanPriceEditor plan={p} onError={setError} onSaved={setMessage} />
-                </div>
-              ))}
-          </fieldset>
-          <fieldset>
             <legend className="mb-2 text-sm font-semibold">Payment durations</legend>
             <div className="flex gap-5">
               {([1, 3] as const).map((period) => (
@@ -445,14 +412,8 @@ export function AdminExamSettings({
                 </label>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => setBillingOpen(true)}
-              className="mt-3 inline-block text-sm text-blue-600 underline underline-offset-4"
-            >
-              Edit prices, plan features & payment QR
-            </button>
           </fieldset>
+          <AdminPaymentQrField />
           <div className="flex flex-wrap gap-3 text-sm">
             <Link href={`/prepare/${slug}`} className="text-blue-600 underline underline-offset-4">
               Preview preparation flow ↗
@@ -701,75 +662,6 @@ export function AdminExamSettings({
           </p>
         ) : null}
       </div>
-      {billingOpen ? <AdminExamBillingDialog onClose={() => setBillingOpen(false)} /> : null}
     </details>
-  );
-}
-
-/** Edits one plan's monthly price in place; the plan's other fields are sent back unchanged. */
-function PlanPriceEditor({
-  plan,
-  onError,
-  onSaved,
-}: {
-  plan: SubscriptionPlan;
-  onError: (message: string) => void;
-  onSaved: (message: string) => void;
-}) {
-  const [saved, setSaved] = useState(plan.price);
-  const [value, setValue] = useState(String(plan.price));
-  const [pending, setPending] = useState(false);
-  const price = Number(value);
-  const valid = value.trim() !== "" && Number.isInteger(price) && price > 0;
-  async function save() {
-    if (!valid || price === saved) return;
-    setPending(true);
-    onError("");
-    try {
-      const response = await fetch(`/api/admin/subscriptions/plans/${plan.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: plan.name,
-          slug: plan.slug,
-          credits: plan.credits,
-          price,
-          currency: plan.currency,
-          billingType: plan.billingType,
-          isActive: plan.isActive,
-        }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Could not save the price.");
-      setSaved(price);
-      onSaved(`${plan.name} is now ${plan.currency} ${price} a month.`);
-    } catch (cause) {
-      onError((cause as Error).message);
-    } finally {
-      setPending(false);
-    }
-  }
-  return (
-    <span className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground">{plan.currency}</span>
-      <input
-        aria-label={`${plan.name} monthly price`}
-        inputMode="numeric"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && void save()}
-        className="min-h-9 w-24 rounded-lg border border-border bg-background px-2 text-right text-sm"
-      />
-      {valid && price !== saved ? (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => void save()}
-          className="min-h-9 rounded-lg bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {pending ? "Saving…" : "Save"}
-        </button>
-      ) : null}
-    </span>
   );
 }

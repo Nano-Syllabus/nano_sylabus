@@ -108,13 +108,19 @@ export function LandingView({
   /** Where the app lives: "" on the main site, the main domain on a subdomain. */
   appOrigin?: string;
   examSlug?: string;
-  examFaculties?: Array<{ id: string; name: string; faculty: string | null }>;
+  examFaculties?: Array<{
+    id: string;
+    name: string;
+    faculty: string | null;
+    university?: string | null;
+    subjects?: Array<{ id: string; name: string }>;
+  }>;
 }) {
   const { brand } = content;
-  // The site's one main action. An exam site opens its list of supported
-  // faculties; every main button on the page follows it.
+  // The site's one main action. An exam site scrolls to its own list of
+  // supported faculties, on this same page; every main button follows it.
   const joinHref = examSlug
-    ? `${appOrigin}/prepare/${encodeURIComponent(examSlug)}`
+    ? "#faculties"
     : brand.communitySlug
       ? `${appOrigin}/communities/${encodeURIComponent(brand.communitySlug)}/join`
       : undefined;
@@ -148,25 +154,6 @@ export function LandingView({
         Skip to content
       </a>
 
-      {examSlug && examFaculties.length ? (
-        <section
-          aria-label="Supported faculties"
-          className="border-b border-[#e5e8df] bg-[var(--lp-accent)] px-5 py-3 text-center text-sm"
-        >
-          <span className="mr-3 font-semibold">One exam. Your faculty.</span>
-          {examFaculties.map((faculty) => (
-            <span key={faculty.id} className="mr-2 inline-block rounded-full bg-white/70 px-3 py-1">
-              {faculty.name}
-            </span>
-          ))}
-          <Link
-            href={`${appOrigin}/prepare/${encodeURIComponent(examSlug)}`}
-            className="ml-2 font-semibold underline underline-offset-4"
-          >
-            Explore faculties ↗
-          </Link>
-        </section>
-      ) : null}
       {/* ── Top Navigation Bar ── */}
       <header
         data-landing-section="nav"
@@ -274,6 +261,64 @@ export function LandingView({
             </div>
           </div>
         </section>
+
+        {examSlug && examFaculties.length ? (
+          <section
+            id="faculties"
+            data-landing-section="faculties"
+            aria-labelledby="faculties-title"
+            className="scroll-mt-24 border-y border-[#e5e8df] bg-white py-20 lg:py-24"
+          >
+            <div className="mx-auto max-w-[1320px] px-5 2xl:px-0">
+              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--lp-primary)]">
+                Browse faculties
+              </p>
+              <h2
+                id="faculties-title"
+                className="mt-3 max-w-2xl text-balance text-4xl font-semibold tracking-tight lg:text-5xl"
+              >
+                Find your faculty here.
+              </h2>
+              <p className="mt-4 max-w-2xl text-lg leading-relaxed text-[#5b5e55]">
+                These are the faculties supported for this exam. You’ll confirm yours when you sign
+                in.
+              </p>
+              <ul className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {examFaculties.map((faculty) => (
+                  <li
+                    key={faculty.id}
+                    className="flex flex-col rounded-2xl border border-[#e5e8df] bg-[#fafbf7] p-6"
+                  >
+                    <h3 className="text-xl font-semibold">{faculty.name}</h3>
+                    {faculty.faculty || faculty.university ? (
+                      <p className="mt-1 text-sm text-[#5b5e55]">
+                        {[faculty.faculty, faculty.university].filter(Boolean).join(" · ")}
+                      </p>
+                    ) : null}
+                    {faculty.subjects?.length ? (
+                      <details className="mt-5 border-t border-[#e5e8df] pt-4">
+                        <summary className="cursor-pointer text-sm font-medium">
+                          {faculty.subjects.length} subjects
+                        </summary>
+                        <ul className="mt-3 space-y-1.5 text-sm text-[#353944]">
+                          {faculty.subjects.map((subject) => (
+                            <li key={subject.id}>{subject.name}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href={`${appOrigin}/prepare/${encodeURIComponent(examSlug)}`}
+                className="mt-10 inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-lg bg-[var(--lp-primary)] px-7 text-[15px] font-semibold text-white transition-colors hover:bg-[var(--lp-primary-hover,#2439d0)]"
+              >
+                Continue <span aria-hidden="true">↗</span>
+              </Link>
+            </div>
+          </section>
+        ) : null}
 
         {features.hidden ? null : (
           <div
