@@ -35,13 +35,25 @@ const plan = {
   updatedAt: "",
 };
 const faculties = [
-  { id: "f1", slug: "bct-license", name: "BCT License", faculty: "Computer", university: null, subjects: [{ id: "s1", name: "Networks" }] },
+  {
+    id: "f1",
+    slug: "bct-license",
+    name: "BCT License",
+    faculty: "Computer",
+    university: null,
+    subjects: [{ id: "s1", name: "Networks" }],
+  },
   { id: "f2", slug: "bei", name: "BEI", faculty: null, university: null, subjects: [] },
 ];
 const exam = (config: Partial<ExamConfig> = {}): EnrollmentExam => ({
   slug: "license",
   name: "License Preparation",
-  config: { ...DEFAULT_EXAM_CONFIG, enabled: true, facultySlugs: ["bct-license", "bei"], ...config },
+  config: {
+    ...DEFAULT_EXAM_CONFIG,
+    enabled: true,
+    facultySlugs: ["bct-license", "bei"],
+    ...config,
+  },
   faculties,
 });
 const render = (props: Record<string, unknown>) =>
@@ -73,11 +85,26 @@ describe("the exam's student journey", () => {
     const html = render({
       exam: exam({ askQuestions: false, questions: [], ...config }),
       initialStep: "plans",
-      initialIntent: { examSlug: "license", planId, billingMonths: 1, answers: {}, facultySlug: "bct-license" },
+      initialIntent: {
+        examSlug: "license",
+        planId,
+        billingMonths: 1,
+        answers: {},
+        facultySlug: "bct-license",
+      },
     });
     expect(html).toContain("300");
     expect(html).not.toContain(">450<");
-    expect(html).toContain("Price for BCT License.");
+    expect(html).toContain("Choose your plan");
+    expect(html).toContain("BCT License");
+    expect(html).toContain(">Change<");
+    expect(html).not.toContain("Invest in your next step");
+  });
+
+  it("sends someone who opens the plans without a faculty back to the start of the flow", () => {
+    const html = render({ exam: exam(), initialStep: "plans" });
+    expect(html).toContain("When are you planning to take your exam?");
+    expect(html).not.toContain("Choose your plan");
   });
 
   it("locks the faculty chosen before sign-in and opens the payment QR, without asking again", () => {
@@ -87,10 +114,55 @@ describe("the exam's student journey", () => {
         plans: [plan],
         intent: { examSlug: "license", planId, billingMonths: 1, answers: {}, facultySlug: "bei" },
         enrollment: null,
-        paymentConfig: { id: "p", paymentMethod: "bank_transfer", displayName: "Bank", bankName: null, accountName: "Nano", accountNumber: null, qrImageUrl: "https://x/qr.png", instructions: null },
+        paymentConfig: {
+          id: "p",
+          paymentMethod: "bank_transfer",
+          displayName: "Bank",
+          bankName: null,
+          accountName: "Nano",
+          accountNumber: null,
+          qrImageUrl: "https://x/qr.png",
+          instructions: null,
+        },
       } as never),
     );
     expect(html).toContain("Joining BEI…");
     expect(html).not.toContain("data-faculty-dialog");
+  });
+
+  it("after sign-in, shows the pricing itself with the faculty locked, and no faculty picker", () => {
+    const html = renderToStaticMarkup(
+      createElement(ExamCheckout, {
+        exam: exam({
+          askQuestions: false,
+          questions: [],
+          facultyPrices: { bei: { [planId]: 300 } },
+        }),
+        plans: [plan],
+        intent: null,
+        enrollment: {
+          examSlug: "license",
+          examName: "License Preparation",
+          facultyId: "f2",
+          facultyName: "BEI",
+        },
+        paymentConfig: {
+          id: "p",
+          paymentMethod: "bank_transfer",
+          displayName: "Bank",
+          bankName: null,
+          accountName: "Nano",
+          accountNumber: null,
+          qrImageUrl: "https://x/qr.png",
+          instructions: null,
+        },
+      } as never),
+    );
+    expect(html).toContain("Choose your plan");
+    expect(html).toContain("BEI");
+    expect(html).toContain("Pay NPR 300");
+    expect(html).not.toContain(">Change<");
+    expect(html).not.toContain("data-faculty-dialog");
+    expect(html).not.toContain("Your exam, ready to go");
   });
 });

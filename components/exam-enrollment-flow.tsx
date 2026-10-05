@@ -4,15 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  GraduationCap,
-  LockKeyhole,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, GraduationCap, LockKeyhole, Sparkles } from "lucide-react";
 import type { EnrollmentExam, StudentExamEnrollment } from "@/lib/data/exam-enrollment";
 import {
   examText,
@@ -21,7 +13,7 @@ import {
   type ExamIntent,
 } from "@/lib/exam-enrollment";
 import type { PaymentMethodConfig, SubscriptionPlan } from "@/lib/types";
-import { ExamFacultyCard } from "@/components/exam-faculty-card";
+import { ExamFacultyBrowse } from "@/components/exam-faculty-browse";
 import { FacultySelectionDialog } from "@/components/faculty-selection-dialog";
 import { PaymentSubmissionModal, type CheckoutInvoice } from "@/components/billing-page-client";
 
@@ -84,11 +76,139 @@ function FlowFrame({
           )}
         </div>
         {children}
-        <p className="mt-10 flex items-center justify-center gap-2 text-xs text-[#777]">
-          <ShieldCheck size={14} />
-          {exam.name} · One focused study space for your faculty.
-        </p>
       </main>
+    </div>
+  );
+}
+
+/**
+ * The pricing screen: the chosen faculty, the duration, and a card per plan with
+ * that faculty's price. Used before sign-in (a plan button signs you in) and
+ * after it (a plan button opens the payment QR), so it looks the same both times.
+ */
+function PricingView({
+  facultyName,
+  onChangeFaculty,
+  durations,
+  months,
+  onMonths,
+  plans,
+  priceFor,
+  highlightId,
+  pendingId,
+  actionLabel,
+  onChoose,
+  disabled,
+  error,
+  notice,
+}: {
+  facultyName?: string;
+  /** Omitted = the faculty is locked and cannot be changed here. */
+  onChangeFaculty?: () => void;
+  durations: Array<1 | 3>;
+  months: 1 | 3;
+  onMonths: (months: 1 | 3) => void;
+  plans: SubscriptionPlan[];
+  priceFor: (plan: SubscriptionPlan) => number;
+  highlightId?: string;
+  pendingId?: string;
+  actionLabel: (plan: SubscriptionPlan) => string;
+  onChoose: (plan: SubscriptionPlan) => void;
+  disabled?: boolean;
+  error?: string;
+  notice?: string;
+}) {
+  return (
+    <div>
+      <div className="mx-auto max-w-2xl text-center">
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Choose your plan</h1>
+        {facultyName ? (
+          <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-border bg-bg-secondary py-1.5 pl-3 pr-3 text-sm">
+            {onChangeFaculty ? (
+              <GraduationCap size={16} className="text-blue-600" />
+            ) : (
+              <LockKeyhole size={16} className="text-blue-600" />
+            )}
+            <span className="font-semibold">{facultyName}</span>
+            {onChangeFaculty ? (
+              <button
+                type="button"
+                onClick={onChangeFaculty}
+                className="-mr-1.5 rounded-full px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-600/10"
+              >
+                Change
+              </button>
+            ) : null}
+          </p>
+        ) : null}
+        {durations.length > 1 ? (
+          <div className="mx-auto mt-5 flex w-fit gap-1 rounded-xl border border-border bg-bg-secondary p-1">
+            {durations.map((period) => (
+              <button
+                key={period}
+                type="button"
+                aria-pressed={months === period}
+                onClick={() => onMonths(period)}
+                className={`min-h-10 rounded-lg px-5 text-sm font-medium ${months === period ? "bg-bg-primary shadow-sm" : "text-text-muted"}`}
+              >
+                {period} {period === 1 ? "month" : "months"}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-8 grid gap-5 md:grid-cols-2">
+        {plans.map((plan, index) => (
+          <article
+            key={plan.id}
+            className={`relative flex flex-col rounded-3xl border p-7 sm:p-8 ${
+              (highlightId ? highlightId === plan.id : index === plans.length - 1)
+                ? "border-blue-600 bg-blue-600/5"
+                : "border-border"
+            }`}
+          >
+            <h2 className="text-xl font-semibold">{plan.name}</h2>
+            <p className="mt-5 text-4xl font-semibold tracking-tight">
+              <span className="mr-2 text-sm font-medium text-text-muted">{plan.currency}</span>
+              {(priceFor(plan) * months).toLocaleString()}
+              <span className="ml-2 text-sm font-normal text-text-muted">
+                / {months} {months === 1 ? "month" : "months"}
+              </span>
+            </p>
+            <ul className="my-6 flex-1 space-y-3 text-sm">
+              {plan.features.map((feature) => (
+                <li key={feature} className="flex items-start gap-2">
+                  <Check size={16} className="mt-0.5 shrink-0 text-blue-600" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              disabled={disabled || Boolean(pendingId)}
+              onClick={() => onChoose(plan)}
+              className={`${actionClass} w-full`}
+            >
+              {pendingId === plan.id ? "Just a moment…" : actionLabel(plan)}
+              <ArrowRight size={16} />
+            </button>
+          </article>
+        ))}
+      </div>
+      {!plans.length ? (
+        <p
+          role="status"
+          className="mt-8 rounded-xl border border-border p-6 text-center text-text-secondary"
+        >
+          Payment plans are being prepared for this exam. Please check again soon.
+        </p>
+      ) : null}
+      {notice ? <p className="mt-5 text-center text-sm text-text-muted">{notice}</p> : null}
+      {error ? (
+        <p role="alert" className="mt-5 text-center text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -110,7 +230,11 @@ export function ExamPreparationFlow({
   const router = useRouter();
   const flow = examFlowSteps(exam);
   const [step, setStep] = useState<FlowStep>(
-    initialStep && flow.includes(initialStep) ? initialStep : flow[0],
+    initialStep &&
+      flow.includes(initialStep) &&
+      (initialStep !== "plans" || initialIntent?.facultySlug)
+      ? initialStep
+      : flow[0],
   );
   const [answers, setAnswers] = useState<Record<string, string>>(initialIntent?.answers || {});
   const durations = examBillingMonths(exam.config);
@@ -206,6 +330,22 @@ export function ExamPreparationFlow({
     }
   }
 
+  if (step === "faculties")
+    return (
+      <ExamFacultyBrowse
+        title={examText(exam.config.copy.facultiesTitle, exam.name)}
+        description={examText(exam.config.copy.facultiesDescription, exam.name)}
+        landingHref={exam.slug === "main" ? "/" : `/sites/${exam.slug}`}
+        faculties={exam.faculties}
+        selectedSlug={facultySlug}
+        onSelect={setFacultySlug}
+        continueLabel={chosenFaculty ? `Continue as ${chosenFaculty.name}` : "Choose your faculty"}
+        onContinue={continueFaculties}
+        onBack={exam.config.askQuestions ? () => setStep("questions") : undefined}
+        backLabel={exam.config.askQuestions ? "Questions" : "Home"}
+      />
+    );
+
   return (
     <FlowFrame
       exam={exam}
@@ -215,64 +355,10 @@ export function ExamPreparationFlow({
           ? questionIndex > 0
             ? () => setQuestionIndex(questionIndex - 1)
             : undefined
-          : step === "faculties"
-            ? exam.config.askQuestions
-              ? () => setStep("questions")
-              : undefined
-            : () => setStep("faculties")
+          : () => setStep("faculties")
       }
       backLabel={step === "questions" && questionIndex === 0 ? "Home" : "Back"}
     >
-      {step === "faculties" ? (
-        <div>
-          <div className="mx-auto mb-8 max-w-2xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-600">
-              One exam. More ways to prepare.
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              {examText(exam.config.copy.facultiesTitle, exam.name)}
-            </h1>
-            <p className="mt-3 text-text-secondary">
-              {examText(exam.config.copy.facultiesDescription, exam.name)}
-            </p>
-          </div>
-          <div className="grid gap-[18px] sm:grid-cols-2">
-            {exam.faculties.map((faculty) => (
-              <ExamFacultyCard
-                key={faculty.id}
-                slug={faculty.slug}
-                name={faculty.name}
-                faculty={faculty.faculty}
-                university={faculty.university}
-                subjects={faculty.subjects}
-                selected={facultySlug === faculty.slug}
-                onJoin={() => setFacultySlug(faculty.slug)}
-              />
-            ))}
-          </div>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            {exam.config.askQuestions ? (
-              <button
-                type="button"
-                onClick={() => setStep("questions")}
-                className="min-h-12 px-5 text-sm font-medium"
-              >
-                <ArrowLeft className="mr-2 inline" size={16} />
-                Questions
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={continueFaculties}
-              disabled={!chosenFaculty}
-              className={actionClass}
-            >
-              {chosenFaculty ? `Continue as ${chosenFaculty.name}` : "Choose your faculty"}
-              <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      ) : null}
       {step === "questions" ? (
         <section aria-live="polite">
           {(() => {
@@ -331,97 +417,19 @@ export function ExamPreparationFlow({
         </section>
       ) : null}
       {step === "plans" ? (
-        <div>
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-600">
-              Invest in your next step
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              {examText(exam.config.copy.paymentTitle, exam.name)}
-            </h1>
-            <p className="mt-3 text-text-secondary">
-              {examText(exam.config.copy.paymentDescription, exam.name)}
-            </p>
-            <div className="mx-auto mt-6 inline-flex gap-1 rounded-xl border border-border bg-bg-secondary p-1">
-              {durations.map((period) => (
-                <button
-                  key={period}
-                  type="button"
-                  aria-pressed={months === period}
-                  onClick={() => setMonths(period)}
-                  className={`min-h-10 rounded-lg px-5 text-sm font-medium ${months === period ? "bg-bg-primary shadow-sm" : "text-text-muted"}`}
-                >
-                  {period} {period === 1 ? "month" : "months"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
-            {plans.map((plan, index) => (
-              <article
-                key={plan.id}
-                className={`relative flex flex-col rounded-3xl border p-7 sm:p-8 ${index === plans.length - 1 ? "border-blue-600 bg-blue-600/5" : "border-border"}`}
-              >
-                <h2 className="text-xl font-semibold">{plan.name}</h2>
-                <p className="mt-5 text-4xl font-semibold tracking-tight">
-                  <span className="mr-2 text-sm font-medium text-text-muted">{plan.currency}</span>
-                  {(examPlanMonthlyPrice(exam.config, facultySlug, plan) * months).toLocaleString()}
-                  <span className="ml-2 text-sm font-normal text-text-muted">
-                    / {months} {months === 1 ? "month" : "months"}
-                  </span>
-                </p>
-                {chosenFaculty ? (
-                  <p className="mt-2 text-xs text-text-muted">Price for {chosenFaculty.name}.</p>
-                ) : null}
-                <p className="mt-3 text-sm text-text-secondary">
-                  {plan.isUnlimited
-                    ? "Unlimited learning and exam practice"
-                    : "Focused study, one topic at a time"}
-                </p>
-                <ul className="my-6 flex-1 space-y-3 text-sm">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <Check size={16} className="mt-0.5 shrink-0 text-blue-600" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  disabled={Boolean(pending)}
-                  onClick={() => void choosePlan(plan)}
-                  className={`${actionClass} w-full`}
-                >
-                  {pending === plan.id
-                    ? "Preparing your plan…"
-                    : examText(exam.config.copy.signInButton, exam.name)}
-                  <ArrowRight size={16} />
-                </button>
-              </article>
-            ))}
-          </div>
-          {!plans.length ? (
-            <p
-              role="status"
-              className="mt-8 rounded-xl border border-border p-6 text-center text-text-secondary"
-            >
-              Payment plans are being prepared for this exam. Please check again soon.
-            </p>
-          ) : null}
-          {error ? (
-            <p role="alert" className="mt-5 text-center text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setStep("faculties")}
-            className="mt-6 min-h-10 text-sm text-text-secondary"
-          >
-            <ArrowLeft className="mr-2 inline" size={14} />
-            Back to faculties
-          </button>
-        </div>
+        <PricingView
+          facultyName={chosenFaculty?.name}
+          onChangeFaculty={() => setStep("faculties")}
+          durations={durations}
+          months={months}
+          onMonths={setMonths}
+          plans={plans}
+          priceFor={(plan) => examPlanMonthlyPrice(exam.config, facultySlug, plan)}
+          pendingId={pending}
+          actionLabel={() => examText(exam.config.copy.signInButton, exam.name)}
+          onChoose={(plan) => void choosePlan(plan)}
+          error={error}
+        />
       ) : null}
     </FlowFrame>
   );
@@ -486,8 +494,8 @@ export function ExamCheckout({
   const faculty = exam.faculties.find((f) => f.id === facultyId);
   const monthly = (p: SubscriptionPlan) => examPlanMonthlyPrice(exam.config, faculty?.slug, p);
   const wrongExam = enrollment && enrollment.examSlug !== exam.slug;
-  async function openPayment() {
-    if (!plan || !facultyId) return;
+  async function openPayment(target: SubscriptionPlan | undefined = plan) {
+    if (!target || !facultyId) return;
     setPending(true);
     setError("");
     try {
@@ -495,7 +503,7 @@ export function ExamCheckout({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          planId,
+          planId: target.id,
           billingMonths: months,
           paymentMethod: "bank_transfer",
           examSlug: exam.slug,
@@ -503,7 +511,7 @@ export function ExamCheckout({
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not open payment.");
-      setInvoice({ ...result.invoice, plan, paymentSubmission: null });
+      setInvoice({ ...result.invoice, plan: target, paymentSubmission: null });
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -534,80 +542,32 @@ export function ExamCheckout({
           </Link>
         </div>
       ) : (
-        <div className="mx-auto max-w-xl rounded-3xl border border-border bg-bg-primary p-7 shadow-sm sm:p-10">
-          <p className="text-xs font-semibold uppercase tracking-widest text-blue-600">
-            You’re signed in
-          </p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-            {examText(exam.config.copy.checkoutTitle, exam.name)}
-          </h1>
-          <div className="mt-6 flex items-center gap-3 rounded-xl bg-bg-secondary p-4">
-            <LockKeyhole size={20} className="text-blue-600" />
-            <div>
-              <p className="text-sm font-semibold">
-                {lock === "joining"
-                  ? `Joining ${intentFaculty?.name}…`
-                  : faculty?.name || enrollment?.facultyName || "Choose your faculty to continue"}
-              </p>
-              <p className="mt-1 text-xs text-text-muted">
-                Faculty stays locked across your study space.
-              </p>
-            </div>
-          </div>
-          <label className="mt-6 block text-sm font-medium">
-            Your plan
-            <select
-              value={planId}
-              onChange={(e) => setPlanId(e.target.value)}
-              className="mt-2 min-h-12 w-full rounded-xl border border-border bg-bg-primary px-3"
-            >
-              {plans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} — {p.currency} {monthly(p)} / month
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="mt-4 block text-sm font-medium">
-            Duration
-            <select
-              value={months}
-              onChange={(e) => setMonths(Number(e.target.value) as 1 | 3)}
-              className="mt-2 min-h-12 w-full rounded-xl border border-border bg-bg-primary px-3"
-            >
-              {durations.map((period) => (
-                <option key={period} value={period}>
-                  {period} {period === 1 ? "month" : "months"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="my-6 flex items-center justify-between border-t border-border pt-5 text-sm">
-            <span>Total</span>
-            <strong className="text-2xl">
-              {plan?.currency} {plan ? (monthly(plan) * months).toLocaleString() : "—"}
-            </strong>
-          </p>
-          <button
-            type="button"
-            disabled={!facultyId || !plan || pending || !paymentConfig || lock === "joining"}
-            onClick={() => void openPayment()}
-            className={`${actionClass} w-full`}
-          >
-            {pending ? "Preparing payment…" : examText(exam.config.copy.qrButton, exam.name)}
-            <ArrowRight size={16} />
-          </button>
-          {!paymentConfig ? (
-            <p className="mt-3 text-sm text-text-muted">
-              The official payment QR is being configured. Please check again soon.
-            </p>
-          ) : null}
-          {error ? (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-        </div>
+        <PricingView
+          facultyName={
+            lock === "joining"
+              ? `Joining ${intentFaculty?.name}…`
+              : faculty?.name || enrollment?.facultyName
+          }
+          durations={durations}
+          months={months}
+          onMonths={setMonths}
+          plans={plans}
+          priceFor={monthly}
+          highlightId={planId}
+          pendingId={pending ? planId : undefined}
+          actionLabel={(p) => `Pay ${p.currency} ${(monthly(p) * months).toLocaleString()}`}
+          onChoose={(p) => {
+            setPlanId(p.id);
+            void openPayment(p);
+          }}
+          disabled={!facultyId || lock === "joining" || !paymentConfig}
+          notice={
+            !paymentConfig
+              ? "The official payment QR is being configured. Please check again soon."
+              : undefined
+          }
+          error={error}
+        />
       )}
       {!enrollment && (!facultyId || lock === "failed") && lock !== "joining" ? (
         <FacultySelectionDialog

@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminGiftPlan } from "@/components/admin-gift-plan";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
@@ -78,7 +79,9 @@ export function AdminUserManager({
   const patchRow = (user: AdminUserSummary) =>
     setList((current) => ({
       ...current,
-      items: current.items.map((item) => (item.userId === user.userId ? { ...item, ...user } : item)),
+      items: current.items.map((item) =>
+        item.userId === user.userId ? { ...item, ...user } : item,
+      ),
     }));
 
   const from = list.total ? (list.page - 1) * list.pageSize + 1 : 0;
@@ -94,7 +97,10 @@ export function AdminUserManager({
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
         <label className="relative flex-1">
           <span className="sr-only">Search</span>
-          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
           <input
             type="search"
             value={query}
@@ -117,7 +123,9 @@ export function AdminUserManager({
               aria-pressed={filter === value}
               onClick={() => setFilter(value)}
               className={`min-h-9 flex-1 rounded-md px-3 text-sm font-medium sm:flex-none ${
-                filter === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                filter === value
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {label}
@@ -126,7 +134,10 @@ export function AdminUserManager({
         </div>
       </div>
 
-      <section className="mt-4 overflow-hidden rounded-xl border border-border bg-card" aria-busy={loading}>
+      <section
+        className="mt-4 overflow-hidden rounded-xl border border-border bg-card"
+        aria-busy={loading}
+      >
         {listError ? (
           <p role="alert" className="px-5 py-10 text-center text-sm text-destructive">
             {listError}
@@ -168,16 +179,24 @@ export function AdminUserManager({
                           <span className="truncate">{user.fullName || "No name"}</span>
                           {user.role !== "student" ? <RoleBadge role={user.role} /> : null}
                         </span>
-                        <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {user.email}
+                        </span>
                       </span>
                     </button>
                   </td>
                   <td className="hidden px-4 py-3 md:table-cell">
                     <PlanBadge plan={user.activePlanName} />
                   </td>
-                  <td className="hidden px-4 py-3 text-right tabular-nums sm:table-cell">{user.creditBalance}</td>
-                  <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">{formatDate(user.createdAt)}</td>
-                  <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">{timeAgo(user.lastSignInAt)}</td>
+                  <td className="hidden px-4 py-3 text-right tabular-nums sm:table-cell">
+                    {user.creditBalance}
+                  </td>
+                  <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
+                    {formatDate(user.createdAt)}
+                  </td>
+                  <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
+                    {timeAgo(user.lastSignInAt)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -280,14 +299,19 @@ function StudentPanel({
       const response = await fetch(`/api/admin/users/${userId}/credits`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: credits, description: reason.trim() || "Manual admin adjustment" }),
+        body: JSON.stringify({
+          amount: credits,
+          description: reason.trim() || "Manual admin adjustment",
+        }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Credits could not be changed.");
       setDetail(payload.user);
       onChanged(payload.user);
       setReason("");
-      setMessage(`${credits > 0 ? "Added" : "Removed"} ${Math.abs(credits)} credits. New balance: ${payload.user.creditBalance}.`);
+      setMessage(
+        `${credits > 0 ? "Added" : "Removed"} ${Math.abs(credits)} credits. New balance: ${payload.user.creditBalance}.`,
+      );
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Credits could not be changed.");
     } finally {
@@ -318,7 +342,12 @@ function StudentPanel({
 
   return (
     <div className="fixed inset-0 z-40">
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/30" />
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/30"
+      />
       <aside
         role="dialog"
         aria-modal="true"
@@ -332,7 +361,8 @@ function StudentPanel({
             <p className="truncate text-sm text-muted-foreground">{person?.email}</p>
             {person ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                {roleLabel[person.role]} · joined {formatDate(person.createdAt)} · last seen {timeAgo(person.lastSignInAt)}
+                {roleLabel[person.role]} · joined {formatDate(person.createdAt)} · last seen{" "}
+                {timeAgo(person.lastSignInAt)}
               </p>
             ) : null}
           </div>
@@ -380,7 +410,9 @@ function StudentPanel({
                   type="button"
                   onClick={() => setAmount(String(value))}
                   className={`min-h-9 rounded-lg border px-3 text-sm font-medium tabular-nums ${
-                    amount === String(value) ? "border-blue-600 text-blue-600" : "border-border hover:bg-muted"
+                    amount === String(value)
+                      ? "border-blue-600 text-blue-600"
+                      : "border-border hover:bg-muted"
                   }`}
                 >
                   {value > 0 ? `+${value}` : value}
@@ -419,10 +451,33 @@ function StudentPanel({
             </button>
           </Section>
 
+          {canManageRoles && person?.role === "student" ? (
+            <Section title="Gift a plan">
+              <AdminGiftPlan
+                userId={userId}
+                onGifted={() => {
+                  fetch(`/api/admin/users/${userId}`)
+                    .then((response) => response.json())
+                    .then((payload) => {
+                      if (payload.user) {
+                        setDetail(payload.user);
+                        onChanged(payload.user);
+                      }
+                    })
+                    .catch(() => undefined);
+                }}
+              />
+            </Section>
+          ) : null}
+
           <Section title="Access">
             {canManageRoles ? (
               <>
-                <div className="flex gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Access">
+                <div
+                  className="flex gap-1 rounded-lg bg-muted p-1"
+                  role="group"
+                  aria-label="Access"
+                >
                   {(["student", "admin", "super_admin"] as AppRole[]).map((value) => (
                     <button
                       key={value}
@@ -431,7 +486,9 @@ function StudentPanel({
                       aria-pressed={role === value}
                       onClick={() => setRole(value)}
                       className={`min-h-9 flex-1 rounded-md px-2 text-sm font-medium disabled:cursor-not-allowed ${
-                        role === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        role === value
+                          ? "bg-card text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       {roleLabel[value]}
@@ -495,7 +552,11 @@ function StudentPanel({
               </History>
               <History title="Recent chats" empty="No chats yet.">
                 {detail.recentSessions.map((session) => (
-                  <HistoryRow key={session.id} left={session.title} sub={formatDate(session.updatedAt)} />
+                  <HistoryRow
+                    key={session.id}
+                    left={session.title}
+                    sub={formatDate(session.updatedAt)}
+                  />
                 ))}
               </History>
             </>
@@ -520,18 +581,33 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function History({ title, empty, children }: { title: string; empty: string; children: ReactNode[] }) {
+function History({
+  title,
+  empty,
+  children,
+}: {
+  title: string;
+  empty: string;
+  children: ReactNode[];
+}) {
   return (
     <details className="group rounded-lg border border-border">
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-sm font-semibold">
         {title}
         <span className="text-xs font-normal text-muted-foreground">
           {children.length ? `${children.length} recent` : "None"}
-          <ChevronRight size={14} className="ml-1 inline transition-transform group-open:rotate-90" />
+          <ChevronRight
+            size={14}
+            className="ml-1 inline transition-transform group-open:rotate-90"
+          />
         </span>
       </summary>
       <div className="divide-y divide-border border-t border-border">
-        {children.length ? children : <p className="px-3 py-3 text-sm text-muted-foreground">{empty}</p>}
+        {children.length ? (
+          children
+        ) : (
+          <p className="px-3 py-3 text-sm text-muted-foreground">{empty}</p>
+        )}
       </div>
     </details>
   );
@@ -616,10 +692,13 @@ function timeAgo(iso: string | null) {
   return formatDate(iso);
 }
 
-
 /** A row can stay "active" after its end date; say what it really is. */
 function subscriptionState(subscription: AdminUserDetail["recentSubscriptions"][number]) {
-  if (subscription.status === "active" && subscription.endsAt && new Date(subscription.endsAt).getTime() <= Date.now())
+  if (
+    subscription.status === "active" &&
+    subscription.endsAt &&
+    new Date(subscription.endsAt).getTime() <= Date.now()
+  )
     return "ended";
   return subscription.status;
 }
