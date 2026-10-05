@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { NanoAiFloatingChat } from "@/components/nanoai-floating-chat";
 import { AppSidebar } from "@/components/app-sidebar";
 import type { AppUser } from "@/lib/types";
@@ -32,6 +34,7 @@ export function AppShell({
   user,
   children,
   faculty,
+  upgradeHref = null,
 }: {
   user: AppUser;
   /** Accepted and unused since the top bar went; see the note in the render. */
@@ -39,7 +42,15 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
   faculty?: StudentExamEnrollment | null;
+  upgradeHref?: string | null;
 }) {
+  const pathname = usePathname();
+  const studyLocked = Boolean(
+    upgradeHref &&
+    ["/app/challenges", "/app/chat", "/app/notes", "/app/exams"].some(
+      (route) => pathname === route || pathname.startsWith(`${route}/`),
+    ),
+  );
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [sidebarSuppressed, setSidebarSuppressed] = useState(false);
@@ -60,6 +71,7 @@ export function AppShell({
 
   const shellContextValue = useMemo(
     () => ({
+      upgradeHref,
       // No bar to put a title or actions in any more. Kept as no-ops so the pages
       // that still announce a title through `SetAppShell` need no change.
       setTitle: () => {},
@@ -68,7 +80,7 @@ export function AppShell({
       setSidebarCollapsed: setSidebarCollapsedOverride,
       setRightRailWidth,
     }),
-    [],
+    [upgradeHref],
   );
 
   return (
@@ -151,10 +163,51 @@ export function AppShell({
               </span>
             </div>
           ) : null}
-          <div className="flex-1 overflow-y-auto">{children}</div>
+          {upgradeHref ? (
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-amber-500/10 px-5 py-3 text-sm">
+              <p>Your dashboard is ready. Upgrade to unlock your study features.</p>
+              <Link
+                href={upgradeHref}
+                className="rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
+              >
+                Upgrade
+              </Link>
+            </div>
+          ) : null}
+          <div className="flex-1 overflow-y-auto">
+            {studyLocked ? (
+              <section className="mx-auto max-w-xl space-y-4 px-6 py-16 text-center">
+                <h1 className="text-2xl font-semibold">Upgrade to start studying</h1>
+                <p className="text-text-secondary">
+                  Your faculty is saved. Choose a plan and complete payment to unlock your learning
+                  tools.
+                </p>
+                <Link
+                  href={upgradeHref!}
+                  className="inline-flex rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
+                >
+                  Upgrade
+                </Link>
+                <Link href="/app/today" className="block text-sm text-blue-600 hover:underline">
+                  Back to dashboard
+                </Link>
+              </section>
+            ) : (
+              children
+            )}
+          </div>
         </main>
       </div>
-      <NanoAiFloatingChat user={user} />
+      {upgradeHref ? (
+        <Link
+          href={upgradeHref}
+          className="fixed bottom-5 right-5 z-40 rounded-full bg-text-primary px-5 py-3 text-sm font-semibold text-text-inverse shadow-lg"
+        >
+          Upgrade · NanoAI
+        </Link>
+      ) : (
+        <NanoAiFloatingChat user={user} />
+      )}
     </AppShellContext.Provider>
   );
 }

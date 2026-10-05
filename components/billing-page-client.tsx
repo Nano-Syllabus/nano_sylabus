@@ -169,7 +169,8 @@ export function BillingPageClient({
         : "Pro";
   // No live subscription row can still mean a paid tier: admins are Pro by role
   // (lib/auth.ts). Use the same tier the sidebar shows, unless a plan was just cancelled here.
-  const roleTier = !activePlan && cancelledSubscriptionIds.length === 0 ? user.activePlanTier : undefined;
+  const roleTier =
+    !activePlan && cancelledSubscriptionIds.length === 0 ? user.activePlanTier : undefined;
   const plusIsCurrent =
     Boolean(activePlan && plans.plus && activePlan.id === plans.plus.id) || roleTier === "plus";
   const proIsCurrent =
@@ -375,7 +376,13 @@ export function BillingPageClient({
             price={formatPlanPrice(plans.plus, billingMonths, 450)}
             includes={PLAN_COPY.plus.description}
             features={[...PLAN_COPY.plus.fallbackFeatures]}
-            actionLabel={plusIsCurrent ? "Current plan" : proIsCurrent ? "Included in your plan" : "Choose Plus"}
+            actionLabel={
+              plusIsCurrent
+                ? "Current plan"
+                : proIsCurrent
+                  ? "Included in your plan"
+                  : "Choose Plus"
+            }
             loading={creatingPlanId === plans.plus?.id}
             onAction={() => startPlan(plans.plus)}
             disabled={plusIsCurrent || proIsCurrent}
@@ -726,11 +733,13 @@ export function PaymentSubmissionModal({
   paymentConfig,
   onClose,
   onSaved,
+  onSkip,
 }: {
   invoice: CheckoutInvoice;
   paymentConfig: PaymentMethodConfig | null;
   onClose: () => void;
   onSaved: () => void;
+  onSkip?: () => void;
 }) {
   const [receipt, setReceipt] = useState<File | null>(null);
   const [mobileUploadSessionId, setMobileUploadSessionId] = useState<string | null>(null);
@@ -1070,6 +1079,16 @@ export function PaymentSubmissionModal({
           >
             {saving ? "Activating access..." : "Submit payment & activate access"}
           </Button>
+          {onSkip ? (
+            <button
+              type="button"
+              onClick={onSkip}
+              disabled={saving}
+              className="mt-3 min-h-11 w-full rounded-xl border border-border px-4 py-3 text-sm font-semibold hover:bg-bg-secondary disabled:opacity-50"
+            >
+              Skip for now — go to dashboard
+            </button>
+          ) : null}
         </form>
       </div>
     </div>

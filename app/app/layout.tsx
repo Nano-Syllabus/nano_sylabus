@@ -11,7 +11,6 @@ import {
 import { FacultySelectionGate } from "@/components/faculty-selection-dialog";
 import { cookies, headers } from "next/headers";
 import { siteSlugFromHost } from "@/lib/landing-site-host";
-import { redirect } from "next/navigation";
 import { hasActiveSubscription } from "@/lib/data/billing";
 import { EXAM_INTENT_COOKIE, readExamIntent } from "@/lib/exam-enrollment";
 
@@ -27,21 +26,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const exams = hostExam ? [hostExam] : allExams;
   const intent = readExamIntent((await cookies()).get(EXAM_INTENT_COOKIE)?.value);
 
-  // Students who came through an exam's checkout pay before they study. Their
-  // faculty is chosen on the payment page, so the in-app modal never has to
-  // block an unpaid student; payment submission activates the plan at once.
+  // Skipping payment opens the dashboard. Study actions offer an upgrade until
+  // a subscription is active; opening the dashboard never activates a plan.
   const examSlug = enrollment?.examSlug ?? intent?.examSlug ?? hostExamSlug ?? undefined;
   // The exam must still be live, or the payment page would bounce back here.
-  if (
-    needsFaculty &&
-    examSlug &&
-    (await getEnrollmentExam(examSlug)) &&
-    !(await hasActiveSubscription(user.id))
-  )
-    redirect(`/payment/${encodeURIComponent(examSlug)}`);
+  const upgradeHref =
+    needsFaculty && examSlug && !(await hasActiveSubscription(user.id))
+      ? (await getEnrollmentExam(examSlug))
+        ? `/payment/${encodeURIComponent(examSlug)}`
+        : "/app/billing"
+      : null;
 
   return (
-    <AppShell user={user} title="Dashboard" faculty={enrollment}>
+    <AppShell user={user} title="Dashboard" faculty={enrollment} upgradeHref={upgradeHref}>
       <FacultySelectionGate
         exams={exams}
         initialExamSlug={hostExam?.slug ?? intent?.examSlug}

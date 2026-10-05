@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { AppShellContext } from "@/components/app-shell-context";
 import {
   ArrowRight,
   Check,
@@ -362,6 +371,7 @@ function SemesterProgress({
   dashboard: StudentDailyDashboard;
   compact?: boolean;
 }) {
+  const { upgradeHref } = useContext(AppShellContext);
   const community = dashboard.community;
   // The running term is chosen once, on Micro-Topics; this map follows it rather than
   // offering its own picker, so every page shows the same faculty and term.
@@ -423,10 +433,10 @@ function SemesterProgress({
             >
               <span className="font-semibold text-text-primary">{semester.label}</span>
               <Link
-                href="/app/challenges"
+                href={upgradeHref || "/app/challenges"}
                 className={cn("text-sm font-medium text-blue-600 hover:underline", focusRing)}
               >
-                Change {termNoun.toLowerCase()}
+                {upgradeHref ? "Upgrade" : `Change ${termNoun.toLowerCase()}`}
               </Link>
             </p>
           </div>
@@ -484,13 +494,17 @@ function SemesterProgress({
                     </div>
                   </div>
                   <Link
-                    href={`/app/chat?community=${encodeURIComponent(community.slug)}&semester=${encodeURIComponent(semester.id)}&librarySubject=${encodeURIComponent(subject.slug)}`}
+                    href={
+                      upgradeHref ||
+                      `/app/chat?community=${encodeURIComponent(community.slug)}&semester=${encodeURIComponent(semester.id)}&librarySubject=${encodeURIComponent(subject.slug)}`
+                    }
                     className={cn(
                       "inline-flex min-h-10 items-center gap-1.5 justify-self-start text-sm font-semibold md:justify-self-end",
                       focusRing,
                     )}
                   >
-                    Open <ArrowRight className="size-4" aria-hidden="true" />
+                    {upgradeHref ? "Upgrade" : "Open"}{" "}
+                    <ArrowRight className="size-4" aria-hidden="true" />
                   </Link>
                 </article>
               ))}
@@ -570,7 +584,9 @@ export function StudentDailyDashboardView({
           Welcome, {fullName.trim().split(/\s+/)[0] || "there"}.
         </h1>
         <div role="alert" className="mt-5 rounded-2xl border border-border bg-card p-6">
-          <p className="text-base font-semibold text-text-primary">Your dashboard didn&apos;t load</p>
+          <p className="text-base font-semibold text-text-primary">
+            Your dashboard didn&apos;t load
+          </p>
           <p className="mt-1 text-sm text-text-secondary">
             The server took too long to answer. Your progress is safe.
           </p>

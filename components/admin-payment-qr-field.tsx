@@ -35,6 +35,22 @@ export function AdminPaymentQrField() {
   const [busy, setBusy] = useState<"" | "upload" | "save">("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [analyzed, setAnalyzed] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const missingFields = analyzed
+    ? [
+        !qr.accountName.trim() && "account name",
+        !qr.bankName.trim() && "bank name",
+        !qr.accountNumber.trim() && "account number",
+      ].filter((field): field is string => Boolean(field))
+    : [];
+
+  useEffect(
+    () => () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    },
+    [previewUrl],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +90,30 @@ export function AdminPaymentQrField() {
         method: "POST",
         body: form,
       }).then(readJson);
-      setQr((current) => ({ ...current, qrImageUrl: result.url }));
+      const details = result.details ?? {};
+      const missing = [
+        !details.accountName && "account name",
+        !details.bankName && "bank name",
+        !details.accountNumber && "account number",
+      ].filter((field): field is string => Boolean(field));
+      setQr((current) => ({
+        ...current,
+        qrImageUrl: result.url,
+        accountName: details.accountName ?? "",
+        bankName: details.bankName ?? "",
+        accountNumber: details.accountNumber ?? "",
+        displayName: details.accountName ?? "Bank transfer",
+        instructions:
+          current.instructions ||
+          "Scan the QR, complete the payment, then submit the transaction reference and receipt for verification.",
+      }));
+      setPreviewUrl(URL.createObjectURL(file));
+      setAnalyzed(true);
+      setMessage(
+        missing.length
+          ? "QR uploaded. Available payment details were filled automatically."
+          : "Account name, bank and account number filled from the QR.",
+      );
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -93,6 +132,7 @@ export function AdminPaymentQrField() {
         body: JSON.stringify(qr),
       }).then(readJson);
       setMessage("Payment QR saved. Students see it at their next checkout.");
+      setAnalyzed(false);
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -105,7 +145,8 @@ export function AdminPaymentQrField() {
       {label}
       <input
         value={qr[key]}
-        onChange={(e) => setQr({ ...qr, [key]: e.target.value })}
+        disabled={Boolean(busy)}
+        onChange={(e) => setQr((current) => ({ ...current, [key]: e.target.value }))}
         className={`${inputClass} mt-1`}
       />
     </label>
@@ -125,7 +166,7 @@ export function AdminPaymentQrField() {
             {qr.qrImageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={qr.qrImageUrl}
+                src={previewUrl || qr.qrImageUrl}
                 alt="Payment QR"
                 className="size-28 rounded-lg border border-border object-contain"
               />
@@ -140,10 +181,15 @@ export function AdminPaymentQrField() {
                 className="mt-1 block text-sm font-normal"
               />
               <span className="block text-xs font-normal text-muted-foreground">
-                PNG, JPEG or WebP, up to 1 MB.
+                PNG, JPEG or WebP, up to 1 MB. Payment details are read automatically.
               </span>
             </label>
           </div>
+          {missingFields.length ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              Not found in this QR: {missingFields.join(", ")}. Please enter those details below.
+            </p>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             {text("Account name", "accountName")}
             {text("Bank name", "bankName")}
@@ -155,6 +201,7 @@ export function AdminPaymentQrField() {
             <textarea
               rows={2}
               value={qr.instructions}
+              disabled={Boolean(busy)}
               onChange={(e) => setQr({ ...qr, instructions: e.target.value })}
               className={`${inputClass} mt-1`}
             />
@@ -167,7 +214,7 @@ export function AdminPaymentQrField() {
             onClick={() => void save()}
             className="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {busy === "save" ? "Saving…" : busy === "upload" ? "Uploading…" : "Save payment QR"}
+            {busy === "save" ? "Saving…" : busy === "upload" ? "Reading QR…" : "Save payment QR"}
           </button>
         </>
       )}

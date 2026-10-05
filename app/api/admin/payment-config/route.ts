@@ -10,12 +10,27 @@ const optionalText = z
   .max(500)
   .transform((value) => value || null)
   .nullable();
+
+function isPaymentImageUrl(value: string) {
+  if (/[\\\s]/.test(value)) return false;
+  // VPS uploads and bundled QR images use paths on the current site.
+  if (value.startsWith("/") && !value.startsWith("//")) {
+    return new URL(value, "https://payment.local").pathname !== "/";
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 const configSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
   bankName: optionalText,
   accountName: z.string().trim().min(1).max(160),
   accountNumber: optionalText,
-  qrImageUrl: z.string().trim().url().max(1000),
+  qrImageUrl: z.string().trim().min(1).max(1000).refine(isPaymentImageUrl),
   instructions: optionalText,
 });
 
@@ -34,11 +49,21 @@ export async function PUT(request: Request) {
   const access = await assertAdminRequest();
   if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
   const parsed = configSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success)
+  if (!parsed.success) {
+    const field = parsed.error.issues[0]?.path[0];
+    const messages: Record<string, string> = {
+      displayName: "Add a display name of 120 characters or fewer.",
+      accountName: "Add an account name of 160 characters or fewer.",
+      qrImageUrl: "Upload a QR image or use a valid image URL.",
+      bankName: "Bank name must be 500 characters or fewer.",
+      accountNumber: "Account number must be 500 characters or fewer.",
+      instructions: "Instructions must be 500 characters or fewer.",
+    };
     return NextResponse.json(
-      { error: "Add a display name, account name and the QR image." },
+      { error: messages[String(field)] ?? "Send valid payment QR details." },
       { status: 400 },
     );
+  }
   try {
     const config = await saveAdminPaymentConfig({
       ...parsed.data,

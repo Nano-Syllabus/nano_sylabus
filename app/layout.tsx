@@ -187,7 +187,7 @@ const STRIP_EXTENSION_ATTRIBUTES = process.env.NODE_ENV === "development";
  * capture listener is first and can stop the event for those sources only.
  * Errors from our own code are untouched.
  */
-const extensionErrorFilterScript = `
+const extensionErrorFilterScript = String.raw`
 (function(){try{
   var fromExtension=function(text){return /(chrome|moz|safari(-web)?)-extension:\/\//.test(String(text||''));};
   window.addEventListener('error',function(event){

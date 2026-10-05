@@ -287,7 +287,9 @@ export function ExamPreparationFlow({
       setStep("questions");
       return;
     }
-    router.push(`/payment/${exam.slug}`);
+    // Keep the chosen faculty and answers until a plan is selected. Opening
+    // payment here loses this draft because the checkout intent is not saved yet.
+    setStep("plans");
   }
   async function choosePlan(plan: SubscriptionPlan) {
     if (!complete) {
@@ -494,6 +496,12 @@ export function ExamCheckout({
   const faculty = exam.faculties.find((f) => f.id === facultyId);
   const monthly = (p: SubscriptionPlan) => examPlanMonthlyPrice(exam.config, faculty?.slug, p);
   const wrongExam = enrollment && enrollment.examSlug !== exam.slug;
+  function skipPayment() {
+    if (!facultyId || lock !== "idle" || pending) return;
+    autoOpened.current = true;
+    router.push("/app/today");
+    router.refresh();
+  }
   async function openPayment(target: SubscriptionPlan | undefined = plan) {
     if (!target || !facultyId) return;
     setPending(true);
@@ -569,19 +577,38 @@ export function ExamCheckout({
           error={error}
         />
       )}
+      {!wrongExam ? (
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={skipPayment}
+            disabled={!facultyId || lock !== "idle" || pending}
+            className="rounded-xl border border-border px-5 py-3 text-sm font-semibold hover:bg-bg-secondary disabled:opacity-50"
+          >
+            Skip for now — go to dashboard
+          </button>
+          <p className="mt-2 text-xs text-text-secondary">
+            You can upgrade from your dashboard to unlock study features.
+          </p>
+        </div>
+      ) : null}
       {!enrollment && (!facultyId || lock === "failed") && lock !== "joining" ? (
         <FacultySelectionDialog
           exams={[exam]}
           initialExamSlug={exam.slug}
           initialAnswers={intent?.answers}
-          onSelected={(_slug, id) => setFacultyId(id)}
+          onSelected={(_slug, id) => {
+            setFacultyId(id);
+            setLock("idle");
+          }}
         />
       ) : null}
       {invoice ? (
         <PaymentSubmissionModal
           invoice={invoice}
           paymentConfig={paymentConfig}
-          onClose={() => setInvoice(null)}
+          onClose={skipPayment}
+          onSkip={skipPayment}
           onSaved={() => {
             router.push("/app/challenges");
             router.refresh();

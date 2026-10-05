@@ -37,12 +37,28 @@ export function ExamFacultyBrowse({
   backLabel: string;
 }) {
   const [query, setQuery] = useState("");
+  const [university, setUniversity] = useState("");
+  const [faculty, setFaculty] = useState("");
   const needle = query.trim().toLowerCase();
-  const visible = needle
-    ? faculties.filter((f) =>
-        [f.name, f.faculty, f.university].some((part) => part?.toLowerCase().includes(needle)),
-      )
-    : faculties;
+  const universities = [
+    ...new Set(faculties.map((f) => f.university?.trim()).filter(Boolean)),
+  ].sort();
+  const facultyNames = [...new Set(faculties.map((f) => f.faculty?.trim()).filter(Boolean))].sort();
+  const visible = faculties.filter(
+    (f) =>
+      (!university || f.university?.trim() === university) &&
+      (!faculty || f.faculty?.trim() === faculty) &&
+      (!needle ||
+        [f.name, f.faculty, f.university, ...f.subjects.map((subject) => subject.name)].some(
+          (part) => part?.toLowerCase().includes(needle),
+        )),
+  );
+  const hasFilters = Boolean(needle || university || faculty);
+  function clearFilters() {
+    setQuery("");
+    setUniversity("");
+    setFaculty("");
+  }
 
   return (
     <main className="ns-ef-page">
@@ -85,14 +101,54 @@ export function ExamFacultyBrowse({
       </section>
 
       <section className="ns-ef-browse" aria-label="Browse faculties">
-        <div className="ns-ef-intro">
-          <div className="ns-ef-heading">
-            <h2>Browse faculties</h2>
-            <span className="ns-ef-count" aria-live="polite">
-              {visible.length} {visible.length === 1 ? "faculty" : "faculties"}
-            </span>
+        <aside className="ns-ef-filters" aria-label="Faculty filters">
+          <div className="ns-ef-filters-header">
+            <h2>Filters</h2>
+            <button type="button" onClick={clearFilters} disabled={!hasFilters}>
+              Clear
+            </button>
           </div>
-          {faculties.length > 3 ? (
+          <div className="ns-ef-filter-fields">
+            <label className="ns-ef-filter" htmlFor="exam-filter-university">
+              University
+              <select
+                id="exam-filter-university"
+                value={university}
+                onChange={(e) => setUniversity(e.target.value)}
+              >
+                <option value="">All universities</option>
+                {universities.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="ns-ef-filter" htmlFor="exam-filter-faculty">
+              Faculty
+              <select
+                id="exam-filter-faculty"
+                value={faculty}
+                onChange={(e) => setFaculty(e.target.value)}
+              >
+                <option value="">All faculties</option>
+                {facultyNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </aside>
+        <div className="ns-ef-results">
+          <div className="ns-ef-intro">
+            <div className="ns-ef-heading">
+              <h2>Browse faculties</h2>
+              <span className="ns-ef-count" aria-live="polite">
+                {visible.length} {visible.length === 1 ? "faculty" : "faculties"}
+              </span>
+            </div>
             <label className="ns-ef-search">
               <span className="sr-only">Search faculties</span>
               <svg
@@ -111,28 +167,36 @@ export function ExamFacultyBrowse({
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search faculty or university"
+                placeholder="Search faculty, university or subject"
                 autoComplete="off"
               />
             </label>
+          </div>
+
+          <div className="ns-ef-grid">
+            {visible.map((faculty) => (
+              <ExamFacultyCard
+                key={faculty.id}
+                slug={faculty.slug}
+                name={faculty.name}
+                faculty={faculty.faculty}
+                university={faculty.university}
+                subjects={faculty.subjects}
+                selected={selectedSlug === faculty.slug}
+                onJoin={() => onSelect(faculty.slug)}
+              />
+            ))}
+          </div>
+          {!visible.length ? (
+            <div className="ns-ef-empty" role="status">
+              <h3>No faculties found</h3>
+              <p>Try another search or clear your filters.</p>
+              <button type="button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            </div>
           ) : null}
         </div>
-
-        <div className="ns-ef-grid">
-          {visible.map((faculty) => (
-            <ExamFacultyCard
-              key={faculty.id}
-              slug={faculty.slug}
-              name={faculty.name}
-              faculty={faculty.faculty}
-              university={faculty.university}
-              subjects={faculty.subjects}
-              selected={selectedSlug === faculty.slug}
-              onJoin={() => onSelect(faculty.slug)}
-            />
-          ))}
-        </div>
-        {!visible.length ? <p className="ns-ef-empty">No faculties match your search.</p> : null}
       </section>
 
       <div className="ns-ef-continue">
@@ -162,23 +226,36 @@ export function ExamFacultyBrowse({
         .ns-ef-hero p { margin: 14px 0 0; max-width: 640px; color: #313329; font-size: 1.125rem; line-height: 1.5; letter-spacing: -.01em; }
         .ns-ef-hero-art { width: 140px; aspect-ratio: 1; justify-self: end; display: grid; place-items: center; border-radius: 28px; background: #fff; }
         .ns-ef-hero-art svg { width: 90px; height: 90px; }
-        .ns-ef-browse { margin-top: 30px; color: #171c27; }
+        .ns-ef-browse { display: grid; grid-template-columns: 240px minmax(0, 1fr); align-items: start; gap: 28px; margin-top: 30px; color: #171c27; }
+        .ns-ef-filters { padding: 22px 20px; border: 1px solid #e6e9f0; border-radius: 16px; background: #fafbf8; }
+        .ns-ef-filters-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+        .ns-ef-filters h2 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+        .ns-ef-filters button, .ns-ef-empty button { border: 0; background: none; color: #314acf; font-size: 13px; font-weight: 700; cursor: pointer; }
+        .ns-ef-filters button:disabled { color: #8490a2; cursor: default; }
+        .ns-ef-filter-fields { display: grid; gap: 20px; }
+        .ns-ef-filter { display: grid; gap: 8px; min-width: 0; font-size: 13px; font-weight: 700; color: #384354; }
+        .ns-ef-filter select { width: 100%; min-width: 0; min-height: 42px; padding: 9px 10px; border: 1px solid #dce1d6; border-radius: 9px; background: #fff; color: #171c27; font-size: 13px; font-weight: 500; cursor: pointer; }
+        .ns-ef-filter select:focus-visible { outline: 3px solid #e9edff; border-color: #a5b4fc; }
+        .ns-ef-results { min-width: 0; }
         .ns-ef-intro { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
         .ns-ef-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
         .ns-ef-heading h2 { margin: 0; font-size: clamp(24px, 2.2vw, 30px); font-weight: 800; line-height: 1.15; letter-spacing: -.045em; white-space: nowrap; }
         .ns-ef-count { padding: 5px 10px; border-radius: 999px; background: #ebefff; color: #314acf; font-size: 12px; font-weight: 800; white-space: nowrap; }
-        .ns-ef-search { position: relative; flex: 0 1 300px; min-width: 0; }
+        .ns-ef-search { position: relative; flex: 0 1 320px; min-width: 0; }
         .ns-ef-search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: #8490a2; pointer-events: none; }
         .ns-ef-search input { width: 100%; height: 40px; padding: 0 12px 0 37px; border: 1px solid #e6e9f0; border-radius: 10px; background: #fff; color: #171c27; font-size: 14px; outline: none; transition: border-color .2s, box-shadow .2s; }
         .ns-ef-search input:focus { border-color: #a5b4fc; box-shadow: 0 0 0 3px #e9edff; }
         .ns-ef-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-        .ns-ef-empty { margin: 24px 0 0; color: #667083; font-size: 14px; }
+        .ns-ef-empty { padding: 32px 20px; border: 1px solid #e6e9f0; border-radius: 16px; text-align: center; color: #667083; font-size: 14px; }
+        .ns-ef-empty h3 { margin: 0; color: #171c27; font-size: 18px; font-weight: 700; }
+        .ns-ef-empty p { margin: 8px 0 16px; }
         .ns-ef-continue { display: flex; justify-content: center; margin-top: 36px; }
         .ns-ef-cta { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 26px; border: 0; border-radius: 10px; background: #3049ed; color: #fff; font-size: 14px; font-weight: 800; cursor: pointer; transition: background .2s; }
         .ns-ef-cta:hover:not(:disabled) { background: #2439d0; }
         .ns-ef-cta:disabled { opacity: .45; cursor: not-allowed; }
         .ns-ef-cta svg { width: 16px; height: 16px; }
         .ns-ef-cta:focus-visible, .ns-ef-back:focus-visible { outline: 3px solid #9aafff; outline-offset: 3px; }
+        @media (max-width: 1200px) { .ns-ef-intro { flex-direction: column; align-items: stretch; } .ns-ef-search { flex-basis: auto; } }
         @media (max-width: 1100px) { .ns-ef-grid { grid-template-columns: 1fr; } }
         @media (max-width: 800px) {
           .ns-ef-page { width: min(100% - 28px, 720px); }
@@ -186,6 +263,10 @@ export function ExamFacultyBrowse({
           .ns-ef-hero { min-height: auto; grid-template-columns: 1fr; padding: 28px; }
           .ns-ef-hero-art { display: none; }
           .ns-ef-grid { gap: 14px; }
+          .ns-ef-browse { grid-template-columns: 1fr; gap: 20px; }
+          .ns-ef-filters { padding: 18px; }
+          .ns-ef-filters-header { margin-bottom: 16px; }
+          .ns-ef-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
         }
         @media (max-width: 560px) {
           .ns-ef-page { width: min(100% - 20px, 520px); }

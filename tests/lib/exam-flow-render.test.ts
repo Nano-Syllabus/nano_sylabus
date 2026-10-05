@@ -128,6 +128,7 @@ describe("the exam's student journey", () => {
     );
     expect(html).toContain("Joining BEI…");
     expect(html).not.toContain("data-faculty-dialog");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Skip for now/);
   });
 
   it("after sign-in, shows the pricing itself with the faculty locked, and no faculty picker", () => {
@@ -164,5 +165,25 @@ describe("the exam's student journey", () => {
     expect(html).not.toContain(">Change<");
     expect(html).not.toContain("data-faculty-dialog");
     expect(html).not.toContain("Your exam, ready to go");
+    expect(html).toMatch(/<button(?![^>]* disabled=)[^>]*>Skip for now/);
+  });
+
+  it("allows skipping when a faculty is locked even if the official payment QR is unavailable", () => {
+    const html = renderToStaticMarkup(
+      createElement(ExamCheckout, {
+        exam: exam(),
+        plans: [plan],
+        intent: null,
+        enrollment: {
+          examSlug: "license",
+          examName: "License Preparation",
+          facultyId: "f2",
+          facultyName: "BEI",
+        },
+        paymentConfig: null,
+      } as never),
+    );
+    expect(html).toContain("The official payment QR is being configured");
+    expect(html).toMatch(/<button(?![^>]* disabled=)[^>]*>Skip for now/);
   });
 });

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { Fragment, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { AppShellContext } from "@/components/app-shell-context";
 import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { AppUser, ChatSessionSummary } from "@/lib/types";
 import { getActivePlanTierLabel } from "@/lib/billing";
@@ -145,6 +146,7 @@ export function AppSidebar({
   onToggleCollapse?: () => void;
   onCloseMobile?: () => void;
 }) {
+  const { upgradeHref } = useContext(AppShellContext);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -532,10 +534,10 @@ export function AppSidebar({
             route: warming is skipped on a metered or 2g connection, and a hover
             means the student is about to pay for the page anyway. */}
         <Link
-          href="/app/challenges"
+          href={upgradeHref || "/app/challenges"}
           onClick={() => onCloseMobile?.()}
-          onPointerEnter={() => router.prefetch("/app/challenges")}
-          onFocus={() => router.prefetch("/app/challenges")}
+          onPointerEnter={() => router.prefetch(upgradeHref || "/app/challenges")}
+          onFocus={() => router.prefetch(upgradeHref || "/app/challenges")}
           className={cn(
             "app-nav-challenges flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
             pathname.startsWith("/app/challenges") && "app-nav-challenges-active",
@@ -547,7 +549,7 @@ export function AppSidebar({
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
           aria-current={pathname.startsWith("/app/challenges") ? "page" : undefined}
-          title={isCollapsed ? "Micro-Topics" : undefined}
+          title={isCollapsed ? `${upgradeHref ? "Upgrade · " : ""}Micro-Topics` : undefined}
         >
           <span className="app-nav-challenges-icon relative flex h-5 w-5 shrink-0 items-center justify-center">
             <svg
@@ -567,12 +569,15 @@ export function AppSidebar({
             </svg>
           </span>
           {!isCollapsed && <span className="app-nav-challenges-label">Micro-Topics</span>}
+          {!isCollapsed && upgradeHref ? (
+            <span className="ml-auto text-xs font-semibold">Upgrade</span>
+          ) : null}
         </Link>
 
         <Link
-          href="/app/chat"
+          href={upgradeHref || "/app/chat"}
           onClick={(e) => {
-            if (window.location.pathname === "/app/chat") {
+            if (!upgradeHref && window.location.pathname === "/app/chat") {
               e.preventDefault();
               window.dispatchEvent(new Event("app:new-chat"));
             }
@@ -587,7 +592,7 @@ export function AppSidebar({
               : "hover:bg-bg-secondary hover:text-text-primary",
           )}
           aria-current={pathname.startsWith("/app/chat") ? "page" : undefined}
-          title={isCollapsed ? "Library" : undefined}
+          title={isCollapsed ? `${upgradeHref ? "Upgrade · " : ""}Library` : undefined}
         >
           {isCollapsed ? (
             <svg
@@ -621,17 +626,22 @@ export function AppSidebar({
                 <path d="M8 11h6" />
               </svg>
               Library
+              {upgradeHref ? <span className="ml-auto text-xs font-semibold">Upgrade</span> : null}
             </>
           )}
         </Link>
 
         {NAV.map((item) => {
+          const needsUpgrade = Boolean(
+            upgradeHref && ["/app/notes", "/app/exams", "/app/billing"].includes(item.href),
+          );
+          const href = needsUpgrade ? upgradeHref! : item.href;
           const isPending = pendingRouteHref === item.href;
           const isActive = isPending || pathname.startsWith(item.href);
           return (
             <Fragment key={item.href}>
               <Link
-                href={item.href}
+                href={href}
                 /**
                  * NO `preventDefault`, NO `router.push`, NO loading event.
                  *
@@ -655,12 +665,12 @@ export function AppSidebar({
                  * it cannot interrupt anything.
                  */
                 onClick={() => {
-                  setPendingRouteHref(item.href);
+                  setPendingRouteHref(href);
                   setPendingSessionId(null);
                   onCloseMobile?.();
                 }}
-                onPointerEnter={() => router.prefetch(item.href)}
-                onFocus={() => router.prefetch(item.href)}
+                onPointerEnter={() => router.prefetch(href)}
+                onFocus={() => router.prefetch(href)}
                 className={cn(
                   "flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
                   isCollapsed
@@ -671,10 +681,13 @@ export function AppSidebar({
                     : "hover:bg-bg-secondary hover:text-text-primary",
                 )}
                 aria-current={isActive ? "page" : undefined}
-                title={isCollapsed ? item.label : undefined}
+                title={isCollapsed ? `${needsUpgrade ? "Upgrade · " : ""}${item.label}` : undefined}
               >
                 {item.icon}
                 {!isCollapsed && item.label}
+                {!isCollapsed && needsUpgrade ? (
+                  <span className="ml-auto text-xs font-semibold">Upgrade</span>
+                ) : null}
               </Link>
               {/* Keep the dashboard after Revision, so the study loop reads
                 Micro-Topics → Library → Revision → Performance. */}

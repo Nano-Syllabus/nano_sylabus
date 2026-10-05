@@ -428,7 +428,10 @@ export function AdminExamSettings({
             <h3 className="text-sm font-semibold">Student journey</h3>
             <p className="mt-1 text-xs text-muted-foreground">
               Landing page → {config.askQuestions ? "onboarding questions → " : ""}supported
-              faculties → payment plans → sign in → payment QR → app
+              faculties → payment plans → sign in → payment QR (or skip) → dashboard
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Students who skip payment see Upgrade buttons for study features.
             </p>
           </div>
           <label className="flex items-start gap-3 rounded-xl bg-muted/50 p-3 text-sm">

@@ -7,7 +7,7 @@ const appSidebar = readFileSync("components/app-sidebar.tsx", "utf8");
 
 describe("student portal navigation chrome", () => {
   it("uses a shared student-portal title as the layout fallback", () => {
-    expect(appLayout).toContain('<AppShell user={user} title="Dashboard" faculty={enrollment}>');
+    expect(appLayout).toContain('<AppShell user={user} title="Dashboard"');
   });
 
   it("has no top bar: every page prints its own heading", () => {
@@ -31,7 +31,7 @@ describe("student portal navigation chrome", () => {
   });
 
   it("aligns the sidebar brand row to the shared top bar", () => {
-    expect(appSidebar).toContain("mb-3 flex items-center pt-[18px]");
+    expect(appSidebar).toContain("mb-6 flex items-center pt-[18px]");
   });
 
   it("uses one compact selected-tab treatment throughout primary navigation", () => {
