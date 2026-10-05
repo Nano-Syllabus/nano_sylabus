@@ -21,26 +21,25 @@ export const dynamic = "force-dynamic";
 
 export default async function CoursePaymentPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
-  const { user } = await getCurrentAuth();
   const paymentPath = `/payment/${encodeURIComponent(slug)}`;
+  const storedIntent =
+    readExamIntent((await searchParams).intent) ??
+    readExamIntent((await cookies()).get(EXAM_INTENT_COOKIE)?.value);
+  const intent = storedIntent?.examSlug === slug ? storedIntent : null;
+  const appOrigin = mainAppOrigin((await headers()).get("host"));
+  // Old bookmarks and exam links must reach the host that owns the session.
+  if (appOrigin) {
+    const query = intent ? `?intent=${encodeURIComponent(JSON.stringify(intent))}` : "";
+    redirect(`${appOrigin}${paymentPath}${query}`);
+  }
+  const { user } = await getCurrentAuth();
 
   const exam = await getEnrollmentExam(slug);
   if (exam) {
     const plans = await getExamPlans(exam);
-    // The link from a subdomain carries the student's choices; a cookie covers same-host visits.
-    const storedIntent =
-      readExamIntent((await searchParams).intent) ??
-      readExamIntent((await cookies()).get(EXAM_INTENT_COOKIE)?.value);
-    const intent = storedIntent?.examSlug === slug ? storedIntent : null;
     if (!user)
       return (
-        <ExamPreparationFlow
-          exam={exam}
-          plans={plans}
-          initialStep="plans"
-          initialIntent={intent}
-          appOrigin={mainAppOrigin((await headers()).get("host"))}
-        />
+        <ExamPreparationFlow exam={exam} plans={plans} initialStep="plans" initialIntent={intent} />
       );
     const [enrollment, paymentConfig] = await Promise.all([
       getStudentExamEnrollment(user.id),

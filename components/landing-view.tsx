@@ -118,7 +118,7 @@ export function LandingView({
 }) {
   const { brand } = content;
   // The site's one main action. An exam site starts its own onboarding flow
-  // (questions → faculties → plans) on this subdomain; every main button follows it.
+  // (questions → faculties → plans) on the app host; every main button follows it.
   const joinHref = examSlug
     ? `${appOrigin}/prepare/${encodeURIComponent(examSlug)}`
     : brand.communitySlug

@@ -69,6 +69,11 @@ HTTP-only, same-site cookie. Students can explore faculties and published subjec
 without an account. Both checkout and the app show the mandatory faculty dialog
 when an authenticated student has not chosen a faculty.
 
+Exam landing buttons open preparation on the main app domain, where sign-in
+cookies are available. Existing subdomain preparation and payment links redirect
+there and carry valid checkout intent. Authenticated visitors to preparation go
+straight to `/app/today`, so returning students do not repeat the guest journey.
+
 The student has one locked exam/faculty. The database makes selection, membership
 replacement and course enrollment a transaction, and refuses later faculty switches
 or leaving the locked membership. Student study scopes, subject authorization,
