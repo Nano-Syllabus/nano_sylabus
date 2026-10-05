@@ -4,7 +4,9 @@ const mocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   listPublicCommunities: vi.fn(),
   createCommunity: vi.fn(),
+  ambassador: vi.fn(),
 }));
+vi.mock("@/lib/data/student-ambassadors", () => ({ isStudentAmbassador: mocks.ambassador }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: mocks.createSupabaseServerClient,
@@ -45,6 +47,7 @@ describe("/api/communities", () => {
     });
     mocks.listPublicCommunities.mockResolvedValue([{ id: "community-1", slug: "sec-bei" }]);
     mocks.createCommunity.mockResolvedValue({ id: "community-1", slug: "sec-bei" });
+    mocks.ambassador.mockResolvedValue(true);
   });
 
   it("lists public communities with viewer membership state", async () => {
@@ -54,6 +57,21 @@ describe("/api/communities", () => {
     await expect(response.json()).resolves.toEqual({
       communities: [{ id: "community-1", slug: "sec-bei" }],
     });
+  });
+
+  it("refuses anyone who is not a student ambassador, whatever they send", async () => {
+    mocks.ambassador.mockResolvedValue(false);
+    const response = await POST(
+      new Request("http://localhost/api/communities", {
+        method: "POST",
+        body: JSON.stringify({ ...validInput, phoneNumber: "+9779812345678" }),
+      }),
+    );
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Only student ambassadors can create faculties.",
+    });
+    expect(mocks.createCommunity).not.toHaveBeenCalled();
   });
 
   it("creates a validated community for the signed-in user", async () => {

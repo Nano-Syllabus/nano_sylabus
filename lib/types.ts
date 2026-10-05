@@ -92,6 +92,8 @@ export interface AppUser {
   creditBalance: number;
   hasUnlimitedAccess: boolean;
   activePlanTier?: "plus" | "pro" | "group";
+  /** A super admin added this email as a student ambassador: may create faculties. */
+  isStudentAmbassador?: boolean;
 }
 
 export interface ChatSessionSummary {

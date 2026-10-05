@@ -5,7 +5,9 @@ const mocks = vi.hoisted(() => ({
   verifiedUser: vi.fn(),
   admin: vi.fn(),
   revalidate: vi.fn(),
+  ambassador: vi.fn(),
 }));
+vi.mock("@/lib/data/student-ambassadors", () => ({ isStudentAmbassador: mocks.ambassador }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient: mocks.serverClient }));
 vi.mock("@/lib/supabase/verified-user", () => ({ getVerifiedUser: mocks.verifiedUser }));
@@ -25,6 +27,7 @@ describe("creator onboarding reports why it failed", () => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.serverClient.mockResolvedValue({});
+    mocks.ambassador.mockResolvedValue(true);
     mocks.admin.mockReturnValue({
       from: () => ({
         select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
@@ -83,7 +86,12 @@ describe("creator onboarding reports why it failed", () => {
         select: () => ({
           eq: () => ({
             maybeSingle: async () => ({
-              data: { id: "t1", user_id: "18966d20-b6dd", handle: "someone_18966", collection_sk: "k" },
+              data: {
+                id: "t1",
+                user_id: "18966d20-b6dd",
+                handle: "someone_18966",
+                collection_sk: "k",
+              },
               error: null,
             }),
           }),
@@ -92,5 +100,17 @@ describe("creator onboarding reports why it failed", () => {
     });
 
     await expect(onboardTeacher()).resolves.toEqual({ ok: true, handle: "someone_18966" });
+  });
+
+  it("opens no workspace for someone who is not a student ambassador", async () => {
+    mocks.ambassador.mockResolvedValue(false);
+    mocks.verifiedUser.mockResolvedValue({
+      data: { user: { id: "18966d20-b6dd", email: "someone@example.com" } },
+    });
+
+    expect(await onboardTeacher()).toEqual({
+      ok: false,
+      message: "Only student ambassadors can open a creator workspace.",
+    });
   });
 });

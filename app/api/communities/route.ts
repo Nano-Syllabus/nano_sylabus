@@ -1,3 +1,4 @@
+import { isStudentAmbassador } from "@/lib/data/student-ambassadors";
 import { NextResponse } from "next/server";
 import { CACHE, privateJson } from "@/lib/http/cache";
 import { communityInputSchema } from "@/lib/communities";
@@ -34,6 +35,12 @@ export async function POST(request: Request) {
     } = await getVerifiedUser(supabase);
     if (!user)
       return NextResponse.json({ error: "Sign in to Create a faculty." }, { status: 401 });
+    // Only student ambassadors create faculties; a super admin adds them by email.
+    if (!(await isStudentAmbassador(user.email)))
+      return NextResponse.json(
+        { error: "Only student ambassadors can create faculties." },
+        { status: 403 },
+      );
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     const parsed = communityInputSchema.safeParse(body);

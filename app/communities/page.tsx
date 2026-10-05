@@ -1,3 +1,4 @@
+import { isStudentAmbassador } from "@/lib/data/student-ambassadors";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { DM_Sans, Plus_Jakarta_Sans } from "next/font/google";
@@ -18,7 +19,11 @@ export const dynamic = "force-dynamic";
 // No `weight` list: DM Sans is variable, and the static-weight request makes Google
 // serve `/l/font?kit=…&skey=…` files whose `&` breaks Turbopack's font loader.
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" });
-const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["700", "800"], variable: "--font-jakarta" });
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["700", "800"],
+  variable: "--font-jakarta",
+});
 
 export const metadata: Metadata = {
   title: "Browse communities — NanoSyllabus",
@@ -66,9 +71,11 @@ export default async function CommunitiesPage({
         initialCommunities={communities}
         signedIn={Boolean(user)}
         studyingSlug={studying?.slug ?? null}
-        initialShowCreate={params.create === "1"}
+        initialShowCreate={params.create === "1" && (await isStudentAmbassador(user?.email))}
         initialPhoneNumber={
-          typeof user?.user_metadata?.phone_number === "string" ? user.user_metadata.phone_number : ""
+          typeof user?.user_metadata?.phone_number === "string"
+            ? user.user_metadata.phone_number
+            : ""
         }
       />
     </div>

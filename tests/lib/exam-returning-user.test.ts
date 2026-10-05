@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   enrollment: vi.fn(),
   joined: vi.fn(),
   payment: vi.fn(),
+  paid: vi.fn(),
   site: vi.fn(),
   redirect: vi.fn((href: string) => {
     throw new Error(`REDIRECT:${href}`);
@@ -31,7 +32,10 @@ vi.mock("@/lib/data/exam-enrollment", () => ({
   getStudentExamEnrollment: mocks.enrollment,
 }));
 vi.mock("@/lib/data/faculty-lock", () => ({ hasJoinedFaculty: mocks.joined }));
-vi.mock("@/lib/data/billing", () => ({ getActiveManualPaymentConfig: mocks.payment }));
+vi.mock("@/lib/data/billing", () => ({
+  getActiveManualPaymentConfig: mocks.payment,
+  hasActiveSubscription: mocks.paid,
+}));
 vi.mock("@/lib/student-courses", () => ({
   getPublishedCourse: vi.fn(),
   enrollStudentInCourse: vi.fn(),
@@ -43,10 +47,10 @@ vi.mock("@/components/exam-enrollment-flow", () => ({
   ExamCheckout: () => null,
 }));
 
-import { GET as prepare } from "@/app/prepare/[slug]/route";
+import Prepare from "@/app/prepare/[slug]/page";
 import PaymentPage from "@/app/payment/[slug]/page";
 import SiteLandingPage from "@/app/sites/[slug]/page";
-import { ExamCheckout } from "@/components/exam-enrollment-flow";
+import { ExamCheckout, ExamPreparationFlow } from "@/components/exam-enrollment-flow";
 import { DEFAULT_EXAM_CONFIG } from "@/lib/exam-enrollment";
 
 const intent = {
@@ -76,55 +80,53 @@ beforeEach(() => {
   mocks.enrollment.mockResolvedValue({ examSlug: "license", facultyId: "f1" });
   mocks.joined.mockResolvedValue(false);
   mocks.payment.mockResolvedValue(null);
+  mocks.paid.mockResolvedValue(false);
   mocks.site.mockResolvedValue({ content: {}, examConfig: { enabled: true } });
 });
 afterEach(() => vi.unstubAllEnvs());
 
-const open = (host = "nanosyllabus.com") =>
-  prepare(new Request(`https://${host}/prepare/license`, { headers: { host } }), {
-    params: Promise.resolve({ slug: "license" }),
-  });
-const location = (response: Response) => response.headers.get("location");
+const open = (host = "nanosyllabus.com") => {
+  mocks.host = host;
+  return Prepare({ params: Promise.resolve({ slug: "license" }) });
+};
 
 describe("Continue learning from an exam site", () => {
-  it("sends a guest to log in and back", async () => {
-    expect(location(await open())).toBe(
-      "https://nanosyllabus.com/login?next=%2Fprepare%2Flicense",
-    );
+  it("onboards a guest: questions, faculties, plans, then sign-in", async () => {
+    const page = await open();
+    expect(page.type).toBe(ExamPreparationFlow);
+    expect(page.props.signedIn).toBe(false);
+    expect(page.props.exam.slug).toBe("license");
   });
 
   it("sends a student who already joined a faculty straight into the app", async () => {
     mocks.auth.mockResolvedValue({ user: { id: "student", role: "student" } });
     mocks.joined.mockResolvedValue(true);
-    const response = await open();
-    expect(location(response)).toBe("https://nanosyllabus.com/app/challenges");
-    expect(response.headers.get("set-cookie")).toBeNull();
+    await expect(open()).rejects.toThrow("REDIRECT:/app/challenges");
   });
 
-  it("lets a new student pick this exam's faculty inside the app", async () => {
+  it("onboards a signed-in student who has not joined yet, without a second login", async () => {
     mocks.auth.mockResolvedValue({ user: { id: "student", role: "student" } });
-    const response = await open();
-    expect(location(response)).toBe("https://nanosyllabus.com/app/challenges");
-    expect(response.headers.get("set-cookie")).toContain("nano_exam_site=license");
+    const page = await open();
+    expect(page.type).toBe(ExamPreparationFlow);
+    expect(page.props.signedIn).toBe(true);
   });
 
-  it("sends an unavailable exam home", async () => {
+  it("shows nothing for an unavailable exam", async () => {
     mocks.exam.mockResolvedValue(null);
-    expect(location(await open())).toBe("https://nanosyllabus.com/");
+    await expect(open()).rejects.toThrow("NOT_FOUND");
   });
 
   it("moves subdomain links to the main site before checking the session", async () => {
-    expect(location(await open("license.nanosyllabus.com"))).toBe(
-      "https://nanosyllabus.com/prepare/license",
+    await expect(open("license.nanosyllabus.com")).rejects.toThrow(
+      "REDIRECT:https://nanosyllabus.com/prepare/license",
     );
     expect(mocks.auth).not.toHaveBeenCalled();
   });
 
   it("keeps local development on the local host", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    expect(location(await open("license.localhost:3001"))).toContain(
-      "license.localhost:3001/login",
-    );
+    const page = await open("license.localhost:3001");
+    expect(page.type).toBe(ExamPreparationFlow);
   });
 });
 
@@ -144,6 +146,13 @@ describe("exam payment", () => {
     const destination = new URL(mocks.redirect.mock.lastCall![0]);
     expect(destination.origin).toBe("https://nanosyllabus.com");
     expect(JSON.parse(destination.searchParams.get("intent")!)).toEqual(intent);
+  });
+
+  it("keeps a joined, paying student off the pricing page", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "student" } });
+    mocks.joined.mockResolvedValue(true);
+    mocks.paid.mockResolvedValue(true);
+    await expect(PaymentPage(props())).rejects.toThrow("REDIRECT:/app/challenges");
   });
 
   it("allows an authenticated student to open payment for an upgrade", async () => {

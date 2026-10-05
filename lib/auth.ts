@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { isProfileComplete } from "@/lib/access";
 import { isAdminRole } from "@/lib/admin-role";
 import { grantStarterCredits } from "@/lib/data/billing";
+import { isStudentAmbassador } from "@/lib/data/student-ambassadors";
 import {
   normalizeBoard,
   normalizeBoardScore,
@@ -15,10 +16,7 @@ import {
 } from "@/lib/profile-normalization";
 import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import {
-  hasCompletedStudyDiagnostic,
-  hasStartedStudyDiagnostic,
-} from "@/lib/study-diagnostic";
+import { hasCompletedStudyDiagnostic, hasStartedStudyDiagnostic } from "@/lib/study-diagnostic";
 import type { AppUser, StudentProfile } from "@/lib/types";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { timed } from "@/lib/dev-timing";
@@ -48,21 +46,21 @@ function toAppUser(
   creditBalance: number,
   hasUnlimitedAccess: boolean,
   activePlanTier?: AppUser["activePlanTier"],
+  isStudentAmbassador = false,
 ): AppUser {
   return {
     id: user.id,
     email: user.email ?? "",
     fullName:
       profile?.fullName ||
-      (typeof user.user_metadata.full_name === "string"
-        ? user.user_metadata.full_name
-        : "") ||
+      (typeof user.user_metadata.full_name === "string" ? user.user_metadata.full_name : "") ||
       (user.email?.split("@")[0] ?? "Student"),
     onboarded: isProfileComplete(profile),
     role: profile?.role ?? "student",
     creditBalance,
     hasUnlimitedAccess,
     ...(activePlanTier ? { activePlanTier } : {}),
+    ...(isStudentAmbassador ? { isStudentAmbassador } : {}),
   };
 }
 
@@ -91,24 +89,27 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
   // The profile decides whether the user is onboarded and the ledger row
   // carries the credit balance. Neither depends on the other, so they go out
   // together instead of one after the next.
-  const [profileResult, ledgerResult, subscriptionResult] = await timed(
-    "page:getCurrentAuth-batch(3)",
-    async () => Promise.all([
-    supabase.from("student_profiles").select("*").eq("user_id", user.id).maybeSingle(),
-    supabase
-      .from("credits_ledger")
-      .select("balance_after")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("user_subscriptions")
-      .select("ends_at, subscription_plans(slug,product_type,is_unlimited)")
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .order("starts_at", { ascending: false }),
-  ]));
+  const [profileResult, ledgerResult, subscriptionResult, ambassador] = await timed(
+    "page:getCurrentAuth-batch(4)",
+    async () =>
+      Promise.all([
+        supabase.from("student_profiles").select("*").eq("user_id", user.id).maybeSingle(),
+        supabase
+          .from("credits_ledger")
+          .select("balance_after")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("user_subscriptions")
+          .select("ends_at, subscription_plans(slug,product_type,is_unlimited)")
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .order("starts_at", { ascending: false }),
+        isStudentAmbassador(user.email),
+      ]),
+  );
 
   const profileRow = profileResult.data;
   const profile: StudentProfile | null = profileRow ? normalizeProfile(profileRow) : null;
@@ -123,8 +124,7 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
   // outside development, where DEV_AUTH_BYPASS is false.
   const creditBalance = DEV_AUTH_BYPASS
     ? 999
-    : (ledgerResult.data?.balance_after ??
-      (onboarded ? await grantStarterCredits(user.id) : 0));
+    : (ledgerResult.data?.balance_after ?? (onboarded ? await grantStarterCredits(user.id) : 0));
 
   const now = Date.now();
   // Whoever can see platform analytics is always on Pro (see
@@ -142,31 +142,31 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
     });
 
   const activePlans = (subscriptionResult.data ?? [])
-    .filter((subscription: any) =>
-      !subscription.ends_at || new Date(subscription.ends_at).getTime() > now,
+    .filter(
+      (subscription: any) =>
+        !subscription.ends_at || new Date(subscription.ends_at).getTime() > now,
     )
     .map((subscription: any) =>
       Array.isArray(subscription.subscription_plans)
         ? subscription.subscription_plans[0]
         : subscription.subscription_plans,
     );
-  const activePlanTier: AppUser["activePlanTier"] = DEV_AUTH_BYPASS || platformAdmin
-    ? "pro"
-    : activePlans.some((plan: any) => plan?.product_type === "group")
-      ? "group"
-      : activePlans.some((plan: any) => plan?.is_unlimited)
-        ? "pro"
-        : activePlans.some((plan: any) => plan?.slug === "plus-monthly")
-          ? "plus"
-          : undefined;
+  const activePlanTier: AppUser["activePlanTier"] =
+    DEV_AUTH_BYPASS || platformAdmin
+      ? "pro"
+      : activePlans.some((plan: any) => plan?.product_type === "group")
+        ? "group"
+        : activePlans.some((plan: any) => plan?.is_unlimited)
+          ? "pro"
+          : activePlans.some((plan: any) => plan?.slug === "plus-monthly")
+            ? "plus"
+            : undefined;
 
   return {
-    user: toAppUser(user, profile, creditBalance, hasUnlimitedAccess, activePlanTier),
+    user: toAppUser(user, profile, creditBalance, hasUnlimitedAccess, activePlanTier, ambassador),
     profile,
     studyDiagnosticCompleted: hasCompletedStudyDiagnostic(user.user_metadata?.study_answers),
-    studyDiagnosticStarted: hasStartedStudyDiagnostic(
-      user.user_metadata?.study_diagnostic_started,
-    ),
+    studyDiagnosticStarted: hasStartedStudyDiagnostic(user.user_metadata?.study_diagnostic_started),
   };
 });
 

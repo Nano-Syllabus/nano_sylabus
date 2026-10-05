@@ -234,6 +234,7 @@ export function ExamPreparationFlow({
   initialStep,
   initialIntent,
   appOrigin = "",
+  signedIn = false,
 }: {
   exam: EnrollmentExam;
   plans: SubscriptionPlan[];
@@ -241,6 +242,8 @@ export function ExamPreparationFlow({
   initialIntent?: ExamIntent | null;
   /** Where sign-in lives: the main domain when this page is on a subdomain, else "". */
   appOrigin?: string;
+  /** Already signed in (a new student on the main domain): skip login, go to payment. */
+  signedIn?: boolean;
 }) {
   const router = useRouter();
   const flow = examFlowSteps(exam);
@@ -337,6 +340,10 @@ export function ExamPreparationFlow({
         ...(facultySlug ? { facultySlug } : {}),
       };
       const next = `${result.next}?intent=${encodeURIComponent(JSON.stringify(intent))}`;
+      if (signedIn) {
+        router.push(next);
+        return;
+      }
       const login = `${appOrigin}/login?next=${encodeURIComponent(next)}`;
       if (appOrigin) window.location.assign(login);
       else router.push(login);

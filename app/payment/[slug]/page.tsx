@@ -10,7 +10,8 @@ import {
 } from "@/lib/data/exam-enrollment";
 import { EXAM_INTENT_COOKIE, readExamIntent } from "@/lib/exam-enrollment";
 import { ExamCheckout, ExamPreparationFlow } from "@/components/exam-enrollment-flow";
-import { getActiveManualPaymentConfig } from "@/lib/data/billing";
+import { getActiveManualPaymentConfig, hasActiveSubscription } from "@/lib/data/billing";
+import { hasJoinedFaculty } from "@/lib/data/faculty-lock";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -41,6 +42,9 @@ export default async function CoursePaymentPage({ params, searchParams }: PagePr
       return (
         <ExamPreparationFlow exam={exam} plans={plans} initialStep="plans" initialIntent={intent} />
       );
+    // Joined and already paying: nothing left to do here.
+    if ((await hasJoinedFaculty(user.id)) && (await hasActiveSubscription(user.id)))
+      redirect("/app/challenges");
     const [enrollment, paymentConfig] = await Promise.all([
       getStudentExamEnrollment(user.id),
       getActiveManualPaymentConfig(),
