@@ -38,8 +38,14 @@ export const config = {
    *
    * Page navigations outside the gated paths stay matched so the session cookie
    * still gets refreshed while browsing.
+   *
+   * `vps-storage/` is the signed-upload proxy to the storage server. Next copies
+   * the body of every request that passes through middleware and stops at 10 MB,
+   * so a larger PDF arrived cut short and the upload failed ("The file could not
+   * be uploaded") while small files worked. The URL is signed, needs no session,
+   * and is a rewrite, so it skips middleware and the body streams straight through.
    */
   matcher: [
-    "/((?!api/|_next/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|css|js|map|woff|woff2|ttf|otf)$).*)",
+    "/((?!api/|vps-storage/|_next/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|css|js|map|woff|woff2|ttf|otf)$).*)",
   ],
 };
