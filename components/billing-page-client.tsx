@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { QrZoom } from "@/components/qr-zoom";
 import { ReceiptUploadFromPhone } from "@/components/receipt-upload-from-phone";
 import type {
   AppUser,
@@ -346,33 +347,33 @@ export function BillingPageClient({
             Simple plans. Bigger dreams.
           </h1>
           {!exam || exam.months.length > 1 ? (
-          <div
-            className="mt-5 inline-flex h-11 items-center rounded-full border border-border bg-card p-[2px]"
-            aria-label="Billing period"
-          >
-            <button
-              type="button"
-              aria-pressed={billingMonths === 1}
-              onClick={() => setBillingMonths(1)}
-              className={cn(
-                "h-10 rounded-full px-6 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
-                billingMonths === 1 ? "bg-text-primary text-text-inverse" : "text-text-muted",
-              )}
+            <div
+              className="mt-5 inline-flex h-11 items-center rounded-full border border-border bg-card p-[2px]"
+              aria-label="Billing period"
             >
-              1 month
-            </button>
-            <button
-              type="button"
-              aria-pressed={billingMonths === 3}
-              onClick={() => setBillingMonths(3)}
-              className={cn(
-                "h-10 rounded-full px-6 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
-                billingMonths === 3 ? "bg-text-primary text-text-inverse" : "text-text-muted",
-              )}
-            >
-              3 months
-            </button>
-          </div>
+              <button
+                type="button"
+                aria-pressed={billingMonths === 1}
+                onClick={() => setBillingMonths(1)}
+                className={cn(
+                  "h-10 rounded-full px-6 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
+                  billingMonths === 1 ? "bg-text-primary text-text-inverse" : "text-text-muted",
+                )}
+              >
+                1 month
+              </button>
+              <button
+                type="button"
+                aria-pressed={billingMonths === 3}
+                onClick={() => setBillingMonths(3)}
+                className={cn(
+                  "h-10 rounded-full px-6 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3353f4] focus-visible:ring-offset-2",
+                  billingMonths === 3 ? "bg-text-primary text-text-inverse" : "text-text-muted",
+                )}
+              >
+                3 months
+              </button>
+            </div>
           ) : null}
         </header>
 
@@ -384,16 +385,16 @@ export function BillingPageClient({
           )}
         >
           {exam ? null : (
-          <PricingCard
-            title="Free"
-            eyebrow={hasPaidPlan ? "Base plan" : "Current Plan"}
-            price="Rs. 0"
-            includes="Everything in Free"
-            features={FREE_FEATURES}
-            actionLabel={hasPaidPlan ? "Included in your plan" : "Current plan"}
-            onAction={() => router.push("/app/today")}
-            disabled
-          />
+            <PricingCard
+              title="Free"
+              eyebrow={hasPaidPlan ? "Base plan" : "Current Plan"}
+              price="Rs. 0"
+              includes="Everything in Free"
+              features={FREE_FEATURES}
+              actionLabel={hasPaidPlan ? "Included in your plan" : "Current plan"}
+              onAction={() => router.push("/app/today")}
+              disabled
+            />
           )}
           <PricingCard
             title={PLAN_COPY.plus.title}
@@ -917,22 +918,28 @@ export function PaymentSubmissionModal({
 
                 <div className="mt-5 flex items-center gap-4 sm:gap-6">
                   {/* QR Code Container */}
-                  <div className="flex size-[160px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-white p-2.5 shadow-xs sm:size-[180px]">
-                    {paymentConfig ? (
-                      <Image
-                        src={paymentConfig.qrImageUrl}
-                        alt={`Official ${paymentConfig.displayName} payment QR`}
-                        width={180}
-                        height={180}
-                        unoptimized
-                        className="size-full rounded-xl object-contain"
-                      />
-                    ) : (
-                      <div className="flex size-full flex-col items-center justify-center p-2 text-center text-xs text-text-muted">
-                        Payment QR not configured yet
-                      </div>
-                    )}
-                  </div>
+                  {paymentConfig ? (
+                    <QrZoom
+                      src={paymentConfig.qrImageUrl}
+                      alt={`Official ${paymentConfig.displayName} payment QR`}
+                      className="shrink-0"
+                    >
+                      <span className="flex size-[160px] items-center justify-center overflow-hidden rounded-2xl border border-border bg-white p-2.5 shadow-xs sm:size-[180px]">
+                        <Image
+                          src={paymentConfig.qrImageUrl}
+                          alt={`Official ${paymentConfig.displayName} payment QR`}
+                          width={180}
+                          height={180}
+                          unoptimized
+                          className="size-full rounded-xl object-contain"
+                        />
+                      </span>
+                    </QrZoom>
+                  ) : (
+                    <div className="flex size-[160px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-white p-2.5 text-center text-xs text-text-muted shadow-xs sm:size-[180px]">
+                      Payment QR not configured yet
+                    </div>
+                  )}
 
                   {/* Payment Amount & Remarks */}
                   <div className="min-w-0 flex-1">

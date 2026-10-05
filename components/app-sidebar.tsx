@@ -5,7 +5,6 @@ import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { AppShellContext } from "@/components/app-shell-context";
-import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
 import type { AppUser, ChatSessionSummary } from "@/lib/types";
 import { getActivePlanTierLabel } from "@/lib/billing";
 import { cn, compactSessionTitle, groupDateLabel } from "@/lib/utils";
@@ -13,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { isAdminRole } from "@/lib/admin-role";
 import { useQueryClient } from "@tanstack/react-query";
+import { fastSignOut } from "@/lib/supabase/sign-out";
 import { clearPersistedCache } from "@/components/query-provider";
 import { resetQueryClient } from "@/lib/query/client";
 import { prefetchDashboard } from "@/lib/query/dashboard";
@@ -191,6 +191,7 @@ export function AppSidebar({
   const activeCommunitySlug = searchParams.get("community") || undefined;
   const [historyErrorOverride, setHistoryErrorOverride] = useState("");
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [contextMenuId, setContextMenuId] = useState<string | null>(null);
   const [renameSession, setRenameSession] = useState<ChatSessionSummary | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -383,8 +384,9 @@ export function AppSidebar({
   }, [sessions]);
 
   async function handleLogout() {
-    const supabase = await loadSupabaseBrowserClient();
-    await supabase.auth.signOut();
+    if (loggingOut) return;
+    setLoggingOut(true);
+    await fastSignOut();
     /**
      * Erase this browser's cached data on the way out.
      *
@@ -396,8 +398,9 @@ export function AppSidebar({
      */
     clearPersistedCache();
     resetQueryClient();
-    router.replace("/login");
-    router.refresh();
+    // A full page load, not a client navigation: it also drops the router's
+    // in-memory copy of the last student's pages, and is one step instead of two.
+    window.location.replace("/login");
   }
 
   /*
@@ -924,7 +927,9 @@ export function AppSidebar({
 
             <button
               onClick={handleLogout}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition"
+              disabled={loggingOut}
+              aria-busy={loggingOut}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition disabled:opacity-60"
             >
               <svg
                 width="16"
@@ -940,7 +945,7 @@ export function AppSidebar({
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" x2="9" y1="12" y2="12" />
               </svg>
-              Log out
+              {loggingOut ? "Logging out…" : "Log out"}
             </button>
           </div>
         )}

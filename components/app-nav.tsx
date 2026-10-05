@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import type { AppUser } from "@/lib/types";
 import { getActivePlanTierLabel } from "@/lib/billing";
-import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
+import { fastSignOut } from "@/lib/supabase/sign-out";
 import { cn } from "@/lib/utils";
 
 // Mirrors the expanded sidebar flag. The route stays available for future use.
@@ -204,13 +204,10 @@ const NAV = [
 
 export function AppNav({ user }: { user: AppUser }) {
   const pathname = usePathname();
-  const router = useRouter();
 
   async function handleLogout() {
-    const supabase = await loadSupabaseBrowserClient();
-    await supabase.auth.signOut();
-    router.replace("/login");
-    router.refresh();
+    await fastSignOut();
+    window.location.replace("/login");
   }
 
   return (

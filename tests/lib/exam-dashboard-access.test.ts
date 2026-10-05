@@ -102,7 +102,8 @@ describe("dashboard access after skipping exam payment", () => {
   });
 
   it("restores normal study actions for an active subscriber", async () => {
-    mocks.paid.mockResolvedValue(true);
+    // The subscription is read once, with the rest of the user, by getCurrentAuth.
+    mocks.auth.mockResolvedValue({ user: { id: "student", role: "student", hasPaidPlan: true } });
     mocks.pathname = "/app/challenges";
     const element = await layout("Paid learning activity");
     expect(element.props.upgradeHref).toBeNull();
@@ -116,13 +117,11 @@ describe("dashboard access after skipping exam payment", () => {
     mocks.enrollment.mockResolvedValue(null);
     const element = await layout();
     expect(element.props.upgradeHref).toBeNull();
-    expect(mocks.paid).not.toHaveBeenCalled();
   });
 
   it.each(["admin", "super_admin"])("does not lock %s accounts", async (role) => {
     mocks.auth.mockResolvedValue({ user: { id: "admin", role } });
     expect((await layout()).props.upgradeHref).toBeNull();
-    expect(mocks.paid).not.toHaveBeenCalled();
   });
 
   it("falls back to billing when the enrolled exam is no longer available", async () => {

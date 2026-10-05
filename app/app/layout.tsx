@@ -3,14 +3,10 @@ import { AppShell } from "@/components/app-shell";
 import { QueryIdentity } from "@/components/query-identity";
 import { TabWarmer } from "@/components/tab-warmer";
 import { requireOnboardedUser } from "@/lib/auth";
-import {
-  getStudentExamEnrollment,
-  listEnrollmentExams,
-} from "@/lib/data/exam-enrollment";
+import { getStudentExamEnrollment, listEnrollmentExams } from "@/lib/data/exam-enrollment";
 import { FacultySelectionGate } from "@/components/faculty-selection-dialog";
 import { cookies, headers } from "next/headers";
 import { siteSlugFromHost } from "@/lib/landing-site-host";
-import { hasActiveSubscription } from "@/lib/data/billing";
 import { EXAM_INTENT_COOKIE, EXAM_SITE_COOKIE, readExamIntent } from "@/lib/exam-enrollment";
 import { hasFacultyMembership } from "@/lib/data/faculty-lock";
 
@@ -18,17 +14,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { user } = await requireOnboardedUser();
   const examStudent =
     user.role === "student" && !(DEV_AUTH_BYPASS && user.id === DEV_BYPASS_USER_ID);
-  const [enrollment, member] = examStudent
-    ? await Promise.all([getStudentExamEnrollment(user.id), hasFacultyMembership(user.id)])
-    : [null, false];
+  // Everything that only needs the user goes out together, not one after another.
+  const [[enrollment, member], cookieStore, requestHeaders] = await Promise.all([
+    examStudent
+      ? Promise.all([getStudentExamEnrollment(user.id), hasFacultyMembership(user.id)])
+      : Promise.resolve([null, false] as const),
+    cookies(),
+    headers(),
+  ]);
   // A student who already joined a faculty (exam enrollment or Browse) is never
   // asked to pick one again: the app simply opens the faculty they joined.
   const needsFaculty = examStudent && !member;
-  const cookieStore = await cookies();
   // Which exam the student is here for: the subdomain they are on, else the exam
   // site whose "Continue learning" brought them in (main domain in production).
   const hostExamSlug =
-    siteSlugFromHost((await headers()).get("host")) ??
+    siteSlugFromHost(requestHeaders.get("host")) ??
     cookieStore.get(EXAM_SITE_COOKIE)?.value ??
     null;
   const allExams = needsFaculty && !enrollment ? await listEnrollmentExams() : [];
@@ -43,8 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     enrollment?.examSlug ?? (member ? undefined : (intent?.examSlug ?? hostExamSlug ?? undefined));
   // Upgrade opens the in-app pricing page, which shows the exam's own prices for
   // the student's faculty once they have one.
-  const upgradeHref =
-    examStudent && examSlug && !(await hasActiveSubscription(user.id)) ? "/app/billing" : null;
+  const upgradeHref = examStudent && examSlug && !user.hasPaidPlan ? "/app/billing" : null;
 
   return (
     <AppShell user={user} title="Dashboard" faculty={enrollment} upgradeHref={upgradeHref}>

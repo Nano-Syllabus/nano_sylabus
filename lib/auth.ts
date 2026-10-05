@@ -4,7 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { isProfileComplete } from "@/lib/access";
 import { isAdminRole } from "@/lib/admin-role";
 import { grantStarterCredits } from "@/lib/data/billing";
-import { isStudentAmbassador } from "@/lib/data/student-ambassadors";
+import { isStudentAmbassadorCached } from "@/lib/data/student-ambassadors";
 import {
   normalizeBoard,
   normalizeBoardScore,
@@ -47,6 +47,7 @@ function toAppUser(
   hasUnlimitedAccess: boolean,
   activePlanTier?: AppUser["activePlanTier"],
   isStudentAmbassador = false,
+  hasPaidPlan = false,
 ): AppUser {
   return {
     id: user.id,
@@ -61,6 +62,7 @@ function toAppUser(
     hasUnlimitedAccess,
     ...(activePlanTier ? { activePlanTier } : {}),
     ...(isStudentAmbassador ? { isStudentAmbassador } : {}),
+    ...(hasPaidPlan ? { hasPaidPlan } : {}),
   };
 }
 
@@ -107,7 +109,7 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
           .eq("user_id", user.id)
           .eq("status", "active")
           .order("starts_at", { ascending: false }),
-        isStudentAmbassador(user.email),
+        isStudentAmbassadorCached(user.email),
       ]),
   );
 
@@ -163,7 +165,15 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
             : undefined;
 
   return {
-    user: toAppUser(user, profile, creditBalance, hasUnlimitedAccess, activePlanTier, ambassador),
+    user: toAppUser(
+      user,
+      profile,
+      creditBalance,
+      hasUnlimitedAccess,
+      activePlanTier,
+      ambassador,
+      DEV_AUTH_BYPASS || platformAdmin || activePlans.length > 0,
+    ),
     profile,
     studyDiagnosticCompleted: hasCompletedStudyDiagnostic(user.user_metadata?.study_answers),
     studyDiagnosticStarted: hasStartedStudyDiagnostic(user.user_metadata?.study_diagnostic_started),

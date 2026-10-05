@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { memo } from "@/lib/http/memo";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -23,6 +24,21 @@ export const isStudentAmbassador = cache(async (email: string | null | undefined
   }
   return Boolean(data);
 });
+
+/**
+ * For menus and labels, which ask on every page: remembered for a minute so the
+ * app shell does not run a query per navigation. Anything that GRANTS the power
+ * (creating a faculty, opening a workspace) uses `isStudentAmbassador`, which is
+ * always fresh, so a removed ambassador loses it at once.
+ */
+export function isStudentAmbassadorCached(email: string | null | undefined) {
+  const address = normalizeAmbassadorEmail(email ?? "");
+  if (!address) return Promise.resolve(false);
+  return memo(`student-ambassador:${address}`, () => isStudentAmbassador(address), {
+    ttlSeconds: 60,
+    staleSeconds: 300,
+  });
+}
 
 export type AmbassadorRow = { email: string; addedAt: string; hasAccount: boolean };
 

@@ -94,6 +94,8 @@ export interface AppUser {
   activePlanTier?: "plus" | "pro" | "group";
   /** A super admin added this email as a student ambassador: may create faculties. */
   isStudentAmbassador?: boolean;
+  /** Any current plan (or platform admin): read from the subscriptions getCurrentAuth already loads. */
+  hasPaidPlan?: boolean;
 }
 
 export interface ChatSessionSummary {

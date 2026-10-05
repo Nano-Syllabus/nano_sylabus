@@ -11,6 +11,7 @@ import {
   examBillingMonths,
   examPlanMonthlyPrice,
   EXISTING_STUDENT_LOGIN,
+  readExamIntent,
   type ExamIntent,
 } from "@/lib/exam-enrollment";
 import type { PaymentMethodConfig, SubscriptionPlan } from "@/lib/types";
@@ -20,6 +21,15 @@ import { PaymentSubmissionModal, type CheckoutInvoice } from "@/components/billi
 
 const actionClass =
   "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40";
+
+/**
+ * "This browser has finished this exam's onboarding": `true` once the student has
+ * chosen a faculty and plan and headed to sign-in. Later visits skip straight to
+ * sign-in. The choices are kept beside it so payment can still be set up.
+ * Add `?restart=1` to the page to go through onboarding again.
+ */
+const onboardingDoneKey = (slug: string) => `prepare-${slug}-onboarding-done`;
+const onboardingIntentKey = (slug: string) => `prepare-${slug}-intent`;
 
 export type FlowStep = "questions" | "faculties" | "plans";
 /** The steps this exam's admin configured, in order: landing → questions → faculties → payment. */
@@ -281,6 +291,29 @@ export function ExamPreparationFlow({
       /* A stale draft starts fresh. */
     }
   }, [exam.slug]);
+  const [redirecting, setRedirecting] = useState(false);
+  useEffect(() => {
+    try {
+      const done = onboardingDoneKey(exam.slug);
+      if (new URLSearchParams(window.location.search).has("restart")) {
+        localStorage.setItem(done, "false");
+        return;
+      }
+      const state = localStorage.getItem(done);
+      if (state === null) localStorage.setItem(done, "false");
+      if (state !== "true") return;
+      const saved = readExamIntent(
+        localStorage.getItem(onboardingIntentKey(exam.slug)) ?? undefined,
+      );
+      const next = `/payment/${exam.slug}${saved ? `?intent=${encodeURIComponent(JSON.stringify(saved))}` : ""}`;
+      setRedirecting(true);
+      window.location.replace(
+        signedIn ? next : `${appOrigin}/login?next=${encodeURIComponent(next)}`,
+      );
+    } catch {
+      /* No storage (private window): the student simply sees onboarding. */
+    }
+  }, [exam.slug, signedIn, appOrigin]);
 
   function continueQuestions(finalAnswers: Record<string, string>) {
     try {
@@ -340,6 +373,12 @@ export function ExamPreparationFlow({
         ...(facultySlug ? { facultySlug } : {}),
       };
       const next = `${result.next}?intent=${encodeURIComponent(JSON.stringify(intent))}`;
+      try {
+        localStorage.setItem(onboardingDoneKey(exam.slug), "true");
+        localStorage.setItem(onboardingIntentKey(exam.slug), JSON.stringify(intent));
+      } catch {
+        /* Not remembered; the student just sees onboarding again next time. */
+      }
       if (signedIn) {
         router.push(next);
         return;
@@ -353,6 +392,15 @@ export function ExamPreparationFlow({
       setPending("");
     }
   }
+
+  if (redirecting)
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-white px-6 text-[#111]">
+        <p role="status" className="text-sm text-[#777]">
+          Taking you to sign in…
+        </p>
+      </main>
+    );
 
   if (step === "faculties")
     return (
@@ -490,7 +538,9 @@ export function ExamCheckout({
   const [invoice, setInvoice] = useState<CheckoutInvoice | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [skipping, setSkipping] = useState(false);
   useEffect(() => {
+    router.prefetch("/app/today");
     if (lock !== "joining" || !intentFaculty || !intent) return;
     let cancelled = false;
     fetch("/api/student/exam-enrollment", {
@@ -522,8 +572,8 @@ export function ExamCheckout({
   function skipPayment() {
     if (!facultyId || lock !== "idle" || pending) return;
     autoOpened.current = true;
+    setSkipping(true);
     router.push("/app/today");
-    router.refresh();
   }
   async function openPayment(target: SubscriptionPlan | undefined = plan) {
     if (!target || !facultyId) return;
@@ -605,10 +655,10 @@ export function ExamCheckout({
           <button
             type="button"
             onClick={skipPayment}
-            disabled={!facultyId || lock !== "idle" || pending}
+            disabled={!facultyId || lock !== "idle" || pending || skipping}
             className="rounded-xl border border-border px-5 py-3 text-sm font-semibold hover:bg-bg-secondary disabled:opacity-50"
           >
-            Skip for now — go to dashboard
+            {skipping ? "Opening your dashboard…" : "Skip for now — go to dashboard"}
           </button>
           <p className="mt-2 text-xs text-text-secondary">
             You can upgrade from your dashboard to unlock study features.

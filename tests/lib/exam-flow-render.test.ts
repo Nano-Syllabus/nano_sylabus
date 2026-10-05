@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -185,5 +186,17 @@ describe("the exam's student journey", () => {
     );
     expect(html).toContain("The official payment QR is being configured");
     expect(html).toMatch(/<button(?![^>]* disabled=)[^>]*>Skip for now/);
+  });
+
+  it("remembers finished onboarding in localStorage and goes straight to sign-in next time", () => {
+    const source = readFileSync("components/exam-enrollment-flow.tsx", "utf8");
+    // prepare-<exam>-onboarding-done = "true" | "false", with the choices kept beside it.
+    expect(source).toContain("`prepare-${slug}-onboarding-done`");
+    expect(source).toContain("`prepare-${slug}-intent`");
+    expect(source).toContain('localStorage.setItem(onboardingDoneKey(exam.slug), "true")');
+    expect(source).toContain('localStorage.setItem(done, "false")');
+    // ?restart=1 is the way back into onboarding.
+    expect(source).toContain('has("restart")');
+    expect(source).toContain("/login?next=");
   });
 });
