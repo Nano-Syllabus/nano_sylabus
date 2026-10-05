@@ -1,3 +1,4 @@
+import { siteOrigin } from "@/lib/landing-site-host";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -28,7 +29,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const exam = await getEnrollmentExam(slug);
-  if (exam) return {title:`${exam.name} - NanoSyllabus`,alternates:{canonical:buildCanonicalUrl(slug === "main" ? "/" : `/sites/${slug}`)}};
+  if (exam) return {title:`${exam.name} - NanoSyllabus`,alternates:{canonical:slug === "main" ? buildCanonicalUrl("/") : `${siteOrigin(slug)}/`}};
   const course = await getPublishedCourse(slug).catch(() => null);
   if (!course) return { title: "Course not found - nanosyllabus", robots: { index: false } };
 

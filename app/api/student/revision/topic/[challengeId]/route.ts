@@ -1,3 +1,4 @@
+import { withExamStudyAccess } from "@/lib/exam-study-access";
 import { getStudentRevisionTopic } from "@/lib/data/student-revision-docs";
 import { errorJson, privateJson } from "@/lib/http/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -29,12 +30,9 @@ async function handleGET(
     if (!topic) return errorJson("Not found", 404);
     return privateJson({ topic }, { request });
   } catch (error) {
-    return errorJson(
-      error instanceof Error ? error.message : "Could not load this page.",
-      502,
-    );
+    return errorJson(error instanceof Error ? error.message : "Could not load this page.", 502);
   }
 }
 
 // Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
-export const GET = withUsageCommunity(handleGET);
+export const GET = withExamStudyAccess(withUsageCommunity(handleGET));

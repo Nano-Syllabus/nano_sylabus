@@ -60,9 +60,11 @@ or **Skip for now** → dashboard.
 
 Skipping or dismissing the exam payment QR opens `/app/today` without activating
 a subscription. Unpaid exam students can view their dashboard; study actions and
-learning navigation show **Upgrade** and link to their exam checkout. Opening a
-study page directly shows an upgrade prompt. Active subscribers keep normal
-access. The dashboard stays accessible without a forced checkout redirect.
+learning actions show **Upgrade** and link to their exam checkout. Micro-Topics,
+Revision and Library remain browsable: students can see subject/topic outlines
+and document names, while opening their contents requires a plan. Content APIs
+also enforce this restriction. Active subscribers keep normal access. The
+dashboard stays accessible without a forced checkout redirect.
 
 Preparation answers and the selected plan/duration survive sign-in using an
 HTTP-only, same-site cookie. Students can explore faculties and published subjects

@@ -1,3 +1,4 @@
+import { withExamStudyAccess } from "@/lib/exam-study-access";
 import { NextResponse } from "next/server";
 import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
 import {
@@ -41,7 +42,8 @@ async function handlePOST(request: Request) {
     if (!(await unlocksEveryTopic(user.id))) {
       return NextResponse.json(
         {
-          error: "This topic is locked. Finish the challenges before it, or upgrade to Plus or Pro.",
+          error:
+            "This topic is locked. Finish the challenges before it, or upgrade to Plus or Pro.",
           code: "plan_required",
         },
         { status: 402 },
@@ -50,7 +52,10 @@ async function handlePOST(request: Request) {
 
     const access = await getStudentCourseSubjectAccessCached(user.id, courseId, subjectSlug);
     if (!access) {
-      return NextResponse.json({ error: "You do not have access to this subject." }, { status: 403 });
+      return NextResponse.json(
+        { error: "You do not have access to this subject." },
+        { status: 403 },
+      );
     }
 
     // The topic must be one the syllabus lists now, read from the same
@@ -98,4 +103,4 @@ async function handlePOST(request: Request) {
 }
 
 // Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
-export const POST = withUsageCommunity(handlePOST);
+export const POST = withExamStudyAccess(withUsageCommunity(handlePOST));

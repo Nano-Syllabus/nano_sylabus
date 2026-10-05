@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ExamFacultyCard } from "@/components/exam-faculty-card";
 import type { ExamFaculty } from "@/lib/data/exam-enrollment";
+import { EXISTING_STUDENT_LOGIN } from "@/lib/exam-enrollment";
 
 /**
  * "Find your faculty" for an exam, laid out like the Browse communities page:
@@ -67,15 +68,21 @@ export function ExamFacultyBrowse({
           <Image src="/nanologo.png" alt="" width={42} height={42} />
           <span>NanoSyllabus</span>
         </Link>
-        {onBack ? (
-          <button type="button" className="ns-ef-back" onClick={onBack}>
-            ← {backLabel}
-          </button>
-        ) : (
-          <Link className="ns-ef-back" href={landingHref}>
-            ← {backLabel}
+        <div className="ns-ef-topbar-actions">
+          {onBack ? (
+            <button type="button" className="ns-ef-back" onClick={onBack}>
+              ← {backLabel}
+            </button>
+          ) : (
+            <Link className="ns-ef-back" href={landingHref}>
+              ← {backLabel}
+            </Link>
+          )}
+          {/* A returning student never has to redo onboarding to get back in. */}
+          <Link className="ns-ef-login" href={EXISTING_STUDENT_LOGIN}>
+            <span className="ns-ef-login-hint">Already joined?</span> <strong>Log in</strong>
           </Link>
-        )}
+        </div>
       </header>
 
       <section className="ns-ef-hero" aria-labelledby="ns-ef-title">
@@ -221,6 +228,12 @@ export function ExamFacultyBrowse({
         .ns-ef-brand img { width: 42px; height: 42px; }
         .ns-ef-back { display: inline-flex; align-items: center; gap: 6px; padding: 8px 4px; border: 0; background: none; color: #667083; font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; }
         .ns-ef-back:hover { color: #101114; }
+        .ns-ef-topbar-actions { display: flex; align-items: center; gap: 18px; }
+        .ns-ef-login { min-height: 40px; display: inline-flex; align-items: center; gap: 4px; padding: 0 14px; border: 1px solid #d9dde5; border-radius: 10px; color: #667083; font-size: 13.5px; text-decoration: none; white-space: nowrap; }
+        .ns-ef-login strong { color: #2563eb; font-weight: 700; }
+        .ns-ef-login:hover { border-color: #2563eb; }
+        .ns-ef-login:focus-visible { outline: 3px solid #9aafff; outline-offset: 3px; }
+        @media (max-width: 520px) { .ns-ef-topbar-actions { gap: 10px; } .ns-ef-login { padding: 0 10px; } .ns-ef-login-hint { display: none; } }
         .ns-ef-hero { min-height: 190px; padding: 36px 50px; display: grid; grid-template-columns: minmax(0, 1fr) 170px; align-items: center; gap: 32px; overflow: hidden; border-radius: 15px; background: #dcfa72; }
         .ns-ef-hero h1 { margin: 0; max-width: 800px; font-size: clamp(2.25rem, 3.2vw, 3.25rem); line-height: 1; letter-spacing: -.045em; font-weight: 600; }
         .ns-ef-hero p { margin: 14px 0 0; max-width: 640px; color: #313329; font-size: 1.125rem; line-height: 1.5; letter-spacing: -.01em; }

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useContext, useState } from "react";
+import { AppShellContext } from "@/components/app-shell-context";
 import { useRouter } from "next/navigation";
 import { Target } from "lucide-react";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
@@ -63,6 +64,7 @@ export function SubjectTopicProgress({ insight, courseId, subjectSlug, community
   unlockAll?: boolean;
 }) {
   const router = useRouter();
+  const { upgradeHref } = useContext(AppShellContext);
   const [starting, setStarting] = useState<string | null>(null);
   const [startError, setStartError] = useState("");
   // Any practised topic (a score at all) is revisable. On Free only the first
@@ -70,6 +72,7 @@ export function SubjectTopicProgress({ insight, courseId, subjectSlug, community
   const practised = (topic: CommunitySubjectExplorerInsight["topics"][number]) => (topic.percentage ?? 0) > 0;
   const firstUnpractised = insight?.topics.findIndex((topic) => !practised(topic)) ?? -1;
   async function startTopic(topic: CommunitySubjectExplorerInsight["topics"][number]) {
+    if (upgradeHref) { router.push(upgradeHref); return; }
     setStarting(topic.key);
     setStartError("");
     try {
@@ -122,7 +125,9 @@ export function SubjectTopicProgress({ insight, courseId, subjectSlug, community
                   </p>
                 ) : null}
               </div>
-              {!courseId || !subjectSlug ? (
+              {upgradeHref ? (
+                <Link href={upgradeHref} className={actionClass}>Upgrade</Link>
+              ) : !courseId || !subjectSlug ? (
                 <span className="shrink-0 px-3 text-xs text-text-muted">Locked</span>
               ) : practised(topic) ? (
                 <Link href={actionHref(topic, true)} className={actionClass}>Revise</Link>

@@ -1,3 +1,4 @@
+import { withExamStudyAccess } from "@/lib/exam-study-access";
 import { NextResponse } from "next/server";
 import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import { getStudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
@@ -58,7 +59,8 @@ async function handlePOST(
     }
 
     const challenge = await startStudentChallenge(user.id, next.id);
-    if (!challenge) return NextResponse.json({ error: "Next challenge not found." }, { status: 404 });
+    if (!challenge)
+      return NextResponse.json({ error: "Next challenge not found." }, { status: 404 });
     return NextResponse.json({ challenge });
   } catch (error) {
     const denied = challengeAccessResponse(error);
@@ -66,7 +68,9 @@ async function handlePOST(
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? studentFacingBuildError(error.message) : "Could not open the next challenge.",
+          error instanceof Error
+            ? studentFacingBuildError(error.message)
+            : "Could not open the next challenge.",
       },
       { status: 502 },
     );
@@ -74,4 +78,4 @@ async function handlePOST(
 }
 
 // Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
-export const POST = withUsageCommunity(handlePOST);
+export const POST = withExamStudyAccess(withUsageCommunity(handlePOST));

@@ -47,7 +47,7 @@ export function AppShell({
   const pathname = usePathname();
   const studyLocked = Boolean(
     upgradeHref &&
-    ["/app/challenges", "/app/chat", "/app/notes", "/app/exams"].some(
+    ["/app/notes/saved", "/app/notes/revision", "/app/exams"].some(
       (route) => pathname === route || pathname.startsWith(`${route}/`),
     ),
   );
@@ -163,7 +163,7 @@ export function AppShell({
               </span>
             </div>
           ) : null}
-          {upgradeHref ? (
+          {upgradeHref && !pathname.startsWith("/app/billing") ? (
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-amber-500/10 px-5 py-3 text-sm">
               <p>Your dashboard is ready. Upgrade to unlock your study features.</p>
               <Link

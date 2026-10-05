@@ -10,6 +10,7 @@ import {
   examText,
   examBillingMonths,
   examPlanMonthlyPrice,
+  EXISTING_STUDENT_LOGIN,
   type ExamIntent,
 } from "@/lib/exam-enrollment";
 import type { PaymentMethodConfig, SubscriptionPlan } from "@/lib/types";
@@ -35,9 +36,12 @@ function FlowFrame({
   onBack,
   backLabel = "Back",
   wide = false,
+  showLogin = false,
   children,
 }: {
   exam: EnrollmentExam;
+  /** Signed-out onboarding: offer returning students a way straight back in. */
+  showLogin?: boolean;
   /** Omitted = Back returns to the exam's landing page. */
   onBack?: () => void;
   backLabel?: string;
@@ -63,17 +67,28 @@ function FlowFrame({
               Nano Syllabus
             </span>
           </Link>
-          {onBack ? (
-            <button type="button" onClick={onBack} className={backClass}>
-              <ArrowLeft className="h-4 w-4" />
-              {backLabel}
-            </button>
-          ) : (
-            <Link href={landing} className={backClass}>
-              <ArrowLeft className="h-4 w-4" />
-              {backLabel}
-            </Link>
-          )}
+          <div className="flex items-center gap-3 sm:gap-5">
+            {onBack ? (
+              <button type="button" onClick={onBack} className={backClass}>
+                <ArrowLeft className="h-4 w-4" />
+                {backLabel}
+              </button>
+            ) : (
+              <Link href={landing} className={backClass}>
+                <ArrowLeft className="h-4 w-4" />
+                {backLabel}
+              </Link>
+            )}
+            {showLogin ? (
+              <Link
+                href={EXISTING_STUDENT_LOGIN}
+                className="inline-flex min-h-10 items-center gap-1 whitespace-nowrap rounded-lg border border-[#ddd] px-3 text-[13px] text-[#777] no-underline transition hover:border-blue-600"
+              >
+                <span className="hidden sm:inline">Already joined?</span>
+                <span className="font-semibold text-blue-600">Log in</span>
+              </Link>
+            ) : null}
+          </div>
         </div>
         {children}
       </main>
@@ -351,6 +366,7 @@ export function ExamPreparationFlow({
   return (
     <FlowFrame
       exam={exam}
+      showLogin
       wide={step !== "questions"}
       onBack={
         step === "questions"

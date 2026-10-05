@@ -27,27 +27,7 @@ export function LandingPrimaryCta({
   /** Where the app lives when this page is served from a subdomain ("" = here). */
   appOrigin?: string;
 }) {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    if (communityOnly) return;
-
-    let cancelled = false;
-
-    void loadSupabaseBrowserClient()
-      .then((supabase) => supabase.auth.getSession())
-      .then(({ data: { session } }) => {
-        if (!cancelled) setIsLoggedIn(Boolean(session?.user));
-      })
-      .catch(() => {
-        // This CTA is non-gating, so a failed session check keeps the safe
-        // signed-out destination instead of blocking the landing page.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [communityOnly]);
+  const isLoggedIn = useLandingSession(!communityOnly);
 
   const sizeClass =
     size === "hero"
@@ -76,6 +56,51 @@ export function LandingPrimaryCta({
             ? "Continue learning"
             : (children ?? "Start Learning")}
       </span>
+      <span aria-hidden="true" className="text-base font-bold leading-none">
+        ↗
+      </span>
+    </Link>
+  );
+}
+
+/**
+ * Whether this browser is signed in on this host. A subdomain never sees the
+ * main domain's session, so there it stays false and both doors are shown.
+ */
+function useLandingSession(enabled = true) {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    void loadSupabaseBrowserClient()
+      .then((supabase) => supabase.auth.getSession())
+      .then(({ data: { session } }) => {
+        if (!cancelled) setIsLoggedIn(Boolean(session?.user));
+      })
+      .catch(() => {
+        // This CTA is non-gating, so a failed session check keeps the safe
+        // signed-out destination instead of blocking the landing page.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+  return isLoggedIn;
+}
+
+/**
+ * The header button of a faculty or exam site. Everyone comes in the same way:
+ * new and returning students alike "Continue learning" — the site's entry signs
+ * them in if needed, skips straight to the faculty they joined, or lets a new
+ * student pick one of this site's faculties inside the app.
+ */
+export function LandingSiteActions({ joinHref }: { joinHref: string }) {
+  return (
+    <Link
+      href={joinHref}
+      className="inline-flex min-h-[44px] items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-[var(--lp-primary,#3049ed)] px-5 text-[13.5px] font-semibold text-white transition-all duration-200 hover:bg-[var(--lp-primary-hover,#2439d0)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-primary,#3049ed)] focus-visible:ring-offset-2"
+    >
+      Continue learning
       <span aria-hidden="true" className="text-base font-bold leading-none">
         ↗
       </span>

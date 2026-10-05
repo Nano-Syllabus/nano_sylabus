@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   exams: vi.fn(),
   exam: vi.fn(),
   paid: vi.fn(),
+  member: vi.fn(),
   pathname: "/app/today",
   host: "localhost:3001",
   cookie: undefined as string | undefined,
@@ -19,6 +20,7 @@ vi.mock("@/lib/data/exam-enrollment", () => ({
   listEnrollmentExams: mocks.exams,
   getEnrollmentExam: mocks.exam,
 }));
+vi.mock("@/lib/data/faculty-lock", () => ({ hasFacultyMembership: mocks.member }));
 vi.mock("@/lib/data/billing", () => ({ hasActiveSubscription: mocks.paid }));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ host: mocks.host }),
@@ -54,6 +56,7 @@ beforeEach(() => {
   mocks.exams.mockResolvedValue([]);
   mocks.exam.mockResolvedValue({ slug: "license" });
   mocks.paid.mockResolvedValue(false);
+  mocks.member.mockResolvedValue(false);
   mocks.pathname = "/app/today";
   mocks.host = "localhost:3001";
   mocks.cookie = undefined;
@@ -64,18 +67,18 @@ async function layout(children: ReactNode = "Dashboard progress") {
 }
 
 describe("dashboard access after skipping exam payment", () => {
-  it("renders the unpaid student's dashboard instead of redirecting to payment", async () => {
+  it("renders the unpaid student's dashboard with Upgrade leading to the pricing page", async () => {
     const element = await layout();
     expect(element.type).toBe(AppShell);
-    expect(element.props.upgradeHref).toBe("/payment/license");
+    expect(element.props.upgradeHref).toBe("/app/billing");
     const html = renderToStaticMarkup(element);
     expect(html).toContain("Dashboard progress");
-    expect(html).toContain('href="/payment/license"');
+    expect(html).toContain('href="/app/billing"');
     expect(html).toContain("Upgrade");
     expect(html).not.toContain("AI study assistant");
   });
 
-  it.each(["/app/challenges", "/app/chat", "/app/notes/saved", "/app/exams"])(
+  it.each(["/app/notes/saved", "/app/notes/revision/cards", "/app/exams"])(
     "offers an upgrade when an unpaid student directly opens %s",
     async (pathname) => {
       mocks.pathname = pathname;
@@ -86,13 +89,17 @@ describe("dashboard access after skipping exam payment", () => {
     },
   );
 
-  it.each(["/app/settings", "/app/community", "/app/billing"])(
-    "keeps %s accessible for unpaid students",
-    async (pathname) => {
-      mocks.pathname = pathname;
-      expect(renderToStaticMarkup(await layout("Accessible page"))).toContain("Accessible page");
-    },
-  );
+  it.each([
+    "/app/challenges",
+    "/app/chat",
+    "/app/notes",
+    "/app/settings",
+    "/app/community",
+    "/app/billing",
+  ])("keeps %s accessible for unpaid students", async (pathname) => {
+    mocks.pathname = pathname;
+    expect(renderToStaticMarkup(await layout("Accessible page"))).toContain("Accessible page");
+  });
 
   it("restores normal study actions for an active subscriber", async () => {
     mocks.paid.mockResolvedValue(true);
@@ -121,5 +128,18 @@ describe("dashboard access after skipping exam payment", () => {
   it("falls back to billing when the enrolled exam is no longer available", async () => {
     mocks.exam.mockResolvedValue(null);
     expect((await layout()).props.upgradeHref).toBe("/app/billing");
+  });
+
+  it("never asks a student who already joined a faculty to pick one again", async () => {
+    mocks.enrollment.mockResolvedValue(null);
+    mocks.member.mockResolvedValue(true);
+    mocks.exams.mockResolvedValue([{ slug: "license" }]);
+    mocks.host = "license.localhost:3001";
+    const element = await layout();
+    const children = [element.props.children].flat(3) as Array<{ props?: { exams?: unknown[] } }>;
+    const gate = children.find((child) => child?.props && "exams" in child.props);
+    expect(gate?.props?.exams).toEqual([]);
+    expect(mocks.exams).not.toHaveBeenCalled();
+    expect(element.props.upgradeHref).toBeNull();
   });
 });

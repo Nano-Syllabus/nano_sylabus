@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   exam: vi.fn(),
   plans: vi.fn(),
   enrollment: vi.fn(),
+  joined: vi.fn(),
   payment: vi.fn(),
   site: vi.fn(),
   redirect: vi.fn((href: string) => {
@@ -29,6 +30,7 @@ vi.mock("@/lib/data/exam-enrollment", () => ({
   getExamPlans: mocks.plans,
   getStudentExamEnrollment: mocks.enrollment,
 }));
+vi.mock("@/lib/data/faculty-lock", () => ({ hasJoinedFaculty: mocks.joined }));
 vi.mock("@/lib/data/billing", () => ({ getActiveManualPaymentConfig: mocks.payment }));
 vi.mock("@/lib/student-courses", () => ({
   getPublishedCourse: vi.fn(),
@@ -41,10 +43,10 @@ vi.mock("@/components/exam-enrollment-flow", () => ({
   ExamCheckout: () => null,
 }));
 
-import PreparationPage from "@/app/prepare/[slug]/page";
+import { GET as prepare } from "@/app/prepare/[slug]/route";
 import PaymentPage from "@/app/payment/[slug]/page";
 import SiteLandingPage from "@/app/sites/[slug]/page";
-import { ExamCheckout, ExamPreparationFlow } from "@/components/exam-enrollment-flow";
+import { ExamCheckout } from "@/components/exam-enrollment-flow";
 import { DEFAULT_EXAM_CONFIG } from "@/lib/exam-enrollment";
 
 const intent = {
@@ -72,93 +74,76 @@ beforeEach(() => {
   });
   mocks.plans.mockResolvedValue([]);
   mocks.enrollment.mockResolvedValue({ examSlug: "license", facultyId: "f1" });
+  mocks.joined.mockResolvedValue(false);
   mocks.payment.mockResolvedValue(null);
   mocks.site.mockResolvedValue({ content: {}, examConfig: { enabled: true } });
 });
 afterEach(() => vi.unstubAllEnvs());
 
-describe("returning students opening exam preparation", () => {
-  it.each(["free", "plus", "pro"])(
-    "sends a signed-in %s student straight to the dashboard",
-    async (tier) => {
-      mocks.auth.mockResolvedValue({
-        user: { id: "student", role: "student", activePlanTier: tier },
-      });
-      await expect(PreparationPage(props())).rejects.toThrow("REDIRECT:/app/today");
-      expect(mocks.plans).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(["admin", "super_admin"])(
-    "does not repeat preparation for a signed-in %s",
-    async (role) => {
-      mocks.auth.mockResolvedValue({ user: { id: "admin", role } });
-      await expect(PreparationPage(props())).rejects.toThrow("REDIRECT:/app/today");
-    },
-  );
-
-  it("keeps the preparation flow available to guests", async () => {
-    const page = await PreparationPage(props());
-    expect(page.type).toBe(ExamPreparationFlow);
-    expect(page.props.exam.slug).toBe("license");
-    expect(mocks.plans).toHaveBeenCalledOnce();
+const open = (host = "nanosyllabus.com") =>
+  prepare(new Request(`https://${host}/prepare/license`, { headers: { host } }), {
+    params: Promise.resolve({ slug: "license" }),
   });
+const location = (response: Response) => response.headers.get("location");
 
-  it("still rejects an unavailable exam for guests", async () => {
-    mocks.exam.mockResolvedValue(null);
-    await expect(PreparationPage(props())).rejects.toThrow("NOT_FOUND");
-  });
-
-  it.each([PreparationPage, PaymentPage])(
-    "moves old subdomain links to the main site before checking the session",
-    async (Page) => {
-      mocks.host = "license.nanosyllabus.com";
-      const route = Page === PreparationPage ? "prepare" : "payment";
-      await expect(Page(props())).rejects.toThrow(
-        `REDIRECT:https://nanosyllabus.com/${route}/license`,
-      );
-      expect(mocks.auth).not.toHaveBeenCalled();
-      expect(mocks.exam).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([PreparationPage, PaymentPage])(
-    "preserves a valid subdomain checkout intent on the main site",
-    async (Page) => {
-      mocks.host = "license.nanosyllabus.com";
-      mocks.cookie = JSON.stringify(intent);
-      await expect(Page(props())).rejects.toThrow("REDIRECT:");
-      const destination = new URL(mocks.redirect.mock.lastCall![0]);
-      expect(destination.origin).toBe("https://nanosyllabus.com");
-      expect(JSON.parse(destination.searchParams.get("intent")!)).toEqual(intent);
-    },
-  );
-
-  it("prefers valid intent from the link over a stale cookie", async () => {
-    mocks.cookie = JSON.stringify({ ...intent, facultySlug: "bct" });
-    const page = await PreparationPage(props(JSON.stringify(intent)));
-    expect(page.props.initialIntent).toEqual(intent);
-  });
-
-  it.each(["not-json", JSON.stringify({ ...intent, examSlug: "other-exam" })])(
-    "does not forward invalid or unrelated intent: %s",
-    async (value) => {
-      mocks.host = "license.nanosyllabus.com";
-      await expect(PreparationPage(props(value))).rejects.toThrow(
-        "REDIRECT:https://nanosyllabus.com/prepare/license",
-      );
-      expect(mocks.redirect.mock.lastCall![0]).not.toContain("?");
-    },
-  );
-
-  it("checks the main-domain session after the subdomain redirect", async () => {
-    mocks.host = "license.nanosyllabus.com";
-    await expect(PreparationPage(props())).rejects.toThrow(
-      "REDIRECT:https://nanosyllabus.com/prepare/license",
+describe("Continue learning from an exam site", () => {
+  it("sends a guest to log in and back", async () => {
+    expect(location(await open())).toBe(
+      "https://nanosyllabus.com/login?next=%2Fprepare%2Flicense",
     );
-    mocks.host = "nanosyllabus.com";
+  });
+
+  it("sends a student who already joined a faculty straight into the app", async () => {
     mocks.auth.mockResolvedValue({ user: { id: "student", role: "student" } });
-    await expect(PreparationPage(props())).rejects.toThrow("REDIRECT:/app/today");
+    mocks.joined.mockResolvedValue(true);
+    const response = await open();
+    expect(location(response)).toBe("https://nanosyllabus.com/app/challenges");
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("lets a new student pick this exam's faculty inside the app", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "student", role: "student" } });
+    const response = await open();
+    expect(location(response)).toBe("https://nanosyllabus.com/app/challenges");
+    expect(response.headers.get("set-cookie")).toContain("nano_exam_site=license");
+  });
+
+  it("sends an unavailable exam home", async () => {
+    mocks.exam.mockResolvedValue(null);
+    expect(location(await open())).toBe("https://nanosyllabus.com/");
+  });
+
+  it("moves subdomain links to the main site before checking the session", async () => {
+    expect(location(await open("license.nanosyllabus.com"))).toBe(
+      "https://nanosyllabus.com/prepare/license",
+    );
+    expect(mocks.auth).not.toHaveBeenCalled();
+  });
+
+  it("keeps local development on the local host", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(location(await open("license.localhost:3001"))).toContain(
+      "license.localhost:3001/login",
+    );
+  });
+});
+
+describe("exam payment", () => {
+  it("moves old subdomain links to the main site before checking the session", async () => {
+    mocks.host = "license.nanosyllabus.com";
+    await expect(PaymentPage(props())).rejects.toThrow(
+      "REDIRECT:https://nanosyllabus.com/payment/license",
+    );
+    expect(mocks.auth).not.toHaveBeenCalled();
+  });
+
+  it("preserves a valid subdomain checkout intent on the main site", async () => {
+    mocks.host = "license.nanosyllabus.com";
+    mocks.cookie = JSON.stringify(intent);
+    await expect(PaymentPage(props())).rejects.toThrow("REDIRECT:");
+    const destination = new URL(mocks.redirect.mock.lastCall![0]);
+    expect(destination.origin).toBe("https://nanosyllabus.com");
+    expect(JSON.parse(destination.searchParams.get("intent")!)).toEqual(intent);
   });
 
   it("allows an authenticated student to open payment for an upgrade", async () => {
@@ -167,22 +152,6 @@ describe("returning students opening exam preparation", () => {
     expect(page.type).toBe(ExamCheckout);
     expect(page.props.intent).toEqual(intent);
     expect(page.props.enrollment.facultyId).toBe("f1");
-  });
-
-  it.each(["development", "test"])(
-    "keeps local preparation on the local host in %s",
-    async (mode) => {
-      vi.stubEnv("NODE_ENV", mode);
-      mocks.host = "license.localhost:3001";
-      const page = await PreparationPage(props());
-      expect(page.type).toBe(ExamPreparationFlow);
-      expect(mocks.redirect).not.toHaveBeenCalled();
-    },
-  );
-
-  it("does not redirect an unrelated preview host to production", async () => {
-    mocks.host = "nano-preview.vercel.app";
-    expect((await PreparationPage(props())).type).toBe(ExamPreparationFlow);
   });
 
   it("points published exam landing buttons at the app's session host", async () => {

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { siteSlugFromHost } from "@/lib/landing-site-host";
+import { isValidSiteSlug, siteOrigin, siteSlugFromHost } from "@/lib/landing-site-host";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
@@ -12,6 +12,18 @@ export async function middleware(request: NextRequest) {
       url.pathname = `/sites/${slug}`;
       return NextResponse.rewrite(url);
     }
+  }
+  // A site lives only on its own subdomain. `/sites/<slug>` is the internal
+  // rewrite target (a rewrite never re-enters middleware), so a direct visit —
+  // nanosyllabus.com/sites/license — is sent to license.nanosyllabus.com.
+  const sitePath = /^\/sites\/([^/]+)\/?$/.exec(request.nextUrl.pathname);
+  if (sitePath && isValidSiteSlug(sitePath[1])) {
+    const slug = sitePath[1];
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.redirect(`${siteOrigin(slug)}/`);
+    }
+    const { protocol, port } = request.nextUrl;
+    return NextResponse.redirect(`${protocol}//${slug}.localhost${port ? `:${port}` : ""}/`);
   }
   return updateSession(request);
 }

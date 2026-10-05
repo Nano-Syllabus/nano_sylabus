@@ -534,10 +534,10 @@ export function AppSidebar({
             route: warming is skipped on a metered or 2g connection, and a hover
             means the student is about to pay for the page anyway. */}
         <Link
-          href={upgradeHref || "/app/challenges"}
+          href="/app/challenges"
           onClick={() => onCloseMobile?.()}
-          onPointerEnter={() => router.prefetch(upgradeHref || "/app/challenges")}
-          onFocus={() => router.prefetch(upgradeHref || "/app/challenges")}
+          onPointerEnter={() => router.prefetch("/app/challenges")}
+          onFocus={() => router.prefetch("/app/challenges")}
           className={cn(
             "app-nav-challenges flex min-h-10 items-center text-sm leading-5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong/70 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
             pathname.startsWith("/app/challenges") && "app-nav-challenges-active",
@@ -575,7 +575,7 @@ export function AppSidebar({
         </Link>
 
         <Link
-          href={upgradeHref || "/app/chat"}
+          href="/app/chat"
           onClick={(e) => {
             if (!upgradeHref && window.location.pathname === "/app/chat") {
               e.preventDefault();
@@ -633,7 +633,7 @@ export function AppSidebar({
 
         {NAV.map((item) => {
           const needsUpgrade = Boolean(
-            upgradeHref && ["/app/notes", "/app/exams", "/app/billing"].includes(item.href),
+            upgradeHref && ["/app/exams", "/app/billing"].includes(item.href),
           );
           const href = needsUpgrade ? upgradeHref! : item.href;
           const isPending = pendingRouteHref === item.href;
@@ -685,7 +685,7 @@ export function AppSidebar({
               >
                 {item.icon}
                 {!isCollapsed && item.label}
-                {!isCollapsed && needsUpgrade ? (
+                {!isCollapsed && (needsUpgrade || (upgradeHref && item.href === "/app/notes")) ? (
                   <span className="ml-auto text-xs font-semibold">Upgrade</span>
                 ) : null}
               </Link>

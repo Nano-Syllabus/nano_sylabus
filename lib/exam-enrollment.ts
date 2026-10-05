@@ -143,6 +143,11 @@ export function validateExamAnswers(config: ExamConfig, raw: unknown) {
 }
 
 export const EXAM_INTENT_COOKIE = "nano_exam_intent";
+/**
+ * The exam site a student came in through ("Continue learning" on its
+ * subdomain). The app reads it to offer only that exam's faculties.
+ */
+export const EXAM_SITE_COOKIE = "nano_exam_site";
 export const examIntentSchema = z.object({
   examSlug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/),
   planId: z.string().uuid(),
@@ -175,3 +180,9 @@ export function examPlanMonthlyPrice(
 export function hasFacultyPrices(config: Pick<ExamConfig, "facultyPrices">) {
   return Object.values(config.facultyPrices).some((prices) => Object.keys(prices).length > 0);
 }
+
+/**
+ * Where a returning student signs in from an exam site: straight into the app,
+ * which opens the faculty they already joined. Onboarding is only for newcomers.
+ */
+export const EXISTING_STUDENT_LOGIN = `/login?next=${encodeURIComponent("/app/challenges")}`;

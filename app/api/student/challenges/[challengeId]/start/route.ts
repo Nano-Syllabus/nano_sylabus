@@ -1,3 +1,4 @@
+import { withExamStudyAccess } from "@/lib/exam-study-access";
 import { NextResponse } from "next/server";
 import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -44,4 +45,4 @@ async function handlePOST(
 }
 
 // Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
-export const POST = withUsageCommunity(handlePOST);
+export const POST = withExamStudyAccess(withUsageCommunity(handlePOST));

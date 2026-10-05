@@ -1,3 +1,4 @@
+import { withExamStudyAccess } from "@/lib/exam-study-access";
 import { NextResponse } from "next/server";
 import {
   getStudentCourseSubjectAccess,
@@ -261,7 +262,7 @@ async function mirrorResponse(
  * never reach the browser, and access is checked through community membership
  * or course enrollment.
  */
-export async function GET(
+async function handleGET(
   request: Request,
   { params }: { params: Promise<{ documentId: string }> },
 ) {
@@ -397,3 +398,5 @@ export async function GET(
     return NextResponse.json({ error: message || "Could not fetch that file." }, { status: 502 });
   }
 }
+
+export const GET = withExamStudyAccess(handleGET);

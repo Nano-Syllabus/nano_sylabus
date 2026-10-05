@@ -108,17 +108,31 @@ function FeatureList({ features }: { features: string[] }) {
   );
 }
 
+/**
+ * A student enrolled through an exam site pays that exam's prices (per faculty)
+ * for the durations it offers. There is no Free card: the free tier is what they
+ * already have, and this page is where "Upgrade" leads.
+ */
+export type BillingExamPricing = {
+  slug: string;
+  months: Array<1 | 3>;
+  /** Monthly price per plan id for the student's faculty. */
+  prices: Record<string, number>;
+};
+
 export function BillingPageClient({
   overview,
   paymentConfig,
   user,
+  exam = null,
 }: {
   overview: StudentBillingOverview;
   paymentConfig: PaymentMethodConfig | null;
   user: AppUser;
+  exam?: BillingExamPricing | null;
 }) {
   const router = useRouter();
-  const [billingMonths, setBillingMonths] = useState<1 | 3>(1);
+  const [billingMonths, setBillingMonths] = useState<1 | 3>(exam?.months[0] ?? 1);
   const [creatingPlanId, setCreatingPlanId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [selectedInvoice, setSelectedInvoice] = useState<CheckoutInvoice | null>(null);
@@ -130,6 +144,13 @@ export function BillingPageClient({
   const [cancelledSubscriptionIds, setCancelledSubscriptionIds] = useState<string[]>([]);
   const [success, setSuccess] = useState("");
 
+  const priceOf = (plan: SubscriptionPlan | null, months: 1 | 3, fallback: number) =>
+    formatPlanPrice(
+      plan && exam ? { ...plan, price: exam.prices[plan.id] ?? plan.price } : plan,
+      months,
+      fallback,
+    );
+  const showMonths = (months: 1 | 3) => !exam || exam.months.includes(months);
   const plans = useMemo(() => {
     const active = overview.plans.filter((plan) => plan.isActive);
     return {
@@ -201,6 +222,7 @@ export function BillingPageClient({
         planId: plan.id,
         paymentMethod: "bank_transfer",
         billingMonths: months,
+        ...(exam ? { examSlug: exam.slug } : {}),
       }),
     });
     const payload = (await response.json().catch(() => ({}))) as {
@@ -323,6 +345,7 @@ export function BillingPageClient({
           <h1 className="type-student-page-title text-text-primary">
             Simple plans. Bigger dreams.
           </h1>
+          {!exam || exam.months.length > 1 ? (
           <div
             className="mt-5 inline-flex h-11 items-center rounded-full border border-border bg-card p-[2px]"
             aria-label="Billing period"
@@ -350,12 +373,17 @@ export function BillingPageClient({
               3 months
             </button>
           </div>
+          ) : null}
         </header>
 
         <section
           aria-label="Subscription plans"
-          className="student-page-width mt-8 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3 lg:gap-5"
+          className={cn(
+            "student-page-width mt-8 grid grid-cols-1 items-stretch gap-4 lg:gap-5",
+            exam ? "mx-auto max-w-[820px] md:grid-cols-2" : "lg:grid-cols-3",
+          )}
         >
+          {exam ? null : (
           <PricingCard
             title="Free"
             eyebrow={hasPaidPlan ? "Base plan" : "Current Plan"}
@@ -366,14 +394,17 @@ export function BillingPageClient({
             onAction={() => router.push("/app/today")}
             disabled
           />
+          )}
           <PricingCard
             title={PLAN_COPY.plus.title}
             eyebrow={
-              billingMonths === 1
-                ? `3 months · ${formatPlanPrice(plans.plus, 3, 450)}`
-                : `1 month · ${formatPlanPrice(plans.plus, 1, 450)}`
+              !showMonths(billingMonths === 1 ? 3 : 1)
+                ? `${billingMonths} ${billingMonths === 1 ? "month" : "months"}`
+                : billingMonths === 1
+                  ? `3 months · ${priceOf(plans.plus, 3, 450)}`
+                  : `1 month · ${priceOf(plans.plus, 1, 450)}`
             }
-            price={formatPlanPrice(plans.plus, billingMonths, 450)}
+            price={priceOf(plans.plus, billingMonths, 450)}
             includes={PLAN_COPY.plus.description}
             features={[...PLAN_COPY.plus.fallbackFeatures]}
             actionLabel={
@@ -393,11 +424,13 @@ export function BillingPageClient({
           <PricingCard
             title={PLAN_COPY.pro.title}
             eyebrow={
-              billingMonths === 1
-                ? `3 months · ${formatPlanPrice(plans.pro, 3, 1500)}`
-                : `1 month · ${formatPlanPrice(plans.pro, 1, 1500)}`
+              !showMonths(billingMonths === 1 ? 3 : 1)
+                ? `${billingMonths} ${billingMonths === 1 ? "month" : "months"}`
+                : billingMonths === 1
+                  ? `3 months · ${priceOf(plans.pro, 3, 1500)}`
+                  : `1 month · ${priceOf(plans.pro, 1, 1500)}`
             }
-            price={formatPlanPrice(plans.pro, billingMonths, 1500)}
+            price={priceOf(plans.pro, billingMonths, 1500)}
             includes={PLAN_COPY.pro.description}
             features={[...PLAN_COPY.pro.fallbackFeatures]}
             actionLabel={proIsCurrent ? "Current plan" : "Choose Pro"}
@@ -520,8 +553,8 @@ export function BillingPageClient({
                     className="min-h-10 rounded-md bg-white px-5 text-sm font-semibold text-[#111827] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#3049ed] disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {billingMonths === 1
-                      ? `Choose Plus - ${formatPlanPrice(plans.plus, 1, 450)}/month ↗`
-                      : `Choose Plus - ${formatPlanPrice(plans.plus, 3, 450)}/3 months ↗`}
+                      ? `Choose Plus - ${priceOf(plans.plus, 1, 450)}/month ↗`
+                      : `Choose Plus - ${priceOf(plans.plus, 3, 450)}/3 months ↗`}
                   </button>
                   <button
                     type="button"

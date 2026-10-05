@@ -1,3 +1,4 @@
+import { withExamStudyAccess } from "@/lib/exam-study-access";
 import { NextResponse } from "next/server";
 import { studentFacingBuildError } from "@/lib/data/student-challenges";
 import { getStudentChallengeContent } from "@/lib/data/student-challenges";
@@ -51,11 +52,16 @@ async function handleGET(
     const denied = challengeAccessResponse(error);
     if (denied) return denied;
     return NextResponse.json(
-      { error: error instanceof Error ? studentFacingBuildError(error.message) : "Could not load this challenge." },
+      {
+        error:
+          error instanceof Error
+            ? studentFacingBuildError(error.message)
+            : "Could not load this challenge.",
+      },
       { status: 502 },
     );
   }
 }
 
 // Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
-export const GET = withUsageCommunity(handleGET);
+export const GET = withExamStudyAccess(withUsageCommunity(handleGET));

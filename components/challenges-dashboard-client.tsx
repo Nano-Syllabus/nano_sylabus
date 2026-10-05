@@ -2016,10 +2016,11 @@ const hubTermKey = (dashboard: StudentChallengeDashboard) =>
 
 /** Where Start was, once the free plan's challenges for today are used. */
 function UpgradeLockButton() {
+  const { upgradeHref } = useContext(AppShellContext);
   return (
     <Link
-      href="/app/billing"
-      title="Today's free challenges are used. Upgrade to Plus or Pro for unlimited challenges."
+      href={upgradeHref || "/app/billing"}
+      title={upgradeHref ? "Upgrade to open this micro-topic." : "Today's free challenges are used. Upgrade to Plus or Pro for unlimited challenges."}
       className="inline-flex min-h-9 w-[104px] shrink-0 items-center justify-center gap-1.5 rounded-[10px] border border-amber-500/40 bg-amber-500/10 px-3 text-[14px] font-semibold text-amber-700 transition-colors hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-amber-300"
     >
       <Lock className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
@@ -2138,7 +2139,7 @@ export function ChallengesDashboardClient({
   const [openError, setOpenError] = useState("");
   /** A subject whose every subtopic is done — celebrated, not reported as an error. */
   const [finishedSubject, setFinishedSubject] = useState<string | null>(null);
-  const { setTitle } = useContext(AppShellContext);
+  const { setTitle, upgradeHref } = useContext(AppShellContext);
 
   /**
    * The top bar names the challenge while one is open, and the hub otherwise.
@@ -2278,6 +2279,7 @@ export function ChallengesDashboardClient({
   const limitReached = Boolean(
     allowance && !allowance.paid && (refusedToday || completedToday >= allowance.limit),
   );
+  const studyLocked = Boolean(upgradeHref) || limitReached;
   /**
    * THE DAILY TARGET (user, 2026-10-02): the topics still to pass, spread over
    * the days left to the exam — counting today, so the exam day itself still
@@ -2290,6 +2292,10 @@ export function ChallengesDashboardClient({
   const extraToday = Math.max(0, completedToday - dailyTarget);
 
   const openChallenge = useCallback(async (challenge: StudentChallengeSummary) => {
+    if (upgradeHref) {
+      router.push(upgradeHref);
+      return false;
+    }
     setOpeningId(challenge.id);
     setOpenError("");
     try {
@@ -2311,7 +2317,7 @@ export function ChallengesDashboardClient({
     } finally {
       setOpeningId("");
     }
-  }, [patchHub]);
+  }, [patchHub, router, upgradeHref]);
 
   /**
    * From a finished subject's row to its next topic: the server tops the
@@ -2319,6 +2325,10 @@ export function ChallengesDashboardClient({
    * card joins the list, and it opens.
    */
   const openNextInSubject = async (done: StudentChallengeSummary) => {
+    if (upgradeHref) {
+      router.push(upgradeHref);
+      return;
+    }
     setOpeningId(done.id);
     setOpenError("");
     try {
@@ -2566,7 +2576,7 @@ export function ChallengesDashboardClient({
             </div>
           ) : dashboard.challenges.length ? (
             <div className={hubRowsClass}>
-              {limitReached ? <DailyLimitNotice limit={allowance?.limit ?? 3} /> : null}
+              {limitReached && !upgradeHref ? <DailyLimitNotice limit={allowance?.limit ?? 3} /> : null}
               {byProgress(hubRows(dashboard.challenges), subjectProgress).map(({ challenge, doneToday }) => {
                 const completed = challenge.status === "completed";
                 const started = challenge.status === "started";
@@ -2607,7 +2617,7 @@ export function ChallengesDashboardClient({
                             <span className="block text-[11px] tabular-nums text-text-muted">{score}</span>
                           ) : null}
                         </span>
-                        {limitReached ? (
+                        {studyLocked ? (
                           <UpgradeLockButton />
                         ) : (
                         <button
@@ -2684,7 +2694,7 @@ export function ChallengesDashboardClient({
                         ) : null}
                       </span>
                       {/* Every card locks at the limit, Continue included (user, 2026-09-28). */}
-                      {limitReached ? (
+                      {studyLocked ? (
                         <UpgradeLockButton />
                       ) : (
                       <button
@@ -2832,7 +2842,7 @@ export function ChallengesDashboardClient({
                       </span>
                     </span>
                     <span className="text-sm font-semibold text-text-secondary">
-                      {openingId === challenge.id
+                      {upgradeHref ? "Upgrade →" : openingId === challenge.id
                         ? "Opening…"
                         : `${score === null ? "Passed" : `${Math.round(score)}%`} · Review →`}
                     </span>

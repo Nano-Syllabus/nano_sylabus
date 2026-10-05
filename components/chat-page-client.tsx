@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import Link from "next/link";
 import {
@@ -554,6 +555,7 @@ export function ChatPageClient({
   const [sessionDetail, setSessionDetail] = useState<ChatSessionDetail | null>(initialSession);
   const [switchingSessionId, setSwitchingSessionId] = useState<string | null>(null);
   const shell = useContext(AppShellContext);
+  const router = useRouter();
   const defaultSubjectContext = useMemo(() => {
     const fromInitial = initialSubjectContext ? stripSubjectChapter(normalizeSubjectLabel(initialSubjectContext)) : "";
     if (fromInitial) return fromInitial;
@@ -1660,6 +1662,7 @@ export function ChatPageClient({
   );
 
   async function sendCurrentMessage(overrideText?: string, overrideMessages?: Message[], truncateFromId?: string) {
+    if (shell.upgradeHref) { router.push(shell.upgradeHref); return; }
     const trimmed = (overrideText ?? input).trim();
     const attachmentsForMessage = overrideText ? [] : pendingAttachments;
     if ((!trimmed && attachmentsForMessage.length === 0) || isLoading) return;
@@ -2155,13 +2158,14 @@ export function ChatPageClient({
 
   const handleWorkspaceMaterialOpen = useCallback(
     (material: LibraryNanoAiMaterial, nextSubject: LibraryNanoAiSubject) => {
+      if (shell.upgradeHref) { router.push(shell.upgradeHref); return; }
       handleLibrarySubjectSelect({ name: nextSubject.name, slug: nextSubject.slug });
       setWorkspaceSubject(nextSubject);
       setWorkspaceMaterial(material);
       setLibraryOpen(false);
       setLibraryShowAllSubjects(false);
     },
-    [handleLibrarySubjectSelect],
+    [handleLibrarySubjectSelect, router, shell.upgradeHref],
   );
 
   function clampNanoAiPanelWidth(width: number) {
@@ -2566,6 +2570,18 @@ export function ChatPageClient({
       </header>
     );
   };
+
+  if (shell.upgradeHref && !isFloating) {
+    return (
+      <LibraryNanoAiWorkspace
+        community={libraryCommunity}
+        insights={libraryInsights}
+        initialSelection={initialLibrarySelection}
+        onSubjectSelect={handleWorkspaceSubjectSelect}
+        onMaterialOpen={handleWorkspaceMaterialOpen}
+      />
+    );
+  }
 
   return (
     <div

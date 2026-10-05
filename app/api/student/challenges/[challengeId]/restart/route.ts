@@ -1,3 +1,4 @@
+import { withExamStudyAccess } from "@/lib/exam-study-access";
 import { NextResponse } from "next/server";
 import { mayRestartChallenges } from "@/lib/challenge-refetch";
 import { restartStudentChallenge } from "@/lib/data/student-challenges";
@@ -32,7 +33,10 @@ async function handlePOST(
   } catch (error) {
     const denied = challengeAccessResponse(error);
     if (denied) return denied;
-    if (error instanceof Error && error.message === "Completed challenges cannot be restarted or repeated.") {
+    if (
+      error instanceof Error &&
+      error.message === "Completed challenges cannot be restarted or repeated."
+    ) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
     return NextResponse.json(
@@ -48,4 +52,4 @@ async function handlePOST(
 }
 
 // Tokens these spend are counted against the student's faculty (lib/usage-community.ts).
-export const POST = withUsageCommunity(handlePOST);
+export const POST = withExamStudyAccess(withUsageCommunity(handlePOST));

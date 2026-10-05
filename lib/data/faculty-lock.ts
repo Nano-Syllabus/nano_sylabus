@@ -39,6 +39,31 @@ export const getStudentExamEnrollment = cache(
   },
 );
 
+/** Whether a student is an active member of any faculty (joined from Browse). */
+export const hasFacultyMembership = cache(async (userId: string) => {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("community_memberships")
+    .select("community_id")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .limit(1);
+  if (error) throw error;
+  return Boolean(data?.length);
+});
+
+/**
+ * Whether a student already studies somewhere: an exam enrollment or any active
+ * faculty membership. Such a student skips a site's onboarding and goes straight
+ * into the app, which opens their own faculty.
+ */
+export async function hasJoinedFaculty(userId: string) {
+  const [enrollment, member] = await Promise.all([
+    getStudentExamEnrollment(userId),
+    hasFacultyMembership(userId),
+  ]);
+  return Boolean(enrollment) || member;
+}
+
 /** Reads the immutable learner scope using the caller’s database client. */
 export const getStudentFacultyId = cache(
   async (userId: string, admin: SupabaseClient): Promise<string | null> => {

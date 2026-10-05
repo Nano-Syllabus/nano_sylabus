@@ -13,13 +13,10 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { AppShellContext } from "@/components/app-shell-context";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
-import {
-  communityTermLayout,
-  communityTermName,
-  communityTermNoun,
-} from "@/lib/communities";
+import { communityTermLayout, communityTermName, communityTermNoun } from "@/lib/communities";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
 import { SubjectTopicProgress } from "@/components/subject-topic-progress";
 import { LibraryContributeDialog } from "@/components/library-contribute-dialog";
@@ -337,6 +334,7 @@ export function LibraryNanoAiWorkspace({
   /** Plus and Pro start any topic; the start-topic route checks again. */
   unlockAllTopics?: boolean;
 }) {
+  const { upgradeHref } = useContext(AppShellContext);
   const orderedTerms = useMemo(
     () => [...(community?.terms ?? [])].sort((a, b) => a.position - b.position),
     [community?.terms],
@@ -773,7 +771,8 @@ export function LibraryNanoAiWorkspace({
                                 isContributedMaterial(material)
                                   ? "Community contributed"
                                   : material.shelf || formatSize(material.sizeBytes),
-                                addedLabel(material.addedAt) && `Added ${addedLabel(material.addedAt)}`,
+                                addedLabel(material.addedAt) &&
+                                  `Added ${addedLabel(material.addedAt)}`,
                               ]
                                 .filter(Boolean)
                                 .join(" · ")}
@@ -787,7 +786,7 @@ export function LibraryNanoAiWorkspace({
                                 : "bg-bg-secondary text-text-muted",
                             )}
                           >
-                            {canOpen ? "Available" : "Locked"}
+                            {upgradeHref ? "Upgrade" : canOpen ? "Available" : "Locked"}
                           </span>
                           {!canOpen ? (
                             <LockKeyhole

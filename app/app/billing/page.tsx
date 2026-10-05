@@ -1,5 +1,11 @@
 import { SetAppShell } from "@/components/set-app-shell";
-import { BillingPageClient } from "@/components/billing-page-client";
+import { BillingPageClient, type BillingExamPricing } from "@/components/billing-page-client";
+import {
+  getEnrollmentExam,
+  getExamPlans,
+  getStudentExamEnrollment,
+} from "@/lib/data/exam-enrollment";
+import { examBillingMonths, examPlanMonthlyPrice } from "@/lib/exam-enrollment";
 import { requireOnboardedUser } from "@/lib/auth";
 import { DEV_AUTH_BYPASS, DEV_BYPASS_USER_ID } from "@/lib/dev-auth-bypass";
 import type { StudentBillingOverview, SubscriptionPlan } from "@/lib/types";
@@ -45,9 +51,10 @@ export default async function BillingPage() {
       </>
     );
   }
-  const [overview, paymentConfig] = await Promise.all([
+  const [overview, paymentConfig, exam] = await Promise.all([
     getStudentBillingOverview(user.id),
     getActiveManualPaymentConfig(),
+    getExamPricing(user.id),
   ]);
 
   return (
@@ -57,7 +64,24 @@ export default async function BillingPage() {
         overview={overview}
         paymentConfig={paymentConfig}
         user={user}
+        exam={exam}
       />
     </>
   );
+}
+
+/** An exam student's prices: their exam's durations and their faculty's plan prices. */
+async function getExamPricing(userId: string): Promise<BillingExamPricing | null> {
+  const enrollment = await getStudentExamEnrollment(userId).catch(() => null);
+  if (!enrollment) return null;
+  const exam = await getEnrollmentExam(enrollment.examSlug);
+  if (!exam) return null;
+  const plans = await getExamPlans(exam);
+  return {
+    slug: exam.slug,
+    months: examBillingMonths(exam.config),
+    prices: Object.fromEntries(
+      plans.map((plan) => [plan.id, examPlanMonthlyPrice(exam.config, enrollment.facultySlug, plan)]),
+    ),
+  };
 }

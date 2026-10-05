@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
+  useContext,
   useEffect,
   useId,
   useMemo,
@@ -13,6 +14,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { AppShellContext } from "@/components/app-shell-context";
 import { AnswerFontPicker, answerFontStyle, useAnswerFont } from "@/components/answer-font-picker";
 import { normalizeQuestionText } from "@/lib/challenge-learn-questions";
 import {
@@ -717,7 +719,7 @@ const secondaryActionClass =
 
 /** What a locked topic says when clicked: the plan it needs, and nothing more
  *  (user, 2026-09-25). */
-function UpgradeModal({ onClose }: { onClose: () => void }) {
+function UpgradeModal({ onClose, upgradeHref }: { onClose: () => void; upgradeHref?: string | null }) {
   const titleId = useId();
   const primaryRef = useRef<HTMLAnchorElement>(null);
 
@@ -770,10 +772,10 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
           Needs a Plus or Pro subscription
         </h2>
         <p className="mt-1.5 text-xs text-text-muted">
-          Or keep going with your challenges. This topic unlocks for free when you reach it.
+          {upgradeHref ? "Upgrade your plan to open revision topics." : "Or keep going with your challenges. This topic unlocks for free when you reach it."}
         </p>
         <div className="mt-5 grid gap-2">
-          <Link ref={primaryRef} href="/app/billing" className={primaryActionClass}>
+          <Link ref={primaryRef} href={upgradeHref || "/app/billing"} className={primaryActionClass}>
             Upgrade
           </Link>
           <button type="button" onClick={onClose} className={secondaryActionClass}>
@@ -887,6 +889,7 @@ export function RevisionDocsView({ community }: { community: string }) {
 }
 
 export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
+  const { upgradeHref } = useContext(AppShellContext);
   const linkParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [navOpen, setNavOpen] = useState(false);
@@ -923,7 +926,7 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
   const visibleTopics = useMemo(() => units.flatMap((unit) => unit.topics), [units]);
   // A search that hides the open page selects the first thing it did find, so
   // the reading pane is never showing something the navigator no longer lists.
-  const selected =
+  const selected = upgradeHref ? null :
     visibleTopics.find((topic) => topicId(topic) === selectedId && canOpen(topic)) ??
     firstPage(visibleTopics) ??
     subjectTopics.find((topic) => topicId(topic) === selectedId && canOpen(topic)) ??
@@ -1014,7 +1017,7 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
                 {unit.topics.map((topic) => {
                   const id = topicId(topic);
                   const isActive = selected ? topicId(selected) === id : false;
-                  const locked = topic.state === "locked";
+                  const locked = Boolean(upgradeHref) || topic.state === "locked";
                   return (
                     <li key={id}>
                       <button
@@ -1030,8 +1033,8 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
                           setSelectedId(id);
                           setNavOpen(false);
                         }}
-                        onPointerEnter={isFiled(topic) ? () => prefetchTopic(topic.challengeId) : undefined}
-                        onFocus={isFiled(topic) ? () => prefetchTopic(topic.challengeId) : undefined}
+                        onPointerEnter={!upgradeHref && isFiled(topic) ? () => prefetchTopic(topic.challengeId) : undefined}
+                        onFocus={!upgradeHref && isFiled(topic) ? () => prefetchTopic(topic.challengeId) : undefined}
                         aria-haspopup={locked ? "dialog" : undefined}
                         title={locked ? `${topic.title} (locked)` : topic.title}
                         className={`flex min-h-10 w-full items-start gap-2.5 rounded-lg py-2 pl-3 pr-2 text-left text-sm leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
@@ -1061,7 +1064,7 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
                         {locked ? (
                           <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md bg-bg-secondary text-text-muted transition-colors group-hover/locked:bg-amber-500/15 group-hover/locked:text-amber-600 dark:group-hover/locked:text-amber-400">
                             <Lock className="size-3" strokeWidth={2.5} aria-hidden="true" />
-                            <span className="sr-only">Locked</span>
+                            <span className="sr-only">{upgradeHref ? "Upgrade" : "Locked"}</span>
                           </span>
                         ) : null}
                       </button>
@@ -1107,10 +1110,10 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
         ) : (
           <div className="student-reading-frame max-w-md py-16 text-center">
             <p className="text-sm text-text-secondary">
-              Topics unlock here as you work through your challenges.
+              {upgradeHref ? "Browse revision topics, then upgrade to open their reading and worked examples." : "Topics unlock here as you work through your challenges."}
             </p>
-            <Link href="/app/challenges" className={`${primaryActionClass} mt-5`}>
-              Continue challenges
+            <Link href={upgradeHref || "/app/challenges"} className={`${primaryActionClass} mt-5`}>
+              {upgradeHref ? "Upgrade" : "Continue challenges"}
             </Link>
           </div>
         )}
@@ -1147,7 +1150,7 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
         </div>
       ) : null}
 
-      {upgradeOpen ? <UpgradeModal onClose={closeUpgrade} /> : null}
+      {upgradeOpen ? <UpgradeModal onClose={closeUpgrade} upgradeHref={upgradeHref} /> : null}
 
       {pickerOpen ? (
         <SubjectPicker

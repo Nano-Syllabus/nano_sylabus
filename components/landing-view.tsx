@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { DM_Sans, Manrope } from "next/font/google";
-import { LandingPrimaryCta } from "@/components/landing-primary-cta";
+import { LandingPrimaryCta, LandingSiteActions } from "@/components/landing-primary-cta";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 import { landingColorVars, type LandingContent } from "@/lib/landing-content";
 
@@ -117,8 +117,9 @@ export function LandingView({
   }>;
 }) {
   const { brand } = content;
-  // The site's one main action. An exam site starts its own onboarding flow
-  // (questions → faculties → plans) on the app host; every main button follows it.
+  // The site's one main action, "Continue learning". On an exam site it signs the
+  // student in, opens the faculty they joined, or lets a newcomer pick one of this
+  // exam's faculties inside the app. Every main button follows it.
   const joinHref = examSlug
     ? `${appOrigin}/prepare/${encodeURIComponent(examSlug)}`
     : brand.communitySlug
@@ -185,7 +186,11 @@ export function LandingView({
             </a>
           </nav>
           <div className="flex items-center gap-3">
-            <LandingPrimaryCta {...ctaProps} />
+            {joinHref ? (
+              <LandingSiteActions joinHref={joinHref} />
+            ) : (
+              <LandingPrimaryCta {...ctaProps} />
+            )}
           </div>
         </div>
       </header>
@@ -232,8 +237,9 @@ export function LandingView({
               </p>
 
               <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-5">
+                {/* A faculty/exam site has one way in for new and returning students. */}
                 <LandingPrimaryCta blue size="hero" communityOnly {...ctaProps}>
-                  {hero.primaryCta}
+                  {joinHref ? "Continue learning" : hero.primaryCta}
                 </LandingPrimaryCta>
 
                 <a
@@ -243,6 +249,7 @@ export function LandingView({
                   {hero.secondaryCta}
                 </a>
               </div>
+
             </div>
 
             {/* Animated feature walkthrough */}
