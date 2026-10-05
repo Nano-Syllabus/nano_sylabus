@@ -39,6 +39,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         { error: "This payment plan is not available for this exam." },
         { status: 400 },
       );
+    if (
+      intent.facultySlug &&
+      !exam.faculties.some((faculty) => faculty.slug === intent.facultySlug)
+    )
+      return NextResponse.json({ error: "Choose a faculty this exam supports." }, { status: 400 });
     intent.answers = validateExamAnswers(exam.config, intent.answers);
     const response = NextResponse.json({ next: `/payment/${exam.slug}` });
     response.cookies.set(EXAM_INTENT_COOKIE, JSON.stringify(intent), {

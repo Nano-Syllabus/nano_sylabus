@@ -148,6 +148,11 @@ export const examIntentSchema = z.object({
   planId: z.string().uuid(),
   billingMonths: z.union([z.literal(1), z.literal(3)]),
   answers: z.record(z.string().max(100)),
+  /** The faculty the student joined at "Find your faculty"; locked once they sign in. */
+  facultySlug: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]{0,99}$/)
+    .optional(),
 });
 export type ExamIntent = z.infer<typeof examIntentSchema>;
 

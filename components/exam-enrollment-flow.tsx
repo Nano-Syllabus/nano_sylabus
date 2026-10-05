@@ -1,7 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -17,10 +18,10 @@ import {
   examText,
   examBillingMonths,
   examPlanMonthlyPrice,
-  hasFacultyPrices,
   type ExamIntent,
 } from "@/lib/exam-enrollment";
 import type { PaymentMethodConfig, SubscriptionPlan } from "@/lib/types";
+import { ExamFacultyCard } from "@/components/exam-faculty-card";
 import { FacultySelectionDialog } from "@/components/faculty-selection-dialog";
 import { PaymentSubmissionModal, type CheckoutInvoice } from "@/components/billing-page-client";
 
@@ -28,73 +29,64 @@ const actionClass =
   "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40";
 
 export type FlowStep = "questions" | "faculties" | "plans";
-const STEP_LABELS: Record<FlowStep, string> = {
-  questions: "Your preparation",
-  faculties: "Supported faculties",
-  plans: "Your plan",
-};
 /** The steps this exam's admin configured, in order: landing → questions → faculties → payment. */
 export function examFlowSteps(exam: EnrollmentExam): FlowStep[] {
   return exam.config.askQuestions ? ["questions", "faculties", "plans"] : ["faculties", "plans"];
 }
 
+/**
+ * The page around every step, styled like the main app's onboarding (/flow):
+ * white page, logo and a Back link on top, one task per screen.
+ */
 function FlowFrame({
   exam,
-  active,
+  onBack,
+  backLabel = "Back",
+  wide = false,
   children,
 }: {
   exam: EnrollmentExam;
-  active: FlowStep;
+  /** Omitted = Back returns to the exam's landing page. */
+  onBack?: () => void;
+  backLabel?: string;
+  wide?: boolean;
   children: React.ReactNode;
 }) {
-  const steps = examFlowSteps(exam);
-  const activeIndex = steps.indexOf(active);
+  const landing = exam.slug === "main" ? "/" : `/sites/${exam.slug}`;
+  const backClass =
+    "inline-flex items-center gap-1.5 p-1 text-[13px] font-semibold text-[#777] transition hover:text-[#111]";
   return (
-    <div className="min-h-screen bg-bg-primary text-text-primary">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-5">
-          <Link
-            href={exam.slug === "main" ? "/" : `/sites/${exam.slug}`}
-            className="flex items-center gap-2 text-sm font-semibold"
-          >
-            <span className="grid size-8 place-items-center rounded-lg bg-text-primary text-bg-primary">
-              n.
+    <div className="min-h-screen bg-white text-[#111111] antialiased">
+      <main className={`mx-auto px-6 py-10 sm:py-14 ${wide ? "max-w-5xl" : "max-w-[760px]"}`}>
+        <div className="mb-6 flex items-center justify-between">
+          <Link href={landing} className="flex items-center gap-2.5 no-underline">
+            <Image
+              src="/nanologo.png"
+              alt=""
+              width={26}
+              height={26}
+              className="h-[26px] w-[26px] rounded-lg object-contain"
+            />
+            <span className="text-[21px] font-extrabold tracking-[-0.7px] text-[#111111]">
+              Nano Syllabus
             </span>
-            Nano Syllabus
           </Link>
-          <span className="rounded-full border border-border px-3 py-1.5 text-xs font-medium">
-            {exam.name}
-          </span>
+          {onBack ? (
+            <button type="button" onClick={onBack} className={backClass}>
+              <ArrowLeft className="h-4 w-4" />
+              {backLabel}
+            </button>
+          ) : (
+            <Link href={landing} className={backClass}>
+              <ArrowLeft className="h-4 w-4" />
+              {backLabel}
+            </Link>
+          )}
         </div>
-      </header>
-      <main className="mx-auto max-w-5xl px-5 py-8 sm:py-14">
-        <ol
-          aria-label="Preparation progress"
-          className="mb-10 grid gap-3"
-          style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
-        >
-          {steps.map((key, index) => {
-            const label = STEP_LABELS[key];
-            return (
-              <li
-                key={label}
-                aria-current={activeIndex === index ? "step" : undefined}
-                className={`border-t-2 pt-3 text-xs sm:text-sm ${activeIndex >= index ? "border-blue-600 text-text-primary" : "border-border text-text-muted"}`}
-              >
-                <span
-                  className={`mr-2 inline-grid size-6 place-items-center rounded-full text-xs ${activeIndex > index ? "bg-blue-600 text-white" : "bg-bg-secondary"}`}
-                >
-                  {activeIndex > index ? <Check size={12} /> : `0${index + 1}`}
-                </span>
-                {label}
-              </li>
-            );
-          })}
-        </ol>
         {children}
-        <p className="mt-10 flex items-center justify-center gap-2 text-xs text-text-muted">
+        <p className="mt-10 flex items-center justify-center gap-2 text-xs text-[#777]">
           <ShieldCheck size={14} />
-          Your exam. Your faculty. One focused study space.
+          {exam.name} · One focused study space for your faculty.
         </p>
       </main>
     </div>
@@ -129,7 +121,16 @@ export function ExamPreparationFlow({
   );
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
-  const complete = exam.config.askQuestions === false || exam.config.questions.every((q) => q.options.includes(answers[q.id]));
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [facultySlug, setFacultySlug] = useState(
+    exam.faculties.some((f) => f.slug === initialIntent?.facultySlug)
+      ? initialIntent!.facultySlug!
+      : "",
+  );
+  const chosenFaculty = exam.faculties.find((f) => f.slug === facultySlug);
+  const complete =
+    exam.config.askQuestions === false ||
+    exam.config.questions.every((q) => q.options.includes(answers[q.id]));
   useEffect(() => {
     try {
       const saved = JSON.parse(sessionStorage.getItem(`exam-preparation:${exam.slug}`) || "null");
@@ -139,15 +140,25 @@ export function ExamPreparationFlow({
     }
   }, [exam.slug]);
 
-  function continueQuestions() {
+  function continueQuestions(finalAnswers: Record<string, string>) {
     try {
-      sessionStorage.setItem(`exam-preparation:${exam.slug}`, JSON.stringify(answers));
+      sessionStorage.setItem(`exam-preparation:${exam.slug}`, JSON.stringify(finalAnswers));
     } catch {
       /* The current form remains usable. */
     }
     setStep("faculties");
   }
+  /** Picking an answer moves on, like the main app's questions. */
+  function answerQuestion(questionId: string, option: string) {
+    const next = { ...answers, [questionId]: option };
+    setAnswers(next);
+    window.setTimeout(() => {
+      if (questionIndex >= exam.config.questions.length - 1) continueQuestions(next);
+      else setQuestionIndex(questionIndex + 1);
+    }, 180);
+  }
   function continueFaculties() {
+    if (!chosenFaculty) return;
     if (!complete) {
       setStep("questions");
       return;
@@ -170,13 +181,20 @@ export function ExamPreparationFlow({
           planId: plan.id,
           billingMonths: months,
           answers,
+          ...(facultySlug ? { facultySlug } : {}),
         }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not prepare your plan.");
       // The choices travel in the link: a subdomain's cookie never reaches the
       // main domain, where sign-in and payment happen.
-      const intent = { examSlug: exam.slug, planId: plan.id, billingMonths: months, answers };
+      const intent = {
+        examSlug: exam.slug,
+        planId: plan.id,
+        billingMonths: months,
+        answers,
+        ...(facultySlug ? { facultySlug } : {}),
+      };
       const next = `${result.next}?intent=${encodeURIComponent(JSON.stringify(intent))}`;
       const login = `${appOrigin}/login?next=${encodeURIComponent(next)}`;
       if (appOrigin) window.location.assign(login);
@@ -189,7 +207,22 @@ export function ExamPreparationFlow({
   }
 
   return (
-    <FlowFrame exam={exam} active={step}>
+    <FlowFrame
+      exam={exam}
+      wide={step !== "questions"}
+      onBack={
+        step === "questions"
+          ? questionIndex > 0
+            ? () => setQuestionIndex(questionIndex - 1)
+            : undefined
+          : step === "faculties"
+            ? exam.config.askQuestions
+              ? () => setStep("questions")
+              : undefined
+            : () => setStep("faculties")
+      }
+      backLabel={step === "questions" && questionIndex === 0 ? "Home" : "Back"}
+    >
       {step === "faculties" ? (
         <div>
           <div className="mx-auto mb-8 max-w-2xl text-center">
@@ -203,36 +236,18 @@ export function ExamPreparationFlow({
               {examText(exam.config.copy.facultiesDescription, exam.name)}
             </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-[18px] sm:grid-cols-2">
             {exam.faculties.map((faculty) => (
-              <article
+              <ExamFacultyCard
                 key={faculty.id}
-                className="flex flex-col rounded-2xl border border-border bg-bg-primary p-6 shadow-xs"
-              >
-                <span className="mb-4 grid size-11 place-items-center rounded-xl bg-blue-600/10 text-blue-600">
-                  <GraduationCap size={24} />
-                </span>
-                <h2 className="text-lg font-semibold">{faculty.name}</h2>
-                <p className="mt-1 text-sm text-text-muted">
-                  {faculty.faculty} {faculty.university ? `· ${faculty.university}` : ""}
-                </p>
-                <details className="mt-5 border-t border-border pt-4">
-                  <summary className="cursor-pointer text-sm font-medium">
-                    {faculty.subjects.length} published subjects
-                  </summary>
-                  <ul className="mt-3 space-y-2 text-sm text-text-secondary">
-                    {faculty.subjects.map((subject) => (
-                      <li key={subject.id} className="flex items-center gap-2">
-                        <Check size={12} className="text-blue-600" />
-                        {subject.name}
-                      </li>
-                    ))}
-                    {!faculty.subjects.length ? (
-                      <li>Subjects will appear as your faculty publishes them.</li>
-                    ) : null}
-                  </ul>
-                </details>
-              </article>
+                slug={faculty.slug}
+                name={faculty.name}
+                faculty={faculty.faculty}
+                university={faculty.university}
+                subjects={faculty.subjects}
+                selected={facultySlug === faculty.slug}
+                onJoin={() => setFacultySlug(faculty.slug)}
+              />
             ))}
           </div>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -249,66 +264,71 @@ export function ExamPreparationFlow({
             <button
               type="button"
               onClick={continueFaculties}
-              disabled={!exam.faculties.length}
+              disabled={!chosenFaculty}
               className={actionClass}
             >
-              Continue to payment plans
+              {chosenFaculty ? `Continue as ${chosenFaculty.name}` : "Choose your faculty"}
               <ArrowRight size={16} />
             </button>
           </div>
         </div>
       ) : null}
       {step === "questions" ? (
-        <div className="mx-auto max-w-2xl">
-          <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-blue-600">
-            <Sparkles size={14} />A plan that fits your day
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            {examText(exam.config.copy.onboardingTitle, exam.name)}
-          </h1>
-          <p className="mt-3 text-base leading-relaxed text-text-secondary">
-            {examText(exam.config.copy.onboardingDescription, exam.name)}
-          </p>
-          <form
-            className="mt-8 space-y-7"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (complete) continueQuestions();
-            }}
-          >
-            {exam.config.questions.map((q, index) => (
-              <fieldset key={q.id}>
-                <legend className="mb-3 text-sm font-semibold">
-                  <span className="mr-2 text-text-muted">0{index + 1}</span>
-                  {q.prompt}
-                </legend>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {q.options.map((option) => (
-                    <label
-                      key={option}
-                      className={`flex min-h-16 cursor-pointer items-center gap-3 rounded-xl border p-4 text-sm transition ${answers[q.id] === option ? "border-blue-600 bg-blue-600/5 ring-1 ring-blue-600" : "border-border hover:bg-bg-secondary"}`}
-                    >
-                      <input
-                        required
-                        type="radio"
-                        name={q.id}
-                        value={option}
-                        checked={answers[q.id] === option}
-                        onChange={() => setAnswers({ ...answers, [q.id]: option })}
-                        className="accent-blue-600"
-                      />
-                      <span>{option}</span>
-                    </label>
-                  ))}
+        <section aria-live="polite">
+          {(() => {
+            const total = exam.config.questions.length;
+            const question = exam.config.questions[Math.min(questionIndex, total - 1)];
+            return (
+              <>
+                <div className="flex items-center justify-between text-[13px] text-[#777]">
+                  <span>{examText(exam.config.copy.onboardingTitle, exam.name)}</span>
+                  <span>
+                    {questionIndex + 1} / {total}
+                  </span>
                 </div>
-              </fieldset>
-            ))}
-            <button className={`${actionClass} w-full`} disabled={!complete}>
-              {examText(exam.config.copy.exploreButton, exam.name)}
-              <ArrowRight size={16} />
-            </button>
-          </form>
-        </div>
+                <div className="mt-2.5 h-[7px] w-full overflow-hidden rounded-[20px] bg-[#eee]">
+                  <div
+                    className="h-full rounded-[20px] bg-[#6195ee] transition-all duration-300"
+                    style={{ width: `${Math.round(((questionIndex + 1) / total) * 100)}%` }}
+                  />
+                </div>
+                <div className="mt-12 sm:mt-14">
+                  <h1 className="m-0 text-[34px] font-[760] leading-[1.15] tracking-[-1.5px] text-[#111111] sm:text-[38px]">
+                    {question.prompt}
+                  </h1>
+                  <p className="mb-7 mt-2.5 text-[15px] text-[#777]">
+                    There is no right answer. Choose what is closest to your situation.
+                  </p>
+                  <div className="grid gap-2.5">
+                    {question.options.map((option) => {
+                      const selected = answers[question.id] === option;
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => answerQuestion(question.id, option)}
+                          aria-pressed={selected}
+                          className={`flex cursor-pointer items-center justify-between rounded-[14px] border p-[17px] text-left text-[15px] font-medium transition active:scale-[0.99] ${
+                            selected
+                              ? "border-[#6195ee] bg-[#f7faff] text-[#111]"
+                              : "border-[#ddd] bg-white text-[#111] hover:border-[#6195ee] hover:bg-[#f7faff]"
+                          }`}
+                        >
+                          <span>{option}</span>
+                          <span
+                            className={`h-[18px] w-[18px] shrink-0 rounded-full border transition ${
+                              selected ? "border-[5px] border-[#6195ee] bg-white" : "border-[#aaa]"
+                            }`}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </section>
       ) : null}
       {step === "plans" ? (
         <div>
@@ -345,15 +365,13 @@ export function ExamPreparationFlow({
                 <h2 className="text-xl font-semibold">{plan.name}</h2>
                 <p className="mt-5 text-4xl font-semibold tracking-tight">
                   <span className="mr-2 text-sm font-medium text-text-muted">{plan.currency}</span>
-                  {(plan.price * months).toLocaleString()}
+                  {(examPlanMonthlyPrice(exam.config, facultySlug, plan) * months).toLocaleString()}
                   <span className="ml-2 text-sm font-normal text-text-muted">
                     / {months} {months === 1 ? "month" : "months"}
                   </span>
                 </p>
-                {hasFacultyPrices(exam.config) ? (
-                  <p className="mt-2 text-xs text-text-muted">
-                    Your final price is confirmed for your faculty after you sign in.
-                  </p>
+                {chosenFaculty ? (
+                  <p className="mt-2 text-xs text-text-muted">Price for {chosenFaculty.name}.</p>
                 ) : null}
                 <p className="mt-3 text-sm text-text-secondary">
                   {plan.isUnlimited
@@ -423,7 +441,12 @@ export function ExamCheckout({
   paymentConfig: PaymentMethodConfig | null;
 }) {
   const router = useRouter();
-  const [facultyId, setFacultyId] = useState(enrollment?.facultyId || "");
+  const intentFaculty = exam.faculties.find((f) => f.slug === intent?.facultySlug);
+  const [facultyId, setFacultyId] = useState(enrollment?.facultyId || intentFaculty?.id || "");
+  // Joined at "Find your faculty" before sign-in: lock it now, without asking again.
+  const [lock, setLock] = useState<"idle" | "joining" | "failed">(
+    !enrollment && intentFaculty && intent ? "joining" : "idle",
+  );
   const [planId, setPlanId] = useState(
     plans.some((p) => p.id === intent?.planId) ? intent!.planId : plans[0]?.id || "",
   );
@@ -434,7 +457,32 @@ export function ExamCheckout({
   const [invoice, setInvoice] = useState<CheckoutInvoice | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (lock !== "joining" || !intentFaculty || !intent) return;
+    let cancelled = false;
+    fetch("/api/student/exam-enrollment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        examSlug: exam.slug,
+        facultyId: intentFaculty.id,
+        answers: intent.answers,
+      }),
+    })
+      .then((response) => {
+        if (cancelled) return;
+        if (!response.ok) throw new Error("Could not lock your faculty.");
+        setLock("idle");
+        router.refresh();
+      })
+      .catch(() => !cancelled && setLock("failed"));
+    return () => {
+      cancelled = true;
+    };
+  }, [lock, intentFaculty, intent, exam.slug, router]);
   const plan = plans.find((p) => p.id === planId);
+  // Signed in with a plan already chosen: the payment QR comes first, no extra clicks.
+  const autoOpened = useRef(false);
   const faculty = exam.faculties.find((f) => f.id === facultyId);
   const monthly = (p: SubscriptionPlan) => examPlanMonthlyPrice(exam.config, faculty?.slug, p);
   const wrongExam = enrollment && enrollment.examSlug !== exam.slug;
@@ -462,8 +510,18 @@ export function ExamCheckout({
       setPending(false);
     }
   }
+  useEffect(() => {
+    if (autoOpened.current || invoice || wrongExam) return;
+    // Only when the student arrives with a plan from the subdomain, with their faculty locked.
+    if (!enrollment || !intent || !plan || !paymentConfig) return;
+    autoOpened.current = true;
+    void openPayment();
+    // openPayment reads the same state this effect is keyed on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enrollment, intent, plan, paymentConfig, invoice, wrongExam]);
+
   return (
-    <FlowFrame exam={exam} active="plans">
+    <FlowFrame exam={exam} wide>
       {wrongExam ? (
         <div className="mx-auto max-w-xl rounded-3xl border border-border p-8">
           <h1 className="text-2xl font-semibold">Your study space is already set.</h1>
@@ -487,7 +545,9 @@ export function ExamCheckout({
             <LockKeyhole size={20} className="text-blue-600" />
             <div>
               <p className="text-sm font-semibold">
-                {faculty?.name || enrollment?.facultyName || "Choose your faculty to continue"}
+                {lock === "joining"
+                  ? `Joining ${intentFaculty?.name}…`
+                  : faculty?.name || enrollment?.facultyName || "Choose your faculty to continue"}
               </p>
               <p className="mt-1 text-xs text-text-muted">
                 Faculty stays locked across your study space.
@@ -530,7 +590,7 @@ export function ExamCheckout({
           </p>
           <button
             type="button"
-            disabled={!facultyId || !plan || pending || !paymentConfig}
+            disabled={!facultyId || !plan || pending || !paymentConfig || lock === "joining"}
             onClick={() => void openPayment()}
             className={`${actionClass} w-full`}
           >
@@ -549,7 +609,7 @@ export function ExamCheckout({
           ) : null}
         </div>
       )}
-      {!enrollment && !facultyId ? (
+      {!enrollment && (!facultyId || lock === "failed") && lock !== "joining" ? (
         <FacultySelectionDialog
           exams={[exam]}
           initialExamSlug={exam.slug}
