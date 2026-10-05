@@ -1,11 +1,21 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ scope: vi.fn(), video: vi.fn(), row: null as Record<string, unknown> | null }));
+const mocks = vi.hoisted(() => ({
+  scope: vi.fn(),
+  script: vi.fn(),
+  hint: vi.fn(),
+  row: null as Record<string, unknown> | null,
+}));
 
 // The free plan's daily limit is its own concern (challenge-daily-limit.test.ts).
-vi.mock("@/lib/data/challenge-daily-limit", () => ({ assertCanFinishChallenge: async () => undefined }));
+vi.mock("@/lib/data/challenge-daily-limit", () => ({
+  assertCanFinishChallenge: async () => undefined,
+}));
 vi.mock("@/lib/data/student-challenges", () => ({ challengeUpstreamScope: mocks.scope }));
-vi.mock("@/lib/data/challenge-question-video", () => ({ requestQuestionVideo: mocks.video }));
+vi.mock("@/lib/data/challenge-question-script", () => ({
+  requestQuestionExplanation: mocks.script,
+  requestQuestionHint: mocks.hint,
+}));
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
     from: () => {
@@ -23,14 +33,20 @@ vi.mock("@/lib/supabase/admin", () => ({
       // `update(...).eq(...).select()` resolves the write.
       (query as Record<string, unknown>).select = () =>
         values
-          ? Promise.resolve((mocks.row = { ...mocks.row!, ...values }, { data: [{ id: "c" }], error: null }))
+          ? Promise.resolve(
+              ((mocks.row = { ...mocks.row!, ...values }), { data: [{ id: "c" }], error: null }),
+            )
           : query;
       return query;
     },
   }),
 }));
 
-import { openExplanation, sealExplanation, sealedChoiceQuestion } from "@/lib/data/challenge-exam-format";
+import {
+  openExplanation,
+  sealExplanation,
+  sealedChoiceQuestion,
+} from "@/lib/data/challenge-exam-format";
 import { checkExamChoice, explainExamChoice } from "@/lib/data/challenge-exam-picks";
 
 /**
@@ -59,8 +75,13 @@ const question = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.scope.mockResolvedValue({ collectionKey: "k", subject: "s", topics: ["t"], topicTitle: "Networking Model" });
-  mocks.video.mockResolvedValue({ specHash: "hash", status: "queued", derivatives: {}, error: "" });
+  mocks.scope.mockResolvedValue({
+    collectionKey: "k",
+    subject: "s",
+    topics: ["t"],
+    topicTitle: "Networking Model",
+  });
+  mocks.script.mockResolvedValue({ script: "Concept hint" });
   mocks.row = {
     id: "c",
     status: "started",
@@ -73,7 +94,9 @@ describe("the explanation is sealed with the paper", () => {
   it("never sits on the row in the clear, and opens on the server", () => {
     const sealed = question();
     expect(JSON.stringify(sealed)).not.toContain("electrical characteristics");
-    expect(openExplanation(sealed.explanationSealed)).toBe("It defines the electrical characteristics of the medium.");
+    expect(openExplanation(sealed.explanationSealed)).toBe(
+      "It defines the electrical characteristics of the medium.",
+    );
     expect(openExplanation(`${sealExplanation("x").slice(0, -2)}zz`)).toBe("");
   });
 });
@@ -89,14 +112,18 @@ describe("answering one question", () => {
       explanation: "It defines the electrical characteristics of the medium.",
       score: -0.5,
     });
-    expect((mocks.row!.content as { examPicks: Record<string, string> }).examPicks).toEqual({ q1: "C" });
+    expect((mocks.row!.content as { examPicks: Record<string, string> }).examPicks).toEqual({
+      q1: "C",
+    });
   });
 
   it("keeps the first pick: choosing again after seeing the answer changes nothing", async () => {
     await checkExamChoice("u", "c", "q1", "C");
     const again = await checkExamChoice("u", "c", "q1", "B");
     expect(again).toMatchObject({ selected: "C", isCorrect: false });
-    expect((mocks.row!.content as { examPicks: Record<string, string> }).examPicks).toEqual({ q1: "C" });
+    expect((mocks.row!.content as { examPicks: Record<string, string> }).examPicks).toEqual({
+      q1: "C",
+    });
   });
 
   it("refuses a question that is not on the current paper", async () => {
@@ -104,21 +131,45 @@ describe("answering one question", () => {
   });
 });
 
-describe("the question's video", () => {
+describe("the question's script", () => {
   it("is the question's own, with the key opened on the server — the pick is not in it", async () => {
     await checkExamChoice("u", "c", "q1", "A");
     await explainExamChoice("u", "c", "q1");
-    expect(mocks.video).toHaveBeenCalledWith(
+    expect(mocks.script).toHaveBeenCalledWith(
       expect.objectContaining({ collectionKey: "k", subject: "s" }),
       expect.objectContaining({ correct: "B", explanation: expect.stringContaining("electrical") }),
-      "urgent",
     );
   });
 
   it("opens every question once the paper is handed in (Revision)", async () => {
     mocks.row = { ...mocks.row!, status: "completed" };
     await explainExamChoice("u", "c", "q1");
-    expect(mocks.video).toHaveBeenCalledTimes(1);
+    expect(mocks.script).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a question-only hint before answering without opening the key", async () => {
+    mocks.hint.mockResolvedValue({ script: "Think about the role of a network layer." });
+    expect(await explainExamChoice("u", "c", "q1", "hint")).toEqual({
+      script: "Think about the role of a network layer.",
+    });
+    expect(mocks.hint).toHaveBeenCalledWith(expect.objectContaining({ collectionKey: "k" }), {
+      text: "What does the physical layer define?",
+    });
+    expect(mocks.script).not.toHaveBeenCalled();
+  });
+
+  it("refuses hints for questions outside the student's paper", async () => {
+    await expect(explainExamChoice("u", "c", "q9", "hint")).rejects.toThrow(
+      "not on your current paper",
+    );
+    expect(mocks.hint).not.toHaveBeenCalled();
+  });
+
+  it("does not request scripts for another student's challenge", async () => {
+    mocks.scope.mockResolvedValue(null);
+    expect(await explainExamChoice("u", "foreign", "q1", "hint")).toBeNull();
+    expect(mocks.hint).not.toHaveBeenCalled();
+    expect(mocks.script).not.toHaveBeenCalled();
   });
 
   it("needs an answer first", async () => {

@@ -94,16 +94,22 @@ const testimonialImages = [
 export function LandingView({
   content,
   appOrigin = "",
+  examSlug,
+  examFaculties = [],
 }: {
   content: LandingContent;
   /** Where the app lives: "" on the main site, the main domain on a subdomain. */
   appOrigin?: string;
+  examSlug?: string;
+  examFaculties?: Array<{ id: string; name: string; faculty: string | null }>;
 }) {
   const { brand } = content;
   // The site's one main action: join its community and start onboarding.
-  const joinHref = brand.communitySlug
-    ? `${appOrigin}/communities/${encodeURIComponent(brand.communitySlug)}/join`
-    : undefined;
+  const joinHref = examSlug
+    ? `${appOrigin}/prepare/${encodeURIComponent(examSlug)}`
+    : brand.communitySlug
+      ? `${appOrigin}/communities/${encodeURIComponent(brand.communitySlug)}/join`
+      : undefined;
   const ctaProps = { joinHref, appOrigin };
   const { nav, hero, features, ribbonOne, problems, steps, featured, ribbonTwo, testimonials, community, prize, faq, finalCta, footer } = content;
   return (
@@ -119,6 +125,25 @@ export function LandingView({
         Skip to content
       </a>
 
+      {examSlug && examFaculties.length ? (
+        <section
+          aria-label="Supported faculties"
+          className="border-b border-[#e5e8df] bg-[var(--lp-accent)] px-5 py-3 text-center text-sm"
+        >
+          <span className="mr-3 font-semibold">One exam. Your faculty.</span>
+          {examFaculties.map((faculty) => (
+            <span key={faculty.id} className="mr-2 inline-block rounded-full bg-white/70 px-3 py-1">
+              {faculty.name}
+            </span>
+          ))}
+          <Link
+            href={`${appOrigin}/prepare/${encodeURIComponent(examSlug)}?step=faculties`}
+            className="ml-2 font-semibold underline underline-offset-4"
+          >
+            Explore faculties ↗
+          </Link>
+        </section>
+      ) : null}
       {/* ── Top Navigation Bar ── */}
       <header data-landing-section="nav" className="border-b border-[#e5e8df] bg-[#fafbf7]/90 backdrop-blur-md sticky top-0 z-40">
         <div className="mx-auto flex h-[84px] max-w-[1320px] items-center justify-between px-5 2xl:px-0">

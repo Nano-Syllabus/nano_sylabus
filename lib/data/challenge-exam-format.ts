@@ -1,6 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { CHALLENGE_MCQ_MARKS } from "@/lib/challenge-format";
-import { prepareQuestionVideos } from "@/lib/data/challenge-question-video";
 import {
   getTeacherChallengeMcq,
   type TeacherChallengeGradeResponse,
@@ -166,18 +165,6 @@ export async function issueChallengeChoiceQuestions(input: {
   );
   if (!usable.length) throw new Error("The course API could not set multiple-choice questions for this topic.");
   const paper = shuffled(usable).slice(0, input.count);
-  // The paper's videos start now, behind the response, so a wrong answer
-  // usually finds its video already made. Built from the same fields the
-  // explain route unseals, so both name the same render.
-  prepareQuestionVideos(
-    { collectionKey: input.collectionKey, subject: input.subject },
-    paper.map((question) => ({
-      text: question.text,
-      options: question.options.map((option) => ({ key: option.key, text: option.text })),
-      correct: question.correct,
-      explanation: question.explanation?.trim() || "",
-    })),
-  );
   return paper.map((question) => sealedChoiceQuestion(input.challengeId, question, input.topicTitle, marks));
 }
 

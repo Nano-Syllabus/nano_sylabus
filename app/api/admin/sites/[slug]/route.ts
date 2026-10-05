@@ -7,7 +7,8 @@ type Context = { params: Promise<{ slug: string }> };
 
 export async function GET(_request: Request, { params }: Context) {
   const access = await assertAdminRequest();
-  if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
+  if ("error" in access)
+    return NextResponse.json({ error: access.error }, { status: access.status });
 
   try {
     const site = await getLandingSite((await params).slug);
@@ -21,11 +22,15 @@ export async function GET(_request: Request, { params }: Context) {
 /** Saves the draft, and/or renames, and/or shows or hides the site. */
 export async function PATCH(request: Request, { params }: Context) {
   const access = await assertAdminRequest();
-  if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
+  if ("error" in access)
+    return NextResponse.json({ error: access.error }, { status: access.status });
 
-  const body = (await request.json().catch(() => null)) as
-    | { draft?: unknown; name?: unknown; status?: unknown }
-    | null;
+  const body = (await request.json().catch(() => null)) as {
+    draft?: unknown;
+    name?: unknown;
+    status?: unknown;
+    examConfig?: unknown;
+  } | null;
   if (!body) return NextResponse.json({ error: "Nothing to save." }, { status: 400 });
 
   const status = body.status === "live" || body.status === "hidden" ? body.status : undefined;
@@ -40,6 +45,7 @@ export async function PATCH(request: Request, { params }: Context) {
         draft: body.draft,
         name: typeof body.name === "string" ? body.name : undefined,
         status,
+        examConfig: body.examConfig,
       },
       access.userId,
     );
@@ -51,7 +57,8 @@ export async function PATCH(request: Request, { params }: Context) {
 
 export async function DELETE(_request: Request, { params }: Context) {
   const access = await assertAdminRequest();
-  if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
+  if ("error" in access)
+    return NextResponse.json({ error: access.error }, { status: access.status });
 
   try {
     await deleteLandingSite((await params).slug);

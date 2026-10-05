@@ -6,8 +6,14 @@ import {
   unsealAnswer,
 } from "@/lib/data/challenge-exam-format";
 import type { FundamentalsExplainer } from "@/lib/data/challenge-fundamentals";
-import { requestQuestionHint, requestQuestionVideo } from "@/lib/data/challenge-question-video";
-import { challengeUpstreamScope, type StudentChallengeContent } from "@/lib/data/student-challenges";
+import {
+  requestQuestionHint,
+  requestQuestionExplanation,
+} from "@/lib/data/challenge-question-script";
+import {
+  challengeUpstreamScope,
+  type StudentChallengeContent,
+} from "@/lib/data/student-challenges";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -18,7 +24,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
  * they choose, so a pick that could be changed afterwards would let them read
  * the key off the screen and hand it in. Marking the paper reads these picks,
  * not what the browser sends. The same pattern as the fundamentals check. Each
- * question has one short video, prepared when the paper is issued.
+ * question has a short narration hint, requested when the student needs it.
  */
 
 export type ExamChoiceResult = {
@@ -32,7 +38,12 @@ export type ExamChoiceResult = {
   score: number;
 };
 
-type Row = { id: string; content: StudentChallengeContent | null; updated_at: string | null; status: string };
+type Row = {
+  id: string;
+  content: StudentChallengeContent | null;
+  updated_at: string | null;
+  status: string;
+};
 
 async function readRow(userId: string, challengeId: string) {
   const { data, error } = await createSupabaseAdminClient()
@@ -49,7 +60,9 @@ async function readRow(userId: string, challengeId: string) {
 export class StalePaperError extends RangeError {}
 
 function paperQuestion(content: StudentChallengeContent | null, questionId: string) {
-  const question = choiceQuestionsOf(content?.examQuestions ?? []).find((item) => item.id === questionId);
+  const question = choiceQuestionsOf(content?.examQuestions ?? []).find(
+    (item) => item.id === questionId,
+  );
   if (!question) throw new StalePaperError("That question is not on your current paper.");
   return question;
 }
@@ -79,7 +92,10 @@ export async function checkExamChoice(
       const now = new Date().toISOString();
       let write = admin
         .from("student_challenges")
-        .update({ content: { ...row.content, examPicks: { ...picks, [questionId]: chosen } }, updated_at: now })
+        .update({
+          content: { ...row.content, examPicks: { ...picks, [questionId]: chosen } },
+          updated_at: now,
+        })
         .eq("id", challengeId)
         .eq("user_id", userId);
       if (row.updated_at) write = write.eq("updated_at", row.updated_at);
@@ -107,12 +123,7 @@ export async function checkExamChoice(
   throw new Error("Your answer could not be saved. Try again.");
 }
 
-/**
- * The video for a question on this paper whose answer is OPEN to this student —
- * picked (on the paper, right or wrong), or anything once the paper is handed in
- * (Revision). Never for an unanswered question on a live paper: the video
- * teaches the answer. `urgent`: somebody is waiting on it.
- */
+/** A text hint before answering, or an accuracy-checked script after the answer opens. */
 export async function explainExamChoice(
   userId: string,
   challengeId: string,
@@ -125,18 +136,14 @@ export async function explainExamChoice(
   if (!row?.content) return null;
   const question = paperQuestion(row.content, questionId);
   // The hint never knew the key, so it is open before the question is answered.
-  if (mode === "hint") return requestQuestionHint(scope, { text: question.question }, "urgent");
+  if (mode === "hint") return requestQuestionHint(scope, { text: question.question });
   if (!row.content.examPicks?.[questionId] && row.status !== "completed") {
     throw new RangeError("Answer the question first.");
   }
-  return requestQuestionVideo(
-    scope,
-    {
-      text: question.question,
-      options: question.options,
-      correct: unsealAnswer(challengeId, question),
-      explanation: openExplanation(question.explanationSealed),
-    },
-    "urgent",
-  );
+  return requestQuestionExplanation(scope, {
+    text: question.question,
+    options: question.options,
+    correct: unsealAnswer(challengeId, question),
+    explanation: openExplanation(question.explanationSealed),
+  });
 }

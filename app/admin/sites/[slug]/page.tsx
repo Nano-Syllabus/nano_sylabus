@@ -5,6 +5,7 @@ import { AdminSiteEditor } from "@/components/admin-site-editor";
 import { assertAdminRequest } from "@/lib/admin-access";
 import { getLandingSite, listCommunityChoices } from "@/lib/data/landing-sites";
 import { rootDomain } from "@/lib/landing-site-host";
+import { listSubscriptionPlans } from "@/lib/data/billing";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -12,21 +13,35 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function AdminSiteEditorPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function AdminSiteEditorPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
   const { slug } = await params;
   const access = await assertAdminRequest();
   if ("error" in access) {
-    if (access.status === 401) redirect(`/login?next=${encodeURIComponent(`/admin/sites/${slug}`)}`);
+    if (access.status === 401)
+      redirect(`/login?next=${encodeURIComponent(`/admin/sites/${slug}`)}`);
     if (access.status === 403) redirect("/app/today");
     throw new Error("Admin access could not be verified. Please retry.");
   }
 
-  const [site, communities] = await Promise.all([getLandingSite(slug), listCommunityChoices().catch(() => [])]);
+  const [site, communities, plans] = await Promise.all([
+    getLandingSite(slug),
+    listCommunityChoices(),
+    listSubscriptionPlans(),
+  ]);
   if (!site) notFound();
 
   return (
     <AdminBillingFrame active="sites" wide>
-      <AdminSiteEditor initialSite={site} rootDomain={rootDomain()} communities={communities} />
+      <AdminSiteEditor
+        initialSite={site}
+        rootDomain={rootDomain()}
+        communities={communities}
+        plans={plans}
+      />
     </AdminBillingFrame>
   );
 }

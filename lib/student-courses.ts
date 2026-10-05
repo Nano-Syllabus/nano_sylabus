@@ -1,3 +1,4 @@
+import { getStudentFacultyId, getStudentFacultyCourseId } from "@/lib/data/faculty-lock";
 import { communityTermLayout, communityTermName } from "@/lib/communities";
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -59,10 +60,11 @@ export async function getStudentCommunityLearningScope(
     .eq("status", "active")
     .order("joined_at", { ascending: false });
   if (membershipResult.error) throw membershipResult.error;
-  const memberships = membershipResult.data || [];
-  const communityIds = memberships
-    .map((row) => String(row.community_id || ""))
-    .filter(Boolean);
+  const facultyId = await getStudentFacultyId(studentId, admin);
+  const memberships = (membershipResult.data || []).filter(
+    (row) => !facultyId || row.community_id === facultyId,
+  );
+  const communityIds = memberships.map((row) => String(row.community_id || "")).filter(Boolean);
   if (!communityIds.length) return null;
 
   const queryCommunities = (columns: string) =>
@@ -360,6 +362,7 @@ export const listStudentCourseSubjects = cache(async function listStudentCourseS
   studentId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ): Promise<StudentCourseSubject[]> {
+  const facultyCourseId = await getStudentFacultyCourseId(studentId, admin);
   const enrollmentResult = await admin
     .from("teacher_course_enrollments")
     .select("course_id")
@@ -372,6 +375,10 @@ export const listStudentCourseSubjects = cache(async function listStudentCourseS
       (enrollmentResult.data || []).map((row) => String(row.course_id || "")).filter(Boolean),
     ),
   ];
+  if (facultyCourseId !== undefined) {
+    const matching = courseIds.filter((id) => id === facultyCourseId);
+    courseIds.splice(0, courseIds.length, ...matching);
+  }
   if (!courseIds.length) return [];
 
   const [courseResult, subjectResult] = await Promise.all([
@@ -514,6 +521,7 @@ export const listStudentCourses = cache(async function listStudentCourses(
   studentId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ): Promise<StudentCourse[]> {
+  const facultyCourseId = await getStudentFacultyCourseId(studentId, admin);
   const enrollmentResult = await admin
     .from("teacher_course_enrollments")
     .select("course_id,status,enrolled_at,completed_at")
@@ -522,7 +530,9 @@ export const listStudentCourses = cache(async function listStudentCourses(
     .order("enrolled_at", { ascending: false });
   if (enrollmentResult.error) throw enrollmentResult.error;
 
-  const enrollments = (enrollmentResult.data || []) as Record<string, unknown>[];
+  const enrollments = ((enrollmentResult.data || []) as Record<string, unknown>[]).filter(
+    (row) => facultyCourseId === undefined || row.course_id === facultyCourseId,
+  );
   const courseIds = enrollments.map((row) => String(row.course_id || "")).filter(Boolean);
   if (!courseIds.length) return [];
 
@@ -617,6 +627,8 @@ async function getCommunitySubjectAccessForCourse(
   if (!communityResult.data?.id) return null;
 
   const communityId = String(communityResult.data.id);
+  const facultyId = await getStudentFacultyId(studentId, admin);
+  if (facultyId && facultyId !== communityId) return null;
   // Both depend on the community id and on nothing else, so they are asked at
   // the same time. Membership still decides the answer — a non-member gets null
   // exactly as before; the subject read is simply already in flight rather than
@@ -667,9 +679,12 @@ export async function listStudentCommunitySubjectAccess(
     .eq("status", "active");
   if (membershipResult.error) throw membershipResult.error;
 
+  const facultyId = await getStudentFacultyId(studentId, admin);
   const communityIds = [
     ...new Set(
-      (membershipResult.data || []).map((row) => String(row.community_id || "")).filter(Boolean),
+      (membershipResult.data || [])
+        .map((row) => String(row.community_id || ""))
+        .filter((id) => id && (!facultyId || id === facultyId)),
     ),
   ];
   if (!communityIds.length) return [];
@@ -740,10 +755,7 @@ export async function listStudentCommunitySubjectAccess(
       .map((row) => [String(row.id), String(row.study_course_id)]),
   );
   const communityNameById = new Map(
-    communityRows.map((row) => [
-      String(row.id || ""),
-      String(row.name || "Community"),
-    ]),
+    communityRows.map((row) => [String(row.id || ""), String(row.name || "Community")]),
   );
   if (!courseByCommunity.size) return [];
 
@@ -857,6 +869,8 @@ export async function getStudentCourseSubjectAccessForCourse(
   subjectSlug: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ): Promise<StudentCourseSubjectAccess | null> {
+  const facultyCourseId = await getStudentFacultyCourseId(studentId, admin);
+  if (facultyCourseId !== undefined && facultyCourseId !== courseId) return null;
   if (courseId.startsWith("private:")) {
     const access = await getCreatorPrivateSubjectAccess(studentId, subjectSlug, admin);
     return access?.courseId === courseId ? access : null;
@@ -926,6 +940,17 @@ export async function getStudentCourseSubjectAccess(
   subject: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ): Promise<StudentCourseSubjectAccess | null> {
+  if (await getStudentFacultyId(studentId, admin)) {
+    const requested = subjectAccessKey(subject);
+    if (!requested) return null;
+    return (
+      (await listStudentCommunitySubjectAccess(studentId, admin)).find(
+        (item) =>
+          subjectAccessKey(item.subjectSlug) === requested ||
+          subjectAccessKey(item.subjectName) === requested,
+      ) ?? null
+    );
+  }
   const requested = subjectAccessKey(subject);
   if (!requested) return null;
 
@@ -1066,6 +1091,17 @@ export async function getStudentCourseSubjectAccessForDocumentPath(
   const normalizedDocumentPath = normalizeCollectionPath(collectionPath).toLowerCase();
   if (!teacherId || !normalizedDocumentPath) return null;
 
+  if (await getStudentFacultyId(studentId, admin)) {
+    return (
+      (await listStudentCommunitySubjectAccess(studentId, admin))
+        .filter(
+          (item) =>
+            item.teacherId === teacherId &&
+            documentBelongsToSubject(collectionPath, item.folderPath),
+        )
+        .sort((a, b) => b.folderPath.length - a.folderPath.length)[0] ?? null
+    );
+  }
   const privateSubjects = await listCreatorPrivateSubjectAccess(studentId, admin);
   const privateMatch = privateSubjects
     .filter((item) => item.teacherId === teacherId)

@@ -14,6 +14,7 @@ const planSchema = z.object({
   currency: z.string().trim().min(1).default("NPR"),
   billingType: z.enum(["one_time", "monthly"]),
   isActive: z.boolean().default(true),
+  features: z.array(z.string().trim().min(1).max(160)).max(20).optional(),
 });
 
 function toInput(payload: z.infer<typeof planSchema>): AdminSubscriptionPlanInput {

@@ -38,6 +38,7 @@ describe("community challenge subject access", () => {
    */
   it("denies subject access after membership and legacy enrollment are revoked", async () => {
     const queries = {
+      student_exam_enrollments: singleResult(null),
       communities: singleResult({ id: "community-1" }),
       community_memberships: singleResult(null),
       teacher_course_enrollments: singleResult(null),
@@ -69,6 +70,7 @@ describe("community challenge subject access", () => {
   });
   it("treats active community membership as access even if a legacy enrollment row is missing", async () => {
     const queries = {
+      student_exam_enrollments: singleResult(null),
       teacher_course_enrollments: singleResult(null),
       teacher_courses: singleResult({
         id: "community-course",
@@ -114,6 +116,7 @@ describe("community challenge subject access", () => {
 
   it("resolves a Creator Workspace subject through active community membership", async () => {
     const queries = {
+      student_exam_enrollments: singleResult(null),
       teacher_course_enrollments: singleResult({ course_id: "community-course" }),
       teacher_courses: singleResult({
         id: "community-course",
@@ -159,6 +162,7 @@ describe("community challenge subject access", () => {
 
   it("resolves a community subject without a legacy course enrollment", async () => {
     const tables = {
+      student_exam_enrollments: singleResult(null),
       teachers: listResult(null),
       community_memberships: listResult([{ community_id: "community-1" }]),
       communities: listResult([
@@ -195,6 +199,7 @@ describe("community challenge subject access", () => {
 
   it("streams community subject documents without a legacy course enrollment", async () => {
     const tables = {
+      student_exam_enrollments: singleResult(null),
       teachers: listResult(null),
       community_memberships: listResult([{ community_id: "community-1" }]),
       communities: listResult([
@@ -235,6 +240,7 @@ describe("community challenge subject access", () => {
 
   it("does not grant challenge access after community membership ends", async () => {
     const queries = {
+      student_exam_enrollments: singleResult(null),
       teacher_course_enrollments: singleResult({ course_id: "community-course" }),
       teacher_courses: singleResult({
         id: "community-course",

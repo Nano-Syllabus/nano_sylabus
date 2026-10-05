@@ -6,6 +6,7 @@ import {
   type LandingContent,
 } from "@/lib/landing-content";
 import { MAIN_SITE_SLUG, RESERVED_SITE_SLUGS, isValidSiteSlug } from "@/lib/landing-site-host";
+import { readExamConfig, examConfigSchema, type ExamConfig } from "@/lib/exam-enrollment";
 
 /**
  * Landing sites: one row per subdomain (plus "main", the bare domain), each
@@ -34,6 +35,7 @@ export type LandingSiteSummary = {
 export type LandingSiteDetail = LandingSiteSummary & {
   draft: LandingContent;
   content: LandingContent;
+  examConfig: ExamConfig;
 };
 
 type LandingSiteRow = {
@@ -44,10 +46,11 @@ type LandingSiteRow = {
   draft: unknown;
   published_at: string | null;
   updated_at: string;
+  exam_config?: unknown;
 };
 
 const TABLE = "landing_sites";
-const COLUMNS = "slug, name, status, content, draft, published_at, updated_at";
+const COLUMNS = "slug, name, status, content, draft, published_at, updated_at, exam_config";
 
 export function landingSiteTag(slug: string) {
   return `landing-site:${slug}`;
@@ -65,12 +68,18 @@ function toDetail(row: LandingSiteRow): LandingSiteDetail {
     updatedAt: row.updated_at,
     draft,
     content,
+    examConfig: readExamConfig(row.exam_config),
   };
 }
 
 /* ── Public read ──────────────────────────────────────────────────────────── */
 
-export type PublishedLandingSite = { slug: string; name: string; content: LandingContent };
+export type PublishedLandingSite = {
+  slug: string;
+  name: string;
+  content: LandingContent;
+  examConfig: ExamConfig;
+};
 
 /**
  * The live text for a site, or null when the site does not exist or is hidden.
@@ -81,11 +90,14 @@ export async function getPublishedLandingSite(slug: string): Promise<PublishedLa
     async () => {
       const { data, error } = await createSupabaseAdminClient()
         .from(TABLE)
-        .select("slug, name, status, content")
+        .select("slug, name, status, content, exam_config")
         .eq("slug", slug)
         .maybeSingle();
       if (error) throw error;
-      return data as Pick<LandingSiteRow, "slug" | "name" | "status" | "content"> | null;
+      return data as Pick<
+        LandingSiteRow,
+        "slug" | "name" | "status" | "content" | "exam_config"
+      > | null;
     },
     ["landing-site", slug],
     // The tag is cleared on Publish; the timer only bounds staleness if a
@@ -96,14 +108,24 @@ export async function getPublishedLandingSite(slug: string): Promise<PublishedLa
   try {
     const row = await read();
     if (row && row.status !== "hidden") {
-      return { slug: row.slug, name: row.name, content: sanitizeLandingContent(row.content) };
+      return {
+        slug: row.slug,
+        name: row.name,
+        content: sanitizeLandingContent(row.content),
+        examConfig: readExamConfig(row.exam_config),
+      };
     }
   } catch (error) {
     console.error(`[landing-sites] could not read "${slug}"`, error);
   }
 
   return slug === MAIN_SITE_SLUG
-    ? { slug, name: "NanoSyllabus", content: DEFAULT_LANDING_CONTENT }
+    ? {
+        slug,
+        name: "NanoSyllabus",
+        content: DEFAULT_LANDING_CONTENT,
+        examConfig: readExamConfig(null),
+      }
     : null;
 }
 
@@ -141,7 +163,7 @@ export async function listLandingSites(): Promise<LandingSiteSummary[]> {
   if (error) throw error;
   return ((data ?? []) as LandingSiteRow[])
     .map(toDetail)
-    .map(({ draft: _draft, content: _content, ...summary }) => summary)
+    .map(({ draft: _draft, content: _content, examConfig: _examConfig, ...summary }) => summary)
     .sort((a, b) =>
       a.slug === MAIN_SITE_SLUG ? -1 : b.slug === MAIN_SITE_SLUG ? 1 : a.slug.localeCompare(b.slug),
     );
@@ -204,10 +226,13 @@ export async function createLandingSite(input: {
 
 export async function updateLandingSite(
   slug: string,
-  patch: { draft?: unknown; name?: string; status?: LandingSiteStatus },
+  patch: { draft?: unknown; name?: string; status?: LandingSiteStatus; examConfig?: unknown },
   userId: string,
 ): Promise<LandingSiteDetail> {
-  const update: Record<string, unknown> = { updated_by: userId, updated_at: new Date().toISOString() };
+  const update: Record<string, unknown> = {
+    updated_by: userId,
+    updated_at: new Date().toISOString(),
+  };
   if (patch.draft !== undefined) update.draft = sanitizeLandingContent(patch.draft);
   if (patch.name !== undefined) {
     const name = patch.name.trim().slice(0, 80);
@@ -221,6 +246,35 @@ export async function updateLandingSite(
     update.status = patch.status;
   }
 
+  if (patch.examConfig !== undefined) {
+    const parsed = examConfigSchema.safeParse(patch.examConfig);
+    if (!parsed.success) throw new LandingSiteError(parsed.error.issues[0].message, 400);
+    if (parsed.data.planIds.length) {
+      const { data: plans, error } = await createSupabaseAdminClient()
+        .from("subscription_plans")
+        .select("id")
+        .in("id", parsed.data.planIds)
+        .eq("is_active", true)
+        .eq("product_type", "individual")
+        .eq("billing_type", "monthly")
+        .gt("price", 0);
+      if (error) throw error;
+      if (plans?.length !== new Set(parsed.data.planIds).size)
+        throw new LandingSiteError("Choose active individual payment plans.", 400);
+    }
+    const { error } = await createSupabaseAdminClient().rpc("configure_landing_exam", {
+      target_exam_slug: slug,
+      configuration: parsed.data,
+    });
+    if (error)
+      throw new LandingSiteError(
+        error.code === "22023"
+          ? "Choose active public faculties for this exam."
+          : "Could not save exam setup.",
+        error.code === "22023" ? 400 : 500,
+      );
+  }
+
   const { data, error } = await createSupabaseAdminClient()
     .from(TABLE)
     .update(update)
@@ -231,7 +285,11 @@ export async function updateLandingSite(
   if (!data) throw new LandingSiteError("That site no longer exists.", 404);
 
   // Status and name show on the live site; the draft does not.
-  if (patch.status !== undefined || patch.name !== undefined) refreshLiveSite(slug);
+  if (patch.status !== undefined || patch.name !== undefined || patch.examConfig !== undefined) {
+    refreshLiveSite(slug);
+    revalidatePath(`/prepare/${slug}`);
+    revalidatePath(`/payment/${slug}`);
+  }
   return toDetail(data as LandingSiteRow);
 }
 
@@ -266,14 +324,15 @@ function refreshLiveSite(slug: string) {
   revalidatePath(slug === MAIN_SITE_SLUG ? "/" : `/sites/${slug}`);
 }
 
-export type CommunityChoice = { slug: string; name: string; faculty: string | null };
+export type CommunityChoice = { id: string; slug: string; name: string; faculty: string | null; visibility?: "public" | "unlisted" | "private" };
 
 /** Active communities a site's main button can lead into, for the editor's picker. */
 export async function listCommunityChoices(): Promise<CommunityChoice[]> {
   const { data, error } = await createSupabaseAdminClient()
     .from("communities")
-    .select("slug, name, faculty")
+    .select("id, slug, name, faculty")
     .eq("status", "active")
+    .eq("visibility", "public")
     .order("name");
   if (error) throw error;
   return (data ?? []) as CommunityChoice[];

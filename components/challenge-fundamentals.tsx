@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
  * examples a screen down. Answering is final and instant to read: the key is
  * fetched only once an option is chosen (`/fundamentals/check`), and a wrong
  * answer is shown the correct option — which one, not a paragraph on why theirs
- * was wrong. The why is a short video, made on request for that exact answer.
+ * was wrong. The why is a short concept script, requested for that question.
  */
 
 type Load =
@@ -30,7 +30,13 @@ type Load =
 const optionBase =
   "flex min-h-11 w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left text-sm leading-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500";
 
-export function ChallengeFundamentals({ challengeId, className }: { challengeId: string; className?: string }) {
+export function ChallengeFundamentals({
+  challengeId,
+  className,
+}: {
+  challengeId: string;
+  className?: string;
+}) {
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState<Record<string, FundamentalsResult>>({});
@@ -43,14 +49,19 @@ export function ChallengeFundamentals({ challengeId, className }: { challengeId:
     setLoad({ status: "loading" });
     (async () => {
       try {
-        const response = await fetch(`/api/student/challenges/${encodeURIComponent(challengeId)}/fundamentals`);
+        const response = await fetch(
+          `/api/student/challenges/${encodeURIComponent(challengeId)}/fundamentals`,
+        );
         const payload = (await response.json().catch(() => ({}))) as {
           questions?: FundamentalsQuestion[];
           error?: string;
         };
         if (cancelled) return;
         if (!response.ok || !payload.questions) {
-          setLoad({ status: "error", message: payload.error || "The fundamentals check couldn't be set right now." });
+          setLoad({
+            status: "error",
+            message: payload.error || "The fundamentals check couldn't be set right now.",
+          });
           return;
         }
         setLoad({ status: "ready", questions: payload.questions });
@@ -105,7 +116,9 @@ export function ChallengeFundamentals({ challengeId, className }: { challengeId:
 
   if (load.status === "error") {
     return (
-      <section className={cn("rounded-xl border border-border bg-bg-secondary p-4 sm:p-5", className)}>
+      <section
+        className={cn("rounded-xl border border-border bg-bg-secondary p-4 sm:p-5", className)}
+      >
         <h2 className="type-student-section-title">Fundamentals check</h2>
         <p className="mt-2 text-sm text-text-secondary">{load.message}</p>
         <button
@@ -130,7 +143,10 @@ export function ChallengeFundamentals({ challengeId, className }: { challengeId:
         <div className="mt-4 h-4 w-4/5 animate-pulse rounded bg-border motion-reduce:animate-none" />
         <div className="mt-4 space-y-2">
           {[0, 1, 2, 3].map((row) => (
-            <div key={row} className="h-11 animate-pulse rounded-lg bg-border motion-reduce:animate-none" />
+            <div
+              key={row}
+              className="h-11 animate-pulse rounded-lg bg-border motion-reduce:animate-none"
+            />
           ))}
         </div>
       </section>
@@ -143,11 +159,15 @@ export function ChallengeFundamentals({ challengeId, className }: { challengeId:
   const correctCount = questions.filter((question) => results[question.id]?.isCorrect).length;
 
   return (
-    <section className={cn("rounded-xl border border-border bg-bg-secondary p-4 sm:p-5", className)}>
+    <section
+      className={cn("rounded-xl border border-border bg-bg-secondary p-4 sm:p-5", className)}
+    >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="type-student-section-title">Fundamentals check</h2>
         <span className="text-xs text-text-muted">
-          {finished ? `${correctCount} of ${questions.length} right` : `${index + 1} of ${questions.length}`}
+          {finished
+            ? `${correctCount} of ${questions.length} right`
+            : `${index + 1} of ${questions.length}`}
         </span>
       </div>
       <ol className="mt-3 flex gap-1.5" aria-label="Progress">
@@ -281,9 +301,14 @@ function Question({
                     option.key
                   )}
                   {/* The letter is still the option's name once an icon stands in for it. */}
-                  {isCorrect || isChosenWrong ? <span className="sr-only">{option.key}</span> : null}
+                  {isCorrect || isChosenWrong ? (
+                    <span className="sr-only">{option.key}</span>
+                  ) : null}
                 </span>
-                <MathText text={delimitBareMath(option.text)} className="min-w-0 flex-1 text-text-primary" />
+                <MathText
+                  text={delimitBareMath(option.text)}
+                  className="min-w-0 flex-1 text-text-primary"
+                />
                 {isCorrect ? (
                   <span className="sr-only">(correct answer)</span>
                 ) : isChosenWrong ? (
@@ -303,9 +328,17 @@ function Question({
           ) : (
             <div className="rounded-lg border border-success/40 bg-success/10 p-3">
               <p className="text-sm font-semibold text-success">Correct answer: {result.correct}</p>
-              <MathText as="div" text={delimitBareMath(result.correctText)} className="mt-0.5 text-sm text-text-primary" />
+              <MathText
+                as="div"
+                text={delimitBareMath(result.correctText)}
+                className="mt-0.5 text-sm text-text-primary"
+              />
               {result.explanation ? (
-                <MathText as="div" text={result.explanation} className="mt-1.5 text-xs leading-5 text-text-secondary" />
+                <MathText
+                  as="div"
+                  text={result.explanation}
+                  className="mt-1.5 text-xs leading-5 text-text-secondary"
+                />
               ) : null}
             </div>
           )}
@@ -325,86 +358,18 @@ function Question({
   );
 }
 
-type Stage = "starting" | "queued" | "planning" | "rendering" | "finishing";
-
-type Video =
-  | { status: "idle" }
-  | { status: "making"; stage: Stage; poster?: string }
-  | { status: "ready"; mp4: string; poster?: string }
+type ScriptState =
+  | { status: "idle" | "loading" }
+  | { status: "ready"; script: string }
   | { status: "error"; message: string };
 
-const POLL_MS = 2500;
-/** A 12-second render is about a minute; past this it is not coming. */
-const GIVE_UP_MS = 6 * 60_000;
-
-/** What the render is doing, in words — so a wait reads as progress. */
-const STAGE_TEXT: Record<Stage, string> = {
-  starting: "Starting",
-  queued: "Waiting for a free slot",
-  planning: "Planning the explanation",
-  rendering: "Drawing the animation",
-  finishing: "Putting the video together",
-};
-/** Where the bar starts for each stage; it creeps on from there with time. */
-const STAGE_FLOOR: Record<Stage, number> = { starting: 4, queued: 8, planning: 18, rendering: 45, finishing: 75 };
-
-function stageOf(status: string | undefined, poster: string | undefined): Stage {
-  if (poster) return "finishing";
-  if (status === "rendering") return "rendering";
-  if (status === "planning") return "planning";
-  if (status === "queued") return "queued";
-  return "starting";
-}
-
-/** Faint behind the spinner: a first frame shown plainly looked like the video. */
-function LoadingFrame({ poster, title, detail, progress }: { poster?: string; title: string; detail: string; progress?: number }) {
-  return (
-    <div className="relative aspect-video overflow-hidden rounded-lg border border-border bg-bg-primary">
-      {poster ? (
-        // eslint-disable-next-line @next/next/no-img-element -- a same-origin render frame, not a layout image
-        <img src={poster} alt="" className="absolute inset-0 h-full w-full object-contain opacity-20" />
-      ) : null}
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
-        <Loader2
-          className="size-8 animate-spin text-blue-600 motion-reduce:animate-none dark:text-blue-400"
-          aria-hidden="true"
-        />
-        <p className="text-sm font-semibold text-text-primary">{title}</p>
-        <p className="text-xs text-text-secondary">{detail}</p>
-      </div>
-      {progress !== undefined ? (
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-border">
-          <div
-            className="h-full bg-blue-600 transition-[width] duration-700 ease-out motion-reduce:transition-none dark:bg-blue-400"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * The why, as a short video made for this answer — only when the student asks
- * for it. Generated then, never ahead of time, never shared with another
- * student's identical answer; polled at `/api/media/<hash>` until the mp4 lands.
- *
- * The wait is said as a wait. Showing the first frame on its own while the mp4
- * rendered read as "it says video, why only an image" — so until the video can
- * actually play, it is a loading state with the step it is on and the seconds
- * it has taken, and the frame is only a faint hint behind it.
- */
-/**
- * A compact hint for a question. `endpoint` is where its short visual explanation
- * is requested: the fundamentals check's route by default, or an MCQ community
- * paper's (`/choices/explain`), which reads the recorded pick itself.
- */
+/** Read the concept explainer's narration as a hint, without rendering a video. */
 export function Explainer({
   challengeId,
   questionId,
   selected,
   endpoint,
-  label = "Memorize trick",
+  label = "Show hint",
   besideQuestion = false,
   mode,
   inSheet = false,
@@ -414,160 +379,138 @@ export function Explainer({
   questionId: string;
   selected: string;
   endpoint?: string;
-  /** The button's words; Revision offers it on every question, not just a miss. */
   label?: string;
-  /** Keep the trigger beside the question, then use the full row once opened. */
   besideQuestion?: boolean;
-  /** "hint": the idea-only video an MCQ paper offers before the question is answered. */
+  /** Pre-answer hints do not use the answer key. */
   mode?: "hint";
-  /** Play in a sheet from the right instead of pushing the options down the page. */
   inSheet?: boolean;
-  /** Shown at the top of the sheet, so the question stays in view while watching. */
   questionText?: string;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const closeSheet = useCallback(() => setSheetOpen(false), []);
-  const [video, setVideo] = useState<Video>({ status: "idle" });
-  const [specHash, setSpecHash] = useState("");
-  const [startedAt, setStartedAt] = useState(0);
-  const [now, setNow] = useState(0);
-  const [playable, setPlayable] = useState(false);
-  const making = video.status === "making";
+  const [script, setScript] = useState<ScriptState>({ status: "idle" });
+  const requestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (!making) return;
-    const tick = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(tick);
-  }, [making]);
-
-  useEffect(() => {
-    if (!specHash) return;
-    let cancelled = false;
-    let timer: number | undefined;
-    const started = Date.now();
-    const poll = async () => {
-      try {
-        const response = await fetch(`/api/media/${specHash}`, { cache: "no-store" });
-        if (cancelled) return;
-        if (response.status === 404) {
-          setVideo({ status: "error", message: "The video was lost on the way. Try making it again." });
-          return;
-        }
-        const state = (await response.json().catch(() => null)) as {
-          status?: string;
-          derivatives?: FundamentalsExplainer["derivatives"];
-        } | null;
-        if (cancelled) return;
-        if (state?.derivatives?.mp4) {
-          setVideo({ status: "ready", mp4: state.derivatives.mp4, poster: state.derivatives.poster });
-          return;
-        }
-        if (state?.status === "failed") {
-          setVideo({ status: "error", message: "This one couldn't be animated. The correct answer above still stands." });
-          return;
-        }
-        setVideo({
-          status: "making",
-          stage: stageOf(state?.status, state?.derivatives?.poster),
-          poster: state?.derivatives?.poster,
-        });
-      } catch {
-        /* one failed poll is not a failed video */
-      }
-      if (Date.now() - started > GIVE_UP_MS) {
-        setVideo({ status: "error", message: "The video is taking too long. Try again in a little while." });
-        return;
-      }
-      timer = window.setTimeout(() => void poll(), POLL_MS);
-    };
-    void poll();
+    setScript({ status: "idle" });
+    setSheetOpen(false);
     return () => {
-      cancelled = true;
-      if (timer) window.clearTimeout(timer);
+      requestRef.current?.abort();
+      requestRef.current = null;
     };
-  }, [specHash]);
+  }, [challengeId, questionId, selected, endpoint, mode]);
 
-  const make = async () => {
-    setStartedAt(Date.now());
-    setNow(Date.now());
-    setPlayable(false);
-    setVideo({ status: "making", stage: "starting" });
+  const load = async () => {
+    if (requestRef.current) return;
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setScript({ status: "loading" });
     try {
       const response = await fetch(
-        endpoint ?? `/api/student/challenges/${encodeURIComponent(challengeId)}/fundamentals/explain`,
+        endpoint ??
+          `/api/student/challenges/${encodeURIComponent(challengeId)}/fundamentals/explain`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(mode ? { questionId, mode } : { questionId, selected }),
+          signal: controller.signal,
         },
       );
       const payload = (await response.json().catch(() => ({}))) as {
         explainer?: FundamentalsExplainer;
         error?: string;
       };
-      if (!response.ok || !payload.explainer?.specHash) {
-        setVideo({ status: "error", message: payload.error || "The video couldn't be started." });
+      if (controller.signal.aborted) return;
+      const text = payload.explainer?.script?.trim();
+      if (!response.ok || !text) {
+        setScript({
+          status: "error",
+          message: payload.error || "The hint couldn't be loaded. Try again.",
+        });
         return;
       }
-      setSpecHash(payload.explainer.specHash);
+      setScript({ status: "ready", script: text });
     } catch {
-      setVideo({ status: "error", message: "Couldn't reach NanoSyllabus." });
+      if (!controller.signal.aborted)
+        setScript({ status: "error", message: "Couldn't reach NanoSyllabus. Try again." });
+    } finally {
+      if (requestRef.current === controller) requestRef.current = null;
     }
   };
+
+  const trigger = (
+    <button
+      type="button"
+      onClick={() => {
+        if (script.status === "idle" || script.status === "error") void load();
+        if (inSheet) setSheetOpen(true);
+      }}
+      aria-haspopup={inSheet ? "dialog" : undefined}
+      aria-expanded={inSheet ? sheetOpen : undefined}
+      disabled={!inSheet && script.status === "loading"}
+      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-bg-primary px-3 text-sm font-semibold hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-60"
+    >
+      <Lightbulb className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+      {script.status === "error" ? "Try hint again" : label}
+    </button>
+  );
+
+  const content =
+    script.status === "loading" ? (
+      <div
+        className="flex items-center gap-3 rounded-xl border border-border bg-bg-secondary p-5"
+        role="status"
+        aria-live="polite"
+      >
+        <Loader2
+          className="size-5 shrink-0 animate-spin text-blue-600 motion-reduce:animate-none"
+          aria-hidden="true"
+        />
+        <p className="text-sm text-text-secondary">Preparing your hint…</p>
+      </div>
+    ) : script.status === "error" ? (
+      <div className="space-y-3" role="alert">
+        <p className="text-sm text-text-secondary">{script.message}</p>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold hover:border-blue-500/60"
+        >
+          <RotateCcw className="size-4" aria-hidden="true" /> Try again
+        </button>
+      </div>
+    ) : script.status === "ready" ? (
+      <div className="rounded-xl border border-blue-500/25 bg-blue-500/5 p-5" aria-live="polite">
+        <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+          <Lightbulb className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />{" "}
+          Concept hint
+        </p>
+        <MathText
+          as="div"
+          text={script.script}
+          className="whitespace-pre-wrap text-sm leading-7 text-text-primary"
+        />
+        <p className="mt-4 border-t border-blue-500/15 pt-3 text-xs text-text-secondary">
+          Use this idea to reason through the question yourself.
+        </p>
+      </div>
+    ) : null;
 
   if (inSheet) {
     return (
       <div className={cn(besideQuestion && "shrink-0")}>
-        <button
-          type="button"
-          onClick={() => {
-            // A video already made or on its way is shown again, not re-asked for.
-            if (video.status === "idle" || video.status === "error") void make();
-            setSheetOpen(true);
-          }}
-          aria-haspopup="dialog"
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-bg-primary px-3 text-sm font-semibold hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-        >
-          <Lightbulb className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-          {video.status === "error" ? "Try trick again" : label}
-        </button>
+        {trigger}
         {sheetOpen && typeof document !== "undefined"
           ? createPortal(
-              <VideoSheet title={mode === "hint" ? "Memorize trick" : "Explanation"} onClose={closeSheet}>
-                {mode !== "hint" || questionText ? (
-                  <div className="mb-5 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
-                    {mode !== "hint" ? (
-                      <p className="flex items-start gap-2 text-sm leading-6 text-text-primary">
-                        <Lightbulb className="mt-1 size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-                        Why the correct option is right, and the slip that leads to the most tempting wrong one.
-                      </p>
-                    ) : null}
-                    {questionText ? (
-                      <MathText
-                        text={questionText}
-                        className={cn(
-                          "block text-sm font-semibold leading-6 text-text-secondary",
-                          mode !== "hint" && "mt-3 border-t border-border pt-3",
-                        )}
-                      />
-                    ) : null}
-                  </div>
+              <HintSheet title="Question hint" onClose={closeSheet}>
+                {questionText ? (
+                  <MathText
+                    text={questionText}
+                    className="mb-5 block border-b border-border pb-5 text-sm font-semibold leading-6 text-text-secondary"
+                  />
                 ) : null}
-                {video.status === "error" ? (
-                  <div className="space-y-3">
-                    <p className="text-sm text-text-secondary">{video.message}</p>
-                    <button
-                      type="button"
-                      onClick={() => void make()}
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold hover:border-blue-500/60"
-                    >
-                      <RotateCcw className="size-4" aria-hidden="true" /> Try again
-                    </button>
-                  </div>
-                ) : (
-                  videoBody()
-                )}
-              </VideoSheet>,
+                {content}
+              </HintSheet>,
               document.body,
             )
           : null}
@@ -575,82 +518,21 @@ export function Explainer({
     );
   }
 
-  if (video.status === "idle" || video.status === "error") {
-    return (
-      <div className={cn(besideQuestion && "shrink-0")}>
-        <button
-          type="button"
-          onClick={() => void make()}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-bg-primary px-3 text-sm font-semibold hover:border-blue-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-        >
-          <Lightbulb className="size-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-          {video.status === "error" ? "Try trick again" : label}
-        </button>
-        {video.status === "error" ? <p className="mt-2 text-xs text-text-secondary">{video.message}</p> : null}
-      </div>
-    );
-  }
-
-  return videoBody();
-
-  function videoBody(): ReactNode {
-  if (video.status === "idle" || video.status === "error") return null;
-  const wide = besideQuestion && !inSheet;
-  if (video.status === "making") {
-    const seconds = Math.max(0, Math.round((now - startedAt) / 1000));
-    const progress = Math.min(95, STAGE_FLOOR[video.stage] + Math.min(20, seconds / 2));
-    return (
-      <div
-        className={cn("mx-auto w-full max-w-xl", wide && "basis-full")}
-        role="status"
-        aria-live="polite"
-        aria-busy="true"
-      >
-        <LoadingFrame
-          poster={video.poster}
-          title="Loading your video…"
-          detail={`${STAGE_TEXT[video.stage]} · ${seconds}s`}
-          progress={progress}
-        />
-        <p className="mt-2 text-xs text-text-secondary">
-          Please wait — this question&apos;s short video is still being made. It usually takes under a minute.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className={cn("relative mx-auto w-full max-w-xl", wide && "basis-full")}>
-      <video
-        src={video.mp4}
-        poster={video.poster}
-        controls
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-        onCanPlay={() => setPlayable(true)}
-        className="block aspect-video w-full rounded-lg border border-border bg-black"
-      />
-      {/* Made, but not yet downloaded far enough to play: still a wait. */}
-      {playable ? null : (
-        <div className="absolute inset-0" role="status" aria-live="polite">
-          <LoadingFrame poster={video.poster} title="Loading your video…" detail="Almost there" />
-        </div>
-      )}
+    <div className={cn("w-full", besideQuestion && "basis-full")}>
+      {script.status === "idle" ? trigger : content}
     </div>
   );
 }
-}
 
 /**
- * The sheet a question's video plays in, from the right — the same dialog
+ * The sheet for a question's text hint, from the right — the same dialog
  * contract as the Concepts sheet: Escape and the backdrop close it, focus moves
  * in and returns to the button, and the page behind does not scroll. Escape is
- * caught in the capture phase and kept, so closing the video never also exits
+ * caught in the capture phase and kept, so closing the hint never also exits
  * the challenge's focus mode.
  */
-function VideoSheet({
+function HintSheet({
   title,
   onClose,
   children,
@@ -661,6 +543,7 @@ function VideoSheet({
 }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -668,6 +551,25 @@ function VideoSheet({
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") {
+        const controls = Array.from(
+          dialogRef.current?.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]',
+          ) ?? [],
+        );
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (
+          first &&
+          last &&
+          ((event.shiftKey && document.activeElement === first) ||
+            (!event.shiftKey && document.activeElement === last))
+        ) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        }
+        return;
+      }
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
@@ -691,6 +593,7 @@ function VideoSheet({
         className="absolute inset-0 bg-black/40 animate-in fade-in duration-200 motion-reduce:animate-none"
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -710,7 +613,9 @@ function VideoSheet({
             <X className="size-4" aria-hidden="true" />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+          {children}
+        </div>
       </div>
     </div>
   );

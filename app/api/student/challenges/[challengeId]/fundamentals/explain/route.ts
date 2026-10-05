@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 import { z } from "zod";
-import { FundamentalsChangedError, explainChallengeFundamental } from "@/lib/data/challenge-fundamentals";
+import {
+  FundamentalsChangedError,
+  explainChallengeFundamental,
+} from "@/lib/data/challenge-fundamentals";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { withUsageCommunity } from "@/lib/usage-community";
@@ -13,16 +16,11 @@ const bodySchema = z.object({
   selected: z.string().trim().min(1).max(4),
 });
 
-/**
- * Every call queues and bills a render, and nothing is reused, so one student
- * gets one at a time: a second press while the first is still being planned is
- * the button being pressed twice, not a second question. Per server instance —
- * a guard against a double click, not a quota.
- */
+/** Bound repeated hint requests per student. */
 const SPACING_MS = 20_000;
 const lastRequest = new Map<string, number>();
 
-/** A short video, made now for this one wrong answer — see
+/** A concept script for this wrong answer — see
  *  `explainChallengeFundamental`. */
 async function handlePOST(
   request: Request,
@@ -68,7 +66,7 @@ async function handlePOST(
     }
     console.warn("[challenge] fundamentals explainer failed", error);
     return NextResponse.json(
-      { error: "The video explainer couldn't be started right now. Try again shortly." },
+      { error: "The hint couldn't be loaded right now. Try again shortly." },
       { status: 502 },
     );
   }

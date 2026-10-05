@@ -254,6 +254,10 @@ export async function listPublicCommunities(
 }
 
 /** Browse must show a community its creator just made, renamed or removed. */
+export function invalidateCommunityCatalog() {
+  invalidateMemo(PUBLIC_COMMUNITIES_MEMO);
+}
+
 function invalidatesPublicCatalog<A extends unknown[], R>(write: (...args: A) => Promise<R>) {
   return async (...args: A) => {
     try {

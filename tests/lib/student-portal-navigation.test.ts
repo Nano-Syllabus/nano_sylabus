@@ -7,7 +7,7 @@ const appSidebar = readFileSync("components/app-sidebar.tsx", "utf8");
 
 describe("student portal navigation chrome", () => {
   it("uses a shared student-portal title as the layout fallback", () => {
-    expect(appLayout).toContain('<AppShell user={user} title="Dashboard">');
+    expect(appLayout).toContain('<AppShell user={user} title="Dashboard" faculty={enrollment}>');
   });
 
   it("has no top bar: every page prints its own heading", () => {
@@ -19,7 +19,9 @@ describe("student portal navigation chrome", () => {
   });
 
   it("keeps a way to open the sidebar on a phone, and only on a phone", () => {
-    expect(appShell).toMatch(/className="flex h-12 shrink-0 items-center border-b border-border px-3 md:hidden"/);
+    expect(appShell).toMatch(
+      /className="flex h-12 shrink-0 items-center border-b border-border px-3 md:hidden"/,
+    );
     expect(appShell).toContain('aria-label="Open sidebar"');
   });
 
@@ -29,13 +31,13 @@ describe("student portal navigation chrome", () => {
   });
 
   it("aligns the sidebar brand row to the shared top bar", () => {
-    expect(appSidebar).toContain('mb-3 flex items-center pt-[18px]');
+    expect(appSidebar).toContain("mb-3 flex items-center pt-[18px]");
   });
 
   it("uses one compact selected-tab treatment throughout primary navigation", () => {
-    expect(appSidebar).toContain('text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2');
-    expect(appSidebar).toContain('bg-text-primary text-text-inverse');
-    expect(appSidebar).toContain('flex min-h-10 items-center text-sm leading-5');
+    expect(appSidebar).toContain("text-sidebar-crisp gap-3 rounded-[9px] px-[11px] py-2");
+    expect(appSidebar).toContain("bg-text-primary text-text-inverse");
+    expect(appSidebar).toContain("flex min-h-10 items-center text-sm leading-5");
   });
 
   it("removes the learning profile menu item and labels the ambassador entry", () => {

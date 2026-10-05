@@ -4,6 +4,7 @@ import { getPublishedLandingSite } from "@/lib/data/landing-sites";
 import { MAIN_SITE_SLUG } from "@/lib/landing-site-host";
 import { buildCanonicalUrl } from "@/lib/site";
 import { DEFAULT_LANDING_CONTENT } from "@/lib/landing-content";
+import { getEnrollmentExam } from "@/lib/data/exam-enrollment";
 
 // Static between publishes: Publish in /admin/sites clears this page's cache.
 export const revalidate = 600;
@@ -23,5 +24,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function LandingPage() {
-  return <LandingView content={await mainContent()} />;
+  const site = await getPublishedLandingSite(MAIN_SITE_SLUG);
+  const exam = site?.examConfig.enabled ? await getEnrollmentExam(MAIN_SITE_SLUG) : null;
+  return (
+    <LandingView
+      content={site?.content ?? DEFAULT_LANDING_CONTENT}
+      examSlug={exam?.slug}
+      examFaculties={exam?.faculties}
+    />
+  );
 }

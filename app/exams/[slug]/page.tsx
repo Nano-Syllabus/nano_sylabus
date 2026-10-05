@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { getEnrollmentExam } from "@/lib/data/exam-enrollment";
 import {
   ArrowLeft,
   ArrowRight,
@@ -26,6 +27,8 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
+  const exam = await getEnrollmentExam(slug);
+  if (exam) return {title:`${exam.name} - NanoSyllabus`,alternates:{canonical:buildCanonicalUrl(slug === "main" ? "/" : `/sites/${slug}`)}};
   const course = await getPublishedCourse(slug).catch(() => null);
   if (!course) return { title: "Course not found - nanosyllabus", robots: { index: false } };
 
@@ -77,6 +80,7 @@ function RelatedCourseCard({ course }: { course: TeacherCourse }) {
 
 export default async function CourseDetailPage({ params }: PageProps) {
   const { slug } = await params;
+  if (await getEnrollmentExam(slug)) redirect(slug === "main" ? "/" : `/sites/${slug}`);
   const [course, published] = await Promise.all([
     getPublishedCourse(slug),
     listPublishedCourses(),

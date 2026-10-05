@@ -34,7 +34,7 @@ export default async function AdminSitesPage() {
     <AdminBillingFrame active="sites">
       <AdminPageHeader
         title="Websites"
-        description={`Each subdomain of ${rootDomain()} gets the same landing page design with its own text. Edit the words, preview, then publish.`}
+        description={`Manage exam websites on ${rootDomain()}. Group supported faculties, configure onboarding and payment plans, then edit and publish each exam’s landing page.`}
       />
       {loadError ? (
         <p className="mt-6 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-300">

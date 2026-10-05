@@ -40,6 +40,9 @@ import { describeLandingPath, getIn, parsePath, setIn, type LandingPath } from "
 import { MAIN_SITE_SLUG } from "@/lib/landing-site-host";
 import type { LandingPreviewEvent, LandingPreviewMessage } from "@/components/landing-preview";
 
+import { AdminExamSettings } from "@/components/admin-exam-settings";
+import type { SubscriptionPlan } from "@/lib/types";
+
 const primaryButton =
   "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50";
 const secondaryButton =
@@ -71,10 +74,12 @@ export function AdminSiteEditor({
   initialSite,
   rootDomain,
   communities,
+  plans,
 }: {
   initialSite: LandingSiteDetail;
   rootDomain: string;
   communities: CommunityChoice[];
+  plans: SubscriptionPlan[];
 }) {
   const router = useRouter();
   const [site, setSite] = useState(initialSite);
@@ -364,6 +369,13 @@ export function AdminSiteEditor({
           {notice.text}
         </p>
       ) : null}
+
+      <AdminExamSettings
+        slug={site.slug}
+        initialConfig={site.examConfig}
+        communities={communities}
+        plans={plans}
+      />
 
       {/* Phone: one pane at a time */}
       <div className="flex gap-1 rounded-lg bg-muted p-1 lg:hidden" role="tablist" aria-label="Editor view">

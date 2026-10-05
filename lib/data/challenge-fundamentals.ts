@@ -1,10 +1,9 @@
 import { challengeUpstreamScope } from "@/lib/data/student-challenges";
-import { requestQuestionVideo, type QuestionVideoQuestion } from "@/lib/data/challenge-question-video";
 import {
-  getTeacherChallengeMcq,
-  type TeacherAnimationReply,
-  type TeacherChallengeMcqQuestion,
-} from "@/lib/teacher-app/client";
+  requestQuestionExplanation,
+  type QuestionScriptQuestion,
+} from "@/lib/data/challenge-question-script";
+import { getTeacherChallengeMcq, type TeacherChallengeMcqQuestion } from "@/lib/teacher-app/client";
 
 /**
  * A challenge's FUNDAMENTALS CHECK: five MCQs on its micro-topic, in step one.
@@ -18,7 +17,7 @@ import {
  * would be an answer key handed out.
  *
  * A wrong answer is told the correct option — not a lecture on why theirs was
- * wrong. The "why" is on request, as the question's short video
+ * wrong. The "why" is on request, as the question's short script
  * (`explainChallengeFundamental`), shared and cached per question.
  */
 
@@ -38,12 +37,7 @@ export type FundamentalsResult = {
   explanation: string;
 };
 
-export type FundamentalsExplainer = {
-  specHash: string;
-  status: string;
-  derivatives: TeacherAnimationReply["derivatives"];
-  error: string;
-};
+export type FundamentalsExplainer = { script: string };
 
 /** The set changed upstream (its notes were re-indexed) since this was asked. */
 export class FundamentalsChangedError extends Error {}
@@ -76,7 +70,8 @@ async function questionFor(scope: Scope, questionId: string) {
   if (found) return found;
   // Held from before a re-index upstream: the set was re-written with new ids.
   const again = (await fundamentalsSet(scope, true)).find((question) => question.id === questionId);
-  if (!again) throw new FundamentalsChangedError("These questions were updated. Reload them to continue.");
+  if (!again)
+    throw new FundamentalsChangedError("These questions were updated. Reload them to continue.");
   return again;
 }
 
@@ -118,7 +113,7 @@ export async function checkChallengeFundamental(
 }
 
 /**
- * The short video for a wrong answer — the question's own, shared and cached.
+ * The short script for a wrong answer — the question's own, shared and cached.
  * Refuses a correct answer: the check already said so.
  */
 export async function explainChallengeFundamental(
@@ -134,27 +129,29 @@ export async function explainChallengeFundamental(
   if (!chosen || selected === question.correct) {
     throw new RangeError("An explainer is made for a wrong answer.");
   }
-  return requestWrongAnswerVideo(scope, {
-    text: question.text,
-    options: question.options,
-    correct: question.correct,
-    explanation: question.explanation || "",
-  }, selected);
+  return requestWrongAnswerScript(
+    scope,
+    {
+      text: question.text,
+      options: question.options,
+      correct: question.correct,
+      explanation: question.explanation || "",
+    },
+    selected,
+  );
 }
 
-/**
- * The video for a wrong answer to any challenge MCQ — the fundamentals check's,
- * or an MCQ community's paper. The QUESTION's video, shared and cached (see
- * `challenge-question-video.ts`); asked for `urgent` because a student is
- * waiting on it.
- */
-export async function requestWrongAnswerVideo(
+/** Shared concept script for a verified wrong answer. */
+export async function requestWrongAnswerScript(
   scope: { collectionKey: string; subject: string },
-  question: QuestionVideoQuestion,
+  question: QuestionScriptQuestion,
   selected: string,
 ): Promise<FundamentalsExplainer> {
-  if (!question.options.some((option) => option.key === selected) || selected === question.correct) {
+  if (
+    !question.options.some((option) => option.key === selected) ||
+    selected === question.correct
+  ) {
     throw new RangeError("An explainer is made for a wrong answer.");
   }
-  return requestQuestionVideo(scope, question, "urgent");
+  return requestQuestionExplanation(scope, question);
 }

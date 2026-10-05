@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LandingView } from "@/components/landing-view";
 import { getPublishedLandingSite } from "@/lib/data/landing-sites";
 import { MAIN_SITE_SLUG, siteOrigin } from "@/lib/landing-site-host";
+import { getEnrollmentExam } from "@/lib/data/exam-enrollment";
 
 /**
  * A subdomain's landing page. Middleware rewrites `highschool.nanosyllabus.com/`
@@ -41,5 +42,13 @@ export default async function SiteLandingPage({ params }: Props) {
   // in one place and one session serves every subdomain. Locally they stay on
   // this host, which is the dev server anyway.
   const appOrigin = process.env.NODE_ENV === "production" ? siteOrigin(MAIN_SITE_SLUG) : "";
-  return <LandingView content={site.content} appOrigin={appOrigin} />;
+  const exam = site.examConfig.enabled ? await getEnrollmentExam(slug) : null;
+  return (
+    <LandingView
+      content={site.content}
+      appOrigin={appOrigin}
+      examSlug={exam?.slug}
+      examFaculties={exam?.faculties}
+    />
+  );
 }

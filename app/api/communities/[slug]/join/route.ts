@@ -4,6 +4,7 @@ import { communityStorageError, joinCommunity } from "@/lib/data/communities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { ACTIVE_COMMUNITY_COOKIE } from "@/lib/community-switch";
+import { getStudentExamEnrollment } from "@/lib/data/exam-enrollment";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
@@ -18,6 +19,12 @@ export async function POST(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Sign in to join this community." }, { status: 401 });
 
     ({ slug } = await context.params);
+    const locked = await getStudentExamEnrollment(user.id);
+    if (locked && locked.facultySlug !== slug)
+      return NextResponse.json(
+        { error: "Your faculty is locked. Contact an admin to change it." },
+        { status: 409 },
+      );
     const community = await joinCommunity(user.id, slug);
     // The join is committed; a failed revalidation must not report it as failed.
     try {

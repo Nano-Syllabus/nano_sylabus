@@ -521,7 +521,7 @@ function McqReview({ challengeId, mcqs }: { challengeId: string; mcqs: RevisionD
                       className="mt-2 max-w-prose text-sm leading-6 text-text-muted"
                     />
                   ) : null}
-                  {/* The question's short video — the one a wrong pick gets on the
+                  {/* The question's concept script — the hint a wrong pick gets on the
                       paper, cached — on every question whose answer is open. */}
                   {item.correct ? (
                     <div className="mt-3">
@@ -530,7 +530,7 @@ function McqReview({ challengeId, mcqs }: { challengeId: string; mcqs: RevisionD
                         questionId={item.id}
                         selected={item.picked ?? ""}
                         endpoint={`/api/student/challenges/${encodeURIComponent(challengeId)}/choices/explain`}
-                        label={missed ? "Why? Understand it with a video" : "Watch the 30-second explainer"}
+                        label={missed ? "Read a hint to understand it" : "Read the explanation hint"}
                       />
                     </div>
                   ) : null}

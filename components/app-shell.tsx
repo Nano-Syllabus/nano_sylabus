@@ -5,6 +5,7 @@ import { NanoAiFloatingChat } from "@/components/nanoai-floating-chat";
 import { AppSidebar } from "@/components/app-sidebar";
 import type { AppUser } from "@/lib/types";
 import { AppShellContext } from "@/components/app-shell-context";
+import type { StudentExamEnrollment } from "@/lib/data/exam-enrollment";
 
 /**
  * WHY THERE IS NO ROUTE-LOADING OVERLAY HERE ANY MORE
@@ -30,19 +31,20 @@ import { AppShellContext } from "@/components/app-shell-context";
 export function AppShell({
   user,
   children,
+  faculty,
 }: {
   user: AppUser;
   /** Accepted and unused since the top bar went; see the note in the render. */
   title?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
+  faculty?: StudentExamEnrollment | null;
 }) {
   const [open, setOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [sidebarSuppressed, setSidebarSuppressed] = useState(false);
   const [sidebarCollapsedOverride, setSidebarCollapsedOverride] = useState(false);
   const [rightRailWidth, setRightRailWidth] = useState(0);
-
 
   useEffect(() => {
     const onResize = () => {
@@ -85,10 +87,10 @@ export function AppShell({
                   : "w-[min(86vw,320px)] border-border opacity-100 md:w-[250px]"))
           }
         >
-          <AppSidebar 
-            user={user} 
+          <AppSidebar
+            user={user}
             isCollapsed={sidebarCollapsedOverride || isCollapsed}
-            onToggleCollapse={() => setIsCollapsed(!isCollapsed)} 
+            onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
             onCloseMobile={() => setOpen(false)}
           />
         </aside>
@@ -121,13 +123,35 @@ export function AppShell({
                 onClick={() => setOpen(true)}
                 aria-label="Open sidebar"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="4" x2="20" y1="12" y2="12" />
+                  <line x1="4" x2="20" y1="6" y2="6" />
+                  <line x1="4" x2="20" y1="18" y2="18" />
+                </svg>
               </button>
             </div>
           ) : null}
-          <div className="flex-1 overflow-y-auto">
-            {children}
-          </div>
+          {faculty ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-bg-secondary px-5 py-2 text-xs text-text-secondary">
+              <span>{faculty.examName}</span>
+              <span aria-hidden="true">→</span>
+              <span className="font-semibold text-text-primary">{faculty.facultyName}</span>
+              <span className="ml-auto rounded-full border border-border px-2 py-1">
+                Faculty locked
+              </span>
+            </div>
+          ) : null}
+          <div className="flex-1 overflow-y-auto">{children}</div>
         </main>
       </div>
       <NanoAiFloatingChat user={user} />

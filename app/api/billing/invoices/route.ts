@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
+import { examBillingMonths } from "@/lib/exam-enrollment";
 import { z } from "zod";
 import { getActiveManualPaymentConfig } from "@/lib/data/billing";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import {
+  getEnrollmentExam,
+  getExamPlans,
+  getStudentExamEnrollment,
+} from "@/lib/data/exam-enrollment";
 
 export const runtime = "nodejs";
 
@@ -11,11 +17,17 @@ const invoiceSchema = z.object({
   planId: z.string().uuid(),
   paymentMethod: z.literal("bank_transfer").default("bank_transfer"),
   billingMonths: z.union([z.literal(1), z.literal(3)]).default(1),
-  purchaseDetails: z.object({
-    groupName: z.string().trim().min(2).max(120),
-    organizerEmail: z.string().trim().email().max(160),
-    studentEmails: z.array(z.string().trim().email().max(160)).min(1).max(5),
-  }).optional(),
+  examSlug: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9-]{0,39}$/)
+    .optional(),
+  purchaseDetails: z
+    .object({
+      groupName: z.string().trim().min(2).max(120),
+      organizerEmail: z.string().trim().email().max(160),
+      studentEmails: z.array(z.string().trim().email().max(160)).min(1).max(5),
+    })
+    .optional(),
 });
 
 function serializeInvoice(row: Record<string, any>) {
@@ -38,9 +50,7 @@ function formatSimpleInvoiceCode(value: number) {
   return value < 1000 ? String(value).padStart(3, "0") : String(value);
 }
 
-async function nextAvailableSimpleInvoiceCode(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-) {
+async function nextAvailableSimpleInvoiceCode(admin: ReturnType<typeof createSupabaseAdminClient>) {
   const { data, error } = await admin.from("invoices").select("invoice_code");
   if (error) throw error;
 
@@ -93,7 +103,10 @@ export async function POST(request: Request) {
 
     const parsed = invoiceSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: "Choose a valid plan and payment method." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Choose a valid plan and payment method." },
+        { status: 400 },
+      );
     }
     const payload = parsed.data;
     const admin = createSupabaseAdminClient();
@@ -114,19 +127,47 @@ export async function POST(request: Request) {
     }
 
     if (plan.product_type === "group" && !payload.purchaseDetails) {
-      return NextResponse.json({ error: "Add the group name and 1–5 student emails." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Add the group name and 1–5 student emails." },
+        { status: 400 },
+      );
     }
 
     const invoiceAmount = plan.price * payload.billingMonths;
 
-    const { data: existingInvoice, error: existingError } = await admin
+    const enrollment = payload.examSlug ? await getStudentExamEnrollment(user.id) : null;
+    if (payload.examSlug) {
+      const exam = await getEnrollmentExam(payload.examSlug);
+      if (!exam || !(await getExamPlans(exam)).some((candidate) => candidate.id === payload.planId))
+        return NextResponse.json(
+          { error: "Choose an available plan for this exam." },
+          { status: 400 },
+        );
+      if (!examBillingMonths(exam.config).includes(payload.billingMonths))
+        return NextResponse.json(
+          { error: "Choose an available duration for this exam." },
+          { status: 400 },
+        );
+      if (!enrollment || enrollment.examSlug !== payload.examSlug)
+        return NextResponse.json(
+          { error: "Choose and confirm your faculty before payment." },
+          { status: 409 },
+        );
+    }
+
+    let invoiceQuery = admin
       .from("invoices")
       .select("*")
       .eq("user_id", user.id)
       .eq("plan_id", payload.planId)
       .eq("amount", invoiceAmount)
       .in("status", ["pending_payment", "payment_submitted"])
-      .gt("expires_at", new Date().toISOString())
+      .gt("expires_at", new Date().toISOString());
+    if (payload.examSlug)
+      invoiceQuery = invoiceQuery
+        .eq("exam_slug", payload.examSlug)
+        .eq("exam_faculty_id", enrollment!.facultyId);
+    const { data: existingInvoice, error: existingError } = await invoiceQuery
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -146,9 +187,10 @@ export async function POST(request: Request) {
     }
 
     const startsAt = new Date();
-    const endsAt = plan.billing_type === "monthly"
-      ? new Date(startsAt.getTime() + payload.billingMonths * 30 * 24 * 60 * 60 * 1000)
-      : null;
+    const endsAt =
+      plan.billing_type === "monthly"
+        ? new Date(startsAt.getTime() + payload.billingMonths * 30 * 24 * 60 * 60 * 1000)
+        : null;
 
     const { data: invoice, error: invoiceError } = await admin
       .from("invoices")
@@ -160,12 +202,18 @@ export async function POST(request: Request) {
         subtotal: invoiceAmount,
         currency: plan.currency,
         payment_method: payload.paymentMethod,
+        ...(payload.examSlug
+          ? { exam_slug: payload.examSlug, exam_faculty_id: enrollment!.facultyId }
+          : {}),
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         billing_period_start: startsAt.toISOString(),
         billing_period_end: endsAt?.toISOString() ?? null,
         purchase_meta: {
           ...(payload.purchaseDetails ?? {}),
           billingMonths: payload.billingMonths,
+          ...(payload.examSlug
+            ? { examSlug: payload.examSlug, facultyId: enrollment!.facultyId }
+            : {}),
         },
       })
       .select("*")

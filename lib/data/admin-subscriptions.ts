@@ -45,6 +45,8 @@ export interface AdminSubscriptionPlanInput {
   currency: string;
   billingType: BillingType;
   isActive: boolean;
+  /** Left out = features are untouched. */
+  features?: string[];
 }
 
 function normalizePlan(row: SubscriptionPlanRow): SubscriptionPlan {
@@ -127,6 +129,7 @@ export async function updateAdminSubscriptionPlan(planId: string, input: AdminSu
     currency: input.currency.trim().toUpperCase(),
     billing_type: input.billingType,
     is_active: input.isActive,
+    ...(input.features ? { features: input.features } : {}),
   };
 
   const { data, error } = await supabase
@@ -251,4 +254,55 @@ export async function extendAdminSubscription(subscriptionId: string, extraDays:
 
   if (updateError) throw updateError;
   return nextEndsAt;
+}
+
+export interface AdminPaymentConfigInput {
+  displayName: string;
+  bankName: string | null;
+  accountName: string;
+  accountNumber: string | null;
+  qrImageUrl: string;
+  instructions: string | null;
+}
+
+/** The one active bank-transfer QR every checkout shows. */
+export async function getAdminPaymentConfig(): Promise<(AdminPaymentConfigInput & { id: string }) | null> {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("payment_method_configs")
+    .select("*")
+    .eq("payment_method", "bank_transfer")
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error) throw error;
+  return data
+    ? {
+        id: data.id,
+        displayName: data.display_name,
+        bankName: data.bank_name ?? null,
+        accountName: data.account_name,
+        accountNumber: data.account_number ?? null,
+        qrImageUrl: data.qr_image_url,
+        instructions: data.instructions ?? null,
+      }
+    : null;
+}
+
+export async function saveAdminPaymentConfig(input: AdminPaymentConfigInput) {
+  const supabase = createSupabaseAdminClient();
+  const row = {
+    display_name: input.displayName,
+    bank_name: input.bankName,
+    account_name: input.accountName,
+    account_number: input.accountNumber,
+    qr_image_url: input.qrImageUrl,
+    instructions: input.instructions,
+  };
+  const existing = await getAdminPaymentConfig();
+  const { error } = existing
+    ? await supabase.from("payment_method_configs").update(row).eq("id", existing.id)
+    : await supabase
+        .from("payment_method_configs")
+        .insert({ ...row, payment_method: "bank_transfer", is_active: true });
+  if (error) throw error;
+  return getAdminPaymentConfig();
 }

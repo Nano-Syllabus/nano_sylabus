@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getUser: vi.fn(), listJoined: vi.fn() }));
+const mocks = vi.hoisted(() => ({ enrollment: vi.fn(), getUser: vi.fn(), listJoined: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth: { getUser: mocks.getUser } }),
 }));
@@ -8,6 +8,8 @@ vi.mock("@/lib/data/communities", () => ({
   listJoinedCommunities: mocks.listJoined,
   communityStorageError: () => ({ status: 500, message: "Could not load communities." }),
 }));
+vi.mock("@/lib/data/exam-enrollment", () => ({ getStudentExamEnrollment: mocks.enrollment }));
+
 import { POST } from "@/app/api/student/active-community/route";
 
 const owned = {
@@ -34,6 +36,7 @@ function request(slug: string, origin = "http://localhost") {
 describe("POST active community", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.enrollment.mockResolvedValue(null);
     mocks.getUser.mockResolvedValue({ data: { user: { id: "owner" } } });
     mocks.listJoined.mockResolvedValue([owned, joined]);
   });
@@ -47,6 +50,12 @@ describe("POST active community", () => {
   });
   it("also allows switching back to the owner's own community", async () => {
     expect((await POST(request("mine"))).status).toBe(200);
+  });
+  it("rejects switching after an exam faculty is locked", async () => {
+    mocks.enrollment.mockResolvedValue({ facultyId: "locked", facultySlug: "bct-license" });
+    const response = await POST(request("mine"));
+    expect(response.status).toBe(403);
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
   it("rejects anonymous users", async () => {
     mocks.getUser.mockResolvedValue({ data: { user: null } });

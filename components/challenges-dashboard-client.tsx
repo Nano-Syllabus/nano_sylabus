@@ -1200,7 +1200,7 @@ function ChallengeDetail({
                 ) : null}
                 {/* No fundamentals check here (removed, user 2026-09-24): step 1
                     is the reading and the past questions. The component stays
-                    for its video explainer, which the MCQ paper uses. */}
+                    for its text hint, which the MCQ paper uses. */}
                 {learnQuestions.length ? (
                   // The same ruled sheets as Revision's worked examples, and the
                   // same face picker: a worked answer looks the same wherever it

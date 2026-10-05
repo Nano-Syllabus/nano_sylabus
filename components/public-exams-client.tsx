@@ -61,7 +61,13 @@ function CourseCard({ course }: { course: TeacherCourse }) {
   );
 }
 
-export function PublicExamsClient({ courses }: { courses: TeacherCourse[] }) {
+export function PublicExamsClient({
+  courses,
+  exams = [],
+}: {
+  courses: TeacherCourse[];
+  exams?: Array<{ slug: string; name: string; faculties: Array<{ id: string; name: string }> }>;
+}) {
   const categories = useMemo(
     () => ["All", ...Array.from(new Set(courses.map((course) => course.category)))],
     [courses],
@@ -106,11 +112,10 @@ export function PublicExamsClient({ courses }: { courses: TeacherCourse[] }) {
 
           <div className="hero-glow glass-card relative mt-8 overflow-hidden rounded-3xl border border-border px-6 py-14 text-center">
             <h1 className="font-display text-3xl font-semibold leading-tight sm:text-5xl">
-              Find your course
+              {exams.length ? "Find your exam" : "Find your course"}
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-              Browse {courses.length} teacher-published course{courses.length === 1 ? "" : "s"}.
-              Open one to inspect its indexed subjects, study plan, and access before enrolling.
+              {exams.length ? `Explore ${exams.length} exam${exams.length === 1 ? "" : "s"}, compare supported faculties and find the right preparation plan.` : <>Browse {courses.length} teacher-published course{courses.length === 1 ? "" : "s"}. Open one to inspect its indexed subjects, study plan, and access before enrolling.</>}
             </p>
           </div>
 
@@ -119,9 +124,9 @@ export function PublicExamsClient({ courses }: { courses: TeacherCourse[] }) {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search by course, authority, or category..."
+              placeholder={exams.length ? "Search by exam, faculty or course..." : "Search by course, authority, or category..."}
               className="h-12 w-full rounded-xl border border-border bg-surface/70 pl-10 pr-3 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Search courses"
+              aria-label={exams.length ? "Search exams and courses" : "Search courses"}
             />
           </div>
 
@@ -142,6 +147,51 @@ export function PublicExamsClient({ courses }: { courses: TeacherCourse[] }) {
             ))}
           </div>
 
+          {exams.length ? (
+            <section aria-label="Exams and supported faculties" className="mt-8">
+              <h2 className="text-lg font-semibold">Exams & supported faculties</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Browse supported faculties and subjects before signing up.
+              </p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {exams
+                  .filter(
+                    (exam) =>
+                      !query.trim() ||
+                      `${exam.name} ${exam.faculties.map((f) => f.name).join(" ")}`
+                        .toLowerCase()
+                        .includes(query.trim().toLowerCase()),
+                  )
+                  .map((exam) => (
+                    <Link
+                      key={exam.slug}
+                      href={exam.slug === "main" ? "/" : `/sites/${exam.slug}`}
+                      className="glass-card group flex flex-col rounded-2xl border border-border p-5 transition hover:border-primary/60"
+                    >
+                      <span className="text-xs uppercase tracking-widest text-primary">
+                        Exam · {exam.faculties.length} faculties
+                      </span>
+                      <h3 className="mt-4 text-lg font-semibold">{exam.name}</h3>
+                      <div className="my-5 flex flex-wrap gap-2">
+                        {exam.faculties.map((f) => (
+                          <span
+                            key={f.id}
+                            className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                          >
+                            {f.name}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="mt-auto flex items-center justify-between text-sm font-medium">
+                        Explore exam <ArrowUpRight size={16} />
+                      </span>
+                    </Link>
+                  ))}
+              </div>
+            </section>
+          ) : null}
+
+          {courses.length || !exams.length ? <>
           <p className="mt-8 text-xs uppercase text-muted-foreground">
             {results.length} {results.length === 1 ? "course" : "courses"}
             {results.length > PER_PAGE ? ` · page ${currentPage} of ${totalPages}` : ""}
@@ -176,6 +226,7 @@ export function PublicExamsClient({ courses }: { courses: TeacherCourse[] }) {
               ) : null}
             </div>
           )}
+          </> : null}
 
 
         </div>

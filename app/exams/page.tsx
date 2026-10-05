@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { listEnrollmentExams } from "@/lib/data/exam-enrollment";
 import { PublicExamsClient } from "@/components/public-exams-client";
 import { buildCanonicalUrl } from "@/lib/site";
 import { listPublishedCourses } from "@/lib/student-courses";
@@ -23,6 +24,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function ExamsPage() {
-  const courses = await listPublishedCourses();
-  return <PublicExamsClient courses={courses} />;
+  const [courses, exams] = await Promise.all([listPublishedCourses(), listEnrollmentExams()]);
+  return <PublicExamsClient courses={courses} exams={exams} />;
 }

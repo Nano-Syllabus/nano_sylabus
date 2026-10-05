@@ -187,8 +187,8 @@ export async function grantStarterCredits(userId: string) {
   return latest?.balance_after ?? STARTER_CREDITS;
 }
 
-export async function listSubscriptionPlans() {
-  const supabase = await createSupabaseServerClient();
+export async function listSubscriptionPlans(client?: ReturnType<typeof createSupabaseAdminClient>) {
+  const supabase = client ?? (await createSupabaseServerClient());
   const { data, error } = await supabase
     .from("subscription_plans")
     .select("*")
@@ -253,6 +253,23 @@ export async function hasUnlimitedSubscription(userId: string) {
     .eq("status", "active")
     .eq("subscription_plans.is_unlimited", true)
     .or(`ends_at.is.null,ends_at.gt.${now}`)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/** Any current paid plan, whatever its tier. Free students have no active subscription row. */
+export async function hasActiveSubscription(userId: string) {
+  if (await isPlatformAdmin(userId)) return true;
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("user_subscriptions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`)
     .limit(1)
     .maybeSingle();
 
@@ -396,7 +413,9 @@ export async function listAdminPaymentSubmissions() {
       studentEmail:
         (typeof submission.proof_meta?.submitterEmail === "string"
           ? submission.proof_meta.submitterEmail
-          : "") || emailsByUserId.get(submission.user_id) || "",
+          : "") ||
+        emailsByUserId.get(submission.user_id) ||
+        "",
       planName: plan.name,
       planCredits: plan.credits,
       amount: invoice.amount,
@@ -474,7 +493,9 @@ export async function getAdminPaymentSubmissionDetail(submissionId: string) {
     studentName: profileRow?.full_name || "Student",
     studentEmail:
       (typeof proofMeta.submitterEmail === "string" ? proofMeta.submitterEmail : "") ||
-      (await admin.auth.admin.getUserById(submissionRow.user_id)).data.user?.email?.trim().toLowerCase() ||
+      (await admin.auth.admin.getUserById(submissionRow.user_id)).data.user?.email
+        ?.trim()
+        .toLowerCase() ||
       "",
     planName: plan.name,
     planCredits: plan.credits,

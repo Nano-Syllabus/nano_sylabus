@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   scope: vi.fn(),
   mcq: vi.fn(),
-  animation: vi.fn(),
+  ask: vi.fn(),
 }));
 vi.mock("@/lib/data/student-challenges", () => ({ challengeUpstreamScope: mocks.scope }));
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherChallengeMcq: mocks.mcq,
-  requestTeacherExplainerAnimation: mocks.animation,
+  askTeacherSubject: mocks.ask,
 }));
 
 import {
@@ -21,7 +21,7 @@ import {
 /**
  * The fundamentals check in step one: five MCQs on the micro-topic. The key is
  * held on the server and revealed only once an answer is in; a wrong answer is
- * told WHICH option was right; the why is a video made for that one answer.
+ * told WHICH option was right; the why is a concept script requested for that question.
  */
 
 const QUESTION = {
@@ -51,14 +51,14 @@ describe("the fundamentals check", () => {
       topicTitle: "Mesh Analysis",
     });
     mocks.mcq.mockResolvedValue({ questions: [QUESTION], served_from: "cache" });
-    mocks.animation.mockResolvedValue({
-      spec_hash: "ab".repeat(16), concept: "", status: "queued", derivatives: {}, error: "", updated_at: "",
-    });
+    mocks.ask.mockResolvedValue({ answer: "Remember that a mesh is a closed loop." });
   });
 
   it("hands the student the questions without the answer key", async () => {
     const questions = await getChallengeFundamentals("student", "challenge-1");
-    expect(questions).toEqual([{ id: QUESTION.id, text: QUESTION.text, options: QUESTION.options }]);
+    expect(questions).toEqual([
+      { id: QUESTION.id, text: QUESTION.text, options: QUESTION.options },
+    ]);
     expect(JSON.stringify(questions)).not.toContain(QUESTION.explanation);
     expect(questions?.[0]).not.toHaveProperty("correct");
     expect(mocks.mcq).toHaveBeenCalledWith(`key-${scopeCount}`, {
@@ -85,17 +85,25 @@ describe("the fundamentals check", () => {
     // A server that holds nothing (restarted, another instance) asks upstream,
     // where the notes were re-indexed after the student loaded the page: the
     // question they answered no longer exists. Asked twice, never guessed at.
-    mocks.mcq.mockResolvedValue({ questions: [{ ...QUESTION, id: "mq_new" }], served_from: "lane_notes_llm" });
-    await expect(checkChallengeFundamental("student", "challenge-1", QUESTION.id, "B")).rejects.toBeInstanceOf(
-      FundamentalsChangedError,
-    );
+    mocks.mcq.mockResolvedValue({
+      questions: [{ ...QUESTION, id: "mq_new" }],
+      served_from: "lane_notes_llm",
+    });
+    await expect(
+      checkChallengeFundamental("student", "challenge-1", QUESTION.id, "B"),
+    ).rejects.toBeInstanceOf(FundamentalsChangedError);
     expect(mocks.mcq).toHaveBeenCalledTimes(2);
   });
 
   it("answers from the set the student was shown while it is held", async () => {
     await getChallengeFundamentals("student", "challenge-1");
-    mocks.mcq.mockResolvedValue({ questions: [{ ...QUESTION, id: "mq_new" }], served_from: "lane_notes_llm" });
-    expect((await checkChallengeFundamental("student", "challenge-1", QUESTION.id, "B"))?.isCorrect).toBe(true);
+    mocks.mcq.mockResolvedValue({
+      questions: [{ ...QUESTION, id: "mq_new" }],
+      served_from: "lane_notes_llm",
+    });
+    expect(
+      (await checkChallengeFundamental("student", "challenge-1", QUESTION.id, "B"))?.isCorrect,
+    ).toBe(true);
   });
 
   it("is not this student's challenge: nothing, and no upstream call", async () => {
@@ -104,24 +112,25 @@ describe("the fundamentals check", () => {
     expect(mocks.mcq).not.toHaveBeenCalled();
   });
 
-  it("asks, urgently, for the question's shared video — the same whichever wrong option was picked", async () => {
+  it("requests the concept narration directly, without a video job", async () => {
     const explainer = await explainChallengeFundamental("student", "challenge-1", QUESTION.id, "A");
-    expect(explainer?.specHash).toBe("ab".repeat(16));
-    const [, request] = mocks.animation.mock.calls[0];
-    expect(request.fresh).toBeUndefined();
-    expect(request.priority).toBe("urgent");
-    expect(request.seconds).toBe(30);
-    expect(request.concept.length).toBeLessThanOrEqual(200);
-    expect(request.notes.length).toBeLessThanOrEqual(2000);
-    expect(request.notes).toContain("never show or say it): B) Kirchhoff's voltage law");
-    expect(request.notes).not.toContain("They chose");
-    expect(request.subject).toBe("Electric Circuit Theory");
+    expect(explainer).toEqual({ script: "Remember that a mesh is a closed loop." });
+    const [key, subject, query, topK, prompt] = mocks.ask.mock.calls[0];
+    expect(key).toBe(`key-${scopeCount}`);
+    expect(subject).toBe("Electric Circuit Theory");
+    expect(topK).toBe(5);
+    expect(query).toContain(QUESTION.explanation);
+    expect(query).not.toContain("They chose");
+    expect(prompt).toContain("spoken script");
+    expect(prompt).toContain("Do not solve the question");
+    await explainChallengeFundamental("student", "challenge-1", QUESTION.id, "C");
+    expect(mocks.ask).toHaveBeenCalledTimes(1);
   });
 
-  it("makes no video for a correct answer — a render costs money", async () => {
-    await expect(explainChallengeFundamental("student", "challenge-1", QUESTION.id, "B")).rejects.toBeInstanceOf(
-      RangeError,
-    );
-    expect(mocks.animation).not.toHaveBeenCalled();
+  it("does not request a script for a correct answer", async () => {
+    await expect(
+      explainChallengeFundamental("student", "challenge-1", QUESTION.id, "B"),
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(mocks.ask).not.toHaveBeenCalled();
   });
 });

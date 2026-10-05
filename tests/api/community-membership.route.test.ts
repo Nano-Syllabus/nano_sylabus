@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ createSupabaseServerClient: vi.fn(), joinCommunity: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  enrollment: vi.fn(),
+  createSupabaseServerClient: vi.fn(),
+  joinCommunity: vi.fn(),
+}));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: mocks.createSupabaseServerClient,
@@ -10,11 +14,14 @@ vi.mock("@/lib/data/communities", async (importOriginal) => {
   return { ...actual, joinCommunity: mocks.joinCommunity };
 });
 
+vi.mock("@/lib/data/exam-enrollment", () => ({ getStudentExamEnrollment: mocks.enrollment }));
+
 import { POST } from "@/app/api/communities/[slug]/join/route";
 
 describe("POST /api/communities/[slug]/join", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.enrollment.mockResolvedValue(null);
     mocks.createSupabaseServerClient.mockResolvedValue({
       auth: { getUser: vi.fn(async () => ({ data: { user: { id: "aarav" } } })) },
     });
@@ -31,6 +38,15 @@ describe("POST /api/communities/[slug]/join", () => {
     });
     expect(response.status).toBe(200);
     expect(mocks.joinCommunity).toHaveBeenCalledWith("aarav", "sec-bei");
+  });
+
+  it("cannot join a different faculty after the exam choice is locked", async () => {
+    mocks.enrollment.mockResolvedValue({ facultySlug: "bct-license" });
+    const response = await POST(new Request("http://localhost", { method: "POST" }), {
+      params: Promise.resolve({ slug: "sec-bei" }),
+    });
+    expect(response.status).toBe(409);
+    expect(mocks.joinCommunity).not.toHaveBeenCalled();
   });
 
   it("does not call the join service without authentication", async () => {

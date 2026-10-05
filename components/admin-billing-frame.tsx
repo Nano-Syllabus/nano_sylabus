@@ -1,7 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowLeft, CreditCard, Globe, LayoutDashboard, Trophy, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  CreditCard,
+  Globe,
+  LayoutDashboard,
+  Trophy,
+  Users,
+} from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 type AdminSection = "overview" | "users" | "billing" | "cash-prize" | "sites";
@@ -14,7 +21,7 @@ const sections: Array<{ id: AdminSection; href: string; label: string; icon: typ
   { id: "sites", href: "/admin/sites", label: "Websites", icon: Globe },
 ];
 
-/** The one frame every admin page sits in: five places, nothing else. */
+/** Shared navigation for the admin workspace. */
 export function AdminBillingFrame({
   children,
   active = "billing",
@@ -44,7 +51,13 @@ export function AdminBillingFrame({
       </a>
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-56 flex-col border-r border-border bg-card lg:flex">
         <Link href="/admin" className="flex h-16 items-center gap-2.5 px-5">
-          <Image src="/nanologo.png" alt="" width={28} height={28} className="h-7 w-7 object-contain" />
+          <Image
+            src="/nanologo.png"
+            alt=""
+            width={28}
+            height={28}
+            className="h-7 w-7 object-contain"
+          />
           <span className="font-display text-base font-semibold tracking-tight">Admin</span>
         </Link>
         <nav aria-label="Admin navigation" className="mt-2 space-y-1 px-3">
@@ -76,7 +89,13 @@ export function AdminBillingFrame({
         <header className="border-b border-border bg-card lg:hidden">
           <div className="flex h-14 items-center justify-between gap-3 px-4">
             <Link href="/admin" className="flex items-center gap-2">
-              <Image src="/nanologo.png" alt="" width={24} height={24} className="h-6 w-6 object-contain" />
+              <Image
+                src="/nanologo.png"
+                alt=""
+                width={24}
+                height={24}
+                className="h-6 w-6 object-contain"
+              />
               <span className="font-display text-sm font-semibold">Admin</span>
             </Link>
             <div className="flex items-center gap-1">
@@ -90,7 +109,10 @@ export function AdminBillingFrame({
               <ThemeToggle className="rounded-md bg-card" />
             </div>
           </div>
-          <nav aria-label="Mobile admin navigation" className="flex gap-1 overflow-x-auto px-3 pb-2">
+          <nav
+            aria-label="Mobile admin navigation"
+            className="flex gap-1 overflow-x-auto px-3 pb-2"
+          >
             {sections.map(({ id, href, label, icon: Icon }) => (
               <Link
                 key={id}

@@ -10,20 +10,16 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
   questionId: z.string().trim().min(1).max(64),
-  /** "hint": the idea only, open before answering; otherwise the solution video. */
+  /** "hint": the idea only, open before answering; otherwise the explanation script. */
   mode: z.enum(["solution", "hint"]).optional(),
 });
 
-/**
- * A question's video is one render shared by everyone and cached, and a paper can
- * only ever name its own questions — so this bounds clicking, not spending. A
- * student going down Revision watching one after another stays well inside it.
- */
+/** Bound repeated hint requests per student. */
 const WINDOW_MS = 60_000;
 const PER_WINDOW = 12;
 const recent = new Map<string, number[]>();
 
-/** The short video for one MCQ whose answer is open: on the paper, or in Revision. */
+/** The short script for one MCQ whose answer is open: on the paper, or in Revision. */
 async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ challengeId: string }> },
@@ -41,8 +37,11 @@ async function handlePOST(
     const asked = (recent.get(user.id) ?? []).filter((at) => now - at < WINDOW_MS);
     if (asked.length >= PER_WINDOW) {
       return NextResponse.json(
-        { error: "That's a lot of videos at once. Give it a few seconds." },
-        { status: 429, headers: { "Retry-After": String(Math.ceil((WINDOW_MS - (now - asked[0])) / 1000)) } },
+        { error: "That's a lot of hints at once. Give it a few seconds." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil((WINDOW_MS - (now - asked[0])) / 1000)) },
+        },
       );
     }
     recent.delete(user.id);
@@ -61,10 +60,11 @@ async function handlePOST(
   } catch (error) {
     const denied = challengeAccessResponse(error);
     if (denied) return denied;
-    if (error instanceof RangeError) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error instanceof RangeError)
+      return NextResponse.json({ error: error.message }, { status: 400 });
     console.warn("[challenge] exam MCQ explainer failed", error);
     return NextResponse.json(
-      { error: "The video explainer couldn't be started right now. Try again shortly." },
+      { error: "The hint couldn't be loaded right now. Try again shortly." },
       { status: 502 },
     );
   }

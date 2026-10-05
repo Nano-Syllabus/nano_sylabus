@@ -24,7 +24,7 @@ describe("MCQ result flow", () => {
   });
 
   it("offers a compact hint beside a wrong question in live and reviewed results", () => {
-    expect(fundamentals).toContain('label = "Memorize trick"');
+    expect(fundamentals).toContain('label = "Show hint"');
     expect(fundamentals).toContain("<Lightbulb");
     // Hint before answering, solution after a miss (live), solution in results.
     expect(page.match(/besideQuestion/g)).toHaveLength(3);
