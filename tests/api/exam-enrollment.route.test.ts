@@ -85,6 +85,18 @@ describe("public preparation intent API", () => {
     answers: { goal: "Soon" },
   };
   const context = { params: Promise.resolve({ slug: "engineering-license" }) };
+  it("prepares checkout without answers when onboarding questions are disabled", async () => {
+    mocks.exam.mockResolvedValue({
+      slug: "engineering-license",
+      config: { askQuestions: false, questions: [{ id: "goal", prompt: "When?", options: ["Soon", "Later"] }] },
+    });
+    const response = await saveIntent(
+      request("/api/exam-enrollment/engineering-license/intent", { ...body, answers: {} }),
+      context,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+  });
   it("keeps exam, plan and preparation through sign-in in an HTTP-only cookie", async () => {
     const response = await saveIntent(
       request("/api/exam-enrollment/engineering-license/intent", body),

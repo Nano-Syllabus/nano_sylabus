@@ -167,7 +167,8 @@ describe("exam checkout invoices", () => {
     mocks.createSupabaseAdminClient.mockReturnValue({ from });
     mocks.exam.mockResolvedValue({
       slug: "engineering-license",
-      config: { billingMonths: [1, 3] },
+      config: { billingMonths: [1, 3], facultyPrices: {} },
+      faculties: [{ id: "locked-faculty", slug: "bct-license" }],
     });
     mocks.plans.mockResolvedValue([{ id: plusId }]);
     mocks.enrollment.mockResolvedValue(enrollment);
@@ -180,7 +181,11 @@ describe("exam checkout invoices", () => {
   });
   it("rejects a disabled exam duration without creating an invoice", async () => {
     const { from } = setup();
-    mocks.exam.mockResolvedValue({ slug: "engineering-license", config: { billingMonths: [1] } });
+    mocks.exam.mockResolvedValue({
+      slug: "engineering-license",
+      config: { billingMonths: [1], facultyPrices: {} },
+      faculties: [],
+    });
     expect((await POST(request())).status).toBe(400);
     expect(from).not.toHaveBeenCalledWith("invoices");
   });
@@ -207,5 +212,15 @@ describe("exam checkout invoices", () => {
         },
       }),
     );
+  });
+  it("charges the locked faculty's own monthly price", async () => {
+    const { created } = setup();
+    mocks.exam.mockResolvedValue({
+      slug: "engineering-license",
+      config: { billingMonths: [1, 3], facultyPrices: { "bct-license": { [plusId]: 300 } } },
+      faculties: [{ id: "locked-faculty", slug: "bct-license" }],
+    });
+    expect((await POST(request())).status).toBe(200);
+    expect(created.insert).toHaveBeenCalledWith(expect.objectContaining({ amount: 900 }));
   });
 });

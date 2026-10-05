@@ -40,7 +40,8 @@
     ".next-vercel/types/**/*.ts",
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
-    "next-env.d.ts"
+    "next-env.d.ts",
+    ".next-live-check/types/**/*.ts"
   ],
   "exclude": [
     "exam-prep-hub",

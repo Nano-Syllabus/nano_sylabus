@@ -9,7 +9,8 @@ import {
   listEnrollmentExams,
 } from "@/lib/data/exam-enrollment";
 import { FacultySelectionGate } from "@/components/faculty-selection-dialog";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { siteSlugFromHost } from "@/lib/landing-site-host";
 import { redirect } from "next/navigation";
 import { hasActiveSubscription } from "@/lib/data/billing";
 import { EXAM_INTENT_COOKIE, readExamIntent } from "@/lib/exam-enrollment";
@@ -19,13 +20,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const needsFaculty =
     user.role === "student" && !(DEV_AUTH_BYPASS && user.id === DEV_BYPASS_USER_ID);
   const enrollment = needsFaculty ? await getStudentExamEnrollment(user.id) : null;
-  const exams = needsFaculty && !enrollment ? await listEnrollmentExams() : [];
+  // On an exam's subdomain the host itself says which exam the student is here for.
+  const hostExamSlug = siteSlugFromHost((await headers()).get("host"));
+  const allExams = needsFaculty && !enrollment ? await listEnrollmentExams() : [];
+  const hostExam = allExams.find((exam) => exam.slug === hostExamSlug);
+  const exams = hostExam ? [hostExam] : allExams;
   const intent = readExamIntent((await cookies()).get(EXAM_INTENT_COOKIE)?.value);
 
   // Students who came through an exam's checkout pay before they study. Their
   // faculty is chosen on the payment page, so the in-app modal never has to
   // block an unpaid student; payment submission activates the plan at once.
-  const examSlug = enrollment?.examSlug ?? intent?.examSlug;
+  const examSlug = enrollment?.examSlug ?? intent?.examSlug ?? hostExamSlug ?? undefined;
   // The exam must still be live, or the payment page would bounce back here.
   if (
     needsFaculty &&
@@ -39,7 +44,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <AppShell user={user} title="Dashboard" faculty={enrollment}>
       <FacultySelectionGate
         exams={exams}
-        initialExamSlug={intent?.examSlug}
+        initialExamSlug={hostExam?.slug ?? intent?.examSlug}
         initialAnswers={intent?.answers}
       />
       {/* Clears the query cache if a different account signs in on this

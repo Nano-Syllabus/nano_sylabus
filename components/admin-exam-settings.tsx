@@ -60,6 +60,27 @@ export function AdminExamSettings({
     return next;
   }
 
+  const pricedPlans = plans.filter(
+    (p) =>
+      p.productType === "individual" &&
+      p.billingType === "monthly" &&
+      p.price > 0 &&
+      (!config.planIds.length || config.planIds.includes(p.id)),
+  );
+
+  function setFacultyPrice(facultySlug: string, planId: string, raw: string) {
+    setMessage("");
+    const price = Number(raw);
+    setConfig((current) => {
+      const forFaculty = { ...(current.facultyPrices[facultySlug] ?? {}) };
+      if (Number.isInteger(price) && price > 0) forFaculty[planId] = price;
+      else delete forFaculty[planId];
+      const facultyPrices = { ...current.facultyPrices, [facultySlug]: forFaculty };
+      if (!Object.keys(forFaculty).length) delete facultyPrices[facultySlug];
+      return { ...current, facultyPrices };
+    });
+  }
+
   function toggleFaculty(value: string) {
     setMessage("");
     setConfig((current) => ({
@@ -270,60 +291,86 @@ export function AdminExamSettings({
             </details>
             <div className="mt-3 space-y-2">
               {selected.map((c, index) => (
-                <div
-                  key={c.slug}
-                  className="flex items-center gap-2 rounded-lg bg-blue-600/5 p-2 text-xs"
-                >
-                  <Check size={12} className="shrink-0 text-blue-600" />
-                  <span className="min-w-0 flex-1 font-medium">
-                    {index + 1}. {c.name}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Move ${c.name} up`}
-                    disabled={config.facultySlugs.indexOf(c.slug) === 0}
-                    onClick={() =>
-                      setConfig({
-                        ...config,
-                        facultySlugs: move(
-                          config.facultySlugs,
-                          config.facultySlugs.indexOf(c.slug),
-                          -1,
-                        ),
-                      })
-                    }
-                    className="p-2 disabled:opacity-30"
-                  >
-                    <ArrowUp size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Move ${c.name} down`}
-                    disabled={
-                      config.facultySlugs.indexOf(c.slug) === config.facultySlugs.length - 1
-                    }
-                    onClick={() =>
-                      setConfig({
-                        ...config,
-                        facultySlugs: move(
-                          config.facultySlugs,
-                          config.facultySlugs.indexOf(c.slug),
-                          1,
-                        ),
-                      })
-                    }
-                    className="p-2 disabled:opacity-30"
-                  >
-                    <ArrowDown size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${c.name} from exam`}
-                    onClick={() => toggleFaculty(c.slug)}
-                    className="p-2"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                <div key={c.slug} className="rounded-lg bg-blue-600/5">
+                  <div className="flex items-center gap-2 p-2 text-xs">
+                    <Check size={12} className="shrink-0 text-blue-600" />
+                    <span className="min-w-0 flex-1 font-medium">
+                      {index + 1}. {c.name}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Move ${c.name} up`}
+                      disabled={config.facultySlugs.indexOf(c.slug) === 0}
+                      onClick={() =>
+                        setConfig({
+                          ...config,
+                          facultySlugs: move(
+                            config.facultySlugs,
+                            config.facultySlugs.indexOf(c.slug),
+                            -1,
+                          ),
+                        })
+                      }
+                      className="p-2 disabled:opacity-30"
+                    >
+                      <ArrowUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${c.name} down`}
+                      disabled={
+                        config.facultySlugs.indexOf(c.slug) === config.facultySlugs.length - 1
+                      }
+                      onClick={() =>
+                        setConfig({
+                          ...config,
+                          facultySlugs: move(
+                            config.facultySlugs,
+                            config.facultySlugs.indexOf(c.slug),
+                            1,
+                          ),
+                        })
+                      }
+                      className="p-2 disabled:opacity-30"
+                    >
+                      <ArrowDown size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${c.name} from exam`}
+                      onClick={() => toggleFaculty(c.slug)}
+                      className="p-2"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  <details className="border-t border-blue-600/10 px-3 py-2 text-xs">
+                    <summary className="cursor-pointer text-muted-foreground">
+                      {Object.keys(config.facultyPrices[c.slug] ?? {}).length
+                        ? "Custom price set for this faculty"
+                        : "Use each plan’s standard price"}
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      {pricedPlans.map((p) => (
+                        <label key={p.id} className="flex items-center gap-2">
+                          <span className="min-w-0 flex-1">{p.name}</span>
+                          <span className="text-muted-foreground">{p.currency}</span>
+                          <input
+                            inputMode="numeric"
+                            aria-label={`${c.name} ${p.name} monthly price`}
+                            placeholder={String(p.price)}
+                            value={config.facultyPrices[c.slug]?.[p.id] ?? ""}
+                            onChange={(e) => setFacultyPrice(c.slug, p.id, e.target.value)}
+                            className="min-h-9 w-24 rounded-lg border border-border bg-background px-2 text-right"
+                          />
+                        </label>
+                      ))}
+                      <p className="text-muted-foreground">
+                        Per month. Leave blank for the standard price. Students see this after they
+                        sign in and their faculty is confirmed.
+                      </p>
+                    </div>
+                  </details>
                 </div>
               ))}
             </div>
@@ -417,12 +464,35 @@ export function AdminExamSettings({
         </div>
         <div className="space-y-4">
           <div>
-            <h3 className="text-sm font-semibold">Onboarding questions</h3>
+            <h3 className="text-sm font-semibold">Student journey</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Asked before faculties and payment. Put one answer option on each line.
+              Landing page → {config.askQuestions ? "onboarding questions → " : ""}supported
+              faculties → payment plans → sign in → payment QR → app
             </p>
           </div>
-          {config.questions.map((q, index) => (
+          <label className="flex items-start gap-3 rounded-xl bg-muted/50 p-3 text-sm">
+            <input
+              type="checkbox"
+              checked={config.askQuestions}
+              onChange={(e) => {
+                setMessage("");
+                setConfig({ ...config, askQuestions: e.target.checked });
+              }}
+              className="mt-0.5 size-4 accent-blue-600"
+            />
+            <span>
+              <span className="block font-medium">Ask onboarding questions first</span>
+              <span className="text-xs text-muted-foreground">
+                Off: this website’s buttons open the faculty list straight away.
+              </span>
+            </span>
+          </label>
+          {config.askQuestions ? (
+            <p className="text-xs text-muted-foreground">
+              Questions are asked before faculties and payment. Put one answer option on each line.
+            </p>
+          ) : null}
+          {(config.askQuestions ? config.questions : []).map((q, index) => (
             <fieldset key={q.id} className="space-y-2 rounded-xl border border-border p-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-muted-foreground">
@@ -497,23 +567,25 @@ export function AdminExamSettings({
               />
             </fieldset>
           ))}
-          <button
-            type="button"
-            disabled={config.questions.length >= 8}
-            onClick={() =>
-              setConfig({
-                ...config,
-                questions: [
-                  ...config.questions,
-                  { id: `question_${Date.now()}`, prompt: "", options: ["", ""] },
-                ],
-              })
-            }
-            className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 disabled:opacity-40"
-          >
-            <Plus size={14} />
-            Add question
-          </button>
+          {config.askQuestions ? (
+            <button
+              type="button"
+              disabled={config.questions.length >= 8}
+              onClick={() =>
+                setConfig({
+                  ...config,
+                  questions: [
+                    ...config.questions,
+                    { id: `question_${Date.now()}`, prompt: "", options: ["", ""] },
+                  ],
+                })
+              }
+              className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 disabled:opacity-40"
+            >
+              <Plus size={14} />
+              Add question
+            </button>
+          ) : null}
         </div>
         <details className="rounded-xl border border-border lg:col-span-2">
           <summary className="cursor-pointer p-4 text-sm font-semibold">

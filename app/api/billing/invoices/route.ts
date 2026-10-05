@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { examBillingMonths } from "@/lib/exam-enrollment";
+import { examBillingMonths, examPlanMonthlyPrice } from "@/lib/exam-enrollment";
 import { z } from "zod";
 import { getActiveManualPaymentConfig } from "@/lib/data/billing";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const invoiceAmount = plan.price * payload.billingMonths;
+    let monthlyPrice = plan.price;
 
     const enrollment = payload.examSlug ? await getStudentExamEnrollment(user.id) : null;
     if (payload.examSlug) {
@@ -153,7 +153,14 @@ export async function POST(request: Request) {
           { error: "Choose and confirm your faculty before payment." },
           { status: 409 },
         );
+      // The student's locked faculty decides the price, not anything the client sends.
+      monthlyPrice = examPlanMonthlyPrice(
+        exam.config,
+        exam.faculties.find((faculty) => faculty.id === enrollment.facultyId)?.slug,
+        plan,
+      );
     }
+    const invoiceAmount = monthlyPrice * payload.billingMonths;
 
     let invoiceQuery = admin
       .from("invoices")

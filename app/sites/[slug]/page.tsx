@@ -38,11 +38,12 @@ export default async function SiteLandingPage({ params }: Props) {
   const site = slug === MAIN_SITE_SLUG ? null : await getPublishedLandingSite(slug);
   // Unknown or hidden subdomains land on the main site instead of a 404.
   if (!site) redirect(siteOrigin(MAIN_SITE_SLUG));
-  // Buttons lead to the main domain, so signing up and the app itself happen
-  // in one place and one session serves every subdomain. Locally they stay on
-  // this host, which is the dev server anyway.
-  const appOrigin = process.env.NODE_ENV === "production" ? siteOrigin(MAIN_SITE_SLUG) : "";
   const exam = site.examConfig.enabled ? await getEnrollmentExam(slug) : null;
+  // An exam site runs its whole journey (questions, faculties, plans, sign-in,
+  // payment QR, app) on its own subdomain, as its admin configured it. Other
+  // sites send buttons to the main domain, so one session serves them all.
+  // Locally they stay on this host, which is the dev server anyway.
+  const appOrigin = exam || process.env.NODE_ENV !== "production" ? "" : siteOrigin(MAIN_SITE_SLUG);
   return (
     <LandingView
       content={site.content}

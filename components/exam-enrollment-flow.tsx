@@ -13,7 +13,13 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { EnrollmentExam, StudentExamEnrollment } from "@/lib/data/exam-enrollment";
-import { examText, examBillingMonths, type ExamIntent } from "@/lib/exam-enrollment";
+import {
+  examText,
+  examBillingMonths,
+  examPlanMonthlyPrice,
+  hasFacultyPrices,
+  type ExamIntent,
+} from "@/lib/exam-enrollment";
 import type { PaymentMethodConfig, SubscriptionPlan } from "@/lib/types";
 import { FacultySelectionDialog } from "@/components/faculty-selection-dialog";
 import { PaymentSubmissionModal, type CheckoutInvoice } from "@/components/billing-page-client";
@@ -21,15 +27,28 @@ import { PaymentSubmissionModal, type CheckoutInvoice } from "@/components/billi
 const actionClass =
   "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40";
 
+export type FlowStep = "questions" | "faculties" | "plans";
+const STEP_LABELS: Record<FlowStep, string> = {
+  questions: "Your preparation",
+  faculties: "Supported faculties",
+  plans: "Your plan",
+};
+/** The steps this exam's admin configured, in order: landing → questions → faculties → payment. */
+export function examFlowSteps(exam: EnrollmentExam): FlowStep[] {
+  return exam.config.askQuestions ? ["questions", "faculties", "plans"] : ["faculties", "plans"];
+}
+
 function FlowFrame({
   exam,
   active,
   children,
 }: {
   exam: EnrollmentExam;
-  active: number;
+  active: FlowStep;
   children: React.ReactNode;
 }) {
+  const steps = examFlowSteps(exam);
+  const activeIndex = steps.indexOf(active);
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary">
       <header className="border-b border-border">
@@ -49,21 +68,28 @@ function FlowFrame({
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-5 py-8 sm:py-14">
-        <ol aria-label="Preparation progress" className="mb-10 grid grid-cols-3 gap-3">
-          {["Your preparation", "Supported faculties", "Your plan"].map((label, index) => (
-            <li
-              key={label}
-              aria-current={active === index ? "step" : undefined}
-              className={`border-t-2 pt-3 text-xs sm:text-sm ${active >= index ? "border-blue-600 text-text-primary" : "border-border text-text-muted"}`}
-            >
-              <span
-                className={`mr-2 inline-grid size-6 place-items-center rounded-full text-xs ${active > index ? "bg-blue-600 text-white" : "bg-bg-secondary"}`}
+        <ol
+          aria-label="Preparation progress"
+          className="mb-10 grid gap-3"
+          style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+        >
+          {steps.map((key, index) => {
+            const label = STEP_LABELS[key];
+            return (
+              <li
+                key={label}
+                aria-current={activeIndex === index ? "step" : undefined}
+                className={`border-t-2 pt-3 text-xs sm:text-sm ${activeIndex >= index ? "border-blue-600 text-text-primary" : "border-border text-text-muted"}`}
               >
-                {active > index ? <Check size={12} /> : `0${index + 1}`}
-              </span>
-              {label}
-            </li>
-          ))}
+                <span
+                  className={`mr-2 inline-grid size-6 place-items-center rounded-full text-xs ${activeIndex > index ? "bg-blue-600 text-white" : "bg-bg-secondary"}`}
+                >
+                  {activeIndex > index ? <Check size={12} /> : `0${index + 1}`}
+                </span>
+                {label}
+              </li>
+            );
+          })}
         </ol>
         {children}
         <p className="mt-10 flex items-center justify-center gap-2 text-xs text-text-muted">
@@ -78,16 +104,22 @@ function FlowFrame({
 export function ExamPreparationFlow({
   exam,
   plans,
-  initialStep = 0,
+  initialStep,
   initialIntent,
+  appOrigin = "",
 }: {
   exam: EnrollmentExam;
   plans: SubscriptionPlan[];
-  initialStep?: 0 | 1 | 2;
+  initialStep?: FlowStep;
   initialIntent?: ExamIntent | null;
+  /** Where sign-in lives: the main domain when this page is on a subdomain, else "". */
+  appOrigin?: string;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState(initialStep);
+  const flow = examFlowSteps(exam);
+  const [step, setStep] = useState<FlowStep>(
+    initialStep && flow.includes(initialStep) ? initialStep : flow[0],
+  );
   const [answers, setAnswers] = useState<Record<string, string>>(initialIntent?.answers || {});
   const durations = examBillingMonths(exam.config);
   const [months, setMonths] = useState<1 | 3>(
@@ -97,7 +129,7 @@ export function ExamPreparationFlow({
   );
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
-  const complete = exam.config.questions.every((q) => q.options.includes(answers[q.id]));
+  const complete = exam.config.askQuestions === false || exam.config.questions.every((q) => q.options.includes(answers[q.id]));
   useEffect(() => {
     try {
       const saved = JSON.parse(sessionStorage.getItem(`exam-preparation:${exam.slug}`) || "null");
@@ -113,18 +145,18 @@ export function ExamPreparationFlow({
     } catch {
       /* The current form remains usable. */
     }
-    setStep(1);
+    setStep("faculties");
   }
   function continueFaculties() {
     if (!complete) {
-      setStep(0);
+      setStep("questions");
       return;
     }
     router.push(`/payment/${exam.slug}`);
   }
   async function choosePlan(plan: SubscriptionPlan) {
     if (!complete) {
-      setStep(0);
+      setStep("questions");
       return;
     }
     setPending(plan.id);
@@ -142,7 +174,13 @@ export function ExamPreparationFlow({
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not prepare your plan.");
-      router.push(`/login?next=${encodeURIComponent(result.next)}`);
+      // The choices travel in the link: a subdomain's cookie never reaches the
+      // main domain, where sign-in and payment happen.
+      const intent = { examSlug: exam.slug, planId: plan.id, billingMonths: months, answers };
+      const next = `${result.next}?intent=${encodeURIComponent(JSON.stringify(intent))}`;
+      const login = `${appOrigin}/login?next=${encodeURIComponent(next)}`;
+      if (appOrigin) window.location.assign(login);
+      else router.push(login);
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -152,7 +190,75 @@ export function ExamPreparationFlow({
 
   return (
     <FlowFrame exam={exam} active={step}>
-      {step === 0 ? (
+      {step === "faculties" ? (
+        <div>
+          <div className="mx-auto mb-8 max-w-2xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-600">
+              One exam. More ways to prepare.
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+              {examText(exam.config.copy.facultiesTitle, exam.name)}
+            </h1>
+            <p className="mt-3 text-text-secondary">
+              {examText(exam.config.copy.facultiesDescription, exam.name)}
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {exam.faculties.map((faculty) => (
+              <article
+                key={faculty.id}
+                className="flex flex-col rounded-2xl border border-border bg-bg-primary p-6 shadow-xs"
+              >
+                <span className="mb-4 grid size-11 place-items-center rounded-xl bg-blue-600/10 text-blue-600">
+                  <GraduationCap size={24} />
+                </span>
+                <h2 className="text-lg font-semibold">{faculty.name}</h2>
+                <p className="mt-1 text-sm text-text-muted">
+                  {faculty.faculty} {faculty.university ? `· ${faculty.university}` : ""}
+                </p>
+                <details className="mt-5 border-t border-border pt-4">
+                  <summary className="cursor-pointer text-sm font-medium">
+                    {faculty.subjects.length} published subjects
+                  </summary>
+                  <ul className="mt-3 space-y-2 text-sm text-text-secondary">
+                    {faculty.subjects.map((subject) => (
+                      <li key={subject.id} className="flex items-center gap-2">
+                        <Check size={12} className="text-blue-600" />
+                        {subject.name}
+                      </li>
+                    ))}
+                    {!faculty.subjects.length ? (
+                      <li>Subjects will appear as your faculty publishes them.</li>
+                    ) : null}
+                  </ul>
+                </details>
+              </article>
+            ))}
+          </div>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            {exam.config.askQuestions ? (
+              <button
+                type="button"
+                onClick={() => setStep("questions")}
+                className="min-h-12 px-5 text-sm font-medium"
+              >
+                <ArrowLeft className="mr-2 inline" size={16} />
+                Questions
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={continueFaculties}
+              disabled={!exam.faculties.length}
+              className={actionClass}
+            >
+              Continue to payment plans
+              <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {step === "questions" ? (
         <div className="mx-auto max-w-2xl">
           <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-blue-600">
             <Sparkles size={14} />A plan that fits your day
@@ -204,73 +310,7 @@ export function ExamPreparationFlow({
           </form>
         </div>
       ) : null}
-      {step === 1 ? (
-        <div>
-          <div className="mx-auto mb-8 max-w-2xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-600">
-              One exam. More ways to prepare.
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              {examText(exam.config.copy.facultiesTitle, exam.name)}
-            </h1>
-            <p className="mt-3 text-text-secondary">
-              {examText(exam.config.copy.facultiesDescription, exam.name)}
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {exam.faculties.map((faculty) => (
-              <article
-                key={faculty.id}
-                className="flex flex-col rounded-2xl border border-border bg-bg-primary p-6 shadow-xs"
-              >
-                <span className="mb-4 grid size-11 place-items-center rounded-xl bg-blue-600/10 text-blue-600">
-                  <GraduationCap size={24} />
-                </span>
-                <h2 className="text-lg font-semibold">{faculty.name}</h2>
-                <p className="mt-1 text-sm text-text-muted">
-                  {faculty.faculty} {faculty.university ? `· ${faculty.university}` : ""}
-                </p>
-                <details className="mt-5 border-t border-border pt-4">
-                  <summary className="cursor-pointer text-sm font-medium">
-                    {faculty.subjects.length} published subjects
-                  </summary>
-                  <ul className="mt-3 space-y-2 text-sm text-text-secondary">
-                    {faculty.subjects.map((subject) => (
-                      <li key={subject.id} className="flex items-center gap-2">
-                        <Check size={12} className="text-blue-600" />
-                        {subject.name}
-                      </li>
-                    ))}
-                    {!faculty.subjects.length ? (
-                      <li>Subjects will appear as your faculty publishes them.</li>
-                    ) : null}
-                  </ul>
-                </details>
-              </article>
-            ))}
-          </div>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setStep(0)}
-              className="min-h-12 px-5 text-sm font-medium"
-            >
-              <ArrowLeft className="mr-2 inline" size={16} />
-              Questions
-            </button>
-            <button
-              type="button"
-              onClick={continueFaculties}
-              disabled={!exam.faculties.length}
-              className={actionClass}
-            >
-              {complete ? "Continue to payment plans" : "Answer questions & continue"}
-              <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {step === 2 ? (
+      {step === "plans" ? (
         <div>
           <div className="mx-auto max-w-2xl text-center">
             <p className="text-xs font-semibold uppercase tracking-widest text-blue-600">
@@ -310,6 +350,11 @@ export function ExamPreparationFlow({
                     / {months} {months === 1 ? "month" : "months"}
                   </span>
                 </p>
+                {hasFacultyPrices(exam.config) ? (
+                  <p className="mt-2 text-xs text-text-muted">
+                    Your final price is confirmed for your faculty after you sign in.
+                  </p>
+                ) : null}
                 <p className="mt-3 text-sm text-text-secondary">
                   {plan.isUnlimited
                     ? "Unlimited learning and exam practice"
@@ -352,7 +397,7 @@ export function ExamPreparationFlow({
           ) : null}
           <button
             type="button"
-            onClick={() => setStep(1)}
+            onClick={() => setStep("faculties")}
             className="mt-6 min-h-10 text-sm text-text-secondary"
           >
             <ArrowLeft className="mr-2 inline" size={14} />
@@ -391,6 +436,7 @@ export function ExamCheckout({
   const [error, setError] = useState("");
   const plan = plans.find((p) => p.id === planId);
   const faculty = exam.faculties.find((f) => f.id === facultyId);
+  const monthly = (p: SubscriptionPlan) => examPlanMonthlyPrice(exam.config, faculty?.slug, p);
   const wrongExam = enrollment && enrollment.examSlug !== exam.slug;
   async function openPayment() {
     if (!plan || !facultyId) return;
@@ -417,7 +463,7 @@ export function ExamCheckout({
     }
   }
   return (
-    <FlowFrame exam={exam} active={2}>
+    <FlowFrame exam={exam} active="plans">
       {wrongExam ? (
         <div className="mx-auto max-w-xl rounded-3xl border border-border p-8">
           <h1 className="text-2xl font-semibold">Your study space is already set.</h1>
@@ -457,7 +503,7 @@ export function ExamCheckout({
             >
               {plans.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} — {p.currency} {p.price} / month
+                  {p.name} — {p.currency} {monthly(p)} / month
                 </option>
               ))}
             </select>
@@ -479,7 +525,7 @@ export function ExamCheckout({
           <p className="my-6 flex items-center justify-between border-t border-border pt-5 text-sm">
             <span>Total</span>
             <strong className="text-2xl">
-              {plan?.currency} {plan ? (plan.price * months).toLocaleString() : "—"}
+              {plan?.currency} {plan ? (monthly(plan) * months).toLocaleString() : "—"}
             </strong>
           </p>
           <button

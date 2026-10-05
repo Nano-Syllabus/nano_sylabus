@@ -144,7 +144,7 @@ describe("billing pricing UI", () => {
     expect(source).toContain('onAction={() => startPlan(plans.pro)}');
     expect(source).toContain("onClick={() => setBillingMonths(3)}");
     expect(source).toContain("billingMonths: months");
-    expect(invoiceRoute).toContain("plan.price * payload.billingMonths");
+    expect(invoiceRoute).toContain("monthlyPrice * payload.billingMonths");
     expect(invoiceRoute).toContain("payload.billingMonths * 30");
     expect(invoiceRoute).toContain('.eq("amount", invoiceAmount)');
   });

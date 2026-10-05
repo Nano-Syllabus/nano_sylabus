@@ -11,7 +11,12 @@ const manrope = Manrope({ subsets: ["latin"], display: "swap" });
 function Brand({ logoUrl = "" }: { logoUrl?: string }) {
   if (logoUrl) {
     return (
-      <Link href="/" data-landing-section="brand" className="inline-flex items-center" aria-label="Home">
+      <Link
+        href="/"
+        data-landing-section="brand"
+        className="inline-flex items-center"
+        aria-label="Home"
+      >
         {/* A site's own uploaded logo, of any size or host: a plain img, sized by height. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={logoUrl} alt="" className="h-[38px] w-auto max-w-[200px] object-contain" />
@@ -60,9 +65,11 @@ function Cta({
 
   let colorClass = "bg-[#1c1e1a] text-white hover:bg-[#33362e] focus-visible:ring-[#1c1e1a]";
   if (blue) {
-    colorClass = "bg-[var(--lp-primary)] text-white hover:bg-[var(--lp-primary-hover)] focus-visible:ring-[var(--lp-primary)]";
+    colorClass =
+      "bg-[var(--lp-primary)] text-white hover:bg-[var(--lp-primary-hover)] focus-visible:ring-[var(--lp-primary)]";
   } else if (lime) {
-    colorClass = "bg-[var(--lp-accent)] text-[#1c1e1a] hover:bg-[var(--lp-accent-hover)] focus-visible:ring-[var(--lp-accent)]";
+    colorClass =
+      "bg-[var(--lp-accent)] text-[#1c1e1a] hover:bg-[var(--lp-accent-hover)] focus-visible:ring-[var(--lp-accent)]";
   }
 
   return (
@@ -104,14 +111,30 @@ export function LandingView({
   examFaculties?: Array<{ id: string; name: string; faculty: string | null }>;
 }) {
   const { brand } = content;
-  // The site's one main action: join its community and start onboarding.
+  // The site's one main action. An exam site opens its list of supported
+  // faculties; every main button on the page follows it.
   const joinHref = examSlug
     ? `${appOrigin}/prepare/${encodeURIComponent(examSlug)}`
     : brand.communitySlug
       ? `${appOrigin}/communities/${encodeURIComponent(brand.communitySlug)}/join`
       : undefined;
   const ctaProps = { joinHref, appOrigin };
-  const { nav, hero, features, ribbonOne, problems, steps, featured, ribbonTwo, testimonials, community, prize, faq, finalCta, footer } = content;
+  const {
+    nav,
+    hero,
+    features,
+    ribbonOne,
+    problems,
+    steps,
+    featured,
+    ribbonTwo,
+    testimonials,
+    community,
+    prize,
+    faq,
+    finalCta,
+    footer,
+  } = content;
   return (
     <div
       style={landingColorVars(brand) as React.CSSProperties}
@@ -137,7 +160,7 @@ export function LandingView({
             </span>
           ))}
           <Link
-            href={`${appOrigin}/prepare/${encodeURIComponent(examSlug)}?step=faculties`}
+            href={`${appOrigin}/prepare/${encodeURIComponent(examSlug)}`}
             className="ml-2 font-semibold underline underline-offset-4"
           >
             Explore faculties ↗
@@ -145,7 +168,10 @@ export function LandingView({
         </section>
       ) : null}
       {/* ── Top Navigation Bar ── */}
-      <header data-landing-section="nav" className="border-b border-[#e5e8df] bg-[#fafbf7]/90 backdrop-blur-md sticky top-0 z-40">
+      <header
+        data-landing-section="nav"
+        className="border-b border-[#e5e8df] bg-[#fafbf7]/90 backdrop-blur-md sticky top-0 z-40"
+      >
         <div className="mx-auto flex h-[84px] max-w-[1320px] items-center justify-between px-5 2xl:px-0">
           <Brand logoUrl={brand.logoUrl} />
           <nav
@@ -179,202 +205,191 @@ export function LandingView({
 
       <main id="main-content">
         {/* ── Hero Section ── */}
-<section data-landing-section="hero" className="relative isolate overflow-hidden px-5 pb-20 pt-16 lg:pb-28 lg:pt-24 2xl:px-0">
-  {/* Subtle notebook background */}
-  <div
-    aria-hidden="true"
-    className="pointer-events-none absolute inset-0 -z-10"
-    style={{
-      backgroundImage:
-        "repeating-linear-gradient(to bottom, transparent 0, transparent 47px, #e8ebdf 48px)",
-      maskImage:
-        "radial-gradient(ellipse 70% 65% at 50% 35%, black, transparent)",
-    }}
-  />
-
-  <div
-    aria-hidden="true"
-    className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[550px] w-[800px] max-w-full -translate-x-1/2 rounded-full bg-[var(--lp-accent)]/20 blur-[110px]"
-  />
-
-  <div className="mx-auto max-w-[1200px]">
-    <div className="mx-auto max-w-[1050px] text-center">
-      <h1
-        className={`${manrope.className} text-[clamp(2.7rem,5.5vw,5.5rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
-      >
-        {hero.titleLead}{" "}
-        <span className="relative isolate inline-block px-1">
-          {hero.titleHighlight}
-          <span
-            aria-hidden="true"
-            className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[var(--lp-accent)]"
-          />
-        </span>
-      </h1>
-
-      <p className="mx-auto mt-7 max-w-[690px] text-[17px] leading-relaxed text-[#5b5e55] sm:text-[19px]">
-        {hero.subtitle}
-      </p>
-
-      <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-5">
-        <LandingPrimaryCta blue size="hero" communityOnly {...ctaProps}>
-          {hero.primaryCta}
-        </LandingPrimaryCta>
-
-        <a
-          href="#steps"
-          className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:border-[var(--lp-primary)] hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
+        <section
+          data-landing-section="hero"
+          className="relative isolate overflow-hidden px-5 pb-20 pt-16 lg:pb-28 lg:pt-24 2xl:px-0"
         >
-          {hero.secondaryCta}
-        </a>
-      </div>
-    </div>
-
-    {/* Animated feature walkthrough */}
-    <div className="mx-auto mt-14 max-w-[1050px] lg:mt-20">
-      <div className="overflow-hidden rounded-[22px] border border-[#dfe4d6] bg-white p-2 shadow-[0_24px_70px_rgba(28,30,26,0.12)] sm:rounded-[30px] sm:p-3">
-        {/* 16:9 stage plus the tour's 56px chapter bar underneath */}
-        <div className="relative w-full overflow-hidden rounded-[15px] pb-[calc(56.25%+56px)] sm:rounded-[20px]">
-          <iframe
-            src="/nanosyllabus-features-minimal-animation.html?capture"
-            title={hero.demoCaption}
-            className="absolute inset-0 block h-full w-full border-0"
-            loading="eager"
+          {/* Subtle notebook background */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 -z-10"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(to bottom, transparent 0, transparent 47px, #e8ebdf 48px)",
+              maskImage: "radial-gradient(ellipse 70% 65% at 50% 35%, black, transparent)",
+            }}
           />
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
 
-{features.hidden ? null : (
-<div data-landing-section="features" className="mx-auto grid max-w-[1320px] gap-4 px-5 pb-16 sm:grid-cols-2 lg:pb-20 xl:grid-cols-4 xl:gap-5 2xl:px-0">
-  {features.items.map(({ title }, index) => (
-    <article
-      key={index}
-      className="ns-feature flex min-h-[330px] flex-col rounded-[24px] border border-[#e3e7dd] bg-white p-5 shadow-[0_1px_2px_rgba(28,30,26,0.04),0_12px_24px_-8px_rgba(28,30,26,0.10),0_32px_60px_-20px_rgba(28,30,26,0.18)] transition-[translate,box-shadow] duration-300 ease-out hover:-translate-y-1.5 hover:shadow-[0_2px_4px_rgba(28,30,26,0.05),0_18px_32px_-8px_rgba(28,30,26,0.14),0_44px_80px_-24px_rgba(28,30,26,0.24)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-6"
-    >
-      <h3 className="min-h-[54px] text-[21px] font-extrabold leading-[1.15] tracking-[-0.045em] text-[#1c1e1a]">
-        {title}
-      </h3>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[550px] w-[800px] max-w-full -translate-x-1/2 rounded-full bg-[var(--lp-accent)]/20 blur-[110px]"
+          />
 
-      <div className="relative mt-5 h-[238px] overflow-hidden rounded-[18px] border border-[#c5cac2] bg-[#fafbf8] shadow-[inset_0_1px_2px_rgba(28,30,26,0.04),0_10px_22px_-12px_rgba(28,30,26,0.20)]">
-        {index === 0 && (
-          <div className="p-4">
-            <div className="flex items-center justify-between rounded-xl bg-[var(--lp-accent-hover)] px-3 py-2.5">
-              <span className="text-sm font-bold text-[#263018]">
-                Physics
-              </span>
-              <span className="text-xs font-semibold text-[#53683b]">
-                37 topics
-              </span>
-            </div>
-
-            <div className="ns-trace mx-auto h-5 w-px bg-[#8eaa6d]" />
-
-            <div className="space-y-2">
-              {["Energy and work", "Power and efficiency", "Motion and speed"].map(
-                (topic, topicIndex) => (
-                  <div
-                    key={topic}
-                    className="ns-reveal flex items-center gap-2.5 rounded-lg border border-[#e5eae2] bg-white px-3 py-2"
-                  >
-                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--lp-primary-soft)] text-[11px] font-bold text-[var(--lp-primary)]">
-                      {topicIndex + 1}
-                    </span>
-                    <span className="text-xs font-semibold text-[#273029]">
-                      {topic}
-                    </span>
-                  </div>
-                )
-              )}
-            </div>
-          </div>
-        )}
-
-        {index === 1 && (
-          <div className="p-4">
-            <div className="rounded-xl border border-[#e5e3dc] bg-[#fffefa] px-4 py-3.5">
-              <span className="text-xs font-semibold text-[#778078]">
-                Past question
-              </span>
-
-              <p className="mt-2 text-[15px] font-bold leading-snug text-[#20251f]">
-                What is delegation?
-              </p>
-
-              <div className="mt-3 h-px bg-[var(--lp-primary-line)]" />
-
-              <div className="ns-reveal mt-3 rounded-lg bg-[var(--lp-primary-soft)] p-3">
-                <span className="text-xs font-bold text-[var(--lp-primary)]">
-                  Solution ↗
+          <div className="mx-auto max-w-[1200px]">
+            <div className="mx-auto max-w-[1050px] text-center">
+              <h1
+                className={`${manrope.className} text-[clamp(2.7rem,5.5vw,5.5rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
+              >
+                {hero.titleLead}{" "}
+                <span className="relative isolate inline-block px-1">
+                  {hero.titleHighlight}
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-0 bottom-[0.06em] -z-10 h-[0.36em] -rotate-1 rounded-sm bg-[var(--lp-accent)]"
+                  />
                 </span>
-                <p className="mt-2 text-xs leading-snug text-[#303c35]">
-                  Assign authority to a team member for a task.
-                </p>
+              </h1>
+
+              <p className="mx-auto mt-7 max-w-[690px] text-[17px] leading-relaxed text-[#5b5e55] sm:text-[19px]">
+                {hero.subtitle}
+              </p>
+
+              <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-5">
+                <LandingPrimaryCta blue size="hero" communityOnly {...ctaProps}>
+                  {hero.primaryCta}
+                </LandingPrimaryCta>
+
+                <a
+                  href="#steps"
+                  className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:border-[var(--lp-primary)] hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
+                >
+                  {hero.secondaryCta}
+                </a>
+              </div>
+            </div>
+
+            {/* Animated feature walkthrough */}
+            <div className="mx-auto mt-14 max-w-[1050px] lg:mt-20">
+              <div className="overflow-hidden rounded-[22px] border border-[#dfe4d6] bg-white p-2 shadow-[0_24px_70px_rgba(28,30,26,0.12)] sm:rounded-[30px] sm:p-3">
+                {/* 16:9 stage plus the tour's 56px chapter bar underneath */}
+                <div className="relative w-full overflow-hidden rounded-[15px] pb-[calc(56.25%+56px)] sm:rounded-[20px]">
+                  <iframe
+                    src="/nanosyllabus-features-minimal-animation.html?capture"
+                    title={hero.demoCaption}
+                    className="absolute inset-0 block h-full w-full border-0"
+                    loading="eager"
+                  />
+                </div>
               </div>
             </div>
           </div>
-        )}
+        </section>
 
-        {index === 2 && (
-          <div className="p-4">
-            <div className="ns-english rounded-xl border border-[#e4e9e1] bg-white px-3 py-2.5">
-              <span className="text-xs font-bold text-[#78847b]">
-                English
-              </span>
-              <p className="mt-1 text-sm font-semibold leading-snug text-[#252c27]">
-                Power is the rate of energy transfer.
-              </p>
-            </div>
+        {features.hidden ? null : (
+          <div
+            data-landing-section="features"
+            className="mx-auto grid max-w-[1320px] gap-4 px-5 pb-16 sm:grid-cols-2 lg:pb-20 xl:grid-cols-4 xl:gap-5 2xl:px-0"
+          >
+            {features.items.map(({ title }, index) => (
+              <article
+                key={index}
+                className="ns-feature flex min-h-[330px] flex-col rounded-[24px] border border-[#e3e7dd] bg-white p-5 shadow-[0_1px_2px_rgba(28,30,26,0.04),0_12px_24px_-8px_rgba(28,30,26,0.10),0_32px_60px_-20px_rgba(28,30,26,0.18)] transition-[translate,box-shadow] duration-300 ease-out hover:-translate-y-1.5 hover:shadow-[0_2px_4px_rgba(28,30,26,0.05),0_18px_32px_-8px_rgba(28,30,26,0.14),0_44px_80px_-24px_rgba(28,30,26,0.24)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-6"
+              >
+                <h3 className="min-h-[54px] text-[21px] font-extrabold leading-[1.15] tracking-[-0.045em] text-[#1c1e1a]">
+                  {title}
+                </h3>
 
-            <div className="ns-reveal my-1 text-center text-sm font-bold leading-none text-[var(--lp-primary)]">
-              ↓
-            </div>
+                <div className="relative mt-5 h-[238px] overflow-hidden rounded-[18px] border border-[#c5cac2] bg-[#fafbf8] shadow-[inset_0_1px_2px_rgba(28,30,26,0.04),0_10px_22px_-12px_rgba(28,30,26,0.20)]">
+                  {index === 0 && (
+                    <div className="p-4">
+                      <div className="flex items-center justify-between rounded-xl bg-[var(--lp-accent-hover)] px-3 py-2.5">
+                        <span className="text-sm font-bold text-[#263018]">Physics</span>
+                        <span className="text-xs font-semibold text-[#53683b]">37 topics</span>
+                      </div>
 
-            <div className="ns-reveal rounded-xl border border-[#d9e9bc] bg-[#f2f9e5] px-3 py-2.5">
-              <span className="text-xs font-bold text-[#5d774b]">
-                Romanized Nepali
-              </span>
-              <p className="mt-1 text-sm font-semibold leading-snug text-[#252c27]">
-                Power bhaneko energy transfer hune rate ho.
-              </p>
-            </div>
+                      <div className="ns-trace mx-auto h-5 w-px bg-[#8eaa6d]" />
+
+                      <div className="space-y-2">
+                        {["Energy and work", "Power and efficiency", "Motion and speed"].map(
+                          (topic, topicIndex) => (
+                            <div
+                              key={topic}
+                              className="ns-reveal flex items-center gap-2.5 rounded-lg border border-[#e5eae2] bg-white px-3 py-2"
+                            >
+                              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--lp-primary-soft)] text-[11px] font-bold text-[var(--lp-primary)]">
+                                {topicIndex + 1}
+                              </span>
+                              <span className="text-xs font-semibold text-[#273029]">{topic}</span>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {index === 1 && (
+                    <div className="p-4">
+                      <div className="rounded-xl border border-[#e5e3dc] bg-[#fffefa] px-4 py-3.5">
+                        <span className="text-xs font-semibold text-[#778078]">Past question</span>
+
+                        <p className="mt-2 text-[15px] font-bold leading-snug text-[#20251f]">
+                          What is delegation?
+                        </p>
+
+                        <div className="mt-3 h-px bg-[var(--lp-primary-line)]" />
+
+                        <div className="ns-reveal mt-3 rounded-lg bg-[var(--lp-primary-soft)] p-3">
+                          <span className="text-xs font-bold text-[var(--lp-primary)]">
+                            Solution ↗
+                          </span>
+                          <p className="mt-2 text-xs leading-snug text-[#303c35]">
+                            Assign authority to a team member for a task.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {index === 2 && (
+                    <div className="p-4">
+                      <div className="ns-english rounded-xl border border-[#e4e9e1] bg-white px-3 py-2.5">
+                        <span className="text-xs font-bold text-[#78847b]">English</span>
+                        <p className="mt-1 text-sm font-semibold leading-snug text-[#252c27]">
+                          Power is the rate of energy transfer.
+                        </p>
+                      </div>
+
+                      <div className="ns-reveal my-1 text-center text-sm font-bold leading-none text-[var(--lp-primary)]">
+                        ↓
+                      </div>
+
+                      <div className="ns-reveal rounded-xl border border-[#d9e9bc] bg-[#f2f9e5] px-3 py-2.5">
+                        <span className="text-xs font-bold text-[#5d774b]">Romanized Nepali</span>
+                        <p className="mt-1 text-sm font-semibold leading-snug text-[#252c27]">
+                          Power bhaneko energy transfer hune rate ho.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {index === 3 && (
+                    <div className="flex h-full items-center gap-3 px-4">
+                      <div className="relative h-[160px] w-[92px] shrink-0 rounded-[20px] border-[5px] border-[#242b25] bg-[#edf1e9] p-2">
+                        <div className="h-[112px] rounded bg-[repeating-linear-gradient(to_bottom,#fffefa_0px,#fffefa_11px,#dce6f8_12px)] p-2">
+                          <div className="mt-3 h-0.5 w-11 rounded bg-[#778276]" />
+                          <div className="mt-2.5 h-0.5 w-9 rounded bg-[#778276]" />
+                          <div className="mt-2.5 h-0.5 w-12 rounded bg-[#778276]" />
+                          <div className="mt-2.5 h-0.5 w-8 rounded bg-[#778276]" />
+                        </div>
+
+                        <div className="ns-shutter absolute bottom-1 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full border-[3px] border-white bg-[#242b25] ring-1 ring-[#242b25]" />
+                        <div className="ns-flash pointer-events-none absolute inset-0 rounded-[15px] bg-white opacity-0" />
+                      </div>
+
+                      <div className="ns-reveal min-w-0 flex-1 rounded-xl border border-[#d9ead8] bg-white p-3">
+                        <span className="text-xs font-bold text-[#368255]">AI feedback:</span>
+                        <div className="mt-2 text-2xl font-extrabold text-[#193421]">7 / 8</div>
+                        <p className="mt-2 text-xs leading-snug text-[#526157]">
+                          Add one team example.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </article>
+            ))}
           </div>
         )}
-
-        {index === 3 && (
-          <div className="flex h-full items-center gap-3 px-4">
-            <div className="relative h-[160px] w-[92px] shrink-0 rounded-[20px] border-[5px] border-[#242b25] bg-[#edf1e9] p-2">
-              <div className="h-[112px] rounded bg-[repeating-linear-gradient(to_bottom,#fffefa_0px,#fffefa_11px,#dce6f8_12px)] p-2">
-                <div className="mt-3 h-0.5 w-11 rounded bg-[#778276]" />
-                <div className="mt-2.5 h-0.5 w-9 rounded bg-[#778276]" />
-                <div className="mt-2.5 h-0.5 w-12 rounded bg-[#778276]" />
-                <div className="mt-2.5 h-0.5 w-8 rounded bg-[#778276]" />
-              </div>
-
-              <div className="ns-shutter absolute bottom-1 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full border-[3px] border-white bg-[#242b25] ring-1 ring-[#242b25]" />
-              <div className="ns-flash pointer-events-none absolute inset-0 rounded-[15px] bg-white opacity-0" />
-            </div>
-
-            <div className="ns-reveal min-w-0 flex-1 rounded-xl border border-[#d9ead8] bg-white p-3">
-              <span className="text-xs font-bold text-[#368255]">
-                AI feedback:
-              </span>
-              <div className="mt-2 text-2xl font-extrabold text-[#193421]">
-                7 / 8
-              </div>
-              <p className="mt-2 text-xs leading-snug text-[#526157]">
-                Add one team example.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </article>
-  ))}
-</div>
-)}
 
         {/* ── Marquee Ribbon 1 ── */}
         {/*
@@ -384,18 +399,20 @@ export function LandingView({
           seamlessly); from `sm` up it is the static, centred row.
         */}
         {ribbonOne.hidden ? null : (
-        <div data-landing-section="ribbonOne" className="overflow-hidden bg-[var(--lp-primary)] py-4 text-white">
           <div
-            className={`${manrope.className} ns-ribbon-track flex w-max items-center text-xs font-bold uppercase tracking-[0.1em] sm:mx-auto sm:w-auto sm:max-w-[1320px] sm:flex-wrap sm:justify-center sm:gap-y-3 sm:px-5`}
+            data-landing-section="ribbonOne"
+            className="overflow-hidden bg-[var(--lp-primary)] py-4 text-white"
           >
-            {[0, 1].map((copy) => (
-              <span
-                key={copy}
-                aria-hidden={copy === 1 ? true : undefined}
-                className={`flex shrink-0 items-center ${copy === 1 ? "sm:hidden" : ""}`}
-              >
-                {ribbonOne.items.map(
-                  (item, index) => (
+            <div
+              className={`${manrope.className} ns-ribbon-track flex w-max items-center text-xs font-bold uppercase tracking-[0.1em] sm:mx-auto sm:w-auto sm:max-w-[1320px] sm:flex-wrap sm:justify-center sm:gap-y-3 sm:px-5`}
+            >
+              {[0, 1].map((copy) => (
+                <span
+                  key={copy}
+                  aria-hidden={copy === 1 ? true : undefined}
+                  className={`flex shrink-0 items-center ${copy === 1 ? "sm:hidden" : ""}`}
+                >
+                  {ribbonOne.items.map((item, index) => (
                     <span key={index} className="inline-flex shrink-0 items-center">
                       <span
                         aria-hidden="true"
@@ -405,12 +422,11 @@ export function LandingView({
                       </span>
                       <span className="whitespace-nowrap">{item}</span>
                     </span>
-                  ),
-                )}
-              </span>
-            ))}
-          </div>
-          <style>{`
+                  ))}
+                </span>
+              ))}
+            </div>
+            <style>{`
             @keyframes ns-ribbon { from { transform: translateX(0); } to { transform: translateX(-50%); } }
             @media (max-width: 639.98px) {
               .ns-ribbon-track { animation: ns-ribbon 22s linear infinite; }
@@ -420,188 +436,194 @@ export function LandingView({
               .ns-ribbon-track > [aria-hidden="true"] { display: none; }
             }
           `}</style>
-        </div>
+          </div>
         )}
 
         {/* ── Section 01 / Sound Familiar? ── */}
         {problems.hidden ? null : (
-        <section data-landing-section="problems" id="little-steps" className="mx-auto max-w-[1320px] px-5 py-24 lg:py-28 2xl:px-0">
-          <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-          </div>
-          <div className="mt-6 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
-            <h2
-              className={`${manrope.className} max-w-[820px] text-[clamp(2.4rem,4.2vw,3.65rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
-            >
-              {problems.headingLine1}
-              <br />{problems.headingLine2}
-            </h2>
-            <p className="max-w-[320px] text-base leading-relaxed text-[#5b5e55]">
-            </p>
-          </div>
+          <section
+            data-landing-section="problems"
+            id="little-steps"
+            className="mx-auto max-w-[1320px] px-5 py-24 lg:py-28 2xl:px-0"
+          >
+            <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]"></div>
+            <div className="mt-6 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+              <h2
+                className={`${manrope.className} max-w-[820px] text-[clamp(2.4rem,4.2vw,3.65rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
+              >
+                {problems.headingLine1}
+                <br />
+                {problems.headingLine2}
+              </h2>
+              <p className="max-w-[320px] text-base leading-relaxed text-[#5b5e55]"></p>
+            </div>
 
-          <div className="mt-14 grid gap-6 md:grid-cols-3">
-            {problems.items.map(({ quote, label }, index) => {
-              const isLime = index === 1;
-              return (
-                <article
-                  key={index}
-                  className={`flex min-h-[320px] flex-col rounded-2xl border p-8 transition-all duration-300 ${
-                    isLime
-                      ? "rotate-[1.5deg] border-[var(--lp-accent-strong)] bg-[var(--lp-accent)] shadow-md hover:rotate-0"
-                      : "border-[#e5e8df] bg-[#fafbf7] shadow-xs hover:shadow-md"
-                  }`}
-                >
-                  <span className="text-xs font-bold text-[#5b5e55]">(0{index + 1})</span>
-                  <h3
-                    className={`${manrope.className} mt-7 text-[22px] font-bold leading-[1.35] tracking-[-0.035em] text-[#1c1e1a]`}
-                  >
-                    {quote}
-                  </h3>
-                  <p
-                    className={`mt-7 border-t pt-4 text-xs font-semibold uppercase tracking-wider ${
-                      isLime ? "border-[var(--lp-accent-strong)] text-[#1c1e1a]" : "border-[#e5e8df] text-[#5b5e55]"
+            <div className="mt-14 grid gap-6 md:grid-cols-3">
+              {problems.items.map(({ quote, label }, index) => {
+                const isLime = index === 1;
+                return (
+                  <article
+                    key={index}
+                    className={`flex min-h-[320px] flex-col rounded-2xl border p-8 transition-all duration-300 ${
+                      isLime
+                        ? "rotate-[1.5deg] border-[var(--lp-accent-strong)] bg-[var(--lp-accent)] shadow-md hover:rotate-0"
+                        : "border-[#e5e8df] bg-[#fafbf7] shadow-xs hover:shadow-md"
                     }`}
                   >
-                    {label}
-                  </p>
-                </article>
-              );
-            })}
-          </div>
-        </section>
+                    <span className="text-xs font-bold text-[#5b5e55]">(0{index + 1})</span>
+                    <h3
+                      className={`${manrope.className} mt-7 text-[22px] font-bold leading-[1.35] tracking-[-0.035em] text-[#1c1e1a]`}
+                    >
+                      {quote}
+                    </h3>
+                    <p
+                      className={`mt-7 border-t pt-4 text-xs font-semibold uppercase tracking-wider ${
+                        isLime
+                          ? "border-[var(--lp-accent-strong)] text-[#1c1e1a]"
+                          : "border-[#e5e8df] text-[#5b5e55]"
+                      }`}
+                    >
+                      {label}
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {/* ── Section 02 / Meet Nano Challenges ── */}
         {steps.hidden ? null : (
-        <section data-landing-section="steps" id="steps" className="bg-[#eff1e9] py-24 lg:py-28">
-          <div className="mx-auto max-w-[1320px] px-5 2xl:px-0">
-            <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-            </div>
-            <div className="mt-6 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
-              <h2
-                className={`${manrope.className} text-[clamp(2.7rem,4.6vw,4.4rem)] font-extrabold leading-[1.02] tracking-[-0.06em] text-[#1c1e1a]`}
-              >
-                {steps.headingLine1}
-                <br />
-                <em className="font-serif font-normal italic">{steps.headingLine2}</em>
-              </h2>
-              <p className="max-w-[340px] text-base leading-relaxed text-[#5b5e55]">
-              </p>
-            </div>
-
-            {/* 4-column steps */}
-            <div className="mt-14 grid border-t border-[#c8cec0] md:grid-cols-4">
-              {steps.items.map(({ title, detail, foot }, index) => (
-                <article
-                  key={index}
-                  className="flex min-h-[260px] flex-col border-b border-[#c8cec0] py-8 pr-5 md:border-r md:px-7 md:first:pl-0 md:last:border-r-0"
+          <section data-landing-section="steps" id="steps" className="bg-[#eff1e9] py-24 lg:py-28">
+            <div className="mx-auto max-w-[1320px] px-5 2xl:px-0">
+              <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]"></div>
+              <div className="mt-6 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+                <h2
+                  className={`${manrope.className} text-[clamp(2.7rem,4.6vw,4.4rem)] font-extrabold leading-[1.02] tracking-[-0.06em] text-[#1c1e1a]`}
                 >
-                  <span className="text-sm font-extrabold text-[var(--lp-primary)]">0{index + 1}</span>
-                  <h3
-                    className={`${manrope.className} mt-6 text-xl font-bold tracking-tight text-[#1c1e1a]`}
-                  >
-                    {title}
-                  </h3>
-                  <p className="mt-3 flex-1 text-sm leading-relaxed text-[#5b5e55]">{detail}</p>
-                  <p className="mt-7 text-[11px] font-bold uppercase tracking-[0.09em] text-[#1c1e1a]">
-                    {foot}
-                  </p>
-                </article>
-              ))}
-            </div>
+                  {steps.headingLine1}
+                  <br />
+                  <em className="font-serif font-normal italic">{steps.headingLine2}</em>
+                </h2>
+                <p className="max-w-[340px] text-base leading-relaxed text-[#5b5e55]"></p>
+              </div>
 
-            {/* Bottom Row */}
-            <div className="mt-8 flex flex-wrap items-center justify-between gap-5">
-              <p className="text-sm font-medium text-[#5b5e55]">
-                {steps.footnote}
-              </p>
-              <LandingPrimaryCta size="default" {...ctaProps}>{steps.cta}</LandingPrimaryCta>
+              {/* 4-column steps */}
+              <div className="mt-14 grid border-t border-[#c8cec0] md:grid-cols-4">
+                {steps.items.map(({ title, detail, foot }, index) => (
+                  <article
+                    key={index}
+                    className="flex min-h-[260px] flex-col border-b border-[#c8cec0] py-8 pr-5 md:border-r md:px-7 md:first:pl-0 md:last:border-r-0"
+                  >
+                    <span className="text-sm font-extrabold text-[var(--lp-primary)]">
+                      0{index + 1}
+                    </span>
+                    <h3
+                      className={`${manrope.className} mt-6 text-xl font-bold tracking-tight text-[#1c1e1a]`}
+                    >
+                      {title}
+                    </h3>
+                    <p className="mt-3 flex-1 text-sm leading-relaxed text-[#5b5e55]">{detail}</p>
+                    <p className="mt-7 text-[11px] font-bold uppercase tracking-[0.09em] text-[#1c1e1a]">
+                      {foot}
+                    </p>
+                  </article>
+                ))}
+              </div>
+
+              {/* Bottom Row */}
+              <div className="mt-8 flex flex-wrap items-center justify-between gap-5">
+                <p className="text-sm font-medium text-[#5b5e55]">{steps.footnote}</p>
+                <LandingPrimaryCta size="default" {...ctaProps}>
+                  {steps.cta}
+                </LandingPrimaryCta>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
         )}
 
         {/* ── Featured Article Card ── */}
         {featured.hidden ? null : (
-        <section
-          data-landing-section="featured"
-          className="mx-auto max-w-[1320px] px-5 py-24 lg:py-28 2xl:px-0"
-          aria-labelledby="featured-title"
-        >
-          <div className="grid overflow-hidden rounded-[28px] border border-[#e5e8df] bg-[#f5f7f1] lg:grid-cols-2">
-            <div className="flex flex-col justify-between gap-8 p-8 sm:p-12 lg:p-14">
-              <div>
-                <span className="inline-block rounded-full bg-[var(--lp-primary-soft)] px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[var(--lp-primary-dark)]">
-                  {featured.badge}
-                </span>
-                <h2
-                  id="featured-title"
-                  className={`${manrope.className} mt-8 text-[clamp(2rem,3.2vw,2.9rem)] font-extrabold leading-[1.18] tracking-[-0.045em] text-[#1c1e1a]`}
-                >
-    
-                  <span className="relative isolate inline-block px-1">
-                    {featured.titleHighlight}
-                    <span
-                      aria-hidden="true"
-                      className="absolute inset-x-0 bottom-1 -z-10 h-3.5 bg-[var(--lp-accent)]"
-                    />
-                  </span>{" "}
-                  {featured.titleRest}
-                </h2>
-                <p className="mt-5 max-w-[480px] text-base leading-relaxed text-[#5b5e55]">
-                  {featured.body}
-                </p>
-              </div>
-
-              <div>
-                <div className="mb-6 flex items-center gap-3 text-sm">
-                  <span className="grid size-9 place-items-center rounded-full bg-[var(--lp-accent)] text-sm font-bold text-[#1c1e1a]">
-                    n.
+          <section
+            data-landing-section="featured"
+            className="mx-auto max-w-[1320px] px-5 py-24 lg:py-28 2xl:px-0"
+            aria-labelledby="featured-title"
+          >
+            <div className="grid overflow-hidden rounded-[28px] border border-[#e5e8df] bg-[#f5f7f1] lg:grid-cols-2">
+              <div className="flex flex-col justify-between gap-8 p-8 sm:p-12 lg:p-14">
+                <div>
+                  <span className="inline-block rounded-full bg-[var(--lp-primary-soft)] px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[var(--lp-primary-dark)]">
+                    {featured.badge}
                   </span>
-                  <strong className="text-[#1c1e1a]">{featured.author}</strong>
-                  <span className="text-[#5b5e55]">· {featured.readTime}</span>
+                  <h2
+                    id="featured-title"
+                    className={`${manrope.className} mt-8 text-[clamp(2rem,3.2vw,2.9rem)] font-extrabold leading-[1.18] tracking-[-0.045em] text-[#1c1e1a]`}
+                  >
+                    <span className="relative isolate inline-block px-1">
+                      {featured.titleHighlight}
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-0 bottom-1 -z-10 h-3.5 bg-[var(--lp-accent)]"
+                      />
+                    </span>{" "}
+                    {featured.titleRest}
+                  </h2>
+                  <p className="mt-5 max-w-[480px] text-base leading-relaxed text-[#5b5e55]">
+                    {featured.body}
+                  </p>
                 </div>
-                <Cta href="#steps">{featured.cta}</Cta>
-              </div>
-            </div>
 
-            {/* Right Photo Frame */}
-            <div className="relative flex items-center justify-center bg-[var(--lp-accent)] p-8 sm:p-12 lg:p-14">
-              {/* Decorative rays */}
-              <div className="absolute top-6 left-10 flex gap-1.5" aria-hidden="true">
-                <span className="h-5 w-1.5 -rotate-25 rounded-full bg-white/70" />
-                <span className="h-6 w-1.5 -rotate-10 rounded-full bg-white/70" />
-                <span className="h-4 w-1.5 rotate-15 rounded-full bg-white/70" />
+                <div>
+                  <div className="mb-6 flex items-center gap-3 text-sm">
+                    <span className="grid size-9 place-items-center rounded-full bg-[var(--lp-accent)] text-sm font-bold text-[#1c1e1a]">
+                      n.
+                    </span>
+                    <strong className="text-[#1c1e1a]">{featured.author}</strong>
+                    <span className="text-[#5b5e55]">· {featured.readTime}</span>
+                  </div>
+                  <Cta href="#steps">{featured.cta}</Cta>
+                </div>
               </div>
-              <div className="w-full max-w-[480px] rotate-[-4deg] rounded-xl border border-[#23251e]/15 bg-white p-5 shadow-[12px_12px_0_var(--lp-accent-strong)] transition-transform duration-300 hover:rotate-0">
-                <Image
-                  src="/landing-new/notebook.png"
-                  alt="Open study notebook beside a NanoSyllabus mug"
-                  width={1184}
-                  height={864}
-                  className="aspect-[1.7] w-full rounded-md object-cover"
-                />
+
+              {/* Right Photo Frame */}
+              <div className="relative flex items-center justify-center bg-[var(--lp-accent)] p-8 sm:p-12 lg:p-14">
+                {/* Decorative rays */}
+                <div className="absolute top-6 left-10 flex gap-1.5" aria-hidden="true">
+                  <span className="h-5 w-1.5 -rotate-25 rounded-full bg-white/70" />
+                  <span className="h-6 w-1.5 -rotate-10 rounded-full bg-white/70" />
+                  <span className="h-4 w-1.5 rotate-15 rounded-full bg-white/70" />
+                </div>
+                <div className="w-full max-w-[480px] rotate-[-4deg] rounded-xl border border-[#23251e]/15 bg-white p-5 shadow-[12px_12px_0_var(--lp-accent-strong)] transition-transform duration-300 hover:rotate-0">
+                  <Image
+                    src="/landing-new/notebook.png"
+                    alt="Open study notebook beside a NanoSyllabus mug"
+                    width={1184}
+                    height={864}
+                    className="aspect-[1.7] w-full rounded-md object-cover"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
         )}
 
         {/* ── Marquee Ribbon 2 ── */}
         {/* The same phone treatment as ribbon 1 (its `ns-ribbon-track` styles). */}
         {ribbonTwo.hidden ? null : (
-        <div data-landing-section="ribbonTwo" className="overflow-hidden bg-[var(--lp-primary)] py-5 text-white">
           <div
-            className={`${manrope.className} ns-ribbon-track flex w-max items-center text-xs font-bold uppercase tracking-[0.1em] sm:mx-auto sm:w-auto sm:max-w-[1320px] sm:flex-wrap sm:justify-center sm:gap-y-3 sm:px-5`}
+            data-landing-section="ribbonTwo"
+            className="overflow-hidden bg-[var(--lp-primary)] py-5 text-white"
           >
-            {[0, 1].map((copy) => (
-              <span
-                key={copy}
-                aria-hidden={copy === 1 ? true : undefined}
-                className={`flex shrink-0 items-center ${copy === 1 ? "sm:hidden" : ""}`}
-              >
-                {ribbonTwo.items.map(
-                  (item, index) => (
+            <div
+              className={`${manrope.className} ns-ribbon-track flex w-max items-center text-xs font-bold uppercase tracking-[0.1em] sm:mx-auto sm:w-auto sm:max-w-[1320px] sm:flex-wrap sm:justify-center sm:gap-y-3 sm:px-5`}
+            >
+              {[0, 1].map((copy) => (
+                <span
+                  key={copy}
+                  aria-hidden={copy === 1 ? true : undefined}
+                  className={`flex shrink-0 items-center ${copy === 1 ? "sm:hidden" : ""}`}
+                >
+                  {ribbonTwo.items.map((item, index) => (
                     <span key={index} className="inline-flex shrink-0 items-center">
                       <span
                         aria-hidden="true"
@@ -611,337 +633,350 @@ export function LandingView({
                       </span>
                       <span className="whitespace-nowrap">{item}</span>
                     </span>
-                  ),
-                )}
-              </span>
-            ))}
+                  ))}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
         )}
 
         {/* ── Testimonials Section ── */}
         {testimonials.hidden ? null : (
-        <section
-          id="people"
-          data-landing-section="testimonials"
-          className="mx-auto max-w-[1320px] px-5 py-24 text-center lg:py-28 2xl:px-0"
-        >
-          <h2
-            className={`${manrope.className} text-[clamp(2rem,3.6vw,3.6rem)] font-extrabold tracking-[-0.05em] text-[#1c1e1a]`}
+          <section
+            id="people"
+            data-landing-section="testimonials"
+            className="mx-auto max-w-[1320px] px-5 py-24 text-center lg:py-28 2xl:px-0"
           >
-            {testimonials.titleLead}{" "}
-            <span className="relative isolate inline-block px-1">
-              {testimonials.titleHighlight}
-              <span
-                aria-hidden="true"
-                className="absolute inset-x-0 bottom-1 -z-10 h-4 bg-[var(--lp-accent)]"
-              />
-            </span>
-          </h2>
-          <p className="mx-auto mt-3 max-w-[660px] text-[15px] text-[#5b5e55]">
-            {testimonials.subtitle}
-          </p>
-
-          <div className="relative mx-auto mt-14 grid max-w-[1180px] gap-6 text-left md:grid-cols-3">
-            {testimonials.items.map(({ quote, name, course }, idx) => (
-              <figure
-                key={idx}
-                className={`flex min-h-[260px] flex-col rounded-2xl border border-[#e2e6dc] bg-white p-8 shadow-[0_8px_25px_rgba(28,30,26,0.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-                  idx === 1 ? "md:-translate-y-1.5" : ""
-                }`}
-              >
-                <span className="text-3xl font-extrabold text-[var(--lp-accent-strong)]" aria-hidden="true">
-                  “
-                </span>
-                <blockquote className="mt-2 flex-1 text-sm leading-6 text-[#1c1e1a]">
-                  {quote}
-                </blockquote>
-                <figcaption className="mt-6 flex items-center gap-3.5">
-                  <Image
-                    src={testimonialImages[idx] ?? testimonialImages[0]}
-                    alt={name}
-                    width={44}
-                    height={44}
-                    className="size-11 rounded-full object-cover border border-[#e2e6dc]"
-                  />
-                  <div>
-                    <strong className="block text-sm text-[#1c1e1a]">{name}</strong>
-                    <span className="text-xs text-[#5b5e55]">{course}</span>
-                  </div>
-                </figcaption>
-              </figure>
-            ))}
-          </div>
-        </section>
-        )}
-
-
-{/* ── Section 04 / Community (Discord) ── */}
-{community.hidden ? null : (
-<section
-  id="discord-community"
-  data-landing-section="community"
-  className="relative scroll-mt-24 overflow-hidden bg-[var(--lp-primary)] text-white"
->
-  <div className="relative mx-auto flex min-h-[780px] max-w-[1460px] flex-col gap-12 px-6 py-20 sm:px-10 lg:block lg:min-h-[780px] lg:px-12 lg:py-0 2xl:min-h-[690px] 2xl:px-0">
-    {/* Discord watermark */}
-    <div
-      className="pointer-events-none absolute left-[31%] top-[-12px] hidden opacity-[0.15] lg:block 2xl:left-[29%]"
-      aria-hidden="true"
-    >
-      <svg width="244" height="244" viewBox="0 0 127.14 96.36" fill="currentColor">
-        <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z" />
-      </svg>
-    </div>
-
-    {/* Left copy */}
-    <div className="relative z-10 max-w-[375px] lg:absolute lg:left-12 lg:top-[126px] 2xl:left-0">
-      <p className="text-xs font-bold uppercase tracking-[0.12em] text-white/85">
-      </p>
-
-      <h2
-        className={`${manrope.className} mt-6 text-[clamp(3rem,4vw,4rem)] font-extrabold leading-[1.01] tracking-[-0.065em] text-white`}
-      >
-        {community.headingLine1}
-        <br />
-        <em className="font-serif font-normal italic text-[var(--lp-accent)]">
-          {community.headingLine2}
-        </em>
-      </h2>
-
-      <p className="mt-7 max-w-[345px] text-[15px] leading-[1.8] text-white/85">
-        {community.body}
-      </p>
-
-      <Cta
-        href={DISCORD_STUDY_ROOM_URL}
-        lime
-        size="hero"
-        className="mt-8 w-full sm:w-[304px] lg:min-h-[62px]"
-      >
-        {community.cta}
-      </Cta>
-    </div>
-
-    {/* Community visual */}
-    <div className="relative order-last mx-auto w-full max-w-[600px] lg:absolute lg:bottom-[190px] lg:left-[24%] lg:order-none lg:w-[500px] lg:max-w-none 2xl:bottom-[48px] 2xl:left-[27%] 2xl:w-[590px]">
-      <div className="absolute right-[19%] top-[5%] z-10 inline-flex items-center gap-2 rounded-full border border-white/20 bg-[var(--lp-primary-deeper)]/80 px-3 py-1.5 text-[11px] font-medium text-white shadow-[0_8px_20px_rgba(13,25,110,0.32)] backdrop-blur-sm">
-        <span className="size-2 rounded-full bg-[#55dd9b]" />
-        <span>{community.liveBadge}</span>
-      </div>
-
-      <Image
-        src="/landing-new/community-visual.png"
-        alt="Students sharing notes and studying together in a NanoSyllabus community chat"
-        width={568}
-        height={439}
-        className="w-full object-contain drop-shadow-[0_24px_22px_rgba(13,25,110,0.28)]"
-      />
-    </div>
-
-    {/* Feature list */}
-    <div className="relative z-10 w-full max-w-[560px] space-y-0 lg:absolute lg:right-12 lg:top-[118px] lg:max-w-[480px] 2xl:right-0 2xl:max-w-[560px]">
-      {community.items.map(({ title, detail, note: extra }, index) => (
-        <article
-          key={index}
-          className="grid grid-cols-[26px_minmax(0,1fr)] gap-4 border-t border-white/30 py-6 first:pt-6"
-        >
-          <span className="pt-0.5 text-[13px] font-medium text-[var(--lp-accent)]">
-            0{index + 1}
-          </span>
-
-          <div>
-            <h3
-              className={`${manrope.className} text-[19px] font-bold tracking-[-0.035em] text-white`}
+            <h2
+              className={`${manrope.className} text-[clamp(2rem,3.6vw,3.6rem)] font-extrabold tracking-[-0.05em] text-[#1c1e1a]`}
             >
-              {title}
-            </h3>
-
-            <p className="mt-3 text-[15px] leading-[1.72] text-white/85">
-              {detail}
+              {testimonials.titleLead}{" "}
+              <span className="relative isolate inline-block px-1">
+                {testimonials.titleHighlight}
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-x-0 bottom-1 -z-10 h-4 bg-[var(--lp-accent)]"
+                />
+              </span>
+            </h2>
+            <p className="mx-auto mt-3 max-w-[660px] text-[15px] text-[#5b5e55]">
+              {testimonials.subtitle}
             </p>
 
-            {extra ? (
-              <p className="mt-3 text-[13px] text-white/70">
-                {extra}
-              </p>
-            ) : null}
-          </div>
-        </article>
-      ))}
-    </div>
-  </div>
-</section>
-)}
+            <div className="relative mx-auto mt-14 grid max-w-[1180px] gap-6 text-left md:grid-cols-3">
+              {testimonials.items.map(({ quote, name, course }, idx) => (
+                <figure
+                  key={idx}
+                  className={`flex min-h-[260px] flex-col rounded-2xl border border-[#e2e6dc] bg-white p-8 shadow-[0_8px_25px_rgba(28,30,26,0.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+                    idx === 1 ? "md:-translate-y-1.5" : ""
+                  }`}
+                >
+                  <span
+                    className="text-3xl font-extrabold text-[var(--lp-accent-strong)]"
+                    aria-hidden="true"
+                  >
+                    “
+                  </span>
+                  <blockquote className="mt-2 flex-1 text-sm leading-6 text-[#1c1e1a]">
+                    {quote}
+                  </blockquote>
+                  <figcaption className="mt-6 flex items-center gap-3.5">
+                    <Image
+                      src={testimonialImages[idx] ?? testimonialImages[0]}
+                      alt={name}
+                      width={44}
+                      height={44}
+                      className="size-11 rounded-full object-cover border border-[#e2e6dc]"
+                    />
+                    <div>
+                      <strong className="block text-sm text-[#1c1e1a]">{name}</strong>
+                      <span className="text-xs text-[#5b5e55]">{course}</span>
+                    </div>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        )}
 
-
-{/* ── Section 05 / BCT Weekly Cash Prize ── */}
-{prize.hidden ? null : (
-<section
-  id="cash-prize"
-  data-landing-section="prize"
-  aria-labelledby="prize-title"
-  className="relative overflow-hidden bg-[var(--lp-primary-soft)] text-[#1c1e1a]"
->
-  <div className="pointer-events-none absolute -right-24 -top-32 size-[420px] rounded-full bg-[var(--lp-accent)]/50 blur-3xl" aria-hidden="true" />
-  <div className="pointer-events-none absolute -bottom-44 -left-24 size-[420px] rounded-full bg-[var(--lp-primary)]/15 blur-3xl" aria-hidden="true" />
-
-  <div className="relative mx-auto grid max-w-[1320px] items-center gap-12 px-5 py-20 sm:px-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-[70px] lg:py-28 2xl:px-0">
-    {/* Left copy */}
-    <div>
-      <p className="inline-flex rounded-full bg-[var(--lp-primary)] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
-        {prize.badge}
-      </p>
-
-      <h2
-        id="prize-title"
-        className={`${manrope.className} mt-7 text-[clamp(3rem,4.2vw,4.25rem)] font-extrabold leading-[1.03] tracking-[-0.065em] text-[#1c1e1a]`}
-      >
-        {prize.headingLine1}
-        <br />
-        {prize.headingLine2}
-        <br />
-        <em className="font-serif font-normal italic text-[var(--lp-primary)]">
-          {prize.headingLine3}
-        </em>
-      </h2>
-
-      <p className="mt-6 max-w-[500px] text-[16px] leading-[1.7] text-[#5b5e55]">
-        {prize.body}
-      </p>
-
-      <div className="mt-8 rounded-[20px] border border-[var(--lp-primary-line)] bg-white/80 p-5 sm:p-6">
-        <h3 className={`${manrope.className} text-xl font-extrabold tracking-[-0.035em]`}>
-          {prize.howToTitle}
-        </h3>
-        <ol className="mt-5 space-y-4">
-          {prize.howToSteps.map((step, index) => (
-            <li key={index} className="flex items-start gap-3 text-[15px] leading-[1.5] text-[#353944]">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--lp-accent)] text-xs font-extrabold text-[#1c1e1a]">
-                {index + 1}
-              </span>
-              <span>{step}</span>
-            </li>
-          ))}
-        </ol>
-      </div>
-
-      <div className="mt-7 flex flex-wrap gap-3">
-        <a
-          href={joinHref ?? `${appOrigin}/communities`}
-          className="inline-flex min-h-12 items-center justify-center gap-5 rounded-xl bg-[var(--lp-primary)] px-6 py-3 font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lp-primary)]"
-        >
-          {prize.primaryCta} <span aria-hidden="true">↗</span>
-        </a>
-        <a
-          href={DISCORD_STUDY_ROOM_URL}
-          className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[var(--lp-primary)] px-6 py-3 font-semibold text-[var(--lp-primary)] transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lp-primary)]"
-        >
-          {prize.secondaryCta}
-        </a>
-      </div>
-      <p className="mt-5 text-sm text-[#5b5e55]">
-      </p>
-    </div>
-
-    {/* Prize board */}
-    <div className="relative">
-      <div className="rounded-[28px] border border-[var(--lp-primary-dark)] bg-[var(--lp-primary)] p-5 text-white shadow-[10px_12px_0_var(--lp-primary-deepest)] sm:p-8">
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.1em]">
-          <span className="rounded-full border border-white/30 px-3 py-1.5">{prize.boardLabel}</span>
-          <span className="text-[var(--lp-accent)]">{prize.winnersLabel}</span>
-        </div>
-
-        <div className="mt-9 text-xs font-bold uppercase tracking-[0.16em] text-white/75">
-          {prize.firstPrizeLabel}
-        </div>
-        <div className={`${manrope.className} mt-2 text-[clamp(3.5rem,6vw,5.5rem)] font-extrabold leading-none tracking-[-0.075em] text-[var(--lp-accent)]`}>
-          {prize.firstPrizeAmount}
-        </div>
-        <p className="mt-3 text-base font-semibold">{prize.firstPrizeExtra}</p>
-
-        <div className="mt-9 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
-            <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--lp-accent)]">{prize.secondPrizeLabel}</span>
-            <strong className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}>
-              {prize.secondPrize}
-            </strong>
-          </div>
-
-          <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
-            <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--lp-accent)]">{prize.thirdPrizeLabel}</span>
-            <strong className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}>
-              {prize.thirdPrize}
-            </strong>
-          </div>
-        </div>
-
-        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--lp-accent)] px-4 py-4 text-[#1c1e1a]">
-          <span className="text-xs font-bold uppercase tracking-[0.1em]">{prize.resultsLabel}</span>
-          <strong className={`${manrope.className} text-lg font-extrabold`}>{prize.resultsWhere}</strong>
-        </div>
-
-        <div className="mt-6 border-t border-white/25 pt-5 text-sm leading-relaxed text-white/85">
-          {prize.footnote}
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-)}
-
-
-{/* ── Section 06 / Fair Questions (FAQ) ── */}
-{faq.hidden ? null : (
-<section
-  id="questions"
-  data-landing-section="faq"
-  className="mx-auto grid max-w-[1320px] gap-12 px-5 py-24 lg:grid-cols-[0.75fr_1.25fr] lg:py-28 2xl:px-0"
->
-  <div>
-    <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]">
-    </div>
-
-    <h2
-      className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.2vw,4.1rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
-    >
-      {faq.headingLine1}
-      <br />
-      <em className="font-serif font-normal italic">
-        {faq.headingLine2}
-      </em>
-    </h2>
-
-  </div>
-
-  <div className="divide-y divide-[#d9ddd3] border-t border-[#d9ddd3]">
-    {faq.items.map(({ question, answer }, index) => (
-      <details key={index} className="group py-6">
-        <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-4 text-[16px] font-semibold text-[#1c1e1a] transition-colors hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]">
-          <span>{question}</span>
-
-          <span
-            className="flex size-7 items-center justify-center rounded-full border border-[#d9ddd3] text-lg font-bold text-[#1c1e1a] transition-transform duration-200 group-open:rotate-45"
-            aria-hidden="true"
+        {/* ── Section 04 / Community (Discord) ── */}
+        {community.hidden ? null : (
+          <section
+            id="discord-community"
+            data-landing-section="community"
+            className="relative scroll-mt-24 overflow-hidden bg-[var(--lp-primary)] text-white"
           >
-            +
-          </span>
-        </summary>
+            <div className="relative mx-auto flex min-h-[780px] max-w-[1460px] flex-col gap-12 px-6 py-20 sm:px-10 lg:block lg:min-h-[780px] lg:px-12 lg:py-0 2xl:min-h-[690px] 2xl:px-0">
+              {/* Discord watermark */}
+              <div
+                className="pointer-events-none absolute left-[31%] top-[-12px] hidden opacity-[0.15] lg:block 2xl:left-[29%]"
+                aria-hidden="true"
+              >
+                <svg width="244" height="244" viewBox="0 0 127.14 96.36" fill="currentColor">
+                  <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z" />
+                </svg>
+              </div>
 
-        <p className="max-w-[700px] pt-3 text-[15px] leading-relaxed text-[#5b5e55]">
-          {answer}
-        </p>
-      </details>
-    ))}
-  </div>
-</section>
-)}
+              {/* Left copy */}
+              <div className="relative z-10 max-w-[375px] lg:absolute lg:left-12 lg:top-[126px] 2xl:left-0">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-white/85"></p>
 
+                <h2
+                  className={`${manrope.className} mt-6 text-[clamp(3rem,4vw,4rem)] font-extrabold leading-[1.01] tracking-[-0.065em] text-white`}
+                >
+                  {community.headingLine1}
+                  <br />
+                  <em className="font-serif font-normal italic text-[var(--lp-accent)]">
+                    {community.headingLine2}
+                  </em>
+                </h2>
+
+                <p className="mt-7 max-w-[345px] text-[15px] leading-[1.8] text-white/85">
+                  {community.body}
+                </p>
+
+                <Cta
+                  href={DISCORD_STUDY_ROOM_URL}
+                  lime
+                  size="hero"
+                  className="mt-8 w-full sm:w-[304px] lg:min-h-[62px]"
+                >
+                  {community.cta}
+                </Cta>
+              </div>
+
+              {/* Community visual */}
+              <div className="relative order-last mx-auto w-full max-w-[600px] lg:absolute lg:bottom-[190px] lg:left-[24%] lg:order-none lg:w-[500px] lg:max-w-none 2xl:bottom-[48px] 2xl:left-[27%] 2xl:w-[590px]">
+                <div className="absolute right-[19%] top-[5%] z-10 inline-flex items-center gap-2 rounded-full border border-white/20 bg-[var(--lp-primary-deeper)]/80 px-3 py-1.5 text-[11px] font-medium text-white shadow-[0_8px_20px_rgba(13,25,110,0.32)] backdrop-blur-sm">
+                  <span className="size-2 rounded-full bg-[#55dd9b]" />
+                  <span>{community.liveBadge}</span>
+                </div>
+
+                <Image
+                  src="/landing-new/community-visual.png"
+                  alt="Students sharing notes and studying together in a NanoSyllabus community chat"
+                  width={568}
+                  height={439}
+                  className="w-full object-contain drop-shadow-[0_24px_22px_rgba(13,25,110,0.28)]"
+                />
+              </div>
+
+              {/* Feature list */}
+              <div className="relative z-10 w-full max-w-[560px] space-y-0 lg:absolute lg:right-12 lg:top-[118px] lg:max-w-[480px] 2xl:right-0 2xl:max-w-[560px]">
+                {community.items.map(({ title, detail, note: extra }, index) => (
+                  <article
+                    key={index}
+                    className="grid grid-cols-[26px_minmax(0,1fr)] gap-4 border-t border-white/30 py-6 first:pt-6"
+                  >
+                    <span className="pt-0.5 text-[13px] font-medium text-[var(--lp-accent)]">
+                      0{index + 1}
+                    </span>
+
+                    <div>
+                      <h3
+                        className={`${manrope.className} text-[19px] font-bold tracking-[-0.035em] text-white`}
+                      >
+                        {title}
+                      </h3>
+
+                      <p className="mt-3 text-[15px] leading-[1.72] text-white/85">{detail}</p>
+
+                      {extra ? <p className="mt-3 text-[13px] text-white/70">{extra}</p> : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Section 05 / BCT Weekly Cash Prize ── */}
+        {prize.hidden ? null : (
+          <section
+            id="cash-prize"
+            data-landing-section="prize"
+            aria-labelledby="prize-title"
+            className="relative overflow-hidden bg-[var(--lp-primary-soft)] text-[#1c1e1a]"
+          >
+            <div
+              className="pointer-events-none absolute -right-24 -top-32 size-[420px] rounded-full bg-[var(--lp-accent)]/50 blur-3xl"
+              aria-hidden="true"
+            />
+            <div
+              className="pointer-events-none absolute -bottom-44 -left-24 size-[420px] rounded-full bg-[var(--lp-primary)]/15 blur-3xl"
+              aria-hidden="true"
+            />
+
+            <div className="relative mx-auto grid max-w-[1320px] items-center gap-12 px-5 py-20 sm:px-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-[70px] lg:py-28 2xl:px-0">
+              {/* Left copy */}
+              <div>
+                <p className="inline-flex rounded-full bg-[var(--lp-primary)] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
+                  {prize.badge}
+                </p>
+
+                <h2
+                  id="prize-title"
+                  className={`${manrope.className} mt-7 text-[clamp(3rem,4.2vw,4.25rem)] font-extrabold leading-[1.03] tracking-[-0.065em] text-[#1c1e1a]`}
+                >
+                  {prize.headingLine1}
+                  <br />
+                  {prize.headingLine2}
+                  <br />
+                  <em className="font-serif font-normal italic text-[var(--lp-primary)]">
+                    {prize.headingLine3}
+                  </em>
+                </h2>
+
+                <p className="mt-6 max-w-[500px] text-[16px] leading-[1.7] text-[#5b5e55]">
+                  {prize.body}
+                </p>
+
+                <div className="mt-8 rounded-[20px] border border-[var(--lp-primary-line)] bg-white/80 p-5 sm:p-6">
+                  <h3 className={`${manrope.className} text-xl font-extrabold tracking-[-0.035em]`}>
+                    {prize.howToTitle}
+                  </h3>
+                  <ol className="mt-5 space-y-4">
+                    {prize.howToSteps.map((step, index) => (
+                      <li
+                        key={index}
+                        className="flex items-start gap-3 text-[15px] leading-[1.5] text-[#353944]"
+                      >
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--lp-accent)] text-xs font-extrabold text-[#1c1e1a]">
+                          {index + 1}
+                        </span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                <div className="mt-7 flex flex-wrap gap-3">
+                  <a
+                    href={joinHref ?? `${appOrigin}/communities`}
+                    className="inline-flex min-h-12 items-center justify-center gap-5 rounded-xl bg-[var(--lp-primary)] px-6 py-3 font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lp-primary)]"
+                  >
+                    {prize.primaryCta} <span aria-hidden="true">↗</span>
+                  </a>
+                  <a
+                    href={DISCORD_STUDY_ROOM_URL}
+                    className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[var(--lp-primary)] px-6 py-3 font-semibold text-[var(--lp-primary)] transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lp-primary)]"
+                  >
+                    {prize.secondaryCta}
+                  </a>
+                </div>
+                <p className="mt-5 text-sm text-[#5b5e55]"></p>
+              </div>
+
+              {/* Prize board */}
+              <div className="relative">
+                <div className="rounded-[28px] border border-[var(--lp-primary-dark)] bg-[var(--lp-primary)] p-5 text-white shadow-[10px_12px_0_var(--lp-primary-deepest)] sm:p-8">
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.1em]">
+                    <span className="rounded-full border border-white/30 px-3 py-1.5">
+                      {prize.boardLabel}
+                    </span>
+                    <span className="text-[var(--lp-accent)]">{prize.winnersLabel}</span>
+                  </div>
+
+                  <div className="mt-9 text-xs font-bold uppercase tracking-[0.16em] text-white/75">
+                    {prize.firstPrizeLabel}
+                  </div>
+                  <div
+                    className={`${manrope.className} mt-2 text-[clamp(3.5rem,6vw,5.5rem)] font-extrabold leading-none tracking-[-0.075em] text-[var(--lp-accent)]`}
+                  >
+                    {prize.firstPrizeAmount}
+                  </div>
+                  <p className="mt-3 text-base font-semibold">{prize.firstPrizeExtra}</p>
+
+                  <div className="mt-9 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
+                      <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--lp-accent)]">
+                        {prize.secondPrizeLabel}
+                      </span>
+                      <strong
+                        className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}
+                      >
+                        {prize.secondPrize}
+                      </strong>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/20 bg-white/10 p-5">
+                      <span className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--lp-accent)]">
+                        {prize.thirdPrizeLabel}
+                      </span>
+                      <strong
+                        className={`${manrope.className} mt-3 block text-xl font-extrabold leading-tight`}
+                      >
+                        {prize.thirdPrize}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--lp-accent)] px-4 py-4 text-[#1c1e1a]">
+                    <span className="text-xs font-bold uppercase tracking-[0.1em]">
+                      {prize.resultsLabel}
+                    </span>
+                    <strong className={`${manrope.className} text-lg font-extrabold`}>
+                      {prize.resultsWhere}
+                    </strong>
+                  </div>
+
+                  <div className="mt-6 border-t border-white/25 pt-5 text-sm leading-relaxed text-white/85">
+                    {prize.footnote}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Section 06 / Fair Questions (FAQ) ── */}
+        {faq.hidden ? null : (
+          <section
+            id="questions"
+            data-landing-section="faq"
+            className="mx-auto grid max-w-[1320px] gap-12 px-5 py-24 lg:grid-cols-[0.75fr_1.25fr] lg:py-28 2xl:px-0"
+          >
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.12em] text-[#5b5e55]"></div>
+
+              <h2
+                className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.2vw,4.1rem)] font-extrabold leading-[1.08] tracking-[-0.055em] text-[#1c1e1a]`}
+              >
+                {faq.headingLine1}
+                <br />
+                <em className="font-serif font-normal italic">{faq.headingLine2}</em>
+              </h2>
+            </div>
+
+            <div className="divide-y divide-[#d9ddd3] border-t border-[#d9ddd3]">
+              {faq.items.map(({ question, answer }, index) => (
+                <details key={index} className="group py-6">
+                  <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-4 text-[16px] font-semibold text-[#1c1e1a] transition-colors hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]">
+                    <span>{question}</span>
+
+                    <span
+                      className="flex size-7 items-center justify-center rounded-full border border-[#d9ddd3] text-lg font-bold text-[#1c1e1a] transition-transform duration-200 group-open:rotate-45"
+                      aria-hidden="true"
+                    >
+                      +
+                    </span>
+                  </summary>
+
+                  <p className="max-w-[700px] pt-3 text-[15px] leading-relaxed text-[#5b5e55]">
+                    {answer}
+                  </p>
+                </details>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Final Call To Action Banner ── */}
-        <section data-landing-section="finalCta" className="mx-auto max-w-[1320px] px-5 pb-16 2xl:px-0">
+        <section
+          data-landing-section="finalCta"
+          className="mx-auto max-w-[1320px] px-5 pb-16 2xl:px-0"
+        >
           <div className="relative overflow-hidden rounded-[28px] bg-[var(--lp-accent)] p-8 sm:p-14 lg:p-16 shadow-sm">
-       
             <h2
               className={`${manrope.className} mt-6 text-[clamp(2.8rem,4.5vw,4.6rem)] font-extrabold leading-[1.05] tracking-[-0.055em] text-[#1c1e1a]`}
             >
@@ -972,14 +1007,20 @@ export function LandingView({
       </main>
 
       {/* ── Footer ── */}
-      <footer data-landing-section="footer" className="mx-auto max-w-[1320px] border-t border-[#e5e8df] px-5 py-10 2xl:px-0">
+      <footer
+        data-landing-section="footer"
+        className="mx-auto max-w-[1320px] border-t border-[#e5e8df] px-5 py-10 2xl:px-0"
+      >
         {/* Top Link Row */}
         <div className="flex flex-wrap items-center justify-between gap-6 pb-8 text-xs font-semibold text-[#5b5e55]">
           <nav aria-label="Footer primary navigation" className="flex flex-wrap gap-x-7 gap-y-3">
             <a href="#steps" className="hover:text-[#1c1e1a] transition-colors">
               Product
             </a>
-            <Link href={`${appOrigin}/communities`} className="hover:text-[#1c1e1a] transition-colors">
+            <Link
+              href={`${appOrigin}/communities`}
+              className="hover:text-[#1c1e1a] transition-colors"
+            >
               Communities
             </Link>
             <Link href={`${appOrigin}/flow`} className="hover:text-[#1c1e1a] transition-colors">

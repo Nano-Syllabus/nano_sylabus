@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentAuth } from "@/lib/auth";
 import { enrollStudentInCourse, getPublishedCourse } from "@/lib/student-courses";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { mainAppOrigin } from "@/lib/landing-site-host";
 import {
   getEnrollmentExam,
   getExamPlans,
@@ -11,11 +12,14 @@ import { EXAM_INTENT_COOKIE, readExamIntent } from "@/lib/exam-enrollment";
 import { ExamCheckout, ExamPreparationFlow } from "@/components/exam-enrollment-flow";
 import { getActiveManualPaymentConfig } from "@/lib/data/billing";
 
-type PageProps = { params: Promise<{ slug: string }> };
+type PageProps = {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ intent?: string }>;
+};
 
 export const dynamic = "force-dynamic";
 
-export default async function CoursePaymentPage({ params }: PageProps) {
+export default async function CoursePaymentPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
   const { user } = await getCurrentAuth();
   const paymentPath = `/payment/${encodeURIComponent(slug)}`;
@@ -23,11 +27,20 @@ export default async function CoursePaymentPage({ params }: PageProps) {
   const exam = await getEnrollmentExam(slug);
   if (exam) {
     const plans = await getExamPlans(exam);
-    const storedIntent = readExamIntent((await cookies()).get(EXAM_INTENT_COOKIE)?.value);
+    // The link from a subdomain carries the student's choices; a cookie covers same-host visits.
+    const storedIntent =
+      readExamIntent((await searchParams).intent) ??
+      readExamIntent((await cookies()).get(EXAM_INTENT_COOKIE)?.value);
     const intent = storedIntent?.examSlug === slug ? storedIntent : null;
     if (!user)
       return (
-        <ExamPreparationFlow exam={exam} plans={plans} initialStep={2} initialIntent={intent} />
+        <ExamPreparationFlow
+          exam={exam}
+          plans={plans}
+          initialStep="plans"
+          initialIntent={intent}
+          appOrigin={mainAppOrigin((await headers()).get("host"))}
+        />
       );
     const [enrollment, paymentConfig] = await Promise.all([
       getStudentExamEnrollment(user.id),

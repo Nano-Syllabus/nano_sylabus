@@ -36,7 +36,9 @@ export function isValidSiteSlug(slug: string) {
 }
 
 export function rootDomain() {
-  return (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "nanosyllabus.com").toLowerCase().replace(/^\.+|\.+$/g, "");
+  return (process.env.NEXT_PUBLIC_ROOT_DOMAIN || "nanosyllabus.com")
+    .toLowerCase()
+    .replace(/^\.+|\.+$/g, "");
 }
 
 /** The site slug a Host header names, or null for the main site / anything unrecognised. */
@@ -59,4 +61,14 @@ export function siteSlugFromHost(host: string | null | undefined): string | null
 export function siteOrigin(slug: string) {
   const root = rootDomain();
   return slug === MAIN_SITE_SLUG ? `https://${root}` : `https://${slug}.${root}`;
+}
+
+/**
+ * Where sign-in and the app live for a request. A subdomain sends students to
+ * the main domain to log in (one session); the main site and local dev stay put.
+ */
+export function mainAppOrigin(host: string | null | undefined) {
+  return process.env.NODE_ENV === "production" && siteSlugFromHost(host)
+    ? siteOrigin(MAIN_SITE_SLUG)
+    : "";
 }

@@ -66,13 +66,22 @@ export const examConfigSchema = z
     enabled: z.boolean(),
     facultySlugs: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/)).max(50),
     planIds: z.array(z.string().uuid()).max(12),
-    questions: z.array(questionSchema).min(1).max(8),
+    /** Off = the flow skips onboarding questions and starts at the faculty list. */
+    askQuestions: z.boolean().default(true),
+    questions: z.array(questionSchema).max(8),
     billingMonths: z
       .array(z.union([z.literal(1), z.literal(3)]))
       .min(1)
       .max(2)
       .refine((values) => new Set(values).size === values.length, "Select each duration only once.")
       .default([1, 3]),
+    /** Monthly price overrides: faculty slug → plan id → price. A missing entry uses the plan's own price. */
+    facultyPrices: z
+      .record(
+        z.string().max(100),
+        z.record(z.string().uuid(), z.number().int().positive().max(10_000_000)),
+      )
+      .default({}),
     copy: copySchema,
   })
   .superRefine((config, ctx) => {
@@ -88,6 +97,12 @@ export const examConfigSchema = z
         path: ["facultySlugs"],
         message: "Select each faculty only once.",
       });
+    if (config.askQuestions && !config.questions.length)
+      ctx.addIssue({
+        code: "custom",
+        path: ["questions"],
+        message: "Add at least one onboarding question, or turn questions off.",
+      });
     if (new Set(config.questions.map((q) => q.id)).size !== config.questions.length)
       ctx.addIssue({
         code: "custom",
@@ -101,8 +116,10 @@ export const DEFAULT_EXAM_CONFIG: ExamConfig = {
   enabled: false,
   facultySlugs: [],
   planIds: [],
+  askQuestions: true,
   questions: DEFAULT_EXAM_QUESTIONS,
   billingMonths: [1, 3],
+  facultyPrices: {},
   copy: DEFAULT_EXAM_COPY,
 };
 
@@ -112,6 +129,7 @@ export function readExamConfig(raw: unknown): ExamConfig {
 }
 
 export function validateExamAnswers(config: ExamConfig, raw: unknown) {
+  if (config.askQuestions === false) return {};
   const parsed = z.record(z.string().max(100)).safeParse(raw);
   if (!parsed.success) throw new Error("Answer the preparation questions before continuing.");
   const answers: Record<string, string> = {};
@@ -139,4 +157,16 @@ export function readExamIntent(value: string | undefined): ExamIntent | null {
   } catch {
     return null;
   }
+}
+
+/** A plan's monthly price for one faculty: the admin's override, else the plan's own price. */
+export function examPlanMonthlyPrice(
+  config: Pick<ExamConfig, "facultyPrices">,
+  facultySlug: string | null | undefined,
+  plan: { id: string; price: number },
+) {
+  return (facultySlug && config.facultyPrices[facultySlug]?.[plan.id]) || plan.price;
+}
+export function hasFacultyPrices(config: Pick<ExamConfig, "facultyPrices">) {
+  return Object.values(config.facultyPrices).some((prices) => Object.keys(prices).length > 0);
 }
