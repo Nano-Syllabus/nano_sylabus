@@ -110,8 +110,8 @@ export function AdminSubscriptionManager({
   async function handlePlanSave() {
     const credits = Number(planForm.credits);
     const price = Number(planForm.price);
-    if (!Number.isInteger(credits) || credits <= 0) {
-      setFeedback("Credits must be a positive whole number.");
+    if (!Number.isInteger(credits) || credits < 0) {
+      setFeedback("Credits must be a whole number, 0 or higher.");
       return;
     }
     if (!Number.isInteger(price) || price < 0) {
