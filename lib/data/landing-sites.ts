@@ -319,8 +319,12 @@ export async function deleteLandingSite(slug: string) {
   refreshLiveSite(slug);
 }
 
+/** The exams and faculties the in-app faculty picker offers (see listEnrollmentExams). */
+export const ENROLLMENT_EXAMS_TAG = "enrollment-exams";
+
 function refreshLiveSite(slug: string) {
   revalidateTag(landingSiteTag(slug));
+  revalidateTag(ENROLLMENT_EXAMS_TAG);
   revalidatePath(slug === MAIN_SITE_SLUG ? "/" : `/sites/${slug}`);
 }
 

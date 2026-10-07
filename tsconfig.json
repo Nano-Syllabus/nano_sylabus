@@ -34,14 +34,15 @@
     ".next-dev-3001/types/**/*.ts",
     ".next-dev-webpack/types/**/*.ts",
     ".next-dev/types/**/*.ts",
+    ".next-live-check/types/**/*.ts",
     ".next-perf/types/**/*.ts",
+    ".next-profile/types/**/*.ts",
     ".next-staging/types/**/*.ts",
     ".next-stale/types/**/*.ts",
     ".next-vercel/types/**/*.ts",
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
-    "next-env.d.ts",
-    ".next-live-check/types/**/*.ts"
+    "next-env.d.ts"
   ],
   "exclude": [
     "exam-prep-hub",

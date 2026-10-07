@@ -3,6 +3,8 @@ import { hostname } from "node:os";
 import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { challengeSettingsForCourse } from "@/lib/data/community-challenge-format";
+import { CHALLENGE_HYBRID_MCQ_QUESTIONS } from "@/lib/challenge-format";
 import { collectionKeyForTeacher } from "@/lib/data/challenge-collection-key";
 import { isChallengeSourceDocumentTopic } from "@/lib/challenge-topics";
 import { createLimiter } from "@/lib/http/limit";
@@ -78,7 +80,7 @@ export const CHALLENGE_POOL_MAX_ATTEMPTS = 6;
 export const CHALLENGE_POOL_STALE_AFTER_DAYS = 25;
 
 /** A topic the course API is still building is polled again after this. */
-const BUILDING_POLL_MS = 2 * 60_000;
+const BUILDING_POLL_MS = 15_000;
 /** A claimed row is the sweep's for this long; a sweep that dies lets it lapse. */
 const LEASE_SECONDS = 180;
 /** The course API has no prepare route yet (older deploy): try again later,
@@ -799,10 +801,13 @@ export async function prepareClaimedTopic(
   try {
     const key = await collectionKeyForTeacher(row.teacher_id);
     if (!key) return await fail("This course creator's study collection is not ready yet.");
+    const settings = await challengeSettingsForCourse(row.course_id, admin);
+    const mcqCount = settings.format === "mcq" ? settings.mcqCount : settings.format === "hybrid" ? CHALLENGE_HYBRID_MCQ_QUESTIONS : 0;
     response = await prepareTeacherChallengeTopic(key, {
       // The slug: a subject's display name can drift from the creator's own.
       subject: row.subject_slug || row.subject_name,
       topic: row.topic_key,
+      ...(mcqCount ? { mcq_count: mcqCount } : {}),
       ...(options.force ? { force: true } : {}),
     });
   } catch (cause) {
@@ -1041,6 +1046,60 @@ async function markStaleTopics(
     }
   }
   return summary;
+}
+
+/** Re-check the least recently audited ready reserves. The course API queues
+ * missing stock without invalidating the reusable lesson in the frontend pool.
+ * A separate timestamp makes this fair across ticks and process restarts.
+ */
+export async function auditReadyChallengeReserves(
+  admin: SupabaseClient = createSupabaseAdminClient(), limit = 4,
+) {
+  const { data, error } = await admin.from(TABLE)
+    .select("id,course_id,teacher_id,subject_slug,topic_key")
+    .eq("status", "ready")
+    .order("reserve_checked_at", { ascending: true, nullsFirst: true })
+    .order("id", { ascending: true })
+    .limit(limit);
+  if (error) {
+    if (isMissingPool(error) || String(error.code) === "42703" || String(error.code) === "PGRST204") return;
+    throw error;
+  }
+  const gate = createLimiter(SWEEP_CONCURRENCY);
+  await Promise.all((data ?? []).map((row) => gate(async () => {
+    try {
+      const key = await collectionKeyForTeacher(String(row.teacher_id));
+      if (key) {
+        const settings = await challengeSettingsForCourse(String(row.course_id), admin);
+        const mcqCount = settings.format === "mcq" ? settings.mcqCount : settings.format === "hybrid" ? CHALLENGE_HYBRID_MCQ_QUESTIONS : 0;
+        await prepareTeacherChallengeTopic(key, {
+          subject: String(row.subject_slug), topic: String(row.topic_key), include_content: false,
+          ...(mcqCount ? { mcq_count: mcqCount } : {}),
+        });
+      }
+    } catch (cause) {
+      console.warn(`[challenge-pool] reserve audit failed: ${errorMessage(cause, "unknown")}`);
+    }
+    // Failed reads rotate too; the next cycle retries instead of starving others.
+    const saved = await admin.from(TABLE).update({ reserve_checked_at: new Date().toISOString() })
+      .eq("id", row.id).eq("status", "ready");
+    if (saved.error) throw saved.error;
+  })));
+}
+
+/** Backfill the published global catalogue even when no student has opened it.
+ * SQL uses the pool's unique index to find only missing rows; each tick resumes
+ * from durable state, including after restarts or concurrent sweeps.
+ */
+export async function enqueueGlobalChallengeCatalogue(
+  admin: SupabaseClient = createSupabaseAdminClient(),
+  limit = 200,
+): Promise<number> {
+  const { data, error } = await admin.rpc("enqueue_global_challenge_catalogue", { p_limit: limit });
+  // Older databases still warm requested topics until the migration is applied.
+  if (error && isMissingPool(error)) return 0;
+  if (error) throw error;
+  return Number(data) || 0;
 }
 
 // ---------------------------------------------------------------------------

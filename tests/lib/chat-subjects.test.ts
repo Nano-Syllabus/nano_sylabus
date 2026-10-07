@@ -7,8 +7,6 @@ describe("deriveSubjectTags", () => {
       existingTags: [],
       subjectContext: "Physics",
       retrieval: {
-        chunks: [],
-        grounded: true,
         citations: [
           {
             chunkId: "chunk-1",
@@ -34,8 +32,6 @@ describe("deriveSubjectTags", () => {
       existingTags: ["General"],
       subjectContext: null,
       retrieval: {
-        chunks: [],
-        grounded: false,
         citations: [],
       },
       question: "Can you solve this Mathematics question?",
@@ -50,8 +46,6 @@ describe("deriveSubjectTags", () => {
       existingTags: [" physics "],
       subjectContext: "physics",
       retrieval: {
-        chunks: [],
-        grounded: true,
         citations: [
           {
             chunkId: "chunk-1",

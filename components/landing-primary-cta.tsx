@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
+import { hasSessionCookie } from "@/lib/landing-session";
 
 export function LandingPrimaryCta({
   children,
@@ -71,19 +71,7 @@ function useLandingSession(enabled = true) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   useEffect(() => {
     if (!enabled) return;
-    let cancelled = false;
-    void loadSupabaseBrowserClient()
-      .then((supabase) => supabase.auth.getSession())
-      .then(({ data: { session } }) => {
-        if (!cancelled) setIsLoggedIn(Boolean(session?.user));
-      })
-      .catch(() => {
-        // This CTA is non-gating, so a failed session check keeps the safe
-        // signed-out destination instead of blocking the landing page.
-      });
-    return () => {
-      cancelled = true;
-    };
+    setIsLoggedIn(hasSessionCookie());
   }, [enabled]);
   return isLoggedIn;
 }

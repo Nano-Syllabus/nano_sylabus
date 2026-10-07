@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
   cookie: undefined as string | undefined,
 }));
 vi.mock("@/lib/dev-auth-bypass", () => ({ DEV_AUTH_BYPASS: false, DEV_BYPASS_USER_ID: "dev" }));
-vi.mock("@/lib/auth", () => ({ requireOnboardedUser: mocks.auth }));
+vi.mock("@/lib/auth", () => ({
+  requireOnboardedUser: mocks.auth,
+  getSessionUser: async () => ({ user: (await mocks.auth()).user }),
+}));
 vi.mock("@/lib/data/exam-enrollment", () => ({
   getStudentExamEnrollment: mocks.enrollment,
   listEnrollmentExams: mocks.exams,

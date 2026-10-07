@@ -1635,6 +1635,7 @@ export type TeacherChallengePrepareManifest = {
   unsolved_count: number;
   has_reading: boolean;
   exam_pool_depth: number;
+  mcq_pool_depth?: number;
   figure_count: number;
   figures_ready: boolean;
 };
@@ -1670,14 +1671,14 @@ export type TeacherChallengePrepareResponse = {
  */
 export const prepareTeacherChallengeTopic = (
   key: string,
-  input: { subject: string; topic: string; force?: boolean },
+  input: { subject: string; topic: string; force?: boolean; include_content?: boolean; mcq_count?: number },
 ) =>
   teacherRequest<TeacherChallengePrepareResponse>("/v1/collection/challenge/prepare", key, {
     method: "POST",
     body: input,
-    timeoutMs: 60_000,
+    timeoutMs: 15_000,
     idempotent: !input.force,
-    retries: input.force ? 0 : 1,
+    retries: 0,
   });
 
 /** The material revision a subject's pooled topics were built from. */

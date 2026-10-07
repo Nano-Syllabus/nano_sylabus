@@ -2,7 +2,7 @@ import { DEV_AUTH_BYPASS, DEV_BYPASS_USER_ID } from "@/lib/dev-auth-bypass";
 import { AppShell } from "@/components/app-shell";
 import { QueryIdentity } from "@/components/query-identity";
 import { TabWarmer } from "@/components/tab-warmer";
-import { requireOnboardedUser } from "@/lib/auth";
+import { getSessionUser, requireOnboardedUser } from "@/lib/auth";
 import { getStudentExamEnrollment, listEnrollmentExams } from "@/lib/data/exam-enrollment";
 import { FacultySelectionGate } from "@/components/faculty-selection-dialog";
 import { cookies, headers } from "next/headers";
@@ -11,14 +11,26 @@ import { EXAM_INTENT_COOKIE, EXAM_SITE_COOKIE, readExamIntent } from "@/lib/exam
 import { hasFacultyMembership } from "@/lib/data/faculty-lock";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  // The faculty lookups need only the user id, which the session gives without a
+  // database trip. Starting them here runs them alongside the profile/credits
+  // batch in `requireOnboardedUser` instead of after it: one round trip fewer on
+  // every app page. For admins the answer is simply unused.
+  const { user: sessionUser } = await getSessionUser();
+  const facultyLookups = sessionUser
+    ? Promise.all([
+        getStudentExamEnrollment(sessionUser.id),
+        hasFacultyMembership(sessionUser.id),
+      ])
+    : null;
+  // Handled here so a redirect below can't leave it as an unhandled rejection;
+  // awaiting it later still throws as before.
+  facultyLookups?.catch(() => {});
+
   const { user } = await requireOnboardedUser();
   const examStudent =
     user.role === "student" && !(DEV_AUTH_BYPASS && user.id === DEV_BYPASS_USER_ID);
-  // Everything that only needs the user goes out together, not one after another.
   const [[enrollment, member], cookieStore, requestHeaders] = await Promise.all([
-    examStudent
-      ? Promise.all([getStudentExamEnrollment(user.id), hasFacultyMembership(user.id)])
-      : Promise.resolve([null, false] as const),
+    examStudent && facultyLookups ? facultyLookups : Promise.resolve([null, false] as const),
     cookies(),
     headers(),
   ]);

@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
-import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { useMemo, type ReactNode } from "react";
+import { PersistQueryClientProvider, type Persister, type PersistedClient } from "@tanstack/react-query-persist-client";
 import { getQueryClient, shouldPersistQuery } from "@/lib/query/client";
 import { QueryDevtools } from "@/components/query-devtools";
 import { QueryBootReconcile } from "@/components/query-boot-reconcile";
@@ -41,30 +39,6 @@ function safeStorage(): Storage | undefined {
   }
 }
 
-/**
- * The query cache, and the disk copy of the parts that are safe to keep.
- *
- * WHAT PERSISTENCE BUYS
- * ---------------------
- * A student opening the app on a cold browser cache waits on the tenant API
- * for the published subject catalog before the course browser can render
- * anything. That is the slowest read in the product and its answer is the same
- * for every student. Written to disk once, the next morning paints it
- * immediately and revalidates behind the paint.
- *
- * WHAT IT DELIBERATELY DOES NOT KEEP
- * ----------------------------------
- * Everything else. `shouldDehydrateQuery` in `lib/query/client.ts` only writes
- * a query that asked to be written (`meta: { persist: true }`), so no chat
- * title, invoice, grade or credit balance reaches `localStorage`. That is why
- * one storage key is enough for every account on the machine: nothing written
- * under it is specific to an account. Anything user-specific that is ever
- * marked persistable breaks that invariant — don't.
- *
- * Signing in as a different user still has to clear the IN-MEMORY half, which
- * is keyed by endpoint and does not change when the cookie does. That is
- * `<QueryIdentity>`, rendered by each authenticated layout.
- */
 /** Where the id of the account this browser last served is remembered. */
 export const ACTIVE_USER_KEY = "ns-active-user";
 
@@ -84,7 +58,10 @@ export function persistedCacheKey(userId: string | null) {
  * Wrapped because the accessor itself throws in a private window or with site
  * data blocked, and a sign-out must never fail on its way out.
  */
+let persistenceEpoch = 0;
+
 export function clearPersistedCache() {
+  persistenceEpoch += 1;
   try {
     const userId = window.localStorage.getItem(ACTIVE_USER_KEY);
     window.localStorage.removeItem(persistedCacheKey(userId));
@@ -95,65 +72,74 @@ export function clearPersistedCache() {
   }
 }
 
+/** Restore without changing provider type, and save away from button clicks.
+ * Every deferred write captures its account and is discarded after sign-out or
+ * an account change. Storage is first accessed from the provider's effect.
+ */
+export function createAccountPersister(getStorage: () => Storage | undefined = safeStorage): Persister {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let idle: number | undefined;
+  const cancel = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    if (idle !== undefined && typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idle);
+    timer = undefined;
+    idle = undefined;
+  };
+  return {
+    persistClient: (client: PersistedClient) => {
+      cancel();
+      let storage: Storage | undefined;
+      let userId: string | null;
+      try {
+        storage = getStorage();
+        if (!storage) return;
+        userId = storage.getItem(ACTIVE_USER_KEY);
+      } catch { return; }
+      const epoch = persistenceEpoch;
+      const save = () => {
+        idle = undefined;
+        try {
+          if (epoch !== persistenceEpoch || storage.getItem(ACTIVE_USER_KEY) !== userId) return;
+          storage.setItem(persistedCacheKey(userId), JSON.stringify(client));
+        } catch {
+          // A full or disabled storage falls back to the in-memory cache.
+        }
+      };
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (typeof window.requestIdleCallback === "function") idle = window.requestIdleCallback(save, { timeout: 2000 });
+        else save();
+      }, 1500);
+    },
+    restoreClient: () => {
+      try {
+        const storage = getStorage();
+        const raw = storage?.getItem(persistedCacheKey(storage.getItem(ACTIVE_USER_KEY)));
+        return raw ? JSON.parse(raw) as PersistedClient : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    removeClient: () => {
+      cancel();
+      try {
+        const storage = getStorage();
+        if (storage) storage.removeItem(persistedCacheKey(storage.getItem(ACTIVE_USER_KEY)));
+      } catch {
+        // Storage may become unavailable after restoration.
+      }
+    },
+  };
+}
+
 export function QueryProvider({ children }: { children: ReactNode }) {
   const queryClient = getQueryClient();
-  const [storage, setStorage] = useState<Storage | undefined>(undefined);
-  /**
-   * Which account's cache to restore, read from the previous session.
-   *
-   * The provider sits at the root layout, which does not know who is signed in
-   * — but the cache has to be restored on the very first paint, long before any
-   * authenticated layout renders. So `<QueryIdentity>` records the id when it
-   * mounts and this reads it back on the next load. A first-ever visit falls
-   * back to the anonymous key and simply restores nothing.
-   */
-  const [userId, setUserId] = useState<string | null>(null);
-
-  // Reading `localStorage` during render would differ between the server pass
-  // (no storage) and the first client pass (storage), which is a hydration
-  // mismatch. The first client render therefore runs without a persister and
-  // the real one attaches one commit later.
-  useEffect(() => {
-    const available = safeStorage();
-    setStorage(available);
-    if (available) {
-      try {
-        setUserId(available.getItem(ACTIVE_USER_KEY));
-      } catch {
-        /* leave it anonymous */
-      }
-    }
-  }, []);
-
-  const persistOptions = useMemo(() => {
-    if (!storage) return null;
-    return {
-      persister: createSyncStoragePersister({
-        storage,
-        key: persistedCacheKey(userId),
-        // Writes are batched. Without a throttle every settled query rewrites
-        // the whole serialised cache — a synchronous JSON.stringify on the
-        // main thread, during exactly the burst of requests a fresh page load
-        // produces.
-        throttleTime: 1500,
-      }),
-      maxAge: PERSIST_MAX_AGE,
-      buster: CACHE_BUSTER,
-      // The opt-in disk rule lives here, on the PERSISTER, and nowhere else.
-      // The client's own `dehydrate` default stays permissive so server-side
-      // prefetching can seed the cache — see lib/query/client.ts.
-      dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
-    };
-  }, [storage, userId]);
-
-  if (!persistOptions) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        {children}
-        <QueryDevtools />
-      </QueryClientProvider>
-    );
-  }
+  const persistOptions = useMemo(() => ({
+    persister: createAccountPersister(),
+    maxAge: PERSIST_MAX_AGE,
+    buster: CACHE_BUSTER,
+    dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
+  }), []);
 
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>

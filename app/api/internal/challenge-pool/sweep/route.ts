@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { sweepChallengePool } from "@/lib/data/challenge-pool";
+import { auditReadyChallengeReserves, enqueueGlobalChallengeCatalogue, sweepChallengePool } from "@/lib/data/challenge-pool";
 import { sweepSecret } from "@/lib/data/challenge-pool-secret";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const summary = await sweepChallengePool({ limit: 6 });
+    await enqueueGlobalChallengeCatalogue();
+    const summary = await sweepChallengePool({ limit: 12, revisionChecks: 4 });
+    await auditReadyChallengeReserves();
     return NextResponse.json(summary, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[challenge-pool] sweep failed", error);

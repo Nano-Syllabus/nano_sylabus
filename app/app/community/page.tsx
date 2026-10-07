@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Building2 } from "lucide-react";
 import { CommunityHubClient } from "@/components/community-hub-client";
 import { SetAppShell } from "@/components/set-app-shell";
-import { requireOnboardedUser } from "@/lib/auth";
+import { requireOnboardedUserWith } from "@/lib/auth";
 import { getCommunityHubForUser } from "@/lib/data/community-hub";
 import { getActiveCommunity } from "@/lib/data/active-community";
 
@@ -13,11 +13,12 @@ export default async function CommunityPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { user } = await requireOnboardedUser();
   const params = await searchParams;
   const preferredCommunity =
     typeof params.community === "string" ? params.community.trim() : undefined;
-  const active = await getActiveCommunity(user.id, preferredCommunity);
+  const [{ user }, active] = await requireOnboardedUserWith((userId) =>
+    getActiveCommunity(userId, preferredCommunity),
+  );
   const data = active.selected
     ? await getCommunityHubForUser(user.id, undefined, active.selected.slug)
     : null;

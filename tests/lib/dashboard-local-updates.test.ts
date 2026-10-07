@@ -50,7 +50,7 @@ function dashboard(overrides: Partial<StudentDailyDashboard> = {}): StudentDaily
         { id: "c1", status: "available" },
         { id: "c2", status: "available" },
       ],
-    } as StudentDailyDashboard["challenge"],
+    } as unknown as StudentDailyDashboard["challenge"],
     community: {
       name: "BCT",
       slug: "bct",
@@ -60,6 +60,7 @@ function dashboard(overrides: Partial<StudentDailyDashboard> = {}): StudentDaily
       topicCount: 65,
       leaderboard: [],
       currentSemesterId: "t1",
+      termNoun: "Semester",
       semesters: [],
     },
     ...overrides,

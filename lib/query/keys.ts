@@ -23,6 +23,10 @@
  */
 
 export const keys = {
+  challenges: {
+    all: () => ["student", "challenges"] as const,
+    content: (id: string) => ["student", "challenges", "content", id] as const,
+  },
   /** The signed-in user's own account row, language and credit balance. */
   account: {
     all: () => ["account"] as const,

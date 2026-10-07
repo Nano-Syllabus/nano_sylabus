@@ -1,6 +1,6 @@
 import { SetAppShell } from "@/components/set-app-shell";
 import { StudentDailyDashboardView } from "@/components/student-daily-dashboard";
-import { requireOnboardedUser } from "@/lib/auth";
+import { requireOnboardedUserWith } from "@/lib/auth";
 import { getActiveCommunity } from "@/lib/data/active-community";
 
 export const dynamic = "force-dynamic";
@@ -32,11 +32,12 @@ export default async function TodayPage({
 }: {
   searchParams: Promise<{ community?: string }>;
 }) {
-  const { user, profile } = await requireOnboardedUser();
   const params = await searchParams;
-  const active = await getActiveCommunity(
-    user.id,
-    typeof params.community === "string" ? params.community : undefined,
+  const [{ user, profile }, active] = await requireOnboardedUserWith((userId) =>
+    getActiveCommunity(
+      userId,
+      typeof params.community === "string" ? params.community : undefined,
+    ),
   );
 
   return (

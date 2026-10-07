@@ -25,6 +25,9 @@ const poppins = Poppins({
   weight: ["500", "600", "700"],
   variable: "--font-poppins",
   display: "swap",
+  // App-only face: fetched when a page uses it, not preloaded on every page
+  // (the public landing never does, and the preload competed with its first paint).
+  preload: false,
 });
 
 const dmMono = DM_Mono({
@@ -32,6 +35,9 @@ const dmMono = DM_Mono({
   weight: ["400", "500"],
   variable: "--font-dm-mono",
   display: "swap",
+  // App-only face: fetched when a page uses it, not preloaded on every page
+  // (the public landing never does, and the preload competed with its first paint).
+  preload: false,
 });
 
 const themeBootScript = `

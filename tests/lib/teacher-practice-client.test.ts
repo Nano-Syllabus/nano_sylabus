@@ -4,7 +4,6 @@ import {
   askTeacherSubject,
   createTeacherChallengeExam,
   generateTeacherCollectionPaper,
-  generateTeacherPracticePaper,
   getTeacherChallengePastQuestions,
   getTeacherChallengeReading,
   getTeacherChallengeSolvedQuestions,
@@ -137,22 +136,22 @@ describe("teacher collection API client", () => {
   });
 
   it("uploads an answer sheet with the collection key", async () => {
-    let received: {
+    const received: Array<{
       path: string;
       authorization: string;
       contentType: string;
       body: string;
-    } | null = null;
+    }> = [];
     const server = http.createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
       request.on("end", () => {
-        received = {
+        received.push({
           path: request.url || "",
           authorization: String(request.headers.authorization || ""),
           contentType: String(request.headers["content-type"] || ""),
           body: Buffer.concat(chunks).toString("utf8"),
-        };
+        });
         response.setHeader("Content-Type", "application/json");
         response.end(JSON.stringify({ total_score: 8, total_marks: 10, results: [] }));
       });
@@ -177,13 +176,13 @@ describe("teacher collection API client", () => {
       });
 
       expect(result.total_score).toBe(8);
-      expect(received?.path).toBe("/api/v1/practice/papers/exam%2Fone/grade-file");
-      expect(received?.authorization).toBe("Bearer collection-secret");
-      expect(received?.contentType).toContain("multipart/form-data; boundary=");
-      expect(received?.body).toContain('name="student_name"');
-      expect(received?.body).toContain("Jane Doe");
-      expect(received?.body).toContain('filename="answers.pdf"');
-      expect(received?.body).toContain("answer sheet");
+      expect(received[0]?.path).toBe("/api/v1/practice/papers/exam%2Fone/grade-file");
+      expect(received[0]?.authorization).toBe("Bearer collection-secret");
+      expect(received[0]?.contentType).toContain("multipart/form-data; boundary=");
+      expect(received[0]?.body).toContain('name="student_name"');
+      expect(received[0]?.body).toContain("Jane Doe");
+      expect(received[0]?.body).toContain('filename="answers.pdf"');
+      expect(received[0]?.body).toContain("answer sheet");
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -192,16 +191,16 @@ describe("teacher collection API client", () => {
   });
 
   it("submits a handwritten scan to the live collection challenge", async () => {
-    let received: { path: string; authorization: string; body: string } | null = null;
+    const received: Array<{ path: string; authorization: string; body: string }> = [];
     const server = http.createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
       request.on("end", () => {
-        received = {
+        received.push({
           path: request.url || "",
           authorization: String(request.headers.authorization || ""),
           body: Buffer.concat(chunks).toString("utf8"),
-        };
+        });
         response.setHeader("Content-Type", "application/json");
         response.end(
           JSON.stringify({
@@ -230,11 +229,11 @@ describe("teacher collection API client", () => {
         file: { name: "answer.jpg", mimeType: "image/jpeg", buffer: Buffer.from("scan") },
       });
       expect(result.total_score).toBe(82);
-      expect(received?.path).toBe("/v1/collection/challenge/exam/attempt%2Fone/submit-file");
-      expect(received?.authorization).toBe("Bearer collection-secret");
-      expect(received?.body).toContain("Aarav Shrestha");
-      expect(received?.body).toContain('filename="answer.jpg"');
-      expect(received?.body).toContain("scan");
+      expect(received[0]?.path).toBe("/v1/collection/challenge/exam/attempt%2Fone/submit-file");
+      expect(received[0]?.authorization).toBe("Bearer collection-secret");
+      expect(received[0]?.body).toContain("Aarav Shrestha");
+      expect(received[0]?.body).toContain('filename="answer.jpg"');
+      expect(received[0]?.body).toContain("scan");
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -243,17 +242,17 @@ describe("teacher collection API client", () => {
   });
 
   it("grades typed answers with the collection key and saved paper id", async () => {
-    let received: { path: string; authorization: string; body: unknown } | null = null;
+    const received: Array<{ path: string; authorization: string; body: unknown }> = [];
     const server = http.createServer((request, response) => {
       let raw = "";
       request.setEncoding("utf8");
       request.on("data", (chunk) => (raw += chunk));
       request.on("end", () => {
-        received = {
+        received.push({
           path: request.url || "",
           authorization: String(request.headers.authorization || ""),
           body: JSON.parse(raw),
-        };
+        });
         response.setHeader("Content-Type", "application/json");
         response.end(JSON.stringify({ total_score: 5, total_marks: 10, results: [] }));
       });
@@ -269,7 +268,7 @@ describe("teacher collection API client", () => {
         student_name: "Jane",
         answers: [{ question_id: "q-1", answer_text: "Typed answer" }],
       });
-      expect(received).toEqual({
+      expect(received[0]).toEqual({
         path: "/api/v1/practice/papers/exam%2Fone/grade",
         authorization: "Bearer collection-secret",
         body: {

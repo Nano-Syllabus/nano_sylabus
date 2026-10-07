@@ -37,7 +37,8 @@ describe("landing page calls to action", () => {
   });
 
   it("routes the footer app link to the community page", () => {
-    expect(landingSource).toContain("href={`${appOrigin}/app/community`}");
+    // Main site → community page; an exam site sends it through its one door.
+    expect(landingSource).toContain("href={joinHref ?? `${appOrigin}/app/community`}");
     expect(landingSource).not.toContain('href="/app/today"');
   });
 });

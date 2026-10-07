@@ -8,7 +8,7 @@ import { AdminPageHeader } from "@/components/admin-billing-frame";
 import type { AdminListPage, AdminUserDetail, AdminUserSummary, AppRole } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
-type RoleFilter = "all" | "students" | "admins";
+type RoleFilter = "all" | "students" | "admins" | "ambassadors";
 
 const roleLabel: Record<AppRole, string> = {
   student: "Student",
@@ -25,13 +25,21 @@ export function AdminUserManager({
   initialPage,
   viewerRole,
   viewerUserId,
+  ambassadorEmails = null,
 }: {
   initialUsers?: AdminUserSummary[];
   initialPage: AdminListPage<AdminUserSummary>;
   viewerRole: Extract<AppRole, "admin" | "super_admin">;
   viewerUserId: string;
+  /** Who may create faculties; null when the viewer isn't a super admin. */
+  ambassadorEmails?: string[] | null;
 }) {
   const [list, setList] = useState(initialPage);
+  const [ambassadors, setAmbassadors] = useState(
+    () => ambassadorEmails && new Set(ambassadorEmails.map((email) => email.toLowerCase())),
+  );
+  const isAmbassador = (email: string | null | undefined) =>
+    Boolean(email && ambassadors?.has(email.toLowerCase()));
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<RoleFilter>("all");
   const [loading, setLoading] = useState(false);
@@ -115,8 +123,12 @@ export function AdminUserManager({
               ["all", "Everyone"],
               ["students", "Students"],
               ["admins", "Admins"],
+              ["ambassadors", "Ambassadors"],
             ] as const
-          ).map(([value, label]) => (
+          )
+            // Only a super admin holds the ambassador list.
+            .filter(([value]) => value !== "ambassadors" || ambassadors)
+            .map(([value, label]) => (
             <button
               key={value}
               type="button"
@@ -178,6 +190,7 @@ export function AdminUserManager({
                         <span className="flex items-center gap-2 font-medium">
                           <span className="truncate">{user.fullName || "No name"}</span>
                           {user.role !== "student" ? <RoleBadge role={user.role} /> : null}
+                          {isAmbassador(user.email) ? <AmbassadorBadge /> : null}
                         </span>
                         <span className="block truncate text-xs text-muted-foreground">
                           {user.email}
@@ -233,6 +246,14 @@ export function AdminUserManager({
           userId={openId}
           summary={list.items.find((user) => user.userId === openId) ?? null}
           canManageRoles={viewerRole === "super_admin"}
+          ambassador={
+            ambassadors
+              ? isAmbassador(list.items.find((user) => user.userId === openId)?.email)
+              : null
+          }
+          onAmbassadorsChanged={(emails) =>
+            setAmbassadors(new Set(emails.map((email) => email.toLowerCase())))
+          }
           isSelf={openId === viewerUserId}
           onClose={() => setOpenId(null)}
           onChanged={patchRow}
@@ -246,6 +267,8 @@ function StudentPanel({
   userId,
   summary,
   canManageRoles,
+  ambassador,
+  onAmbassadorsChanged,
   isSelf,
   onClose,
   onChanged,
@@ -253,6 +276,9 @@ function StudentPanel({
   userId: string;
   summary: AdminUserSummary | null;
   canManageRoles: boolean;
+  /** Whether this person may create faculties; null hides the control (not a super admin). */
+  ambassador: boolean | null;
+  onAmbassadorsChanged: (emails: string[]) => void;
   isSelf: boolean;
   onClose: () => void;
   onChanged: (user: AdminUserSummary) => void;
@@ -260,7 +286,7 @@ function StudentPanel({
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"credits" | "role" | null>(null);
+  const [busy, setBusy] = useState<"credits" | "role" | "ambassador" | null>(null);
   const [amount, setAmount] = useState("20");
   const [reason, setReason] = useState("");
   const [role, setRole] = useState<AppRole>(summary?.role ?? "student");
@@ -335,6 +361,30 @@ function StudentPanel({
       setMessage(`Access changed to ${roleLabel[payload.user.role as AppRole]}.`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Access could not be changed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function toggleAmbassador() {
+    const email = person?.email;
+    if (!email || ambassador === null) return;
+    setBusy("ambassador");
+    setMessage(null);
+    try {
+      const response = await fetch("/api/admin/ambassadors", {
+        method: ambassador ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Ambassador access could not be changed.");
+      onAmbassadorsChanged(
+        (payload.ambassadors as Array<{ email: string }>).map((row) => row.email),
+      );
+      setMessage(ambassador ? "No longer a student ambassador." : "Now a student ambassador.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Ambassador access could not be changed.");
     } finally {
       setBusy(null);
     }
@@ -510,6 +560,33 @@ function StudentPanel({
                     {busy === "role" ? "Saving…" : `Make ${roleLabel[role]}`}
                   </button>
                 ) : null}
+                {ambassador !== null && person?.email ? (
+                  <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">Student ambassador</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+                        Can create faculties.
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={ambassador}
+                      aria-label="Student ambassador"
+                      disabled={busy !== null}
+                      onClick={() => void toggleAmbassador()}
+                      className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                        ambassador ? "bg-blue-600" : "bg-muted-foreground/35"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block size-5 rounded-full bg-white shadow-sm transition-[translate] ${
+                          ambassador ? "translate-x-[22px]" : "translate-x-0.5"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                ) : null}
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -667,6 +744,14 @@ function RoleBadge({ role }: { role: AppRole }) {
   return (
     <span className="shrink-0 rounded-full bg-blue-600/10 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:text-blue-300">
       {roleLabel[role]}
+    </span>
+  );
+}
+
+function AmbassadorBadge() {
+  return (
+    <span className="shrink-0 rounded-full bg-emerald-600/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+      Ambassador
     </span>
   );
 }

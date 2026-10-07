@@ -85,7 +85,6 @@ describe("community membership controls (without browser)", () => {
           {
             ...community,
             membership: { role: "creator", status: "active", joinedAt: "2026-09-03" },
-            canManage: true,
           },
         ],
         signedIn: true,

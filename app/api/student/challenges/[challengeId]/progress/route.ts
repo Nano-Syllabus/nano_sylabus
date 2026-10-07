@@ -6,7 +6,7 @@ import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { challengeAccessResponse } from "@/lib/data/challenge-access-error";
 import { withUsageCommunity } from "@/lib/usage-community";
 
-const schema = z.object({ step: z.enum(["lesson", "examples"]) });
+const schema = z.object({ step: z.enum(["lesson", "examples", "learn"]) });
 
 async function handlePOST(
   request: Request,

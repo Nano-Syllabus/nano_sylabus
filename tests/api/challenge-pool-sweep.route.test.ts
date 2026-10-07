@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ sweep: vi.fn() }));
-vi.mock("@/lib/data/challenge-pool", () => ({ sweepChallengePool: mocks.sweep }));
+const mocks = vi.hoisted(() => ({ sweep: vi.fn(), enqueue: vi.fn(), audit: vi.fn() }));
+vi.mock("@/lib/data/challenge-pool", () => ({ sweepChallengePool: mocks.sweep, enqueueGlobalChallengeCatalogue: mocks.enqueue, auditReadyChallengeReserves: mocks.audit }));
 
 import { POST } from "@/app/api/internal/challenge-pool/sweep/route";
 import { sweepSecret } from "@/lib/data/challenge-pool-secret";
@@ -31,11 +31,13 @@ describe("POST /api/internal/challenge-pool/sweep", () => {
     delete process.env.CHALLENGE_POOL_SWEEP_SECRET;
   });
 
-  it("sweeps up to six topics for the timer and reports what happened", async () => {
+  it("sweeps up to twelve topics for the timer and reports what happened", async () => {
     const response = await call(`Bearer ${SECRET}`);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ available: true, claimed: 2, outcomes: { ready: 2 } });
-    expect(mocks.sweep).toHaveBeenCalledWith({ limit: 6 });
+    expect(mocks.enqueue).toHaveBeenCalledOnce();
+    expect(mocks.audit).toHaveBeenCalledOnce();
+    expect(mocks.sweep).toHaveBeenCalledWith({ limit: 12, revisionChecks: 4 });
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 

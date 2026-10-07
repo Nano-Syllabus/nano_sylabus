@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { AdminBillingFrame } from "@/components/admin-billing-frame";
 import { AdminUserManager } from "@/components/admin-user-manager";
 import { assertAdminRequest } from "@/lib/admin-access";
-import { AdminAmbassadors } from "@/components/admin-ambassadors";
 import { listStudentAmbassadors } from "@/lib/data/student-ambassadors";
 import { listAdminUsers } from "@/lib/data/admin-users";
 
@@ -22,14 +21,19 @@ export default async function AdminUsersPage() {
   }
 
   const page = await listAdminUsers({ page: 1, pageSize: 50 });
-  // Only a super admin decides who may create faculties.
+  // Only a super admin decides who may create faculties (the switch in a
+  // person's panel, under Access).
   const ambassadors =
     access.role === "super_admin" ? await listStudentAmbassadors().catch(() => []) : null;
 
   return (
     <AdminBillingFrame active="users">
-      {ambassadors ? <AdminAmbassadors initial={ambassadors} /> : null}
-      <AdminUserManager initialPage={page} viewerRole={access.role} viewerUserId={access.userId} />
+      <AdminUserManager
+        initialPage={page}
+        viewerRole={access.role}
+        viewerUserId={access.userId}
+        ambassadorEmails={ambassadors?.map((row) => row.email) ?? null}
+      />
     </AdminBillingFrame>
   );
 }

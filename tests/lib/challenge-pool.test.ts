@@ -40,12 +40,14 @@ import {
   CHALLENGE_POOL_MAX_ATTEMPTS,
   CHALLENGE_POOL_PRIORITY,
   enqueueChallengeTopics,
+  auditReadyChallengeReserves,
   readyPoolSnapshot,
   resetChallengePoolState,
   sweepChallengePool,
 } from "@/lib/data/challenge-pool";
 import {
   nepaliChallengeDate,
+  markStudentChallengeStep,
   recordStudentChallengeGrade,
   restartStudentChallenge,
   scheduleChallengeWarmups,
@@ -261,6 +263,29 @@ describe("the global challenge pool", () => {
     delete process.env.CHALLENGE_POOL_INLINE_SWEEP;
   });
 
+  it("saves the combined Learn step in a single update", async () => {
+    db.tables.student_challenges = [studentRow("learn", "t1", {
+      status: "started", content: { provider: "collection-challenge-v1" },
+      lesson_read_at: null, examples_reviewed_at: null,
+    })];
+    const detail = await markStudentChallengeStep("member", "learn", "learn");
+    expect(detail?.lessonRead).toBe(true);
+    expect(detail?.examplesReviewed).toBe(true);
+    const saved = db.tables.student_challenges[0];
+    expect(saved.lesson_read_at).toBe(saved.examples_reviewed_at);
+  });
+
+  it("audits ready reserves without replacing the cached lesson", async () => {
+    db.tables.challenge_topic_pool = [poolRow("t1", { status: "ready", content: bank })];
+    await auditReadyChallengeReserves(db.admin, 1);
+    expect(mocks.prepare).toHaveBeenCalledWith("collection", {
+      subject: "teacher_nims", topic: "t1", include_content: false,
+    });
+    expect(topic("t1").status).toBe("ready");
+    expect(topic("t1").content).toEqual(bank);
+    expect(topic("t1").reserve_checked_at).toBeTruthy();
+  });
+
   describe("enqueueing", () => {
     it("queues the next two topics in syllabus order, skipping source documents", async () => {
       const result = await enqueueChallengeTopics({
@@ -401,8 +426,8 @@ describe("the global challenge pool", () => {
       expect(topic("t1").status).toBe("building");
       expect(topic("t1").lease_owner).toBeTruthy();
       const lease = Date.parse(String(topic("t1").lease_expires_at));
-      expect(lease - Date.now()).toBeGreaterThan(1.5 * MINUTE);
-      expect(lease - Date.now()).toBeLessThanOrEqual(2 * MINUTE);
+      expect(lease - Date.now()).toBeGreaterThan(10_000);
+      expect(lease - Date.now()).toBeLessThanOrEqual(15_000);
 
       // Still leased: an immediate sweep leaves it alone.
       await sweepChallengePool({ limit: 6, markStale: false });

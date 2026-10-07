@@ -141,6 +141,34 @@
     border-color: var(--color-border);
   }
 
+  /*
+   * Press feedback for every button, everywhere. Most buttons are plain
+   * <button>s with their own classes, so it lives here rather than in one
+   * component. `transform` stacks with Tailwind v4's `scale`/`translate`
+   * properties instead of replacing them. Inline text links are untouched:
+   * transforms don't apply to inline boxes. Opt out with `data-no-press`.
+   */
+  :where(button, [role="button"], input[type="submit"], input[type="button"], a):not(:disabled):not([aria-disabled="true"]):not([data-no-press]) {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :where(button, [role="button"], input[type="submit"], input[type="button"], a):not(:disabled):not([aria-disabled="true"]):not([data-no-press]):active {
+    transform: scale(0.97);
+    filter: brightness(0.94);
+    transition-duration: 60ms;
+  }
+
+  /* Disclosure rows (FAQ) span the full width, where shrinking reads as a glitch. */
+  :where(summary):active {
+    opacity: 0.7;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(button, [role="button"], input[type="submit"], input[type="button"], a):active {
+      transform: none;
+    }
+  }
+
   html {
     scroll-behavior: smooth;
     font-family: var(--font-sans);

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Drain the global challenge pool once: POST /api/internal/challenge-pool/sweep.
 #
-# Run by challenge-pool-sweep.timer on the app VPS (every ~3 minutes). NOT
+# Run by challenge-pool-sweep.timer on the app VPS (~30 seconds after each completed sweep). NOT
 # installed by anything in this repo — see the install notes below.
 #
 # Reads two variables, normally from /etc/nano-syllabus/challenge-pool-sweep.env

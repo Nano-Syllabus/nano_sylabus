@@ -1,5 +1,6 @@
 import { isProfileComplete } from "@/lib/access";
 import { isAdminRole } from "@/lib/admin-role";
+import { listStudentAmbassadors } from "@/lib/data/student-ambassadors";
 import {
   normalizeBoard,
   normalizeBoardScore,
@@ -321,8 +322,11 @@ export async function listAdminUsers(filters?: {
   q?: string;
   page?: number;
   pageSize?: number;
-  /** "admins" = admin + super_admin; "students" = everyone else. */
-  role?: "students" | "admins";
+  /**
+   * "admins" = admin + super_admin; "students" = everyone else; "ambassadors" =
+   * people whose email may create faculties (only a super admin may ask).
+   */
+  role?: "students" | "admins" | "ambassadors";
 }): Promise<AdminListPage<AdminUserSummary>> {
   const page = normalizePage(filters?.page);
   const pageSize = normalizePageSize(filters?.pageSize);
@@ -332,8 +336,16 @@ export async function listAdminUsers(filters?: {
   if (q || role) {
     const users = await listAllAuthUsers();
     const aggregates = await loadAdminUserAggregates(users.map((user) => user.id));
+    const ambassadors =
+      role === "ambassadors"
+        ? new Set((await listStudentAmbassadors()).map((row) => row.email.toLowerCase()))
+        : null;
     const filtered = buildUserSummaries(users, aggregates)
-      .filter((user) => !role || (user.role === "student") === (role === "students"))
+      .filter((user) =>
+        ambassadors
+          ? ambassadors.has((user.email ?? "").toLowerCase())
+          : !role || (user.role === "student") === (role === "students"),
+      )
       .filter((user) =>
         [user.email, user.fullName, user.college, user.board, user.grade, user.activePlanName ?? ""]
           .join(" ")

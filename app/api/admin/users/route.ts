@@ -12,11 +12,21 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = parseAdminListQuery(searchParams);
+    const role = (["students", "admins", "ambassadors"] as const).find(
+      (value) => value === searchParams.get("role"),
+    );
+    // Who may create faculties is a super admin's list, like the switch that edits it.
+    if (role === "ambassadors" && access.role !== "super_admin") {
+      return NextResponse.json(
+        { error: "Only a super admin can see ambassadors." },
+        { status: 403 },
+      );
+    }
     const result = await listAdminUsers({
       q: query.q,
       page: query.page,
       pageSize: query.pageSize,
-      role: (["students", "admins"] as const).find((value) => value === searchParams.get("role")),
+      role,
     });
     return NextResponse.json(result);
   } catch (error) {

@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   provision: vi.fn(),
   createSubject: vi.fn(),
 }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }));
 vi.mock("@/lib/data/community-subjects", () => ({ publishCommunitySubject: mocks.publish }));
 vi.mock("@/lib/community-learning", () => ({ ensureCommunityLearningSpace: mocks.provision }));
 vi.mock("@/lib/teacher-app/client", () => ({ createTeacherSubject: mocks.createSubject }));

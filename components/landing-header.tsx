@@ -3,29 +3,17 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { loadSupabaseBrowserClient } from "@/lib/supabase/browser-lazy";
+import { hasSessionCookie } from "@/lib/landing-session";
 
 export function LandingHeader({ dark = false }: { dark?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // The header only needs to know whether to say "Dashboard" or "Sign in", and
-  // it already renders the signed-out version first. Loading the auth SDK on
-  // demand keeps it off the landing page's critical path — this is the first
-  // page a new student sees, and it is the one that has to be fast.
+  // it renders the signed-out version first. A cookie check answers that without
+  // downloading the auth SDK on the first page a new student sees.
   useEffect(() => {
-    let cancelled = false;
-    void loadSupabaseBrowserClient()
-      .then((supabase) => supabase.auth.getSession())
-      .then(({ data: { session } }) => {
-        if (!cancelled && session?.user) setIsLoggedIn(true);
-      })
-      .catch(() => {
-        // Header stays in its signed-out state; nothing here gates access.
-      });
-    return () => {
-      cancelled = true;
-    };
+    if (hasSessionCookie()) setIsLoggedIn(true);
   }, []);
 
   return (

@@ -142,6 +142,21 @@ export function LandingView({
     finalCta,
     footer,
   } = content;
+  // In-page links only point at sections this site shows; a hidden section's
+  // anchor would scroll nowhere.
+  const anchorClass =
+    "transition-colors hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]";
+  const headerLinks = [
+    { href: "#steps", label: nav.stepsLink, shown: !steps.hidden },
+    { href: "#discord-community", label: nav.peopleLink, shown: !community.hidden },
+    { href: "#questions", label: nav.questionsLink, shown: !faq.hidden },
+  ].filter((link) => link.shown);
+  const footerLinks = [
+    { href: "#steps", label: "How it works", shown: !steps.hidden },
+    { href: "#people", label: "Students", shown: !testimonials.hidden },
+    { href: "#discord-community", label: "Community", shown: !community.hidden },
+    { href: "#questions", label: "FAQ", shown: !faq.hidden },
+  ].filter((link) => link.shown);
   return (
     <div
       style={landingColorVars(brand) as React.CSSProperties}
@@ -162,29 +177,18 @@ export function LandingView({
       >
         <div className="mx-auto flex h-[84px] max-w-[1320px] items-center justify-between px-5 2xl:px-0">
           <Brand logoUrl={brand.logoUrl} />
-          <nav
-            aria-label="Main navigation"
-            className="hidden items-center gap-9 text-[15px] font-medium text-[#1c1e1a] md:flex"
-          >
-            <a
-              href="#steps"
-              className="transition-colors hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
+          {headerLinks.length > 0 ? (
+            <nav
+              aria-label="Main navigation"
+              className="hidden items-center gap-9 text-[15px] font-medium text-[#1c1e1a] md:flex"
             >
-              {nav.stepsLink}
-            </a>
-            <a
-              href="#discord-community"
-              className="transition-colors hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
-            >
-              {nav.peopleLink}
-            </a>
-            <a
-              href="#questions"
-              className="transition-colors hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
-            >
-              {nav.questionsLink}
-            </a>
-          </nav>
+              {headerLinks.map((link) => (
+                <a key={link.href} href={link.href} className={anchorClass}>
+                  {link.label}
+                </a>
+              ))}
+            </nav>
+          ) : null}
           <div className="flex items-center gap-3">
             {joinHref ? (
               <LandingSiteActions joinHref={joinHref} />
@@ -242,12 +246,14 @@ export function LandingView({
                   {joinHref ? "Continue learning" : hero.primaryCta}
                 </LandingPrimaryCta>
 
-                <a
-                  href="#steps"
-                  className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:border-[var(--lp-primary)] hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
-                >
-                  {hero.secondaryCta}
-                </a>
+                {steps.hidden ? null : (
+                  <a
+                    href="#steps"
+                    className="border-b border-[#1c1e1a] text-sm font-semibold text-[#1c1e1a] transition-colors hover:border-[var(--lp-primary)] hover:text-[var(--lp-primary)] focus-visible:rounded focus-visible:outline-2 focus-visible:outline-[var(--lp-primary)]"
+                  >
+                    {hero.secondaryCta}
+                  </a>
+                )}
               </div>
 
             </div>
@@ -261,7 +267,7 @@ export function LandingView({
                     src="/nanosyllabus-features-minimal-animation.html?capture"
                     title={hero.demoCaption}
                     className="absolute inset-0 block h-full w-full border-0"
-                    loading="eager"
+                    loading="lazy"
                   />
                 </div>
               </div>
@@ -575,7 +581,7 @@ export function LandingView({
                     <strong className="text-[#1c1e1a]">{featured.author}</strong>
                     <span className="text-[#5b5e55]">· {featured.readTime}</span>
                   </div>
-                  <Cta href="#steps">{featured.cta}</Cta>
+                  {steps.hidden ? null : <Cta href="#steps">{featured.cta}</Cta>}
                 </div>
               </div>
 
@@ -858,7 +864,6 @@ export function LandingView({
                     {prize.secondaryCta}
                   </a>
                 </div>
-                <p className="mt-5 text-sm text-[#5b5e55]"></p>
               </div>
 
               {/* Prize board */}
@@ -1008,79 +1013,29 @@ export function LandingView({
         {/* Top Link Row */}
         <div className="flex flex-wrap items-center justify-between gap-6 pb-8 text-xs font-semibold text-[#5b5e55]">
           <nav aria-label="Footer primary navigation" className="flex flex-wrap gap-x-7 gap-y-3">
-            <a href="#steps" className="hover:text-[#1c1e1a] transition-colors">
-              Product
-            </a>
-            <Link
-              href={`${appOrigin}/communities`}
-              className="hover:text-[#1c1e1a] transition-colors"
-            >
-              Communities
-            </Link>
-            <Link href={`${appOrigin}/flow`} className="hover:text-[#1c1e1a] transition-colors">
-              Resources
-            </Link>
-            <a href="#people" className="hover:text-[#1c1e1a] transition-colors">
-              About
-            </a>
-            <a href="#questions" className="hover:text-[#1c1e1a] transition-colors">
-              Contact
-            </a>
-            <Link href={`${appOrigin}/app`} className="hover:text-[#1c1e1a] transition-colors">
-              Blog
-            </Link>
+            {footerLinks.map((link) => (
+              <a key={link.href} href={link.href} className="transition-colors hover:text-[#1c1e1a]">
+                {link.label}
+              </a>
+            ))}
+            {/* An exam site has one way in; the faculty directory belongs to the main site. */}
+            {joinHref ? null : (
+              <Link href={`${appOrigin}/communities`} className="transition-colors hover:text-[#1c1e1a]">
+                Communities
+              </Link>
+            )}
           </nav>
-          {/* Social Icons */}
-          <div className="flex items-center gap-4 text-[#1c1e1a]">
-            {/* Twitter / X */}
-            <a
-              href="https://twitter.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Twitter"
-              className="hover:opacity-70 transition-opacity"
-            >
-              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-            </a>
-            {/* LinkedIn */}
-            <a
-              href="https://linkedin.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="LinkedIn"
-              className="hover:opacity-70 transition-opacity"
-            >
-              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
-              </svg>
-            </a>
-            {/* Instagram */}
-            <a
-              href="https://instagram.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Instagram"
-              className="hover:opacity-70 transition-opacity"
-            >
-              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
-              </svg>
-            </a>
-            {/* Facebook */}
-            <a
-              href="https://facebook.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Facebook"
-              className="hover:opacity-70 transition-opacity"
-            >
-              <svg className="size-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M22.675 0h-21.35c-.732 0-1.325.593-1.325 1.325v21.351c0 .731.593 1.324 1.325 1.324h11.495v-9.294h-3.128v-3.622h3.128v-2.671c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12v9.293h6.116c.73 0 1.323-.593 1.323-1.325v-21.35c0-.732-.593-1.325-1.325-1.325z" />
-              </svg>
-            </a>
-          </div>
+          <a
+            href={DISCORD_STUDY_ROOM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="NanoSyllabus on Discord"
+            className="text-[#1c1e1a] transition-opacity hover:opacity-70"
+          >
+            <svg className="size-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.1 14.1 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+            </svg>
+          </a>
         </div>
 
         {/* Bottom Logo & App Link Row */}
@@ -1088,7 +1043,7 @@ export function LandingView({
           <Brand logoUrl={brand.logoUrl} />
           <p className="text-xs text-[#5b5e55]">{footer.tagline}</p>
           <Link
-            href={`${appOrigin}/app/community`}
+            href={joinHref ?? `${appOrigin}/app/community`}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1c1e1a] hover:text-[var(--lp-primary)] transition-colors underline underline-offset-4"
           >
             <span>{footer.appLink}</span>

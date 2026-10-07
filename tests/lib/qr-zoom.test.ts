@@ -1,11 +1,11 @@
-import { createElement } from "react";
+import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { QrZoom } from "@/components/qr-zoom";
 
 describe("the payment QR", () => {
   const html = renderToStaticMarkup(
-    createElement(QrZoom, { src: "https://x/qr.png", alt: "Official Bank payment QR" }, "thumb"),
+    createElement(QrZoom, { src: "https://x/qr.png", alt: "Official Bank payment QR" } as ComponentProps<typeof QrZoom>, "thumb"),
   );
 
   it("opens full screen from a button around the thumbnail", () => {

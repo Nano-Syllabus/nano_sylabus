@@ -1,6 +1,6 @@
 import { SetAppShell } from "@/components/set-app-shell";
 import { SubjectExplorerClient } from "@/components/subject-explorer-client";
-import { requireOnboardedUser } from "@/lib/auth";
+import { getSessionUser, requireOnboardedUser } from "@/lib/auth";
 import { listExplorerSubjects } from "@/lib/data/explorer";
 import {
   listCreatorPrivateSubjectAccess,
@@ -9,15 +9,20 @@ import {
 } from "@/lib/student-courses";
 
 export default async function ExplorePage() {
-  const { user, profile } = await requireOnboardedUser();
+  // Everything below except the explorer query needs only the user id, which the
+  // session has without a database trip — so it starts now, alongside the
+  // profile batch, rather than after it.
+  const { user: sessionUser } = await getSessionUser();
+  const userId = sessionUser?.id ?? (await requireOnboardedUser()).user.id;
 
   // The explorer only needs subject names to resolve its tenant subjects, and
   // that lookup is two cheap round trips. Kicking it off alongside the full
   // course cards lets the explorer query start while the heavier card fan-out
   // is still in flight, instead of waiting for it to finish first.
-  const coursesPromise = listStudentCourses(user.id);
-  const courseSubjectPromise = listStudentCourseSubjects(user.id);
-  const privateSubjectPromise = listCreatorPrivateSubjectAccess(user.id);
+  const coursesPromise = listStudentCourses(userId);
+  const courseSubjectPromise = listStudentCourseSubjects(userId);
+  const privateSubjectPromise = listCreatorPrivateSubjectAccess(userId);
+  const { user, profile } = await requireOnboardedUser();
 
   const subjectsPromise = profile
     ? Promise.all([courseSubjectPromise, privateSubjectPromise]).then(

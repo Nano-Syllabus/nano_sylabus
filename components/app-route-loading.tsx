@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { SetAppShell } from "@/components/set-app-shell";
 
-type LoadingVariant = "chat" | "exams" | "subjects" | "notes" | "billing" | "settings";
+type LoadingVariant = "chat" | "exams" | "subjects" | "notes" | "billing" | "settings" | "page";
 
 const titleByVariant: Record<LoadingVariant, string> = {
   chat: "Loading chat",
@@ -10,6 +10,7 @@ const titleByVariant: Record<LoadingVariant, string> = {
   notes: "Loading notes",
   billing: "Loading billing",
   settings: "Loading settings",
+  page: "Loading",
 };
 
 function CardGridSkeleton() {
@@ -207,7 +208,7 @@ export function AppRouteLoading({ variant }: { variant: LoadingVariant }) {
           {Array.from({ length: 6 }).map((_, index) => (
             <div
               key={index}
-              className="h-16 rounded-2xl border border-border bg-bg-secondary animate-pulse-soft motion-reduce:animate-none"
+              className="h-16 rounded-2xl bg-border animate-pulse-soft motion-reduce:animate-none"
             />
           ))}
         </div>

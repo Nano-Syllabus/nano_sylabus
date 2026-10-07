@@ -53,14 +53,17 @@ export async function getStudentCommunityLearningScope(
   admin: SupabaseClient = createSupabaseAdminClient(),
   preferred?: { communitySlug?: string; courseId?: string },
 ): Promise<StudentCommunityLearningScope | null> {
-  const membershipResult = await admin
-    .from("community_memberships")
-    .select("community_id,role,joined_at,current_term_id")
-    .eq("user_id", studentId)
-    .eq("status", "active")
-    .order("joined_at", { ascending: false });
+  // Independent reads: together they are one round trip, not two.
+  const [membershipResult, facultyId] = await Promise.all([
+    admin
+      .from("community_memberships")
+      .select("community_id,role,joined_at,current_term_id")
+      .eq("user_id", studentId)
+      .eq("status", "active")
+      .order("joined_at", { ascending: false }),
+    getStudentFacultyId(studentId, admin),
+  ]);
   if (membershipResult.error) throw membershipResult.error;
-  const facultyId = await getStudentFacultyId(studentId, admin);
   const memberships = (membershipResult.data || []).filter(
     (row) => !facultyId || row.community_id === facultyId,
   );
@@ -617,17 +620,20 @@ async function getCommunitySubjectAccessForCourse(
   subjectSlug: string,
   admin: SupabaseClient,
 ): Promise<StudentCourseSubjectAccess | null> {
-  const communityResult = await admin
-    .from("communities")
-    .select("id")
-    .eq("study_course_id", courseId)
-    .eq("status", "active")
-    .maybeSingle();
+  // The faculty lock doesn't depend on the community, so it is read alongside it.
+  const [communityResult, facultyId] = await Promise.all([
+    admin
+      .from("communities")
+      .select("id")
+      .eq("study_course_id", courseId)
+      .eq("status", "active")
+      .maybeSingle(),
+    getStudentFacultyId(studentId, admin),
+  ]);
   if (communityResult.error) throw communityResult.error;
   if (!communityResult.data?.id) return null;
 
   const communityId = String(communityResult.data.id);
-  const facultyId = await getStudentFacultyId(studentId, admin);
   if (facultyId && facultyId !== communityId) return null;
   // Both depend on the community id and on nothing else, so they are asked at
   // the same time. Membership still decides the answer — a non-member gets null
@@ -672,14 +678,16 @@ export async function listStudentCommunitySubjectAccess(
   studentId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ): Promise<StudentCourseSubjectAccess[]> {
-  const membershipResult = await admin
-    .from("community_memberships")
-    .select("community_id")
-    .eq("user_id", studentId)
-    .eq("status", "active");
+  // Independent reads: together they are one round trip, not two.
+  const [membershipResult, facultyId] = await Promise.all([
+    admin
+      .from("community_memberships")
+      .select("community_id")
+      .eq("user_id", studentId)
+      .eq("status", "active"),
+    getStudentFacultyId(studentId, admin),
+  ]);
   if (membershipResult.error) throw membershipResult.error;
-
-  const facultyId = await getStudentFacultyId(studentId, admin);
   const communityIds = [
     ...new Set(
       (membershipResult.data || [])

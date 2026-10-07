@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { communityLevel, communityLevelStructure } from "@/lib/communities";
@@ -9,6 +9,7 @@ import { ensureCommunityLearningSpace } from "@/lib/community-learning";
 import { createTeacherSubject } from "@/lib/teacher-app/client";
 import { invalidateCommunityCatalog } from "@/lib/data/communities";
 import { invalidateMemo } from "@/lib/http/memo";
+import { ENROLLMENT_EXAMS_TAG } from "@/lib/data/landing-sites";
 import {
   facultyUpdateSchema,
   subjectCreateSchema,
@@ -107,6 +108,7 @@ export async function getAdminFaculty(
 function refresh(slug: string) {
   invalidateCommunityCatalog();
   invalidateMemo("student:course-subject-access");
+  revalidateTag(ENROLLMENT_EXAMS_TAG);
   revalidatePath("/admin/sites");
   revalidatePath("/communities");
   revalidatePath(`/communities/${slug}`);

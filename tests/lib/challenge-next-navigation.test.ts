@@ -79,6 +79,7 @@ describe("next challenge navigation", () => {
         ...challenge("ratio", "assigned", 2),
         content: {
           lesson: { title: "Ratio", content: [], focus: "Ratio" },
+          warning: null,
           solvedExamples: [],
           examQuestions: [],
         },
@@ -92,7 +93,8 @@ describe("next challenge navigation", () => {
       ...challenge("ratio", "started", 2),
       content: {
         lesson: { title: "Ratio", content: [], focus: "Ratio" },
-        solvedExamples: [],
+        warning: null,
+          solvedExamples: [],
         examQuestions: [],
       },
       latestAttempt: null,

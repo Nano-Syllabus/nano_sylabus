@@ -83,3 +83,30 @@ describe("persisted cache boundary", () => {
     expect(shouldPersistQuery(query({ persist: false }))).toBe(false);
   });
 });
+
+it("discards deferred cache writes after sign-out and account changes", async () => {
+  vi.useFakeTimers();
+  const map = installStorage();
+  const { createAccountPersister, ACTIVE_USER_KEY, persistedCacheKey, clearPersistedCache } = await import("@/components/query-provider");
+  const persister = createAccountPersister(() => window.localStorage);
+  const client = { timestamp: Date.now(), buster: "test", clientState: { queries: [], mutations: [] } };
+  try {
+    map.set(ACTIVE_USER_KEY, "a");
+    persister.persistClient(client);
+    clearPersistedCache();
+    await vi.runAllTimersAsync();
+    expect(map.has(persistedCacheKey("a"))).toBe(false);
+    map.set(ACTIVE_USER_KEY, "a");
+    persister.persistClient(client);
+    map.set(ACTIVE_USER_KEY, "b");
+    await vi.runAllTimersAsync();
+    expect(map.has(persistedCacheKey("a"))).toBe(false);
+    expect(map.has(persistedCacheKey("b"))).toBe(false);
+    persister.persistClient(client);
+    await vi.runAllTimersAsync();
+    expect(JSON.parse(map.get(persistedCacheKey("b"))!)).toEqual(client);
+  } finally {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});

@@ -3824,7 +3824,7 @@ export async function submitStudentChallengeFile(input: {
 export async function markStudentChallengeStep(
   userId: string,
   challengeId: string,
-  step: "lesson" | "examples",
+  step: "lesson" | "examples" | "learn",
 ) {
   const admin = createSupabaseAdminClient();
   const { data: current, error: currentError } = await admin
@@ -3841,11 +3841,13 @@ export async function markStudentChallengeStep(
     throw new Error("Finish the lesson before reviewing examples.");
   }
   const now = new Date().toISOString();
-  const column = step === "lesson" ? "lesson_read_at" : "examples_reviewed_at";
+  const progress = step === "learn"
+    ? { lesson_read_at: current.lesson_read_at || now, examples_reviewed_at: now }
+    : { [step === "lesson" ? "lesson_read_at" : "examples_reviewed_at"]: now };
   const { data, error } = await admin
     .from("student_challenges")
     .update({
-      [column]: now,
+      ...progress,
       status: current.status === "completed" ? "completed" : "started",
       updated_at: now,
     })

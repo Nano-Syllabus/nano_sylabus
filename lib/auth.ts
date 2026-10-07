@@ -67,6 +67,20 @@ function toAppUser(
 }
 
 /**
+ * The verified session user and its client, nothing else — a local JWT check,
+ * no database. Shared per request, so callers that only need the id (the app
+ * layout's faculty lookups) can start their queries while `getCurrentAuth` is
+ * still waiting on the profile and credits batch.
+ */
+export const getSessionUser = cache(async function getSessionUser() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await getVerifiedUser(supabase);
+  return { supabase, user };
+});
+
+/**
  * Deduped for the lifetime of one request. The app layout and the page beneath
  * it both need the signed-in user; without this each of them paid a separate
  * `auth.getUser()` round trip plus its own profile and credits queries, so a
@@ -74,10 +88,7 @@ function toAppUser(
  * already done.
  */
 export const getCurrentAuth = cache(async function getCurrentAuth() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await getVerifiedUser(supabase);
+  const { supabase, user } = await getSessionUser();
 
   if (!user) {
     return {
@@ -188,6 +199,21 @@ export async function requireAuthenticatedUser() {
 
 export async function requireOnboardedUser() {
   return requireAuthenticatedUser();
+}
+
+/**
+ * `requireOnboardedUser()` plus work that needs only the user id, started at the
+ * same time instead of after it. A page that awaited the user and then, say, its
+ * active community paid two round trips in a row; this makes them one.
+ */
+export async function requireOnboardedUserWith<T>(work: (userId: string) => Promise<T>) {
+  const { user: sessionUser } = await getSessionUser();
+  const early = sessionUser ? work(sessionUser.id) : null;
+  // Handled here so a sign-in redirect can't leave it unhandled; awaiting it
+  // below still throws as before.
+  early?.catch(() => {});
+  const auth = await requireOnboardedUser();
+  return [auth, await (early ?? work(auth.user.id))] as const;
 }
 
 export async function requireAdminUser() {

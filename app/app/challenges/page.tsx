@@ -3,7 +3,7 @@ import {
   ChallengesDashboardClient,
 } from "@/components/challenges-dashboard-client";
 import { SetAppShell } from "@/components/set-app-shell";
-import { requireOnboardedUser } from "@/lib/auth";
+import { requireOnboardedUserWith } from "@/lib/auth";
 import { getStudentChallengeDashboard } from "@/lib/data/student-challenge-dashboard";
 import { getStudentChallenge } from "@/lib/data/student-challenges";
 import { getActiveCommunity } from "@/lib/data/active-community";
@@ -26,14 +26,12 @@ export default async function ChallengesPage({
     topicTitle?: string;
   }>;
 }) {
-  const { user } = await requireOnboardedUser();
   const params = await searchParams;
   const requestedPage = Number.parseInt(params.completedPage || "1", 10);
   const courseId = String(params.courseId || "").trim();
   const subjectSlug = String(params.subject || "").trim();
-  const active = await getActiveCommunity(
-    user.id,
-    String(params.community || "").trim() || undefined,
+  const [{ user }, active] = await requireOnboardedUserWith((userId) =>
+    getActiveCommunity(userId, String(params.community || "").trim() || undefined),
   );
   const [initialDashboard, allowance, nextExam] = await Promise.all([
     getStudentChallengeDashboard(

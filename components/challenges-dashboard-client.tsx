@@ -20,6 +20,9 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { challengeContentQuery, useChallengeProgress, useStartChallenge } from "@/lib/query/challenges";
+import { keys } from "@/lib/query/keys";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -561,55 +564,25 @@ function ChallengeDetail({
    * the row reports `ready`, and the only thing it ever replaces is content this
    * client knows to be incomplete.
    */
+  const queryClient = useQueryClient();
+  const progressMutation = useChallengeProgress(challenge.id);
+  const contentQuery = useQuery({
+    ...challengeContentQuery(challenge.id),
+    enabled: contentPending === "pending",
+    refetchInterval: (query) => {
+      const detail = query.state.data?.challenge;
+      if (detail?.content?.contentStatus === "ready" || detail?.content?.contentError) return false;
+      if (query.state.error instanceof ApiError && [401, 403, 404].includes(query.state.error.status)) return false;
+      if (query.state.dataUpdateCount + query.state.errorUpdateCount >= 40) return false;
+      return query.state.dataUpdateCount < 3 ? 2_000 : query.state.dataUpdateCount < 8 ? 4_000 : 8_000;
+    },
+    refetchIntervalInBackground: false,
+  });
   useEffect(() => {
-    if (contentPending !== "pending") return;
-    let cancelled = false;
-    let attempt = 0;
-    let timer = 0;
-    // Chained timeouts rather than an interval: the delay has to widen as the
-    // wait goes on, and an interval fixes its period at the moment it is armed.
-    // Tight while the build is plausibly still running, slow after that, and it
-    // gives up rather than polling a tab someone left open all afternoon.
-    const schedule = () => {
-      if (cancelled || attempt >= 40) return;
-      // Widening, because the cost of a poll is the same whether or not anything
-      // has changed and the odds of it having changed fall as the wait goes on.
-      // Measured on the dev server, the old 1.5s beat ran eleven ~400ms requests
-      // to catch one build; four spread over the same window catch it just as
-      // well and leave the tab alone afterwards.
-      const delay = attempt < 3 ? 2_000 : attempt < 8 ? 4_000 : 8_000;
-      timer = window.setTimeout(() => void tick(), delay);
-    };
-    const tick = async () => {
-      attempt += 1;
-      try {
-        const response = await fetch(`/api/student/challenges/${challenge.id}/content`);
-        // `{status: "pending"}` is the whole body while the build is running —
-        // the route does not serialise a challenge to say "not yet".
-        const payload = (await response.json().catch(() => ({}))) as {
-          challenge?: StudentChallengeDetail;
-          status?: string;
-        };
-        if (cancelled) return;
-        // Gone (403: the community that set it was left; 404: the row) — no
-        // later poll will answer differently.
-        if (response.status === 403 || response.status === 404) return;
-        const next = response.ok ? payload.challenge?.content : null;
-        if (next && (next.contentStatus === "ready" || next.contentError)) {
-          onChange(payload.challenge as StudentChallengeDetail);
-          return;
-        }
-      } catch {
-        // A dropped poll is not worth surfacing; the next tick asks again.
-      }
-      schedule();
-    };
-    schedule();
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [challenge.id, contentPending, onChange]);
+    const next = contentQuery.data?.challenge;
+    if (contentPending === "pending" && next?.id === challenge.id &&
+        (next.content?.contentStatus === "ready" || next.content?.contentError)) onChange(next);
+  }, [challenge.id, contentPending, contentQuery.data, onChange]);
 
   useEffect(() => {
     if (challenge.status !== "completed" || !challenge.latestAttempt) return;
@@ -668,6 +641,11 @@ function ChallengeDetail({
 
   if (!content) return null;
 
+  const updateChallenge = (detail: StudentChallengeDetail) => {
+    queryClient.setQueryData(keys.challenges.content(detail.id), { challenge: detail });
+    onChange(detail);
+  };
+
   const retryContentBuild = async () => {
     setRetryingContent(true);
     setError("");
@@ -675,7 +653,10 @@ function ChallengeDetail({
       const payload = await apiJson<{ challenge: StudentChallengeDetail }>(
         await fetch(`/api/student/challenges/${challenge.id}/content?retry=1`),
       );
-      onChange(payload.challenge);
+      // Reset the polling budget when the student explicitly retries a build.
+      await queryClient.resetQueries({ queryKey: keys.challenges.content(challenge.id), exact: true });
+      const refreshed = queryClient.getQueryData<{ challenge?: StudentChallengeDetail }>(keys.challenges.content(challenge.id));
+      updateChallenge(refreshed?.challenge ?? payload.challenge);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not prepare this challenge.");
     } finally {
@@ -683,20 +664,21 @@ function ChallengeDetail({
     }
   };
 
-  const markStep = async (step: "lesson" | "examples") => {
-    setSavingStep(step);
+  const markStep = async (step: "lesson" | "examples" | "learn") => {
+    setSavingStep(step === "learn" ? "examples" : step);
     setError("");
+    const previous = challenge;
+    updateChallenge({
+      ...challenge,
+      lessonRead: step === "lesson" || step === "learn" || challenge.lessonRead,
+      examplesReviewed: step === "examples" || step === "learn" || challenge.examplesReviewed,
+    });
     try {
-      const payload = await apiJson<{ challenge: StudentChallengeDetail }>(
-        await fetch(`/api/student/challenges/${challenge.id}/progress`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ step }),
-        }),
-      );
-      onChange(payload.challenge);
+      const payload = await progressMutation.mutateAsync(step);
+      updateChallenge(payload.challenge);
       return true;
     } catch (cause) {
+      updateChallenge(previous);
       setError(cause instanceof Error ? cause.message : "Could not save progress.");
       return false;
     } finally {
@@ -721,7 +703,7 @@ function ChallengeDetail({
     setScore({ earned: payload.totalScore, total: payload.totalMarks, passed: payload.passed });
     setAnswerSheet(null);
     setChoices({});
-    onChange(payload.challenge);
+    updateChallenge(payload.challenge);
     setActiveStep(2);
     setPracticeStage("result");
     // See the note in `submitScan`: the dashboard's numbers move in this tick.
@@ -748,7 +730,7 @@ function ChallengeDetail({
       if (!response.ok) {
         if (payload.challenge) {
           setChoices({});
-          onChange(payload.challenge);
+          updateChallenge(payload.challenge);
         }
         throw new Error(payload.error || "Could not mark your answers.");
       }
@@ -783,7 +765,7 @@ function ChallengeDetail({
       });
       const payload = (await response.json().catch(() => ({}))) as GradedPayload;
       if (!response.ok) {
-        if (payload.challenge) onChange(payload.challenge);
+        if (payload.challenge) updateChallenge(payload.challenge);
         throw new Error(payload.error || "Could not grade the handwritten answer.");
       }
       applyGrade(payload);
@@ -831,7 +813,7 @@ function ChallengeDetail({
       setAnswerSheet(null);
       setChoices({});
       setClock(Date.now());
-      onChange(payload.challenge);
+      updateChallenge(payload.challenge);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not issue a fresh exam.");
@@ -845,7 +827,7 @@ function ChallengeDetail({
     try {
       const response = await fetch(`/api/student/challenges/${challenge.id}/content`);
       const payload = (await response.json().catch(() => ({}))) as { challenge?: StudentChallengeDetail };
-      if (response.ok && payload.challenge) onChange(payload.challenge);
+      if (response.ok && payload.challenge) updateChallenge(payload.challenge);
     } catch {
       // The next open reads the row again.
     }
@@ -864,7 +846,7 @@ function ChallengeDetail({
       setClock(Date.now());
       setActiveStep(1);
       setPracticeStage("questions");
-      onChange(payload.challenge);
+      updateChallenge(payload.challenge);
       onHubPatch((d) => applyChallengeState(d, payload.challenge));
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (cause) {
@@ -899,13 +881,11 @@ function ChallengeDetail({
     if (activeStep === 1) {
       // Never record examples the student was not shown, whatever the button did.
       if (buildingRest) return;
-      // One step to the student, two rows to the server. Both are recorded on
-      // the way out, in order, and a failure on either leaves the student where
-      // they are rather than advancing on a half-saved record.
-      if (!challenge.lessonRead && !(await markStep("lesson"))) return;
-      if (!challenge.examplesReviewed && !(await markStep("examples"))) return;
+      // Advance on the click, save both Learn flags together, and return to
+      // Learn if persistence fails. The paper is already ready at this point.
       setActiveStep(2);
       setPracticeStage(challenge.status === "completed" ? "result" : "questions");
+      if ((!challenge.lessonRead || !challenge.examplesReviewed) && !(await markStep("learn"))) setActiveStep(1);
     }
   };
 
@@ -1446,7 +1426,7 @@ function ChallengeDetail({
                         <button
                           type="button"
                           aria-busy={submitting}
-                          disabled={!answerSheet || submitting}
+                          disabled={!answerSheet || submitting || savingStep !== null}
                           onClick={() => void submitScan()}
                           className={`${focusButtonClass} mx-auto block bg-blue-600 text-white`}
                         >
@@ -1839,7 +1819,7 @@ function ChallengeDetail({
               <button
                 type="button"
                 aria-busy={submitting}
-                disabled={!answeredChoices || submitting || examExpired}
+                disabled={!answeredChoices || submitting || examExpired || savingStep !== null}
                 onClick={() => void submitChoices()}
                 className={`${focusButtonClass} bg-blue-600 text-white`}
               >
@@ -2084,6 +2064,8 @@ export function ChallengesDashboardClient({
   canRestartChallenge?: boolean;
 }) {
   const router = useRouter();
+  const { mutateAsync: startChallenge } = useStartChallenge();
+  const openingRef = useRef(false);
   // Re-renders the RSC payload. Only the recovery paths below use it now.
   const refreshApp = useAppRefresh();
 
@@ -2296,12 +2278,12 @@ export function ChallengesDashboardClient({
       router.push(upgradeHref);
       return false;
     }
+    if (openingRef.current) return false;
+    openingRef.current = true;
     setOpeningId(challenge.id);
     setOpenError("");
     try {
-      const payload = await apiJson<{ challenge: StudentChallengeDetail }>(
-        await fetch(`/api/student/challenges/${challenge.id}/start`, { method: "POST" }),
-      );
+      const payload = await startChallenge(challenge.id);
       setSelected(payload.challenge);
       return true;
     } catch (cause) {
@@ -2315,9 +2297,10 @@ export function ChallengesDashboardClient({
       setOpenError(cause instanceof Error ? cause.message : "Could not open this challenge.");
       return false;
     } finally {
+      openingRef.current = false;
       setOpeningId("");
     }
-  }, [patchHub, router, upgradeHref]);
+  }, [patchHub, router, startChallenge, upgradeHref]);
 
   /**
    * From a finished subject's row to its next topic: the server tops the

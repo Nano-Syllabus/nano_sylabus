@@ -1,5 +1,10 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getPublishedLandingSite, LandingSiteError } from "@/lib/data/landing-sites";
+import { unstable_cache } from "next/cache";
+import {
+  ENROLLMENT_EXAMS_TAG,
+  getPublishedLandingSite,
+  LandingSiteError,
+} from "@/lib/data/landing-sites";
 import { readExamConfig, validateExamAnswers, type ExamConfig } from "@/lib/exam-enrollment";
 import { listSubscriptionPlans } from "@/lib/data/billing";
 import { ensureCommunityLearningSpace } from "@/lib/community-learning";
@@ -62,7 +67,21 @@ export async function getEnrollmentExam(slug: string): Promise<EnrollmentExam | 
   return { slug: site.slug, name: site.name, config: site.examConfig, faculties };
 }
 
-export async function listEnrollmentExams(): Promise<EnrollmentExam[]> {
+/**
+ * Every live exam with its faculties, for the in-app faculty picker.
+ *
+ * The same list for everyone, and the app layout reads it on every page a
+ * student without a faculty opens — uncached that was ~370 ms of sequential
+ * queries per navigation. Publishing a site and editing a faculty clear it
+ * (ENROLLMENT_EXAMS_TAG); anything else, such as a subject being published,
+ * shows within a minute.
+ */
+export const listEnrollmentExams = unstable_cache(readEnrollmentExams, ["enrollment-exams"], {
+  revalidate: 60,
+  tags: [ENROLLMENT_EXAMS_TAG],
+});
+
+async function readEnrollmentExams(): Promise<EnrollmentExam[]> {
   const { data, error } = await createSupabaseAdminClient()
     .from("landing_sites")
     .select("slug,exam_config")
