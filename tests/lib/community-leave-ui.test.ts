@@ -71,28 +71,25 @@ describe("community membership controls (without browser)", () => {
     expect(html).not.toContain("Semester 1 · current");
     expect(html).toContain("Tabs below only change what you browse.");
   });
-  it("opens a joined community from its card, with no leave", () => {
-    const html = renderToStaticMarkup(
-      createElement(CommunityCatalogClient, { initialCommunities: [community], signedIn: true }),
-    );
-    expect(html).toContain('aria-label="Open Henglish community"');
-    expect(html).not.toContain("Leave Henglish community");
-  });
-  it("offers a creator plain Join on their own community", () => {
+  it("lists exam sites, not faculty cards, on Browse", () => {
     const html = renderToStaticMarkup(
       createElement(CommunityCatalogClient, {
-        initialCommunities: [
+        signedIn: true,
+        examSites: [
           {
-            ...community,
-            membership: { role: "creator", status: "active", joinedAt: "2026-09-03" },
+            slug: "license",
+            name: "License Preparation",
+            headline: "Crack the license exam.",
+            logoUrl: "",
+            facultyCount: 2,
+            href: "https://license.nanosyllabus.com",
           },
         ],
-        signedIn: true,
       }),
     );
-    expect(html).toContain('aria-label="Join Henglish"');
-    expect(html).not.toContain("/teachers?view=communities");
-    expect(html).toContain("Creator");
+    expect(html).toContain('href="https://license.nanosyllabus.com"');
+    expect(html).toContain("2 faculties");
+    expect(html).not.toContain("Browse faculties");
     expect(html).not.toContain("Leave Henglish community");
   });
   it("labels an owned community as full learner access", () => {

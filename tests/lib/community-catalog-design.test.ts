@@ -12,10 +12,8 @@ describe("public community catalog design system", () => {
     expect(catalog).toContain(".ns-fc-title");
   });
 
-  it("keeps filters keyboard-accessible and respects reduced motion", () => {
-    expect(catalog).toContain('htmlFor="ns-filter-university"');
-    expect(catalog).toContain('htmlFor="ns-filter-level"');
-    expect(catalog).toContain(".ns-filter-select select:focus-visible");
+  it("has no faculty filters and respects reduced motion", () => {
+    expect(catalog).not.toContain("ns-filter");
     expect(catalog).toContain("prefers-reduced-motion: reduce");
   });
 
@@ -28,6 +26,7 @@ describe("public community catalog design system", () => {
 
   it("uses faculty language in the discovery actions", () => {
     expect(catalog).toContain("Add New Faculty");
-    expect(catalog).toContain("Browse faculties");
+    expect(catalog).toContain("Exam sites");
+    expect(catalog).not.toContain("Browse faculties");
   });
 });

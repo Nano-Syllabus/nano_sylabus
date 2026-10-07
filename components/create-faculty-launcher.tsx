@@ -42,7 +42,7 @@ const CommunityCatalogClient = dynamic(() => loadCatalog().then((m) => m.Communi
 export function CreateFacultyDialog({ onClose }: { onClose: () => void }) {
   return (
     <div className={`${dmSans.variable} ${jakarta.variable}`}>
-      <CommunityCatalogClient initialCommunities={[]} signedIn createOnly onCreateClose={onClose} />
+      <CommunityCatalogClient signedIn createOnly onCreateClose={onClose} />
     </div>
   );
 }

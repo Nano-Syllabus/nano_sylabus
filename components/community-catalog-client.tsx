@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { useRouter } from "next/navigation";
 import { X, Loader2 } from "lucide-react";
 import type { ExamSiteCard } from "@/lib/data/landing-sites";
 import {
   communityInputSchema,
-  communityLevel,
   communityLevelDefaults,
   communityLevelLockedFormat,
   communityLevelStructure,
@@ -18,11 +17,8 @@ import {
   generateCommunityTerms,
   type CommunitySummary,
 } from "@/lib/communities";
-import { titleCase } from "@/lib/utils";
-import { forgetCommunityScopedCaches } from "@/lib/query/membership";
 import { getPhoneNumberError, normalizePhoneNumber } from "@/lib/phone-number";
 import type { ChallengeQuestionFormat } from "@/lib/challenge-format";
-import { CommunitySwitchDialog, type SwitchCommunity } from "@/components/community-switch-dialog";
 
 // The create form offers only the two plain formats; hybrid stays available in
 // the community's settings picker.
@@ -113,178 +109,6 @@ function plural(count: number, word: string) {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-function CommunityCard({
-  community,
-  signedIn,
-  currentCommunity,
-}: {
-  community: CommunitySummary;
-  signedIn: boolean;
-  /** The faculty this student studies in now — joined, or one they own opened as a student. */
-  currentCommunity: SwitchCommunity | null;
-}) {
-  const router = useRouter();
-  const joined = community.membership?.status === "active";
-  const creator = joined && community.membership?.role === "creator";
-  const [joining, setJoining] = useState(false);
-  const [joinError, setJoinError] = useState("");
-  const [switchFrom, setSwitchFrom] = useState<SwitchCommunity | null>(null);
-
-  function openJoined() {
-    router.push(`/flow?community=${encodeURIComponent(community.slug)}`);
-    router.refresh();
-  }
-
-
-  async function joinCommunity() {
-    // Already in another faculty: ask to switch rather than let the join fail.
-    if (currentCommunity && currentCommunity.slug !== community.slug) {
-      setSwitchFrom(currentCommunity);
-      return;
-    }
-    setJoining(true);
-    setJoinError("");
-    try {
-      const response = await fetch(
-        `/api/communities/${encodeURIComponent(community.slug)}/join`,
-        {
-          method: "POST",
-          headers: { Accept: "application/json" },
-        },
-      );
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        current?: SwitchCommunity;
-      };
-      if (response.status === 409 && payload.current) {
-        setSwitchFrom(payload.current);
-        return;
-      }
-      if (!response.ok) {
-        setJoinError(payload.error || "Could not join this community. Please try again.");
-        return;
-      }
-      forgetCommunityScopedCaches();
-      openJoined();
-    } catch {
-      setJoinError("Could not reach NanoSyllabus. Check your connection and try again.");
-    } finally {
-      setJoining(false);
-    }
-  }
-
-  // A creator's own faculty always offers Join: it opens it as a student
-  // (replacing a joined faculty); the workspace is in the sidebar.
-  const actionLabel = joined && !creator ? "Open" : "Join";
-
-  return (
-    <article className={`ns-fc ns-fc--${communityTint(community.slug)}`}>
-      <div className="ns-fc-inner">
-        <div className="ns-fc-top">
-          <div className="ns-fc-monogram" aria-hidden="true">
-            {communityMonogram(community.name)}
-          </div>
-          <span className="ns-fc-tag">{communityLevel(community)}</span>
-        </div>
-
-        <div>
-          <h3 className="ns-fc-title">
-            {titleCase(community.name)}
-            {creator ? (
-              <span className="ns-fc-badge">★ Creator</span>
-            ) : joined ? (
-              <span className="ns-fc-badge">✓ Joined</span>
-            ) : null}
-          </h3>
-          <p className="ns-fc-subtitle">
-            {[community.faculty, community.university].filter(Boolean).join(" · ")}
-          </p>
-        </div>
-
-        <div className="ns-fc-meta">
-          <span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="16" rx="2" />
-              <path d="M7 3v4M17 3v4M3 10h18" />
-            </svg>
-            {plural(community.totalYears, "year")}
-            {community.totalSemesters ? ` · ${plural(community.totalSemesters, "semester")}` : ""}
-          </span>
-          {community.subjectCount ? (
-            <span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13Z" />
-              </svg>
-              <strong>{plural(community.subjectCount, "subject")}</strong>
-            </span>
-          ) : null}
-        </div>
-
-        <div className="ns-fc-bottom">
-          <div className="ns-fc-members">
-            <span className="ns-fc-members-icon" aria-hidden="true">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 21a8 8 0 0 1 16 0" />
-              </svg>
-            </span>
-            {plural(community.memberCount, "member")}
-          </div>
-
-          <div className="ns-fc-actions">
-            {joined && !creator ? (
-              <Link
-                className="ns-fc-open"
-                href={`/app/communities/${encodeURIComponent(community.slug)}`}
-                aria-label={`Open ${community.name} community`}
-              >
-                {actionLabel} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" /></svg>
-              </Link>
-            ) : signedIn ? (
-              <button
-                type="button"
-                className="ns-fc-open"
-                onClick={joinCommunity}
-                disabled={joining}
-                aria-busy={joining}
-                aria-label={`Join ${community.name}`}
-              >
-                {actionLabel}
-                {joining ? <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} /> : <><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" /></svg></>}
-              </button>
-            ) : (
-              <Link
-                className="ns-fc-open"
-                href={`/flow?community=${encodeURIComponent(community.slug)}`}
-                aria-label={`Join ${community.name}`}
-              >
-                {actionLabel} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" /></svg>
-              </Link>
-            )}
-          </div>
-        </div>
-
-        <CommunitySwitchDialog
-          open={Boolean(switchFrom)}
-          from={switchFrom}
-          to={{ slug: community.slug, name: community.name, university: community.university }}
-          onClose={() => setSwitchFrom(null)}
-          onSwitched={openJoined}
-        />
-
-        {joinError ? (
-          <div className="ns-fc-error" role="alert">
-            <p>{joinError}</p>
-            <button type="button" onClick={joinCommunity} disabled={joining}>
-              Try again
-            </button>
-          </div>
-        ) : null}
-      </div>
-    </article>
-  );
-}
-
 /**
  * One live exam site (subdomain) on the main domain's Browse page. It is a
  * plain link: the site's own landing page handles sign-in and its faculties.
@@ -348,21 +172,16 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 }
 
 export function CommunityCatalogClient({
-  initialCommunities,
   examSites = [],
   signedIn,
   initialShowCreate = false,
   initialPhoneNumber = "",
-  studyingSlug = null,
   createOnly = false,
   onCreateClose,
 }: {
-  initialCommunities: CommunitySummary[];
   /** Live subdomains, listed above the faculties (user, 2026-10-07). */
   examSites?: Array<ExamSiteCard & { href: string }>;
   signedIn: boolean;
-  /** The faculty the student portal shows (joined, or owned and opened as a student). */
-  studyingSlug?: string | null;
   initialShowCreate?: boolean;
   /** The signed-in creator's saved number, so they rarely retype it. */
   initialPhoneNumber?: string;
@@ -375,9 +194,6 @@ export function CommunityCatalogClient({
 }) {
   const router = useRouter();
   const firstFieldRef = useRef<HTMLInputElement>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 6;
-
   const [showCreate, setShowCreate] = useState(initialShowCreate || createOnly);
   // Kept in a ref: the opener passes a fresh function each render, and the
   // dialog's effect (which moves focus) must not re-run while someone types.
@@ -393,40 +209,6 @@ export function CommunityCatalogClient({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  const currentCommunity = useMemo(() => {
-    const current =
-      initialCommunities.find((c) => c.slug === studyingSlug) ??
-      initialCommunities.find(
-        (c) => c.membership?.status === "active" && c.membership.role === "member",
-      );
-    return current ? { slug: current.slug, name: current.name, university: current.university } : null;
-  }, [initialCommunities, studyingSlug]);
-
-  // No filters or search (user, 2026-10-07): every faculty, biggest first.
-  const filtered = useMemo(
-    () =>
-      [...initialCommunities].sort(
-        (left, right) =>
-          right.memberCount - left.memberCount || left.name.localeCompare(right.name),
-      ),
-    [initialCommunities],
-  );
-
-  // Pagination calculation
-  const totalItems = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const safePage = Math.min(currentPage, totalPages);
-  const start = (safePage - 1) * pageSize;
-  const end = Math.min(start + pageSize, totalItems);
-  const paginatedCommunities = filtered.slice(start, end);
-
-  function goToPage(page: number) {
-    setCurrentPage(page);
-    document
-      .querySelector("#communities .ns-browse-intro")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
 
   const levelStructure = communityLevelStructure(draft.level);
   const lockedFormat = communityLevelLockedFormat(draft.level);
@@ -638,10 +420,6 @@ export function CommunityCatalogClient({
 
         .ns-top-cta:focus-visible,
         .ns-hero-cta:focus-visible,
-        .ns-page-button:focus-visible {
-          outline: 2px solid #3049ed;
-          outline-offset: 3px;
-        }
 
         .ns-hero-cta--blue {
           background: #3049ed !important;
@@ -699,7 +477,7 @@ export function CommunityCatalogClient({
         .ns-discovery { margin-top: 30px; }
         .ns-site-logo { width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }
 
-        /* Browse faculties — tinted community cards */
+        /* Exam sites — tinted cards */
         .ns-browse {
           font-family: var(--font-dm-sans), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
           color: #171c27;
@@ -915,59 +693,13 @@ export function CommunityCatalogClient({
           cursor: pointer;
         }
 
-        .ns-pagination-wrap {
-          margin-top: 26px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 18px;
-        }
 
-        .ns-page-summary {
-          color: #606774;
-          font-size: 14px;
-          font-weight: 400;
-        }
 
-        .ns-pagination {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-        }
 
-        .ns-page-numbers { display: flex; align-items: center; gap: 7px; }
 
-        .ns-page-button {
-          min-width: 40px;
-          height: 40px;
-          padding: 0 12px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          border: 1px solid #d6dbe3;
-          border-radius: 10px;
-          color: #101114;
-          background: white;
-          font-size: 14px;
-          font-weight: 650;
-          cursor: pointer;
-          transition: border-color .18s ease, background .18s ease, color .18s ease;
-        }
 
-        .ns-page-button:hover:not(:disabled):not([aria-current="page"]) {
-          border-color: #9ba2ad;
-          background: #f6f7f9;
-        }
 
-        .ns-page-button[aria-current="page"] {
-          border-color: #3049ed;
-          color: white;
-          background: #3049ed;
-        }
 
-        .ns-page-button:disabled { opacity: .38; cursor: not-allowed; }
-        .ns-page-button svg { width: 16px; height: 16px; }
 
         /* Create-a-faculty modal */
         .ns-cf-overlay {
@@ -1411,9 +1143,6 @@ export function CommunityCatalogClient({
           .ns-cf-close,
           .ns-cf-chip span,
           .ns-cf-submit,
-          .ns-page-button {
-            transition: none;
-          }
         }
 
         @media (max-width: 1120px) {
@@ -1435,7 +1164,6 @@ export function CommunityCatalogClient({
           .ns-browse-grid { grid-template-columns: 1fr; gap: 14px; }
           .ns-fc-inner { padding: 20px; }
           .ns-fc-title { font-size: 20px; }
-          .ns-pagination-wrap { align-items: flex-start; flex-direction: column; }
         }
 
         @media (max-width: 560px) {
@@ -1446,8 +1174,6 @@ export function CommunityCatalogClient({
           .ns-hero p { font-size: 1rem; }
           .ns-browse-grid { grid-template-columns: 1fr; }
           .ns-fc-bottom { flex-wrap: wrap; }
-          .ns-pagination { width: 100%; justify-content: space-between; }
-          .ns-page-button span { display: none; }
         }
       `}</style>
       {createOnly ? null : (
@@ -1939,8 +1665,7 @@ export function CommunityCatalogClient({
 
       {createOnly ? null : (
       <>
-      {examSites.length ? (
-        <section className="ns-discovery ns-browse" aria-labelledby="ns-sites-title">
+      <section className="ns-discovery ns-browse" id="communities" aria-labelledby="ns-sites-title">
           <div className="ns-browse-intro">
             <div className="ns-browse-heading">
               <h2 id="ns-sites-title">Exam sites</h2>
@@ -1954,90 +1679,13 @@ export function CommunityCatalogClient({
               <SiteCard key={site.slug} site={site} />
             ))}
           </div>
-        </section>
-      ) : null}
-
-      {/* Faculties — no filters or search (user, 2026-10-07). */}
-      <section className="ns-discovery" id="communities" aria-label="Browse faculties">
-        <div className="ns-results ns-browse">
-          <div className="ns-browse-intro">
-            <div className="ns-browse-heading">
-              <h2>Browse faculties</h2>
-              <span className="ns-browse-count" aria-live="polite">
-                {totalItems} {totalItems === 1 ? "community" : "communities"}
-              </span>
-            </div>
-          </div>
-
-          <div className="ns-browse-grid">
-            {paginatedCommunities.map((community) => (
-              <CommunityCard
-                key={community.id}
-                community={community}
-                signedIn={signedIn}
-                currentCommunity={currentCommunity}
-              />
-            ))}
-          </div>
-          {!totalItems ? (
+          {!examSites.length ? (
             <div className="ns-browse-empty">
-              <h3>No communities yet</h3>
+              <h3>No exam sites yet</h3>
             </div>
           ) : null}
+        </section>
 
-          {/* Pagination */}
-          {totalItems > 0 ? (
-            <div className="ns-pagination-wrap">
-              <span className="ns-page-summary" aria-live="polite">
-                Showing {start + 1}–{end} of {totalItems}
-              </span>
-
-              <nav className="ns-pagination" aria-label="Community pages">
-                <button
-                  className="ns-page-button"
-                  type="button"
-                  onClick={() => goToPage(safePage - 1)}
-                  disabled={safePage <= 1}
-                  aria-label="Previous page"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <path d="m15 18-6-6 6-6" />
-                  </svg>
-                  <span>Previous</span>
-                </button>
-
-                <div className="ns-page-numbers">
-                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-                    <button
-                      key={page}
-                      type="button"
-                      className="ns-page-button"
-                      onClick={() => goToPage(page)}
-                      aria-label={`Go to page ${page}`}
-                      aria-current={page === safePage ? "page" : undefined}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  className="ns-page-button"
-                  type="button"
-                  onClick={() => goToPage(safePage + 1)}
-                  disabled={safePage >= totalPages}
-                  aria-label="Next page"
-                >
-                  <span>Next</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <path d="m9 18 6-6-6-6" />
-                  </svg>
-                </button>
-              </nav>
-            </div>
-          ) : null}
-        </div>
-      </section>
       </>
       )}
     </main>
