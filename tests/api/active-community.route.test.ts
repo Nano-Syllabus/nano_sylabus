@@ -14,7 +14,13 @@ vi.mock("@/lib/data/communities", () => ({
   communityStorageError: () => ({ status: 500, message: "Could not load communities." }),
 }));
 vi.mock("@/lib/data/faculty-lock", () => ({
-  getFacultyLock: async (id: string) => ((await mocks.isAdmin(id)) ? null : mocks.enrollment(id)),
+  facultyChangeRefusal: async (id: string, target: { slug: string }) => {
+    if (await mocks.isAdmin(id)) return null;
+    const enrollment = await mocks.enrollment(id);
+    return enrollment && enrollment.facultySlug !== target.slug
+      ? "Your faculty is locked. Contact an admin to change it."
+      : null;
+  },
 }));
 
 import { POST } from "@/app/api/student/active-community/route";
@@ -64,7 +70,7 @@ describe("POST active community", () => {
     expect(response.status).toBe(403);
     expect(response.headers.get("set-cookie")).toBeNull();
   });
-  it("lets a platform admin switch even with an exam faculty on record", async () => {
+  it("lets a super admin switch even with an exam faculty on record", async () => {
     mocks.enrollment.mockResolvedValue({ facultyId: "locked", facultySlug: "bct-license" });
     mocks.isAdmin.mockResolvedValueOnce(true);
     expect((await POST(request("mine"))).status).toBe(200);

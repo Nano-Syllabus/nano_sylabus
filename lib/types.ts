@@ -353,6 +353,12 @@ export interface AdminUserSummary {
   role: AppRole;
   onboarded: boolean;
   creditBalance: number;
+  /**
+   * How credits work for this person: "unlimited" (admins, super admins,
+   * unlimited plans), "ambassador" (balance as is), "monthly" (refills to 20
+   * each month; creditBalance already counts this month's refill).
+   */
+  creditAllowance: "unlimited" | "ambassador" | "monthly";
   activePlanName: string | null;
   /** When the current plan stops; null for plans without an end and for admins (Pro by role). */
   activePlanEndsAt: string | null;
@@ -360,6 +366,13 @@ export interface AdminUserSummary {
   noteCount: number;
   createdAt: string;
   lastSignInAt: string | null;
+  /**
+   * "all" for a super admin; the faculties an admin may move between; a
+   * student's own faculty (normally one).
+   */
+  faculties: "all" | Array<{ id: string; slug: string; name: string }>;
+  /** The subdomain site an admin runs (one each, one admin per site); null for everyone else. */
+  site: { slug: string; name: string } | null;
 }
 
 export interface AdminUserDetail extends AdminUserSummary {

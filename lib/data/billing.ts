@@ -1,4 +1,4 @@
-import { STARTER_CREDITS } from "@/lib/billing";
+import { monthlyRefreshAmount, monthlyRefreshReference, STARTER_CREDITS } from "@/lib/billing";
 import { isPlatformAdmin } from "@/lib/data/platform-admin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -185,6 +185,66 @@ export async function grantStarterCredits(userId: string) {
 
   if (latestError) throw latestError;
   return latest?.balance_after ?? STARTER_CREDITS;
+}
+
+/**
+ * Top a regular student's credits back up to MONTHLY_FREE_CREDITS, once per
+ * month (user, 2026-10-07). "Regular" is the caller's call: not on an unlimited
+ * plan (admins included) and not a student ambassador, whose credits stay as
+ * they are. Returns the balance afterwards. Written with the service role; the
+ * unique (reference_type, reference_id) index makes racing requests refill
+ * once. Until the migration that allows `monthly_refresh` is applied the insert
+ * is refused (23514), the balance is returned unchanged rather than failing a
+ * page, and this server stops trying so pages don't pay two extra round trips.
+ */
+let monthlyRefreshUnsupported = false;
+export async function refreshMonthlyCredits(
+  userId: string,
+  /** The balance the caller already read; returned as is when refills are unsupported. */
+  knownBalance?: number,
+): Promise<number> {
+  if (monthlyRefreshUnsupported && knownBalance !== undefined) return knownBalance;
+  const admin = createSupabaseAdminClient();
+  const readBalance = async () => {
+    const { data, error } = await admin
+      .from("credits_ledger")
+      .select("balance_after")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.balance_after ?? 0;
+  };
+  const balance = await readBalance();
+  if (monthlyRefreshUnsupported) return balance;
+  const amount = monthlyRefreshAmount(balance);
+  const { error } = await admin.from("credits_ledger").insert({
+    user_id: userId,
+    type: "grant",
+    amount,
+    balance_after: balance + amount,
+    reference_type: "monthly_refresh",
+    reference_id: monthlyRefreshReference(userId),
+    description: "Monthly free credits",
+  });
+  if (!error) return balance + amount;
+  if (error.code === "23505") return readBalance();
+  if (error.code === "23514") monthlyRefreshUnsupported = true;
+  console.error("[credits] monthly refill failed", error.code, error.message);
+  return balance;
+}
+
+/** Whether this month's refill is already on the ledger. */
+export async function hasMonthlyRefresh(userId: string) {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("credits_ledger")
+    .select("id")
+    .eq("reference_type", "monthly_refresh")
+    .eq("reference_id", monthlyRefreshReference(userId))
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
 }
 
 export async function listSubscriptionPlans(client?: ReturnType<typeof createSupabaseAdminClient>) {

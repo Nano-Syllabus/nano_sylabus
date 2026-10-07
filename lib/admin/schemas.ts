@@ -3,6 +3,8 @@ import type { AdminAnswerFilter } from "@/lib/types";
 
 export const userRoleUpdateSchema = z.object({
   role: z.enum(["student", "admin", "super_admin"]),
+  /** Required when role is "admin": the subdomain site they will run. */
+  siteSlug: z.string().trim().min(1).max(40).optional(),
 });
 
 export const userCreditAdjustmentSchema = z.object({

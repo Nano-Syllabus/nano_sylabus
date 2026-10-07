@@ -1,6 +1,8 @@
 import { isProfileComplete } from "@/lib/access";
 import { isAdminRole } from "@/lib/admin-role";
 import { listStudentAmbassadors } from "@/lib/data/student-ambassadors";
+import { listAdminSites, type AdminSite, type FacultyRef } from "@/lib/data/faculty-lock";
+import { monthlyRefreshAmount, monthlyRefreshReference } from "@/lib/billing";
 import {
   normalizeBoard,
   normalizeBoardScore,
@@ -90,7 +92,9 @@ function normalizePlan(row: any): SubscriptionPlan {
     productType: row.product_type ?? "credit_pack",
     seatLimit: row.seat_limit ?? 1,
     isUnlimited: row.is_unlimited ?? false,
-    features: Array.isArray(row.features) ? row.features.filter((item: unknown): item is string => typeof item === "string") : [],
+    features: Array.isArray(row.features)
+      ? row.features.filter((item: unknown): item is string => typeof item === "string")
+      : [],
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -122,7 +126,8 @@ function normalizeInvoice(row: any): Invoice {
     amount: row.amount,
     currency: row.currency,
     paymentMethod: row.payment_method,
-    invoiceCode: row.invoice_code ?? `NS-${String(row.id).replaceAll("-", "").slice(0, 10).toUpperCase()}`,
+    invoiceCode:
+      row.invoice_code ?? `NS-${String(row.id).replaceAll("-", "").slice(0, 10).toUpperCase()}`,
     subtotal: row.subtotal ?? row.amount,
     expiresAt: row.expires_at ?? row.created_at,
     billingPeriodStart: row.billing_period_start ?? null,
@@ -191,6 +196,11 @@ async function loadAdminUserAggregates(userIds: string[]) {
       activePlanByUserId: new Map<string, { name: string; endsAt: string | null }>(),
       sessionCountByUserId: new Map<string, number>(),
       noteCountByUserId: new Map<string, number>(),
+      facultiesByUserId: new Map<string, FacultyRef[]>(),
+      adminSiteByUserId: new Map<string, AdminSite>(),
+      unlimitedPlanUserIds: new Set<string>(),
+      refreshedUserIds: new Set<string>(),
+      ambassadorEmails: new Set<string>(),
     };
   }
 
@@ -203,6 +213,11 @@ async function loadAdminUserAggregates(userIds: string[]) {
     { data: planRows, error: planError },
     { data: sessionRows, error: sessionError },
     { data: noteRows, error: noteError },
+    { data: memberRows, error: memberError },
+    { data: enrollmentRows, error: enrollmentError },
+    adminSites,
+    { data: refreshRows, error: refreshError },
+    ambassadors,
   ] = await Promise.all([
     supabase.from("student_profiles").select("*").in("user_id", userIds),
     supabase
@@ -219,6 +234,27 @@ async function loadAdminUserAggregates(userIds: string[]) {
     supabase.from("subscription_plans").select("*"),
     supabase.from("chat_sessions").select("id, user_id, title, updated_at").in("user_id", userIds),
     supabase.from("revision_notes").select("user_id").in("user_id", userIds),
+    // A student's faculty: the one they joined, or the one an exam site pinned.
+    supabase
+      .from("community_memberships")
+      .select("user_id,communities!inner(id,slug,name)")
+      .in("user_id", userIds)
+      .eq("role", "member")
+      .eq("status", "active"),
+    supabase
+      .from("student_exam_enrollments")
+      .select("user_id,communities!inner(id,slug,name)")
+      .in("user_id", userIds),
+    listAdminSites(userIds),
+    supabase
+      .from("credits_ledger")
+      .select("user_id")
+      .eq("reference_type", "monthly_refresh")
+      .in(
+        "reference_id",
+        userIds.map((userId) => monthlyRefreshReference(userId)),
+      ),
+    listStudentAmbassadors(),
   ]);
 
   if (profileError) throw profileError;
@@ -227,6 +263,20 @@ async function loadAdminUserAggregates(userIds: string[]) {
   if (planError) throw planError;
   if (sessionError) throw sessionError;
   if (noteError) throw noteError;
+  if (memberError) throw memberError;
+  if (enrollmentError) throw enrollmentError;
+  if (refreshError) throw refreshError;
+
+  const facultiesByUserId = new Map<string, FacultyRef[]>();
+  for (const row of [...(enrollmentRows ?? []), ...(memberRows ?? [])]) {
+    const faculty = (Array.isArray(row.communities)
+      ? row.communities[0]
+      : row.communities) as unknown as FacultyRef;
+    const list = facultiesByUserId.get(row.user_id) ?? [];
+    if (!list.some((item) => item.id === faculty.id))
+      list.push({ id: faculty.id, slug: faculty.slug, name: faculty.name });
+    facultiesByUserId.set(row.user_id, list);
+  }
 
   const profilesByUserId = new Map(
     ((profileRows ?? []) as ProfileRow[])
@@ -248,9 +298,12 @@ async function loadAdminUserAggregates(userIds: string[]) {
   // ends_at has lapsed — nothing flips its status — so it is not their plan any more.
   const now = Date.now();
   const activePlanByUserId = new Map<string, { name: string; endsAt: string | null }>();
+  const unlimitedPlanUserIds = new Set<string>();
   for (const row of subscriptionRows ?? []) {
     const subscription = normalizeSubscription(row);
     if (subscription.endsAt && new Date(subscription.endsAt).getTime() <= now) continue;
+    if (plansById.get(subscription.planId)?.isUnlimited)
+      unlimitedPlanUserIds.add(subscription.userId);
     if (!activePlanByUserId.has(subscription.userId)) {
       activePlanByUserId.set(subscription.userId, {
         name: plansById.get(subscription.planId)?.name ?? "Active plan",
@@ -269,7 +322,18 @@ async function loadAdminUserAggregates(userIds: string[]) {
     noteCountByUserId.set(row.user_id, (noteCountByUserId.get(row.user_id) ?? 0) + 1);
   }
 
-  return { profilesByUserId, latestLedgerByUserId, activePlanByUserId, sessionCountByUserId, noteCountByUserId };
+  return {
+    profilesByUserId,
+    latestLedgerByUserId,
+    activePlanByUserId,
+    sessionCountByUserId,
+    noteCountByUserId,
+    facultiesByUserId,
+    adminSiteByUserId: adminSites,
+    unlimitedPlanUserIds,
+    refreshedUserIds: new Set((refreshRows ?? []).map((row) => row.user_id as string)),
+    ambassadorEmails: new Set(ambassadors.map((row) => row.email.toLowerCase())),
+  };
 }
 
 function buildUserSummaries(
@@ -280,6 +344,13 @@ function buildUserSummaries(
     activePlanByUserId: Map<string, { name: string; endsAt: string | null }>;
     sessionCountByUserId: Map<string, number>;
     noteCountByUserId: Map<string, number>;
+    facultiesByUserId: Map<string, FacultyRef[]>;
+    /** The subdomain each admin runs; its faculties are their column, not where they sit. */
+    adminSiteByUserId: Map<string, AdminSite>;
+    unlimitedPlanUserIds: Set<string>;
+    /** Who already had this month's credit refill. */
+    refreshedUserIds: Set<string>;
+    ambassadorEmails: Set<string>;
   },
 ) {
   const {
@@ -288,11 +359,29 @@ function buildUserSummaries(
     activePlanByUserId,
     sessionCountByUserId,
     noteCountByUserId,
+    facultiesByUserId,
+    adminSiteByUserId,
+    unlimitedPlanUserIds,
+    refreshedUserIds,
+    ambassadorEmails,
   } = aggregates;
 
   return users.map((user) => {
     const profile = profilesByUserId.get(user.id) ?? null;
-    const balance = latestLedgerByUserId.get(user.id)?.balanceAfter ?? 0;
+    const ledgerBalance = latestLedgerByUserId.get(user.id)?.balanceAfter ?? 0;
+    // Same rule as the student's own page (lib/auth.ts): unlimited for admins
+    // and unlimited plans, as-is for ambassadors, a monthly refill to 20 for
+    // everyone else — counted here even before they visit this month.
+    const creditAllowance: AdminUserSummary["creditAllowance"] =
+      isAdminRole(profile?.role) || unlimitedPlanUserIds.has(user.id)
+        ? "unlimited"
+        : ambassadorEmails.has((user.email ?? "").toLowerCase())
+          ? "ambassador"
+          : "monthly";
+    const balance =
+      creditAllowance === "monthly" && !refreshedUserIds.has(user.id)
+        ? ledgerBalance + monthlyRefreshAmount(ledgerBalance)
+        : ledgerBalance;
 
     return {
       userId: user.id,
@@ -307,15 +396,31 @@ function buildUserSummaries(
       role: profile?.role ?? "student",
       onboarded: isProfileComplete(profile),
       creditBalance: balance,
+      creditAllowance,
       // Admins are Pro by role (lib/data/platform-admin.ts), with or without a subscription row.
-      activePlanName: isAdminRole(profile?.role) ? "Pro" : (activePlanByUserId.get(user.id)?.name ?? null),
-      activePlanEndsAt: isAdminRole(profile?.role) ? null : (activePlanByUserId.get(user.id)?.endsAt ?? null),
+      activePlanName: isAdminRole(profile?.role)
+        ? "Pro"
+        : (activePlanByUserId.get(user.id)?.name ?? null),
+      activePlanEndsAt: isAdminRole(profile?.role)
+        ? null
+        : (activePlanByUserId.get(user.id)?.endsAt ?? null),
       chatSessionCount: sessionCountByUserId.get(user.id) ?? 0,
       noteCount: noteCountByUserId.get(user.id) ?? 0,
       createdAt: user.created_at,
       lastSignInAt: user.last_sign_in_at ?? null,
+      faculties:
+        profile?.role === "super_admin"
+          ? "all"
+          : profile?.role === "admin"
+            ? (adminSiteByUserId.get(user.id)?.faculties ?? [])
+            : (facultiesByUserId.get(user.id) ?? []),
+      site: profile?.role === "admin" ? siteRef(adminSiteByUserId.get(user.id)) : null,
     } satisfies AdminUserSummary;
   });
+}
+
+function siteRef(site: AdminSite | undefined) {
+  return site ? { slug: site.slug, name: site.name } : null;
 }
 
 export async function listAdminUsers(filters?: {
@@ -410,10 +515,30 @@ export async function getAdminUserDetail(userId: string) {
     { data: planRows, error: planError },
   ] = await Promise.all([
     supabase.from("student_profiles").select("*").eq("user_id", userId).maybeSingle(),
-    supabase.from("credits_ledger").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(12),
-    supabase.from("user_subscriptions").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(6),
-    supabase.from("invoices").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(8),
-    supabase.from("chat_sessions").select("id, title, updated_at").eq("user_id", userId).order("updated_at", { ascending: false }).limit(8),
+    supabase
+      .from("credits_ledger")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(12),
+    supabase
+      .from("user_subscriptions")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(6),
+    supabase
+      .from("invoices")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("chat_sessions")
+      .select("id, title, updated_at")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(8),
     supabase.from("subscription_plans").select("*"),
   ]);
 
@@ -447,7 +572,9 @@ export async function getAdminUserDetail(userId: string) {
     recentLedger,
     recentSubscriptions,
     recentInvoices,
-    recentSessions: ((sessionRows ?? []) as Array<{ id: string; title: string; updated_at: string }>).map((row) => ({
+    recentSessions: (
+      (sessionRows ?? []) as Array<{ id: string; title: string; updated_at: string }>
+    ).map((row) => ({
       id: row.id,
       title: row.title,
       updatedAt: row.updated_at,
@@ -455,19 +582,208 @@ export async function getAdminUserDetail(userId: string) {
   } satisfies AdminUserDetail;
 }
 
+export class AdminRoleError extends Error {
+  constructor(
+    message: string,
+    readonly status = 400,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Change a person's access. An admin runs exactly one subdomain site and a site
+ * has one admin (user, 2026-10-07), so making someone an admin — or moving an
+ * admin — needs `siteSlug`. Leaving the admin role frees the site (a database
+ * trigger, `release_landing_site_on_role_change`).
+ */
 export async function updateAdminUserRole(input: {
   actorUserId: string;
   userId: string;
   role: AppRole;
+  siteSlug?: string;
 }) {
   const supabase = createSupabaseAdminClient();
-  const { error } = await supabase.rpc("set_platform_user_roles", {
-    p_actor_user_id: input.actorUserId,
-    p_target_user_ids: [input.userId],
-    p_role: input.role,
-  });
-  if (error) throw new Error(error.message);
+  let siteHolder: string | null = null;
+  if (input.role === "admin") {
+    if (!input.siteSlug) throw new AdminRoleError("Choose the subdomain this admin will run.");
+    const { data: holder, error: holderError } = await supabase
+      .from("landing_site_admins")
+      .select("user_id")
+      .eq("site_slug", input.siteSlug)
+      .maybeSingle();
+    if (holderError) throw new Error(holderError.message);
+    if (holder && holder.user_id !== input.userId)
+      throw new AdminRoleError("That subdomain already has an admin.", 409);
+    siteHolder = holder?.user_id ?? null;
+  }
+
+  const { data: current, error: currentError } = await supabase
+    .from("student_profiles")
+    .select("role")
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  if (currentError) throw new Error(currentError.message);
+  const previousRole = (current?.role ?? "student") as AppRole;
+
+  if (previousRole !== input.role) {
+    const { error } = await supabase.rpc("set_platform_user_roles", {
+      p_actor_user_id: input.actorUserId,
+      p_target_user_ids: [input.userId],
+      p_role: input.role,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  if (input.role === "admin") {
+    // The admin's old site (if any) goes, the new one comes; one statement each
+    // so the unique keys see a consistent state.
+    const { error: clearError } = await supabase
+      .from("landing_site_admins")
+      .delete()
+      .eq("user_id", input.userId)
+      .neq("site_slug", input.siteSlug!);
+    // A plain insert: if another admin took the site meanwhile, the primary
+    // key refuses it (23505) instead of handing their site over.
+    const { error: assignError } = clearError
+      ? { error: clearError }
+      : siteHolder === input.userId
+        ? { error: null }
+        : await supabase.from("landing_site_admins").insert({
+            site_slug: input.siteSlug,
+            user_id: input.userId,
+            assigned_by: input.actorUserId,
+          });
+    if (assignError) {
+      // Don't leave an admin without a site: put the old role back.
+      if (previousRole !== "admin")
+        await supabase.rpc("set_platform_user_roles", {
+          p_actor_user_id: input.actorUserId,
+          p_target_user_ids: [input.userId],
+          p_role: previousRole,
+        });
+      throw new AdminRoleError(
+        assignError.code === "23505"
+          ? "That subdomain already has an admin."
+          : "The subdomain could not be assigned.",
+        assignError.code === "23505" ? 409 : 500,
+      );
+    }
+  }
   return getAdminUserDetail(input.userId);
+}
+
+export type SiteAdmin = { userId: string; fullName: string; email: string };
+
+/**
+ * Who runs each subdomain site, by slug — the Websites list shows it. A missing
+ * table (migration not applied) reads as no admins rather than failing the page.
+ */
+export async function listSiteAdmins(): Promise<Map<string, SiteAdmin>> {
+  const supabase = createSupabaseAdminClient();
+  const bySite = new Map<string, SiteAdmin>();
+  const { data: rows, error } = await supabase
+    .from("landing_site_admins")
+    .select("site_slug,user_id");
+  if (error) {
+    console.error("[site-admins] could not read site admins", error.message);
+    return bySite;
+  }
+  if (!rows?.length) return bySite;
+  const { data: profiles } = await supabase
+    .from("student_profiles")
+    .select("user_id,full_name")
+    .in(
+      "user_id",
+      rows.map((row) => row.user_id),
+    );
+  const nameById = new Map((profiles ?? []).map((row) => [row.user_id, row.full_name ?? ""]));
+  // One lookup per site, and a platform has a handful of sites.
+  const users = await Promise.all(
+    rows.map((row) => supabase.auth.admin.getUserById(row.user_id).then((r) => r.data.user)),
+  );
+  rows.forEach((row, index) => {
+    const user = users[index];
+    const metaName =
+      typeof user?.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
+    bySite.set(row.site_slug, {
+      userId: row.user_id,
+      fullName: normalizeFullName(nameById.get(row.user_id) || metaName) || "No name",
+      email: user?.email ?? "",
+    });
+  });
+  return bySite;
+}
+
+/**
+ * Give a site a new admin, or none (`userId` null). A site has one admin and an
+ * admin runs one site, so the admin being replaced goes back to student — an
+ * admin with no site has nothing to run. A super admin can't be picked: making
+ * them an admin would quietly take away their platform-wide access.
+ */
+export async function setSiteAdmin(input: {
+  actorUserId: string;
+  siteSlug: string;
+  userId: string | null;
+}) {
+  const supabase = createSupabaseAdminClient();
+  const { data: holder, error } = await supabase
+    .from("landing_site_admins")
+    .select("user_id")
+    .eq("site_slug", input.siteSlug)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (holder?.user_id === input.userId) return;
+
+  if (input.userId) {
+    const { data: profile, error: profileError } = await supabase
+      .from("student_profiles")
+      .select("role")
+      .eq("user_id", input.userId)
+      .maybeSingle();
+    if (profileError) throw new Error(profileError.message);
+    if (profile?.role === "super_admin")
+      throw new AdminRoleError("A super admin already sees every site. Pick someone else.", 409);
+  }
+
+  if (holder) {
+    // The trigger frees the site when the role changes; the delete makes that
+    // independent of the trigger having been applied.
+    await updateAdminUserRole({
+      actorUserId: input.actorUserId,
+      userId: holder.user_id,
+      role: "student",
+    });
+    const { error: freeError } = await supabase
+      .from("landing_site_admins")
+      .delete()
+      .eq("site_slug", input.siteSlug);
+    if (freeError) throw new Error(freeError.message);
+  }
+  if (input.userId)
+    await updateAdminUserRole({
+      actorUserId: input.actorUserId,
+      userId: input.userId,
+      role: "admin",
+      siteSlug: input.siteSlug,
+    });
+}
+
+/** Every subdomain site with the admin who runs it, for the super admin's picker. */
+export async function listSiteAdminChoices() {
+  const supabase = createSupabaseAdminClient();
+  const [{ data: sites, error }, { data: admins, error: adminError }] = await Promise.all([
+    supabase.from("landing_sites").select("slug,name").order("name"),
+    supabase.from("landing_site_admins").select("site_slug,user_id"),
+  ]);
+  if (error) throw new Error(error.message);
+  if (adminError) throw new Error(adminError.message);
+  const adminBySite = new Map((admins ?? []).map((row) => [row.site_slug, row.user_id as string]));
+  return (sites ?? []).map((site) => ({
+    slug: site.slug as string,
+    name: site.name as string,
+    adminUserId: adminBySite.get(site.slug) ?? null,
+  }));
 }
 
 export async function adjustAdminUserCredits(input: {

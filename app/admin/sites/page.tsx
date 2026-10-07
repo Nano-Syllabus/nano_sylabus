@@ -4,6 +4,7 @@ import { AdminBillingFrame, AdminPageHeader } from "@/components/admin-billing-f
 import { AdminSitesList } from "@/components/admin-sites-list";
 import { assertAdminRequest } from "@/lib/admin-access";
 import { listLandingSites } from "@/lib/data/landing-sites";
+import { listSiteAdmins, type SiteAdmin } from "@/lib/data/admin-users";
 import { rootDomain } from "@/lib/landing-site-host";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,12 @@ export default async function AdminSitesPage() {
   }
 
   let sites: Awaited<ReturnType<typeof listLandingSites>> | null = null;
+  let admins: Record<string, SiteAdmin> = {};
   let loadError: string | null = null;
   try {
-    sites = await listLandingSites();
+    const [loaded, adminBySite] = await Promise.all([listLandingSites(), listSiteAdmins()]);
+    sites = loaded;
+    admins = Object.fromEntries(adminBySite);
   } catch (error) {
     console.error("[admin/sites]", error);
     loadError =
@@ -41,7 +45,13 @@ export default async function AdminSitesPage() {
           {loadError}
         </p>
       ) : (
-        <AdminSitesList initialSites={sites ?? []} rootDomain={rootDomain()} />
+        <AdminSitesList
+          initialSites={sites ?? []}
+          initialAdmins={admins}
+          canAssignAdmins={access.role === "super_admin"}
+          viewerUserId={access.userId}
+          rootDomain={rootDomain()}
+        />
       )}
     </AdminBillingFrame>
   );

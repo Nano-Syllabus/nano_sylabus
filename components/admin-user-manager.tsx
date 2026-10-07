@@ -1,5 +1,6 @@
 "use client";
 
+import { FacultyTags, SiteTag, SubdomainPicker } from "@/components/admin-faculty-tags";
 import { AdminGiftPlan } from "@/components/admin-gift-plan";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -7,6 +8,7 @@ import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin-billing-frame";
 import type { AdminListPage, AdminUserDetail, AdminUserSummary, AppRole } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
+import { MONTHLY_FREE_CREDITS } from "@/lib/billing";
 
 type RoleFilter = "all" | "students" | "admins" | "ambassadors";
 
@@ -20,6 +22,8 @@ const primaryButton =
   "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50";
 const inputClass =
   "min-h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-600/40";
+/** The same field sized by its row (flex), not stretched to the full width. */
+const inlineInputClass = inputClass.replace("w-full ", "");
 
 export function AdminUserManager({
   initialPage,
@@ -129,20 +133,20 @@ export function AdminUserManager({
             // Only a super admin holds the ambassador list.
             .filter(([value]) => value !== "ambassadors" || ambassadors)
             .map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
-              className={`min-h-9 flex-1 rounded-md px-3 text-sm font-medium sm:flex-none ${
-                filter === value
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+              <button
+                key={value}
+                type="button"
+                aria-pressed={filter === value}
+                onClick={() => setFilter(value)}
+                className={`min-h-9 flex-1 rounded-md px-3 text-sm font-medium sm:flex-none ${
+                  filter === value
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
         </div>
       </div>
 
@@ -163,6 +167,8 @@ export function AdminUserManager({
             <thead className="border-b border-border text-xs text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
+                <th className="hidden px-4 py-3 font-medium lg:table-cell">Subdomain</th>
+                <th className="hidden px-4 py-3 font-medium md:table-cell">Faculty</th>
                 <th className="hidden px-4 py-3 font-medium md:table-cell">Plan</th>
                 <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">Credits</th>
                 <th className="hidden px-4 py-3 font-medium lg:table-cell">Joined</th>
@@ -198,11 +204,17 @@ export function AdminUserManager({
                       </span>
                     </button>
                   </td>
+                  <td className="hidden px-4 py-3 lg:table-cell">
+                    <SiteTag user={user} />
+                  </td>
+                  <td className="hidden px-4 py-3 md:table-cell">
+                    <FacultyTags faculties={user.faculties} />
+                  </td>
                   <td className="hidden px-4 py-3 md:table-cell">
                     <PlanBadge plan={user.activePlanName} />
                   </td>
                   <td className="hidden px-4 py-3 text-right tabular-nums sm:table-cell">
-                    {user.creditBalance}
+                    {creditsLabel(user)}
                   </td>
                   <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
                     {formatDate(user.createdAt)}
@@ -290,6 +302,7 @@ function StudentPanel({
   const [amount, setAmount] = useState("20");
   const [reason, setReason] = useState("");
   const [role, setRole] = useState<AppRole>(summary?.role ?? "student");
+  const [siteSlug, setSiteSlug] = useState(summary?.site?.slug ?? "");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -299,6 +312,7 @@ function StudentPanel({
         if (!response.ok) throw new Error(payload.error || "This person could not be loaded.");
         setDetail(payload.user);
         setRole(payload.user.role);
+        setSiteSlug(payload.user.site?.slug ?? "");
       })
       .catch((cause) => {
         if (!controller.signal.aborted)
@@ -352,13 +366,17 @@ function StudentPanel({
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
+        body: JSON.stringify(role === "admin" ? { role, siteSlug } : { role }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Access could not be changed.");
       setDetail(payload.user);
       onChanged(payload.user);
-      setMessage(`Access changed to ${roleLabel[payload.user.role as AppRole]}.`);
+      setMessage(
+        payload.user.site
+          ? `${roleLabel[payload.user.role as AppRole]} of ${payload.user.site.name}.`
+          : `Access changed to ${roleLabel[payload.user.role as AppRole]}.`,
+      );
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "Access could not be changed.");
     } finally {
@@ -384,7 +402,9 @@ function StudentPanel({
       );
       setMessage(ambassador ? "No longer a student ambassador." : "Now a student ambassador.");
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Ambassador access could not be changed.");
+      setMessage(
+        cause instanceof Error ? cause.message : "Ambassador access could not be changed.",
+      );
     } finally {
       setBusy(null);
     }
@@ -404,10 +424,10 @@ function StudentPanel({
         aria-label={person?.fullName || "Student"}
         className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border bg-background shadow-xl"
       >
-        <div className="flex items-start gap-3 border-b border-border p-5">
+        <div className="flex items-start gap-3 border-b border-border px-5 py-4">
           <Avatar name={person?.fullName ?? ""} large />
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold">{person?.fullName || "No name"}</h2>
+            <h2 className="truncate text-base font-semibold">{person?.fullName || "No name"}</h2>
             <p className="truncate text-sm text-muted-foreground">{person?.email}</p>
             {person ? (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -426,7 +446,7 @@ function StudentPanel({
           </button>
         </div>
 
-        <div className="flex-1 space-y-6 overflow-y-auto p-5">
+        <div className="flex-1 space-y-4 overflow-y-auto bg-muted/40 p-4">
           {error ? (
             <p role="alert" className="text-sm text-destructive">
               {error}
@@ -439,70 +459,89 @@ function StudentPanel({
           ) : null}
 
           {person ? (
-            <dl className="grid grid-cols-4 gap-2 text-center">
-              <Stat label="Plan" value={person.activePlanName ?? "Free"} />
-              <Stat label="Credits" value={String(person.creditBalance)} />
-              <Stat label="Chats" value={String(person.chatSessionCount)} />
-              <Stat label="Notes" value={String(person.noteCount)} />
-              {person.activePlanEndsAt ? (
-                <div className="col-span-4 text-left text-xs text-muted-foreground">
-                  {person.activePlanName} until {formatDate(person.activePlanEndsAt)}
+            <div className="divide-y divide-border rounded-xl border border-border bg-card">
+              <dl className="grid grid-cols-4 divide-x divide-border text-center">
+                <Stat label="Plan" value={person.activePlanName ?? "Free"} />
+                <Stat label="Credits" value={creditsLabel(person)} />
+                <Stat label="Chats" value={String(person.chatSessionCount)} />
+                <Stat label="Notes" value={String(person.noteCount)} />
+              </dl>
+              {/* Which faculties this person is allowed into — shown to every
+                  viewer, not only in the read-only Access view. */}
+              <div className="flex items-start gap-3 px-3 py-2.5">
+                <span className="w-16 shrink-0 pt-0.5 text-xs text-muted-foreground">
+                  {person.role === "student" ? "Faculty" : "Faculties"}
+                </span>
+                <FacultyTags faculties={person.faculties} wrap />
+              </div>
+              {person.role === "admin" ? (
+                <div className="flex items-start gap-3 px-3 py-2.5">
+                  <span className="w-16 shrink-0 pt-0.5 text-xs text-muted-foreground">
+                    Subdomain
+                  </span>
+                  <SiteTag user={person} />
                 </div>
               ) : null}
-            </dl>
+              {person.activePlanEndsAt ? (
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  {person.activePlanName} until {formatDate(person.activePlanEndsAt)}
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
-          <Section title="Give or take credits">
-            <div className="flex flex-wrap gap-2">
+          <Section title="Credits" hint={person ? `Balance ${creditsLabel(person)}` : undefined}>
+            <div className="grid grid-cols-5 gap-1.5" role="group" aria-label="Quick amounts">
               {[-10, 10, 20, 50, 100].map((value) => (
                 <button
                   key={value}
                   type="button"
+                  aria-pressed={amount === String(value)}
                   onClick={() => setAmount(String(value))}
-                  className={`min-h-9 rounded-lg border px-3 text-sm font-medium tabular-nums ${
+                  className={`min-h-9 rounded-lg border text-sm font-medium tabular-nums ${
                     amount === String(value)
-                      ? "border-blue-600 text-blue-600"
-                      : "border-border hover:bg-muted"
+                      ? "border-blue-600 bg-blue-600/10 text-blue-700 dark:text-blue-300"
+                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
                   {value > 0 ? `+${value}` : value}
                 </button>
               ))}
             </div>
-            <div className="mt-3 grid grid-cols-[6rem_minmax(0,1fr)] gap-2">
+            <div className="mt-2 flex gap-2">
               <input
                 inputMode="numeric"
                 aria-label="Credits"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
-                className={`${inputClass} tabular-nums`}
+                className={`${inlineInputClass} w-20 shrink-0 tabular-nums`}
               />
               <input
                 aria-label="Reason"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 placeholder="Reason (optional)"
-                className={inputClass}
+                className={`${inlineInputClass} min-w-0 flex-1`}
               />
+              <button
+                type="button"
+                onClick={() => void saveCredits()}
+                disabled={!creditsValid || busy !== null || !detail}
+                className={`${primaryButton} shrink-0 tabular-nums`}
+              >
+                {busy === "credits"
+                  ? "Saving…"
+                  : !creditsValid
+                    ? "Apply"
+                    : credits > 0
+                      ? `Give ${credits}`
+                      : `Take ${Math.abs(credits)}`}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void saveCredits()}
-              disabled={!creditsValid || busy !== null || !detail}
-              className={`${primaryButton} mt-3 w-full`}
-            >
-              {busy === "credits"
-                ? "Saving…"
-                : !creditsValid
-                  ? "Enter a whole number"
-                  : credits > 0
-                    ? `Give ${credits} credits`
-                    : `Take away ${Math.abs(credits)} credits`}
-            </button>
           </Section>
 
           {canManageRoles && person?.role === "student" ? (
-            <Section title="Gift a plan">
+            <Section title="Gift a plan" hint="Plus or Pro, for one faculty">
               <AdminGiftPlan
                 userId={userId}
                 onGifted={() => {
@@ -520,7 +559,7 @@ function StudentPanel({
             </Section>
           ) : null}
 
-          <Section title="Access">
+          <Section title="Access" hint={person ? roleLabel[person.role] : undefined}>
             {canManageRoles ? (
               <>
                 <div
@@ -548,20 +587,43 @@ function StudentPanel({
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
                   {isSelf
                     ? "You can’t change your own access."
-                    : "Admins can use this admin area. Super admins can also change other people’s access."}
+                    : "An admin runs one subdomain and its faculties. Super admins see every faculty and can change other people’s access."}
                 </p>
-                {detail && role !== detail.role ? (
+                {role === "admin" ? (
+                  <SubdomainPicker
+                    userId={userId}
+                    value={siteSlug}
+                    onChange={setSiteSlug}
+                    disabled={isSelf || busy !== null}
+                    faculties={
+                      detail?.role === "admin" &&
+                      detail.site?.slug === siteSlug &&
+                      detail.faculties !== "all"
+                        ? detail.faculties
+                        : null
+                    }
+                  />
+                ) : null}
+                {detail &&
+                (role !== detail.role ||
+                  (role === "admin" && siteSlug !== (detail.site?.slug ?? ""))) ? (
                   <button
                     type="button"
                     onClick={() => void saveRole()}
-                    disabled={busy !== null}
+                    disabled={busy !== null || (role === "admin" && !siteSlug)}
                     className={`${primaryButton} mt-3 w-full`}
                   >
-                    {busy === "role" ? "Saving…" : `Make ${roleLabel[role]}`}
+                    {busy === "role"
+                      ? "Saving…"
+                      : role === "admin" && !siteSlug
+                        ? "Choose a subdomain"
+                        : role === detail.role
+                          ? "Change subdomain"
+                          : `Make ${roleLabel[role]}`}
                   </button>
                 ) : null}
                 {ambassador !== null && person?.email ? (
-                  <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+                  <div className="-mx-4 mt-4 flex items-center justify-between gap-4 border-t border-border px-4 pt-3">
                     <span className="min-w-0">
                       <span className="block text-sm font-medium">Student ambassador</span>
                       <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
@@ -575,7 +637,7 @@ function StudentPanel({
                       aria-label="Student ambassador"
                       disabled={busy !== null}
                       onClick={() => void toggleAmbassador()}
-                      className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
                         ambassador ? "bg-blue-600" : "bg-muted-foreground/35"
                       }`}
                     >
@@ -589,16 +651,18 @@ function StudentPanel({
                 ) : null}
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                {person ? roleLabel[person.role] : "—"}. Only a super admin can change access.
-              </p>
+              <>
+                <p className="text-sm text-muted-foreground">
+                  {person ? roleLabel[person.role] : "—"}. Only a super admin can change access.
+                </p>
+              </>
             )}
           </Section>
 
           {detail ? (
             <>
               <Section title="Profile">
-                <dl className="divide-y divide-border rounded-lg border border-border text-sm">
+                <dl className="-mx-4 -my-1 divide-y divide-border text-sm">
                   <Detail label="College" value={detail.college} />
                   <Detail label="Board" value={detail.board} />
                   <Detail label="Class" value={detail.grade} />
@@ -608,34 +672,36 @@ function StudentPanel({
                 </dl>
               </Section>
 
-              <History title="Credit history" empty="No credit changes yet.">
-                {detail.recentLedger.map((entry) => (
-                  <HistoryRow
-                    key={entry.id}
-                    left={entry.description || entry.type}
-                    sub={formatDate(entry.createdAt)}
-                    right={`${entry.amount > 0 ? "+" : ""}${entry.amount}`}
-                  />
-                ))}
-              </History>
-              <History title="Plans" empty="Never had a paid plan.">
-                {detail.recentSubscriptions.map((subscription) => (
-                  <HistoryRow
-                    key={subscription.id}
-                    left={subscriptionState(subscription)}
-                    sub={`${formatDate(subscription.startsAt)}${subscription.endsAt ? ` – ${formatDate(subscription.endsAt)}` : ""}`}
-                  />
-                ))}
-              </History>
-              <History title="Recent chats" empty="No chats yet.">
-                {detail.recentSessions.map((session) => (
-                  <HistoryRow
-                    key={session.id}
-                    left={session.title}
-                    sub={formatDate(session.updatedAt)}
-                  />
-                ))}
-              </History>
+              <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+                <History title="Credit history" empty="No credit changes yet.">
+                  {detail.recentLedger.map((entry) => (
+                    <HistoryRow
+                      key={entry.id}
+                      left={entry.description || entry.type}
+                      sub={formatDate(entry.createdAt)}
+                      right={`${entry.amount > 0 ? "+" : ""}${entry.amount}`}
+                    />
+                  ))}
+                </History>
+                <History title="Plans" empty="Never had a paid plan.">
+                  {detail.recentSubscriptions.map((subscription) => (
+                    <HistoryRow
+                      key={subscription.id}
+                      left={subscriptionState(subscription)}
+                      sub={`${formatDate(subscription.startsAt)}${subscription.endsAt ? ` – ${formatDate(subscription.endsAt)}` : ""}`}
+                    />
+                  ))}
+                </History>
+                <History title="Recent chats" empty="No chats yet.">
+                  {detail.recentSessions.map((session) => (
+                    <HistoryRow
+                      key={session.id}
+                      left={session.title}
+                      sub={formatDate(session.updatedAt)}
+                    />
+                  ))}
+                </History>
+              </div>
             </>
           ) : !error ? (
             <div className="space-y-3 motion-safe:animate-pulse" aria-label="Loading">
@@ -649,11 +715,16 @@ function StudentPanel({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** One card per job, its current state on the right of the title, so the panel
+ * reads as a few separate tools instead of one long column of controls. */
+function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <section>
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
-      {children}
+    <section className="rounded-xl border border-border bg-card">
+      <header className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-2.5">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {hint ? <span className="truncate text-xs text-muted-foreground">{hint}</span> : null}
+      </header>
+      <div className="p-4">{children}</div>
     </section>
   );
 }
@@ -668,7 +739,7 @@ function History({
   children: ReactNode[];
 }) {
   return (
-    <details className="group rounded-lg border border-border">
+    <details className="group">
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-sm font-semibold">
         {title}
         <span className="text-xs font-normal text-muted-foreground">
@@ -704,16 +775,18 @@ function HistoryRow({ left, sub, right }: { left: string; sub: string; right?: s
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-muted px-2 py-2">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 truncate text-sm font-semibold">{value}</dd>
+    <div className="px-2 py-2.5">
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-0.5 truncate text-sm font-semibold tabular-nums">{value}</dd>
     </div>
   );
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-4 px-3 py-2">
+    <div className="flex justify-between gap-4 px-4 py-2">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="text-right">{value || "—"}</dd>
     </div>
@@ -764,6 +837,13 @@ function PlanBadge({ plan }: { plan: string | null }) {
   ) : (
     <span className="text-xs text-muted-foreground">Free</span>
   );
+}
+
+/** "Unlimited" for admins and unlimited plans, "12 / 20" for the monthly refill, the plain balance for ambassadors. */
+function creditsLabel(user: Pick<AdminUserSummary, "creditAllowance" | "creditBalance">) {
+  if (user.creditAllowance === "unlimited") return "Unlimited";
+  if (user.creditAllowance === "monthly") return `${user.creditBalance} / ${MONTHLY_FREE_CREDITS}`;
+  return String(user.creditBalance);
 }
 
 function timeAgo(iso: string | null) {

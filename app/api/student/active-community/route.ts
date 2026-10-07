@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { listJoinedCommunities, communityStorageError } from "@/lib/data/communities";
 import { ACTIVE_COMMUNITY_COOKIE, communitySwitchState } from "@/lib/community-switch";
-import { getFacultyLock } from "@/lib/data/faculty-lock";
+import { facultyChangeRefusal } from "@/lib/data/faculty-lock";
 
 export async function POST(request: Request) {
   try {
@@ -27,11 +27,8 @@ export async function POST(request: Request) {
     if (!slug || slug.length > 100) {
       return NextResponse.json({ error: "Choose a valid community." }, { status: 400 });
     }
-    if (await getFacultyLock(user.id))
-      return NextResponse.json(
-        { error: "Your faculty is locked. Contact an admin to change it." },
-        { status: 403 },
-      );
+    const refusal = await facultyChangeRefusal(user.id, { slug });
+    if (refusal) return NextResponse.json({ error: refusal }, { status: 403 });
     const state = communitySwitchState(user.id, await listJoinedCommunities(user.id));
     const target = state.options.find((option) => option.slug === slug);
     if (!state.canSwitch || !target) {

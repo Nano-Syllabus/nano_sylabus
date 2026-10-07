@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { AdminBillingFrame } from "@/components/admin-billing-frame";
 import { AdminSiteEditor } from "@/components/admin-site-editor";
 import { assertAdminRequest } from "@/lib/admin-access";
-import { getLandingSite, listCommunityChoices } from "@/lib/data/landing-sites";
+import { countSiteStudents, getLandingSite, listCommunityChoices } from "@/lib/data/landing-sites";
 import { rootDomain } from "@/lib/landing-site-host";
 import { listSubscriptionPlans } from "@/lib/data/billing";
 
@@ -27,10 +27,11 @@ export default async function AdminSiteEditorPage({
     throw new Error("Admin access could not be verified. Please retry.");
   }
 
-  const [site, communities, plans] = await Promise.all([
+  const [site, communities, plans, studentCount] = await Promise.all([
     getLandingSite(slug),
     listCommunityChoices(),
     listSubscriptionPlans(),
+    countSiteStudents(slug).catch(() => 0),
   ]);
   if (!site) notFound();
 
@@ -41,6 +42,7 @@ export default async function AdminSiteEditorPage({
         rootDomain={rootDomain()}
         communities={communities}
         plans={plans}
+        studentCount={studentCount}
       />
     </AdminBillingFrame>
   );

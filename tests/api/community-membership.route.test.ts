@@ -16,12 +16,15 @@ vi.mock("@/lib/data/communities", async (importOriginal) => {
   return { ...actual, joinCommunity: mocks.joinCommunity };
 });
 
-// The lock's contract (lib/data/faculty-lock.ts): admins are never pinned, and
-// releasing is a no-op for anyone else.
+// The lock's contract (lib/data/faculty-lock.ts, tested there): a super admin
+// is never refused, and releasing is a no-op for anyone else.
 vi.mock("@/lib/data/faculty-lock", () => ({
-  getStudentExamEnrollment: mocks.enrollment,
-  getFacultyLock: async (id: string) => ((await mocks.isAdmin(id)) ? null : mocks.enrollment(id)),
-  releaseAdminFacultyLock: mocks.release,
+  facultyChangeRefusal: async (id: string, target: { slug: string }) =>
+    !(await mocks.isAdmin(id)) && (await mocks.enrollment(id))?.facultySlug !== undefined &&
+    (await mocks.enrollment(id)).facultySlug !== target.slug
+      ? "Your faculty is locked. Contact an admin to change it."
+      : null,
+  releaseFacultyLockFor: mocks.release,
 }));
 
 import { POST } from "@/app/api/communities/[slug]/join/route";
@@ -60,14 +63,14 @@ describe("POST /api/communities/[slug]/join", () => {
     expect(mocks.release).not.toHaveBeenCalled();
   });
 
-  it("lets a platform admin change faculty, releasing their own lock first", async () => {
+  it("lets a super admin change faculty, releasing their own lock first", async () => {
     mocks.enrollment.mockResolvedValue({ facultySlug: "bct-license" });
     mocks.isAdmin.mockResolvedValue(true);
     const response = await POST(new Request("http://localhost", { method: "POST" }), {
       params: Promise.resolve({ slug: "sec-bei" }),
     });
     expect(response.status).toBe(200);
-    expect(mocks.release).toHaveBeenCalledWith("aarav");
+    expect(mocks.release).toHaveBeenCalledWith("aarav", { slug: "sec-bei" });
     expect(mocks.release.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.joinCommunity.mock.invocationCallOrder[0],
     );

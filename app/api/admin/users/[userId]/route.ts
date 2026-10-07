@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertAdminRequest, assertSuperAdminRequest } from "@/lib/admin-access";
 import { userRoleUpdateSchema } from "@/lib/admin/schemas";
-import { getAdminUserDetail, updateAdminUserRole } from "@/lib/data/admin-users";
+import { AdminRoleError, getAdminUserDetail, updateAdminUserRole } from "@/lib/data/admin-users";
 
 export async function GET(
   _request: Request,
@@ -43,9 +43,12 @@ export async function PATCH(
       actorUserId: access.userId,
       userId,
       role: payload.role,
+      siteSlug: payload.siteSlug,
     });
     return NextResponse.json({ user });
   } catch (error) {
+    if (error instanceof AdminRoleError)
+      return NextResponse.json({ error: error.message }, { status: error.status });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to update user role." },
       { status: 500 },

@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { isProfileComplete } from "@/lib/access";
 import { isAdminRole } from "@/lib/admin-role";
-import { grantStarterCredits } from "@/lib/data/billing";
+import { grantStarterCredits, refreshMonthlyCredits } from "@/lib/data/billing";
+import { monthlyRefreshReference } from "@/lib/billing";
 import { isStudentAmbassadorCached } from "@/lib/data/student-ambassadors";
 import {
   normalizeBoard,
@@ -102,8 +103,8 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
   // The profile decides whether the user is onboarded and the ledger row
   // carries the credit balance. Neither depends on the other, so they go out
   // together instead of one after the next.
-  const [profileResult, ledgerResult, subscriptionResult, ambassador] = await timed(
-    "page:getCurrentAuth-batch(4)",
+  const [profileResult, ledgerResult, subscriptionResult, ambassador, refreshResult] = await timed(
+    "page:getCurrentAuth-batch(5)",
     async () =>
       Promise.all([
         supabase.from("student_profiles").select("*").eq("user_id", user.id).maybeSingle(),
@@ -121,6 +122,13 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
           .eq("status", "active")
           .order("starts_at", { ascending: false }),
         isStudentAmbassadorCached(user.email),
+        // This month's credit refill, if it has happened (one unique-index read).
+        supabase
+          .from("credits_ledger")
+          .select("id")
+          .eq("reference_type", "monthly_refresh")
+          .eq("reference_id", monthlyRefreshReference(user.id))
+          .maybeSingle(),
       ]),
   );
 
@@ -135,7 +143,7 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
   // without these two overrides every screen renders its out-of-credits state
   // and the UI being worked on never appears. Both collapse to the real values
   // outside development, where DEV_AUTH_BYPASS is false.
-  const creditBalance = DEV_AUTH_BYPASS
+  const ledgerBalance = DEV_AUTH_BYPASS
     ? 999
     : (ledgerResult.data?.balance_after ?? (onboarded ? await grantStarterCredits(user.id) : 0));
 
@@ -153,6 +161,19 @@ export const getCurrentAuth = cache(async function getCurrentAuth() {
       const notExpired = !subscription.ends_at || new Date(subscription.ends_at).getTime() > now;
       return Boolean(plan?.is_unlimited && notExpired);
     });
+
+  // A regular student's credits refill to 20 once a month, on their first visit
+  // of the month. Unlimited accounts (admins included) never spend credits, and
+  // an ambassador's credits stay as they are (user, 2026-10-07).
+  const creditBalance =
+    !DEV_AUTH_BYPASS &&
+    onboarded &&
+    !hasUnlimitedAccess &&
+    !ambassador &&
+    !refreshResult.error &&
+    !refreshResult.data
+      ? await refreshMonthlyCredits(user.id, ledgerBalance)
+      : ledgerBalance;
 
   const activePlans = (subscriptionResult.data ?? [])
     .filter(

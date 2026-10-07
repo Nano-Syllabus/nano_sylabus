@@ -25,6 +25,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { AdminSiteDeleteDialog } from "@/components/admin-site-delete-dialog";
 import type { CommunityChoice, LandingSiteDetail } from "@/lib/data/landing-sites";
 import {
   LANDING_LIST_LIMITS,
@@ -75,9 +76,12 @@ export function AdminSiteEditor({
   rootDomain,
   communities,
   plans,
+  studentCount = 0,
 }: {
   initialSite: LandingSiteDetail;
   rootDomain: string;
+  /** Students who picked a faculty on this site (the delete dialog says so). */
+  studentCount?: number;
   communities: CommunityChoice[];
   plans: SubscriptionPlan[];
 }) {
@@ -85,7 +89,7 @@ export function AdminSiteEditor({
   const [site, setSite] = useState(initialSite);
   const [draft, setDraft] = useState<LandingContent>(initialSite.draft);
   const [saveState, setSaveState] = useState<SaveState>("saved");
-  const [busy, setBusy] = useState<"publish" | "status" | "delete" | null>(null);
+  const [busy, setBusy] = useState<"publish" | "status" | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [selection, setSelection] = useState<Selection>({ section: null, path: null });
   const [flashPath, setFlashPath] = useState<string | null>(null);
@@ -263,22 +267,12 @@ export function AdminSiteEditor({
     }
   }
 
-  async function deleteSite() {
-    const typed = window.prompt(`This removes ${domain} for good. Type ${site.slug} to confirm.`);
-    if (typed?.trim() !== site.slug) return;
-    setBusy("delete");
-    try {
-      const response = await fetch(`/api/admin/sites/${site.slug}`, { method: "DELETE" });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Couldn’t delete the site.");
-      lastSaved.current = JSON.stringify(draftRef.current);
-      setSaveState("saved");
-      router.push("/admin/sites");
-      router.refresh();
-    } catch (error) {
-      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Couldn’t delete the site." });
-      setBusy(null);
-    }
+  function onSiteDeleted() {
+    // Nothing left to autosave: the site is gone.
+    lastSaved.current = JSON.stringify(draftRef.current);
+    setSaveState("saved");
+    router.push("/admin/sites");
+    router.refresh();
   }
 
   const update = (path: LandingPath, value: unknown) => setDraft((current) => setIn(current, path, value));
@@ -498,15 +492,14 @@ export function AdminSiteEditor({
                     <p className="mt-1 text-xs text-muted-foreground">
                       {domain} will send visitors to {rootDomain}. The text can’t be recovered.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => void deleteSite()}
+                    <AdminSiteDeleteDialog
+                      slug={site.slug}
+                      domain={domain}
+                      rootDomain={rootDomain}
+                      studentCount={studentCount}
                       disabled={busy !== null}
-                      className="mt-3 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-red-500/40 px-3 text-sm font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-50"
-                    >
-                      <Trash2 size={14} aria-hidden="true" />
-                      {busy === "delete" ? "Deleting…" : "Delete website"}
-                    </button>
+                      onDeleted={onSiteDeleted}
+                    />
                   </div>
                 ) : null}
               </div>

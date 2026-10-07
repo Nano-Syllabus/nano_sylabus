@@ -312,11 +312,49 @@ export async function publishLandingSite(slug: string, userId: string, draft?: u
   return toDetail(data as LandingSiteRow);
 }
 
+/**
+ * Delete a subdomain site. Two tables point at a site with `on delete restrict`,
+ * which made every site with a student on it undeletable; they are let go
+ * first (user, 2026-10-07):
+ * - invoices keep their payment record and lose only the site link;
+ * - students who picked a faculty here stay members of it but are no longer
+ *   locked to it (the exam enrollment row goes).
+ * The site's faculty list and its admin (landing_site_admins) cascade.
+ */
 export async function deleteLandingSite(slug: string) {
   if (slug === MAIN_SITE_SLUG) throw new LandingSiteError("The main site can’t be deleted.", 400);
-  const { error } = await createSupabaseAdminClient().from(TABLE).delete().eq("slug", slug);
+  const admin = createSupabaseAdminClient();
+  const { data: existing, error: readError } = await admin
+    .from(TABLE)
+    .select("slug")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!existing) throw new LandingSiteError("This site no longer exists.", 404);
+
+  const { error: invoiceError } = await admin
+    .from("invoices")
+    .update({ exam_slug: null })
+    .eq("exam_slug", slug);
+  if (invoiceError) throw invoiceError;
+  const { error: enrollmentError } = await admin
+    .from("student_exam_enrollments")
+    .delete()
+    .eq("exam_slug", slug);
+  if (enrollmentError) throw enrollmentError;
+  const { error } = await admin.from(TABLE).delete().eq("slug", slug);
   if (error) throw error;
   refreshLiveSite(slug);
+}
+
+/** How many students picked a faculty on this site — shown before deleting it. */
+export async function countSiteStudents(slug: string) {
+  const { count, error } = await createSupabaseAdminClient()
+    .from("student_exam_enrollments")
+    .select("user_id", { count: "exact", head: true })
+    .eq("exam_slug", slug);
+  if (error) throw error;
+  return count ?? 0;
 }
 
 /** The exams and faculties the in-app faculty picker offers (see listEnrollmentExams). */

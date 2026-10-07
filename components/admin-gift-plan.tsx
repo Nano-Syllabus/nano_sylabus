@@ -22,6 +22,9 @@ export function AdminGiftPlan({ userId, onGifted }: { userId: string; onGifted: 
   const [error, setError] = useState<string | null>(null);
   const [planId, setPlanId] = useState("");
   const [months, setMonths] = useState("1");
+  // Typed months live apart from the chips: mirrored into one value, typing "12"
+  // would pass through "1", light the 1-month chip and clear the box mid-word.
+  const [customMonths, setCustomMonths] = useState("");
   const [target, setTarget] = useState(""); // "examSlug|facultyId"
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -64,7 +67,7 @@ export function AdminGiftPlan({ userId, onGifted }: { userId: string; onGifted: 
   const exam = options.exams.find((item) => item.slug === examSlug);
   const faculty = exam?.faculties.find((item) => item.id === facultyId);
   const plan = options.plans.find((item) => item.id === planId);
-  const count = Number(months);
+  const count = Number(customMonths || months);
   const valid = Number.isInteger(count) && count >= 1 && count <= 24 && Boolean(plan && faculty);
   const moves =
     options.enrollment &&
@@ -103,63 +106,77 @@ export function AdminGiftPlan({ userId, onGifted }: { userId: string; onGifted: 
     }
   }
 
-  return (
-    <div className="space-y-3">
-      <div className="flex gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Plan">
-        {options.plans.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            aria-pressed={planId === item.id}
-            onClick={() => setPlanId(item.id)}
-            className={`min-h-9 flex-1 rounded-md px-2 text-sm font-medium ${
-              planId === item.id
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {item.name}
-          </button>
-        ))}
-      </div>
+  const label = "mb-1.5 block text-xs font-medium text-muted-foreground";
 
+  return (
+    <div className="space-y-4">
       <div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Months">
-          {MONTH_CHIPS.map((value) => (
+        <span className={label}>Plan</span>
+        <div className="flex gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Plan">
+          {options.plans.map((item) => (
             <button
-              key={value}
+              key={item.id}
               type="button"
-              aria-pressed={months === String(value)}
-              onClick={() => setMonths(String(value))}
-              className={`min-h-9 rounded-full border px-4 text-sm font-medium ${
-                months === String(value)
-                  ? "border-blue-600 bg-blue-600/10 text-blue-700 dark:text-blue-300"
-                  : "border-border text-muted-foreground hover:text-foreground"
+              aria-pressed={planId === item.id}
+              onClick={() => setPlanId(item.id)}
+              className={`min-h-8 flex-1 rounded-md px-2 text-sm font-medium ${
+                planId === item.id
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {value} {value === 1 ? "month" : "months"}
+              {item.name}
             </button>
           ))}
         </div>
-        <label className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-          Or exactly
-          <input
-            aria-label="Months"
-            inputMode="numeric"
-            value={months}
-            onChange={(event) => setMonths(event.target.value)}
-            className={`${inputClass} w-20 tabular-nums`}
-          />
-          months (1–24)
-        </label>
       </div>
 
-      <label className="block text-sm font-medium">
-        Faculty
+      <div>
+        <span className={label}>Length</span>
+        <div className="grid grid-cols-5 gap-1.5" role="group" aria-label="Months">
+          {MONTH_CHIPS.map((value) => {
+            const on = !customMonths && months === String(value);
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  setMonths(String(value));
+                  setCustomMonths("");
+                }}
+                className={`min-h-9 rounded-lg border text-sm font-medium tabular-nums ${
+                  on
+                    ? "border-blue-600 bg-blue-600/10 text-blue-700 dark:text-blue-300"
+                    : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {value} mo
+              </button>
+            );
+          })}
+          <input
+            aria-label="Other number of months, 1 to 24"
+            inputMode="numeric"
+            placeholder="Other"
+            value={customMonths}
+            onChange={(event) => setCustomMonths(event.target.value.replace(/\D/g, "").slice(0, 2))}
+            className={`min-h-9 w-full rounded-lg border bg-background px-2 text-center text-sm tabular-nums text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-600/40 ${
+              customMonths ? "border-blue-600" : "border-border"
+            }`}
+          />
+        </div>
+        {customMonths && !valid && Boolean(plan && faculty) ? (
+          <p className="mt-1.5 text-xs text-destructive">Between 1 and 24 months.</p>
+        ) : null}
+      </div>
+
+      <label className="block">
+        <span className={label}>Faculty</span>
         <select
           value={target}
           onChange={(event) => setTarget(event.target.value)}
-          className={`${inputClass} mt-1`}
+          className={inputClass}
         >
           {options.exams.map((item) => (
             <optgroup key={item.slug} label={item.name}>
@@ -171,16 +188,14 @@ export function AdminGiftPlan({ userId, onGifted }: { userId: string; onGifted: 
             </optgroup>
           ))}
         </select>
+        <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">
+          {moves
+            ? `Moves them from ${options.enrollment!.facultyName} to ${faculty?.name}. The plan opens only that faculty.`
+            : options.enrollment
+              ? `Locked to ${options.enrollment.facultyName}. The plan opens only that faculty.`
+              : `Locks them to ${faculty?.name ?? "this faculty"}. The plan opens only that faculty.`}
+        </span>
       </label>
-
-      <p className="text-xs leading-5 text-muted-foreground">
-        {moves
-          ? `Currently locked to ${options.enrollment!.facultyName}. Gifting moves them to ${faculty?.name}.`
-          : options.enrollment
-            ? `Locked to ${options.enrollment.facultyName}.`
-            : `Not in a faculty yet. This locks them to ${faculty?.name ?? "the faculty"}.`}{" "}
-        The plan only opens that faculty.
-      </p>
 
       <button
         type="button"
@@ -192,7 +207,7 @@ export function AdminGiftPlan({ userId, onGifted }: { userId: string; onGifted: 
           ? "Gifting…"
           : valid
             ? `Gift ${plan!.name} · ${count} month${count === 1 ? "" : "s"} · ${faculty!.name}`
-            : "Choose plan, months and faculty"}
+            : "Choose plan, length and faculty"}
       </button>
       {message ? (
         <p role="status" className="text-sm text-muted-foreground">
