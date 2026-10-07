@@ -1,38 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
-import { AppShellContext } from "@/components/app-shell-context";
-import {
-  ArrowRight,
-  Check,
-  CircleGauge,
-  Clock3,
-  Flame,
-  LibraryBig,
-  LockKeyholeOpen,
-  Pencil,
-  Plus,
-  Quote,
-  Sparkles,
-} from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Pencil, Plus, Quote } from "lucide-react";
 import type { DailyExamDate, StudentDailyDashboard } from "@/lib/data/student-daily-dashboard";
-import { rankSemesterSubjects } from "@/lib/data/student-semester-ranking";
-import { cn } from "@/lib/utils";
 import { useDashboard } from "@/lib/query/dashboard";
 import { PracticeCalendar } from "@/components/practice-calendar";
-
-const focusRing =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary";
 
 const STUDY_QUOTE_LIMIT = 140;
 
@@ -243,284 +216,8 @@ function StudyQuoteCard({ initialQuote = "" }: { initialQuote?: string }) {
   );
 }
 
-function formatNumber(value: number, maximumFractionDigits = 0) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits }).format(value);
-}
-
 function firstName(value: string) {
   return value.trim().split(/\s+/)[0] || "Student";
-}
-
-/**
- * True for a moment after `value` changes, false the rest of the time.
- *
- * This is what makes an update read as A NUMBER MOVING rather than a screen
- * reloading. The dashboard is now patched in place when a student finishes a
- * challenge — the streak and the "Today" count change without any request — and
- * without a cue that is invisible: the figure simply differs from what the eye
- * last registered, which reads as "was it always that?" rather than "I just did
- * that."
- *
- * A shimmer would be exactly the wrong signal here. Shimmer means "this is
- * absent and is being fetched"; nothing is absent, the value is already correct.
- * What is wanted is the opposite gesture — draw the eye to a value that is
- * newly right.
- *
- * Ref-compared rather than stored in state, so a re-render that does not change
- * the value cannot retrigger the highlight. The timer is cleared on every
- * change, so rapid successive updates extend the highlight instead of stacking
- * timers.
- */
-function useValueChanged(value: string) {
-  const previous = useRef(value);
-  const [changed, setChanged] = useState(false);
-
-  useEffect(() => {
-    if (previous.current === value) return;
-    previous.current = value;
-    setChanged(true);
-    const timer = window.setTimeout(() => setChanged(false), 1100);
-    return () => window.clearTimeout(timer);
-  }, [value]);
-
-  return changed;
-}
-
-/**
- * `pending` shimmers only the NUMBER, never the card.
- *
- * A tile's label and icon are known before its value is — they are constants in
- * this file, not data — so greying the whole card while waiting throws away
- * information the reader could already have used. Keeping the frame, the label
- * and the icon solid means the dashboard arrives as a real page with five
- * recognisable tiles whose figures are still landing, rather than as six grey
- * rectangles that could be anything.
- *
- * It also removes the layout shift: the card is exactly the size it will be, so
- * nothing moves when the value arrives.
- */
-function MetricCard({
-  icon,
-  label,
-  value,
-  accent,
-  pending,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  accent?: boolean;
-  pending?: boolean;
-}) {
-  const justChanged = useValueChanged(value);
-
-  if (pending) {
-    return (
-      <article className="min-w-0 rounded-2xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between gap-3">
-          <span className="type-student-eyebrow text-text-muted">{label}</span>
-          <span className="text-text-secondary" aria-hidden="true">
-            {icon}
-          </span>
-        </div>
-        <div
-          className="mt-5 h-8 w-20 animate-pulse rounded-lg bg-border motion-reduce:animate-none"
-          aria-hidden="true"
-        />
-        <span className="sr-only">{label} is still loading</span>
-      </article>
-    );
-  }
-
-  return (
-    <article
-      className={cn(
-        "min-w-0 rounded-2xl border p-4",
-        accent
-          ? "border-[var(--community-accent)]/35 bg-[color-mix(in_srgb,var(--community-accent)_7%,var(--bg-primary))]"
-          : "border-border bg-card",
-      )}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <span className="type-student-eyebrow text-text-muted">{label}</span>
-        <span className="text-text-secondary" aria-hidden="true">
-          {icon}
-        </span>
-      </div>
-      <p
-        className={cn(
-          "type-student-metric mt-5 truncate tabular-nums",
-          // The settle is slower than the lift, so the number arrives with a
-          // small flourish and then calms down rather than snapping back.
-          "transition-[color,transform,text-shadow] duration-700 ease-out motion-reduce:transition-none",
-          justChanged &&
-            "scale-[1.06] text-[var(--community-accent,#1d57fd)] [text-shadow:0_0_18px_color-mix(in_srgb,var(--community-accent,#1d57fd)_45%,transparent)] duration-200",
-        )}
-        style={{ transformOrigin: "left center" }}
-      >
-        {value}
-      </p>
-    </article>
-  );
-}
-
-function SemesterProgress({
-  dashboard,
-  compact = false,
-}: {
-  dashboard: StudentDailyDashboard;
-  compact?: boolean;
-}) {
-  const { upgradeHref } = useContext(AppShellContext);
-  const community = dashboard.community;
-  // The running term is chosen once, on Micro-Topics; this map follows it rather than
-  // offering its own picker, so every page shows the same faculty and term.
-  const semester = useMemo(
-    () =>
-      community?.semesters.find((item) => item.id === community.currentSemesterId) ??
-      community?.semesters[0],
-    [community],
-  );
-  const rankedSubjects = useMemo(
-    () => (semester ? rankSemesterSubjects(semester.subjects) : []),
-    [semester],
-  );
-
-  if (!community) {
-    return (
-      <section className="rounded-2xl border border-dashed border-border p-7 text-center">
-        <LibraryBig className="mx-auto size-7 text-text-muted" aria-hidden="true" />
-        <h2 className="type-student-section-title mt-3">
-          Semester progress starts with a community
-        </h2>
-        <p className="type-student-body mx-auto mt-2 max-w-xl text-text-secondary">
-          Semester-to-subject mappings come from your joined programme community, so nothing is
-          guessed from profile text.
-        </p>
-      </section>
-    );
-  }
-
-  // A payload cached before `termNoun` existed reads as the old "Semester".
-  const termNoun = community.termNoun === undefined ? "Semester" : community.termNoun;
-
-  return (
-    <section
-      className="overflow-hidden rounded-2xl border border-border bg-card"
-      aria-labelledby="semester-progress-heading"
-    >
-      <div
-        className={cn(
-          "flex flex-col gap-4 border-b border-border px-5 py-5",
-          !compact && "sm:flex-row sm:items-end sm:justify-between sm:px-6",
-        )}
-      >
-        <div className="min-w-0">
-          <p className="type-student-eyebrow text-text-muted">Programme map</p>
-          <h2 id="semester-progress-heading" className="type-student-section-title mt-2">
-            {termNoun ?? "Syllabus"} progress
-          </h2>
-        </div>
-        {/* One track (Entrance, License) or a single term: nothing to name or change. */}
-        {termNoun && semester && community.semesters.length > 1 ? (
-          <div className={cn("min-w-0 text-sm", !compact && "sm:text-right")}>
-            <p className="truncate text-text-secondary">{community.name}</p>
-            <p
-              className={cn(
-                "mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1",
-                !compact && "sm:justify-end",
-              )}
-            >
-              <span className="font-semibold text-text-primary">{semester.label}</span>
-              <Link
-                href={upgradeHref || "/app/challenges"}
-                className={cn("text-sm font-medium text-blue-600 hover:underline", focusRing)}
-              >
-                {upgradeHref ? "Upgrade" : `Change ${termNoun.toLowerCase()}`}
-              </Link>
-            </p>
-          </div>
-        ) : null}
-      </div>
-
-      {semester ? (
-        <div className="p-5 sm:p-6">
-          {rankedSubjects.length ? (
-            <div className="divide-y divide-border">
-              {rankedSubjects.map((subject) => (
-                <article
-                  key={subject.id}
-                  className="grid gap-4 py-5 first:pt-0 last:pb-0 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      {subject.code ? (
-                        <span className="rounded-md bg-border px-2 py-1 text-[11px] font-semibold text-text-secondary">
-                          {subject.code}
-                        </span>
-                      ) : null}
-                      <h3 className="type-student-card-title break-words">{subject.name}</h3>
-                    </div>
-                    <div
-                      className="mt-3 h-2 overflow-hidden rounded-full bg-border"
-                      role="progressbar"
-                      aria-label={`${subject.name} readiness`}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={subject.readiness ?? undefined}
-                    >
-                      {subject.readiness !== null ? (
-                        <div
-                          className="h-full rounded-full bg-[var(--community-accent)]"
-                          style={{ width: `${Math.max(0, Math.min(100, subject.readiness))}%` }}
-                        />
-                      ) : null}
-                    </div>
-                    <div className="type-student-meta mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-text-muted">
-                      <span>
-                        {subject.topicCount === null
-                          ? "Topics syncing"
-                          : `${formatNumber(subject.topicCount)} topics`}{" "}
-                        ·{" "}
-                        {subject.materialCount === null
-                          ? "Materials syncing"
-                          : `${formatNumber(subject.materialCount)} materials`}
-                      </span>
-                      <span>
-                        {subject.readiness === null
-                          ? "No graded practice yet"
-                          : `${Math.round(subject.readiness)}% ready`}
-                      </span>
-                    </div>
-                  </div>
-                  <Link
-                    href={
-                      upgradeHref ||
-                      `/app/chat?community=${encodeURIComponent(community.slug)}&semester=${encodeURIComponent(semester.id)}&librarySubject=${encodeURIComponent(subject.slug)}`
-                    }
-                    className={cn(
-                      "inline-flex min-h-10 items-center gap-1.5 justify-self-start text-sm font-semibold md:justify-self-end",
-                      focusRing,
-                    )}
-                  >
-                    {upgradeHref ? "Upgrade" : "Open"}{" "}
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  </Link>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-6 rounded-xl border border-dashed border-border p-6 text-center">
-              <p className="text-sm font-medium">No subjects mapped to this semester yet.</p>
-              <p className="mt-1 text-sm text-text-secondary">
-                A community creator can attach real indexed subjects.
-              </p>
-            </div>
-          )}
-        </div>
-      ) : null}
-    </section>
-  );
 }
 
 /**
@@ -684,27 +381,7 @@ function DashboardDataSkeleton({
         aria-label="Loading your next challenge"
       />
 
-      <section
-        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-        aria-label="Daily learning metrics"
-      >
-        <MetricCard pending icon={<Flame className="size-4" />} label="Current streak" value="" />
-        {/* Known from the session — no reason to hide it. */}
-        <MetricCard
-          icon={<LockKeyholeOpen className="size-4" />}
-          label="NanoAI Credits"
-          value={hasUnlimitedAccess ? "Unlimited" : formatNumber(creditBalance)}
-        />
-        <MetricCard
-          pending
-          icon={<CircleGauge className="size-4" />}
-          label="Challenges / day"
-          value=""
-        />
-        <MetricCard pending icon={<Clock3 className="size-4" />} label="Today" value="" />
-      </section>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section className="rounded-2xl border border-border bg-card p-5">
           <h2 className="type-student-section-title">Practice calendar</h2>
           <div className={`mt-2 h-3 w-52 ${line}`} aria-hidden="true" />
@@ -718,25 +395,11 @@ function DashboardDataSkeleton({
           </div>
         </section>
 
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <div className="flex flex-col gap-4">
-            <div>
-              <div className={`h-3 w-24 ${line}`} aria-hidden="true" />
-              <h2 className="type-student-section-title mt-2">Semester progress</h2>
-              <div className={`mt-2 h-3 w-44 ${line}`} aria-hidden="true" />
-            </div>
-            <div className={`h-4 w-48 ${line}`} aria-hidden="true" />
-          </div>
-          <div className="mt-5 space-y-4" aria-hidden="true">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="border-t border-border pt-4">
-                <div className={`h-3 w-40 ${line}`} />
-                <div className={`mt-2 h-3 w-28 ${line}`} />
-                <div className={`mt-3 h-2 w-full ${line}`} />
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* The exam card's footprint (it replaced the programme map). */}
+        <section
+          className="min-h-[150px] animate-pulse rounded-[20px] bg-border motion-reduce:animate-none"
+          aria-label="Loading your exam day"
+        />
       </div>
       <span className="sr-only">Loading your dashboard</span>
     </main>
@@ -763,7 +426,6 @@ function DashboardContent({
   const queryClient = useQueryClient();
   const community = dashboard.community;
   const challenge = dashboard.challenge;
-  const accessValue = hasUnlimitedAccess ? "Unlimited" : formatNumber(creditBalance);
 
   function handleExamDatesChange(examDates: DailyExamDate[]) {
     queryClient.setQueriesData<{ dashboard: StudentDailyDashboard }>(
@@ -781,38 +443,6 @@ function DashboardContent({
 
       <StudyQuoteCard initialQuote={studyQuote} />
 
-      <section
-        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-        aria-label="Daily learning metrics"
-      >
-        <MetricCard
-          icon={<Flame className="size-4" />}
-          label="Current streak"
-          value={`${challenge.currentStreak}d`}
-        />
-        <MetricCard
-          icon={<LockKeyholeOpen className="size-4" />}
-          label="NanoAI Credits"
-          value={accessValue}
-        />
-        <MetricCard
-          icon={<CircleGauge className="size-4" />}
-          label="Challenges / day"
-          value={formatNumber(challenge.practicePerDay, 1)}
-        />
-        <MetricCard
-          icon={
-            dashboard.todayChallengeCompletions ? (
-              <Check className="size-4" />
-            ) : (
-              <Clock3 className="size-4" />
-            )
-          }
-          label="Today"
-          value={formatNumber(dashboard.todayChallengeCompletions)}
-          accent={dashboard.todayChallengeCompletions > 0}
-        />
-      </section>
 
       <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <PracticeCalendar
@@ -826,7 +456,6 @@ function DashboardContent({
           // One track (Entrance, License) = one MCQ exam day, no subjects.
           singleExam={community?.termNoun === null}
         />
-        <SemesterProgress dashboard={dashboard} compact />
       </div>
     </main>
   );

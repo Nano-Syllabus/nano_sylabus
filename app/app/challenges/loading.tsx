@@ -62,8 +62,8 @@ export default function ChallengesLoading() {
           </article>
 
           <article className={hubMetricCardClass}>
-            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">TOPICS PASSED</p>
-            <div className={`mt-2 h-7 w-12 ${skeleton}`} />
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">STREAK</p>
+            <div className={`mt-2 h-7 w-20 ${skeleton}`} />
           </article>
 
           <article className={hubMetricCardClass}>

@@ -693,7 +693,7 @@ export function AppSidebar({
                 ) : null}
               </Link>
               {/* Keep the dashboard after Revision, so the study loop reads
-                Micro-Topics → Library → Revision → Performance. */}
+                Micro-Topics → Library → Revision → Exam Calendar. */}
               {item.href === "/app/notes" ? (
                 <>
                   <Link
@@ -717,7 +717,7 @@ export function AppSidebar({
                         : "hover:bg-bg-secondary hover:text-text-primary",
                     )}
                     aria-current={pathname === "/app/today" ? "page" : undefined}
-                    title={isCollapsed ? "Performance" : undefined}
+                    title={isCollapsed ? "Exam Calendar" : undefined}
                   >
                     <svg
                       width="20"
@@ -733,7 +733,7 @@ export function AppSidebar({
                       <path d="M8.5 14.5c0 2 1.5 3.5 3.5 3.5s3.5-1.5 3.5-3.5c0-1.5-.8-2.5-2-3.5.1 1.3-.5 2.1-1.4 2.6.1-2.7-1.4-4.7-3.1-6.1.2 2.2-.7 3.7-1.9 5-.4.5-.6 1.2-.6 2Z" />
                       <circle cx="12" cy="12" r="9" />
                     </svg>
-                    {!isCollapsed && "Performance"}
+                    {!isCollapsed && "Exam Calendar"}
                   </Link>
 
                   <Link

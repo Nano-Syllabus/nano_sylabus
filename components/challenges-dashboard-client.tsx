@@ -2440,16 +2440,17 @@ export function ChallengesDashboardClient({
             </div>
           </article>
 
-          {/* Card 2: Topics passed — just the count (user, 2026-10-01). The
-              "/ total" and its % were syllabus coverage, which rounded to 0%
-              for a new student and only repeated Exam readiness beside it. */}
+          {/* Card 2: Streak as the performance number (user, 2026-10-07);
+              topics passed moved under Exam readiness. `currentStreak` is
+              patched locally on the day's first pass (local-updates.ts). */}
           <article className={hubMetricCardClass}>
-            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">TOPICS PASSED</p>
-            {topicsPassed.total > 0 ? (
-              <p className="type-student-metric mt-2 text-text-primary">{topicsPassed.covered}</p>
-            ) : (
-              <p className="mt-2 text-[13px] text-text-muted">Topics not mapped yet</p>
-            )}
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">STREAK</p>
+            <p className="type-student-metric mt-2 text-text-primary">
+              {dashboard.currentStreak} {dashboard.currentStreak === 1 ? "day" : "days"}
+            </p>
+            <p className="mt-2 text-xs text-text-muted">
+              {dashboard.todayCompleted ? "Kept today" : "Pass a topic today to keep it"}
+            </p>
           </article>
 
           {/* Card 3: Exam countdown (user, 2026-10-02) — days to the nearest
@@ -2483,6 +2484,11 @@ export function ChallengesDashboardClient({
               <div className="h-full rounded-full bg-[#84cc16]" style={{ width: `${examReadiness}%` }} />
             </div>
             <p className="mt-2 text-xs text-text-muted">Average progress across {dashboard.subjects.length} subjects</p>
+            <p className="mt-1 text-xs text-text-muted">
+              {topicsPassed.total > 0
+                ? `${topicsPassed.covered} ${topicsPassed.covered === 1 ? "topic" : "topics"} passed`
+                : "Topics not mapped yet"}
+            </p>
           </article>
         </section>
 

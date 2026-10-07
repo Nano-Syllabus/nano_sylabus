@@ -101,7 +101,7 @@ const NAV = [
   },
   {
     href: "/app/today",
-    label: "Performance",
+    label: "Exam Calendar",
     icon: (
       <svg
         width="18"

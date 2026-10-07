@@ -587,6 +587,7 @@ export function PracticeCalendar({
   };
 
   return (
+    <>
     <section
       className="rounded-[24px] border border-border bg-card p-5 shadow-xs sm:p-7"
       aria-labelledby="activity-calendar-heading"
@@ -1098,6 +1099,12 @@ export function PracticeCalendar({
         </div>
       </div>
 
+    </section>
+
+    {/* The exam panel sits in the dashboard's right column (where the
+        programme map was, user 2026-10-07): PracticeCalendar returns two grid
+        children so the panel keeps this component's save/remove state. */}
+    <div className="min-w-0">
       {singleExam ? (
         <ExamDayCard
           exam={upcomingExams[0] ?? null}
@@ -1119,7 +1126,7 @@ export function PracticeCalendar({
       <>
       {/* ── Upcoming Exams Section ── */}
       <section
-        className="mt-6 rounded-[20px] border border-border bg-bg-secondary p-5 shadow-xs sm:p-6"
+        className="rounded-[20px] border border-border bg-bg-secondary p-5 shadow-xs sm:p-6"
         aria-labelledby="upcoming-exams-heading"
       >
         <div className="mb-4 flex items-center justify-between">
@@ -1240,7 +1247,8 @@ export function PracticeCalendar({
       </section>
       </>
       )}
-    </section>
+    </div>
+    </>
   );
 }
 
@@ -1297,7 +1305,7 @@ function ExamDayCard({
 
   if (!exam) {
     return (
-      <section className="mt-6 flex flex-wrap items-center gap-4 rounded-[20px] border border-border bg-bg-secondary p-5 shadow-xs sm:p-6">
+      <section className="flex flex-wrap items-center gap-4 rounded-[20px] border border-border bg-bg-secondary p-5 shadow-xs sm:p-6">
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-600/10 text-blue-600 dark:text-blue-400">
           <GraduationCap className="size-5" aria-hidden="true" />
         </span>
@@ -1334,7 +1342,7 @@ function ExamDayCard({
   const pace = paceLine(left, remaining);
   return (
     <section
-      className="relative mt-6 overflow-hidden rounded-[20px] bg-gradient-to-br from-blue-600 to-indigo-600 p-5 text-white shadow-sm sm:p-6"
+      className="relative overflow-hidden rounded-[20px] bg-gradient-to-br from-blue-600 to-indigo-600 p-5 text-white shadow-sm sm:p-6"
       aria-labelledby="exam-day-heading"
     >
       <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-12 size-44 rounded-full bg-white/10" />

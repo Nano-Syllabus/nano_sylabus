@@ -7,19 +7,11 @@
  * one, a student would watch the layout rearrange itself twice before any real
  * content appeared, which reads as the page loading three separate times.
  *
- * So this draws the same frame — the same header, the same five tiles with their
- * real labels, the same two panels with their real titles. What it cannot show
- * is anything derived from the session (the student's name, their access
+ * So this draws the same frame — the same header and the same two panels with
+ * their real titles. What it cannot show is anything derived from the session (the student's name, their access
  * figure), because a `loading.tsx` renders before the page's own data exists.
  * Those appear one step later, and nothing moves when they do.
  */
-const LABELS = [
-  "Current streak",
-  "NanoAI Credits",
-  "Challenges / day",
-  "Today",
-] as const;
-
 /**
  * `bg-border`, not `bg-bg-secondary`.
  *
@@ -47,23 +39,6 @@ export default function TodayLoading() {
         <div className={`mt-3 h-4 w-64 max-w-full ${shimmer}`} />
       </header>
 
-      <section
-        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-        aria-label="Daily learning metrics"
-      >
-        {LABELS.map((label) => (
-          <article key={label} className="min-w-0 rounded-2xl border border-border bg-card p-4">
-            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
-              {label}
-            </span>
-            <div className={`mt-5 h-8 w-20 rounded-lg ${shimmer}`} />
-            <div className="mt-2 min-h-10">
-              <div className={`h-3 w-full ${shimmer}`} />
-              <div className={`mt-1.5 h-3 w-2/3 ${shimmer}`} />
-            </div>
-          </article>
-        ))}
-      </section>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
         <section className="rounded-2xl border border-border bg-card p-5">
