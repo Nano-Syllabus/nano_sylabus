@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 import { DM_Sans, Plus_Jakarta_Sans } from "next/font/google";
 import { CommunityCatalogClient } from "@/components/community-catalog-client";
 import { listPublicCommunities } from "@/lib/data/communities";
+import { listLiveExamSites } from "@/lib/data/landing-sites";
+import { siteOrigin } from "@/lib/landing-site-host";
 import { buildCanonicalUrl } from "@/lib/site";
 import {
   ACTIVE_COMMUNITY_COOKIE,
@@ -49,11 +51,12 @@ export default async function CommunitiesPage({
   // Auth and the catalogue at the same time: the shared list does not wait for
   // the viewer, only the viewer's own memberships do.
   const userPromise = getVerifiedUser(supabase).then((result) => result.data.user);
-  const [params, user, communities, store] = await Promise.all([
+  const [params, user, communities, store, sites] = await Promise.all([
     searchParams,
     userPromise,
     listPublicCommunities(userPromise.then((viewer) => viewer?.id)),
     cookies(),
+    listLiveExamSites(),
   ]);
   // The faculty the student portal is showing — a joined one, or one they own
   // and opened as a student — so joining another asks to switch from it.
@@ -69,6 +72,7 @@ export default async function CommunitiesPage({
     <div className={`${dmSans.variable} ${jakarta.variable} min-h-screen bg-white text-[#101114]`}>
       <CommunityCatalogClient
         initialCommunities={communities}
+        examSites={sites.map((site) => ({ ...site, href: siteOrigin(site.slug) }))}
         signedIn={Boolean(user)}
         studyingSlug={studying?.slug ?? null}
         initialShowCreate={params.create === "1" && (await isStudentAmbassador(user?.email))}

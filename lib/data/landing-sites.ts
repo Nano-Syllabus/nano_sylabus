@@ -52,6 +52,9 @@ type LandingSiteRow = {
 const TABLE = "landing_sites";
 const COLUMNS = "slug, name, status, content, draft, published_at, updated_at, exam_config";
 
+/** Cleared with any site's tag, so the main domain's domains list follows. */
+const LIVE_SITES_TAG = "landing-sites-live";
+
 export function landingSiteTag(slug: string) {
   return `landing-site:${slug}`;
 }
@@ -127,6 +130,61 @@ export async function getPublishedLandingSite(slug: string): Promise<PublishedLa
         examConfig: readExamConfig(null),
       }
     : null;
+}
+
+/** A live exam site as the main domain's Browse page lists it. */
+export type ExamSiteCard = {
+  slug: string;
+  name: string;
+  /** The hero headline, lead and highlight joined. */
+  headline: string;
+  logoUrl: string;
+  facultyCount: number;
+};
+
+/**
+ * Every live subdomain (never "main"), for the domains list on
+ * nanosyllabus.com/communities. Cached under each site's tag plus a list tag,
+ * so publishing or hiding a site shows up here too; an error means no list,
+ * not a broken Browse page.
+ */
+export async function listLiveExamSites(): Promise<ExamSiteCard[]> {
+  const read = unstable_cache(
+    async () => {
+      const { data, error } = await createSupabaseAdminClient()
+        .from(TABLE)
+        .select("slug, name, status, content, exam_config")
+        .eq("status", "live")
+        .neq("slug", MAIN_SITE_SLUG);
+      if (error) throw error;
+      return (data ?? []) as Array<
+        Pick<LandingSiteRow, "slug" | "name" | "status" | "content" | "exam_config">
+      >;
+    },
+    ["landing-sites-live"],
+    { tags: [LIVE_SITES_TAG], revalidate: 600 },
+  );
+  try {
+    return (await read())
+      .filter((row) => isValidSiteSlug(row.slug))
+      .map((row) => {
+        const content = sanitizeLandingContent(row.content);
+        return {
+          slug: row.slug,
+          name: row.name,
+          headline: [content.hero.titleLead, content.hero.titleHighlight]
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .join(" "),
+          logoUrl: content.brand.logoUrl,
+          facultyCount: readExamConfig(row.exam_config).facultySlugs.length,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (error) {
+    console.error("[landing-sites] could not list live sites", error);
+    return [];
+  }
 }
 
 /* ── Admin ────────────────────────────────────────────────────────────────── */
@@ -363,6 +421,7 @@ export const ENROLLMENT_EXAMS_TAG = "enrollment-exams";
 function refreshLiveSite(slug: string) {
   revalidateTag(landingSiteTag(slug));
   revalidateTag(ENROLLMENT_EXAMS_TAG);
+  revalidateTag(LIVE_SITES_TAG);
   revalidatePath(slug === MAIN_SITE_SLUG ? "/" : `/sites/${slug}`);
 }
 

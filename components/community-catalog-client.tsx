@@ -6,8 +6,8 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import { useRouter } from "next/navigation";
 import { X, Loader2 } from "lucide-react";
+import type { ExamSiteCard } from "@/lib/data/landing-sites";
 import {
-  canonicalUniversity,
   communityInputSchema,
   communityLevel,
   communityLevelDefaults,
@@ -285,6 +285,60 @@ function CommunityCard({
   );
 }
 
+/**
+ * One live exam site (subdomain) on the main domain's Browse page. It is a
+ * plain link: the site's own landing page handles sign-in and its faculties.
+ */
+function SiteCard({ site }: { site: ExamSiteCard & { href: string } }) {
+  const host = site.href.replace(/^https?:\/\//, "");
+  return (
+    <article className={`ns-fc ns-fc--${communityTint(site.slug)}`}>
+      <div className="ns-fc-inner">
+        <div className="ns-fc-top">
+          <div className="ns-fc-monogram" aria-hidden="true">
+            {site.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded logo on any host
+              <img src={site.logoUrl} alt="" className="ns-site-logo" />
+            ) : (
+              communityMonogram(site.name)
+            )}
+          </div>
+          <span className="ns-fc-tag">Exam site</span>
+        </div>
+
+        <div>
+          <h3 className="ns-fc-title">{site.name}</h3>
+          {site.headline ? <p className="ns-fc-subtitle">{site.headline}</p> : null}
+        </div>
+
+        <div className="ns-fc-meta">
+          <span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3Z" />
+            </svg>
+            {host}
+          </span>
+          {site.facultyCount ? (
+            <span>
+              <strong>{plural(site.facultyCount, "faculty").replace(/facultys$/, "faculties")}</strong>
+            </span>
+          ) : null}
+        </div>
+
+        <div className="ns-fc-bottom">
+          <span />
+          <div className="ns-fc-actions">
+            <a className="ns-fc-open" href={site.href} aria-label={`Visit ${site.name}`}>
+              Visit <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" /></svg>
+            </a>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function FieldError({ id, message }: { id: string; message?: string }) {
   return message ? (
     <p id={id} style={{ marginTop: 6, fontSize: 12, color: "#dc2626" }}>
@@ -295,6 +349,7 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 
 export function CommunityCatalogClient({
   initialCommunities,
+  examSites = [],
   signedIn,
   initialShowCreate = false,
   initialPhoneNumber = "",
@@ -303,6 +358,8 @@ export function CommunityCatalogClient({
   onCreateClose,
 }: {
   initialCommunities: CommunitySummary[];
+  /** Live subdomains, listed above the faculties (user, 2026-10-07). */
+  examSites?: Array<ExamSiteCard & { href: string }>;
   signedIn: boolean;
   /** The faculty the student portal shows (joined, or owned and opened as a student). */
   studyingSlug?: string | null;
@@ -318,9 +375,6 @@ export function CommunityCatalogClient({
 }) {
   const router = useRouter();
   const firstFieldRef = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState("");
-  const [selectedUniversity, setSelectedUniversity] = useState("");
-  const [selectedLevel, setSelectedLevel] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 6;
 
@@ -340,20 +394,6 @@ export function CommunityCatalogClient({
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Dynamic filter options derived from initialCommunities + standard fallbacks
-  const availableUniversities = useMemo(() => {
-    const set = new Set<string>();
-    initialCommunities.forEach((c) => {
-      if (c.university) set.add(canonicalUniversity(c.university));
-    });
-    ["Tribhuvan University", "Kathmandu University", "Pokhara University", "Purbanchal University"].forEach(
-      (u) => set.add(u),
-    );
-    return Array.from(set);
-  }, [initialCommunities]);
-
-  const availableLevels = communityLevels;
-
   const currentCommunity = useMemo(() => {
     const current =
       initialCommunities.find((c) => c.slug === studyingSlug) ??
@@ -363,37 +403,15 @@ export function CommunityCatalogClient({
     return current ? { slug: current.slug, name: current.name, university: current.university } : null;
   }, [initialCommunities, studyingSlug]);
 
-  // Filter logic
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-
-    return initialCommunities
-      .filter((community) => {
-        const haystack = [
-          community.name,
-          community.university,
-          community.faculty,
-          community.description,
-          communityLevel(community),
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        const matchesSearch = !needle || haystack.includes(needle);
-
-        const matchesUniversity =
-          !selectedUniversity ||
-          community.university.toLowerCase().includes(selectedUniversity.toLowerCase());
-
-        const matchesLevel = !selectedLevel || communityLevel(community) === selectedLevel;
-
-        return matchesSearch && matchesUniversity && matchesLevel;
-      })
-      .sort(
+  // No filters or search (user, 2026-10-07): every faculty, biggest first.
+  const filtered = useMemo(
+    () =>
+      [...initialCommunities].sort(
         (left, right) =>
           right.memberCount - left.memberCount || left.name.localeCompare(right.name),
-      );
-  }, [initialCommunities, query, selectedUniversity, selectedLevel]);
+      ),
+    [initialCommunities],
+  );
 
   // Pagination calculation
   const totalItems = filtered.length;
@@ -403,17 +421,10 @@ export function CommunityCatalogClient({
   const end = Math.min(start + pageSize, totalItems);
   const paginatedCommunities = filtered.slice(start, end);
 
-  function clearAllFilters() {
-    setQuery("");
-    setSelectedUniversity("");
-    setSelectedLevel("");
-    setCurrentPage(1);
-  }
-
   function goToPage(page: number) {
     setCurrentPage(page);
     document
-      .querySelector(".ns-browse-intro")
+      .querySelector("#communities .ns-browse-intro")
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -625,7 +636,6 @@ export function CommunityCatalogClient({
         .ns-top-cta:hover,
         .ns-hero-cta:hover { background: #26282d; transform: translateY(-1px); }
 
-        .ns-clear-button:focus-visible,
         .ns-top-cta:focus-visible,
         .ns-hero-cta:focus-visible,
         .ns-page-button:focus-visible {
@@ -686,122 +696,8 @@ export function CommunityCatalogClient({
 
         .ns-hero-art svg { width: 96px; height: 96px; }
 
-        .ns-discovery {
-          margin-top: 30px;
-          display: grid;
-          grid-template-columns: 286px minmax(0, 1fr);
-          gap: 28px;
-          align-items: start;
-        }
-
-        /* Sleek Sidebar Filters */
-        .ns-filters {
-          padding: 20px;
-          border: 1px solid #e5e8df;
-          border-radius: 15px;
-          background: #f5f7f1;
-        }
-
-        .ns-filters-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding-bottom: 16px;
-          border-bottom: 1px solid #d6dbe3;
-        }
-
-        .ns-filters h2 {
-          margin: 0;
-          font-family: var(--font-display);
-          font-size: 1.125rem;
-          letter-spacing: -0.025em;
-          font-weight: 600;
-          color: #101114;
-        }
-
-        .ns-filters h2::before {
-          content: "";
-          display: inline-block;
-          width: 8px;
-          height: 8px;
-          margin-right: 8px;
-          border-radius: 999px;
-          background: #3049ed;
-          vertical-align: 2px;
-        }
-
-        .ns-clear-button {
-          min-height: 40px;
-          padding: 0 10px;
-          border: 0;
-          border-radius: 6px;
-          color: #0a2ec3;
-          background: #ebf1ff;
-          font-size: 0.875rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background 0.15s ease, color 0.15s ease;
-        }
-
-        .ns-clear-button:hover {
-          color: #0a2ec3;
-          background: #dce5ff;
-        }
-
-        .ns-filter-group {
-          margin: 0;
-          padding: 18px 0;
-          border-bottom: 1px solid #e5e8df;
-        }
-
-        .ns-filter-group:last-child {
-          padding-bottom: 0;
-          border-bottom: 0;
-        }
-
-        .ns-filter-label {
-          display: block;
-          margin: 0 0 12px;
-          padding: 0;
-          font-size: 14px;
-          font-weight: 750;
-          letter-spacing: -0.01em;
-          color: #101114;
-        }
-
-        .ns-filter-select { position: relative; }
-        .ns-filter-select select {
-          width: 100%;
-          height: 44px;
-          padding: 0 40px 0 14px;
-          appearance: none;
-          -webkit-appearance: none;
-          border: 1px solid #dfe3d8;
-          border-radius: 10px;
-          background: #ffffff;
-          color: #101114;
-          font: inherit;
-          font-size: 14px;
-          cursor: pointer;
-          transition: border-color .18s ease, box-shadow .18s ease;
-        }
-        .ns-filter-select select:hover { border-color: #b9bfb0; }
-        .ns-filter-select select:focus-visible {
-          outline: none;
-          border-color: #3049ed;
-          box-shadow: 0 0 0 3px rgba(48, 73, 237, .15);
-        }
-        .ns-filter-select svg {
-          position: absolute;
-          right: 14px;
-          top: 50%;
-          width: 16px;
-          height: 16px;
-          transform: translateY(-50%);
-          color: #606774;
-          pointer-events: none;
-        }
+        .ns-discovery { margin-top: 30px; }
+        .ns-site-logo { width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }
 
         /* Browse faculties — tinted community cards */
         .ns-browse {
@@ -840,29 +736,6 @@ export function CommunityCatalogClient({
           white-space: nowrap;
         }
 
-        .ns-browse-search { position: relative; flex: 0 1 300px; min-width: 0; }
-        .ns-browse-search svg {
-          position: absolute;
-          left: 13px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #8490a2;
-          pointer-events: none;
-        }
-        .ns-browse-search input {
-          width: 100%;
-          height: 40px;
-          padding: 0 12px 0 37px;
-          border: 1px solid #e6e9f0;
-          border-radius: 10px;
-          background: #fff;
-          color: #171c27;
-          font-size: 14px !important;
-          outline: none;
-          transition: border-color .2s, box-shadow .2s;
-        }
-        .ns-browse-search input::placeholder { color: #9aa2b1; }
-        .ns-browse-search input:focus { border-color: #a5b4fc; box-shadow: 0 0 0 3px #e9edff; }
         .ns-results { min-width: 0; }
         .ns-browse-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 
@@ -1533,8 +1406,6 @@ export function CommunityCatalogClient({
         @media (prefers-reduced-motion: reduce) {
           .ns-top-cta,
           .ns-hero-cta,
-          .ns-clear-button,
-          .ns-filter-select select,
           .ns-fc,
           .ns-fc-open,
           .ns-cf-close,
@@ -1549,8 +1420,6 @@ export function CommunityCatalogClient({
           .ns-communities-page { width: min(100% - 40px, 1120px); }
           .ns-hero { grid-template-columns: minmax(0, 1fr) 150px; padding-inline: 38px; }
           .ns-hero-art { width: 128px; }
-          .ns-discovery { grid-template-columns: 250px minmax(0, 1fr); gap: 20px; }
-          .ns-browse-grid { grid-template-columns: 1fr; }
         }
 
         @media (max-width: 800px) {
@@ -1563,9 +1432,7 @@ export function CommunityCatalogClient({
           .ns-hero h1 { font-size: clamp(2.25rem, 9vw, 3rem); }
           .ns-hero p { margin-bottom: 20px; }
           .ns-hero-art { display: none; }
-          .ns-discovery { grid-template-columns: 1fr; }
-          .ns-filters { padding: 18px; }
-          .ns-browse-grid { gap: 14px; }
+          .ns-browse-grid { grid-template-columns: 1fr; gap: 14px; }
           .ns-fc-inner { padding: 20px; }
           .ns-fc-title { font-size: 20px; }
           .ns-pagination-wrap { align-items: flex-start; flex-direction: column; }
@@ -1577,8 +1444,6 @@ export function CommunityCatalogClient({
           .ns-hero { padding: 28px 22px; }
           .ns-hero h1 { font-size: 2.25rem; }
           .ns-hero p { font-size: 1rem; }
-          .ns-browse-intro { flex-direction: column; align-items: stretch; gap: 12px; }
-          .ns-browse-search { flex-basis: auto; }
           .ns-browse-grid { grid-template-columns: 1fr; }
           .ns-fc-bottom { flex-wrap: wrap; }
           .ns-pagination { width: 100%; justify-content: space-between; }
@@ -2074,74 +1939,26 @@ export function CommunityCatalogClient({
 
       {createOnly ? null : (
       <>
-      {/* Discovery Section: Filters + Community Grid */}
+      {examSites.length ? (
+        <section className="ns-discovery ns-browse" aria-labelledby="ns-sites-title">
+          <div className="ns-browse-intro">
+            <div className="ns-browse-heading">
+              <h2 id="ns-sites-title">Exam sites</h2>
+              <span className="ns-browse-count">
+                {examSites.length} {examSites.length === 1 ? "site" : "sites"}
+              </span>
+            </div>
+          </div>
+          <div className="ns-browse-grid">
+            {examSites.map((site) => (
+              <SiteCard key={site.slug} site={site} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Faculties — no filters or search (user, 2026-10-07). */}
       <section className="ns-discovery" id="communities" aria-label="Browse faculties">
-        {/* Sleek Sidebar Filters */}
-        <aside className="ns-filters" aria-label="Community filters">
-          <div className="ns-filters-header">
-            <h2>Filters</h2>
-            <button className="ns-clear-button" type="button" onClick={clearAllFilters}>
-              Clear
-            </button>
-          </div>
-
-          <div>
-            {/* University Group */}
-            <div className="ns-filter-group">
-              <label className="ns-filter-label" htmlFor="ns-filter-university">
-                University
-              </label>
-              <div className="ns-filter-select">
-                <select
-                  id="ns-filter-university"
-                  value={selectedUniversity}
-                  onChange={(e) => {
-                    setSelectedUniversity(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                >
-                  <option value="">All universities</option>
-                  {availableUniversities.map((uni) => (
-                    <option key={uni} value={uni}>
-                      {uni}
-                    </option>
-                  ))}
-                </select>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </div>
-            </div>
-
-            {/* Level Group */}
-            <div className="ns-filter-group">
-              <label className="ns-filter-label" htmlFor="ns-filter-level">
-                Level
-              </label>
-              <div className="ns-filter-select">
-                <select
-                  id="ns-filter-level"
-                  value={selectedLevel}
-                  onChange={(e) => {
-                    setSelectedLevel(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                >
-                  <option value="">All levels</option>
-                  {availableLevels.map((lvl) => (
-                    <option key={lvl} value={lvl}>
-                      {lvl}
-                    </option>
-                  ))}
-                </select>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </aside>
-
         <div className="ns-results ns-browse">
           <div className="ns-browse-intro">
             <div className="ns-browse-heading">
@@ -2150,24 +1967,6 @@ export function CommunityCatalogClient({
                 {totalItems} {totalItems === 1 ? "community" : "communities"}
               </span>
             </div>
-
-            <label className="ns-browse-search">
-              <span className="sr-only">Search communities</span>
-              <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="10.8" cy="10.8" r="7.4" />
-                <path d="m16.5 16.5 5 5" />
-              </svg>
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Search programme or university"
-                autoComplete="off"
-              />
-            </label>
           </div>
 
           <div className="ns-browse-grid">
@@ -2182,11 +1981,7 @@ export function CommunityCatalogClient({
           </div>
           {!totalItems ? (
             <div className="ns-browse-empty">
-              <h3>No communities found</h3>
-              <p>Try another search or reset your filters.</p>
-              <button type="button" onClick={clearAllFilters}>
-                Clear filters
-              </button>
+              <h3>No communities yet</h3>
             </div>
           ) : null}
 
