@@ -10,7 +10,8 @@ import { listSubscriptionPlans } from "@/lib/data/billing";
 import { ensureCommunityLearningSpace } from "@/lib/community-learning";
 import { invalidateStudentCourseAccess } from "@/lib/student-courses";
 import { z } from "zod";
-import { getStudentExamEnrollment } from "@/lib/data/faculty-lock";
+import { getFacultyLock } from "@/lib/data/faculty-lock";
+import { isPlatformAdmin } from "@/lib/data/platform-admin";
 
 export type ExamFaculty = {
   id: string;
@@ -123,8 +124,11 @@ export async function selectExamFaculty(
 ) {
   // Check before provisioning learning services; the RPC repeats this check
   // under a per-student transaction lock to handle concurrent requests.
-  if (!allowChange) {
-    const existing = await getStudentExamEnrollment(userId);
+  // A platform admin is never pinned (getFacultyLock), so the RPC must not
+  // refuse them either; the preparation answers are still validated as usual.
+  const canChange = allowChange || (await isPlatformAdmin(userId));
+  if (!canChange) {
+    const existing = await getFacultyLock(userId);
     if (existing && (existing.examSlug !== examSlug || existing.facultyId !== facultyId)) {
       throw new LandingSiteError(
         "Your faculty is already locked. Contact an admin to change it.",
@@ -152,7 +156,7 @@ export async function selectExamFaculty(
     target_exam_slug: examSlug,
     target_community_id: facultyId,
     preparation_answers: cleanAnswers,
-    allow_change: allowChange,
+    allow_change: canChange,
   });
   if (error)
     throw new LandingSiteError(

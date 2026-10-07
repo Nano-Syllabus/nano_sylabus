@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 import { listJoinedCommunities, communityStorageError } from "@/lib/data/communities";
 import { ACTIVE_COMMUNITY_COOKIE, communitySwitchState } from "@/lib/community-switch";
-import { getStudentExamEnrollment } from "@/lib/data/exam-enrollment";
+import { getFacultyLock } from "@/lib/data/faculty-lock";
 
 export async function POST(request: Request) {
   try {
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     if (!slug || slug.length > 100) {
       return NextResponse.json({ error: "Choose a valid community." }, { status: 400 });
     }
-    if (await getStudentExamEnrollment(user.id))
+    if (await getFacultyLock(user.id))
       return NextResponse.json(
         { error: "Your faculty is locked. Contact an admin to change it." },
         { status: 403 },

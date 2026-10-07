@@ -1,6 +1,7 @@
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isPlatformAdmin } from "@/lib/data/platform-admin";
 
 export type StudentExamEnrollment = {
   examSlug: string;
@@ -38,6 +39,38 @@ export const getStudentExamEnrollment = cache(
     };
   },
 );
+
+/**
+ * The exam enrollment that pins this user to one faculty — or null when nothing
+ * does. Platform admins are never pinned: they move between faculties to check
+ * them, and "Contact an admin to change it" is no answer for the admin. Every
+ * place that refuses a faculty change asks here, not `getStudentExamEnrollment`.
+ */
+export async function getFacultyLock(userId: string): Promise<StudentExamEnrollment | null> {
+  const [enrollment, admin] = await Promise.all([
+    getStudentExamEnrollment(userId),
+    isPlatformAdmin(userId),
+  ]);
+  return admin ? null : enrollment;
+}
+
+/**
+ * Drop an admin's own exam enrollment before they move faculty. The database
+ * guard (`guard_exam_faculty_membership`) refuses every membership change for an
+ * enrolled user, admin or not, so skipping the app's check alone would only
+ * swap the friendly 409 for a raw P0001. Admins are Pro by role, so the
+ * enrollment pins them to an exam's prices they never pay; nothing is lost.
+ * Returns false (and changes nothing) for anyone who is not a platform admin.
+ */
+export async function releaseAdminFacultyLock(userId: string): Promise<boolean> {
+  if (!(await isPlatformAdmin(userId))) return false;
+  const { error } = await createSupabaseAdminClient()
+    .from("student_exam_enrollments")
+    .delete()
+    .eq("user_id", userId);
+  if (error) throw error;
+  return true;
+}
 
 /** Whether a student is an active member of any faculty (joined from Browse). */
 export const hasFacultyMembership = cache(async (userId: string) => {

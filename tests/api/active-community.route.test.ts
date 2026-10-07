@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ enrollment: vi.fn(), getUser: vi.fn(), listJoined: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  enrollment: vi.fn(),
+  isAdmin: vi.fn(async (_id: string) => false),
+  getUser: vi.fn(),
+  listJoined: vi.fn(),
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth: { getUser: mocks.getUser } }),
 }));
@@ -8,7 +13,9 @@ vi.mock("@/lib/data/communities", () => ({
   listJoinedCommunities: mocks.listJoined,
   communityStorageError: () => ({ status: 500, message: "Could not load communities." }),
 }));
-vi.mock("@/lib/data/exam-enrollment", () => ({ getStudentExamEnrollment: mocks.enrollment }));
+vi.mock("@/lib/data/faculty-lock", () => ({
+  getFacultyLock: async (id: string) => ((await mocks.isAdmin(id)) ? null : mocks.enrollment(id)),
+}));
 
 import { POST } from "@/app/api/student/active-community/route";
 
@@ -56,6 +63,11 @@ describe("POST active community", () => {
     const response = await POST(request("mine"));
     expect(response.status).toBe(403);
     expect(response.headers.get("set-cookie")).toBeNull();
+  });
+  it("lets a platform admin switch even with an exam faculty on record", async () => {
+    mocks.enrollment.mockResolvedValue({ facultyId: "locked", facultySlug: "bct-license" });
+    mocks.isAdmin.mockResolvedValueOnce(true);
+    expect((await POST(request("mine"))).status).toBe(200);
   });
   it("rejects anonymous users", async () => {
     mocks.getUser.mockResolvedValue({ data: { user: null } });
