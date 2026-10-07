@@ -4,11 +4,11 @@ import { AdminBillingFrame } from "@/components/admin-billing-frame";
 import { AdminUserManager } from "@/components/admin-user-manager";
 import { assertAdminRequest } from "@/lib/admin-access";
 import { listStudentAmbassadors } from "@/lib/data/student-ambassadors";
-import { listAdminUsers } from "@/lib/data/admin-users";
+import { listAdminUsers, listFacultyChoices } from "@/lib/data/admin-users";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Students · Nano Syllabus Admin",
+  title: "Users · Nano Syllabus Admin",
   robots: { index: false, follow: false },
 };
 
@@ -20,7 +20,10 @@ export default async function AdminUsersPage() {
     throw new Error("Admin access could not be verified. Please retry.");
   }
 
-  const page = await listAdminUsers({ page: 1, pageSize: 50 });
+  const [page, faculties] = await Promise.all([
+    listAdminUsers({ page: 1, pageSize: 50 }),
+    listFacultyChoices().catch(() => []),
+  ]);
   // Only a super admin decides who may create faculties (the switch in a
   // person's panel, under Access).
   const ambassadors =
@@ -30,6 +33,7 @@ export default async function AdminUsersPage() {
     <AdminBillingFrame active="users">
       <AdminUserManager
         initialPage={page}
+        faculties={faculties}
         viewerRole={access.role}
         viewerUserId={access.userId}
         ambassadorEmails={ambassadors?.map((row) => row.email) ?? null}

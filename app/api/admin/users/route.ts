@@ -27,6 +27,7 @@ export async function GET(request: Request) {
       page: query.page,
       pageSize: query.pageSize,
       role,
+      faculty: searchParams.get("faculty")?.slice(0, 100) || undefined,
     });
     return NextResponse.json(result);
   } catch (error) {

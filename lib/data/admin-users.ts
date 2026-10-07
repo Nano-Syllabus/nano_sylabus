@@ -432,13 +432,20 @@ export async function listAdminUsers(filters?: {
    * people whose email may create faculties (only a super admin may ask).
    */
   role?: "students" | "admins" | "ambassadors";
+  /**
+   * A faculty slug: the people in it — its students, and the admins whose
+   * subdomain covers it, sorted first so "who runs this faculty" is the top of
+   * page one. Super admins ("all faculties") are left out; they cover every one.
+   */
+  faculty?: string;
 }): Promise<AdminListPage<AdminUserSummary>> {
   const page = normalizePage(filters?.page);
   const pageSize = normalizePageSize(filters?.pageSize);
   const q = filters?.q?.trim().toLowerCase() ?? "";
   const role = filters?.role;
+  const faculty = filters?.faculty?.trim() ?? "";
 
-  if (q || role) {
+  if (q || role || faculty) {
     const users = await listAllAuthUsers();
     const aggregates = await loadAdminUserAggregates(users.map((user) => user.id));
     const ambassadors =
@@ -457,7 +464,16 @@ export async function listAdminUsers(filters?: {
           .toLowerCase()
           .includes(q),
       )
-      .sort(sortUsersByRecent);
+      .filter(
+        (user) =>
+          !faculty ||
+          (user.faculties !== "all" && user.faculties.some((item) => item.slug === faculty)),
+      )
+      .sort(
+        (a, b) =>
+          (faculty ? Number(b.role === "admin") - Number(a.role === "admin") : 0) ||
+          sortUsersByRecent(a, b),
+      );
 
     const total = filtered.length;
     const from = (page - 1) * pageSize;
@@ -671,6 +687,17 @@ export async function updateAdminUserRole(input: {
     }
   }
   return getAdminUserDetail(input.userId);
+}
+
+/** Every active faculty, for the Users page's faculty filter. */
+export async function listFacultyChoices(): Promise<Array<{ slug: string; name: string }>> {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("communities")
+    .select("slug,name")
+    .eq("status", "active")
+    .order("name");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({ slug: row.slug as string, name: row.name as string }));
 }
 
 export type SiteAdmin = { userId: string; fullName: string; email: string };

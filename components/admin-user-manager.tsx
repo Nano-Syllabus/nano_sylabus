@@ -30,6 +30,7 @@ export function AdminUserManager({
   viewerRole,
   viewerUserId,
   ambassadorEmails = null,
+  faculties = [],
 }: {
   initialUsers?: AdminUserSummary[];
   initialPage: AdminListPage<AdminUserSummary>;
@@ -37,8 +38,11 @@ export function AdminUserManager({
   viewerUserId: string;
   /** Who may create faculties; null when the viewer isn't a super admin. */
   ambassadorEmails?: string[] | null;
+  /** Every active faculty, for the "who is in / who runs this faculty" filter. */
+  faculties?: Array<{ slug: string; name: string }>;
 }) {
   const [list, setList] = useState(initialPage);
+  const [faculty, setFaculty] = useState("");
   const [ambassadors, setAmbassadors] = useState(
     () => ambassadorEmails && new Set(ambassadorEmails.map((email) => email.toLowerCase())),
   );
@@ -60,21 +64,22 @@ export function AdminUserManager({
       const params = new URLSearchParams({ page: String(page), pageSize: String(list.pageSize) });
       if (query.trim()) params.set("q", query.trim());
       if (filter !== "all") params.set("role", filter);
+      if (faculty) params.set("faculty", faculty);
       setLoading(true);
       setListError(null);
       try {
         const response = await fetch(`/api/admin/users?${params}`, { signal: controller.signal });
         const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || "Students could not be loaded.");
+        if (!response.ok) throw new Error(payload.error || "Users could not be loaded.");
         setList(payload);
       } catch (error) {
         if (!controller.signal.aborted)
-          setListError(error instanceof Error ? error.message : "Students could not be loaded.");
+          setListError(error instanceof Error ? error.message : "Users could not be loaded.");
       } finally {
         if (pending.current === controller) setLoading(false);
       }
     },
-    [filter, list.pageSize, query],
+    [faculty, filter, list.pageSize, query],
   );
 
   useEffect(() => {
@@ -86,7 +91,7 @@ export function AdminUserManager({
     const timer = setTimeout(() => void load(1), 250);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, filter]);
+  }, [query, filter, faculty]);
 
   const patchRow = (user: AdminUserSummary) =>
     setList((current) => ({
@@ -96,14 +101,18 @@ export function AdminUserManager({
       ),
     }));
 
+  // With a faculty chosen the server puts its admins first, so page one holds them.
+  const facultyName = faculties.find((item) => item.slug === faculty)?.name ?? faculty;
+  const facultyAdmins = faculty ? list.items.filter((user) => user.role === "admin") : [];
+
   const from = list.total ? (list.page - 1) * list.pageSize + 1 : 0;
   const to = Math.min(list.total, from + list.items.length - 1);
 
   return (
     <>
       <AdminPageHeader
-        title="Students"
-        description="Find anyone who signed up. Click a person to see their plan, give them credits or change their access."
+        title="Users"
+        description="Everyone who signed up — students and admins. Pick a faculty to see who is in it and which admin runs it. Click a person to see their plan, give them credits or change their access."
       />
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -121,6 +130,23 @@ export function AdminUserManager({
             className={`${inputClass} pl-9`}
           />
         </label>
+        {faculties.length ? (
+          <label className="sm:w-56">
+            <span className="sr-only">Faculty</span>
+            <select
+              value={faculty}
+              onChange={(event) => setFaculty(event.target.value)}
+              className={inputClass}
+            >
+              <option value="">All faculties</option>
+              {faculties.map((item) => (
+                <option key={item.slug} value={item.slug}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <div className="flex gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Show">
           {(
             [
@@ -149,6 +175,39 @@ export function AdminUserManager({
             ))}
         </div>
       </div>
+
+      {faculty && !loading && list.page === 1 ? (
+        <p className="mt-4 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+          <span className="font-medium">{facultyName}</span>{" "}
+          {facultyAdmins.length ? (
+            <>
+              is run by{" "}
+              {facultyAdmins.map((admin, index) => (
+                <span key={admin.userId}>
+                  {index ? ", " : ""}
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(admin.userId)}
+                    className="font-medium text-blue-700 hover:underline dark:text-blue-300"
+                  >
+                    {admin.fullName || admin.email}
+                  </button>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    ({admin.email}
+                    {admin.site ? ` · ${admin.site.name}` : ""})
+                  </span>
+                </span>
+              ))}
+              .
+            </>
+          ) : (
+            <span className="text-muted-foreground">
+              has no admin — only super admins manage it. Set one under Websites.
+            </span>
+          )}
+        </p>
+      ) : null}
 
       <section
         className="mt-4 overflow-hidden rounded-xl border border-border bg-card"
@@ -213,13 +272,13 @@ export function AdminUserManager({
                   <td className="hidden px-4 py-3 md:table-cell">
                     <PlanBadge plan={user.activePlanName} />
                   </td>
-                  <td className="hidden px-4 py-3 text-right tabular-nums sm:table-cell">
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-right tabular-nums sm:table-cell">
                     {creditsLabel(user)}
                   </td>
-                  <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-muted-foreground lg:table-cell">
                     {formatDate(user.createdAt)}
                   </td>
-                  <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-muted-foreground md:table-cell">
                     {timeAgo(user.lastSignInAt)}
                   </td>
                 </tr>

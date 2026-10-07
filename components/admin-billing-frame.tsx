@@ -1,21 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import {
-  ArrowLeft,
-  CreditCard,
-  Globe,
-  LayoutDashboard,
-  Trophy,
-  Users,
-} from "lucide-react";
+import { ArrowLeft, CreditCard, Globe, LayoutDashboard, Trophy, Users } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 type AdminSection = "overview" | "users" | "billing" | "cash-prize" | "sites";
 
 const sections: Array<{ id: AdminSection; href: string; label: string; icon: typeof Users }> = [
   { id: "overview", href: "/admin", label: "Overview", icon: LayoutDashboard },
-  { id: "users", href: "/admin/users", label: "Students", icon: Users },
+  { id: "users", href: "/admin/users", label: "Users", icon: Users },
   { id: "billing", href: "/admin/billing", label: "Payments", icon: CreditCard },
   { id: "cash-prize", href: "/admin/cash-prize", label: "Prize draw", icon: Trophy },
   { id: "sites", href: "/admin/sites", label: "Websites", icon: Globe },
