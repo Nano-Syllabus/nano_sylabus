@@ -20,18 +20,28 @@ const focusRing =
 
 type LibraryState = "idle" | "loading" | "ready" | "error";
 
+/** Files on each shelf of one subject, from the creator's workspace. */
+export type SubjectShelfCounts = { syllabus: number; notes: number; questionBank: number };
+
+function plural(count: number, word: string) {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
 export function CommunityStudySpaceClient({
   initialCommunity,
   mode = "student",
   onCreateSubject,
   teacherWorkspaceBaseHref,
   onSubjectAttached,
+  shelfCounts,
 }: {
   initialCommunity: CommunityDetail;
   mode?: "student" | "teacher";
   onCreateSubject?: (termId: string) => void;
   teacherWorkspaceBaseHref?: string;
   onSubjectAttached?: () => Promise<unknown> | void;
+  /** Keyed by the creator subject slug; absent while the workspace loads. */
+  shelfCounts?: Record<string, SubjectShelfCounts>;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -355,7 +365,23 @@ export function CommunityStudySpaceClient({
 
               {term.subjects.length ? (
                 <div className="mt-5 divide-y divide-border border-y border-border">
-                  {term.subjects.map((subject) => (
+                  {term.subjects.map((subject) => {
+                    const counts =
+                      canManage && shelfCounts
+                        ? (subject.externalSubjectSlug &&
+                            shelfCounts[subject.externalSubjectSlug]) || {
+                            syllabus: 0,
+                            notes: 0,
+                            questionBank: 0,
+                          }
+                        : null;
+                    const missing = counts
+                      ? [
+                          counts.syllabus ? "" : "a syllabus",
+                          counts.questionBank ? "" : "a question bank",
+                        ].filter(Boolean)
+                      : [];
+                    return (
                     <div
                       key={subject.id}
                       className="flex min-h-16 flex-wrap items-center gap-3 py-3"
@@ -365,18 +391,46 @@ export function CommunityStudySpaceClient({
                       </span>
                       <div className="min-w-40 flex-1">
                         <span className="block text-sm font-medium">{titleCase(subject.name)}</span>
-                        <span className="mt-0.5 block text-xs text-text-muted">
-                          {canManage
-                            ? [
-                                subject.code,
-                                subject.publicationStatus === "published"
-                                  ? "Published · Community members"
-                                  : "Draft · Only you",
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")
-                            : subject.code || "Subject workspace"}
-                        </span>
+                        {counts ? (
+                          <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                            {(
+                              [
+                                ["Syllabus", counts.syllabus, true],
+                                ["Notes", counts.notes, false],
+                                ["Question bank", counts.questionBank, true],
+                              ] as const
+                            ).map(([label, count, required]) => (
+                              <span
+                                key={label}
+                                className={
+                                  count
+                                    ? "text-text-secondary"
+                                    : required
+                                      ? "font-medium text-amber-700 dark:text-amber-400"
+                                      : "text-text-muted"
+                                }
+                              >
+                                {label} {count}
+                              </span>
+                            ))}
+                            <span className="text-text-muted">
+                              {subject.publicationStatus === "published" ? "Published" : "Draft"}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="mt-0.5 block text-xs text-text-muted">
+                            {canManage
+                              ? [
+                                  subject.code,
+                                  subject.publicationStatus === "published"
+                                    ? "Published · Community members"
+                                    : "Draft · Only you",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")
+                              : subject.code || "Subject workspace"}
+                          </span>
+                        )}
                       </div>
                       {canManage && subject.externalSubjectSlug ? (
                         <Link
@@ -405,10 +459,16 @@ export function CommunityStudySpaceClient({
                           communitySlug={community.slug}
                           subject={subject}
                           onExtracted={onSubjectAttached}
+                          blockedReason={
+                            missing.length
+                              ? `Add ${missing.join(" and ")} to publish ${titleCase(subject.name)}.`
+                              : ""
+                          }
                         />
                       ) : null}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="mt-5 rounded-lg border border-dashed border-border p-6 text-center">

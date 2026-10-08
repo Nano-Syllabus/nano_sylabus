@@ -1307,6 +1307,8 @@ export function UploadDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [uploadStatus, setUploadStatus] = useState({ current: 0, total: 0 });
+  /** Set while a file waits out the indexing server's per-minute limit. */
+  const [waitNote, setWaitNote] = useState("");
   /** How many files this dialog has handed to the queue. Non-zero switches the
    *  footer from "Cancel / Queue" to "Done", because the work is already away. */
   const [queuedCount, setQueuedCount] = useState(0);
@@ -1325,11 +1327,12 @@ export function UploadDialog({
     setBusy(true);
     setError("");
     setUploadStatus({ current: 0, total: jobs.length });
-    const failed: Array<{ name: string; error: string }> = [];
+    const failed: Array<{ name: string; error: string; rateLimited?: boolean }> = [];
     const warnings: string[] = [];
 
     for (const [index, job] of jobs.entries()) {
       setUploadStatus({ current: index + 1, total: jobs.length });
+      setWaitNote("");
       try {
         const payload = await job.run();
         completedJobs.current.push({ jobId: text(payload.jobId), fileName: job.name });
@@ -1339,25 +1342,40 @@ export function UploadDialog({
         failed.push({
           name: job.name,
           error: caught instanceof Error ? caught.message : `Could not ${verb} this file.`,
+          rateLimited: caught instanceof ResponseError && caught.status === 429,
         });
       }
     }
+    setWaitNote("");
     return { failed, warnings };
   }
 
   function reportFailures(
-    failed: Array<{ name: string; error: string }>,
+    failed: Array<{ name: string; error: string; rateLimited?: boolean }>,
     keep: () => void,
     verb: string,
   ) {
     keep();
-    setError(
-      `${failed.length} file${failed.length === 1 ? "" : "s"} could not be ${verb}:\n${failed
-        .map((item) => `${item.name}: ${item.error}`)
-        .join(
-          "\n",
-        )}\n\nSuccessful files are already indexing. Retry to ${verb === "uploaded" ? "upload" : "import"} only the files listed here.`,
+    const limited = failed.filter((item) => item.rateLimited);
+    const other = failed.filter((item) => !item.rateLimited);
+    const sections = [
+      `${failed.length} file${failed.length === 1 ? "" : "s"} could not be ${verb}.`,
+    ];
+    if (limited.length) {
+      // One plain explanation for the whole group, not the same sentence seven times.
+      sections.push(
+        `Upload limit reached (${limited.length}): ${limited.map((item) => item.name).join(", ")}\n` +
+          "The indexing server takes about 60 requests a minute per creator, and each file uses a few of them. " +
+          "Wait one minute, then press the button below — or upload around 10 files at a time to avoid this.",
+      );
+    }
+    if (other.length) {
+      sections.push(other.map((item) => `${item.name}: ${item.error}`).join("\n"));
+    }
+    sections.push(
+      `Files not listed here are already indexing. Retry ${verb === "uploaded" ? "uploads" : "imports"} only the files still in the list above.`,
     );
+    setError(sections.join("\n\n"));
     setBusy(false);
     setUploadStatus({ current: 0, total: 0 });
   }
@@ -1469,7 +1487,15 @@ export function UploadDialog({
       return;
     }
     const { failed, warnings } = await runJobs(
-      files.map((file) => ({ name: file.name, run: () => uploadTeacherDocument(file, shelfRoot) })),
+      files.map((file) => ({
+        name: file.name,
+        run: () =>
+          uploadTeacherDocument(file, shelfRoot, (seconds) =>
+            setWaitNote(
+              `Upload limit reached — waiting ${seconds} seconds, then continuing with ${file.name}. Keep this window open.`,
+            ),
+          ),
+      })),
       "upload",
     );
     if (failed.length) {
@@ -1663,6 +1689,7 @@ export function UploadDialog({
                 }}
               />
             </div>
+            {waitNote ? <p className="mt-3 text-xs text-text-muted">{waitNote}</p> : null}
           </div>
         ) : null}
         {error ? (

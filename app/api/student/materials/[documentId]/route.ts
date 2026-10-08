@@ -1,4 +1,3 @@
-import { withExamStudyAccess } from "@/lib/exam-study-access";
 import { NextResponse } from "next/server";
 import {
   getStudentCourseSubjectAccess,
@@ -17,6 +16,7 @@ import {
   type TenantSourceTreeNode,
 } from "@/lib/tenant/client";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { contentDisposition } from "@/lib/http/content-disposition";
 
 export const dynamic = "force-dynamic";
 
@@ -240,20 +240,40 @@ async function mirrorResponse(
     );
   }
 
+  const name = mirror.original_name || mirror.collection_path.split("/").pop() || "file";
+  if (new URL(request.url).searchParams.get("download") === "1") {
+    return signedDownloadRedirect(mirror.storage_path, name);
+  }
+
   const download = await admin.storage.from("teacher-documents").download(mirror.storage_path);
   if (download.error || !download.data) throw download.error || new Error("File unavailable.");
   const body = await download.data.arrayBuffer();
-  const name = mirror.original_name || mirror.collection_path.split("/").pop() || "file";
-  const disposition = new URL(request.url).searchParams.get("download") === "1"
-    ? "attachment"
-    : "inline";
 
   return new NextResponse(new Uint8Array(body), {
     headers: {
       "Content-Type": mirror.mime_type || download.data.type || "application/octet-stream",
-      "Content-Disposition": `${disposition}; filename="${name.replace(/"/g, "")}"`,
+      "Content-Disposition": contentDisposition("inline", name),
       "Cache-Control": "private, max-age=300",
     },
+  });
+}
+
+/**
+ * A download goes straight to storage through a short-lived signed URL, so a
+ * large syllabus PDF is never held in this server's memory. Storage names
+ * the saved file.
+ */
+async function signedDownloadRedirect(storagePath: string, name: string) {
+  const admin = createSupabaseAdminClient();
+  const signed = await admin.storage
+    .from("teacher-documents")
+    .createSignedUrl(storagePath, 60, { download: name });
+  if (signed.error || !signed.data?.signedUrl) {
+    throw signed.error || new Error("File unavailable.");
+  }
+  return NextResponse.redirect(signed.data.signedUrl, {
+    status: 302,
+    headers: { "Cache-Control": "private, no-store" },
   });
 }
 
@@ -381,15 +401,19 @@ async function handleGET(
       );
     }
 
+    const name = mirror.original_name || path.split("/").pop() || "file";
+    if (new URL(request.url).searchParams.get("download") === "1") {
+      return signedDownloadRedirect(mirror.storage_path, name);
+    }
+
     const download = await admin.storage.from("teacher-documents").download(mirror.storage_path);
     if (download.error || !download.data) throw download.error || new Error("File unavailable.");
     const body = await download.data.arrayBuffer();
-    const name = mirror.original_name || path.split("/").pop() || "file";
 
     return new NextResponse(new Uint8Array(body), {
       headers: {
         "Content-Type": mirror.mime_type || download.data.type || "application/octet-stream",
-        "Content-Disposition": `inline; filename="${name.replace(/"/g, "")}"`,
+        "Content-Disposition": contentDisposition("inline", name),
         "Cache-Control": "private, max-age=300",
       },
     });
@@ -399,4 +423,6 @@ async function handleGET(
   }
 }
 
-export const GET = withExamStudyAccess(handleGET);
+// No plan gate: every student who can reach a subject may read its files.
+// The AI features around them (NanoAI) are what Plus and Pro unlock.
+export const GET = handleGET;

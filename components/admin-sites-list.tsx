@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ExternalLink, Plus, Search, X } from "lucide-react";
-import type { LandingSiteSummary } from "@/lib/data/landing-sites";
+import type {
+  CommunityChoice,
+  LandingSiteListItem,
+  LandingSiteSummary,
+} from "@/lib/data/landing-sites";
 import type { SiteAdmin } from "@/lib/data/admin-users";
 import type { AdminUserSummary } from "@/lib/types";
 import { MAIN_SITE_SLUG, RESERVED_SITE_SLUGS, isValidSiteSlug } from "@/lib/landing-site-host";
@@ -28,21 +32,28 @@ function formatDate(value: string | null) {
 export function AdminSitesList({
   initialSites,
   initialAdmins,
+  faculties,
   canAssignAdmins,
   viewerUserId,
   rootDomain,
 }: {
-  initialSites: LandingSiteSummary[];
-  /** Who runs each site, by slug. */
-  initialAdmins: Record<string, SiteAdmin>;
+  initialSites: LandingSiteListItem[];
+  /** Active public faculties a site can lead into. */
+  faculties: CommunityChoice[];
+  /** Who runs each site, by slug (a site may have several admins). */
+  initialAdmins: Record<string, SiteAdmin[]>;
   /** Only a super admin changes who runs a site. */
   canAssignAdmins: boolean;
   viewerUserId: string;
   rootDomain: string;
 }) {
+  const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [admins, setAdmins] = useState(initialAdmins);
   const [assigning, setAssigning] = useState<LandingSiteSummary | null>(null);
+  const [sites, setSites] = useState(initialSites);
+  const [linking, setLinking] = useState<LandingSiteListItem | null>(null);
+  const facultyBySlug = new Map(faculties.map((faculty) => [faculty.slug, faculty]));
 
   return (
     <div className="mt-6">
@@ -59,6 +70,7 @@ export function AdminSitesList({
             <tr>
               <th className="px-4 py-3 font-medium">Website</th>
               <th className="hidden px-4 py-3 font-medium md:table-cell">Admin</th>
+              <th className="hidden px-4 py-3 font-medium lg:table-cell">Faculties</th>
               <th className="hidden px-4 py-3 font-medium sm:table-cell">Status</th>
               <th className="hidden px-4 py-3 font-medium md:table-cell">Last published</th>
               <th className="px-4 py-3 text-right font-medium">
@@ -67,7 +79,7 @@ export function AdminSitesList({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {initialSites.map((site) => (
+            {sites.map((site) => (
               <tr key={site.slug}>
                 <td className="px-4 py-3">
                   <div className="font-medium text-foreground">
@@ -77,9 +89,18 @@ export function AdminSitesList({
                   <div className="mt-1 sm:hidden">
                     <StatusBadge site={site} />
                   </div>
+                  {site.slug !== MAIN_SITE_SLUG ? (
+                    <div className="mt-2 lg:hidden">
+                      <SiteFacultyCell
+                        site={site}
+                        facultyBySlug={facultyBySlug}
+                        onChange={() => setLinking(site)}
+                      />
+                    </div>
+                  ) : null}
                   <div className="mt-2 md:hidden">
                     <SiteAdminCell
-                      admin={site.slug === MAIN_SITE_SLUG ? undefined : admins[site.slug]}
+                      admins={site.slug === MAIN_SITE_SLUG ? [] : (admins[site.slug] ?? [])}
                       main={site.slug === MAIN_SITE_SLUG}
                       onChange={canAssignAdmins ? () => setAssigning(site) : null}
                     />
@@ -87,10 +108,21 @@ export function AdminSitesList({
                 </td>
                 <td className="hidden px-4 py-3 md:table-cell">
                   <SiteAdminCell
-                    admin={site.slug === MAIN_SITE_SLUG ? undefined : admins[site.slug]}
+                    admins={site.slug === MAIN_SITE_SLUG ? [] : (admins[site.slug] ?? [])}
                     main={site.slug === MAIN_SITE_SLUG}
                     onChange={canAssignAdmins ? () => setAssigning(site) : null}
                   />
+                </td>
+                <td className="hidden px-4 py-3 lg:table-cell">
+                  {site.slug === MAIN_SITE_SLUG ? (
+                    <span className="text-xs text-muted-foreground">Every faculty</span>
+                  ) : (
+                    <SiteFacultyCell
+                      site={site}
+                      facultyBySlug={facultyBySlug}
+                      onChange={() => setLinking(site)}
+                    />
+                  )}
                 </td>
                 <td className="hidden px-4 py-3 sm:table-cell">
                   <StatusBadge site={site} />
@@ -129,27 +161,42 @@ export function AdminSitesList({
         <AssignAdminDialog
           site={assigning}
           domain={domainOf(assigning.slug, rootDomain)}
-          current={admins[assigning.slug] ?? null}
+          current={admins[assigning.slug] ?? []}
           viewerUserId={viewerUserId}
           onClose={() => setAssigning(null)}
-          onSaved={(admin) => {
+          onSaved={(list) =>
             setAdmins((all) => {
-              const next = { ...all };
-              // An admin runs one site: moving them empties the site they left.
-              for (const [slug, held] of Object.entries(next))
-                if (admin && held.userId === admin.userId) delete next[slug];
-              if (admin) next[assigning.slug] = admin;
-              else delete next[assigning.slug];
+              const ids = new Set(list.map((admin) => admin.userId));
+              // An admin runs one site: adding them here takes them off the site they left.
+              const next: Record<string, SiteAdmin[]> = {};
+              for (const [slug, held] of Object.entries(all))
+                next[slug] = held.filter((admin) => !ids.has(admin.userId));
+              next[assigning.slug] = list;
               return next;
-            });
-            setAssigning(null);
+            })
+          }
+        />
+      ) : null}
+
+      {linking ? (
+        <SiteFacultiesDialog
+          site={linking}
+          domain={domainOf(linking.slug, rootDomain)}
+          faculties={faculties}
+          onClose={() => setLinking(null)}
+          onSaved={(saved) => {
+            setSites((all) =>
+              all.map((site) => (site.slug === saved.slug ? { ...site, ...saved } : site)),
+            );
+            setLinking(null);
+            router.refresh();
           }}
         />
       ) : null}
 
       {creating ? (
         <CreateSiteDialog
-          sites={initialSites}
+          sites={sites}
           rootDomain={rootDomain}
           onClose={() => setCreating(false)}
         />
@@ -158,24 +205,272 @@ export function AdminSitesList({
   );
 }
 
-/** The site's admin, name over email; a super admin gets a Change/Set button. */
+/** The faculties a site leads into, and whether its exam flow is on. */
+function SiteFacultyCell({
+  site,
+  facultyBySlug,
+  onChange,
+}: {
+  site: LandingSiteListItem;
+  facultyBySlug: Map<string, CommunityChoice>;
+  onChange: () => void;
+}) {
+  const names = site.facultySlugs.map((slug) => facultyBySlug.get(slug)?.name || slug);
+  return (
+    <div className="flex items-start gap-3">
+      <div className="min-w-0">
+        {names.length ? (
+          <ul className="space-y-0.5">
+            {names.map((name) => (
+              <li key={name} className="truncate text-sm text-foreground">
+                {name}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <span className="text-xs text-amber-700 dark:text-amber-300">No faculty</span>
+        )}
+        {names.length && !site.examEnabled ? (
+          <div className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
+            Not shown to visitors yet
+          </div>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={onChange}
+        className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-600/10 dark:text-blue-300"
+      >
+        {names.length ? "Manage" : "Link faculty"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Which faculties a subdomain leads into, and the site's name — the two things
+ * a creator reaches for when "license.nanosyllabus.com" should open the
+ * Engineering License faculty. The rest of the exam setup (questions, plans,
+ * prices) stays in the site editor; this reads the full config and changes
+ * only these fields.
+ */
+function SiteFacultiesDialog({
+  site,
+  domain,
+  faculties,
+  onClose,
+  onSaved,
+}: {
+  site: LandingSiteListItem;
+  domain: string;
+  faculties: CommunityChoice[];
+  onClose: () => void;
+  onSaved: (site: Pick<LandingSiteListItem, "slug" | "name" | "facultySlugs" | "examEnabled">) => void;
+}) {
+  const [name, setName] = useState(site.name);
+  const [picked, setPicked] = useState<string[]>(site.facultySlugs);
+  // Opening this is asking for the faculties to show, so the switch starts on.
+  const [enabled, setEnabled] = useState(true);
+  const [query, setQuery] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const shown = faculties.filter((faculty) =>
+    `${faculty.name} ${faculty.faculty ?? ""} ${faculty.slug}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
+  );
+
+  async function save() {
+    if (enabled && !picked.length) {
+      setError("Choose at least one faculty, or turn off “Send visitors to these faculties”.");
+      return;
+    }
+    if (!name.trim()) {
+      setError("Give the site a name.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const current = await fetch(`/api/admin/sites/${site.slug}`);
+      const loaded = await current.json().catch(() => ({}));
+      if (!current.ok || !loaded.site) throw new Error(loaded.error || "Couldn’t load the site.");
+      const response = await fetch(`/api/admin/sites/${site.slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(name.trim() !== site.name ? { name: name.trim() } : {}),
+          examConfig: { ...loaded.site.examConfig, facultySlugs: picked, enabled },
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.site) throw new Error(payload.error || "Couldn’t save.");
+      onSaved({
+        slug: site.slug,
+        name: payload.site.name,
+        facultySlugs: payload.site.examConfig.facultySlugs,
+        examEnabled: payload.site.examConfig.enabled,
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn’t save.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="site-faculties-title"
+      onKeyDown={(event) => event.key === "Escape" && !saving && onClose()}
+    >
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-xl border border-border bg-card p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 id="site-faculties-title" className="font-display text-lg font-semibold">
+              Faculties on {domain}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Visitors to this subdomain choose from these faculties.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            aria-label="Close"
+            className="grid size-9 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <label className="mt-4 block text-sm font-medium" htmlFor={`site-name-${site.slug}`}>
+          Site name
+        </label>
+        <input
+          id={`site-name-${site.slug}`}
+          value={name}
+          maxLength={80}
+          onChange={(event) => setName(event.target.value)}
+          className={`${inputClass} mt-1.5`}
+        />
+
+        <label className="relative mt-4 block">
+          <span className="sr-only">Search faculties</span>
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search faculties"
+            className={`${inputClass} pl-9`}
+          />
+        </label>
+        <ul className="mt-2 min-h-0 flex-1 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+          {shown.length ? (
+            shown.map((faculty) => {
+              const checked = picked.includes(faculty.slug);
+              return (
+                <li key={faculty.slug}>
+                  <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-muted">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setError(null);
+                        setPicked((current) =>
+                          checked
+                            ? current.filter((slug) => slug !== faculty.slug)
+                            : [...current, faculty.slug],
+                        );
+                      }}
+                      className="size-4 accent-blue-600"
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{faculty.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {[faculty.faculty, faculty.slug].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                  </label>
+                </li>
+              );
+            })
+          ) : (
+            <li className="px-3 py-3 text-sm text-muted-foreground">
+              {faculties.length
+                ? "No faculty matches."
+                : "No public faculty yet. Create one and make it public first."}
+            </li>
+          )}
+        </ul>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Only active, public faculties are listed.
+        </p>
+
+        <label className="mt-4 flex items-start gap-3 rounded-lg bg-muted/50 p-3">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => {
+              setError(null);
+              setEnabled(event.target.checked);
+            }}
+            className="mt-0.5 size-4 accent-blue-600"
+          />
+          <span className="text-sm">
+            <span className="block font-medium">Send visitors to these faculties</span>
+            <span className="text-xs text-muted-foreground">
+              The site’s main buttons open these faculties. Questions, plans and prices stay in
+              Edit text → Exam, faculties &amp; checkout.
+            </span>
+          </span>
+        </label>
+
+        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} disabled={saving} className={secondaryButton}>
+            Cancel
+          </button>
+          <button type="button" disabled={saving} onClick={() => void save()} className={primaryButton}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The site's admins, name over email; a super admin gets a Manage button. */
 function SiteAdminCell({
-  admin,
+  admins,
   main,
   onChange,
 }: {
-  admin: SiteAdmin | undefined;
+  admins: SiteAdmin[];
   main: boolean;
   onChange: (() => void) | null;
 }) {
   if (main) return <span className="text-xs text-muted-foreground">Super admins</span>;
   return (
     <div className="flex items-center gap-3">
-      {admin ? (
-        <div className="min-w-0">
-          <div className="truncate font-medium text-foreground">{admin.fullName}</div>
-          <div className="truncate text-xs text-muted-foreground">{admin.email}</div>
-        </div>
+      {admins.length ? (
+        <ul className="min-w-0 space-y-1">
+          {admins.map((admin) => (
+            <li key={admin.userId} className="min-w-0">
+              <div className="truncate font-medium text-foreground">{admin.fullName}</div>
+              {admin.email ? (
+                <div className="truncate text-xs text-muted-foreground">{admin.email}</div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       ) : (
         <span className="text-xs text-amber-700 dark:text-amber-300">No admin</span>
       )}
@@ -185,7 +480,7 @@ function SiteAdminCell({
           onClick={onChange}
           className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-600/10 dark:text-blue-300"
         >
-          {admin ? "Change" : "Set admin"}
+          {admins.length ? "Manage" : "Add admin"}
         </button>
       ) : null}
     </div>
@@ -193,9 +488,9 @@ function SiteAdminCell({
 }
 
 /**
- * Pick who runs a site. Search anyone who signed up; super admins can't be
- * picked (they already see every site), and the current admin goes back to
- * student when replaced or removed — said before saving, not after.
+ * Who runs a site. A site may have several admins: add anyone who signed up
+ * (super admins can't be picked — they already see every site), or remove one,
+ * which makes them a student again — said before saving, not after.
  */
 function AssignAdminDialog({
   site,
@@ -207,17 +502,17 @@ function AssignAdminDialog({
 }: {
   site: LandingSiteSummary;
   domain: string;
-  current: SiteAdmin | null;
+  current: SiteAdmin[];
   viewerUserId: string;
   onClose: () => void;
-  onSaved: (admin: SiteAdmin | null) => void;
+  onSaved: (admins: SiteAdmin[]) => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<AdminUserSummary[] | null>(null);
   const [picked, setPicked] = useState<AdminUserSummary | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
   useEffect(() => {
     const q = query.trim();
@@ -244,31 +539,36 @@ function AssignAdminDialog({
     };
   }, [query]);
 
-  async function save(userId: string | null) {
+  async function save(userId: string, action: "add" | "remove") {
     setSaving(true);
     setError(null);
     try {
       const response = await fetch(`/api/admin/sites/${site.slug}/admin`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ userId, action }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "The admin could not be changed.");
-      onSaved(payload.admin ?? null);
+      if (!response.ok) throw new Error(payload.error || "The admins could not be changed.");
+      onSaved((payload.admins ?? []) as SiteAdmin[]);
+      setPicked(null);
+      setQuery("");
+      setConfirmRemove(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The admin could not be changed.");
+      setError(cause instanceof Error ? cause.message : "The admins could not be changed.");
+    } finally {
       setSaving(false);
     }
   }
 
+  const currentIds = new Set(current.map((admin) => admin.userId));
   const blocked = (user: AdminUserSummary) =>
     user.role === "super_admin"
       ? "Super admin"
       : user.userId === viewerUserId
         ? "You"
-        : user.userId === current?.userId
-          ? "Current"
+        : currentIds.has(user.userId)
+          ? "Already admin"
           : null;
 
   return (
@@ -283,7 +583,7 @@ function AssignAdminDialog({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h2 id="assign-admin-title" className="font-display text-lg font-semibold">
-              Admin of {site.name}
+              Admins of {site.name}
             </h2>
             <p className="mt-1 truncate text-sm text-muted-foreground">{domain}</p>
           </div>
@@ -297,26 +597,38 @@ function AssignAdminDialog({
           </button>
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
-          {current ? (
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium">{current.fullName}</div>
-              <div className="truncate text-xs text-muted-foreground">{current.email}</div>
-            </div>
+        <ul className="mt-4 divide-y divide-border rounded-lg border border-border">
+          {current.length ? (
+            current.map((admin) => (
+              <li key={admin.userId} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{admin.fullName}</div>
+                  <div className="truncate text-xs text-muted-foreground">{admin.email}</div>
+                </div>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() =>
+                    confirmRemove === admin.userId
+                      ? void save(admin.userId, "remove")
+                      : setConfirmRemove(admin.userId)
+                  }
+                  className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-50"
+                >
+                  {confirmRemove === admin.userId ? "Confirm remove" : "Remove"}
+                </button>
+              </li>
+            ))
           ) : (
-            <span className="text-sm text-muted-foreground">No admin yet.</span>
+            <li className="px-3 py-2.5 text-sm text-muted-foreground">No admin yet.</li>
           )}
-          {current ? (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => (confirmRemove ? void save(null) : setConfirmRemove(true))}
-              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-50"
-            >
-              {confirmRemove ? "Confirm remove" : "Remove"}
-            </button>
-          ) : null}
-        </div>
+        </ul>
+        {confirmRemove ? (
+          <p className="mt-2 text-xs leading-5 text-red-600">
+            Removing {current.find((admin) => admin.userId === confirmRemove)?.fullName} makes them
+            a student again.
+          </p>
+        ) : null}
 
         <label className="relative mt-4 block">
           <span className="sr-only">Search people</span>
@@ -333,9 +645,7 @@ function AssignAdminDialog({
               setPicked(null);
               setError(null);
             }}
-            placeholder={
-              current ? "Search a new admin by name or email" : "Search by name or email"
-            }
+            placeholder="Add an admin — search by name or email"
             className={`${inputClass} pl-9`}
           />
         </label>
@@ -380,15 +690,8 @@ function AssignAdminDialog({
 
         {picked ? (
           <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            {picked.fullName || picked.email} becomes the admin of {domain}
-            {picked.role === "admin" && picked.site ? ` and stops running ${picked.site.name}` : ""}
-            .{current ? ` ${current.fullName} goes back to student.` : ""}
-          </p>
-        ) : current ? (
-          <p
-            className={`mt-3 text-xs leading-5 ${confirmRemove ? "text-red-600" : "text-muted-foreground"}`}
-          >
-            Replacing or removing {current.fullName} makes them a student again.
+            {picked.fullName || picked.email} becomes an admin of {domain}
+            {picked.role === "admin" && picked.site ? ` and stops running ${picked.site.name}` : ""}.
           </p>
         ) : null}
 
@@ -396,15 +699,15 @@ function AssignAdminDialog({
 
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose} className={secondaryButton}>
-            Cancel
+            Done
           </button>
           <button
             type="button"
             disabled={!picked || saving}
-            onClick={() => picked && void save(picked.userId)}
+            onClick={() => picked && void save(picked.userId, "add")}
             className={primaryButton}
           >
-            {saving ? "Saving…" : "Make admin"}
+            {saving ? "Saving…" : "Add admin"}
           </button>
         </div>
       </div>

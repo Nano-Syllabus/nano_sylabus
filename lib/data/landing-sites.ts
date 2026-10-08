@@ -215,13 +215,23 @@ async function ensureMainSite() {
   if (error) throw error;
 }
 
-export async function listLandingSites(): Promise<LandingSiteSummary[]> {
+/** A row of the admin Websites table: the summary plus which faculties the site leads to. */
+export type LandingSiteListItem = LandingSiteSummary & {
+  facultySlugs: string[];
+  examEnabled: boolean;
+};
+
+export async function listLandingSites(): Promise<LandingSiteListItem[]> {
   await ensureMainSite();
   const { data, error } = await createSupabaseAdminClient().from(TABLE).select(COLUMNS);
   if (error) throw error;
   return ((data ?? []) as LandingSiteRow[])
     .map(toDetail)
-    .map(({ draft: _draft, content: _content, examConfig: _examConfig, ...summary }) => summary)
+    .map(({ draft: _draft, content: _content, examConfig, ...summary }) => ({
+      ...summary,
+      facultySlugs: examConfig.facultySlugs,
+      examEnabled: examConfig.enabled,
+    }))
     .sort((a, b) =>
       a.slug === MAIN_SITE_SLUG ? -1 : b.slug === MAIN_SITE_SLUG ? 1 : a.slug.localeCompare(b.slug),
     );

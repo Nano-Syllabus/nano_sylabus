@@ -31,6 +31,7 @@ export function AdminUserManager({
   viewerUserId,
   ambassadorEmails = null,
   faculties = [],
+  initialFaculty = "",
 }: {
   initialUsers?: AdminUserSummary[];
   initialPage: AdminListPage<AdminUserSummary>;
@@ -40,9 +41,11 @@ export function AdminUserManager({
   ambassadorEmails?: string[] | null;
   /** Every active faculty, for the "who is in / who runs this faculty" filter. */
   faculties?: Array<{ slug: string; name: string }>;
+  /** A faculty the server already filtered page 1 by (`?faculty=` from the Faculties page). */
+  initialFaculty?: string;
 }) {
   const [list, setList] = useState(initialPage);
-  const [faculty, setFaculty] = useState("");
+  const [faculty, setFaculty] = useState(initialFaculty);
   const [ambassadors, setAmbassadors] = useState(
     () => ambassadorEmails && new Set(ambassadorEmails.map((email) => email.toLowerCase())),
   );

@@ -17,7 +17,10 @@ import {
   type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { CommunityStudySpaceClient } from "@/components/community-study-space-client";
+import {
+  CommunityStudySpaceClient,
+  type SubjectShelfCounts,
+} from "@/components/community-study-space-client";
 const CommunityTopicExtractionControl = dynamic(() =>
   import("@/components/community-topic-extraction-control").then(
     (m) => m.CommunityTopicExtractionControl,
@@ -1087,6 +1090,29 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
         .flatMap((term) => term.subjects)
         .find((subject) => subject.externalSubjectSlug === selectedSubject?.slug)
     : undefined;
+  /** Files per shelf for every subject, so the faculty's subject rows can say
+   *  which ones still need a syllabus or question bank. From the workspace
+   *  already in memory — no extra request. */
+  const subjectShelfCounts = useMemo(() => {
+    const counts: Record<string, SubjectShelfCounts> = {};
+    if (!workspace) return counts;
+    for (const subject of workspace.subjects) {
+      const row: SubjectShelfCounts = { syllabus: 0, notes: 0, questionBank: 0 };
+      for (const document of workspace.documents) {
+        if (
+          document.path !== subject.folderPath &&
+          !document.path.startsWith(`${subject.folderPath}/`)
+        ) {
+          continue;
+        }
+        if (document.shelf === "Syllabus") row.syllabus += 1;
+        else if (document.shelf === "Notes") row.notes += 1;
+        else if (document.shelf === "Question Bank") row.questionBank += 1;
+      }
+      counts[subject.slug] = row;
+    }
+    return counts;
+  }, [workspace]);
   const subjectDocuments = useMemo(
     () =>
       selectedSubject && workspace
@@ -1544,6 +1570,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
                 await Promise.all([loadDashboard(), loadWorkspace()]);
               }}
               onCreateSubject={openCommunitySubjectCreator}
+              shelfCounts={subjectShelfCounts}
             />
           ) : null}
           {view === "courses" ? (
@@ -1608,6 +1635,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
                 await Promise.all([loadDashboard(), loadWorkspace()]);
               }}
               onCreateSubject={openCommunitySubjectCreator}
+              shelfCounts={subjectShelfCounts}
             />
           ) : null}
           {view === "subjects" && !selectedSubject && showSubjectLibrary ? (
@@ -1999,6 +2027,7 @@ export function CommunitiesView({
   selectedTermId,
   onRefresh,
   subjectsMode = false,
+  shelfCounts,
 }: {
   dashboard: TeacherDashboard | null;
   state: DashboardState;
@@ -2008,6 +2037,7 @@ export function CommunitiesView({
   selectedTermId: string;
   onRefresh: () => Promise<unknown>;
   subjectsMode?: boolean;
+  shelfCounts?: Record<string, SubjectShelfCounts>;
   onCreateSubject: (communityAttach: {
     slug: string;
     termId: string;
@@ -2237,6 +2267,7 @@ export function CommunitiesView({
             mode="teacher"
             teacherWorkspaceBaseHref={workspaceHref(selected.slug)}
             onSubjectAttached={onRefresh}
+            shelfCounts={shelfCounts}
             onCreateSubject={(termId) =>
               onCreateSubject({
                 slug: selected.slug,

@@ -46,7 +46,7 @@ export const FACULTY_LOCKED_MESSAGE = "Your faculty is locked. Contact an admin 
 export type AdminSite = { slug: string; name: string; faculties: FacultyRef[] };
 
 /**
- * The subdomain site each admin runs (`landing_site_admins`, one-to-one) with
+ * The subdomain site each admin runs (`landing_site_admins`; one site per admin, several admins per site) with
  * that site's supported faculties — what the admin may move between. Keyed by
  * user id. A missing table (migration not applied yet) reads as no sites, so
  * admins behave like students until it lands.

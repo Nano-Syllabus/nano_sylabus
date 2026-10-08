@@ -608,10 +608,10 @@ export class AdminRoleError extends Error {
 }
 
 /**
- * Change a person's access. An admin runs exactly one subdomain site and a site
- * has one admin (user, 2026-10-07), so making someone an admin — or moving an
- * admin — needs `siteSlug`. Leaving the admin role frees the site (a database
- * trigger, `release_landing_site_on_role_change`).
+ * Change a person's access. An admin runs exactly one subdomain site, and a
+ * site may have several admins (user, 2026-10-08), so making someone an admin
+ * — or moving an admin — needs `siteSlug`. Leaving the admin role frees the
+ * site (a database trigger, `release_landing_site_on_role_change`).
  */
 export async function updateAdminUserRole(input: {
   actorUserId: string;
@@ -620,18 +620,16 @@ export async function updateAdminUserRole(input: {
   siteSlug?: string;
 }) {
   const supabase = createSupabaseAdminClient();
-  let siteHolder: string | null = null;
+  let alreadyOnSite = false;
   if (input.role === "admin") {
     if (!input.siteSlug) throw new AdminRoleError("Choose the subdomain this admin will run.");
-    const { data: holder, error: holderError } = await supabase
+    const { data: held, error: heldError } = await supabase
       .from("landing_site_admins")
-      .select("user_id")
-      .eq("site_slug", input.siteSlug)
+      .select("site_slug")
+      .eq("user_id", input.userId)
       .maybeSingle();
-    if (holderError) throw new Error(holderError.message);
-    if (holder && holder.user_id !== input.userId)
-      throw new AdminRoleError("That subdomain already has an admin.", 409);
-    siteHolder = holder?.user_id ?? null;
+    if (heldError) throw new Error(heldError.message);
+    alreadyOnSite = held?.site_slug === input.siteSlug;
   }
 
   const { data: current, error: currentError } = await supabase
@@ -651,25 +649,19 @@ export async function updateAdminUserRole(input: {
     if (error) throw new Error(error.message);
   }
 
-  if (input.role === "admin") {
-    // The admin's old site (if any) goes, the new one comes; one statement each
-    // so the unique keys see a consistent state.
+  if (input.role === "admin" && !alreadyOnSite) {
+    // The admin's old site (if any) goes, the new one comes.
     const { error: clearError } = await supabase
       .from("landing_site_admins")
       .delete()
-      .eq("user_id", input.userId)
-      .neq("site_slug", input.siteSlug!);
-    // A plain insert: if another admin took the site meanwhile, the primary
-    // key refuses it (23505) instead of handing their site over.
+      .eq("user_id", input.userId);
     const { error: assignError } = clearError
       ? { error: clearError }
-      : siteHolder === input.userId
-        ? { error: null }
-        : await supabase.from("landing_site_admins").insert({
-            site_slug: input.siteSlug,
-            user_id: input.userId,
-            assigned_by: input.actorUserId,
-          });
+      : await supabase.from("landing_site_admins").insert({
+          site_slug: input.siteSlug,
+          user_id: input.userId,
+          assigned_by: input.actorUserId,
+        });
     if (assignError) {
       // Don't leave an admin without a site: put the old role back.
       if (previousRole !== "admin")
@@ -678,9 +670,11 @@ export async function updateAdminUserRole(input: {
           p_target_user_ids: [input.userId],
           p_role: previousRole,
         });
+      // 23505 here means the one-admin-per-site key is still in the database
+      // (migration 20261008090000 not applied yet).
       throw new AdminRoleError(
         assignError.code === "23505"
-          ? "That subdomain already has an admin."
+          ? "This subdomain can hold only one admin until the database is updated."
           : "The subdomain could not be assigned.",
         assignError.code === "23505" ? 409 : 500,
       );
@@ -702,115 +696,118 @@ export async function listFacultyChoices(): Promise<Array<{ slug: string; name: 
 
 export type SiteAdmin = { userId: string; fullName: string; email: string };
 
+/** Names and emails for a set of user ids, in one profile read plus one auth lookup each. */
+export async function describeUsers(userIds: string[]): Promise<Map<string, SiteAdmin>> {
+  const supabase = createSupabaseAdminClient();
+  const byId = new Map<string, SiteAdmin>();
+  const ids = [...new Set(userIds)];
+  if (!ids.length) return byId;
+  const { data: profiles } = await supabase
+    .from("student_profiles")
+    .select("user_id,full_name")
+    .in("user_id", ids);
+  const nameById = new Map((profiles ?? []).map((row) => [row.user_id, row.full_name ?? ""]));
+  // A handful of managers per page, so one lookup each is fine.
+  const users = await Promise.all(
+    ids.map((id) => supabase.auth.admin.getUserById(id).then((r) => r.data.user)),
+  );
+  ids.forEach((id, index) => {
+    const user = users[index];
+    const metaName =
+      typeof user?.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
+    byId.set(id, {
+      userId: id,
+      fullName: normalizeFullName(nameById.get(id) || metaName) || "No name",
+      email: user?.email ?? "",
+    });
+  });
+  return byId;
+}
+
 /**
  * Who runs each subdomain site, by slug — the Websites list shows it. A missing
  * table (migration not applied) reads as no admins rather than failing the page.
  */
-export async function listSiteAdmins(): Promise<Map<string, SiteAdmin>> {
+export async function listSiteAdmins(): Promise<Map<string, SiteAdmin[]>> {
   const supabase = createSupabaseAdminClient();
-  const bySite = new Map<string, SiteAdmin>();
+  const bySite = new Map<string, SiteAdmin[]>();
   const { data: rows, error } = await supabase
     .from("landing_site_admins")
-    .select("site_slug,user_id");
+    .select("site_slug,user_id")
+    .order("assigned_at");
   if (error) {
     console.error("[site-admins] could not read site admins", error.message);
     return bySite;
   }
-  if (!rows?.length) return bySite;
-  const { data: profiles } = await supabase
-    .from("student_profiles")
-    .select("user_id,full_name")
-    .in(
-      "user_id",
-      rows.map((row) => row.user_id),
-    );
-  const nameById = new Map((profiles ?? []).map((row) => [row.user_id, row.full_name ?? ""]));
-  // One lookup per site, and a platform has a handful of sites.
-  const users = await Promise.all(
-    rows.map((row) => supabase.auth.admin.getUserById(row.user_id).then((r) => r.data.user)),
-  );
-  rows.forEach((row, index) => {
-    const user = users[index];
-    const metaName =
-      typeof user?.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
-    bySite.set(row.site_slug, {
-      userId: row.user_id,
-      fullName: normalizeFullName(nameById.get(row.user_id) || metaName) || "No name",
-      email: user?.email ?? "",
-    });
-  });
+  const people = await describeUsers((rows ?? []).map((row) => row.user_id));
+  for (const row of rows ?? []) {
+    const person = people.get(row.user_id);
+    if (person) bySite.set(row.site_slug, [...(bySite.get(row.site_slug) ?? []), person]);
+  }
   return bySite;
 }
 
 /**
- * Give a site a new admin, or none (`userId` null). A site has one admin and an
- * admin runs one site, so the admin being replaced goes back to student — an
- * admin with no site has nothing to run. A super admin can't be picked: making
- * them an admin would quietly take away their platform-wide access.
+ * Add an admin to a site, or take one off it. A site may have several admins
+ * and an admin runs one site, so an added admin leaves any site they ran, and a
+ * removed admin goes back to student — an admin with no site has nothing to
+ * run. A super admin can't be added: it would quietly take away their
+ * platform-wide access.
  */
 export async function setSiteAdmin(input: {
   actorUserId: string;
   siteSlug: string;
-  userId: string | null;
+  userId: string;
+  action: "add" | "remove";
 }) {
   const supabase = createSupabaseAdminClient();
-  const { data: holder, error } = await supabase
-    .from("landing_site_admins")
-    .select("user_id")
-    .eq("site_slug", input.siteSlug)
+  const { data: profile, error: profileError } = await supabase
+    .from("student_profiles")
+    .select("role")
+    .eq("user_id", input.userId)
     .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (holder?.user_id === input.userId) return;
+  if (profileError) throw new Error(profileError.message);
 
-  if (input.userId) {
-    const { data: profile, error: profileError } = await supabase
-      .from("student_profiles")
-      .select("role")
-      .eq("user_id", input.userId)
-      .maybeSingle();
-    if (profileError) throw new Error(profileError.message);
+  if (input.action === "add") {
     if (profile?.role === "super_admin")
       throw new AdminRoleError("A super admin already sees every site. Pick someone else.", 409);
-  }
-
-  if (holder) {
-    // The trigger frees the site when the role changes; the delete makes that
-    // independent of the trigger having been applied.
-    await updateAdminUserRole({
-      actorUserId: input.actorUserId,
-      userId: holder.user_id,
-      role: "student",
-    });
-    const { error: freeError } = await supabase
-      .from("landing_site_admins")
-      .delete()
-      .eq("site_slug", input.siteSlug);
-    if (freeError) throw new Error(freeError.message);
-  }
-  if (input.userId)
     await updateAdminUserRole({
       actorUserId: input.actorUserId,
       userId: input.userId,
       role: "admin",
       siteSlug: input.siteSlug,
     });
+    return;
+  }
+
+  const { data: held, error } = await supabase
+    .from("landing_site_admins")
+    .select("user_id")
+    .eq("site_slug", input.siteSlug)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!held) return;
+  // The trigger frees the site when the role changes; the delete makes that
+  // independent of the trigger having been applied.
+  if (profile?.role === "admin")
+    await updateAdminUserRole({ actorUserId: input.actorUserId, userId: input.userId, role: "student" });
+  const { error: freeError } = await supabase
+    .from("landing_site_admins")
+    .delete()
+    .eq("site_slug", input.siteSlug)
+    .eq("user_id", input.userId);
+  if (freeError) throw new Error(freeError.message);
 }
 
-/** Every subdomain site with the admin who runs it, for the super admin's picker. */
+/** Every subdomain site, for the super admin's site picker. */
 export async function listSiteAdminChoices() {
-  const supabase = createSupabaseAdminClient();
-  const [{ data: sites, error }, { data: admins, error: adminError }] = await Promise.all([
-    supabase.from("landing_sites").select("slug,name").order("name"),
-    supabase.from("landing_site_admins").select("site_slug,user_id"),
-  ]);
+  const { data: sites, error } = await createSupabaseAdminClient()
+    .from("landing_sites")
+    .select("slug,name")
+    .order("name");
   if (error) throw new Error(error.message);
-  if (adminError) throw new Error(adminError.message);
-  const adminBySite = new Map((admins ?? []).map((row) => [row.site_slug, row.user_id as string]));
-  return (sites ?? []).map((site) => ({
-    slug: site.slug as string,
-    name: site.name as string,
-    adminUserId: adminBySite.get(site.slug) ?? null,
-  }));
+  return (sites ?? []).map((site) => ({ slug: site.slug as string, name: site.name as string }));
 }
 
 export async function adjustAdminUserCredits(input: {

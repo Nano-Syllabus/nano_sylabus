@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminBillingFrame, AdminPageHeader } from "@/components/admin-billing-frame";
 import { AdminSitesList } from "@/components/admin-sites-list";
 import { assertAdminRequest } from "@/lib/admin-access";
-import { listLandingSites } from "@/lib/data/landing-sites";
+import { listCommunityChoices, listLandingSites, type CommunityChoice } from "@/lib/data/landing-sites";
 import { listSiteAdmins, type SiteAdmin } from "@/lib/data/admin-users";
 import { rootDomain } from "@/lib/landing-site-host";
 
@@ -22,12 +22,24 @@ export default async function AdminSitesPage() {
   }
 
   let sites: Awaited<ReturnType<typeof listLandingSites>> | null = null;
-  let admins: Record<string, SiteAdmin> = {};
+  let admins: Record<string, SiteAdmin[]> = {};
+  let faculties: CommunityChoice[] = [];
   let loadError: string | null = null;
   try {
-    const [loaded, adminBySite] = await Promise.all([listLandingSites(), listSiteAdmins()]);
+    const [loaded, adminBySite, choices] = await Promise.all([
+      listLandingSites(),
+      listSiteAdmins(),
+      listCommunityChoices(),
+    ]);
     sites = loaded;
-    admins = Object.fromEntries(adminBySite);
+    faculties = choices;
+    // Managers' emails are for super admins only (user, 2026-10-08).
+    admins = Object.fromEntries(
+      [...adminBySite].map(([slug, list]) => [
+        slug,
+        access.role === "super_admin" ? list : list.map((admin) => ({ ...admin, email: "" })),
+      ]),
+    );
   } catch (error) {
     console.error("[admin/sites]", error);
     loadError =
@@ -48,6 +60,7 @@ export default async function AdminSitesPage() {
         <AdminSitesList
           initialSites={sites ?? []}
           initialAdmins={admins}
+          faculties={faculties}
           canAssignAdmins={access.role === "super_admin"}
           viewerUserId={access.userId}
           rootDomain={rootDomain()}

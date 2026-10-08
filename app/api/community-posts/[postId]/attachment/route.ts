@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { contentDisposition } from "@/lib/http/content-disposition";
 import { communityStorageError } from "@/lib/data/communities";
 import { getCommunityPostAttachment } from "@/lib/data/community-subjects";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -8,10 +9,6 @@ import { getVerifiedUser } from "@/lib/supabase/verified-user";
 type RouteContext = { params: Promise<{ postId: string }> };
 
 export const dynamic = "force-dynamic";
-
-function safeFileName(value: string) {
-  return value.replace(/["\\\r\n]/g, "_").slice(0, 180) || "community-resource";
-}
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
@@ -32,7 +29,7 @@ export async function GET(_request: Request, context: RouteContext) {
     return new NextResponse(new Uint8Array(await download.data.arrayBuffer()), {
       headers: {
         "Content-Type": attachment.mimeType || download.data.type || "application/octet-stream",
-        "Content-Disposition": `inline; filename="${safeFileName(attachment.name)}"`,
+        "Content-Disposition": contentDisposition("inline", attachment.name, "community-resource"),
         "Cache-Control": "private, max-age=300",
         "X-Content-Type-Options": "nosniff",
       },

@@ -71,6 +71,20 @@ function errorResponse(error: unknown) {
     );
   }
 
+  // The creator's indexing key allows about 60 calls a minute. Say so in plain
+  // words, with how long to wait, so the dialog can pause and retry by itself.
+  if (error instanceof TeacherApiError && error.status === 429) {
+    const wait = Math.min(Math.max(Math.ceil(error.retryAfterSeconds || 20), 5), 60);
+    return NextResponse.json(
+      {
+        error: `Too many uploads in one minute — the indexing server takes about 60 requests a minute per creator. Wait ${wait} seconds and try again, or upload around 10 files at a time.`,
+        code: "rate_limited",
+        retryAfterSeconds: wait,
+      },
+      { status: 429, headers: { "Retry-After": String(wait) } },
+    );
+  }
+
   console.error("Upload route error:", error);
   const status =
     error instanceof UpstreamUploadError

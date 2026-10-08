@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { contentDisposition } from "@/lib/http/content-disposition";
 import { getTeacherProfile } from "@/app/teachers/actions";
 import {
   fetchTeacherDocumentRaw,
@@ -109,7 +110,7 @@ export async function GET(_request: Request, context: RouteContext) {
       return new NextResponse(new Uint8Array(body), {
         headers: {
           "Content-Type": mirror.mime_type || download.data.type || "application/octet-stream",
-          "Content-Disposition": `inline; filename="${String(mirror.original_name || "file").replace(/"/g, "")}"`,
+          "Content-Disposition": contentDisposition("inline", String(mirror.original_name || "file")),
           "Cache-Control": "private, max-age=300",
         },
       });
@@ -121,7 +122,7 @@ export async function GET(_request: Request, context: RouteContext) {
     return new NextResponse(new Uint8Array(raw.body), {
       headers: {
         "Content-Type": raw.contentType,
-        "Content-Disposition": `inline; filename="${name.replace(/"/g, "")}"`,
+        "Content-Disposition": contentDisposition("inline", name),
         "Cache-Control": "private, max-age=300",
       },
     });

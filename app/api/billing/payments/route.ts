@@ -11,7 +11,11 @@ export const runtime = "nodejs";
 const paymentFieldsSchema = z.object({
   invoiceId: z.string().uuid(),
   mobileUploadSessionId: z.string().uuid().optional(),
+  /** The invoice ID the student says they wrote in the payment remarks. */
+  remarkCode: z.string().trim().max(64).optional(),
 });
+
+const normalizeInvoiceCode = (value: string) => value.toUpperCase().replace(/[\s-]+/g, "");
 
 function authenticatedPayerName(user: {
   email?: string | null;
@@ -49,6 +53,7 @@ export async function POST(request: Request) {
     const parsed = paymentFieldsSchema.safeParse({
       invoiceId: formData.get("invoiceId"),
       mobileUploadSessionId: formData.get("mobileUploadSessionId") || undefined,
+      remarkCode: formData.get("remarkCode") || undefined,
     });
 
     if (!parsed.success) {
@@ -71,6 +76,15 @@ export async function POST(request: Request) {
     }
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
+    }
+    if (
+      parsed.data.remarkCode !== undefined &&
+      normalizeInvoiceCode(parsed.data.remarkCode) !== normalizeInvoiceCode(invoice.invoice_code)
+    ) {
+      return NextResponse.json(
+        { error: `The remark must be your invoice ID: ${invoice.invoice_code}.` },
+        { status: 400 },
+      );
     }
     if (invoice.status !== "pending_payment" && invoice.status !== "payment_submitted") {
       return NextResponse.json(

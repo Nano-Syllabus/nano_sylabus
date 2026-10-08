@@ -2158,14 +2158,14 @@ export function ChatPageClient({
 
   const handleWorkspaceMaterialOpen = useCallback(
     (material: LibraryNanoAiMaterial, nextSubject: LibraryNanoAiSubject) => {
-      if (shell.upgradeHref) { router.push(shell.upgradeHref); return; }
+      // Free students may read the files; only NanoAI waits for a plan.
       handleLibrarySubjectSelect({ name: nextSubject.name, slug: nextSubject.slug });
       setWorkspaceSubject(nextSubject);
       setWorkspaceMaterial(material);
       setLibraryOpen(false);
       setLibraryShowAllSubjects(false);
     },
-    [handleLibrarySubjectSelect, router, shell.upgradeHref],
+    [handleLibrarySubjectSelect],
   );
 
   function clampNanoAiPanelWidth(width: number) {
@@ -2572,6 +2572,35 @@ export function ChatPageClient({
   };
 
   if (shell.upgradeHref && !isFloating) {
+    // A free exam student reads the file full width, with no NanoAI panel
+    // beside it — the AI features are the part that needs Plus or Pro.
+    if (workspaceMaterial && workspaceSubject) {
+      return (
+        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-bg-primary">
+          <LibraryDocumentViewer
+            material={workspaceMaterial}
+            subject={workspaceSubject}
+            onBack={() => {
+              setWorkspaceMaterial(null);
+              const url = new URL(window.location.href);
+              url.searchParams.delete("document");
+              window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+            }}
+          />
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm">
+            <span className="text-text-secondary">
+              Ask NanoAI about this file with Plus or Pro.
+            </span>
+            <Link
+              href={shell.upgradeHref}
+              className="inline-flex min-h-10 items-center rounded-lg bg-blue-600 px-4 font-medium text-white hover:bg-blue-700"
+            >
+              Upgrade
+            </Link>
+          </div>
+        </div>
+      );
+    }
     return (
       <LibraryNanoAiWorkspace
         community={libraryCommunity}

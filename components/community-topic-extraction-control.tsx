@@ -16,10 +16,14 @@ export function CommunityTopicExtractionControl({
   communitySlug,
   subject,
   onExtracted,
+  blockedReason = "",
 }: {
   communitySlug: string;
   subject: ExtractionSubject;
   onExtracted?: () => Promise<unknown> | void;
+  /** Set when the subject is missing a syllabus or question bank: publishing
+   *  would give students nothing to be examined on, so the button is off. */
+  blockedReason?: string;
 }) {
   const router = useRouter();
   const inFlight = useRef(false);
@@ -87,12 +91,13 @@ export function CommunityTopicExtractionControl({
       <button
         type="button"
         onClick={() => void extract()}
-        disabled={busy}
+        disabled={busy || Boolean(blockedReason)}
         aria-busy={busy}
+        title={blockedReason || undefined}
         aria-label={`${published ? "Refresh published" : "Publish"} subject ${subject.name}`}
         // Publish is the row's primary action, in the app's blue; Refresh on an
         // already published subject is secondary, outlined like Open.
-        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:cursor-wait disabled:opacity-60 ${
+        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:opacity-60 ${busy ? "disabled:cursor-wait" : "disabled:cursor-not-allowed"} ${
           published
             ? "border border-border bg-bg-primary text-text-primary hover:bg-bg-secondary"
             : "bg-blue-600 text-white hover:bg-blue-700"

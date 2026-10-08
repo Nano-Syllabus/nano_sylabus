@@ -13,8 +13,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { AppShellContext } from "@/components/app-shell-context";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { CommunityDetail, CommunitySubject, CommunityTerm } from "@/lib/communities";
 import { communityTermLayout, communityTermName, communityTermNoun } from "@/lib/communities";
 import type { CommunitySubjectExplorerInsight } from "@/lib/data/community-subject-explorer";
@@ -334,7 +333,6 @@ export function LibraryNanoAiWorkspace({
   /** Plus and Pro start any topic; the start-topic route checks again. */
   unlockAllTopics?: boolean;
 }) {
-  const { upgradeHref } = useContext(AppShellContext);
   const orderedTerms = useMemo(
     () => [...(community?.terms ?? [])].sort((a, b) => a.position - b.position),
     [community?.terms],
@@ -786,7 +784,7 @@ export function LibraryNanoAiWorkspace({
                                 : "bg-bg-secondary text-text-muted",
                             )}
                           >
-                            {upgradeHref ? "Upgrade" : canOpen ? "Available" : "Locked"}
+                            {canOpen ? "Available" : "Locked"}
                           </span>
                           {!canOpen ? (
                             <LockKeyhole

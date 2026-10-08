@@ -5,12 +5,15 @@ import { AdminRoleError, listSiteAdmins, setSiteAdmin } from "@/lib/data/admin-u
 
 type Context = { params: Promise<{ slug: string }> };
 
-const bodySchema = z.object({ userId: z.string().uuid().nullable() });
+const bodySchema = z.object({
+  userId: z.string().uuid(),
+  action: z.enum(["add", "remove"]),
+});
 
 /**
- * Set who runs this subdomain site, or nobody (`userId: null`). Super admins
- * only: it changes a person's access. The admin being replaced goes back to
- * student (see `setSiteAdmin`).
+ * Add an admin to this subdomain site, or take one off. Super admins only: it
+ * changes a person's access. A removed admin goes back to student (see
+ * `setSiteAdmin`).
  */
 export async function PUT(request: Request, { params }: Context) {
   const access = await assertSuperAdminRequest();
@@ -22,8 +25,8 @@ export async function PUT(request: Request, { params }: Context) {
     const { slug } = await params;
     if (parsed.data.userId === access.userId)
       return NextResponse.json({ error: "You can’t change your own access." }, { status: 409 });
-    await setSiteAdmin({ actorUserId: access.userId, siteSlug: slug, userId: parsed.data.userId });
-    return NextResponse.json({ admin: (await listSiteAdmins()).get(slug) ?? null });
+    await setSiteAdmin({ actorUserId: access.userId, siteSlug: slug, ...parsed.data });
+    return NextResponse.json({ admins: (await listSiteAdmins()).get(slug) ?? [] });
   } catch (error) {
     if (error instanceof AdminRoleError)
       return NextResponse.json({ error: error.message }, { status: error.status });

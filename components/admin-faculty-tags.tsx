@@ -43,7 +43,7 @@ export function FacultyTags({
   );
 }
 
-type SiteChoice = { slug: string; name: string; adminUserId: string | null };
+type SiteChoice = { slug: string; name: string };
 
 /** The subdomain an admin runs, in the table: "All" for a super admin, "—" for others. */
 export function SiteTag({ user }: { user: Pick<AdminUserSummary, "role" | "site"> }) {
@@ -60,8 +60,8 @@ export function SiteTag({ user }: { user: Pick<AdminUserSummary, "role" | "site"
 }
 
 /**
- * A super admin picks the one subdomain an admin runs. A site already run by
- * someone else can't be picked: an admin and a site are one-to-one.
+ * A super admin picks the one subdomain an admin runs. A site may have several
+ * admins, so every site can be picked.
  */
 export function SubdomainPicker({
   userId,
@@ -111,14 +111,11 @@ export function SubdomainPicker({
         className="mt-3 min-h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-600/40 disabled:opacity-50"
       >
         <option value="">{sites ? "Choose a subdomain…" : "Loading subdomains…"}</option>
-        {(sites ?? []).map((site) => {
-          const taken = Boolean(site.adminUserId && site.adminUserId !== userId);
-          return (
-            <option key={site.slug} value={site.slug} disabled={taken}>
-              {site.name} ({site.slug}){taken ? " — has an admin" : ""}
-            </option>
-          );
-        })}
+        {(sites ?? []).map((site) => (
+          <option key={site.slug} value={site.slug}>
+            {site.name} ({site.slug})
+          </option>
+        ))}
       </select>
       {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
       {faculties ? (

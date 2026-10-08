@@ -542,22 +542,54 @@ export function normalizeSubmission(value: unknown): ExamSubmission | null {
   };
 }
 
-export async function uploadTeacherDocument(file: File, path: string) {
+/** How often one file waits out the indexing server's per-minute limit before giving up. */
+const UPLOAD_RATE_LIMIT_RETRIES = 4;
+
+/**
+ * One step of an upload, waiting out a 429.
+ *
+ * The indexing server allows a creator's key about 60 calls a minute, and a
+ * folder of PDFs (plus the page's own polling) can spend that. The staged bytes
+ * are kept, so pausing for the `Retry-After` and asking again is safe, and far
+ * kinder than reporting seven files as failed.
+ */
+async function postUploadStep(
+  body: Record<string, unknown>,
+  onWait?: (seconds: number) => void,
+) {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch("/api/teacher/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (response.status !== 429 || attempt >= UPLOAD_RATE_LIMIT_RETRIES) {
+      return responsePayload(response);
+    }
+    const header = Number(response.headers.get("Retry-After"));
+    const seconds = Number.isFinite(header) && header > 0 ? Math.min(header, 60) : 20;
+    onWait?.(seconds);
+    await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+  }
+}
+
+export async function uploadTeacherDocument(
+  file: File,
+  path: string,
+  onWait?: (seconds: number) => void,
+) {
   const sizeError = teacherUploadSizeError(file.size);
   if (sizeError) throw new Error(sizeError);
 
-  const prepared = await responsePayload(
-    await fetch("/api/teacher/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        action: "prepare",
-        path,
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        sizeBytes: file.size,
-      }),
-    }),
+  const prepared = await postUploadStep(
+    {
+      action: "prepare",
+      path,
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      sizeBytes: file.size,
+    },
+    onWait,
   );
   const bucket = text(prepared.bucket);
   const storagePath = text(prepared.storagePath);
@@ -568,19 +600,16 @@ export async function uploadTeacherDocument(file: File, path: string) {
 
   await uploadVpsFile(uploadUrl, file, file.type || "application/octet-stream");
 
-  return responsePayload(
-    await fetch("/api/teacher/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        action: "complete",
-        path,
-        storagePath,
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        sizeBytes: file.size,
-      }),
-    }),
+  return postUploadStep(
+    {
+      action: "complete",
+      path,
+      storagePath,
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      sizeBytes: file.size,
+    },
+    onWait,
   );
 }
 
