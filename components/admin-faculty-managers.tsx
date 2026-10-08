@@ -223,13 +223,14 @@ function ManageFacultyDialog({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
-  const [picking, setPicking] = useState<"creator" | "admin" | null>(null);
+  const [picking, setPicking] = useState<"creator" | "admin" | "ambassador" | null>(null);
   const [siteSlug, setSiteSlug] = useState(faculty.sites[0]?.slug ?? "");
   const [query, setQuery] = useState("");
   const results = usePeopleSearch(picking ? query : "");
 
   const creator = faculty.managers.find((manager) => manager.role === "creator") ?? null;
   const admins = faculty.managers.filter((manager) => manager.role === "admin");
+  const ambassadors = faculty.managers.filter((manager) => manager.role === "ambassador");
 
   async function run(key: string, action: () => Promise<void>) {
     setBusy(key);
@@ -258,7 +259,16 @@ function ManageFacultyDialog({
     );
 
   const pick = (user: AdminUserSummary) =>
-    picking === "creator"
+    picking === "ambassador"
+      ? run("ambassador", () =>
+          send(
+            `/api/admin/faculties/${faculty.slug}/ambassadors`,
+            "PUT",
+            { userId: user.userId, action: "add" },
+            "The ambassador wasn’t added.",
+          ),
+        )
+      : picking === "creator"
       ? run("creator", () =>
           send(
             `/api/admin/faculties/${faculty.slug}/creator`,
@@ -277,7 +287,11 @@ function ManageFacultyDialog({
         );
 
   const blocked = (user: AdminUserSummary) =>
-    picking === "creator"
+    picking === "ambassador"
+      ? ambassadors.some((ambassador) => ambassador.userId === user.userId)
+        ? "Already ambassador"
+        : null
+      : picking === "creator"
       ? user.userId === creator?.userId
         ? "Creator"
         : null
@@ -439,6 +453,64 @@ function ManageFacultyDialog({
           </p>
         )}
 
+        <h3 className="mt-5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Faculty ambassadors
+        </h3>
+        <ul className="mt-2 divide-y divide-border rounded-lg border border-border">
+          {ambassadors.length ? (
+            ambassadors.map((ambassador) => {
+              const key = `amb-rm:${ambassador.userId}`;
+              return (
+                <li key={ambassador.userId} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{ambassador.fullName}</div>
+                    <div className="truncate text-xs text-muted-foreground">{ambassador.email}</div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={Boolean(busy)}
+                    onClick={() =>
+                      confirm === key
+                        ? void run(key, () =>
+                            send(
+                              `/api/admin/faculties/${faculty.slug}/ambassadors`,
+                              "PUT",
+                              { userId: ambassador.userId, action: "remove" },
+                              "The ambassador wasn’t removed.",
+                            ),
+                          )
+                        : setConfirm(key)
+                    }
+                    className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-500/10 disabled:opacity-50"
+                  >
+                    {confirm === key ? "Confirm remove" : "Remove"}
+                  </button>
+                </li>
+              );
+            })
+          ) : (
+            <li className="px-3 py-2.5 text-sm text-muted-foreground">No ambassador yet.</li>
+          )}
+        </ul>
+        <div className="mt-2">
+          <button
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={() => {
+              setPicking(picking === "ambassador" ? null : "ambassador");
+              setQuery("");
+            }}
+            className="rounded-md px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-600/10 disabled:opacity-50 dark:text-blue-300"
+          >
+            + Add ambassador
+          </button>
+          {picking === "ambassador" ? (
+            <span className="ml-1 text-xs text-muted-foreground">
+              They can also open the Student Ambassador workspace.
+            </span>
+          ) : null}
+        </div>
+
         {picking ? (
           <div className="mt-4">
             <label className="relative block">
@@ -453,7 +525,11 @@ function ManageFacultyDialog({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={
-                  picking === "creator" ? "New creator — name or email" : "New admin — name or email"
+                  picking === "creator"
+                    ? "New creator — name or email"
+                    : picking === "ambassador"
+                      ? "New ambassador — name or email"
+                      : "New admin — name or email"
                 }
                 className={`${inputClass} pl-9`}
               />
@@ -480,7 +556,14 @@ function ManageFacultyDialog({
                             </span>
                           </span>
                           <span className="shrink-0 text-xs text-muted-foreground">
-                            {reason ?? (busy ? "Saving…" : picking === "creator" ? "Make creator" : "Make admin")}
+                            {reason ??
+                              (busy
+                                ? "Saving…"
+                                : picking === "creator"
+                                  ? "Make creator"
+                                  : picking === "ambassador"
+                                    ? "Add ambassador"
+                                    : "Make admin")}
                           </span>
                         </button>
                       </li>
@@ -562,12 +645,18 @@ function ManagerRow({ manager }: { manager: FacultyManager }) {
           className={
             manager.role === "admin"
               ? "rounded-full bg-blue-600/10 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300"
-              : tagClass
+              : manager.role === "ambassador"
+                ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"
+                : tagClass
           }
         >
-          {manager.role === "admin" ? `Admin · ${manager.site?.name}` : "Creator"}
+          {manager.role === "admin"
+            ? `Admin · ${manager.site?.name}`
+            : manager.role === "ambassador"
+              ? "Faculty ambassador"
+              : "Creator"}
         </span>
-        {manager.ambassador ? (
+        {manager.ambassador && manager.role !== "ambassador" ? (
           <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
             Ambassador
           </span>

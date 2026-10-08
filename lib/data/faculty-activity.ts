@@ -13,6 +13,8 @@ export type FacultyActivityAction =
   | "faculty.created"
   | "faculty.updated"
   | "faculty.owner_changed"
+  | "faculty.ambassador_added"
+  | "faculty.ambassador_removed"
   | "faculty.deleted"
   | "subject.added"
   | "subject.updated"

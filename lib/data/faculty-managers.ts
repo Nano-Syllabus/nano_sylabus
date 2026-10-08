@@ -4,14 +4,18 @@ import { ensureCommunityLearningSpace } from "@/lib/community-learning";
 import { CommunityError, PUBLIC_COMMUNITIES_MEMO } from "@/lib/data/communities";
 import { invalidateMemo } from "@/lib/http/memo";
 import { invalidateStudentCourseAccess } from "@/lib/student-courses";
+import { addStudentAmbassador } from "@/lib/data/student-ambassadors";
 
 export type FacultyManager = {
   userId: string;
   fullName: string;
   /** Empty unless a super admin is looking (user, 2026-10-08). */
   email: string;
-  /** "admin" runs a subdomain that lists the faculty; "creator" made the faculty. */
-  role: "admin" | "creator";
+  /**
+   * "admin" runs a subdomain that lists the faculty; "creator" made the faculty;
+   * "ambassador" is one of the faculty's student ambassadors (one or more).
+   */
+  role: "admin" | "creator" | "ambassador";
   /** The subdomain an admin manages it through. */
   site: { slug: string; name: string } | null;
   ambassador: boolean;
@@ -38,16 +42,18 @@ export async function listFacultyManagement(options: {
   onlyIds?: string[];
 }): Promise<FacultyManagement[]> {
   const admin = createSupabaseAdminClient();
-  const [faculties, links, siteAdmins, sites, ambassadors] = await Promise.all([
+  const [faculties, links, siteAdmins, sites, ambassadors, facultyAmbassadors] = await Promise.all([
     admin.from("communities").select("id,slug,name,status,creator_id").order("name"),
     admin.from("landing_exam_faculties").select("exam_slug,community_id").eq("is_active", true),
     admin.from("landing_site_admins").select("site_slug,user_id").order("assigned_at"),
     admin.from("landing_sites").select("slug,name"),
     admin.from("student_ambassadors").select("email"),
+    admin.from("faculty_ambassadors").select("community_id,user_id").order("added_at"),
   ]);
   for (const result of [faculties, links, sites]) if (result.error) throw result.error;
-  // These two tables may lag a migration; read them as empty rather than fail.
+  // These tables may lag a migration; read them as empty rather than fail.
   const adminRows = siteAdmins.error ? [] : (siteAdmins.data ?? []);
+  const facultyAmbassadorRows = facultyAmbassadors.error ? [] : (facultyAmbassadors.data ?? []);
   const ambassadorEmails = new Set(
     (ambassadors.error ? [] : (ambassadors.data ?? [])).map((row) => row.email.toLowerCase()),
   );
@@ -69,6 +75,7 @@ export async function listFacultyManagement(options: {
   const people = await describeUsers([
     ...adminRows.map((row) => row.user_id),
     ...rows.map((row) => row.creator_id).filter(Boolean),
+    ...facultyAmbassadorRows.map((row) => row.user_id),
   ]);
   const memberCounts = await Promise.all(
     rows.map((row) =>
@@ -102,6 +109,9 @@ export async function listFacultyManagement(options: {
       }));
     if (row.creator_id && !managers.some((manager) => manager.userId === row.creator_id))
       managers.push({ ...person(row.creator_id), role: "creator", site: null });
+    for (const ambassadorRow of facultyAmbassadorRows)
+      if (ambassadorRow.community_id === row.id)
+        managers.push({ ...person(ambassadorRow.user_id), role: "ambassador", site: null, ambassador: true });
     return {
       id: row.id,
       slug: row.slug,
@@ -342,4 +352,53 @@ export async function setFacultyCreator(facultySlug: string, userId: string) {
   } catch (provisionError) {
     console.error("[faculty-managers] provisioning the new creator failed", provisionError);
   }
+}
+
+/**
+ * Make someone one of a faculty's ambassadors (a faculty may have several), or
+ * take them off it. Adding also puts their email on the global ambassador list
+ * so they can open the Student Ambassador workspace; removing leaves that list
+ * alone (they may be an ambassador elsewhere — the checkbox clears it).
+ */
+export async function setFacultyAmbassador(input: {
+  facultySlug: string;
+  userId: string;
+  actorUserId: string;
+  action: "add" | "remove";
+}) {
+  const admin = createSupabaseAdminClient();
+  const { data: faculty, error } = await admin
+    .from("communities")
+    .select("id,name")
+    .eq("slug", input.facultySlug)
+    .maybeSingle();
+  if (error) throw error;
+  if (!faculty) throw new CommunityError("Faculty not found.", 404);
+
+  if (input.action === "remove") {
+    const removed = await admin
+      .from("faculty_ambassadors")
+      .delete()
+      .eq("community_id", faculty.id)
+      .eq("user_id", input.userId);
+    if (removed.error) throw removed.error;
+    return { facultyId: String(faculty.id), facultyName: String(faculty.name) };
+  }
+
+  const person = (await describeUsers([input.userId])).get(input.userId);
+  if (!person?.email) throw new CommunityError("That person has no account.", 404);
+  const added = await admin.from("faculty_ambassadors").upsert(
+    { community_id: faculty.id, user_id: input.userId, added_by: input.actorUserId },
+    { onConflict: "community_id,user_id", ignoreDuplicates: true },
+  );
+  if (added.error) {
+    if (added.error.code === "42P01" || added.error.code === "PGRST205")
+      throw new CommunityError(
+        "Faculty ambassadors need the Supabase migration 20261008160000_faculty_ambassadors.sql.",
+        503,
+      );
+    throw added.error;
+  }
+  await addStudentAmbassador(person.email, input.actorUserId);
+  return { facultyId: String(faculty.id), facultyName: String(faculty.name), person };
 }

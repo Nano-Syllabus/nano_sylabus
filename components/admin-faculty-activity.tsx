@@ -25,7 +25,12 @@ const CATEGORIES: Array<{ id: Category; label: string }> = [
 
 function categoryOf(action: string): Exclude<Category, "all"> {
   if (action.startsWith("subject.")) return "subjects";
-  if (action === "site.admin_added" || action === "site.admin_removed" || action === "faculty.owner_changed")
+  if (
+    action === "site.admin_added" ||
+    action === "site.admin_removed" ||
+    action === "faculty.owner_changed" ||
+    action.startsWith("faculty.ambassador_")
+  )
     return "access";
   if (action.startsWith("student.")) return "students";
   return "settings";
