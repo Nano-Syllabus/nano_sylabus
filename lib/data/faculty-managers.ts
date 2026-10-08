@@ -1,5 +1,9 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { describeUsers } from "@/lib/data/admin-users";
+import { ensureCommunityLearningSpace } from "@/lib/community-learning";
+import { CommunityError, PUBLIC_COMMUNITIES_MEMO } from "@/lib/data/communities";
+import { invalidateMemo } from "@/lib/http/memo";
+import { invalidateStudentCourseAccess } from "@/lib/student-courses";
 
 export type FacultyManager = {
   userId: string;
@@ -259,4 +263,83 @@ export async function getFacultyOverview(
       .map(([userId, stats]) => ({ ...person(userId), ...stats }))
       .sort((a, b) => b.subjectsAdded - a.subjectsAdded || b.lastAt.localeCompare(a.lastAt)),
   };
+}
+
+/**
+ * A super admin hands a faculty to a new creator directly — no emailed accept
+ * link (that is the creator's own transfer, lib/data/community-ownership-transfer.ts).
+ * Mirrors `accept_community_ownership_transfer`: the new creator gets a creator
+ * membership; the old one stays on as a member, or leaves if they already study
+ * in another faculty (one active member faculty per student).
+ */
+export async function setFacultyCreator(facultySlug: string, userId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data: faculty, error } = await admin
+    .from("communities")
+    .select("id,creator_id")
+    .eq("slug", facultySlug)
+    .maybeSingle();
+  if (error) throw error;
+  if (!faculty) throw new CommunityError("Faculty not found.", 404);
+  const previous = faculty.creator_id ? String(faculty.creator_id) : null;
+  if (previous === userId) return;
+
+  const { data: profile, error: profileError } = await admin
+    .from("student_profiles")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  if (!profile) throw new CommunityError("That person has no account.", 404);
+
+  const moved = await admin
+    .from("communities")
+    .update({ creator_id: userId, updated_at: new Date().toISOString() })
+    .eq("id", faculty.id);
+  if (moved.error) throw moved.error;
+
+  const now = new Date().toISOString();
+  const joined = await admin.from("community_memberships").upsert(
+    {
+      community_id: faculty.id,
+      user_id: userId,
+      role: "creator",
+      status: "active",
+      left_at: null,
+      updated_at: now,
+    },
+    { onConflict: "community_id,user_id" },
+  );
+  if (joined.error) throw joined.error;
+
+  if (previous) {
+    const { data: elsewhere } = await admin
+      .from("community_memberships")
+      .select("community_id")
+      .eq("user_id", previous)
+      .eq("role", "member")
+      .eq("status", "active")
+      .neq("community_id", faculty.id)
+      .limit(1);
+    const demoted = await admin
+      .from("community_memberships")
+      .update(
+        elsewhere?.length
+          ? { role: "member", status: "left", left_at: now, updated_at: now }
+          : { role: "member", updated_at: now },
+      )
+      .eq("community_id", faculty.id)
+      .eq("user_id", previous);
+    if (demoted.error) console.error("[faculty-managers] old creator kept the creator row", demoted.error);
+  }
+
+  invalidateMemo(PUBLIC_COMMUNITIES_MEMO);
+  invalidateStudentCourseAccess(userId);
+  // The new creator's teacher collection and study course, as creating a faculty
+  // does. Best effort: ownership has moved, and the workspace provisions on visit.
+  try {
+    await ensureCommunityLearningSpace(admin, String(faculty.id));
+  } catch (provisionError) {
+    console.error("[faculty-managers] provisioning the new creator failed", provisionError);
+  }
 }

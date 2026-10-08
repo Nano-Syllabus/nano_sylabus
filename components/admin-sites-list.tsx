@@ -953,7 +953,9 @@ function CreateSiteDialog({
             maxLength={80}
             className={inputClass}
           />
-          <span className="text-xs font-normal text-muted-foreground">Only admins see this.</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            Only admins see this. You can rename it later from Edit text.
+          </span>
         </label>
 
         <label className="mt-4 grid gap-1.5 text-sm font-medium">

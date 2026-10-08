@@ -3,13 +3,21 @@ import { AppShell } from "@/components/app-shell";
 import { QueryIdentity } from "@/components/query-identity";
 import { TabWarmer } from "@/components/tab-warmer";
 import { getSessionUser, requireOnboardedUser } from "@/lib/auth";
-import { getStudentExamEnrollment, listEnrollmentExams } from "@/lib/data/exam-enrollment";
+import {
+  getEnrollmentExam,
+  getStudentExamEnrollment,
+  listEnrollmentExams,
+} from "@/lib/data/exam-enrollment";
 import { FacultySelectionGate } from "@/components/faculty-selection-dialog";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { MAIN_SITE_SLUG, siteAppOrigin, siteSlugFromHost } from "@/lib/landing-site-host";
 import { EXAM_INTENT_COOKIE, EXAM_SITE_COOKIE, readExamIntent } from "@/lib/exam-enrollment";
-import { hasFacultyMembership } from "@/lib/data/faculty-lock";
+import {
+  currentMemberFacultySlug,
+  getFacultySwitchAccess,
+  hasFacultyMembership,
+} from "@/lib/data/faculty-lock";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   // The faculty lookups need only the user id, which the session gives without a
@@ -44,6 +52,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     const protocol = requestHeaders.get("x-forwarded-proto") === "https" ? "https:" : "http:";
     redirect(`${siteAppOrigin(enrollment.examSlug, requestHeaders.get("host"), protocol)}/app/today`);
   }
+  // A super admin (or this site's admin) on a subdomain is never locked: they
+  // get a bar with the site's faculties to open any of them (user, 2026-10-08).
+  const platformAdmin = user.role === "admin" || user.role === "super_admin";
+  // A student switches freely within the exam they joined (only Upgrade nudges).
+  const [siteExam, switchAccess, currentFacultySlug] =
+    platformAdmin && hostSlug
+      ? await Promise.all([
+          getEnrollmentExam(hostSlug).catch(() => null),
+          getFacultySwitchAccess(user.id).catch(() => null),
+          currentMemberFacultySlug(user.id).catch(() => null),
+        ])
+      : enrollment
+        ? [await getEnrollmentExam(enrollment.examSlug).catch(() => null), null, enrollment.facultySlug]
+        : [null, null, null];
+  const pickerFaculties = siteExam?.faculties
+    ? siteExam.faculties.filter(
+        (faculty) =>
+          !platformAdmin ||
+          switchAccess === "all" ||
+          (Array.isArray(switchAccess) && switchAccess.some((own) => own.slug === faculty.slug)),
+      )
+    : [];
   // A student who already joined a faculty (exam enrollment or Browse) is never
   // asked to pick one again: the app simply opens the faculty they joined.
   const needsFaculty = examStudent && !member;
@@ -68,7 +98,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const upgradeHref = examStudent && examSlug && !user.hasPaidPlan ? "/app/billing" : null;
 
   return (
-    <AppShell user={user} title="Dashboard" faculty={enrollment} upgradeHref={upgradeHref}>
+    <AppShell
+      user={user}
+      title="Dashboard"
+      faculty={enrollment}
+      facultySwitch={
+        siteExam && pickerFaculties.length
+          ? {
+              siteName: siteExam.name,
+              faculties: pickerFaculties.map(({ slug, name }) => ({ slug, name })),
+              currentSlug: currentFacultySlug,
+              mode: platformAdmin ? "admin" : "student",
+              roleLabel: platformAdmin
+                ? user.role === "super_admin"
+                  ? "Super admin"
+                  : "Admin"
+                : undefined,
+            }
+          : null
+      }
+      upgradeHref={upgradeHref}
+    >
       <FacultySelectionGate
         exams={exams}
         initialExamSlug={hostExam?.slug ?? intent?.examSlug}

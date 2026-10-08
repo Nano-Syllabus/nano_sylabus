@@ -39,7 +39,7 @@ export default async function AdminFacultiesPage() {
             : "The faculties of your subdomain (and ones you created), who manages each, and every change made to them."
         }
       />
-      <AdminFacultyManagers faculties={faculties} showEmails={superAdmin} />
+      <AdminFacultyManagers faculties={faculties} showEmails={superAdmin} canEdit={superAdmin} />
       <div className="mt-6">
         <AdminFacultyActivity title="Recent changes across faculties" />
       </div>

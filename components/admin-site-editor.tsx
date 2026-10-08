@@ -92,7 +92,9 @@ export function AdminSiteEditor({
   const [site, setSite] = useState(initialSite);
   const [draft, setDraft] = useState<LandingContent>(initialSite.draft);
   const [saveState, setSaveState] = useState<SaveState>("saved");
-  const [busy, setBusy] = useState<"publish" | "status" | null>(null);
+  const [busy, setBusy] = useState<"publish" | "status" | "name" | null>(null);
+  // The site's name (set when it was created) is renamed in place from the header.
+  const [renaming, setRenaming] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [selection, setSelection] = useState<Selection>({ section: null, path: null });
   const [flashPath, setFlashPath] = useState<string | null>(null);
@@ -270,6 +272,33 @@ export function AdminSiteEditor({
     }
   }
 
+  async function saveName() {
+    const name = (renaming ?? "").trim();
+    if (!name || name === site.name) {
+      setRenaming(null);
+      return;
+    }
+    setBusy("name");
+    setNotice(null);
+    try {
+      const { site: saved } = await readJson(
+        await fetch(`/api/admin/sites/${site.slug}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }),
+      );
+      setSite(saved);
+      setRenaming(null);
+      setNotice({ tone: "ok", text: `Renamed to ${saved.name}.` });
+      router.refresh();
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Couldn’t rename the site." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function onSiteDeleted() {
     // Nothing left to autosave: the site is gone.
     lastSaved.current = JSON.stringify(draftRef.current);
@@ -304,7 +333,50 @@ export function AdminSiteEditor({
           <div className="min-w-0">
             <h1 className="truncate font-display text-xl font-semibold tracking-tight">{domain}</h1>
             <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-              <span>{site.name}</span>
+              {renaming !== null ? (
+                <span className="inline-flex items-center gap-1">
+                  <input
+                    autoFocus
+                    aria-label="Site name"
+                    value={renaming}
+                    maxLength={80}
+                    disabled={busy === "name"}
+                    onChange={(event) => setRenaming(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void saveName();
+                      if (event.key === "Escape") setRenaming(null);
+                    }}
+                    className="h-7 w-52 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-blue-600/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void saveName()}
+                    disabled={busy === "name"}
+                    className="h-7 rounded-md bg-blue-600 px-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {busy === "name" ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRenaming(null)}
+                    disabled={busy === "name"}
+                    className="h-7 rounded-md px-2 text-xs font-medium hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setRenaming(site.name)}
+                  title="Rename this site"
+                  className="inline-flex items-center gap-1 rounded px-1 -mx-1 hover:bg-muted hover:text-foreground"
+                >
+                  {site.name}
+                  <PencilLine size={12} aria-hidden="true" />
+                  <span className="sr-only">Rename</span>
+                </button>
+              )}
               <span aria-hidden="true">·</span>
               <span>{site.status === "live" ? "Live" : "Hidden"}</span>
               <span aria-hidden="true">·</span>

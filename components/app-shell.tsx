@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import type { AppUser } from "@/lib/types";
 import { AppShellContext } from "@/components/app-shell-context";
 import type { StudentExamEnrollment } from "@/lib/data/exam-enrollment";
+import { FacultySwitchBar, type FacultySwitch } from "@/components/faculty-switch-bar";
 
 /**
  * WHY THERE IS NO ROUTE-LOADING OVERLAY HERE ANY MORE
@@ -34,6 +35,7 @@ export function AppShell({
   user,
   children,
   faculty,
+  facultySwitch = null,
   upgradeHref = null,
 }: {
   user: AppUser;
@@ -42,6 +44,8 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
   faculty?: StudentExamEnrollment | null;
+  /** The exam site's faculties as a dropdown; replaces the plain faculty line. */
+  facultySwitch?: FacultySwitch | null;
   upgradeHref?: string | null;
 }) {
   const pathname = usePathname();
@@ -153,14 +157,13 @@ export function AppShell({
               </button>
             </div>
           ) : null}
-          {faculty ? (
+          {facultySwitch ? (
+            <FacultySwitchBar {...facultySwitch} />
+          ) : faculty ? (
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-bg-secondary px-5 py-2 text-xs text-text-secondary">
               <span>{faculty.examName}</span>
               <span aria-hidden="true">→</span>
               <span className="font-semibold text-text-primary">{faculty.facultyName}</span>
-              <span className="ml-auto rounded-full border border-border px-2 py-1">
-                Faculty locked
-              </span>
             </div>
           ) : null}
           {upgradeHref && !pathname.startsWith("/app/billing") ? (

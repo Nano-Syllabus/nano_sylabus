@@ -225,3 +225,24 @@ export const getStudentFacultyCourseId = cache(
     return data?.study_course_id ?? null;
   },
 );
+
+/**
+ * The faculty this person studies in as a member (their joined faculty), or
+ * null. Admins on a subdomain see it highlighted in the faculty picker.
+ */
+export async function currentMemberFacultySlug(userId: string): Promise<string | null> {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("community_memberships")
+    .select("communities!inner(slug)")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .eq("role", "member")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const community = (Array.isArray(data.communities)
+    ? data.communities[0]
+    : data.communities) as unknown as { slug: string };
+  return community.slug;
+}

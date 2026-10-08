@@ -24,7 +24,11 @@ vi.mock("@/lib/data/exam-enrollment", () => ({
   listEnrollmentExams: mocks.exams,
   getEnrollmentExam: mocks.exam,
 }));
-vi.mock("@/lib/data/faculty-lock", () => ({ hasFacultyMembership: mocks.member }));
+vi.mock("@/lib/data/faculty-lock", () => ({
+  hasFacultyMembership: mocks.member,
+  getFacultySwitchAccess: async () => "all",
+  currentMemberFacultySlug: async () => "bei",
+}));
 vi.mock("@/lib/data/billing", () => ({ hasActiveSubscription: mocks.paid }));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ host: mocks.host }),
@@ -32,6 +36,7 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => mocks.pathname,
+  useRouter: () => ({ refresh: () => {} }),
   redirect: vi.fn((to: string) => {
     throw new Error(`Unexpected redirect to ${to}`);
   }),
@@ -81,6 +86,40 @@ describe("a dashboard opens on the student's own subdomain", () => {
   it("sends a student on another exam's subdomain to their own", async () => {
     mocks.host = "ioe.localhost:3001";
     await expect(layout()).rejects.toThrow("license.localhost:3001/app/today");
+  });
+
+  it("gives a super admin on a subdomain that site's faculties to open", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "boss", role: "super_admin" } });
+    mocks.exam.mockResolvedValue({
+      slug: "license",
+      name: "License Preparation",
+      faculties: [
+        { slug: "bei", name: "BEI" },
+        { slug: "bct", name: "BCT" },
+      ],
+    });
+    const html = renderToStaticMarkup(await layout());
+    expect(html).toContain("Super admin");
+    expect(html).toContain("License Preparation");
+    expect(html).toContain("BCT");
+    expect(html).not.toContain("Faculty locked");
+  });
+
+  it("lets a student switch faculty within their exam instead of locking", async () => {
+    mocks.enrollment.mockResolvedValue({ ...enrollment, facultySlug: "bei" });
+    mocks.exam.mockResolvedValue({
+      slug: "license",
+      name: "License Preparation",
+      faculties: [
+        { slug: "bei", name: "BEI" },
+        { slug: "bct", name: "BCT" },
+      ],
+    });
+    const html = renderToStaticMarkup(await layout());
+    expect(html).toContain("<select");
+    expect(html).toContain("BCT");
+    expect(html).not.toContain("Faculty locked");
+    expect(html).toContain("Upgrade");
   });
 
   it("leaves admins wherever they are", async () => {

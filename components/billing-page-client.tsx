@@ -12,12 +12,9 @@ import {
   CreditCard,
   FileText,
   LoaderCircle,
-  Lock,
   ShieldCheck,
-  Smartphone,
   Upload,
   UploadCloud,
-  Wallet,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -764,11 +761,6 @@ function PricingCard({
   );
 }
 
-/** Invoice IDs compare without case, spaces or dashes: "inv 12-ab" is "INV12AB". */
-function normalizeInvoiceCode(value: string) {
-  return value.toUpperCase().replace(/[\s-]+/g, "");
-}
-
 export function PaymentSubmissionModal({
   invoice,
   paymentConfig,
@@ -787,15 +779,7 @@ export function PaymentSubmissionModal({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  // The QR stays covered until the student has the invoice ID in hand, so the
-  // remark is written before paying, not remembered after (user, 2026-10-08).
-  const [remarkReady, setRemarkReady] = useState(Boolean(invoice.paymentSubmission));
   const [copied, setCopied] = useState(false);
-  const [typedRemark, setTypedRemark] = useState(
-    invoice.paymentSubmission ? invoice.invoiceCode : "",
-  );
-  const remarkMatches =
-    normalizeInvoiceCode(typedRemark) === normalizeInvoiceCode(invoice.invoiceCode);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -824,7 +808,6 @@ export function PaymentSubmissionModal({
     } catch {
       // Clipboard can be blocked (http, old WebViews); the code is on screen to type.
     }
-    setRemarkReady(true);
   }
 
   function handleFileSelect(file: File) {
@@ -849,12 +832,6 @@ export function PaymentSubmissionModal({
       setError("Please upload your payment screenshot before submitting.");
       return;
     }
-    if (!remarkMatches) {
-      setError(
-        `Type the invoice ID exactly as in your payment remarks: ${invoice.invoiceCode}. Payments without it can't be matched.`,
-      );
-      return;
-    }
 
     const activationStartedAt = Date.now();
     setSaving(true);
@@ -862,7 +839,6 @@ export function PaymentSubmissionModal({
 
     const formData = new FormData();
     formData.set("invoiceId", invoice.id);
-    formData.set("remarkCode", typedRemark.trim());
     if (receipt) {
       formData.set("receipt", receipt);
     } else if (mobileUploadSessionId) {
@@ -949,57 +925,8 @@ export function PaymentSubmissionModal({
               <div>
                 <h3 className="text-base font-bold text-text-primary sm:text-lg">1. Pay via QR</h3>
 
-                {/* Remarks come first: the invoice ID is what matches the payment to you. */}
-                <div className="mt-4 rounded-xl border-2 border-amber-400 bg-amber-50 p-3.5 dark:border-amber-400/60 dark:bg-amber-500/10">
-                  <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
-                    Before you scan: write this invoice ID in the payment remarks
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-lg bg-card px-3 py-1.5 font-mono text-lg font-bold tracking-wide text-text-primary">
-                      {invoice.invoiceCode}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void copyInvoiceCode()}
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"
-                    >
-                      {copied ? (
-                        <Check className="size-4" aria-hidden="true" />
-                      ) : (
-                        <Copy className="size-4" aria-hidden="true" />
-                      )}
-                      {copied ? "Copied" : "Copy"}
-                    </button>
-                  </div>
-                  <p className="mt-2 text-xs leading-5 text-amber-900/80 dark:text-amber-200/80">
-                    Without it in the remarks we can&apos;t tell the payment is yours, and your
-                    access won&apos;t be confirmed.
-                  </p>
-                </div>
-
                 <div className="mt-5 flex items-center gap-4 sm:gap-6">
-                  {/* QR Code Container */}
-                  {paymentConfig && !remarkReady ? (
-                    <button
-                      type="button"
-                      onClick={() => void copyInvoiceCode()}
-                      className="relative flex size-[160px] shrink-0 flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border border-border bg-white p-3 text-center shadow-xs sm:size-[180px]"
-                    >
-                      <Image
-                        src={paymentConfig.qrImageUrl}
-                        alt=""
-                        width={180}
-                        height={180}
-                        unoptimized
-                        aria-hidden="true"
-                        className="absolute inset-0 size-full object-contain p-2.5 opacity-20 blur-md"
-                      />
-                      <Lock className="relative size-5 text-slate-700" aria-hidden="true" />
-                      <span className="relative text-xs font-semibold leading-4 text-slate-800">
-                        Copy the invoice ID to show the QR
-                      </span>
-                    </button>
-                  ) : paymentConfig ? (
+                  {paymentConfig ? (
                     <QrZoom
                       src={paymentConfig.qrImageUrl}
                       alt={`Official ${paymentConfig.displayName} payment QR`}
@@ -1022,34 +949,39 @@ export function PaymentSubmissionModal({
                     </div>
                   )}
 
-                  {/* Payment Amount & Remarks */}
                   <div className="min-w-0 flex-1">
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-[#e3f7d4] text-[#24591e]">
-                      <Wallet className="size-4" aria-hidden="true" />
-                    </div>
-                    <p className="mt-1.5 text-xs font-semibold text-text-muted sm:text-sm">
-                      Payment amount
-                    </p>
+                    <p className="text-xs font-semibold text-text-muted sm:text-sm">Amount</p>
                     <p className="font-display text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
                       {invoice.currency} {invoice.amount.toLocaleString()}
                     </p>
 
-                    <div className="my-3.5 w-full border-t border-border" />
-
-                    <p className="text-xs font-semibold text-text-muted sm:text-sm">Remarks</p>
-                    <div className="mt-1.5 inline-flex items-center rounded-lg bg-[#e3f7d4] px-3 py-1.5 text-xs font-bold text-[#24591e] sm:text-sm">
-                      Invoice ID: {invoice.invoiceCode}
+                    <p className="mt-4 text-xs font-semibold text-text-muted sm:text-sm">
+                      Remarks
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="rounded-lg bg-card px-3 py-1.5 font-mono text-lg font-bold tracking-wide text-text-primary ring-1 ring-border">
+                        {invoice.invoiceCode}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void copyInvoiceCode()}
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-sm font-medium text-text-primary hover:bg-bg-secondary"
+                      >
+                        {copied ? (
+                          <Check className="size-4" aria-hidden="true" />
+                        ) : (
+                          <Copy className="size-4" aria-hidden="true" />
+                        )}
+                        {copied ? "Copied" : "Copy"}
+                      </button>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Step 1 Bottom Notice */}
-              <div className="mt-6 flex items-start gap-3 rounded-xl border border-[#d6f2ca] bg-[#eefae8] p-3.5 text-xs leading-relaxed text-text-secondary dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-text-secondary sm:text-[13px]">
-                <Smartphone className="mt-0.5 size-4 shrink-0 text-[#24591e]" aria-hidden="true" />
-                <p>
-                  Make sure the screenshot clearly shows the invoice ID ({invoice.invoiceCode}) in
-                  the remarks section after payment.
+                {/* The one thing to remember: the invoice ID matches the payment to the student. */}
+                <p className="mt-5 rounded-xl bg-amber-50 px-3.5 py-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+                  Write <span className="font-mono font-bold">{invoice.invoiceCode}</span> in the
+                  payment remarks so we can match the payment to you.
                 </p>
               </div>
             </div>
@@ -1166,41 +1098,6 @@ export function PaymentSubmissionModal({
             </div>
           </div>
 
-          {/* The student retypes the remark they used, so a wrong or missing ID is caught here. */}
-          <label className="mt-6 block rounded-2xl border border-border bg-card p-4 sm:p-5">
-            <span className="block text-sm font-bold text-text-primary">
-              Invoice ID you wrote in the remarks
-            </span>
-            <span className="mt-0.5 block text-xs text-text-muted">
-              Type it as you entered it in the payment app. It must be {invoice.invoiceCode}.
-            </span>
-            <input
-              value={typedRemark}
-              onChange={(event) => {
-                setTypedRemark(event.target.value);
-                setError("");
-              }}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={invoice.invoiceCode}
-              aria-invalid={Boolean(typedRemark) && !remarkMatches}
-              className={cn(
-                "mt-3 min-h-11 w-full rounded-xl border bg-background px-3 font-mono text-base uppercase tracking-wide text-text-primary placeholder:normal-case placeholder:tracking-normal placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-blue-600/40",
-                typedRemark && !remarkMatches ? "border-destructive" : "border-border",
-              )}
-            />
-            {typedRemark && !remarkMatches ? (
-              <span className="mt-2 block text-xs font-medium text-destructive">
-                That doesn&apos;t match. If you paid with a different remark, contact us with your
-                screenshot.
-              </span>
-            ) : remarkMatches ? (
-              <span className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                Matches your invoice
-              </span>
-            ) : null}
-          </label>
 
           {/* Error display */}
           {error ? (
@@ -1225,10 +1122,10 @@ export function PaymentSubmissionModal({
           <Button
             type="submit"
             size="lg"
-            disabled={!hasProof || !remarkMatches || saving || !paymentConfig}
+            disabled={!hasProof || saving || !paymentConfig}
             className={cn(
               "mt-6 w-full rounded-2xl py-4 text-base font-bold transition-all",
-              hasProof && remarkMatches && !saving && paymentConfig
+              hasProof && !saving && paymentConfig
                 ? "bg-text-primary text-text-inverse hover:opacity-90 active:scale-[0.99] shadow-sm cursor-pointer"
                 : "bg-bg-tertiary text-text-muted cursor-not-allowed",
             )}
