@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { getAdminScope, scopeSite } from "@/lib/admin-scope";
 import { AdminAnalyticsDashboard } from "@/components/admin-analytics-dashboard";
 import { AdminBillingFrame } from "@/components/admin-billing-frame";
 import { listAdminPaymentSubmissions } from "@/lib/data/billing";
@@ -19,7 +20,8 @@ export default async function AdminPage() {
     throw new Error("Admin access could not be verified. Please retry.");
   }
   // The review queue is the one thing an admin must act on; a failed read hides the banner, not the page.
-  const pendingPayments = await listAdminPaymentSubmissions()
+  const pendingPayments = await getAdminScope(access)
+    .then((scope) => listAdminPaymentSubmissions({ onlySite: scopeSite(scope) }))
     .then((rows) => rows.filter((row) => row.status === "submitted").length)
     .catch(() => null);
 

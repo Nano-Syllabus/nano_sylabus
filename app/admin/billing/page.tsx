@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { CheckCircle2, Clock3, CreditCard, ExternalLink, XCircle } from "lucide-react";
 import { AdminBillingFrame, AdminPageHeader } from "@/components/admin-billing-frame";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { getAdminScope, scopeSite } from "@/lib/admin-scope";
 import { listAdminPaymentSubmissions } from "@/lib/data/billing";
 import type { PaymentSubmissionStatus } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -37,7 +38,9 @@ export default async function AdminBillingPage({
   const activeStatus = filters.some((filter) => filter.value === requestedStatus)
     ? (requestedStatus as "all" | PaymentSubmissionStatus)
     : "all";
-  const submissions = await listAdminPaymentSubmissions();
+  const submissions = await listAdminPaymentSubmissions({
+    onlySite: scopeSite(await getAdminScope(access)),
+  });
   const visible =
     activeStatus === "all"
       ? submissions

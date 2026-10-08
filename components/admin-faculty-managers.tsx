@@ -93,8 +93,8 @@ export function AdminFacultyManagers({
                 <tr key={faculty.id} className="align-top">
                   <td className="px-4 py-3">
                     <Link
-                      href={`/admin/users?faculty=${encodeURIComponent(faculty.slug)}`}
-                      className="font-medium text-foreground hover:underline"
+                      href={`/admin/faculties/${encodeURIComponent(faculty.slug)}`}
+                      className="font-medium text-blue-700 hover:underline dark:text-blue-300"
                     >
                       {faculty.name}
                     </Link>

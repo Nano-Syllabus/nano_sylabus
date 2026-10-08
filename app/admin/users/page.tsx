@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminBillingFrame } from "@/components/admin-billing-frame";
 import { AdminUserManager } from "@/components/admin-user-manager";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { getAdminScope, listScopedUserIds } from "@/lib/admin-scope";
 import { listStudentAmbassadors } from "@/lib/data/student-ambassadors";
 import { listAdminUsers, listFacultyChoices } from "@/lib/data/admin-users";
 
@@ -25,10 +26,16 @@ export default async function AdminUsersPage({
   }
 
   const faculty = (await searchParams).faculty?.trim() || "";
-  const [page, faculties] = await Promise.all([
-    listAdminUsers({ page: 1, pageSize: 50, ...(faculty ? { faculty } : {}) }),
+  // An admin sees the students of their subdomain and faculties only.
+  const scope = await getAdminScope(access);
+  const onlyUserIds = await listScopedUserIds(scope);
+  const [page, allFaculties] = await Promise.all([
+    listAdminUsers({ page: 1, pageSize: 50, onlyUserIds, ...(faculty ? { faculty } : {}) }),
     listFacultyChoices().catch(() => []),
   ]);
+  const faculties = scope.all
+    ? allFaculties
+    : allFaculties.filter((choice) => scope.faculties.some((own) => own.slug === choice.slug));
   // Only a super admin decides who may create faculties (the switch in a
   // person's panel, under Access).
   const ambassadors =

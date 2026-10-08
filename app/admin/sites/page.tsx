@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminBillingFrame, AdminPageHeader } from "@/components/admin-billing-frame";
 import { AdminSitesList } from "@/components/admin-sites-list";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { getAdminScope } from "@/lib/admin-scope";
 import { listCommunityChoices, listLandingSites, type CommunityChoice } from "@/lib/data/landing-sites";
 import { listSiteAdmins, type SiteAdmin } from "@/lib/data/admin-users";
 import { rootDomain } from "@/lib/landing-site-host";
@@ -31,8 +32,12 @@ export default async function AdminSitesPage() {
       listSiteAdmins(),
       listCommunityChoices(),
     ]);
-    sites = loaded;
-    faculties = choices;
+    const scope = await getAdminScope(access);
+    // An admin sees their own subdomain, and links only faculties on it or theirs.
+    sites = scope.all ? loaded : loaded.filter((site) => site.slug === scope.site?.slug);
+    faculties = scope.all
+      ? choices
+      : choices.filter((choice) => scope.faculties.some((own) => own.slug === choice.slug));
     // Managers' emails are for super admins only (user, 2026-10-08).
     admins = Object.fromEntries(
       [...adminBySite].map(([slug, list]) => [
@@ -62,6 +67,7 @@ export default async function AdminSitesPage() {
           initialAdmins={admins}
           faculties={faculties}
           canAssignAdmins={access.role === "super_admin"}
+          canCreateSites={access.role === "super_admin"}
           viewerUserId={access.userId}
           rootDomain={rootDomain()}
         />

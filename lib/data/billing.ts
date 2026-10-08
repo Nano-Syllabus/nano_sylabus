@@ -410,7 +410,34 @@ export async function getStudentBillingOverview(userId: string): Promise<Student
   };
 }
 
-export async function listAdminPaymentSubmissions() {
+/**
+ * The subdomain a payment was made through (`invoices.exam_slug`), or null for
+ * one made on the main site. Used to keep each admin to their own payments.
+ */
+export async function paymentSubmissionSite(submissionId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data: submission, error } = await admin
+    .from("payment_submissions")
+    .select("invoice_id")
+    .eq("id", submissionId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!submission) return { found: false as const, site: null };
+  const { data: invoice, error: invoiceError } = await admin
+    .from("invoices")
+    .select("exam_slug")
+    .eq("id", submission.invoice_id)
+    .maybeSingle();
+  if (invoiceError) throw invoiceError;
+  return { found: true as const, site: (invoice?.exam_slug as string | null) ?? null };
+}
+
+/**
+ * `onlySite`: undefined lists every payment (super admin); a slug lists only
+ * payments made through that subdomain; null (an admin with no site) lists none.
+ */
+export async function listAdminPaymentSubmissions(options: { onlySite?: string | null } = {}) {
+  if (options.onlySite === null) return [] as AdminPaymentSubmissionSummary[];
   const supabase = await createSupabaseServerClient();
   const admin = createSupabaseAdminClient();
   const { data: submissionRows, error: submissionError } = await supabase
@@ -430,6 +457,19 @@ export async function listAdminPaymentSubmissions() {
     .in("id", invoiceIds);
 
   if (invoiceError) throw invoiceError;
+  if (options.onlySite !== undefined) {
+    const inSite = new Set(
+      (invoiceRows ?? [])
+        .filter((invoice) => invoice.exam_slug === options.onlySite)
+        .map((invoice) => invoice.id),
+    );
+    submissionRows.splice(
+      0,
+      submissionRows.length,
+      ...submissionRows.filter((submission) => inSite.has(submission.invoice_id)),
+    );
+    if (!submissionRows.length) return [] as AdminPaymentSubmissionSummary[];
+  }
 
   const planIds = Array.from(new Set((invoiceRows ?? []).map((invoice) => invoice.plan_id)));
   const { data: planRows, error: planError } = await supabase

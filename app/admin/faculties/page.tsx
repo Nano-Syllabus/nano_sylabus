@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { AdminBillingFrame, AdminPageHeader } from "@/components/admin-billing-frame";
 import { AdminFacultyManagers } from "@/components/admin-faculty-managers";
 import { assertAdminRequest } from "@/lib/admin-access";
-import { listAdminSites } from "@/lib/data/faculty-lock";
+import { getAdminScope } from "@/lib/admin-scope";
+import { AdminFacultyActivity } from "@/components/admin-faculty-activity";
 import { listFacultyManagement } from "@/lib/data/faculty-managers";
 
 export const dynamic = "force-dynamic";
@@ -21,11 +22,12 @@ export default async function AdminFacultiesPage() {
   }
 
   const superAdmin = access.role === "super_admin";
-  // An admin sees only the faculties of the subdomain they run.
-  const onlySite = superAdmin
-    ? undefined
-    : ((await listAdminSites([access.userId])).get(access.userId)?.slug ?? null);
-  const faculties = await listFacultyManagement({ showEmails: superAdmin, onlySite });
+  // An admin sees their subdomain's faculties and the ones they created.
+  const scope = await getAdminScope(access);
+  const faculties = await listFacultyManagement({
+    showEmails: superAdmin,
+    onlyIds: scope.all ? undefined : scope.faculties.map((faculty) => faculty.id),
+  });
 
   return (
     <AdminBillingFrame active="faculties">
@@ -33,11 +35,14 @@ export default async function AdminFacultiesPage() {
         title="Faculties"
         description={
           superAdmin
-            ? "Who manages each faculty: the admins of the subdomains that list it, and the person who created it. Super admins manage every faculty."
-            : "The faculties of your subdomain and who manages each one."
+            ? "Who manages each faculty, who can add to it, and every change made to it. Open a faculty for its full picture."
+            : "The faculties of your subdomain (and ones you created), who manages each, and every change made to them."
         }
       />
       <AdminFacultyManagers faculties={faculties} showEmails={superAdmin} />
+      <div className="mt-6">
+        <AdminFacultyActivity title="Recent changes across faculties" />
+      </div>
     </AdminBillingFrame>
   );
 }

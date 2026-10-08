@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { assertAdminRequest } from "@/lib/admin-access";
+import { assertScopedAdmin, outOfScope, scopeAllowsSite } from "@/lib/admin-scope";
 import { getLandingSite, listCommunityChoices } from "@/lib/data/landing-sites";
 import {
   AssistantUnavailableError,
@@ -19,8 +19,9 @@ type Context = { params: Promise<{ slug: string }> };
  * applies it and its autosave stores it, exactly like typed edits.
  */
 export async function POST(request: Request, { params }: Context) {
-  const access = await assertAdminRequest();
+  const access = await assertScopedAdmin();
   if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
+  if (!scopeAllowsSite(access.scope, (await params).slug)) return outOfScope("that subdomain");
 
   const body = (await request.json().catch(() => null)) as {
     draft?: unknown;

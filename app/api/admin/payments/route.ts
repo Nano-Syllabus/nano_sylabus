@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { listAdminPaymentSubmissions } from "@/lib/data/billing";
+import { getAdminScope, scopeSite } from "@/lib/admin-scope";
 import { isAdminRole } from "@/lib/admin-role";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
@@ -25,7 +26,11 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const submissions = await listAdminPaymentSubmissions();
+    const scope = await getAdminScope({
+      userId: user.id,
+      role: profile!.role as "admin" | "super_admin",
+    });
+    const submissions = await listAdminPaymentSubmissions({ onlySite: scopeSite(scope) });
     return NextResponse.json({ submissions });
   } catch (error) {
     return NextResponse.json(

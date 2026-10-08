@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminRole } from "@/lib/admin-role";
-import { getAdminPaymentSubmissionDetail } from "@/lib/data/billing";
+import { getAdminPaymentSubmissionDetail, paymentSubmissionSite } from "@/lib/data/billing";
+import { getAdminScope, outOfScope, scopeAllowsSite } from "@/lib/admin-scope";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
 
@@ -34,6 +35,14 @@ export async function GET(
     }
 
     const { submissionId } = await params;
+    const scope = await getAdminScope({
+      userId: user.id,
+      role: profile!.role as "admin" | "super_admin",
+    });
+    if (!scope.all) {
+      const owner = await paymentSubmissionSite(submissionId);
+      if (!owner.site || !scopeAllowsSite(scope, owner.site)) return outOfScope("payments");
+    }
     const detail = await getAdminPaymentSubmissionDetail(submissionId);
 
     if (!detail) {
@@ -74,6 +83,14 @@ export async function PATCH(
     }
 
     const { submissionId } = await params;
+    const scope = await getAdminScope({
+      userId: user.id,
+      role: profile!.role as "admin" | "super_admin",
+    });
+    if (!scope.all) {
+      const owner = await paymentSubmissionSite(submissionId);
+      if (!owner.site || !scopeAllowsSite(scope, owner.site)) return outOfScope("payments");
+    }
     const payload = actionSchema.parse(await request.json());
 
     const { error } =

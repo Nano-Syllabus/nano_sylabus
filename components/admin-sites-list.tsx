@@ -34,6 +34,7 @@ export function AdminSitesList({
   initialAdmins,
   faculties,
   canAssignAdmins,
+  canCreateSites = false,
   viewerUserId,
   rootDomain,
 }: {
@@ -44,6 +45,8 @@ export function AdminSitesList({
   initialAdmins: Record<string, SiteAdmin[]>;
   /** Only a super admin changes who runs a site. */
   canAssignAdmins: boolean;
+  /** A new subdomain is a new tenant: super admins only. */
+  canCreateSites?: boolean;
   viewerUserId: string;
   rootDomain: string;
 }) {
@@ -57,12 +60,14 @@ export function AdminSitesList({
 
   return (
     <div className="mt-6">
-      <div className="flex justify-end">
-        <button type="button" className={primaryButton} onClick={() => setCreating(true)}>
-          <Plus size={16} aria-hidden="true" />
-          New subdomain
-        </button>
-      </div>
+      {canCreateSites ? (
+        <div className="flex justify-end">
+          <button type="button" className={primaryButton} onClick={() => setCreating(true)}>
+            <Plus size={16} aria-hidden="true" />
+            New subdomain
+          </button>
+        </div>
+      ) : null}
 
       <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full text-left text-sm">
@@ -153,6 +158,13 @@ export function AdminSitesList({
                 </td>
               </tr>
             ))}
+            {!sites.length ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No subdomain is assigned to you yet. Ask a super admin to add you to one.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

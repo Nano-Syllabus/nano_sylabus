@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { assertAdminRequest } from "@/lib/admin-access";
+import { assertScopedAdmin, outOfScope, scopeAllowsSite } from "@/lib/admin-scope";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isValidSiteSlug, MAIN_SITE_SLUG } from "@/lib/landing-site-host";
 
@@ -17,8 +17,9 @@ const EXTENSIONS: Record<string, string> = {
  * when the editor saves it into the draft and the draft is published.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
-  const access = await assertAdminRequest();
+  const access = await assertScopedAdmin();
   if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
+  if (!scopeAllowsSite(access.scope, (await params).slug)) return outOfScope("that subdomain");
 
   const { slug } = await params;
   if (slug !== MAIN_SITE_SLUG && !isValidSiteSlug(slug)) {

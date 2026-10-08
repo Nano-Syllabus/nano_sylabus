@@ -1,3 +1,4 @@
+import { recordFacultyActivity } from "@/lib/data/faculty-activity";
 import { NextResponse } from "next/server";
 import { communityInputSchema, communityNameSchema } from "@/lib/communities";
 import {
@@ -71,6 +72,17 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (hasDetails) {
       community = await updateOwnedCommunityDetails(user.id, slug, details.data);
     }
+    if (community)
+      await recordFacultyActivity({
+        actorId: user.id,
+        action: "faculty.updated",
+        communityId: community.id,
+        communityName: community.name,
+        summary: `Changed ${[body.name !== undefined ? "name" : "", hasDetails ? "short name" : ""]
+          .filter(Boolean)
+          .join(", ")}`,
+        details: { via: "creator workspace", name: body.name, faculty: body.faculty },
+      });
     return NextResponse.json({ community });
   } catch (error) {
     const mapped = communityStorageError(error);
@@ -96,7 +108,15 @@ export async function DELETE(request: Request, context: RouteContext) {
         { status: 400 },
       );
     }
-    return NextResponse.json(await deleteOwnedCommunity(user.id, slug, body.confirmation));
+    const result = await deleteOwnedCommunity(user.id, slug, body.confirmation);
+    await recordFacultyActivity({
+      actorId: user.id,
+      action: "faculty.deleted",
+      communityName: body.confirmation.trim(),
+      summary: `Deleted faculty ${body.confirmation.trim()}`,
+      details: { slug, via: "creator workspace" },
+    });
+    return NextResponse.json(result);
   } catch (error) {
     const mapped = communityStorageError(error);
     return NextResponse.json({ error: mapped.message }, { status: mapped.status });

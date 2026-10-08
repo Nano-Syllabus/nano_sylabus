@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { assertAdminRequest } from "@/lib/admin-access";
+import { assertScopedAdmin, outOfScope, scopeAllowsSite } from "@/lib/admin-scope";
+import { recordFacultyActivity } from "@/lib/data/faculty-activity";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { selectExamFaculty } from "@/lib/data/exam-enrollment";
 import { landingSiteErrorResponse } from "@/lib/admin/landing-site-response";
@@ -9,9 +10,10 @@ import { landingSiteErrorResponse } from "@/lib/admin/landing-site-response";
 type Context = { params: Promise<{ slug: string }> };
 
 export async function GET(_request: Request, { params }: Context) {
-  const access = await assertAdminRequest();
+  const access = await assertScopedAdmin();
   if ("error" in access)
     return NextResponse.json({ error: access.error }, { status: access.status });
+  if (!scopeAllowsSite(access.scope, (await params).slug)) return outOfScope("that subdomain");
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("student_exam_enrollments")
@@ -43,9 +45,10 @@ export async function GET(_request: Request, { params }: Context) {
 }
 
 export async function PATCH(request: Request, { params }: Context) {
-  const access = await assertAdminRequest();
+  const access = await assertScopedAdmin();
   if ("error" in access)
     return NextResponse.json({ error: access.error }, { status: access.status });
+  if (!scopeAllowsSite(access.scope, (await params).slug)) return outOfScope("that subdomain");
   if (
     request.headers.get("origin") &&
     request.headers.get("origin") !== new URL(request.url).origin
@@ -59,7 +62,7 @@ export async function PATCH(request: Request, { params }: Context) {
   const slug = (await params).slug;
   const { data, error } = await createSupabaseAdminClient()
     .from("student_exam_enrollments")
-    .select("preparation_answers")
+    .select("preparation_answers,community_id")
     .eq("user_id", parsed.data.userId)
     .eq("exam_slug", slug)
     .maybeSingle();
@@ -77,6 +80,20 @@ export async function PATCH(request: Request, { params }: Context) {
       true,
     );
     revalidatePath("/app", "layout");
+    const { data: faculties } = await createSupabaseAdminClient()
+      .from("communities")
+      .select("id,name")
+      .in("id", [data.community_id, parsed.data.facultyId]);
+    const nameOf = (id: string) => faculties?.find((row) => row.id === id)?.name ?? "another faculty";
+    await recordFacultyActivity({
+      actorId: access.userId,
+      action: "student.faculty_changed",
+      siteSlug: slug,
+      communityId: parsed.data.facultyId,
+      communityName: nameOf(parsed.data.facultyId),
+      summary: `Moved a student from ${nameOf(data.community_id)} to ${nameOf(parsed.data.facultyId)}`,
+      details: { userId: parsed.data.userId, fromFacultyId: data.community_id },
+    });
     return NextResponse.json({ enrollment });
   } catch (cause) {
     return landingSiteErrorResponse(cause, "Could not change this student’s faculty.");

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { assertAdminRequest } from "@/lib/admin-access";
+import { assertScopedAdmin, outOfScope, scopeAllowsUser } from "@/lib/admin-scope";
 import { userCreditAdjustmentSchema } from "@/lib/admin/schemas";
 import { adjustAdminUserCredits } from "@/lib/data/admin-users";
 
@@ -7,13 +7,14 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ userId: string }> },
 ) {
-  const access = await assertAdminRequest();
+  const access = await assertScopedAdmin();
   if ("error" in access) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   try {
     const { userId } = await params;
+    if (!(await scopeAllowsUser(access.scope, userId))) return outOfScope("students");
     const payload = userCreditAdjustmentSchema.parse(await request.json());
     const user = await adjustAdminUserCredits({
       userId,

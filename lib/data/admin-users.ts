@@ -438,14 +438,17 @@ export async function listAdminUsers(filters?: {
    * page one. Super admins ("all faculties") are left out; they cover every one.
    */
   faculty?: string;
+  /** An admin's reach (see lib/admin-scope.ts); null/undefined = everyone. */
+  onlyUserIds?: Set<string> | null;
 }): Promise<AdminListPage<AdminUserSummary>> {
   const page = normalizePage(filters?.page);
   const pageSize = normalizePageSize(filters?.pageSize);
   const q = filters?.q?.trim().toLowerCase() ?? "";
   const role = filters?.role;
   const faculty = filters?.faculty?.trim() ?? "";
+  const onlyUserIds = filters?.onlyUserIds ?? null;
 
-  if (q || role || faculty) {
+  if (q || role || faculty || onlyUserIds) {
     const users = await listAllAuthUsers();
     const aggregates = await loadAdminUserAggregates(users.map((user) => user.id));
     const ambassadors =
@@ -453,6 +456,7 @@ export async function listAdminUsers(filters?: {
         ? new Set((await listStudentAmbassadors()).map((row) => row.email.toLowerCase()))
         : null;
     const filtered = buildUserSummaries(users, aggregates)
+      .filter((user) => !onlyUserIds || onlyUserIds.has(user.userId))
       .filter((user) =>
         ambassadors
           ? ambassadors.has((user.email ?? "").toLowerCase())

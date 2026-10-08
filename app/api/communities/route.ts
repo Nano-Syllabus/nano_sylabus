@@ -1,3 +1,4 @@
+import { recordFacultyActivity } from "@/lib/data/faculty-activity";
 import { isStudentAmbassador } from "@/lib/data/student-ambassadors";
 import { NextResponse } from "next/server";
 import { CACHE, privateJson } from "@/lib/http/cache";
@@ -74,6 +75,14 @@ export async function POST(request: Request) {
     }
 
     const community = await createCommunity(user.id, parsed.data);
+    await recordFacultyActivity({
+      actorId: user.id,
+      action: "faculty.created",
+      communityId: community.id,
+      communityName: community.name,
+      summary: `Created faculty ${community.name}`,
+      details: { via: "creator workspace" },
+    });
     return NextResponse.json({ community }, { status: 201 });
   } catch (error) {
     const mapped = communityStorageError(error);

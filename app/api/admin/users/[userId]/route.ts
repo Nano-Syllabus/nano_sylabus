@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { assertAdminRequest, assertSuperAdminRequest } from "@/lib/admin-access";
+import { assertSuperAdminRequest } from "@/lib/admin-access";
+import { assertScopedAdmin, outOfScope, scopeAllowsUser } from "@/lib/admin-scope";
 import { userRoleUpdateSchema } from "@/lib/admin/schemas";
 import { AdminRoleError, getAdminUserDetail, updateAdminUserRole } from "@/lib/data/admin-users";
 
@@ -7,13 +8,14 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ userId: string }> },
 ) {
-  const access = await assertAdminRequest();
+  const access = await assertScopedAdmin();
   if ("error" in access) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
   try {
     const { userId } = await params;
+    if (!(await scopeAllowsUser(access.scope, userId))) return outOfScope("students");
     const user = await getAdminUserDetail(userId);
     if (!user) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });

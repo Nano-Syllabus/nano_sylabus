@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { assertAdminRequest } from "@/lib/admin-access";
+import { assertScopedAdmin, listScopedUserIds } from "@/lib/admin-scope";
 import { parseAdminListQuery } from "@/lib/admin/list-query";
 import { listAdminUsers } from "@/lib/data/admin-users";
 
 export async function GET(request: Request) {
-  const access = await assertAdminRequest();
+  const access = await assertScopedAdmin();
   if ("error" in access) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
@@ -28,6 +28,7 @@ export async function GET(request: Request) {
       pageSize: query.pageSize,
       role,
       faculty: searchParams.get("faculty")?.slice(0, 100) || undefined,
+      onlyUserIds: await listScopedUserIds(access.scope),
     });
     return NextResponse.json(result);
   } catch (error) {

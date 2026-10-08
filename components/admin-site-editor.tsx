@@ -77,8 +77,11 @@ export function AdminSiteEditor({
   communities,
   plans,
   studentCount = 0,
+  canDelete = true,
 }: {
   initialSite: LandingSiteDetail;
+  /** Deleting a subdomain is a super admin's call. */
+  canDelete?: boolean;
   rootDomain: string;
   /** Students who picked a faculty on this site (the delete dialog says so). */
   studentCount?: number;
@@ -486,7 +489,7 @@ export function AdminSiteEditor({
                   })}
                 </ul>
 
-                {!isMain ? (
+                {!isMain && canDelete ? (
                   <div className="mx-2 mt-6 rounded-xl border border-red-500/30 p-4">
                     <h2 className="text-sm font-semibold">Delete this website</h2>
                     <p className="mt-1 text-xs text-muted-foreground">

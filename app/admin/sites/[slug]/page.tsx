@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { AdminBillingFrame } from "@/components/admin-billing-frame";
 import { AdminSiteEditor } from "@/components/admin-site-editor";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { getAdminScope, scopeAllowsSite } from "@/lib/admin-scope";
 import { countSiteStudents, getLandingSite, listCommunityChoices } from "@/lib/data/landing-sites";
 import { rootDomain } from "@/lib/landing-site-host";
 import { listSubscriptionPlans } from "@/lib/data/billing";
@@ -27,13 +28,22 @@ export default async function AdminSiteEditorPage({
     throw new Error("Admin access could not be verified. Please retry.");
   }
 
-  const [site, communities, plans, studentCount] = await Promise.all([
+  const scope = await getAdminScope(access);
+  if (!scopeAllowsSite(scope, slug)) redirect("/admin/sites");
+
+  const [site, allCommunities, plans, studentCount] = await Promise.all([
     getLandingSite(slug),
     listCommunityChoices(),
     listSubscriptionPlans(),
     countSiteStudents(slug).catch(() => 0),
   ]);
   if (!site) notFound();
+  // An admin links only faculties already on the site or ones they created.
+  const communities = scope.all
+    ? allCommunities
+    : allCommunities.filter((choice) =>
+        scope.faculties.some((own) => own.slug === choice.slug),
+      );
 
   return (
     <AdminBillingFrame active="sites" wide>
@@ -43,6 +53,7 @@ export default async function AdminSiteEditorPage({
         communities={communities}
         plans={plans}
         studentCount={studentCount}
+        canDelete={scope.all}
       />
     </AdminBillingFrame>
   );

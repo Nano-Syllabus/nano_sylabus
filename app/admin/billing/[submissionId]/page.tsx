@@ -5,7 +5,8 @@ import { ArrowLeft } from "lucide-react";
 import { AdminBillingFrame } from "@/components/admin-billing-frame";
 import { AdminPaymentDetailClient } from "@/components/admin-payment-detail-client";
 import { assertAdminRequest } from "@/lib/admin-access";
-import { getAdminPaymentSubmissionDetail } from "@/lib/data/billing";
+import { getAdminScope, scopeAllowsSite } from "@/lib/admin-scope";
+import { getAdminPaymentSubmissionDetail, paymentSubmissionSite } from "@/lib/data/billing";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -26,6 +27,11 @@ export default async function AdminPaymentReviewPage({
   }
 
   const { submissionId } = await params;
+  const scope = await getAdminScope(access);
+  if (!scope.all) {
+    const owner = await paymentSubmissionSite(submissionId);
+    if (!owner.site || !scopeAllowsSite(scope, owner.site)) notFound();
+  }
   const submission = await getAdminPaymentSubmissionDetail(submissionId);
   if (!submission) notFound();
 
