@@ -39,16 +39,15 @@ export default async function SiteLandingPage({ params }: Props) {
   // Unknown or hidden subdomains land on the main site instead of a 404.
   if (!site) redirect(siteOrigin(MAIN_SITE_SLUG));
   const exam = site.examConfig.enabled ? await getEnrollmentExam(slug) : null;
-  // All journeys use the main domain, which owns the sign-in cookie. The exam
-  // slug still selects this site's questions, faculties and plans. Locally the
-  // buttons stay on this host, which is the dev server anyway.
   // Sign-in and the dashboard live on this subdomain itself.
   const appOrigin = "";
   return (
     <LandingView
       content={site.content}
       appOrigin={appOrigin}
-      examSlug={exam?.slug}
+      // Always this site's own faculty step, never Browse communities (user,
+      // 2026-10-08) — even while its faculties aren't switched on yet.
+      examSlug={slug}
       examFaculties={exam?.faculties}
     />
   );

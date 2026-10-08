@@ -1,3 +1,4 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -111,9 +112,18 @@ describe("Continue learning from an exam site", () => {
     expect(page.props.signedIn).toBe(true);
   });
 
-  it("shows nothing for an unavailable exam", async () => {
+  it("shows nothing for an unknown site", async () => {
     mocks.exam.mockResolvedValue(null);
+    mocks.site.mockResolvedValue(null);
     await expect(open()).rejects.toThrow("NOT_FOUND");
+  });
+
+  it("says faculties are coming for a live site without them, never Browse", async () => {
+    mocks.exam.mockResolvedValue(null);
+    mocks.site.mockResolvedValue({ slug: "license", name: "License Preparation" });
+    const html = renderToStaticMarkup(await open());
+    expect(html).toContain("Faculties are almost ready");
+    expect(html).not.toContain("/communities");
   });
 
   it("keeps onboarding on the subdomain's own dashboard", async () => {
