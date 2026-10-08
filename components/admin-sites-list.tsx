@@ -69,7 +69,8 @@ export function AdminSitesList({
         </div>
       ) : null}
 
-      <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
+      {/* Scrolls sideways rather than clipping: a clipped table hid Edit text. */}
+      <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border text-xs font-medium text-muted-foreground">
             <tr>
@@ -77,7 +78,6 @@ export function AdminSitesList({
               <th className="hidden px-4 py-3 font-medium md:table-cell">Admin</th>
               <th className="hidden px-4 py-3 font-medium lg:table-cell">Faculties</th>
               <th className="hidden px-4 py-3 font-medium sm:table-cell">Status</th>
-              <th className="hidden px-4 py-3 font-medium md:table-cell">Last published</th>
               <th className="px-4 py-3 text-right font-medium">
                 <span className="sr-only">Actions</span>
               </th>
@@ -145,9 +145,9 @@ export function AdminSitesList({
                 </td>
                 <td className="hidden px-4 py-3 sm:table-cell">
                   <StatusBadge site={site} />
-                </td>
-                <td className="hidden whitespace-nowrap px-4 py-3 text-muted-foreground md:table-cell">
-                  {formatDate(site.publishedAt)}
+                  <div className="mt-1 whitespace-nowrap text-xs text-muted-foreground">
+                    Published {formatDate(site.publishedAt).replace(/^Never$/, "never")}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
@@ -174,7 +174,7 @@ export function AdminSitesList({
             ))}
             {!sites.length ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
                   No subdomain is assigned to you yet. Ask a super admin to add you to one.
                 </td>
               </tr>
