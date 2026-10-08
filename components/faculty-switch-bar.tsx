@@ -2,29 +2,38 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ChevronDown, LoaderCircle } from "lucide-react";
+import { ChevronDown, ExternalLink, LoaderCircle } from "lucide-react";
+import { MAIN_SITE_SLUG, rootDomain } from "@/lib/landing-site-host";
+
+type SiteChoice = { slug: string; name: string; faculties: Array<{ slug: string; name: string }> };
 
 export type FacultySwitch = {
-  siteName: string;
-  faculties: Array<{ slug: string; name: string }>;
+  /** One site for students and site admins; every exam site for a super admin. */
+  sites: SiteChoice[];
+  siteSlug: string;
   currentSlug: string | null;
-  /** A student moves within their exam; an admin opens any listed faculty. */
+  /** A student moves within their site; an admin opens any listed faculty. */
   mode: "student" | "admin";
-  /** "Super admin" / "Admin", shown before the site for admins. */
+  /** "Super admin" / "Admin", shown first for admins. */
   roleLabel?: string;
 };
 
+const selectClass =
+  "min-h-8 cursor-pointer appearance-none rounded-lg border border-border bg-bg-primary py-1 pl-2.5 pr-7 text-xs font-semibold text-text-primary hover:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/40 disabled:opacity-60";
+
 /**
- * "Institute of Engineering → [BCT ▾]": the exam site and a dropdown of all its
- * faculties. Nobody is locked (user, 2026-10-08) — a student switches within
- * their exam (POST /api/student/exam-faculty), an admin opens any of the
- * site's faculties (the join route, which admins pass).
+ * "Institute of Engineering → [BCT ▾]". Nobody is locked (user, 2026-10-08): a
+ * student switches within their site (POST /api/student/exam-faculty); an admin
+ * opens any listed faculty through the join route, which admins pass. A super
+ * admin also gets a site dropdown and moves across every subdomain from here.
  */
-export function FacultySwitchBar({ siteName, faculties, currentSlug, mode, roleLabel }: FacultySwitch) {
+export function FacultySwitchBar({ sites, siteSlug, currentSlug, mode, roleLabel }: FacultySwitch) {
   const router = useRouter();
+  const [site, setSite] = useState(siteSlug);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const known = faculties.some((faculty) => faculty.slug === currentSlug);
+  const shown = sites.find((item) => item.slug === site) ?? sites[0];
+  const known = shown.faculties.some((faculty) => faculty.slug === currentSlug);
 
   async function switchTo(slug: string) {
     if (!slug || slug === currentSlug) return;
@@ -49,6 +58,9 @@ export function FacultySwitchBar({ siteName, faculties, currentSlug, mode, roleL
     }
   }
 
+  const siteHost =
+    shown.slug === MAIN_SITE_SLUG ? rootDomain() : `${shown.slug}.${rootDomain()}`;
+
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-bg-secondary px-5 py-2 text-xs text-text-secondary">
       {roleLabel ? (
@@ -56,41 +68,57 @@ export function FacultySwitchBar({ siteName, faculties, currentSlug, mode, roleL
           {roleLabel}
         </span>
       ) : null}
-      <span>{siteName}</span>
+      {sites.length > 1 ? (
+        <Dropdown label="Subdomain" pending={false}>
+          <select
+            value={shown.slug}
+            disabled={pending}
+            onChange={(event) => setSite(event.target.value)}
+            className={selectClass}
+          >
+            {sites.map((item) => (
+              <option key={item.slug} value={item.slug}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </Dropdown>
+      ) : (
+        <span>{shown.name}</span>
+      )}
       <span aria-hidden="true">→</span>
-      <label className="relative inline-flex items-center">
-        <span className="sr-only">Faculty</span>
+      <Dropdown label="Faculty" pending={pending}>
         <select
+          // Remounts per site so a site without your faculty starts on "Choose".
+          key={shown.slug}
           value={known ? (currentSlug ?? "") : ""}
           disabled={pending}
           onChange={(event) => void switchTo(event.target.value)}
-          className="min-h-8 cursor-pointer appearance-none rounded-lg border border-border bg-bg-primary py-1 pl-2.5 pr-7 text-xs font-semibold text-text-primary hover:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/40 disabled:opacity-60"
+          className={selectClass}
         >
           {!known ? (
             <option value="" disabled>
               Choose a faculty
             </option>
           ) : null}
-          {faculties.map((faculty) => (
+          {shown.faculties.map((faculty) => (
             <option key={faculty.slug} value={faculty.slug}>
               {faculty.name}
             </option>
           ))}
         </select>
-        {pending ? (
-          <LoaderCircle
-            size={13}
-            className="pointer-events-none absolute right-2 animate-spin text-text-muted"
-            aria-hidden="true"
-          />
-        ) : (
-          <ChevronDown
-            size={13}
-            className="pointer-events-none absolute right-2 text-text-muted"
-            aria-hidden="true"
-          />
-        )}
-      </label>
+      </Dropdown>
+      {mode === "admin" && sites.length > 1 ? (
+        <a
+          href={`https://${siteHost}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-medium text-blue-700 hover:bg-blue-600/10 dark:text-blue-300"
+        >
+          Open site
+          <ExternalLink size={12} aria-hidden="true" />
+        </a>
+      ) : null}
       {pending ? <span className="text-text-muted">Switching…</span> : null}
       {error ? (
         <span role="alert" className="text-destructive">
@@ -98,5 +126,35 @@ export function FacultySwitchBar({ siteName, faculties, currentSlug, mode, roleL
         </span>
       ) : null}
     </div>
+  );
+}
+
+function Dropdown({
+  label,
+  pending,
+  children,
+}: {
+  label: string;
+  pending: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="relative inline-flex items-center">
+      <span className="sr-only">{label}</span>
+      {children}
+      {pending ? (
+        <LoaderCircle
+          size={13}
+          className="pointer-events-none absolute right-2 animate-spin text-text-muted"
+          aria-hidden="true"
+        />
+      ) : (
+        <ChevronDown
+          size={13}
+          className="pointer-events-none absolute right-2 text-text-muted"
+          aria-hidden="true"
+        />
+      )}
+    </label>
   );
 }

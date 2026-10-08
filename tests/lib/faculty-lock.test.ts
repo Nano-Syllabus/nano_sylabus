@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 // One fake table per name; each chain ends the way faculty-lock.ts reads it.
+vi.mock("next/headers", () => ({ headers: async () => new Headers({ host: "localhost:3000" }) }));
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: () => ({
     from: (table: string) => ({
@@ -15,6 +16,11 @@ vi.mock("@/lib/supabase/admin", () => ({
         eq: () => ({
           maybeSingle: async () => ({
             data: table === "student_profiles" ? { role: mocks.role() } : mocks.enrollmentRow(),
+            error: null,
+          }),
+          // student_exam_enrollments: every site the student joined, newest first.
+          order: async () => ({
+            data: mocks.enrollmentRow() ? [mocks.enrollmentRow()] : [],
             error: null,
           }),
         }),

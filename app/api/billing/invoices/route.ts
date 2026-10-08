@@ -135,7 +135,9 @@ export async function POST(request: Request) {
 
     let monthlyPrice = plan.price;
 
-    const enrollment = payload.examSlug ? await getStudentExamEnrollment(user.id) : null;
+    const enrollment = payload.examSlug
+      ? await getStudentExamEnrollment(user.id, payload.examSlug)
+      : null;
     if (payload.examSlug) {
       const exam = await getEnrollmentExam(payload.examSlug);
       if (!exam || !(await getExamPlans(exam)).some((candidate) => candidate.id === payload.planId))

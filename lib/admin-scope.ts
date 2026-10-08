@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertAdminRequest } from "@/lib/admin-access";
-import { getStudentExamEnrollment, listAdminSites, type FacultyRef } from "@/lib/data/faculty-lock";
+import { listAdminSites, listStudentExamEnrollments, type FacultyRef } from "@/lib/data/faculty-lock";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -95,8 +95,9 @@ export function scopeAllowsFaculty(scope: AdminScope, target: { id?: string; slu
 export async function scopeAllowsUser(scope: AdminScope, userId: string) {
   if (scope.all) return true;
   if (userId === scope.userId) return true;
-  const enrollment = await getStudentExamEnrollment(userId);
-  if (enrollment && scope.site && enrollment.examSlug === scope.site.slug) return true;
+  const enrollments = await listStudentExamEnrollments(userId);
+  if (scope.site && enrollments.some((enrollment) => enrollment.examSlug === scope.site!.slug))
+    return true;
   if (!scope.faculties.length) return false;
   const { count, error } = await createSupabaseAdminClient()
     .from("community_memberships")

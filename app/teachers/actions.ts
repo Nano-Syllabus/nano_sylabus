@@ -1,6 +1,6 @@
 "use server";
 
-import { isStudentAmbassador } from "@/lib/data/student-ambassadors";
+import { mayUseAmbassadorWorkspace } from "@/lib/data/student-ambassadors";
 import http from "node:http";
 import https from "node:https";
 import { revalidatePath } from "next/cache";
@@ -170,8 +170,8 @@ export async function onboardTeacher(): Promise<OnboardTeacherResult> {
     data: { user },
   } = await getVerifiedUser(supabase);
   if (!user) return fail("You must be logged in to create a creator workspace.");
-  if (!(await isStudentAmbassador(user.email)))
-    return fail("Only student ambassadors can open a creator workspace.");
+  if (!(await mayUseAmbassadorWorkspace(user)))
+    return fail("Only student ambassadors and admins can open a creator workspace.");
 
   // `getTeacherProfileForUserId` throws when Supabase itself errors, and a throw
   // from inside a Server Action is exactly what the redacted paragraph is made of.

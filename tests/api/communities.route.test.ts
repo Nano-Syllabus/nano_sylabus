@@ -6,7 +6,12 @@ const mocks = vi.hoisted(() => ({
   createCommunity: vi.fn(),
   ambassador: vi.fn(),
 }));
-vi.mock("@/lib/data/student-ambassadors", () => ({ isStudentAmbassador: mocks.ambassador }));
+vi.mock("@/lib/data/student-ambassadors", () => ({
+  isStudentAmbassador: mocks.ambassador,
+  // Admins also pass; these tests are about ambassadors, so it reads the same flag.
+  mayUseAmbassadorWorkspace: (user: { email?: string | null } | null) =>
+    user ? mocks.ambassador(user.email) : false,
+}));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: mocks.createSupabaseServerClient,
@@ -69,7 +74,7 @@ describe("/api/communities", () => {
     );
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({
-      error: "Only student ambassadors can create faculties.",
+      error: "Only student ambassadors and admins can create faculties.",
     });
     expect(mocks.createCommunity).not.toHaveBeenCalled();
   });

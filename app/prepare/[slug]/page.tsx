@@ -47,7 +47,7 @@ export default async function ExamOnboardingPage({
   }
 
   const { user } = await getCurrentAuth();
-  if (user && (await hasJoinedFaculty(user.id))) redirect("/app/challenges");
+  if (user && (await hasJoinedFaculty(user.id, slug))) redirect("/app/challenges");
 
   const intent = readExamIntent((await cookies()).get(EXAM_INTENT_COOKIE)?.value);
   return (

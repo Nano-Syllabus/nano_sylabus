@@ -1,4 +1,4 @@
-import { isStudentAmbassador } from "@/lib/data/student-ambassadors";
+import { mayUseAmbassadorWorkspace } from "@/lib/data/student-ambassadors";
 import type { Metadata } from "next";
 import { DM_Sans, Plus_Jakarta_Sans } from "next/font/google";
 import { CommunityCatalogClient } from "@/components/community-catalog-client";
@@ -54,7 +54,7 @@ export default async function CommunitiesPage({
       <CommunityCatalogClient
         examSites={sites.map((site) => ({ ...site, href: siteOrigin(site.slug) }))}
         signedIn={Boolean(user)}
-        initialShowCreate={params.create === "1" && (await isStudentAmbassador(user?.email))}
+        initialShowCreate={params.create === "1" && (await mayUseAmbassadorWorkspace(user))}
         initialPhoneNumber={
           typeof user?.user_metadata?.phone_number === "string"
             ? user.user_metadata.phone_number

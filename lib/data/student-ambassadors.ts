@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { memo } from "@/lib/http/memo";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isPlatformAdmin } from "@/lib/data/platform-admin";
 
 /**
  * Student ambassadors are the only people who may create faculties. A super
@@ -81,4 +82,21 @@ export async function removeStudentAmbassador(email: string) {
     .delete()
     .eq("email", normalizeAmbassadorEmail(email));
   if (error) throw error;
+}
+
+/**
+ * Who may open the Student Ambassador workspace (files and folders) and create
+ * faculties: ambassadors, plus admins and super admins (user, 2026-10-08) — the
+ * Faculties page lists both as managers, so both get the workspace. Fresh on
+ * every call, like `isStudentAmbassador`, because it grants the power.
+ */
+export async function mayUseAmbassadorWorkspace(
+  user: { id: string; email?: string | null } | null | undefined,
+) {
+  if (!user) return false;
+  const [ambassador, admin] = await Promise.all([
+    isStudentAmbassador(user.email),
+    isPlatformAdmin(user.id),
+  ]);
+  return ambassador || admin;
 }

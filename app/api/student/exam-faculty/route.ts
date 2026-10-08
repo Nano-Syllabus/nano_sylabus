@@ -47,6 +47,7 @@ export async function POST(request: Request) {
       .from("student_exam_enrollments")
       .select("preparation_answers")
       .eq("user_id", user.id)
+      .eq("exam_slug", enrollment.examSlug)
       .maybeSingle();
     await selectExamFaculty(
       user.id,

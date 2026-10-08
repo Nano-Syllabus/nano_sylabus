@@ -12,6 +12,8 @@ function singleResult(data: Record<string, unknown> | null) {
     in: vi.fn(),
     is: vi.fn(),
     maybeSingle: vi.fn(async () => ({ data, error: null })),
+    // A list read (a student's exam enrollments, one per site) ends here.
+    order: vi.fn(async () => ({ data: data ? [data] : [], error: null })),
   };
   query.select.mockReturnValue(query);
   query.eq.mockReturnValue(query);

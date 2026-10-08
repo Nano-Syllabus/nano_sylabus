@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { isStudentAmbassador } from "@/lib/data/student-ambassadors";
+import { mayUseAmbassadorWorkspace } from "@/lib/data/student-ambassadors";
 import { getTeacherProfileForUserId } from "@/app/teachers/actions";
 import { TeacherOnboarding } from "@/app/teachers/onboarding";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -21,8 +21,9 @@ export default async function TeachersPage() {
 
   const teacher = await getTeacherProfileForUserId(user.id);
   if (!teacher) {
-    // Opening a creator workspace (and creating faculties) is for student ambassadors only.
-    if (!(await isStudentAmbassador(user.email))) return <AmbassadorsOnly />;
+    // Opening a creator workspace (and creating faculties) is for student
+    // ambassadors, admins and super admins.
+    if (!(await mayUseAmbassadorWorkspace(user))) return <AmbassadorsOnly />;
     return <TeacherOnboarding userEmail={user.email || ""} />;
   }
 

@@ -7,7 +7,12 @@ const mocks = vi.hoisted(() => ({
   revalidate: vi.fn(),
   ambassador: vi.fn(),
 }));
-vi.mock("@/lib/data/student-ambassadors", () => ({ isStudentAmbassador: mocks.ambassador }));
+vi.mock("@/lib/data/student-ambassadors", () => ({
+  isStudentAmbassador: mocks.ambassador,
+  // Admins also pass; these tests are about ambassadors, so it reads the same flag.
+  mayUseAmbassadorWorkspace: (user: { email?: string | null } | null) =>
+    user ? mocks.ambassador(user.email) : false,
+}));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient: mocks.serverClient }));
 vi.mock("@/lib/supabase/verified-user", () => ({ getVerifiedUser: mocks.verifiedUser }));
@@ -110,7 +115,7 @@ describe("creator onboarding reports why it failed", () => {
 
     expect(await onboardTeacher()).toEqual({
       ok: false,
-      message: "Only student ambassadors can open a creator workspace.",
+      message: "Only student ambassadors and admins can open a creator workspace.",
     });
   });
 });

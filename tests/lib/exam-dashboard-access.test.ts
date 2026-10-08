@@ -27,6 +27,7 @@ vi.mock("@/lib/data/exam-enrollment", () => ({
 vi.mock("@/lib/data/faculty-lock", () => ({
   hasFacultyMembership: mocks.member,
   getFacultySwitchAccess: async () => "all",
+  activateExamEnrollment: async () => false,
   currentMemberFacultySlug: async () => "bei",
 }));
 vi.mock("@/lib/data/billing", () => ({ hasActiveSubscription: mocks.paid }));
@@ -83,24 +84,35 @@ describe("a dashboard opens on the student's own subdomain", () => {
     );
   });
 
-  it("sends a student on another exam's subdomain to their own", async () => {
+  it("lets a student joined elsewhere pick this subdomain's faculty too", async () => {
+    // Joined License; on IOE they have no IOE faculty yet (one per site).
     mocks.host = "ioe.localhost:3001";
-    await expect(layout()).rejects.toThrow("license.localhost:3001/app/today");
+    mocks.enrollment.mockResolvedValue(null);
+    mocks.member.mockResolvedValue(true);
+    mocks.exams.mockResolvedValue([{ slug: "license" }, { slug: "ioe" }]);
+    const element = await layout();
+    const children = [element.props.children].flat(3) as Array<{ props?: { exams?: unknown[] } }>;
+    const gate = children.find((child) => child?.props && "exams" in child.props);
+    expect(gate?.props?.exams).toEqual([{ slug: "ioe" }]);
   });
 
-  it("gives a super admin on a subdomain that site's faculties to open", async () => {
+  it("gives a super admin every subdomain and faculty to move across", async () => {
     mocks.auth.mockResolvedValue({ user: { id: "boss", role: "super_admin" } });
-    mocks.exam.mockResolvedValue({
-      slug: "license",
-      name: "License Preparation",
-      faculties: [
-        { slug: "bei", name: "BEI" },
-        { slug: "bct", name: "BCT" },
-      ],
-    });
+    mocks.exams.mockResolvedValue([
+      {
+        slug: "license",
+        name: "License Preparation",
+        faculties: [
+          { slug: "bei", name: "BEI" },
+          { slug: "bct", name: "BCT" },
+        ],
+      },
+      { slug: "ioe", name: "Institute of Engineering", faculties: [{ slug: "bct", name: "BCT" }] },
+    ]);
     const html = renderToStaticMarkup(await layout());
     expect(html).toContain("Super admin");
     expect(html).toContain("License Preparation");
+    expect(html).toContain("Institute of Engineering");
     expect(html).toContain("BCT");
     expect(html).not.toContain("Faculty locked");
   });
@@ -197,7 +209,7 @@ describe("dashboard access after skipping exam payment", () => {
     mocks.enrollment.mockResolvedValue(null);
     mocks.member.mockResolvedValue(true);
     mocks.exams.mockResolvedValue([{ slug: "license" }]);
-    mocks.host = "license.localhost:3001";
+    mocks.host = "localhost:3001";
     const element = await layout();
     const children = [element.props.children].flat(3) as Array<{ props?: { exams?: unknown[] } }>;
     const gate = children.find((child) => child?.props && "exams" in child.props);

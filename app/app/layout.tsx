@@ -13,7 +13,11 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { MAIN_SITE_SLUG, siteAppOrigin, siteSlugFromHost } from "@/lib/landing-site-host";
 import { EXAM_INTENT_COOKIE, EXAM_SITE_COOKIE, readExamIntent } from "@/lib/exam-enrollment";
+import { invalidateStudentCourseAccess } from "@/lib/student-courses";
+import type { FacultySwitch } from "@/components/faculty-switch-bar";
+import { RefreshOnce } from "@/components/refresh-once";
 import {
+  activateExamEnrollment,
   currentMemberFacultySlug,
   getFacultySwitchAccess,
   hasFacultyMembership,
@@ -43,40 +47,90 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     cookies(),
     headers(),
   ]);
-  // A student's dashboard lives on the subdomain of the exam they joined
-  // (user, 2026-10-08): an IOE student on nanosyllabus.com/app — or on another
-  // site's subdomain — goes to ioe.nanosyllabus.com. Sessions are per host, so
-  // they sign in there; admins and super admins stay where they are.
+  // Each subdomain is its own dashboard, and a student holds one faculty PER
+  // site (user, 2026-10-08): IOE → BCT and License → its faculty side by side.
+  // `enrollment` is the one for the host they're on. On the main domain a
+  // student with an enrollment goes to that site's subdomain; admins stay put.
   const hostSlug = siteSlugFromHost(requestHeaders.get("host"));
-  if (enrollment && (hostSlug ?? MAIN_SITE_SLUG) !== enrollment.examSlug) {
+  if (enrollment && !hostSlug && enrollment.examSlug !== MAIN_SITE_SLUG) {
     const protocol = requestHeaders.get("x-forwarded-proto") === "https" ? "https:" : "http:";
     redirect(`${siteAppOrigin(enrollment.examSlug, requestHeaders.get("host"), protocol)}/app/today`);
   }
-  // A super admin (or this site's admin) on a subdomain is never locked: they
-  // get a bar with the site's faculties to open any of them (user, 2026-10-08).
+  // The rest of the app reads one active faculty: make it this site's. When
+  // that changes, pages rendered alongside this layout saw the old one, so the
+  // client refreshes once.
+  let switchedFaculty = false;
+  if (enrollment && hostSlug) {
+    switchedFaculty = await activateExamEnrollment(user.id, hostSlug).catch((error) => {
+      console.error("[app/layout] could not activate the site's faculty", error);
+      return false;
+    });
+    if (switchedFaculty) invalidateStudentCourseAccess(user.id);
+  }
+
+  // Admins are never locked. A super admin moves across every subdomain and
+  // faculty from a site + faculty dropdown (user, 2026-10-08); a site admin
+  // gets their own site's faculties while on it.
   const platformAdmin = user.role === "admin" || user.role === "super_admin";
-  // A student switches freely within the exam they joined (only Upgrade nudges).
-  const [siteExam, switchAccess, currentFacultySlug] =
-    platformAdmin && hostSlug
-      ? await Promise.all([
-          getEnrollmentExam(hostSlug).catch(() => null),
-          getFacultySwitchAccess(user.id).catch(() => null),
-          currentMemberFacultySlug(user.id).catch(() => null),
-        ])
-      : enrollment
-        ? [await getEnrollmentExam(enrollment.examSlug).catch(() => null), null, enrollment.facultySlug]
-        : [null, null, null];
-  const pickerFaculties = siteExam?.faculties
-    ? siteExam.faculties.filter(
-        (faculty) =>
-          !platformAdmin ||
-          switchAccess === "all" ||
-          (Array.isArray(switchAccess) && switchAccess.some((own) => own.slug === faculty.slug)),
-      )
-    : [];
-  // A student who already joined a faculty (exam enrollment or Browse) is never
-  // asked to pick one again: the app simply opens the faculty they joined.
-  const needsFaculty = examStudent && !member;
+  const superAdmin = user.role === "super_admin";
+  let facultySwitch: FacultySwitch | null = null;
+  if (platformAdmin) {
+    const [allSites, switchAccess, currentSlug] = await Promise.all([
+      superAdmin
+        ? listEnrollmentExams().catch(() => [])
+        : hostSlug
+          ? getEnrollmentExam(hostSlug).then((exam) => (exam ? [exam] : []), () => [])
+          : Promise.resolve([]),
+      getFacultySwitchAccess(user.id).catch(() => null),
+      currentMemberFacultySlug(user.id).catch(() => null),
+    ]);
+    const sites = allSites
+      .map((exam) => ({
+        slug: exam.slug,
+        name: exam.name,
+        faculties: (exam.faculties ?? [])
+          .filter(
+            (faculty) =>
+              switchAccess === "all" ||
+              (Array.isArray(switchAccess) && switchAccess.some((own) => own.slug === faculty.slug)),
+          )
+          .map(({ slug, name }) => ({ slug, name })),
+      }))
+      .filter((site) => site.faculties.length);
+    const currentSite =
+      sites.find((site) => site.slug === hostSlug) ??
+      sites.find((site) => site.faculties.some((faculty) => faculty.slug === currentSlug)) ??
+      sites[0];
+    if (currentSite)
+      facultySwitch = {
+        sites,
+        siteSlug: currentSite.slug,
+        currentSlug,
+        mode: "admin",
+        roleLabel: superAdmin ? "Super admin" : "Admin",
+      };
+  } else if (enrollment) {
+    // A student switches freely within this site's faculties; only Upgrade nudges.
+    const exam = await getEnrollmentExam(enrollment.examSlug).catch(() => null);
+    if (exam?.faculties?.length)
+      facultySwitch = {
+        sites: [
+          {
+            slug: exam.slug,
+            name: exam.name,
+            faculties: exam.faculties.map(({ slug, name }) => ({ slug, name })),
+          },
+        ],
+        siteSlug: exam.slug,
+        currentSlug: enrollment.facultySlug,
+        mode: "student",
+      };
+  }
+
+  // A student without a faculty here picks one of this site's: on a subdomain
+  // that means no enrollment for THIS site (joining another never counts); on
+  // the main domain, no faculty at all.
+  const needsFaculty = examStudent && (hostSlug ? !enrollment : !member);
   // Which exam the student is here for: the subdomain they are on, else the exam
   // site whose "Continue learning" brought them in (main domain in production).
   const hostExamSlug =
@@ -92,7 +146,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // a subscription is active; opening the dashboard never activates a plan.
   // A Browse member with no exam enrollment is on the app's own plans, not an exam's.
   const examSlug =
-    enrollment?.examSlug ?? (member ? undefined : (intent?.examSlug ?? hostExamSlug ?? undefined));
+    enrollment?.examSlug ??
+    hostSlug ??
+    (member ? undefined : (intent?.examSlug ?? hostExamSlug ?? undefined));
   // Upgrade opens the in-app pricing page, which shows the exam's own prices for
   // the student's faculty once they have one.
   const upgradeHref = examStudent && examSlug && !user.hasPaidPlan ? "/app/billing" : null;
@@ -102,21 +158,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       user={user}
       title="Dashboard"
       faculty={enrollment}
-      facultySwitch={
-        siteExam && pickerFaculties.length
-          ? {
-              siteName: siteExam.name,
-              faculties: pickerFaculties.map(({ slug, name }) => ({ slug, name })),
-              currentSlug: currentFacultySlug,
-              mode: platformAdmin ? "admin" : "student",
-              roleLabel: platformAdmin
-                ? user.role === "super_admin"
-                  ? "Super admin"
-                  : "Admin"
-                : undefined,
-            }
-          : null
-      }
+      facultySwitch={facultySwitch}
       upgradeHref={upgradeHref}
     >
       <FacultySelectionGate
@@ -132,6 +174,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           the first click on each is an in-memory read rather than a wait.
           See components/tab-warmer.tsx. */}
       <TabWarmer />
+      {switchedFaculty ? <RefreshOnce /> : null}
       {children}
     </AppShell>
   );

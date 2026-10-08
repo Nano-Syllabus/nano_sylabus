@@ -114,9 +114,9 @@ export async function POST(request: Request, { params }: Context) {
     if (!exam?.faculties.some((faculty) => faculty.id === gift.facultyId))
       return NextResponse.json({ error: "Choose a faculty that exam supports." }, { status: 400 });
 
-    const existing = await getStudentExamEnrollment(userId);
-    const moves =
-      existing && (existing.examSlug !== gift.examSlug || existing.facultyId !== gift.facultyId);
+    // A student holds one faculty per site; only this exam's can be "moved".
+    const existing = await getStudentExamEnrollment(userId, gift.examSlug);
+    const moves = existing && existing.facultyId !== gift.facultyId;
     if (moves && !gift.changeFaculty)
       return NextResponse.json(
         { error: `This student is locked to ${existing.facultyName}. Confirm to move them.` },
@@ -130,6 +130,7 @@ export async function POST(request: Request, { params }: Context) {
         .from("student_exam_enrollments")
         .select("preparation_answers")
         .eq("user_id", userId)
+        .eq("exam_slug", gift.examSlug)
         .maybeSingle();
       answers = (data?.preparation_answers as Record<string, string>) ?? {};
     }

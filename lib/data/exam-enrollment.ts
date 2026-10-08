@@ -128,8 +128,9 @@ export async function selectExamFaculty(
   // preparation answers are still validated as usual.
   const canChange = allowChange || (await mayMovePastFacultyLock(userId, { id: facultyId }));
   if (!canChange) {
-    const existing = await getStudentExamEnrollment(userId);
-    if (existing && (existing.examSlug !== examSlug || existing.facultyId !== facultyId)) {
+    // One faculty per site: only this site's own enrollment can refuse it.
+    const existing = await getStudentExamEnrollment(userId, examSlug);
+    if (existing && existing.facultyId !== facultyId) {
       throw new LandingSiteError(
         "Your faculty is already locked. Contact an admin to change it.",
         409,

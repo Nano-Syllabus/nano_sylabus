@@ -38,10 +38,10 @@ export default async function CoursePaymentPage({ params, searchParams }: PagePr
         <ExamPreparationFlow exam={exam} plans={plans} initialStep="plans" initialIntent={intent} />
       );
     // Joined and already paying: nothing left to do here.
-    if ((await hasJoinedFaculty(user.id)) && (await hasActiveSubscription(user.id)))
+    if ((await hasJoinedFaculty(user.id, slug)) && (await hasActiveSubscription(user.id)))
       redirect("/app/challenges");
     const [enrollment, paymentConfig] = await Promise.all([
-      getStudentExamEnrollment(user.id),
+      getStudentExamEnrollment(user.id, slug),
       getActiveManualPaymentConfig(),
     ]);
     return (

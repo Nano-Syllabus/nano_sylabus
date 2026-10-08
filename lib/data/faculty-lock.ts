@@ -1,6 +1,8 @@
 import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { headers } from "next/headers";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { siteSlugFromHost } from "@/lib/landing-site-host";
 
 export type StudentExamEnrollment = {
   examSlug: string;
@@ -11,33 +13,97 @@ export type StudentExamEnrollment = {
   selectedAt: string;
 };
 
-export const getStudentExamEnrollment = cache(
-  async (userId: string): Promise<StudentExamEnrollment | null> => {
+/**
+ * Every exam site this student joined, newest first. A student holds one
+ * faculty PER SUBDOMAIN (user, 2026-10-08): ioe → BCT and license → its
+ * faculty can sit side by side for the same account.
+ */
+export const listStudentExamEnrollments = cache(
+  async (userId: string): Promise<StudentExamEnrollment[]> => {
     const { data, error } = await createSupabaseAdminClient()
       .from("student_exam_enrollments")
       .select(
         "exam_slug,community_id,selected_at,communities!inner(slug,name),landing_sites!inner(name)",
       )
       .eq("user_id", userId)
-      .maybeSingle();
+      .order("selected_at", { ascending: false });
     if (error) throw error;
-    if (!data) return null;
-    const faculty = (Array.isArray(data.communities)
-      ? data.communities[0]
-      : data.communities) as unknown as { slug: string; name: string };
-    const exam = (Array.isArray(data.landing_sites)
-      ? data.landing_sites[0]
-      : data.landing_sites) as unknown as { name: string };
-    return {
-      examSlug: data.exam_slug,
-      facultyId: data.community_id,
-      facultySlug: faculty.slug,
-      facultyName: faculty.name,
-      examName: exam.name,
-      selectedAt: data.selected_at,
-    };
+    return (data ?? []).map((row) => {
+      const faculty = (Array.isArray(row.communities)
+        ? row.communities[0]
+        : row.communities) as unknown as { slug: string; name: string };
+      const exam = (Array.isArray(row.landing_sites)
+        ? row.landing_sites[0]
+        : row.landing_sites) as unknown as { name: string };
+      return {
+        examSlug: row.exam_slug,
+        facultyId: row.community_id,
+        facultySlug: faculty.slug,
+        facultyName: faculty.name,
+        examName: exam.name,
+        selectedAt: row.selected_at,
+      };
+    });
   },
 );
+
+/** The subdomain this request came in on, or null (main domain, or no request). */
+async function requestSiteSlug(): Promise<string | null> {
+  try {
+    return siteSlugFromHost((await headers()).get("host"));
+  } catch {
+    return null;
+  }
+}
+
+/** The member faculty the student studies in right now, by id. */
+const activeMemberFacultyId = cache(async (userId: string): Promise<string | null> => {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("community_memberships")
+    .select("community_id")
+    .eq("user_id", userId)
+    .eq("role", "member")
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.community_id ?? null;
+});
+
+/**
+ * The student's enrollment for one exam site: `examSlug` when given, else the
+ * subdomain this request is on. On the main domain (no site) it is the one they
+ * study in now — the active member faculty — or their newest.
+ */
+export const getStudentExamEnrollment = cache(
+  async (userId: string, examSlug?: string): Promise<StudentExamEnrollment | null> => {
+    const all = await listStudentExamEnrollments(userId);
+    if (!all.length) return null;
+    const site = examSlug ?? (await requestSiteSlug());
+    if (site) return all.find((enrollment) => enrollment.examSlug === site) ?? null;
+    if (all.length === 1) return all[0];
+    const active = await activeMemberFacultyId(userId);
+    return all.find((enrollment) => enrollment.facultyId === active) ?? all[0];
+  },
+);
+
+/**
+ * Make this site's enrolled faculty the one the student studies in now (the
+ * rest of the app reads a single active member faculty). Returns true when
+ * something changed: the caller then drops the student's cached course access
+ * and refreshes what it already rendered.
+ */
+export async function activateExamEnrollment(userId: string, examSlug: string) {
+  const enrollment = await getStudentExamEnrollment(userId, examSlug);
+  if (!enrollment) return false;
+  if ((await activeMemberFacultyId(userId)) === enrollment.facultyId) return false;
+  const { error } = await createSupabaseAdminClient().rpc("activate_exam_enrollment", {
+    target_user_id: userId,
+    target_exam_slug: examSlug,
+  });
+  if (error) throw error;
+  return true;
+}
 
 export type FacultyRef = { id: string; slug: string; name: string };
 
@@ -129,8 +195,8 @@ export async function facultyChangeRefusal(
   userId: string,
   target: FacultyTarget,
 ): Promise<string | null> {
-  const [enrollment, access] = await Promise.all([
-    getStudentExamEnrollment(userId),
+  const [enrollments, access] = await Promise.all([
+    listStudentExamEnrollments(userId),
     getFacultySwitchAccess(userId),
   ]);
   if (access === "all") return null;
@@ -139,7 +205,14 @@ export async function facultyChangeRefusal(
       ? null
       : `You can switch only between your faculties: ${access.map((faculty) => faculty.name).join(", ")}.`;
   }
-  if (enrollment && !isTarget({ slug: enrollment.facultySlug, id: enrollment.facultyId }, target))
+  // A student with exam sites studies only in those sites' faculties (one per
+  // site); they change one through that site's faculty dropdown.
+  if (
+    enrollments.length &&
+    !enrollments.some((enrollment) =>
+      isTarget({ slug: enrollment.facultySlug, id: enrollment.facultyId }, target),
+    )
+  )
     return FACULTY_LOCKED_MESSAGE;
   return null;
 }
@@ -185,28 +258,35 @@ export const hasFacultyMembership = cache(async (userId: string) => {
 });
 
 /**
- * Whether a student already studies somewhere: an exam enrollment or any active
- * faculty membership. Such a student skips a site's onboarding and goes straight
- * into the app, which opens their own faculty.
+ * Whether a student already has a faculty on this exam site, so they skip its
+ * onboarding and go straight into the app. Joining ANOTHER site doesn't count
+ * (one faculty per site, user 2026-10-08). A student from before exam sites —
+ * a Browse member with no enrollment anywhere — counts as joined.
  */
-export async function hasJoinedFaculty(userId: string) {
-  const [enrollment, member] = await Promise.all([
-    getStudentExamEnrollment(userId),
+export async function hasJoinedFaculty(userId: string, examSlug: string) {
+  const [enrollments, member] = await Promise.all([
+    listStudentExamEnrollments(userId),
     hasFacultyMembership(userId),
   ]);
-  return Boolean(enrollment) || member;
+  if (enrollments.some((enrollment) => enrollment.examSlug === examSlug)) return true;
+  return !enrollments.length && member;
 }
 
 /** Reads the immutable learner scope using the caller’s database client. */
 export const getStudentFacultyId = cache(
   async (userId: string, admin: SupabaseClient): Promise<string | null> => {
+    // A student may hold one faculty per site; the one in use is the active
+    // member faculty among them, else the newest.
     const { data, error } = await admin
       .from("student_exam_enrollments")
       .select("community_id")
       .eq("user_id", userId)
-      .maybeSingle();
+      .order("selected_at", { ascending: false });
     if (error) throw error;
-    return data?.community_id ?? null;
+    if (!data?.length) return null;
+    if (data.length === 1) return data[0].community_id;
+    const active = await activeMemberFacultyId(userId);
+    return data.find((row) => row.community_id === active)?.community_id ?? data[0].community_id;
   },
 );
 
