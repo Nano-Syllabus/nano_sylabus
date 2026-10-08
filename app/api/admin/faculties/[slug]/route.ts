@@ -28,12 +28,12 @@ export async function PATCH(request: Request, { params }: Context) {
   if (!scopeAllowsFaculty(access.scope, { slug })) return outOfScope("that faculty");
   try {
     const input = facultyUpdateSchema.parse(await request.json().catch(() => null));
-    const before = (await getAdminFaculty(slug)) as unknown as Record<string, unknown>;
+    const before = ((await getAdminFaculty(slug)) ?? {}) as unknown as Record<string, unknown>;
     const faculty = await updateAdminFaculty(slug, input);
     const changed = Object.entries(input)
       .filter(([key, value]) => JSON.stringify(before[key]) !== JSON.stringify(value))
       .map(([key, value]) => ({ field: key, from: before[key] ?? null, to: value }));
-    if (changed.length)
+    if (changed.length && before.id)
       await recordFacultyActivity({
         actorId: access.userId,
         action: "faculty.updated",

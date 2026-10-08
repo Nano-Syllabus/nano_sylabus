@@ -46,7 +46,9 @@ describe("brand", () => {
     const good = sanitizeLandingContent({
       brand: { logoUrl: "https://x.supabase.co/logo.png", primaryColor: "#AA0000", accentColor: "#ffee00", communitySlug: "ioe-bct" },
     }).brand;
-    expect(good).toEqual({ logoUrl: "https://x.supabase.co/logo.png", primaryColor: "#aa0000", accentColor: "#ffee00", communitySlug: "ioe-bct" });
+    expect(good).toEqual({ logoUrl: "https://x.supabase.co/logo.png", iconUrl: "", primaryColor: "#aa0000", accentColor: "#ffee00", communitySlug: "ioe-bct" });
+    expect(sanitizeLandingContent({ brand: { iconUrl: "javascript:alert(1)" } }).brand.iconUrl).toBe("");
+    expect(sanitizeLandingContent({ brand: { iconUrl: "https://x.supabase.co/icon.png" } }).brand.iconUrl).toBe("https://x.supabase.co/icon.png");
     expect(sanitizeLandingContent({ brand: { logoUrl: "//evil.com/x.png" } }).brand.logoUrl).toBe("");
   });
 

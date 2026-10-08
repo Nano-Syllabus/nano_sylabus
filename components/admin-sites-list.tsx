@@ -87,6 +87,18 @@ export function AdminSitesList({
             {sites.map((site) => (
               <tr key={site.slug}>
                 <td className="px-4 py-3">
+                  <div className="flex items-start gap-3">
+                  {site.slug !== MAIN_SITE_SLUG ? (
+                    <SiteIconButton
+                      site={site}
+                      onChange={(iconUrl) =>
+                        setSites((all) =>
+                          all.map((row) => (row.slug === site.slug ? { ...row, iconUrl } : row)),
+                        )
+                      }
+                    />
+                  ) : null}
+                  <div className="min-w-0 flex-1">
                   <div className="font-medium text-foreground">
                     {domainOf(site.slug, rootDomain)}
                   </div>
@@ -109,6 +121,8 @@ export function AdminSitesList({
                       main={site.slug === MAIN_SITE_SLUG}
                       onChange={canAssignAdmins ? () => setAssigning(site) : null}
                     />
+                  </div>
+                  </div>
                   </div>
                 </td>
                 <td className="hidden px-4 py-3 md:table-cell">
@@ -213,6 +227,91 @@ export function AdminSitesList({
           onClose={() => setCreating(false)}
         />
       ) : null}
+    </div>
+  );
+}
+
+/** The Browse card's initials ("Institute of Engineering" → "IOE"), same rule as communityMonogram. */
+function initials(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const acronym = words.find((word) => /^[A-Z]{2,4}$/.test(word));
+  if (acronym) return acronym;
+  return (words.length > 1 ? words.slice(0, 3).map((word) => word[0]).join("") : name.slice(0, 3))
+    .toUpperCase() || "NS";
+}
+
+/**
+ * The square image on this site's Browse card. Click to upload one (live at
+ * once); without one the card shows the initials.
+ */
+function SiteIconButton({
+  site,
+  onChange,
+}: {
+  site: LandingSiteListItem;
+  onChange: (iconUrl: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send(file: File | null) {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      if (file) body.set("file", file);
+      const response = await fetch(`/api/admin/sites/${site.slug}/icon`, {
+        method: file ? "POST" : "DELETE",
+        body: file ? body : undefined,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Couldn’t save the image.");
+      onChange(payload.iconUrl ?? "");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn’t save the image.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="shrink-0 text-center">
+      <label
+        className={`grid size-11 cursor-pointer place-items-center overflow-hidden rounded-xl border border-border bg-muted text-xs font-semibold text-muted-foreground hover:border-blue-600 ${busy ? "opacity-50" : ""}`}
+        title={site.iconUrl ? "Change the card image" : "Add a card image (shown on Browse instead of the initials)"}
+      >
+        {site.iconUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded image on the storage host
+          <img src={site.iconUrl} alt="" className="size-full object-contain" />
+        ) : (
+          initials(site.name)
+        )}
+        <input
+          type="file"
+          accept="image/png,image/svg+xml,image/webp,image/jpeg"
+          className="sr-only"
+          aria-label={`Card image for ${site.name}`}
+          disabled={busy}
+          onChange={(event) => {
+            const file = event.target.files?.[0] ?? null;
+            event.target.value = "";
+            if (file) void send(file);
+          }}
+        />
+      </label>
+      {site.iconUrl ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void send(null)}
+          className="mt-1 text-[11px] text-muted-foreground hover:text-red-600"
+        >
+          Remove
+        </button>
+      ) : (
+        <span className="mt-1 block text-[11px] text-muted-foreground">Image</span>
+      )}
+      {error ? <p className="mt-1 max-w-24 text-[11px] text-red-600">{error}</p> : null}
     </div>
   );
 }

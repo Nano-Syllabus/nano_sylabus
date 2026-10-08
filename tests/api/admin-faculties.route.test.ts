@@ -7,8 +7,27 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   addSubject: vi.fn(),
   updateSubject: vi.fn(),
+  scope: vi.fn(),
 }));
 vi.mock("@/lib/admin-access", () => ({ assertAdminRequest: mocks.access }));
+// The scope lookup reads Supabase; tests hand it a scope directly.
+vi.mock("@/lib/admin-scope", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/admin-scope")>();
+  return {
+    ...actual,
+    assertScopedAdmin: async () => {
+      const access = await mocks.access();
+      return "error" in access ? access : { ...access, scope: mocks.scope() };
+    },
+  };
+});
+vi.mock("@/lib/data/faculty-activity", () => ({ recordFacultyActivity: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => {
+  const chain: Record<string, unknown> = {};
+  for (const key of ["from", "update", "eq", "gte"]) chain[key] = () => chain;
+  chain.then = (resolve: (value: { error: null }) => unknown) => resolve({ error: null });
+  return { createSupabaseAdminClient: () => chain };
+});
 vi.mock("@/lib/data/communities", () => ({
   createCommunity: mocks.create,
   CommunityError: class extends Error {},
@@ -48,6 +67,13 @@ function req(body: unknown, method = "POST", origin = "http://localhost") {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.access.mockResolvedValue({ userId: "verified-admin", role: "admin" });
+  mocks.scope.mockReturnValue({
+    all: false,
+    userId: "verified-admin",
+    role: "admin",
+    site: { slug: "license", name: "License" },
+    faculties: [{ id: "f1", slug: "bct-license", name: "BCT License" }],
+  });
   mocks.create.mockResolvedValue({ slug: "bct-license" });
   mocks.update.mockResolvedValue({ slug: "bct-license" });
   mocks.addSubject.mockResolvedValue({ slug: "bct-license" });
@@ -113,5 +139,17 @@ describe("admin faculty permissions", () => {
     expect((await addSubject(req({ termId: "bad", name: "Physics" }), context)).status).toBe(400);
     expect((await addSubject(req({ termId, name: "../secret" }), context)).status).toBe(400);
     expect(mocks.addSubject).not.toHaveBeenCalled();
+  });
+  it("refuses a faculty outside the admin's subdomain", async () => {
+    mocks.scope.mockReturnValue({
+      all: false,
+      userId: "verified-admin",
+      role: "admin",
+      site: { slug: "ioe", name: "IOE" },
+      faculties: [{ id: "f2", slug: "bei", name: "BEI" }],
+    });
+    const response = await PATCH(req(faculty, "PATCH"), context);
+    expect(response.status).toBe(403);
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 });

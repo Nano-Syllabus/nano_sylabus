@@ -19,7 +19,14 @@ export type LandingContent = {
    * `communitySlug` sends every main button into that community's join +
    * onboarding flow, and empty keeps the "pick your faculty" browse page.
    */
-  brand: { logoUrl: string; primaryColor: string; accentColor: string; communitySlug: string };
+  brand: {
+    logoUrl: string;
+    /** Square image for the site's card on nanosyllabus.com/communities. */
+    iconUrl: string;
+    primaryColor: string;
+    accentColor: string;
+    communitySlug: string;
+  };
   seo: { title: string; description: string };
   nav: { stepsLink: string; peopleLink: string; questionsLink: string };
   hero: {
@@ -108,7 +115,7 @@ export type LandingContent = {
 };
 
 export const DEFAULT_LANDING_CONTENT: LandingContent = {
-  brand: { logoUrl: "", primaryColor: "#3049ed", accentColor: "#dcfa72", communitySlug: "" },
+  brand: { logoUrl: "", iconUrl: "", primaryColor: "#3049ed", accentColor: "#dcfa72", communitySlug: "" },
   seo: {
     title: "NanoSyllabus — AI Study Companion for Nepal",
     description:
@@ -363,6 +370,7 @@ export const LANDING_SECTIONS: LandingSection[] = [
     fields: [
       { key: "communitySlug", label: "Main button opens", kind: "community", hint: "Visitors join this community and go straight into onboarding." },
       { key: "logoUrl", label: "Logo", kind: "image", hint: "Replaces the nanosyllabus logo in the header and footer. PNG, SVG or WebP, up to 1 MB." },
+      { key: "iconUrl", label: "Card image", kind: "image", hint: "Square image shown on this site's card in Browse, in place of its initials. PNG, SVG or WebP, up to 1 MB." },
       { key: "primaryColor", label: "Primary colour", kind: "color", hint: "Buttons, ribbons and the blue sections. White text sits on it, so keep it dark enough." },
       { key: "accentColor", label: "Accent colour", kind: "color", hint: "Highlights and the closing banner. Dark text sits on it, so keep it light." },
     ],
@@ -663,10 +671,13 @@ function sanitizeNode(value: unknown, template: unknown, path: string): unknown 
 export function sanitizeLandingContent(value: unknown): LandingContent {
   const content = sanitizeNode(value, DEFAULT_LANDING_CONTENT, "") as LandingContent;
   const fallback = DEFAULT_LANDING_CONTENT.brand;
-  const { logoUrl, primaryColor, accentColor, communitySlug } = content.brand;
+  const { logoUrl, iconUrl, primaryColor, accentColor, communitySlug } = content.brand;
+  // Only our own paths or https images: these values land in an <img src>.
+  const safeImage = (value: string) =>
+    /^(https:\/\/|\/(?!\/))\S+$/.test(value.trim()) ? value.trim() : "";
   content.brand = {
-    // Only our own paths or https images: this value lands in an <img src>.
-    logoUrl: /^(https:\/\/|\/(?!\/))\S+$/.test(logoUrl.trim()) ? logoUrl.trim() : "",
+    logoUrl: safeImage(logoUrl),
+    iconUrl: safeImage(iconUrl),
     primaryColor: HEX_COLOR.test(primaryColor) ? primaryColor.toLowerCase() : fallback.primaryColor,
     accentColor: HEX_COLOR.test(accentColor) ? accentColor.toLowerCase() : fallback.accentColor,
     communitySlug: /^[a-z0-9][a-z0-9-]{0,80}$/.test(communitySlug) ? communitySlug : "",

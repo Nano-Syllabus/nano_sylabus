@@ -139,6 +139,8 @@ export type ExamSiteCard = {
   /** The hero headline, lead and highlight joined. */
   headline: string;
   logoUrl: string;
+  /** The square card image, else "" (the card then uses the logo, then initials). */
+  iconUrl: string;
   facultyCount: number;
 };
 
@@ -177,6 +179,7 @@ export async function listLiveExamSites(): Promise<ExamSiteCard[]> {
             .filter(Boolean)
             .join(" "),
           logoUrl: content.brand.logoUrl,
+          iconUrl: content.brand.iconUrl,
           facultyCount: readExamConfig(row.exam_config).facultySlugs.length,
         };
       })
@@ -219,6 +222,8 @@ async function ensureMainSite() {
 export type LandingSiteListItem = LandingSiteSummary & {
   facultySlugs: string[];
   examEnabled: boolean;
+  /** The live card image (see `setLandingSiteIcon`). */
+  iconUrl: string;
 };
 
 export async function listLandingSites(): Promise<LandingSiteListItem[]> {
@@ -227,8 +232,9 @@ export async function listLandingSites(): Promise<LandingSiteListItem[]> {
   if (error) throw error;
   return ((data ?? []) as LandingSiteRow[])
     .map(toDetail)
-    .map(({ draft: _draft, content: _content, examConfig, ...summary }) => ({
+    .map(({ draft: _draft, content, examConfig, ...summary }) => ({
       ...summary,
+      iconUrl: content.brand.iconUrl,
       facultySlugs: examConfig.facultySlugs,
       examEnabled: examConfig.enabled,
     }))
@@ -358,6 +364,32 @@ export async function updateLandingSite(
     revalidatePath(`/prepare/${slug}`);
     revalidatePath(`/payment/${slug}`);
   }
+  return toDetail(data as LandingSiteRow);
+}
+
+/**
+ * Sets (or clears, with "") the square card image on both the draft and the
+ * live text at once. It is a picture on the Browse card, not page copy, so it
+ * goes live without a Publish — and without publishing other pending edits.
+ */
+export async function setLandingSiteIcon(slug: string, iconUrl: string, userId: string) {
+  const current = await getLandingSite(slug);
+  if (!current) throw new LandingSiteError("That site no longer exists.", 404);
+  const withIcon = (content: LandingContent) =>
+    sanitizeLandingContent({ ...content, brand: { ...content.brand, iconUrl } });
+  const { data, error } = await createSupabaseAdminClient()
+    .from(TABLE)
+    .update({
+      draft: withIcon(current.draft),
+      content: withIcon(current.content),
+      updated_at: new Date().toISOString(),
+      updated_by: userId,
+    })
+    .eq("slug", slug)
+    .select(COLUMNS)
+    .single();
+  if (error) throw error;
+  refreshLiveSite(slug);
   return toDetail(data as LandingSiteRow);
 }
 

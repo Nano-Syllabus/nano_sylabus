@@ -120,9 +120,9 @@ function SiteCard({ site }: { site: ExamSiteCard & { href: string } }) {
       <div className="ns-fc-inner">
         <div className="ns-fc-top">
           <div className="ns-fc-monogram" aria-hidden="true">
-            {site.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded logo on any host
-              <img src={site.logoUrl} alt="" className="ns-site-logo" />
+            {site.iconUrl || site.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded image on any host
+              <img src={site.iconUrl || site.logoUrl} alt="" className="ns-site-logo" />
             ) : (
               communityMonogram(site.name)
             )}

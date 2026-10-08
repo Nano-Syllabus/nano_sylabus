@@ -81,6 +81,7 @@ describe("community membership controls (without browser)", () => {
             name: "License Preparation",
             headline: "Crack the license exam.",
             logoUrl: "",
+            iconUrl: "",
             facultyCount: 2,
             href: "https://license.nanosyllabus.com",
           },
