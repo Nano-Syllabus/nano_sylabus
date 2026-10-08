@@ -6,7 +6,8 @@ import { getSessionUser, requireOnboardedUser } from "@/lib/auth";
 import { getStudentExamEnrollment, listEnrollmentExams } from "@/lib/data/exam-enrollment";
 import { FacultySelectionGate } from "@/components/faculty-selection-dialog";
 import { cookies, headers } from "next/headers";
-import { siteSlugFromHost } from "@/lib/landing-site-host";
+import { redirect } from "next/navigation";
+import { MAIN_SITE_SLUG, siteAppOrigin, siteSlugFromHost } from "@/lib/landing-site-host";
 import { EXAM_INTENT_COOKIE, EXAM_SITE_COOKIE, readExamIntent } from "@/lib/exam-enrollment";
 import { hasFacultyMembership } from "@/lib/data/faculty-lock";
 
@@ -34,13 +35,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     cookies(),
     headers(),
   ]);
+  // A student's dashboard lives on the subdomain of the exam they joined
+  // (user, 2026-10-08): an IOE student on nanosyllabus.com/app — or on another
+  // site's subdomain — goes to ioe.nanosyllabus.com. Sessions are per host, so
+  // they sign in there; admins and super admins stay where they are.
+  const hostSlug = siteSlugFromHost(requestHeaders.get("host"));
+  if (enrollment && (hostSlug ?? MAIN_SITE_SLUG) !== enrollment.examSlug) {
+    const protocol = requestHeaders.get("x-forwarded-proto") === "https" ? "https:" : "http:";
+    redirect(`${siteAppOrigin(enrollment.examSlug, requestHeaders.get("host"), protocol)}/app/today`);
+  }
   // A student who already joined a faculty (exam enrollment or Browse) is never
   // asked to pick one again: the app simply opens the faculty they joined.
   const needsFaculty = examStudent && !member;
   // Which exam the student is here for: the subdomain they are on, else the exam
   // site whose "Continue learning" brought them in (main domain in production).
   const hostExamSlug =
-    siteSlugFromHost(requestHeaders.get("host")) ??
+    hostSlug ??
     cookieStore.get(EXAM_SITE_COOKIE)?.value ??
     null;
   const allExams = needsFaculty && !enrollment ? await listEnrollmentExams() : [];

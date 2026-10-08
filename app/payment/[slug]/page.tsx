@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentAuth } from "@/lib/auth";
 import { enrollStudentInCourse, getPublishedCourse } from "@/lib/student-courses";
-import { cookies, headers } from "next/headers";
-import { mainAppOrigin } from "@/lib/landing-site-host";
+import { cookies } from "next/headers";
 import {
   getEnrollmentExam,
   getExamPlans,
@@ -27,12 +26,8 @@ export default async function CoursePaymentPage({ params, searchParams }: PagePr
     readExamIntent((await searchParams).intent) ??
     readExamIntent((await cookies()).get(EXAM_INTENT_COOKIE)?.value);
   const intent = storedIntent?.examSlug === slug ? storedIntent : null;
-  const appOrigin = mainAppOrigin((await headers()).get("host"));
-  // Old bookmarks and exam links must reach the host that owns the session.
-  if (appOrigin) {
-    const query = intent ? `?intent=${encodeURIComponent(JSON.stringify(intent))}` : "";
-    redirect(`${appOrigin}${paymentPath}${query}`);
-  }
+  // Payment stays on the host it was opened on: each subdomain signs in and
+  // pays on its own dashboard (user, 2026-10-08).
   const { user } = await getCurrentAuth();
 
   const exam = await getEnrollmentExam(slug);

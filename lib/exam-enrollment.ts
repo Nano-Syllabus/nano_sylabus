@@ -142,6 +142,38 @@ export function validateExamAnswers(config: ExamConfig, raw: unknown) {
   return answers;
 }
 
+/**
+ * The onboarding result (user, 2026-10-08): how ready the answers say the
+ * student is, as a percentage. Admins list each question's options from least
+ * to most prepared, so an answer scores its position: the first option 0, the
+ * last 1. The result is the average, kept between 10% and 95% — onboarding
+ * answers alone never say "not at all" or "fully ready". `focus` is the answer
+ * that pulled the score down most, to name what the plan starts with.
+ */
+export function examReadiness(
+  questions: Array<{ id: string; prompt: string; options: string[] }>,
+  answers: Record<string, string>,
+): { percent: number; focus: { prompt: string; answer: string } | null } | null {
+  const scored = questions
+    .map((question) => {
+      const index = question.options.indexOf(answers[question.id] ?? "");
+      if (index < 0 || question.options.length < 2) return null;
+      return {
+        prompt: question.prompt,
+        answer: question.options[index],
+        score: index / (question.options.length - 1),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+  if (!scored.length) return null;
+  const average = scored.reduce((sum, item) => sum + item.score, 0) / scored.length;
+  const weakest = scored.reduce((low, item) => (item.score < low.score ? item : low));
+  return {
+    percent: Math.round(10 + average * 85),
+    focus: weakest.score < 1 ? { prompt: weakest.prompt, answer: weakest.answer } : null,
+  };
+}
+
 export const EXAM_INTENT_COOKIE = "nano_exam_intent";
 /**
  * The exam site a student came in through ("Continue learning" on its

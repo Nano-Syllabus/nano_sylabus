@@ -1,11 +1,10 @@
 import { notFound, redirect } from "next/navigation";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { ExamPreparationFlow } from "@/components/exam-enrollment-flow";
 import { getCurrentAuth } from "@/lib/auth";
 import { getEnrollmentExam, getExamPlans } from "@/lib/data/exam-enrollment";
 import { hasJoinedFaculty } from "@/lib/data/faculty-lock";
 import { EXAM_INTENT_COOKIE, readExamIntent } from "@/lib/exam-enrollment";
-import { mainAppOrigin } from "@/lib/landing-site-host";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +13,8 @@ export const dynamic = "force-dynamic";
  * questions → supported faculties → plans → sign in → payment QR. A student who
  * already joined a faculty never sees it again and goes straight to the app.
  *
- * Sign-in lives on the main domain, and a subdomain never sees that session, so
- * a subdomain visit is handed to the main domain, which can tell who is who.
+ * It runs on the subdomain itself: each site has its own sign-in and dashboard
+ * (user, 2026-10-08).
  */
 export default async function ExamOnboardingPage({
   params,
@@ -23,9 +22,6 @@ export default async function ExamOnboardingPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const appOrigin = mainAppOrigin((await headers()).get("host"));
-  if (appOrigin) redirect(`${appOrigin}/prepare/${encodeURIComponent(slug)}`);
-
   const exam = await getEnrollmentExam(slug);
   if (!exam) notFound();
 

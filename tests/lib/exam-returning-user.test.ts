@@ -116,11 +116,10 @@ describe("Continue learning from an exam site", () => {
     await expect(open()).rejects.toThrow("NOT_FOUND");
   });
 
-  it("moves subdomain links to the main site before checking the session", async () => {
-    await expect(open("license.nanosyllabus.com")).rejects.toThrow(
-      "REDIRECT:https://nanosyllabus.com/prepare/license",
-    );
-    expect(mocks.auth).not.toHaveBeenCalled();
+  it("keeps onboarding on the subdomain's own dashboard", async () => {
+    const page = await open("license.nanosyllabus.com");
+    expect(page.type).toBe(ExamPreparationFlow);
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
   it("keeps local development on the local host", async () => {
@@ -131,21 +130,11 @@ describe("Continue learning from an exam site", () => {
 });
 
 describe("exam payment", () => {
-  it("moves old subdomain links to the main site before checking the session", async () => {
-    mocks.host = "license.nanosyllabus.com";
-    await expect(PaymentPage(props())).rejects.toThrow(
-      "REDIRECT:https://nanosyllabus.com/payment/license",
-    );
-    expect(mocks.auth).not.toHaveBeenCalled();
-  });
-
-  it("preserves a valid subdomain checkout intent on the main site", async () => {
+  it("keeps payment on the subdomain instead of the main site", async () => {
     mocks.host = "license.nanosyllabus.com";
     mocks.cookie = JSON.stringify(intent);
-    await expect(PaymentPage(props())).rejects.toThrow("REDIRECT:");
-    const destination = new URL(mocks.redirect.mock.lastCall![0]);
-    expect(destination.origin).toBe("https://nanosyllabus.com");
-    expect(JSON.parse(destination.searchParams.get("intent")!)).toEqual(intent);
+    await PaymentPage(props());
+    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
   it("keeps a joined, paying student off the pricing page", async () => {
@@ -163,9 +152,9 @@ describe("exam payment", () => {
     expect(page.props.enrollment.facultyId).toBe("f1");
   });
 
-  it("points published exam landing buttons at the app's session host", async () => {
+  it("keeps published exam landing buttons on the subdomain's own sign-in", async () => {
     const page = await SiteLandingPage({ params: Promise.resolve({ slug: "license" }) });
-    expect(page.props.appOrigin).toBe("https://nanosyllabus.com");
+    expect(page.props.appOrigin).toBe("");
     expect(page.props.examSlug).toBe("license");
   });
 });

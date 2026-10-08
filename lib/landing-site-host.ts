@@ -64,11 +64,13 @@ export function siteOrigin(slug: string) {
 }
 
 /**
- * Where sign-in and the app live for a request. A subdomain sends students to
- * the main domain to log in (one session); the main site and local dev stay put.
+ * The origin of a site's own dashboard, matching how this request arrived:
+ * `https://ioe.nanosyllabus.com` in production, `http://ioe.localhost:3000`
+ * locally. The main site is the bare domain.
  */
-export function mainAppOrigin(host: string | null | undefined) {
-  return process.env.NODE_ENV === "production" && siteSlugFromHost(host)
-    ? siteOrigin(MAIN_SITE_SLUG)
-    : "";
+export function siteAppOrigin(slug: string, host: string | null | undefined, protocol = "https:") {
+  if (process.env.NODE_ENV === "production") return siteOrigin(slug);
+  const port = (host ?? "").split(":")[1];
+  const base = slug === MAIN_SITE_SLUG ? "localhost" : `${slug}.localhost`;
+  return `${protocol}//${base}${port ? `:${port}` : ""}`;
 }

@@ -42,7 +42,8 @@ export default async function SiteLandingPage({ params }: Props) {
   // All journeys use the main domain, which owns the sign-in cookie. The exam
   // slug still selects this site's questions, faculties and plans. Locally the
   // buttons stay on this host, which is the dev server anyway.
-  const appOrigin = process.env.NODE_ENV !== "production" ? "" : siteOrigin(MAIN_SITE_SLUG);
+  // Sign-in and the dashboard live on this subdomain itself.
+  const appOrigin = "";
   return (
     <LandingView
       content={site.content}

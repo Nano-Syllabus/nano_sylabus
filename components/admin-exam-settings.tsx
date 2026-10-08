@@ -453,7 +453,7 @@ export function AdminExamSettings({
           </label>
           {config.askQuestions ? (
             <p className="text-xs text-muted-foreground">
-              Questions are asked before faculties and payment. Put one answer option on each line.
+              Questions are asked before faculties and payment. Put one answer option on each line, from least to most prepared — the student’s readiness % is worked out from that order.
             </p>
           ) : null}
           {(config.askQuestions ? config.questions : []).map((q, index) => (

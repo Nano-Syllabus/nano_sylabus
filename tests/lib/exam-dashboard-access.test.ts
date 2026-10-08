@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
   paid: vi.fn(),
   member: vi.fn(),
   pathname: "/app/today",
-  host: "localhost:3001",
+  // The enrolled student's own subdomain: a dashboard opens only there.
+  host: "license.localhost:3001",
   cookie: undefined as string | undefined,
 }));
 vi.mock("@/lib/dev-auth-bypass", () => ({ DEV_AUTH_BYPASS: false, DEV_BYPASS_USER_ID: "dev" }));
@@ -31,8 +32,8 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => mocks.pathname,
-  redirect: vi.fn(() => {
-    throw new Error("Unexpected redirect to payment");
+  redirect: vi.fn((to: string) => {
+    throw new Error(`Unexpected redirect to ${to}`);
   }),
 }));
 vi.mock("@/components/app-sidebar", () => ({ AppSidebar: () => null }));
@@ -61,13 +62,33 @@ beforeEach(() => {
   mocks.paid.mockResolvedValue(false);
   mocks.member.mockResolvedValue(false);
   mocks.pathname = "/app/today";
-  mocks.host = "localhost:3001";
+  mocks.host = "license.localhost:3001";
   mocks.cookie = undefined;
 });
 
 async function layout(children: ReactNode = "Dashboard progress") {
   return AppLayout({ children });
 }
+
+describe("a dashboard opens on the student's own subdomain", () => {
+  it("sends an enrolled student on the main domain to their exam's subdomain", async () => {
+    mocks.host = "localhost:3001";
+    await expect(layout()).rejects.toThrow(
+      "Unexpected redirect to http://license.localhost:3001/app/today",
+    );
+  });
+
+  it("sends a student on another exam's subdomain to their own", async () => {
+    mocks.host = "ioe.localhost:3001";
+    await expect(layout()).rejects.toThrow("license.localhost:3001/app/today");
+  });
+
+  it("leaves admins wherever they are", async () => {
+    mocks.host = "localhost:3001";
+    mocks.auth.mockResolvedValue({ user: { id: "boss", role: "admin" } });
+    expect((await layout()).type).toBe(AppShell);
+  });
+});
 
 describe("dashboard access after skipping exam payment", () => {
   it("renders the unpaid student's dashboard with Upgrade leading to the pricing page", async () => {
@@ -118,6 +139,7 @@ describe("dashboard access after skipping exam payment", () => {
 
   it("preserves the existing free experience for students outside an exam", async () => {
     mocks.enrollment.mockResolvedValue(null);
+    mocks.host = "localhost:3001";
     const element = await layout();
     expect(element.props.upgradeHref).toBeNull();
   });

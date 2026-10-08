@@ -9,6 +9,7 @@ import type { EnrollmentExam, StudentExamEnrollment } from "@/lib/data/exam-enro
 import {
   examText,
   examBillingMonths,
+  examReadiness,
   examPlanMonthlyPrice,
   EXISTING_STUDENT_LOGIN,
   readExamIntent,
@@ -103,6 +104,74 @@ function FlowFrame({
         {children}
       </main>
     </div>
+  );
+}
+
+/**
+ * The onboarding result: the readiness % worked out from the answers
+ * (`examReadiness`), a ring to show it, and what the plan starts with.
+ */
+function ReadinessResult({
+  result,
+  examName,
+  onContinue,
+}: {
+  result: ReturnType<typeof examReadiness>;
+  examName: string;
+  onContinue: () => void;
+}) {
+  const percent = result?.percent ?? 0;
+  const verdict =
+    percent < 40
+      ? "You’re at the start — we’ll build the basics first, step by step."
+      : percent < 70
+        ? "You’re on your way — we’ll fill the gaps and get you practising."
+        : "You’re in good shape — we’ll sharpen you with exam-style practice.";
+  return (
+    <section aria-live="polite" className="text-center">
+      <p className="text-[13px] font-semibold uppercase tracking-wider text-[#777]">
+        Your starting point
+      </p>
+      <div
+        className="relative mx-auto mt-6 size-44"
+        role="img"
+        aria-label={`${percent} percent ready for ${examName}`}
+      >
+        <svg viewBox="0 0 36 36" className="size-full -rotate-90">
+          <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#eee" strokeWidth="3" />
+          <circle
+            cx="18"
+            cy="18"
+            r="15.9155"
+            fill="none"
+            stroke="#2563eb"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={`${percent} 100`}
+            className="transition-all duration-700"
+          />
+        </svg>
+        <span className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-[44px] font-[760] leading-none tracking-[-1.5px] text-[#111]">
+            {percent}%
+          </span>
+          <span className="mt-1 text-[13px] text-[#777]">ready</span>
+        </span>
+      </div>
+      <h1 className="mx-auto mt-8 max-w-md text-[26px] font-[760] leading-[1.2] tracking-[-1px] text-[#111] sm:text-[30px]">
+        {verdict}
+      </h1>
+      {result?.focus ? (
+        <p className="mx-auto mt-4 max-w-md rounded-xl border border-[#ddd] bg-[#f7faff] px-4 py-3 text-left text-[14px] leading-6 text-[#444]">
+          <span className="font-semibold text-[#111]">We’ll start with:</span> {result.focus.prompt}{" "}
+          <span className="text-[#777]">You said “{result.focus.answer}”.</span>
+        </p>
+      ) : null}
+      <button type="button" onClick={onContinue} className={`${actionClass} mt-8`}>
+        Find my faculty
+        <ArrowRight size={16} />
+      </button>
+    </section>
   );
 }
 
@@ -274,6 +343,8 @@ export function ExamPreparationFlow({
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
   const [questionIndex, setQuestionIndex] = useState(0);
+  // After the last question the student sees their readiness % before faculties.
+  const [showResult, setShowResult] = useState(false);
   const [facultySlug, setFacultySlug] = useState(
     exam.faculties.some((f) => f.slug === initialIntent?.facultySlug)
       ? initialIntent!.facultySlug!
@@ -321,7 +392,7 @@ export function ExamPreparationFlow({
     } catch {
       /* The current form remains usable. */
     }
-    setStep("faculties");
+    setShowResult(true);
   }
   /** Picking an answer moves on, like the main app's questions. */
   function answerQuestion(questionId: string, option: string) {
@@ -425,14 +496,26 @@ export function ExamPreparationFlow({
       wide={step !== "questions"}
       onBack={
         step === "questions"
-          ? questionIndex > 0
-            ? () => setQuestionIndex(questionIndex - 1)
-            : undefined
+          ? showResult
+            ? () => setShowResult(false)
+            : questionIndex > 0
+              ? () => setQuestionIndex(questionIndex - 1)
+              : undefined
           : () => setStep("faculties")
       }
-      backLabel={step === "questions" && questionIndex === 0 ? "Home" : "Back"}
+      backLabel={step === "questions" && questionIndex === 0 && !showResult ? "Home" : "Back"}
     >
-      {step === "questions" ? (
+      {step === "questions" && showResult ? (
+        <ReadinessResult
+          result={examReadiness(exam.config.questions, answers)}
+          examName={exam.name}
+          onContinue={() => {
+            setShowResult(false);
+            setStep("faculties");
+          }}
+        />
+      ) : null}
+      {step === "questions" && !showResult ? (
         <section aria-live="polite">
           {(() => {
             const total = exam.config.questions.length;

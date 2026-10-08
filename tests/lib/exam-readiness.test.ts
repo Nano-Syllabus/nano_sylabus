@@ -1,15 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { calculateExamReadiness } from "@/lib/exam-readiness";
+import { DEFAULT_EXAM_QUESTIONS, examReadiness } from "@/lib/exam-enrollment";
 
-describe("exam readiness", () => {
-  it("weights subjects equally even when their syllabus sizes differ", () => {
-    expect(calculateExamReadiness([{ completedTopics: 1, totalTopics: 2 }, { completedTopics: 90, totalTopics: 100 }])).toBe(70);
+const answer = (picks: number[]) =>
+  Object.fromEntries(DEFAULT_EXAM_QUESTIONS.map((q, i) => [q.id, q.options[picks[i]]]));
+
+describe("examReadiness", () => {
+  it("scores each answer by its position, least to most prepared", () => {
+    expect(examReadiness(DEFAULT_EXAM_QUESTIONS, answer([0, 0, 0]))?.percent).toBe(10);
+    expect(examReadiness(DEFAULT_EXAM_QUESTIONS, answer([2, 2, 2]))?.percent).toBe(95);
+    expect(examReadiness(DEFAULT_EXAM_QUESTIONS, answer([1, 1, 1]))?.percent).toBe(53);
   });
-  it("includes untouched and unmapped subjects in the denominator", () => {
-    expect(calculateExamReadiness([{ completedTopics: 10, totalTopics: 10 }, { completedTopics: 0, totalTopics: 20 }, { completedTopics: 0, totalTopics: 0 }])).toBeCloseTo(100 / 3);
-    expect(calculateExamReadiness([])).toBe(0);
+
+  it("names the weakest answer as the focus, none when all are top", () => {
+    const result = examReadiness(DEFAULT_EXAM_QUESTIONS, answer([2, 0, 1]));
+    expect(result?.focus?.prompt).toBe(DEFAULT_EXAM_QUESTIONS[1].prompt);
+    expect(examReadiness(DEFAULT_EXAM_QUESTIONS, answer([2, 2, 2]))?.focus).toBeNull();
   });
-  it("bounds inconsistent completion counts", () => {
-    expect(calculateExamReadiness([{ completedTopics: 11, totalTopics: 10 }, { completedTopics: -1, totalTopics: 10 }])).toBe(50);
+
+  it("returns null with no usable answers", () => {
+    expect(examReadiness(DEFAULT_EXAM_QUESTIONS, {})).toBeNull();
   });
 });
