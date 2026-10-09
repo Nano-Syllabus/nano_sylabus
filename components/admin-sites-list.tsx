@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ExternalLink, Globe, ImagePlus, PencilLine, Plus, Search, X } from "lucide-react";
+import { Check, ExternalLink, Globe, ImagePlus, PencilLine, Plus, Search, X } from "lucide-react";
 import { messageOf, toast } from "@/components/admin/admin-toaster";
 import type {
   CommunityChoice,
@@ -105,6 +105,8 @@ export function AdminSitesList({
     facultyBySlug,
     onAssign: canAssignAdmins ? () => setAssigning(site) : null,
     onLink: () => setLinking(site),
+    onRename: (name: string) =>
+      setSites((all) => all.map((row) => (row.slug === site.slug ? { ...row, name } : row))),
     onIcon: (iconUrl: string) =>
       setSites((all) => all.map((row) => (row.slug === site.slug ? { ...row, iconUrl } : row))),
   });
@@ -275,9 +277,15 @@ type SiteRowProps = {
   onAssign: (() => void) | null;
   onLink: () => void;
   onIcon: (iconUrl: string) => void;
+  onRename: (name: string) => void;
 };
 
-function SiteIdentity({ site, domain, onIcon }: Pick<SiteRowProps, "site" | "domain" | "onIcon">) {
+function SiteIdentity({
+  site,
+  domain,
+  onIcon,
+  onRename,
+}: Pick<SiteRowProps, "site" | "domain" | "onIcon" | "onRename">) {
   const main = site.slug === MAIN_SITE_SLUG;
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -288,7 +296,7 @@ function SiteIdentity({ site, domain, onIcon }: Pick<SiteRowProps, "site" | "dom
       ) : (
         <SiteIconButton site={site} onChange={onIcon} />
       )}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <Link
           href={`/admin/sites/${site.slug}`}
           className="block truncate font-medium text-foreground hover:text-blue-700 hover:underline dark:hover:text-blue-300"
@@ -296,11 +304,101 @@ function SiteIdentity({ site, domain, onIcon }: Pick<SiteRowProps, "site" | "dom
         >
           {domain}
         </Link>
-        <div className="truncate text-xs text-muted-foreground" title={site.name}>
-          {site.name}
-          {main ? " · main site" : ""}
-        </div>
+        <SiteNameEditor site={site} onRename={onRename} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * The site's admin-only name, renamed in place: pencil → field, Enter saves,
+ * Escape cancels.
+ */
+function SiteNameEditor({ site, onRename }: Pick<SiteRowProps, "site" | "onRename">) {
+  const [value, setValue] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const name = (value ?? "").trim();
+    if (!name || name === site.name) {
+      setValue(null);
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/admin/sites/${site.slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.site) throw new Error(payload.error || "Couldn’t rename the site.");
+      onRename(payload.site.name);
+      setValue(null);
+      toast.success(`Renamed to ${payload.site.name}`);
+    } catch (cause) {
+      toast.error("Couldn’t rename the site", { description: messageOf(cause, "Try again.") });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (value !== null) {
+    return (
+      <form
+        className="mt-0.5 flex items-center gap-1"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save();
+        }}
+      >
+        <input
+          autoFocus
+          aria-label={`Name of ${site.slug}`}
+          value={value}
+          maxLength={80}
+          disabled={saving}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => event.key === "Escape" && setValue(null)}
+          className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-blue-600/40"
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          aria-label="Save name"
+          title="Save (Enter)"
+          className="grid size-7 shrink-0 place-items-center rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          <Check size={13} />
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => setValue(null)}
+          aria-label="Cancel"
+          title="Cancel (Esc)"
+          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted"
+        >
+          <X size={13} />
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <div className="group/name flex min-w-0 items-center gap-1">
+      <span className="truncate text-xs text-muted-foreground" title={site.name}>
+        {site.name}
+      </span>
+      <button
+        type="button"
+        onClick={() => setValue(site.name)}
+        aria-label={`Rename ${site.name}`}
+        title="Rename"
+        className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground opacity-60 hover:bg-muted hover:text-foreground hover:opacity-100 focus-visible:opacity-100 group-hover/name:opacity-100"
+      >
+        <PencilLine size={12} />
+      </button>
     </div>
   );
 }

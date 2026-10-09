@@ -275,15 +275,23 @@ export async function hasJoinedFaculty(userId: string, examSlug: string) {
 /** Reads the immutable learner scope using the caller’s database client. */
 export const getStudentFacultyId = cache(
   async (userId: string, admin: SupabaseClient): Promise<string | null> => {
-    // A student may hold one faculty per site; the one in use is the active
+    // A student may hold one faculty per site. On a subdomain it is that
+    // site's — read here, not off the active membership, because the layout
+    // switches the membership in the same render and pages beside it would
+    // otherwise show the previous site's faculty. Elsewhere it is the active
     // member faculty among them, else the newest.
-    const { data, error } = await admin
-      .from("student_exam_enrollments")
-      .select("community_id")
-      .eq("user_id", userId)
-      .order("selected_at", { ascending: false });
+    const [{ data, error }, site] = await Promise.all([
+      admin
+        .from("student_exam_enrollments")
+        .select("community_id,exam_slug")
+        .eq("user_id", userId)
+        .order("selected_at", { ascending: false }),
+      requestSiteSlug(),
+    ]);
     if (error) throw error;
     if (!data?.length) return null;
+    const forSite = site ? data.find((row) => row.exam_slug === site) : undefined;
+    if (forSite) return forSite.community_id;
     if (data.length === 1) return data[0].community_id;
     const active = await activeMemberFacultyId(userId);
     return data.find((row) => row.community_id === active)?.community_id ?? data[0].community_id;
