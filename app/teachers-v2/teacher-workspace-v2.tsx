@@ -642,6 +642,49 @@ function WorkspaceSkeleton() {
   );
 }
 
+/** A subject opened by link while its collection is still on its way. */
+function OpeningSubject({
+  missing,
+  backHref,
+  onRetry,
+}: {
+  missing: boolean;
+  backHref: string;
+  onRetry: () => void;
+}) {
+  if (!missing) {
+    return (
+      <div role="status" aria-label="Opening subject" className="space-y-4">
+        <SkeletonBlock className="h-4 w-28" />
+        <SkeletonBlock className="h-9 w-72" />
+        <SkeletonBlock className="h-10 w-full max-w-xl" />
+        <SkeletonBlock className="h-48" />
+      </div>
+    );
+  }
+  return (
+    <section className="rounded-xl border border-border bg-bg-primary p-6">
+      <h2 className="font-display text-xl font-semibold">This subject could not be opened</h2>
+      <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
+        It isn&apos;t in this faculty&apos;s workspace yet. If it was just created, reload in a
+        moment.
+      </p>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Button onClick={onRetry}>Reload</Button>
+        <Link
+          href={backHref}
+          className={cn(
+            "inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-sm font-medium",
+            interactive,
+          )}
+        >
+          Back to subjects
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string }) {
   useEffect(() => {
     const warm = () => void loadDialogs();
@@ -757,13 +800,15 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
     setWorkspaceState((current) => (current === "loading" ? "ready" : current));
   }, [cachedWorkspace, workspace]);
 
-  const loadWorkspace = useCallback(async () => {
+  /** Which collection the workspace on screen was loaded for ("" = own). */
+  const [loadedWorkspaceFaculty, setLoadedWorkspaceFaculty] = useState<string | null>(null);
+  const loadWorkspace = useCallback(async (options: { fresh?: boolean } = {}) => {
     const request = ++workspaceRequest.current;
     setWorkspaceState("loading");
     setWorkspaceError("");
     setWorkspaceErrorCode("");
     try {
-      const response = await fetch("/api/teacher/workspace", {
+      const response = await fetch(`/api/teacher/workspace${options.fresh ? "?fresh=1" : ""}`, {
         headers: { Accept: "application/json" },
         cache: "no-store",
       });
@@ -775,9 +820,12 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       // A snapshot the server served while the creator service was down is not
       // worth keeping over the last live copy.
       if (!next.stale) queryClient.setQueryData(keys.teacher.workspace(workspaceFaculty), next);
-      setSelectedSlug((current) =>
-        current && next.subjects.some((subject) => subject.slug === current) ? current : "",
-      );
+      // The subject asked for stays selected even when this load lacks it: it
+      // may be the wrong collection still (a shared faculty, before the page
+      // knows it is shared) or a copy from before the subject existed. Clearing
+      // it here is what made "Open" do nothing (2026-10-09). Deleting a subject
+      // clears the selection itself.
+      setLoadedWorkspaceFaculty(workspaceFaculty);
       setWorkspaceState("ready");
       return next;
     } catch (error) {
@@ -790,6 +838,28 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       return null;
     }
   }, [queryClient, workspaceFaculty]);
+
+  // A subject asked for by the URL that the right collection's load still lacks:
+  // read once more past every cache (this server's and the browser's) before
+  // saying it is missing — it was usually created a moment ago.
+  const freshTriedFor = useRef("");
+  const workspaceSettled =
+    workspaceState === "ready" &&
+    loadedWorkspaceFaculty === workspaceFaculty &&
+    (!communitySlug || Boolean(dashboard));
+  const requestedSubjectMissing =
+    Boolean(selectedSlug) &&
+    Boolean(workspace) &&
+    !workspace?.subjects.some((subject) => subject.slug === selectedSlug);
+  const freshAttempt = `${workspaceFaculty}:${selectedSlug}`;
+  useEffect(() => {
+    if (!workspaceSettled || !requestedSubjectMissing) return;
+    if (freshTriedFor.current === freshAttempt) return;
+    freshTriedFor.current = freshAttempt;
+    void loadWorkspace({ fresh: true });
+  }, [workspaceSettled, requestedSubjectMissing, freshAttempt, loadWorkspace]);
+  const openingSubject =
+    requestedSubjectMissing && (!workspaceSettled || freshTriedFor.current !== freshAttempt);
 
   const loadDashboard = useCallback(async () => {
     const request = ++dashboardRequest.current;
@@ -1658,7 +1728,14 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               documents={workspace.documents}
             />
           ) : null}
-          {view === "subjects" && !selectedSubject && !showSubjectLibrary ? (
+          {view === "subjects" && !selectedSubject && selectedSlug ? (
+            <OpeningSubject
+              missing={!openingSubject && workspaceState !== "loading"}
+              backHref={teacherSubjectsHref({ community: communitySlug, term: communityTermId })}
+              onRetry={() => void loadWorkspace({ fresh: true })}
+            />
+          ) : null}
+          {view === "subjects" && !selectedSubject && !selectedSlug && !showSubjectLibrary ? (
             <CommunitiesView
               subjectsMode
               dashboard={dashboard}
@@ -1674,7 +1751,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
               shelfCounts={subjectShelfCounts}
             />
           ) : null}
-          {view === "subjects" && !selectedSubject && showSubjectLibrary ? (
+          {view === "subjects" && !selectedSubject && !selectedSlug && showSubjectLibrary ? (
             <>
               <Link
                 href={teacherSubjectsHref({ community: communitySlug, term: communityTermId })}

@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { getWorkspaceTeacher } from "@/app/teachers/actions";
-import { readTeacherWorkspace, TeacherApiError } from "@/lib/teacher-app/client";
+import { invalidateTeacherReads, readTeacherWorkspace, TeacherApiError } from "@/lib/teacher-app/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { profileFromUser, withTeacherAvatar } from "@/lib/teacher-public-profile";
@@ -13,7 +13,7 @@ import { pruneOrphanedMirrors } from "@/lib/teacher-document-mirrors";
 // platform error instead of this route's own 503 and Retry-After.
 export const maxDuration = 30;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -37,6 +37,11 @@ export async function GET() {
     // queries, then the profile, then the avatar. Against Supabase measured at
     // ~165ms a hop (and the tenant API slower still), that was most of the wait on
     // a screen that computes nothing.
+    // `?fresh=1`: a subject the page was sent to is missing from the cached
+    // reads, so read the collection live (lib/teacher-app/client.ts cache).
+    if (new URL(request.url).searchParams.get("fresh") === "1") {
+      invalidateTeacherReads(teacher.collection_sk);
+    }
     const admin = createSupabaseAdminClient();
     const [
       tenant,

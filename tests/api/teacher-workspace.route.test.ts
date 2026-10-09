@@ -94,7 +94,7 @@ describe("GET /api/teacher/workspace", () => {
   });
 
   it("returns the real workspace without exposing the collection key", async () => {
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/teacher/workspace"));
     const payload = await response.json();
 
     expect(response.status).toBe(200);
@@ -129,7 +129,7 @@ describe("GET /api/teacher/workspace", () => {
       auth: { getUser: vi.fn(async () => ({ data: { user: null } })) },
     });
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/teacher/workspace"));
 
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
@@ -157,7 +157,7 @@ describe("GET /api/teacher/workspace", () => {
           : fallback(table),
     );
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/teacher/workspace"));
     expect(response.status).toBe(200);
     const payload = await response.json();
     expect(payload.subjectProfiles[0]).toMatchObject({
@@ -178,7 +178,7 @@ describe("GET /api/teacher/workspace", () => {
     admin.from.mockImplementation((table: string) =>
       table === "community_subjects" ? links : fallback(table),
     );
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/teacher/workspace"));
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toEqual({
       error: "Could not load subject community access. Please try again.",
@@ -189,7 +189,7 @@ describe("GET /api/teacher/workspace", () => {
   it("turns an invalid collection key into a recoverable workspace error", async () => {
     mocks.getTeacherMe.mockRejectedValue(new mocks.MockTeacherApiError("Unauthorized", 401));
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/teacher/workspace"));
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
@@ -203,7 +203,7 @@ describe("GET /api/teacher/workspace", () => {
       new mocks.MockTeacherApiError("Teacher API timed out after 6000ms", 504),
     );
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/teacher/workspace"));
 
     expect(response.status).toBe(503);
     expect(response.headers.get("retry-after")).toBe("3");
@@ -216,7 +216,7 @@ describe("GET /api/teacher/workspace", () => {
   it("says so when the workspace came from the last read that succeeded", async () => {
     mocks.stale.mockReturnValue(true);
 
-    const response = await GET();
+    const response = await GET(new Request("http://localhost/api/teacher/workspace"));
     const payload = await response.json();
 
     // 200 and `stale`, not 503: the teacher gets their subjects, papers and
@@ -227,7 +227,7 @@ describe("GET /api/teacher/workspace", () => {
   });
 
   it("does not mark a healthy read stale", async () => {
-    const payload = await (await GET()).json();
+    const payload = await (await GET(new Request("http://localhost/api/teacher/workspace"))).json();
     expect(payload.stale).toBe(false);
   });
 });
