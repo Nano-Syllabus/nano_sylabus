@@ -82,7 +82,10 @@ export function LandingPreview({ initialContent }: { initialContent: LandingCont
       if (element?.closest("a")) event.preventDefault();
       if (!element || !key) return;
       // The logo sits in the header and footer; it belongs to Brand.
-      const path = key === "brand" ? "brand.logoUrl" : matchLandingField(contentRef.current, key, textsFrom(element, root));
+      // Images name their own field (a testimonial photo); text is matched by its words.
+      const tagged = element.closest("[data-landing-path]")?.getAttribute("data-landing-path") ?? null;
+      const path =
+        tagged ?? (key === "brand" ? "brand.logoUrl" : matchLandingField(contentRef.current, key, textsFrom(element, root)));
       const section = path ? path.split(".")[0] : key;
       setSelected({ section, path });
       window.parent.postMessage({ type: "landing-preview:select", section, path }, window.location.origin);

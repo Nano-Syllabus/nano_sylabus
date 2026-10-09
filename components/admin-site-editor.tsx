@@ -1309,6 +1309,8 @@ function CommunityField({ field, value, onChange }: FieldProps) {
 
 function ImageField({ field, value, onChange }: FieldProps) {
   const { slug } = useContext(EditorContext);
+  const photo = field.key === "photoUrl";
+  const what = photo ? "photo" : field.key === "iconUrl" ? "card image" : "logo";
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1318,14 +1320,15 @@ function ImageField({ field, value, onChange }: FieldProps) {
     try {
       const body = new FormData();
       body.append("file", file);
+      if (photo) body.append("kind", "photo");
       const response = await fetch(`/api/admin/sites/${slug}/logo`, { method: "POST", body });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Couldn’t upload the logo.");
+      if (!response.ok) throw new Error(payload.error || `Couldn’t upload the ${what}.`);
       onChange(payload.url);
-      toast.success("Logo uploaded", { description: "It’s in the draft — publish to put it live." });
+      toast.success(`${what[0].toUpperCase()}${what.slice(1)} uploaded`, { description: "It’s in the draft — publish to put it live." });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn’t upload the logo.");
-      toast.error("Couldn’t upload the logo", { description: messageOf(caught, "Try a PNG, SVG, WebP or JPEG.") });
+      setError(caught instanceof Error ? caught.message : `Couldn’t upload the ${what}.`);
+      toast.error(`Couldn’t upload the ${what}`, { description: messageOf(caught, "Try a PNG, SVG, WebP or JPEG.") });
     } finally {
       setUploading(false);
     }
@@ -1335,14 +1338,25 @@ function ImageField({ field, value, onChange }: FieldProps) {
     <div className="grid gap-1.5 text-xs font-medium text-muted-foreground">
       {field.label}
       <div className="flex items-center gap-3 rounded-lg border border-border bg-background p-3">
-        <div className="grid h-12 w-28 shrink-0 place-items-center rounded-md bg-[#fafbf7]">
-          {value ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt="Current logo" className="max-h-10 max-w-24 object-contain" />
-          ) : (
-            <span className="text-[11px] text-[#5b5e55]">Default logo</span>
-          )}
-        </div>
+        {photo ? (
+          <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full border border-border bg-[#fafbf7]">
+            {value ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={value} alt="Current photo" className="size-full object-cover" />
+            ) : (
+              <span className="text-[10px] text-[#5b5e55]">Default</span>
+            )}
+          </div>
+        ) : (
+          <div className="grid h-12 w-28 shrink-0 place-items-center rounded-md bg-[#fafbf7]">
+            {value ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={value} alt={`Current ${what}`} className="max-h-10 max-w-24 object-contain" />
+            ) : (
+              <span className="text-[11px] text-[#5b5e55]">Default {what}</span>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <label className={`${secondaryButton} min-h-9 cursor-pointer`}>
             <Upload size={14} aria-hidden="true" />

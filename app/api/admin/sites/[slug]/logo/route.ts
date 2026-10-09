@@ -13,7 +13,8 @@ const EXTENSIONS: Record<string, string> = {
 };
 
 /**
- * Stores a site's logo and returns its public URL. The URL only goes live
+ * Stores a site's logo or another landing image (e.g. a testimonial photo) and
+ * returns its public URL. The URL only goes live
  * when the editor saves it into the draft and the draft is published.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -31,9 +32,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!(file instanceof File)) return NextResponse.json({ error: "Choose an image to upload." }, { status: 400 });
   const extension = EXTENSIONS[file.type];
   if (!extension) return NextResponse.json({ error: "Use a PNG, SVG, WebP or JPEG image." }, { status: 400 });
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: "The logo must be 1 MB or smaller." }, { status: 400 });
+  if (file.size > MAX_BYTES) return NextResponse.json({ error: "The image must be 1 MB or smaller." }, { status: 400 });
 
-  const path = `sites/${slug}/logo-${Date.now()}.${extension}`;
+  const kind = form?.get("kind") === "photo" ? "photo" : "logo";
+  const path = `sites/${slug}/${kind}-${Date.now()}.${extension}`;
   const storage = createSupabaseAdminClient().storage.from(BUCKET);
   const { error } = await storage.upload(path, Buffer.from(await file.arrayBuffer()), {
     contentType: file.type,
@@ -42,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   });
   if (error) {
     console.error("[admin/sites/logo]", error);
-    return NextResponse.json({ error: "Couldn’t upload the logo." }, { status: 500 });
+    return NextResponse.json({ error: "Couldn’t upload the image." }, { status: 500 });
   }
 
   return NextResponse.json({ url: storage.getPublicUrl(path).data.publicUrl });

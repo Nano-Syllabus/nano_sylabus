@@ -664,7 +664,7 @@ export function LandingView({
             </p>
 
             <div className="relative mx-auto mt-14 grid max-w-[1180px] gap-6 text-left md:grid-cols-3">
-              {testimonials.items.map(({ quote, name, course }, idx) => (
+              {testimonials.items.map(({ quote, name, course, photoUrl }, idx) => (
                 <figure
                   key={idx}
                   className={`flex min-h-[260px] flex-col rounded-2xl border border-[#e2e6dc] bg-white p-8 shadow-[0_8px_25px_rgba(28,30,26,0.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
@@ -681,13 +681,27 @@ export function LandingView({
                     {quote}
                   </blockquote>
                   <figcaption className="mt-6 flex items-center gap-3.5">
-                    <Image
-                      src={testimonialImages[idx] ?? testimonialImages[0]}
-                      alt={name}
-                      width={44}
-                      height={44}
-                      className="size-11 rounded-full object-cover border border-[#e2e6dc]"
-                    />
+                    {photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded photo on the storage host
+                      <img
+                        src={photoUrl}
+                        alt={name}
+                        width={44}
+                        height={44}
+                        loading="lazy"
+                        data-landing-path={`testimonials.items.${idx}.photoUrl`}
+                        className="size-11 shrink-0 rounded-full object-cover border border-[#e2e6dc]"
+                      />
+                    ) : (
+                      <Image
+                        src={testimonialImages[idx] ?? testimonialImages[0]}
+                        alt={name}
+                        width={44}
+                        height={44}
+                        data-landing-path={`testimonials.items.${idx}.photoUrl`}
+                        className="size-11 shrink-0 rounded-full object-cover border border-[#e2e6dc]"
+                      />
+                    )}
                     <div>
                       <strong className="block text-sm text-[#1c1e1a]">{name}</strong>
                       <span className="text-xs text-[#5b5e55]">{course}</span>

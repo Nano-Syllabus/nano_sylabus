@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
+import { ChevronRight, Search, X } from "lucide-react";
 import type { FacultyManagement, FacultyManager } from "@/lib/data/faculty-managers";
 import type { AdminUserSummary } from "@/lib/types";
 import { messageOf, toast } from "@/components/admin/admin-toaster";
@@ -44,17 +44,21 @@ export function AdminFacultyManagers({
     });
   }, [faculties, query, unmanagedOnly]);
 
-  const withoutAdmin = faculties.filter(
+  // Archived faculties sit in their own section, out of the counts and the main table.
+  const active = faculties.filter((faculty) => faculty.status !== "archived");
+  const shownActive = shown.filter((faculty) => faculty.status !== "archived");
+  const shownArchived = shown.filter((faculty) => faculty.status === "archived");
+  const withoutAdmin = active.filter(
     (faculty) => !faculty.managers.some((manager) => manager.role === "admin"),
   ).length;
 
   return (
     <div className="mt-6">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Faculties" value={faculties.length} />
+        <Stat label="Faculties" value={active.length} />
         <Stat
           label="Members"
-          value={faculties.reduce((sum, faculty) => sum + faculty.members, 0)}
+          value={active.reduce((sum, faculty) => sum + faculty.members, 0)}
         />
         <Stat label="Without an admin" value={withoutAdmin} warn={withoutAdmin > 0} />
       </div>
@@ -85,6 +89,45 @@ export function AdminFacultyManagers({
         </label>
       </div>
 
+      <FacultyTable
+        rows={shownActive}
+        empty={active.length ? "No faculty matches." : "No faculties to show."}
+        canEdit={canEdit}
+        onManage={setManaging}
+      />
+
+      {shownArchived.length ? (
+        <details className="group mt-6">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground">
+            <ChevronRight size={16} aria-hidden="true" className="transition-transform group-open:rotate-90" />
+            Archived faculties
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
+              {shownArchived.length}
+            </span>
+            <span className="font-normal">— hidden from students; not counted above</span>
+          </summary>
+          <div className="opacity-80">
+            <FacultyTable rows={shownArchived} empty="" canEdit={canEdit} onManage={setManaging} />
+          </div>
+        </details>
+      ) : null}
+      {managed ? <ManageFacultyDialog faculty={managed} onClose={() => setManaging(null)} /> : null}
+    </div>
+  );
+}
+
+function FacultyTable({
+  rows,
+  empty,
+  canEdit,
+  onManage,
+}: {
+  rows: FacultyManagement[];
+  empty: string;
+  canEdit: boolean;
+  onManage: (id: string) => void;
+}) {
+  return (
       <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border bg-muted/40 text-xs font-medium text-muted-foreground">
@@ -96,8 +139,8 @@ export function AdminFacultyManagers({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {shown.length ? (
-              shown.map((faculty) => (
+            {rows.length ? (
+              rows.map((faculty) => (
                 <tr key={faculty.id} className="align-top">
                   <td className="px-4 py-3">
                     <Link
@@ -108,7 +151,7 @@ export function AdminFacultyManagers({
                     </Link>
                     <div className="text-xs text-muted-foreground">
                       {faculty.slug}
-                      {faculty.status !== "active" ? ` · ${faculty.status}` : ""}
+                      {faculty.status !== "active" && faculty.status !== "archived" ? ` · ${faculty.status}` : ""}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground sm:hidden">
                       {faculty.members} members
@@ -143,7 +186,7 @@ export function AdminFacultyManagers({
                       {canEdit ? (
                         <button
                           type="button"
-                          onClick={() => setManaging(faculty.id)}
+                          onClick={() => onManage(faculty.id)}
                           className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-600/10 dark:text-blue-300"
                         >
                           Manage
@@ -159,15 +202,13 @@ export function AdminFacultyManagers({
             ) : (
               <tr>
                 <td colSpan={4} className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  {faculties.length ? "No faculty matches." : "No faculties to show."}
+                  {empty}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-      {managed ? <ManageFacultyDialog faculty={managed} onClose={() => setManaging(null)} /> : null}
-    </div>
   );
 }
 

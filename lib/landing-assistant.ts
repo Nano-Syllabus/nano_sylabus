@@ -52,7 +52,7 @@ Answer as JSON: {"reply": string, "changes": [{"path": string, "value": string}]
 - value is the new text. For a ".hidden" path use "true" or "false". To replace a whole list at once (only the FAQ may change length), use the list path and a JSON array as the value.
 - Colours are "#rrggbb". brand.primaryColor carries white text, so keep it dark enough; brand.accentColor carries dark text, so keep it light.
 - brand.communitySlug must be "" or one of: ${communities.length ? communities.map((community) => `${community.slug} (${community.name}${community.faculty ? `, ${community.faculty}` : ""})`).join("; ") : "(none available)"}.
-- Leave brand.logoUrl alone; logos are uploaded by hand.
+- Leave brand.logoUrl, brand.iconUrl and every testimonials photoUrl alone; images are uploaded by hand.
 - Keep each text about as long as the one it replaces unless asked otherwise — the design was drawn for that length. Headlines stay short.
 - Write for Nepali students: warm, concrete, confident, no hype. Never use the words "master" or "mastery" (say "learn", "get ready", "pass" instead). Never invent prices, prize amounts, statistics or testimonials from real named people unless the admin gives them.
 - When the admin says "this", "here" or similar, they mean the FOCUS given with their message.
@@ -152,7 +152,7 @@ export async function runLandingAssistant({
 
   const requested = Array.isArray(parsed.changes)
     ? (parsed.changes as LandingChangeRequest[]).filter(
-        (change) => change && typeof change.path === "string" && !change.path.startsWith("brand.logoUrl"),
+        (change) => change && typeof change.path === "string" && !/^brand\.(logoUrl|iconUrl)|\.photoUrl$/.test(change.path),
       )
     : [];
   const next = applyLandingChanges(draft, requested);

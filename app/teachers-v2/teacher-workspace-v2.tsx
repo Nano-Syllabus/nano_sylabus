@@ -1,7 +1,7 @@
 "use client";
 
 import { setWorkspaceFaculty } from "@/lib/teacher-workspace-faculty";
-import Link from "next/link";
+import { WorkspaceLink as Link } from "@/app/teachers-v2/workspace-link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
@@ -742,13 +742,14 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
     enabled: false,
     staleTime: Infinity,
   });
-  // Switching collections drops the other one's subjects off the screen.
+  // Switching collections paints the other one's last copy at once. With none
+  // cached yet the page stays up (never the full-screen skeleton) and the live
+  // read, already on its way, replaces it.
   const shownWorkspaceFaculty = useRef(workspaceFaculty);
   useEffect(() => {
     if (shownWorkspaceFaculty.current === workspaceFaculty) return;
     shownWorkspaceFaculty.current = workspaceFaculty;
-    setWorkspace(cachedWorkspace ?? null);
-    setSelectedSlug("");
+    if (cachedWorkspace) setWorkspace(cachedWorkspace);
   }, [cachedWorkspace, workspaceFaculty]);
   useEffect(() => {
     if (!cachedWorkspace || workspace) return;

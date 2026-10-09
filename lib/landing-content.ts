@@ -69,7 +69,8 @@ export type LandingContent = {
     titleLead: string;
     titleHighlight: string;
     subtitle: string;
-    items: Array<{ quote: string; name: string; course: string }>;
+    /** `photoUrl` empty = the built-in avatar for that slot. */
+    items: Array<{ quote: string; name: string; course: string; photoUrl: string }>;
   };
   community: {
     hidden: boolean;
@@ -213,18 +214,21 @@ export const DEFAULT_LANDING_CONTENT: LandingContent = {
           "NanoSyllabus made my preparation so organized. The mock tests and feedback helped me improve every week.",
         name: "Simrika Duwal",
         course: "CSIT, 3rd Year",
+        photoUrl: "",
       },
       {
         quote:
           "The chapter-wise practice and instant feedback helped me clear concepts I always found difficult.",
         name: "Rohit Paudel",
         course: "BCT, 4th Year",
+        photoUrl: "",
       },
       {
         quote:
           "Unlimited mock tests and smart analytics show exactly where I stand. It's like having a personal coach.",
         name: "Suman Giri",
         course: "CSIT, 4rd Year",
+        photoUrl: "",
       },
     ],
   },
@@ -518,6 +522,7 @@ export const LANDING_SECTIONS: LandingSection[] = [
           { key: "quote", label: "Quote", long: true },
           { key: "name", label: "Name" },
           { key: "course", label: "Course / year" },
+          { key: "photoUrl", label: "Photo", kind: "image", hint: "A square photo of the student. PNG, JPEG or WebP, up to 1 MB. Empty uses the default picture." },
         ],
       },
     ],
@@ -682,6 +687,10 @@ export function sanitizeLandingContent(value: unknown): LandingContent {
     accentColor: HEX_COLOR.test(accentColor) ? accentColor.toLowerCase() : fallback.accentColor,
     communitySlug: /^[a-z0-9][a-z0-9-]{0,80}$/.test(communitySlug) ? communitySlug : "",
   };
+  content.testimonials.items = content.testimonials.items.map((item) => ({
+    ...item,
+    photoUrl: safeImage(item.photoUrl),
+  }));
   return content;
 }
 
