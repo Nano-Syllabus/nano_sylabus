@@ -5,6 +5,7 @@ import { AdminFacultyManagers } from "@/components/admin-faculty-managers";
 import { assertAdminRequest } from "@/lib/admin-access";
 import { getAdminScope } from "@/lib/admin-scope";
 import { AdminFacultyActivity } from "@/components/admin-faculty-activity";
+import { AdminFacultyCreateButton } from "@/components/admin-faculty-create-button";
 import { listFacultyManagement } from "@/lib/data/faculty-managers";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export default async function AdminFacultiesPage() {
     <AdminBillingFrame active="faculties">
       <AdminPageHeader
         title="Faculties"
+        actions={<AdminFacultyCreateButton />}
         description={
           superAdmin
             ? "Who manages each faculty, who can add to it, and every change made to it. Open a faculty for its full picture."
