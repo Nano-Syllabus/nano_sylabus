@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   recordTeacherClassroomActivity: vi.fn(),
 }));
 
-vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile }));
+vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile, getWorkspaceTeacher: mocks.getTeacherProfile }));
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: mocks.createSupabaseAdminClient,
 }));

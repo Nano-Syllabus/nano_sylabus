@@ -5,10 +5,11 @@ import { AdminGiftPlan } from "@/components/admin-gift-plan";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
-import { AdminPageHeader } from "@/components/admin-billing-frame";
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import type { AdminListPage, AdminUserDetail, AdminUserSummary, AppRole } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { MONTHLY_FREE_CREDITS } from "@/lib/billing";
+import { messageOf, toast } from "@/components/admin/admin-toaster";
 
 type RoleFilter = "all" | "students" | "admins" | "ambassadors";
 
@@ -213,7 +214,7 @@ export function AdminUserManager({
       ) : null}
 
       <section
-        className="mt-4 overflow-hidden rounded-xl border border-border bg-card"
+        className="mt-4 overflow-clip rounded-xl border border-border bg-card"
         aria-busy={loading}
       >
         {listError ? (
@@ -226,7 +227,7 @@ export function AdminUserManager({
           </p>
         ) : (
           <table className={`w-full text-left text-sm ${loading ? "opacity-60" : ""}`}>
-            <thead className="border-b border-border text-xs text-muted-foreground">
+            <thead className="sticky top-0 z-10 border-b border-border bg-muted/60 text-xs text-muted-foreground backdrop-blur">
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="hidden px-4 py-3 font-medium lg:table-cell">Subdomain</th>
@@ -359,7 +360,6 @@ function StudentPanel({
 }) {
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<"credits" | "role" | "ambassador" | null>(null);
   const [amount, setAmount] = useState("20");
   const [reason, setReason] = useState("");
@@ -396,7 +396,6 @@ function StudentPanel({
   async function saveCredits() {
     if (!creditsValid) return;
     setBusy("credits");
-    setMessage(null);
     try {
       const response = await fetch(`/api/admin/users/${userId}/credits`, {
         method: "POST",
@@ -411,11 +410,12 @@ function StudentPanel({
       setDetail(payload.user);
       onChanged(payload.user);
       setReason("");
-      setMessage(
-        `${credits > 0 ? "Added" : "Removed"} ${Math.abs(credits)} credits. New balance: ${payload.user.creditBalance}.`,
+      toast.success(
+        `${credits > 0 ? "Gave" : "Took"} ${Math.abs(credits)} credits ${credits > 0 ? "to" : "from"} ${payload.user.fullName || payload.user.email}`,
+        { description: `New balance: ${payload.user.creditBalance}.` },
       );
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Credits could not be changed.");
+      toast.error("Credits could not be changed", { description: messageOf(cause, "Try again.") });
     } finally {
       setBusy(null);
     }
@@ -423,7 +423,6 @@ function StudentPanel({
 
   async function saveRole() {
     setBusy("role");
-    setMessage(null);
     try {
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
@@ -434,13 +433,15 @@ function StudentPanel({
       if (!response.ok) throw new Error(payload.error || "Access could not be changed.");
       setDetail(payload.user);
       onChanged(payload.user);
-      setMessage(
-        payload.user.site
-          ? `${roleLabel[payload.user.role as AppRole]} of ${payload.user.site.name}.`
-          : `Access changed to ${roleLabel[payload.user.role as AppRole]}.`,
+      toast.success(
+        `${payload.user.fullName || payload.user.email} is now ${
+          payload.user.site
+            ? `${roleLabel[payload.user.role as AppRole].toLowerCase()} of ${payload.user.site.name}`
+            : `a ${roleLabel[payload.user.role as AppRole].toLowerCase()}`
+        }`,
       );
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Access could not be changed.");
+      toast.error("Access could not be changed", { description: messageOf(cause, "Try again.") });
     } finally {
       setBusy(null);
     }
@@ -450,7 +451,6 @@ function StudentPanel({
     const email = person?.email;
     if (!email || ambassador === null) return;
     setBusy("ambassador");
-    setMessage(null);
     try {
       const response = await fetch("/api/admin/ambassadors", {
         method: ambassador ? "DELETE" : "POST",
@@ -462,11 +462,15 @@ function StudentPanel({
       onAmbassadorsChanged(
         (payload.ambassadors as Array<{ email: string }>).map((row) => row.email),
       );
-      setMessage(ambassador ? "No longer a student ambassador." : "Now a student ambassador.");
-    } catch (cause) {
-      setMessage(
-        cause instanceof Error ? cause.message : "Ambassador access could not be changed.",
+      toast.success(
+        ambassador
+          ? `${person?.fullName || email} is no longer a student ambassador`
+          : `${person?.fullName || email} is now a student ambassador`,
       );
+    } catch (cause) {
+      toast.error("Ambassador access could not be changed", {
+        description: messageOf(cause, "Try again."),
+      });
     } finally {
       setBusy(null);
     }
@@ -512,11 +516,6 @@ function StudentPanel({
           {error ? (
             <p role="alert" className="text-sm text-destructive">
               {error}
-            </p>
-          ) : null}
-          {message ? (
-            <p aria-live="polite" className="rounded-lg bg-muted px-3 py-2 text-sm">
-              {message}
             </p>
           ) : null}
 

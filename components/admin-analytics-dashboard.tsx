@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, CircleAlert, CircleCheck, Download, RefreshCw } from "lucide-react";
 import { AdminActivityChart } from "@/components/admin-activity-chart";
-import { AdminPageHeader } from "@/components/admin-billing-frame";
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { AdminTokenUsageCard } from "@/components/admin-token-usage-card";
 import {
   adminAnalyticsSchema,

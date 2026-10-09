@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import { readTeacherWorkspace, TeacherApiError } from "@/lib/teacher-app/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -24,7 +24,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) {
       return NextResponse.json({ error: "Teacher workspace not found." }, { status: 404 });
     }

@@ -73,7 +73,7 @@ function dashboard(selected = false): Dashboard {
     },
     classrooms: [],
     needsAttention: [],
-    managedCommunities: [{ ...community, level: "Bachelor", filledSemesterCount: 1, subjectCount: 1 }],
+    managedCommunities: [{ ...community, level: "Bachelor", filledSemesterCount: 1, subjectCount: 1, shared: false }],
     communityWorkspace: selected ? community : null,
     communityAdmin: null,
     communitySubjectWorkspace: null,

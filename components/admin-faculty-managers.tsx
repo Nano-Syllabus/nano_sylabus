@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { FacultyManagement, FacultyManager } from "@/lib/data/faculty-managers";
 import type { AdminUserSummary } from "@/lib/types";
+import { messageOf, toast } from "@/components/admin/admin-toaster";
 
 const inputClass =
   "min-h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-600/40";
@@ -86,7 +87,7 @@ export function AdminFacultyManagers({
 
       <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-border text-xs font-medium text-muted-foreground">
+          <thead className="border-b border-border bg-muted/40 text-xs font-medium text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">Faculty</th>
               <th className="hidden px-4 py-3 font-medium md:table-cell">Subdomains</th>
@@ -221,7 +222,6 @@ function ManageFacultyDialog({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [picking, setPicking] = useState<"creator" | "admin" | "ambassador" | null>(null);
   const [siteSlug, setSiteSlug] = useState(faculty.sites[0]?.slug ?? "");
@@ -232,17 +232,17 @@ function ManageFacultyDialog({
   const admins = faculty.managers.filter((manager) => manager.role === "admin");
   const ambassadors = faculty.managers.filter((manager) => manager.role === "ambassador");
 
-  async function run(key: string, action: () => Promise<void>) {
+  async function run(key: string, action: () => Promise<void>, done = "Saved") {
     setBusy(key);
-    setError(null);
     try {
       await action();
       setConfirm(null);
       setPicking(null);
       setQuery("");
+      toast.success(done, { description: `${faculty.name} is updated.` });
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "That change didn’t save.");
+      toast.error("That change didn’t save", { description: messageOf(cause, "Try again.") });
     } finally {
       setBusy(null);
     }
@@ -256,6 +256,9 @@ function ManageFacultyDialog({
         { email: manager.email },
         "The ambassador list didn’t change.",
       ),
+      manager.ambassador
+        ? `${manager.fullName} is no longer an ambassador`
+        : `${manager.fullName} is now an ambassador`,
     );
 
   const pick = (user: AdminUserSummary) =>
@@ -267,6 +270,7 @@ function ManageFacultyDialog({
             { userId: user.userId, action: "add" },
             "The ambassador wasn’t added.",
           ),
+          `${user.fullName || user.email} is now a faculty ambassador`,
         )
       : picking === "creator"
       ? run("creator", () =>
@@ -276,6 +280,7 @@ function ManageFacultyDialog({
             { userId: user.userId },
             "The creator didn’t change.",
           ),
+          `${user.fullName || user.email} is now the creator`,
         )
       : run("admin", () =>
           send(
@@ -284,6 +289,7 @@ function ManageFacultyDialog({
             { userId: user.userId, action: "add" },
             "The admin wasn’t added.",
           ),
+          `${user.fullName || user.email} is now an admin`,
         );
 
   const blocked = (user: AdminUserSummary) =>
@@ -396,6 +402,7 @@ function ManageFacultyDialog({
                                   { userId: admin.userId, action: "remove" },
                                   "The admin wasn’t removed.",
                                 ),
+                                `${admin.fullName} removed as admin`,
                               )
                             : setConfirm(key)
                         }
@@ -478,6 +485,7 @@ function ManageFacultyDialog({
                               { userId: ambassador.userId, action: "remove" },
                               "The ambassador wasn’t removed.",
                             ),
+                            `${ambassador.fullName} removed as ambassador`,
                           )
                         : setConfirm(key)
                     }
@@ -577,7 +585,6 @@ function ManageFacultyDialog({
           </div>
         ) : null}
 
-        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
         <div className="mt-5 flex justify-end">
           <button

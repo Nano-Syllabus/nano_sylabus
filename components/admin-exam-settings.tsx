@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUp,
   ArrowDown,
   Check,
   ChevronDown,
-  Layers3,
+  LoaderCircle,
   LockKeyhole,
   Plus,
   Search,
@@ -18,6 +18,7 @@ import { AdminFacultyCreate } from "@/components/admin-faculty-create";
 import type { CommunityChoice } from "@/lib/data/landing-sites";
 import type { ExamConfig } from "@/lib/exam-enrollment";
 import type { SubscriptionPlan } from "@/lib/types";
+import { messageOf, toast } from "@/components/admin/admin-toaster";
 
 const inputClass =
   "min-h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
@@ -34,19 +35,25 @@ export function AdminExamSettings({
   initialConfig,
   communities: initialCommunities,
   plans,
+  onDirtyChange,
 }: {
   slug: string;
   initialConfig: ExamConfig;
   communities: CommunityChoice[];
   plans: SubscriptionPlan[];
+  /** Told whether the form differs from what was last saved (the editor marks its tab). */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [config, setConfig] = useState(initialConfig);
+  const [savedJson, setSavedJson] = useState(() => JSON.stringify(initialConfig));
+  const dirty = JSON.stringify(config) !== savedJson;
+  const dirtyRef = useRef(onDirtyChange);
+  dirtyRef.current = onDirtyChange;
+  useEffect(() => dirtyRef.current?.(dirty), [dirty]);
   const [communities, setCommunities] = useState(initialCommunities);
   const [addingFaculty, setAddingFaculty] = useState(false);
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [students, setStudents] = useState<LockedStudent[] | null>(null);
   const [facultyChanges, setFacultyChanges] = useState<Record<string, string>>({});
   const selected = config.facultySlugs.flatMap((slug) =>
@@ -68,7 +75,6 @@ export function AdminExamSettings({
   );
 
   function setFacultyPrice(facultySlug: string, planId: string, raw: string) {
-    setMessage("");
     const price = Number(raw);
     setConfig((current) => {
       const forFaculty = { ...(current.facultyPrices[facultySlug] ?? {}) };
@@ -81,7 +87,6 @@ export function AdminExamSettings({
   }
 
   function toggleFaculty(value: string) {
-    setMessage("");
     setConfig((current) => ({
       ...current,
       facultySlugs: current.facultySlugs.includes(value)
@@ -92,8 +97,6 @@ export function AdminExamSettings({
 
   async function save() {
     setPending(true);
-    setError("");
-    setMessage("");
     try {
       const response = await fetch(`/api/admin/sites/${slug}`, {
         method: "PATCH",
@@ -103,11 +106,14 @@ export function AdminExamSettings({
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not save exam setup.");
       setConfig(result.site.examConfig);
-      setMessage(
-        "Exam setup saved. The website’s main buttons now open this exam’s preparation flow.",
-      );
+      setSavedJson(JSON.stringify(result.site.examConfig));
+      toast.success("Exam setup saved", {
+        description: result.site.examConfig.enabled
+          ? "The website’s main buttons open this exam’s preparation flow."
+          : "The exam flow is off, so the website’s buttons work as before.",
+      });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save exam setup.");
+      toast.error("Couldn’t save the exam setup", { description: messageOf(cause, "Try again.") });
     } finally {
       setPending(false);
     }
@@ -115,14 +121,13 @@ export function AdminExamSettings({
 
   async function loadStudents() {
     setPending(true);
-    setError("");
     try {
       const response = await fetch(`/api/admin/sites/${slug}/enrollments`);
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not load students.");
       setStudents(result.students);
     } catch (cause) {
-      setError((cause as Error).message);
+      toast.error("That didn’t work", { description: messageOf(cause, "Try again.") });
     } finally {
       setPending(false);
     }
@@ -132,7 +137,6 @@ export function AdminExamSettings({
     const facultyId = facultyChanges[student.userId];
     if (!facultyId || facultyId === student.facultyId) return;
     setPending(true);
-    setError("");
     try {
       const response = await fetch(`/api/admin/sites/${slug}/enrollments`, {
         method: "PATCH",
@@ -142,29 +146,23 @@ export function AdminExamSettings({
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not change this faculty.");
       await loadStudents();
-      setMessage(`${student.name}’s faculty has been updated and locked to the new selection.`);
+      toast.success(`${student.name}’s faculty changed`, { description: "It is locked to the new choice." });
     } catch (cause) {
-      setError((cause as Error).message);
+      toast.error("That didn’t work", { description: messageOf(cause, "Try again.") });
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <details className="rounded-xl border border-border bg-card" open={config.enabled}>
-      <summary className="flex cursor-pointer list-none items-center gap-3 p-5">
-        <span className="grid size-10 place-items-center rounded-xl bg-blue-600/10 text-blue-600">
-          <Layers3 size={20} />
-        </span>
-        <span className="flex-1">
-          <span className="block text-base font-semibold">Exam, faculties & checkout</span>
-          <span className="block text-sm text-muted-foreground">
-            One exam → multiple faculties → their subjects
-          </span>
-        </span>
-        <ChevronDown size={18} />
-      </summary>
-      <div className="grid gap-6 border-t border-border p-5 lg:grid-cols-2">
+    <section className="rounded-xl border border-border bg-card" aria-label="Exam, faculties and checkout">
+      <header className="border-b border-border px-5 py-4">
+        <h2 className="text-base font-semibold">Exam, faculties &amp; checkout</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          One exam → its faculties → their subjects. Changes apply when you save — no publish needed.
+        </p>
+      </header>
+      <div className="grid gap-6 p-5 lg:grid-cols-2">
         <div className="space-y-5">
           <label className="flex items-start gap-3 rounded-xl bg-muted/50 p-4">
             <input
@@ -207,8 +205,9 @@ export function AdminExamSettings({
                           f.status === "active" && f.visibility === "public",
                       ),
                     );
+                    toast.success("Faculty list refreshed");
                   } catch (cause) {
-                    setError((cause as Error).message);
+                    toast.error("Couldn’t refresh the faculties", { description: messageOf(cause, "Try again.") });
                   }
                 }}
                 className="text-muted-foreground underline"
@@ -229,11 +228,14 @@ export function AdminExamSettings({
                         facultySlugs: [...current.facultySlugs, faculty.slug],
                       }));
                     }
-                    setMessage(
-                      faculty.visibility === "public"
-                        ? "Faculty created. Save exam setup to apply your selection."
-                        : "Faculty created. Make it public before adding it to an exam.",
-                    );
+                    if (faculty.visibility === "public")
+                      toast.success(`${faculty.name} created and selected`, {
+                        description: "Save the exam setup to apply it.",
+                      });
+                    else
+                      toast.info(`${faculty.name} created`, {
+                        description: "Make it public before adding it to an exam.",
+                      });
                   }}
                 />
               </div>
@@ -439,7 +441,6 @@ export function AdminExamSettings({
               type="checkbox"
               checked={config.askQuestions}
               onChange={(e) => {
-                setMessage("");
                 setConfig({ ...config, askQuestions: e.target.checked });
               }}
               className="mt-0.5 size-4 accent-blue-600"
@@ -580,19 +581,6 @@ export function AdminExamSettings({
             ))}
           </div>
         </details>
-        <div className="flex flex-wrap items-center gap-3 lg:col-span-2">
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={pending}
-            className="min-h-10 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {pending ? "Saving…" : "Save exam setup"}
-          </button>
-          <span className="text-xs text-muted-foreground">
-            Setup changes take effect when saved; hidden websites stay hidden.
-          </span>
-        </div>
         <div className="border-t border-border pt-5 lg:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -640,7 +628,7 @@ export function AdminExamSettings({
                       type="button"
                       disabled={pending || !facultyChanges[s.userId]}
                       onClick={() => void changeFaculty(s)}
-                      className="min-h-10 rounded-lg bg-foreground px-3 text-sm text-background disabled:opacity-40"
+                      className="min-h-10 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
                     >
                       Change & lock
                     </button>
@@ -654,17 +642,33 @@ export function AdminExamSettings({
             </div>
           ) : null}
         </div>
-        {message ? (
-          <p role="status" className="text-sm text-emerald-600 lg:col-span-2">
-            {message}
-          </p>
-        ) : null}
-        {error ? (
-          <p role="alert" className="text-sm text-red-600 lg:col-span-2">
-            {error}
-          </p>
-        ) : null}
       </div>
-    </details>
+      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-t border-border bg-card/95 px-5 py-3 backdrop-blur">
+        <span className={`text-xs ${dirty ? "font-medium text-amber-700 dark:text-amber-300" : "text-muted-foreground"}`}>
+          {dirty ? "Unsaved exam changes" : "All exam changes saved. Hidden websites stay hidden."}
+        </span>
+        <div className="flex gap-2">
+          {dirty ? (
+            <button
+              type="button"
+              onClick={() => setConfig(JSON.parse(savedJson) as ExamConfig)}
+              disabled={pending}
+              className="min-h-10 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+            >
+              Reset
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={pending || !dirty}
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pending ? <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
+            {pending ? "Saving…" : "Save exam setup"}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }

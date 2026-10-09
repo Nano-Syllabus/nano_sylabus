@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   mastery: vi.fn(),
   attempts: vi.fn(),
 }));
-vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.profile }));
+vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.profile, getWorkspaceTeacher: mocks.profile }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.admin }));
 vi.mock("@/lib/teacher-app/client", async (original) => ({
   ...(await original<typeof import("@/lib/teacher-app/client")>()),

@@ -18,6 +18,7 @@ import { ensureCommunityLearningSpace, markCommunityLearningError } from "@/lib/
 import { invalidateStudentCourseAccess } from "@/lib/student-courses";
 import { invalidateMemo, memo } from "@/lib/http/memo";
 import { timed } from "@/lib/dev-timing";
+import { mayManageFaculty } from "@/lib/data/faculty-share";
 
 const communityColumns =
   "id,creator_id,slug,name,university,faculty,description,total_years,total_semesters,visibility,status,contribution_threshold,study_course_id,learning_status,learning_error,learning_ready_at,created_at,updated_at";
@@ -362,7 +363,12 @@ async function getCommunityOnce(
       .order("position", { ascending: true }),
   ]);
 
-  const canManage = Boolean(viewerId && viewerId === String(row.creator_id || ""));
+  // The creator and the faculty's ambassadors run it together (user, 2026-10-09).
+  const canManage = await mayManageFaculty(
+    viewerId,
+    { id: String(row.id), creator_id: String(row.creator_id || "") },
+    admin,
+  );
   const canView =
     row.status === "active" &&
     (row.visibility === "public" || canManage || summary.membership?.status === "active");
@@ -727,14 +733,15 @@ export async function listCommunityCreatorSubjects(
   if (!communityResult.data || communityResult.data.status !== "active") {
     throw new CommunityError("Community not found.", 404);
   }
-  if (String(communityResult.data.creator_id) !== creatorId) {
-    throw new CommunityError("Only the community creator can manage semester subjects.", 403);
+  if (!(await mayManageFaculty(creatorId, communityResult.data, admin))) {
+    throw new CommunityError("Only the faculty's creator and ambassadors can manage semester subjects.", 403);
   }
 
+  // The faculty's subjects live in its creator's collection, whoever is asking.
   const teacherResult = await admin
     .from("teachers")
     .select("id")
-    .eq("user_id", creatorId)
+    .eq("user_id", String(communityResult.data.creator_id))
     .maybeSingle();
   if (teacherResult.error) throw teacherResult.error;
   if (!teacherResult.data) return [];
@@ -795,8 +802,8 @@ async function attachCommunitySubjectWrite(
   if (!communityResult.data || communityResult.data.status !== "active") {
     throw new CommunityError("Community not found.", 404);
   }
-  if (communityResult.data.creator_id !== creatorId) {
-    throw new CommunityError("Only the community creator can add subjects right now.", 403);
+  if (!(await mayManageFaculty(creatorId, communityResult.data, admin))) {
+    throw new CommunityError("Only the faculty's creator and ambassadors can add subjects.", 403);
   }
 
   const termResult = await admin

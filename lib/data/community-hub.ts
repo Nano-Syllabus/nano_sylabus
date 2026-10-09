@@ -1,3 +1,4 @@
+import { mayManageFaculty } from "@/lib/data/faculty-share";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CommunityDetail, CommunityTerm } from "@/lib/communities";
 import { selectStudentCommunity } from "@/lib/communities";
@@ -622,16 +623,29 @@ async function requireActiveCommunityMembership(
   return { community: communityResult.data, membership: membershipResult.data };
 }
 
+/** The faculty's creator or one of its ambassadors (user, 2026-10-09); no membership needed. */
+async function requireFacultyManager(admin: SupabaseClient, userId: string, slug: string) {
+  const result = await admin
+    .from("communities")
+    .select("id,slug,creator_id,status")
+    .eq("slug", slug)
+    .eq("status", "active")
+    .maybeSingle();
+  if (result.error) throw result.error;
+  if (!result.data) throw new CommunityError("Community not found.", 404);
+  if (!(await mayManageFaculty(userId, result.data, admin))) {
+    throw new CommunityError("Only the faculty's creator and ambassadors can manage announcements.", 403);
+  }
+  return result.data;
+}
+
 export async function createCommunityAnnouncement(
   userId: string,
   slug: string,
   input: { title: string; body: string },
   admin: SupabaseClient = createSupabaseAdminClient(),
 ) {
-  const { community } = await requireActiveCommunityMembership(admin, userId, slug);
-  if (String(community.creator_id) !== userId) {
-    throw new CommunityError("Only the community creator can publish announcements.", 403);
-  }
+  const community = await requireFacultyManager(admin, userId, slug);
   const title = input.title.trim();
   const body = input.body.trim();
   if (title.length < 3 || title.length > 140) {
@@ -655,10 +669,7 @@ export async function archiveCommunityAnnouncement(
   announcementId: string,
   admin: SupabaseClient = createSupabaseAdminClient(),
 ) {
-  const { community } = await requireActiveCommunityMembership(admin, userId, slug);
-  if (String(community.creator_id) !== userId) {
-    throw new CommunityError("Only the community creator can archive announcements.", 403);
-  }
+  const community = await requireFacultyManager(admin, userId, slug);
   const result = await admin
     .from("community_announcements")
     .update({ archived_at: new Date().toISOString() })

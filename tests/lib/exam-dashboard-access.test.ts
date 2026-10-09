@@ -96,24 +96,38 @@ describe("a dashboard opens on the student's own subdomain", () => {
     expect(gate?.props?.exams).toEqual([{ slug: "ioe" }]);
   });
 
-  it("gives a super admin every subdomain and faculty to move across", async () => {
+  const allSites = [
+    {
+      slug: "license",
+      name: "License Preparation",
+      faculties: [
+        { slug: "bei", name: "BEI" },
+        { slug: "bct", name: "BCT" },
+      ],
+    },
+    { slug: "ioe", name: "Institute of Engineering", faculties: [{ slug: "bct", name: "BCT" }] },
+  ];
+
+  it("keeps a super admin on the subdomain's own site, with no site picker", async () => {
     mocks.auth.mockResolvedValue({ user: { id: "boss", role: "super_admin" } });
-    mocks.exams.mockResolvedValue([
-      {
-        slug: "license",
-        name: "License Preparation",
-        faculties: [
-          { slug: "bei", name: "BEI" },
-          { slug: "bct", name: "BCT" },
-        ],
-      },
-      { slug: "ioe", name: "Institute of Engineering", faculties: [{ slug: "bct", name: "BCT" }] },
-    ]);
+    mocks.exams.mockResolvedValue(allSites);
+    mocks.exam.mockResolvedValue(allSites[0]);
     const html = renderToStaticMarkup(await layout());
     expect(html).toContain("Super admin");
     expect(html).toContain("License Preparation");
+    expect(html).toContain("BEI");
+    // Another site is reached by changing the URL, never from here (user, 2026-10-09).
+    expect(html).not.toContain("Institute of Engineering");
+    expect(html).not.toContain("Open site");
+  });
+
+  it("lists every site for a super admin on the main domain", async () => {
+    mocks.host = "localhost:3001";
+    mocks.auth.mockResolvedValue({ user: { id: "boss", role: "super_admin" } });
+    mocks.exams.mockResolvedValue(allSites);
+    const html = renderToStaticMarkup(await layout());
+    expect(html).toContain("License Preparation");
     expect(html).toContain("Institute of Engineering");
-    expect(html).toContain("BCT");
     expect(html).not.toContain("Faculty locked");
   });
 

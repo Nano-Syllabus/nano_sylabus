@@ -1,3 +1,4 @@
+import { mayManageFaculty } from "@/lib/data/faculty-share";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CommunityError } from "@/lib/data/communities";
 import { ensureDailyChallenges } from "@/lib/data/student-challenges";
@@ -81,14 +82,19 @@ export async function getCommunitySubjectWorkspace(
   if (communityResult.error) throw communityResult.error;
   if (!communityResult.data) return null;
   const communityId = String(communityResult.data.id);
-  const membershipResult = await admin
-    .from("community_memberships")
-    .select("status")
-    .eq("community_id", communityId)
-    .eq("user_id", userId)
-    .maybeSingle();
+  // The faculty's creator and ambassadors (user, 2026-10-09) manage it without
+  // being members; everyone else must have joined.
+  const [canManage, membershipResult] = await Promise.all([
+    mayManageFaculty(userId, communityResult.data, admin),
+    admin
+      .from("community_memberships")
+      .select("status")
+      .eq("community_id", communityId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+  ]);
   if (membershipResult.error) throw membershipResult.error;
-  if (membershipResult.data?.status !== "active") return null;
+  if (!canManage && membershipResult.data?.status !== "active") return null;
 
   const subjectResult = await admin
     .from("community_subjects")
@@ -101,7 +107,6 @@ export async function getCommunitySubjectWorkspace(
     .maybeSingle();
   if (subjectResult.error) throw subjectResult.error;
   if (!subjectResult.data) return null;
-  const canManage = String(communityResult.data.creator_id) === userId;
   if (!canManage && subjectResult.data.publication_status !== "published") return null;
   const subjectId = String(subjectResult.data.id);
   const courseId = communityResult.data.study_course_id
@@ -225,8 +230,8 @@ export async function syncCommunitySubjectTopics(
     .maybeSingle();
   if (communityResult.error) throw communityResult.error;
   if (!communityResult.data) throw new CommunityError("Community not found.", 404);
-  if (String(communityResult.data.creator_id) !== userId) {
-    throw new CommunityError("Only the community creator can refresh extracted topics.", 403);
+  if (!(await mayManageFaculty(userId, communityResult.data, admin))) {
+    throw new CommunityError("Only the faculty's creator and ambassadors can refresh extracted topics.", 403);
   }
   if (!subjectResult.data.external_subject_slug || !communityResult.data.study_course_id) {
     throw new CommunityError(
@@ -516,7 +521,7 @@ export async function createCommunityPost(input: {
   }
   if (
     subjectResult.data.publication_status !== "published" &&
-    String(communityResult.data.creator_id) !== input.userId
+    !(await mayManageFaculty(input.userId, communityResult.data, admin))
   ) {
     throw new CommunityError("Subject not found.", 404);
   }
@@ -829,12 +834,12 @@ export async function hideCommunityPost(
   if (!postResult.data) throw new CommunityError("Post not found.", 404);
   const community = await admin
     .from("communities")
-    .select("creator_id")
+    .select("id,creator_id")
     .eq("id", postResult.data.community_id)
     .maybeSingle();
   if (community.error) throw community.error;
-  if (String(community.data?.creator_id || "") !== userId) {
-    throw new CommunityError("Only the community creator can hide a post.", 403);
+  if (!community.data || !(await mayManageFaculty(userId, community.data, admin))) {
+    throw new CommunityError("Only the faculty's creator and ambassadors can hide a post.", 403);
   }
   const update = await admin
     .from("community_posts")

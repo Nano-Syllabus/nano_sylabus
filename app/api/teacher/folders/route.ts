@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import {
   createTeacherFolder,
   getTeacherSubjects,
@@ -19,7 +19,7 @@ function cleanFolderName(value: unknown) {
 
 export async function POST(request: Request) {
   try {
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = (await request.json().catch(() => null)) as {

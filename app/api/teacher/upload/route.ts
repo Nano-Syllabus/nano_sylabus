@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import { TeacherApiError } from "@/lib/teacher-app/client";
 import {
   isTeacherUploadFileSupported,
@@ -104,7 +104,7 @@ function errorResponse(error: unknown) {
 
 export async function POST(request: Request) {
   try {
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const contentType = request.headers.get("content-type") || "";

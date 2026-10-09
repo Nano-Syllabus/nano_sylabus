@@ -26,6 +26,10 @@ import {
   retrieveTeacherChunks,
 } from "@/lib/teacher-app/client";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
+import { headers } from "next/headers";
+import { ensureCommunityTeacher } from "@/lib/community-learning";
+import { isFacultyAmbassador } from "@/lib/data/faculty-share";
+import { WORKSPACE_FACULTY_HEADER } from "@/lib/teacher-workspace-faculty";
 
 type TeacherProfile = {
   id: string;
@@ -44,6 +48,39 @@ export async function getTeacherProfile(): Promise<TeacherProfile | null> {
   return getTeacherProfileForUserId(user.id);
 }
 
+/**
+ * The collection a creator-workspace request works in. Normally the caller's
+ * own; when the tab has a faculty open that the caller is a faculty ambassador
+ * of (WORKSPACE_FACULTY_HEADER), the faculty creator's, so every ambassador
+ * edits the same subjects and files (user, 2026-10-09). A header naming a
+ * faculty the caller no longer manages answers null (401), never their own
+ * collection, so nothing lands in the wrong place.
+ */
+export async function getWorkspaceTeacher(): Promise<TeacherProfile | null> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await getVerifiedUser(supabase);
+  if (!user) return null;
+  const slug = (await headers()).get(WORKSPACE_FACULTY_HEADER)?.trim();
+  if (!slug) return getTeacherProfileForUserId(user.id);
+
+  const admin = createSupabaseAdminClient();
+  const { data: community, error } = await admin
+    .from("communities")
+    .select("id,creator_id")
+    .eq("slug", slug)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!community) return null;
+  const creatorId = String(community.creator_id);
+  if (creatorId === user.id) return getTeacherProfileForUserId(user.id);
+  if (!(await isFacultyAmbassador(user.id, String(community.id), admin))) return null;
+  const owner = await ensureCommunityTeacher(admin, creatorId);
+  return { id: owner.id, user_id: owner.userId, handle: owner.handle, collection_sk: owner.collectionKey };
+}
+
 export async function getTeacherProfileForUserId(userId: string): Promise<TeacherProfile | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -55,8 +92,16 @@ export async function getTeacherProfileForUserId(userId: string): Promise<Teache
   return data as TeacherProfile | null;
 }
 
-async function requireTeacher() {
+/** Key rotation is the owner's alone, whatever faculty is open. */
+async function requireOwnTeacher() {
   const teacher = await getTeacherProfile();
+  if (!teacher) throw new Error("Not authorized as a teacher.");
+  return teacher;
+}
+
+/** The collection these actions work in: a shared faculty's creator's when one is open. */
+async function requireTeacher() {
+  const teacher = await getWorkspaceTeacher();
   if (!teacher) throw new Error("Not authorized as a teacher.");
   return teacher;
 }
@@ -393,7 +438,7 @@ export async function indexTeacherDocumentAction(input: {
 }
 
 export async function rotateTeacherCollectionKeyAction() {
-  const teacher = await requireTeacher();
+  const teacher = await requireOwnTeacher();
   const result = await regenerateTeacherCollectionKey(teacher.collection_sk);
   const nextKey =
     (typeof result.api_key === "string" && result.api_key) ||

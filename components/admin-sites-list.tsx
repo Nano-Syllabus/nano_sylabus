@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ExternalLink, Plus, Search, X } from "lucide-react";
+import { ExternalLink, Globe, ImagePlus, PencilLine, Plus, Search, X } from "lucide-react";
+import { messageOf, toast } from "@/components/admin/admin-toaster";
 import type {
   CommunityChoice,
   LandingSiteListItem,
@@ -27,6 +28,17 @@ function domainOf(slug: string, root: string) {
 function formatDate(value: string | null) {
   if (!value) return "Never";
   return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function timeAgo(value: string) {
+  const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return days === 1 ? "yesterday" : `${days} days ago`;
+  return new Date(value).toLocaleDateString(undefined, { dateStyle: "medium" });
 }
 
 export function AdminSitesList({
@@ -56,132 +68,146 @@ export function AdminSitesList({
   const [assigning, setAssigning] = useState<LandingSiteSummary | null>(null);
   const [sites, setSites] = useState(initialSites);
   const [linking, setLinking] = useState<LandingSiteListItem | null>(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "live" | "hidden" | "attention">("all");
   const facultyBySlug = new Map(faculties.map((faculty) => [faculty.slug, faculty]));
+
+  const needsAttention = (site: LandingSiteListItem) =>
+    site.slug !== MAIN_SITE_SLUG &&
+    (site.hasUnpublishedChanges ||
+      !(admins[site.slug]?.length) ||
+      !site.facultySlugs.length ||
+      !site.examEnabled);
+  const counts = {
+    all: sites.length,
+    live: sites.filter((site) => site.status === "live").length,
+    hidden: sites.filter((site) => site.status !== "live").length,
+    attention: sites.filter(needsAttention).length,
+  };
+  const q = query.trim().toLowerCase();
+  const shown = sites.filter((site) => {
+    if (filter === "live" && site.status !== "live") return false;
+    if (filter === "hidden" && site.status === "live") return false;
+    if (filter === "attention" && !needsAttention(site)) return false;
+    if (!q) return true;
+    return [
+      domainOf(site.slug, rootDomain),
+      site.name,
+      ...site.facultySlugs.map((slug) => facultyBySlug.get(slug)?.name ?? slug),
+      ...(admins[site.slug] ?? []).flatMap((admin) => [admin.fullName, admin.email]),
+    ].some((text) => text.toLowerCase().includes(q));
+  });
+
+  const rowProps = (site: LandingSiteListItem) => ({
+    site,
+    domain: domainOf(site.slug, rootDomain),
+    admins: site.slug === MAIN_SITE_SLUG ? [] : (admins[site.slug] ?? []),
+    facultyBySlug,
+    onAssign: canAssignAdmins ? () => setAssigning(site) : null,
+    onLink: () => setLinking(site),
+    onIcon: (iconUrl: string) =>
+      setSites((all) => all.map((row) => (row.slug === site.slug ? { ...row, iconUrl } : row))),
+  });
 
   return (
     <div className="mt-6">
-      {canCreateSites ? (
-        <div className="flex justify-end">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="flex gap-1 overflow-x-auto rounded-lg bg-muted p-1" role="group" aria-label="Show">
+          {(
+            [
+              ["all", "All"],
+              ["live", "Live"],
+              ["hidden", "Hidden"],
+              ["attention", "Needs attention"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={filter === value}
+              onClick={() => setFilter(value)}
+              className={`inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-medium ${
+                filter === value
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+              <span
+                className={`rounded-full px-1.5 text-[11px] tabular-nums ${
+                  value === "attention" && counts.attention
+                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                    : "bg-background/70 text-muted-foreground"
+                }`}
+              >
+                {counts[value]}
+              </span>
+            </button>
+          ))}
+        </div>
+        <label className="relative flex-1">
+          <span className="sr-only">Search websites</span>
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search domain, faculty or admin"
+            className={`${inputClass} pl-9`}
+          />
+        </label>
+        {canCreateSites ? (
           <button type="button" className={primaryButton} onClick={() => setCreating(true)}>
             <Plus size={16} aria-hidden="true" />
             New subdomain
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
-      {/* Scrolls sideways rather than clipping: a clipped table hid Edit text. */}
-      <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border text-xs font-medium text-muted-foreground">
+      {/* Wide screens: a fixed-layout table that never scrolls sideways. */}
+      <div className="mt-4 hidden overflow-hidden rounded-xl border border-border bg-card lg:block">
+        <table className="w-full table-fixed text-left text-sm">
+          <colgroup>
+            <col className="w-[28%]" />
+            <col className="w-[22%]" />
+            <col className="w-[21%]" />
+            <col className="w-[15%]" />
+            <col className="w-[14%]" />
+          </colgroup>
+          <thead className="border-b border-border bg-muted/40 text-xs font-medium text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-medium">Website</th>
-              <th className="hidden px-4 py-3 font-medium md:table-cell">Admin</th>
-              <th className="hidden px-4 py-3 font-medium lg:table-cell">Faculties</th>
-              <th className="hidden px-4 py-3 font-medium sm:table-cell">Status</th>
-              <th className="px-4 py-3 text-right font-medium">
+              <th className="px-4 py-2.5 font-medium">Website</th>
+              <th className="px-4 py-2.5 font-medium">Faculties</th>
+              <th className="px-4 py-2.5 font-medium">Admins</th>
+              <th className="px-4 py-2.5 font-medium">Status</th>
+              <th className="px-4 py-2.5 text-right font-medium">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {sites.map((site) => (
-              <tr key={site.slug}>
-                <td className="px-4 py-3">
-                  <div className="flex items-start gap-3">
-                  {site.slug !== MAIN_SITE_SLUG ? (
-                    <SiteIconButton
-                      site={site}
-                      onChange={(iconUrl) =>
-                        setSites((all) =>
-                          all.map((row) => (row.slug === site.slug ? { ...row, iconUrl } : row)),
-                        )
-                      }
-                    />
-                  ) : null}
-                  <div className="min-w-0 flex-1">
-                  <div className="font-medium text-foreground">
-                    {domainOf(site.slug, rootDomain)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">{site.name}</div>
-                  <div className="mt-1 sm:hidden">
-                    <StatusBadge site={site} />
-                  </div>
-                  {site.slug !== MAIN_SITE_SLUG ? (
-                    <div className="mt-2 lg:hidden">
-                      <SiteFacultyCell
-                        site={site}
-                        facultyBySlug={facultyBySlug}
-                        onChange={() => setLinking(site)}
-                      />
-                    </div>
-                  ) : null}
-                  <div className="mt-2 md:hidden">
-                    <SiteAdminCell
-                      admins={site.slug === MAIN_SITE_SLUG ? [] : (admins[site.slug] ?? [])}
-                      main={site.slug === MAIN_SITE_SLUG}
-                      onChange={canAssignAdmins ? () => setAssigning(site) : null}
-                    />
-                  </div>
-                  </div>
-                  </div>
-                </td>
-                <td className="hidden px-4 py-3 md:table-cell">
-                  <SiteAdminCell
-                    admins={site.slug === MAIN_SITE_SLUG ? [] : (admins[site.slug] ?? [])}
-                    main={site.slug === MAIN_SITE_SLUG}
-                    onChange={canAssignAdmins ? () => setAssigning(site) : null}
-                  />
-                </td>
-                <td className="hidden px-4 py-3 lg:table-cell">
-                  {site.slug === MAIN_SITE_SLUG ? (
-                    <span className="text-xs text-muted-foreground">Every faculty</span>
-                  ) : (
-                    <SiteFacultyCell
-                      site={site}
-                      facultyBySlug={facultyBySlug}
-                      onChange={() => setLinking(site)}
-                    />
-                  )}
-                </td>
-                <td className="hidden px-4 py-3 sm:table-cell">
-                  <StatusBadge site={site} />
-                  <div className="mt-1 whitespace-nowrap text-xs text-muted-foreground">
-                    Published {formatDate(site.publishedAt).replace(/^Never$/, "never")}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
-                    {site.status === "live" ? (
-                      <a
-                        href={`https://${domainOf(site.slug, rootDomain)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`${secondaryButton} hidden sm:inline-flex`}
-                      >
-                        Visit
-                        <ExternalLink size={14} aria-hidden="true" />
-                      </a>
-                    ) : null}
-                    <Link
-                      href={`/admin/sites/${site.slug}`}
-                      className="inline-flex min-h-9 items-center whitespace-nowrap rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"
-                    >
-                      Edit text
-                    </Link>
-                  </div>
-                </td>
-              </tr>
+            {shown.map((site) => (
+              <SiteRow key={site.slug} {...rowProps(site)} />
             ))}
-            {!sites.length ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  No subdomain is assigned to you yet. Ask a super admin to add you to one.
-                </td>
-              </tr>
-            ) : null}
           </tbody>
         </table>
+        {!shown.length ? <EmptySites any={sites.length > 0} /> : null}
       </div>
+
+      {/* Phones and tablets: one card per site, nothing hidden. */}
+      <ul className="mt-4 space-y-3 lg:hidden">
+        {shown.map((site) => (
+          <SiteCard key={site.slug} {...rowProps(site)} />
+        ))}
+        {!shown.length ? (
+          <li className="rounded-xl border border-border bg-card">
+            <EmptySites any={sites.length > 0} />
+          </li>
+        ) : null}
+      </ul>
 
       {assigning ? (
         <AssignAdminDialog
@@ -231,6 +257,150 @@ export function AdminSitesList({
   );
 }
 
+function EmptySites({ any }: { any: boolean }) {
+  return (
+    <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+      {any
+        ? "No website matches."
+        : "No subdomain is assigned to you yet. Ask a super admin to add you to one."}
+    </p>
+  );
+}
+
+type SiteRowProps = {
+  site: LandingSiteListItem;
+  domain: string;
+  admins: SiteAdmin[];
+  facultyBySlug: Map<string, CommunityChoice>;
+  onAssign: (() => void) | null;
+  onLink: () => void;
+  onIcon: (iconUrl: string) => void;
+};
+
+function SiteIdentity({ site, domain, onIcon }: Pick<SiteRowProps, "site" | "domain" | "onIcon">) {
+  const main = site.slug === MAIN_SITE_SLUG;
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      {main ? (
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-600/10 text-blue-700 dark:text-blue-300">
+          <Globe size={18} aria-hidden="true" />
+        </span>
+      ) : (
+        <SiteIconButton site={site} onChange={onIcon} />
+      )}
+      <div className="min-w-0">
+        <Link
+          href={`/admin/sites/${site.slug}`}
+          className="block truncate font-medium text-foreground hover:text-blue-700 hover:underline dark:hover:text-blue-300"
+          title={domain}
+        >
+          {domain}
+        </Link>
+        <div className="truncate text-xs text-muted-foreground" title={site.name}>
+          {site.name}
+          {main ? " · main site" : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SiteActions({ site, domain }: Pick<SiteRowProps, "site" | "domain">) {
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      {site.status === "live" ? (
+        <a
+          href={`https://${domain}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Visit ${domain}`}
+          title={`Visit ${domain}`}
+          className="grid size-9 shrink-0 place-items-center rounded-lg border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <ExternalLink size={15} aria-hidden="true" />
+        </a>
+      ) : null}
+      <Link
+        href={`/admin/sites/${site.slug}`}
+        className="inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700"
+      >
+        <PencilLine size={14} aria-hidden="true" />
+        Edit
+      </Link>
+    </div>
+  );
+}
+
+function SiteRow(props: SiteRowProps) {
+  const { site, domain, admins, facultyBySlug, onAssign, onLink } = props;
+  const main = site.slug === MAIN_SITE_SLUG;
+  return (
+    <tr className="align-middle hover:bg-muted/30">
+      <td className="px-4 py-3">
+        <SiteIdentity {...props} />
+      </td>
+      <td className="px-4 py-3">
+        {main ? (
+          <span className="text-xs text-muted-foreground">Every faculty</span>
+        ) : (
+          <SiteFacultyCell site={site} facultyBySlug={facultyBySlug} onChange={onLink} />
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <SiteAdminCell admins={admins} main={main} onChange={onAssign} />
+      </td>
+      <td className="px-4 py-3">
+        <StatusBadge site={site} />
+        <div className="mt-1 truncate text-xs text-muted-foreground" title={formatDate(site.publishedAt)}>
+          {site.publishedAt ? `Published ${timeAgo(site.publishedAt)}` : "Never published"}
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <SiteActions site={site} domain={domain} />
+      </td>
+    </tr>
+  );
+}
+
+function SiteCard(props: SiteRowProps) {
+  const { site, domain, admins, facultyBySlug, onAssign, onLink } = props;
+  const main = site.slug === MAIN_SITE_SLUG;
+  return (
+    <li className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <SiteIdentity {...props} />
+        <SiteActions site={site} domain={domain} />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <StatusBadge site={site} />
+        <span className="text-xs text-muted-foreground">
+          {site.publishedAt ? `Published ${timeAgo(site.publishedAt)}` : "Never published"}
+        </span>
+      </div>
+      {main ? null : (
+        <dl className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2">
+          <div>
+            <dt className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Faculties
+            </dt>
+            <dd>
+              <SiteFacultyCell site={site} facultyBySlug={facultyBySlug} onChange={onLink} />
+            </dd>
+          </div>
+          <div>
+            <dt className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Admins
+            </dt>
+            <dd>
+              <SiteAdminCell admins={admins} main={false} onChange={onAssign} />
+            </dd>
+          </div>
+        </dl>
+      )}
+    </li>
+  );
+}
+
 /** The Browse card's initials ("Institute of Engineering" → "IOE"), same rule as communityMonogram. */
 function initials(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -242,7 +412,7 @@ function initials(name: string) {
 
 /**
  * The square image on this site's Browse card. Click to upload one (live at
- * once); without one the card shows the initials.
+ * once); without one the card shows the initials. Hover shows the remove button.
  */
 function SiteIconButton({
   site,
@@ -252,11 +422,10 @@ function SiteIconButton({
   onChange: (iconUrl: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function send(file: File | null) {
     setBusy(true);
-    setError(null);
+    const id = toast.loading(file ? "Uploading card image…" : "Removing card image…");
     try {
       const body = new FormData();
       if (file) body.set("file", file);
@@ -267,17 +436,21 @@ function SiteIconButton({
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Couldn’t save the image.");
       onChange(payload.iconUrl ?? "");
+      toast.success(file ? "Card image updated" : "Card image removed", {
+        id,
+        description: `Browse shows it for ${site.name} now.`,
+      });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Couldn’t save the image.");
+      toast.error("Couldn’t save the image", { id, description: messageOf(cause, "Try again.") });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="shrink-0 text-center">
+    <div className="group relative shrink-0">
       <label
-        className={`grid size-11 cursor-pointer place-items-center overflow-hidden rounded-xl border border-border bg-muted text-xs font-semibold text-muted-foreground hover:border-blue-600 ${busy ? "opacity-50" : ""}`}
+        className={`relative grid size-10 cursor-pointer place-items-center overflow-hidden rounded-xl border border-border bg-muted text-[11px] font-semibold text-muted-foreground hover:border-blue-600 ${busy ? "opacity-50" : ""}`}
         title={site.iconUrl ? "Change the card image" : "Add a card image (shown on Browse instead of the initials)"}
       >
         {site.iconUrl ? (
@@ -286,6 +459,9 @@ function SiteIconButton({
         ) : (
           initials(site.name)
         )}
+        <span className="absolute inset-0 hidden place-items-center bg-black/45 text-white group-hover:grid">
+          <ImagePlus size={15} aria-hidden="true" />
+        </span>
         <input
           type="file"
           accept="image/png,image/svg+xml,image/webp,image/jpeg"
@@ -304,14 +480,13 @@ function SiteIconButton({
           type="button"
           disabled={busy}
           onClick={() => void send(null)}
-          className="mt-1 text-[11px] text-muted-foreground hover:text-red-600"
+          aria-label={`Remove the card image of ${site.name}`}
+          title="Remove image"
+          className="absolute -right-1.5 -top-1.5 hidden size-5 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:text-red-600 focus-visible:grid group-hover:grid"
         >
-          Remove
+          <X size={11} />
         </button>
-      ) : (
-        <span className="mt-1 block text-[11px] text-muted-foreground">Image</span>
-      )}
-      {error ? <p className="mt-1 max-w-24 text-[11px] text-red-600">{error}</p> : null}
+      ) : null}
     </div>
   );
 }
@@ -327,32 +502,41 @@ function SiteFacultyCell({
   onChange: () => void;
 }) {
   const names = site.facultySlugs.map((slug) => facultyBySlug.get(slug)?.name || slug);
+  const visible = names.slice(0, 3);
   return (
-    <div className="flex items-start gap-3">
-      <div className="min-w-0">
+    <div className="flex min-w-0 items-start gap-2">
+      <div className="min-w-0 flex-1">
         {names.length ? (
-          <ul className="space-y-0.5">
-            {names.map((name) => (
-              <li key={name} className="truncate text-sm text-foreground">
+          <ul className="flex flex-wrap gap-1" title={names.join(", ")}>
+            {visible.map((name) => (
+              <li
+                key={name}
+                className="max-w-full truncate rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
+              >
                 {name}
               </li>
             ))}
+            {names.length > visible.length ? (
+              <li className="rounded-md px-1 py-0.5 text-xs text-muted-foreground">
+                +{names.length - visible.length}
+              </li>
+            ) : null}
           </ul>
         ) : (
-          <span className="text-xs text-amber-700 dark:text-amber-300">No faculty</span>
+          <span className="text-xs text-amber-700 dark:text-amber-300">No faculty linked</span>
         )}
         {names.length && !site.examEnabled ? (
-          <div className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
-            Not shown to visitors yet
-          </div>
+          <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">Not shown to visitors yet</div>
         ) : null}
       </div>
       <button
         type="button"
         onClick={onChange}
-        className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-600/10 dark:text-blue-300"
+        aria-label={names.length ? `Change the faculties of ${site.name}` : `Link a faculty to ${site.name}`}
+        title={names.length ? "Change faculties" : "Link a faculty"}
+        className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-600/10 dark:text-blue-300"
       >
-        {names.length ? "Manage" : "Link faculty"}
+        {names.length ? <PencilLine size={13} aria-hidden="true" /> : <><Plus size={13} aria-hidden="true" />Link</>}
       </button>
     </div>
   );
@@ -422,8 +606,13 @@ function SiteFacultiesDialog({
         facultySlugs: payload.site.examConfig.facultySlugs,
         examEnabled: payload.site.examConfig.enabled,
       });
+      toast.success(`Faculties saved for ${domain}`, {
+        description: payload.site.examConfig.enabled
+          ? `Visitors now choose from ${picked.length} ${picked.length === 1 ? "faculty" : "faculties"}.`
+          : "The faculties are linked but not shown to visitors.",
+      });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Couldn’t save.");
+      toast.error("Couldn’t save the faculties", { description: messageOf(cause, "Try again.") });
       setSaving(false);
     }
   }
@@ -570,31 +759,54 @@ function SiteAdminCell({
 }) {
   if (main) return <span className="text-xs text-muted-foreground">Super admins</span>;
   return (
-    <div className="flex items-center gap-3">
-      {admins.length ? (
-        <ul className="min-w-0 space-y-1">
-          {admins.map((admin) => (
-            <li key={admin.userId} className="min-w-0">
-              <div className="truncate font-medium text-foreground">{admin.fullName}</div>
-              {admin.email ? (
-                <div className="truncate text-xs text-muted-foreground">{admin.email}</div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <span className="text-xs text-amber-700 dark:text-amber-300">No admin</span>
-      )}
+    <div className="flex min-w-0 items-start gap-2">
+      <div className="min-w-0 flex-1">
+        {admins.length ? (
+          <ul className="space-y-1">
+            {admins.map((admin) => (
+              <li key={admin.userId} className="flex min-w-0 items-center gap-2" title={admin.email || admin.fullName}>
+                <span
+                  aria-hidden="true"
+                  className="grid size-6 shrink-0 place-items-center rounded-full bg-blue-600/10 text-[10px] font-semibold text-blue-700 dark:text-blue-300"
+                >
+                  {personInitials(admin.fullName)}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-foreground">{admin.fullName}</span>
+                  {admin.email ? (
+                    <span className="block truncate text-xs text-muted-foreground">{admin.email}</span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <span className="text-xs text-amber-700 dark:text-amber-300">No admin</span>
+        )}
+      </div>
       {onChange ? (
         <button
           type="button"
           onClick={onChange}
-          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-600/10 dark:text-blue-300"
+          aria-label={admins.length ? "Manage admins" : "Add an admin"}
+          title={admins.length ? "Manage admins" : "Add an admin"}
+          className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-600/10 dark:text-blue-300"
         >
-          {admins.length ? "Manage" : "Add admin"}
+          {admins.length ? <PencilLine size={13} aria-hidden="true" /> : <><Plus size={13} aria-hidden="true" />Add</>}
         </button>
       ) : null}
     </div>
+  );
+}
+
+function personInitials(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]!.toUpperCase())
+      .join("") || "?"
   );
 }
 
@@ -662,11 +874,19 @@ function AssignAdminDialog({
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "The admins could not be changed.");
       onSaved((payload.admins ?? []) as SiteAdmin[]);
+      const who =
+        action === "add"
+          ? picked?.fullName || picked?.email
+          : current.find((admin) => admin.userId === userId)?.fullName;
+      toast.success(
+        action === "add" ? `${who || "New admin"} now runs ${domain}` : `${who || "Admin"} removed`,
+        action === "remove" ? { description: "They are a student again." } : undefined,
+      );
       setPicked(null);
       setQuery("");
       setConfirmRemove(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The admins could not be changed.");
+      toast.error("The admins could not be changed", { description: messageOf(cause, "Try again.") });
     } finally {
       setSaving(false);
     }
@@ -863,7 +1083,6 @@ function CreateSiteDialog({
   const [name, setName] = useState("");
   const [copyFrom, setCopyFrom] = useState(MAIN_SITE_SLUG);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const cleanSlug = slug.trim().toLowerCase();
   const slugProblem = !cleanSlug
@@ -880,7 +1099,6 @@ function CreateSiteDialog({
     event.preventDefault();
     if (!cleanSlug || slugProblem || !name.trim()) return;
     setSaving(true);
-    setError(null);
     try {
       const response = await fetch("/api/admin/sites", {
         method: "POST",
@@ -889,9 +1107,12 @@ function CreateSiteDialog({
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Couldn’t create the site.");
+      toast.success(`${cleanSlug}.${rootDomain} created`, {
+        description: "It stays hidden until you publish it from the editor.",
+      });
       router.push(`/admin/sites/${cleanSlug}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn’t create the site.");
+      toast.error("Couldn’t create the site", { description: messageOf(caught, "Try again.") });
       setSaving(false);
     }
   }
@@ -972,8 +1193,6 @@ function CreateSiteDialog({
             ))}
           </select>
         </label>
-
-        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
         <div className="mt-6 flex justify-end gap-2">
           <button type="button" onClick={onClose} className={secondaryButton}>

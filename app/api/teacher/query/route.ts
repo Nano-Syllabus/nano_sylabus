@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import {
   getTeacherSubjects,
   retrieveTeacherChunks,
@@ -36,7 +36,7 @@ function resultChunk(value: unknown) {
 
 export async function POST(request: Request) {
   try {
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const parsed = requestSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {

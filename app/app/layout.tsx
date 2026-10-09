@@ -68,18 +68,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     if (switchedFaculty) invalidateStudentCourseAccess(user.id);
   }
 
-  // Admins are never locked. A super admin moves across every subdomain and
-  // faculty from a site + faculty dropdown (user, 2026-10-08); a site admin
-  // gets their own site's faculties while on it.
+  // Admins are never locked to a faculty, but a subdomain IS its site: on
+  // csit.<root> everyone, super admin included, sees only that site's faculties
+  // and moves to another site by changing the URL (user, 2026-10-09). Only the
+  // main domain, which has no site of its own, lists every site for a super admin.
   const platformAdmin = user.role === "admin" || user.role === "super_admin";
   const superAdmin = user.role === "super_admin";
   let facultySwitch: FacultySwitch | null = null;
   if (platformAdmin) {
     const [allSites, switchAccess, currentSlug] = await Promise.all([
-      superAdmin
-        ? listEnrollmentExams().catch(() => [])
-        : hostSlug
-          ? getEnrollmentExam(hostSlug).then((exam) => (exam ? [exam] : []), () => [])
+      hostSlug
+        ? getEnrollmentExam(hostSlug).then((exam) => (exam ? [exam] : []), () => [])
+        : superAdmin
+          ? listEnrollmentExams().catch(() => [])
           : Promise.resolve([]),
       getFacultySwitchAccess(user.id).catch(() => null),
       currentMemberFacultySlug(user.id).catch(() => null),

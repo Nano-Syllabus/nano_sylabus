@@ -1,6 +1,6 @@
 import { reconcileDriveIndexes } from "@/lib/teacher-index-reconcile";
 import { after, NextResponse } from "next/server";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import {
   clearFinishedDriveImports,
   listDriveImports,
@@ -34,7 +34,7 @@ import { drainDriveQueue } from "@/lib/teacher-drive-drain";
 export const maxDuration = 300;
 
 export async function GET() {
-  const teacher = await getTeacherProfile();
+  const teacher = await getWorkspaceTeacher();
   if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   await reconcileDriveIndexes(teacher.collection_sk, teacher.id);
   const { items, unavailable } = await listDriveImports(teacher.id);
@@ -49,7 +49,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const teacher = await getTeacherProfile();
+  const teacher = await getWorkspaceTeacher();
   if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const input = (await request.json().catch(() => ({}))) as {

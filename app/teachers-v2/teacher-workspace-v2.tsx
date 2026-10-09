@@ -1,5 +1,6 @@
 "use client";
 
+import { setWorkspaceFaculty } from "@/lib/teacher-workspace-faculty";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -412,6 +413,7 @@ function normalizeDashboard(payload: ApiRecord): TeacherDashboard {
           memberCount: numberValue(community.memberCount),
           subjectCount: numberValue(community.subjectCount),
           createdAt: text(community.createdAt),
+          shared: community.shared === true,
         },
       ];
     }),
@@ -713,12 +715,41 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
    * `loadWorkspace` stays the one request, and writes the cache back.
    */
   const queryClient = useQueryClient();
+  /**
+   * WHOSE COLLECTION THIS TAB IS WORKING IN.
+   *
+   * A faculty is shared by its creator and its faculty ambassadors (user,
+   * 2026-10-09): opening one you are an ambassador of works in the CREATOR's
+   * subjects and files. "" is your own. Decided from the dashboard for the
+   * faculty that is open, and held until that dashboard is known, so a switch
+   * never flickers through the wrong collection. Every /api/teacher request
+   * from this tab carries it (lib/teacher-workspace-faculty.ts).
+   */
+  const [workspaceFaculty, setWorkspaceFacultyState] = useState("");
+  const openFacultyShared = dashboard?.managedCommunities.some(
+    (community) => community.slug === communitySlug && community.shared,
+  );
+  useEffect(() => {
+    if (!communitySlug) setWorkspaceFacultyState("");
+    else if (dashboard) setWorkspaceFacultyState(openFacultyShared ? communitySlug : "");
+  }, [communitySlug, dashboard, openFacultyShared]);
+  // Set during render, before any child effect can send a request for it.
+  setWorkspaceFaculty(workspaceFaculty);
+  const workspaceRequest = useRef(0);
   const { data: cachedWorkspace } = useQuery<Workspace>({
-    queryKey: keys.teacher.workspace(),
+    queryKey: keys.teacher.workspace(workspaceFaculty),
     queryFn: () => Promise.reject(new Error("The workspace is loaded by loadWorkspace.")),
     enabled: false,
     staleTime: Infinity,
   });
+  // Switching collections drops the other one's subjects off the screen.
+  const shownWorkspaceFaculty = useRef(workspaceFaculty);
+  useEffect(() => {
+    if (shownWorkspaceFaculty.current === workspaceFaculty) return;
+    shownWorkspaceFaculty.current = workspaceFaculty;
+    setWorkspace(cachedWorkspace ?? null);
+    setSelectedSlug("");
+  }, [cachedWorkspace, workspaceFaculty]);
   useEffect(() => {
     if (!cachedWorkspace || workspace) return;
     setWorkspace(cachedWorkspace);
@@ -726,6 +757,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
   }, [cachedWorkspace, workspace]);
 
   const loadWorkspace = useCallback(async () => {
+    const request = ++workspaceRequest.current;
     setWorkspaceState("loading");
     setWorkspaceError("");
     setWorkspaceErrorCode("");
@@ -736,16 +768,19 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       });
       const payload = await responsePayload(response);
       const next = normalizeWorkspace(payload);
+      // A load for the collection this tab has since switched away from.
+      if (request !== workspaceRequest.current) return next;
       setWorkspace(next);
       // A snapshot the server served while the creator service was down is not
       // worth keeping over the last live copy.
-      if (!next.stale) queryClient.setQueryData(keys.teacher.workspace(), next);
+      if (!next.stale) queryClient.setQueryData(keys.teacher.workspace(workspaceFaculty), next);
       setSelectedSlug((current) =>
         current && next.subjects.some((subject) => subject.slug === current) ? current : "",
       );
       setWorkspaceState("ready");
       return next;
     } catch (error) {
+      if (request !== workspaceRequest.current) return null;
       setWorkspaceError(
         error instanceof Error ? error.message : "Could not load the creator workspace.",
       );
@@ -753,7 +788,7 @@ export function TeacherWorkspaceV2({ teacherHandle }: { teacherHandle: string })
       setWorkspaceState("error");
       return null;
     }
-  }, [queryClient]);
+  }, [queryClient, workspaceFaculty]);
 
   const loadDashboard = useCallback(async () => {
     const request = ++dashboardRequest.current;
@@ -1958,6 +1993,14 @@ function FacultyCard({
         <p className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-widest text-text-muted">
           {community.university}
         </p>
+        {community.shared ? (
+          <span
+            title="You are a faculty ambassador here. Its subjects and files are shared with its creator."
+            className="shrink-0 rounded-full bg-blue-600/10 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300"
+          >
+            Shared
+          </span>
+        ) : null}
         {community.level ? (
           <span className="shrink-0 rounded-full border border-border px-2.5 py-0.5 text-xs font-medium text-text-secondary">
             {community.level}
@@ -2150,6 +2193,9 @@ export function CommunitiesView({
   }
 
   const selectedLevel = communityLevel(selected);
+  const selectedShared = dashboard.managedCommunities.some(
+    (community) => community.slug === selected.slug && community.shared,
+  );
   const selectedStructure = facultyStructure({ ...selected, level: selectedLevel });
 
   return (
@@ -2179,6 +2225,7 @@ export function CommunitiesView({
                 }}
                 structureText={selectedStructure.text}
                 onSaved={onRefresh}
+                readOnly={selectedShared}
               />
             </div>
             <Link
@@ -2320,7 +2367,8 @@ export function CommunitiesView({
       {admin && !subjectsMode ? <FacultyTokenUsage key={selected.slug} slug={selected.slug} /> : null}
 
       {/* Last on the tab, as GitHub keeps its danger zone. */}
-      {!subjectsMode && selected.canManage ? (
+      {/* Transfer and delete are the creator's; an ambassador shares the work only. */}
+      {!subjectsMode && selected.canManage && !selectedShared ? (
         <section
           className="mt-7 rounded-xl border border-destructive/30 bg-bg-primary p-5 sm:p-6"
           aria-labelledby="danger-zone-heading"

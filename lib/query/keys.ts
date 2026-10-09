@@ -131,7 +131,9 @@ export const keys = {
     subject: (slug: string) => ["teacher", "subject", slug] as const,
     exams: () => ["teacher", "exams"] as const,
     exam: (paperId: string) => ["teacher", "exams", paperId] as const,
-    workspace: () => ["teacher", "workspace"] as const,
+    /** One per collection: the caller's own, or a shared faculty's (by slug). */
+    workspace: (faculty = "") =>
+      (faculty ? ["teacher", "workspace", faculty] : ["teacher", "workspace"]) as readonly string[],
     preferences: () => ["teacher", "preferences"] as const,
     job: (jobId: string) => ["teacher", "job", jobId] as const,
   },

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getTeacherCollectionUsage, TeacherApiError } from "@/lib/teacher-app/client";
 
 export async function GET(request: Request) {
   try {
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const since = new URL(request.url).searchParams.get("since")?.trim() || undefined;
     const usage = await getTeacherCollectionUsage(teacher.collection_sk, since);

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ getTeacherProfile: vi.fn(), gradeTeacherPracticePaperFile: vi.fn() }));
-vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile }));
+vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile, getWorkspaceTeacher: mocks.getTeacherProfile }));
 vi.mock("@/lib/teacher-app/client", () => ({ gradeTeacherPracticePaperFile: mocks.gradeTeacherPracticePaperFile, TeacherApiError: class TeacherApiError extends Error {} }));
 
 import { POST } from "@/app/api/teacher/exams/[paperId]/submissions/[submissionId]/replace-file/route";

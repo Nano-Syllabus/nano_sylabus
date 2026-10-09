@@ -1,3 +1,4 @@
+import { mayManageFaculty } from "@/lib/data/faculty-share";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CHALLENGE_MCQ_EXAM_QUESTIONS,
@@ -102,8 +103,8 @@ export async function setCommunityChallengeFormat(
   if (!community.data || community.data.status !== "active") {
     throw new CommunityError("Community not found.", 404);
   }
-  if (String(community.data.creator_id) !== userId) {
-    throw new CommunityError("Only the community creator can change its challenge questions.", 403);
+  if (!(await mayManageFaculty(userId, community.data, admin))) {
+    throw new CommunityError("Only the faculty's creator and ambassadors can change its challenge questions.", 403);
   }
   const now = new Date().toISOString();
   const base = { challenge_question_format: format, challenge_question_format_set_at: now, updated_at: now };

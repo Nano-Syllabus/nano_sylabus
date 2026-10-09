@@ -26,7 +26,8 @@ describe("community data authorization", () => {
         admin as never,
       ),
     ).rejects.toMatchObject({ status: 403 });
-    expect(admin.from).toHaveBeenCalledTimes(1);
+    // The faculty, then whether "aarav" is one of its ambassadors — never a term.
     expect(admin.from).toHaveBeenCalledWith("communities");
+    expect(admin.from).not.toHaveBeenCalledWith("community_terms");
   });
 });

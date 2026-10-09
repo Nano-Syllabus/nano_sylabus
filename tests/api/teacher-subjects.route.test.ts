@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@/app/teachers/actions", () => ({
-  getTeacherProfile: mocks.getTeacherProfile,
+  getTeacherProfile: mocks.getTeacherProfile, getWorkspaceTeacher: mocks.getTeacherProfile,
 }));
 
 vi.mock("@/lib/teacher-app/client", () => ({

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { clearTeacherSubjectTrails } from "@/lib/data/study-trail-cleanup";
 import { validSubjectName } from "@/lib/teacher-subject-name";
@@ -142,7 +142,7 @@ async function deleteLocalSubjectMetadata(
 
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { slug } = await params;
@@ -204,7 +204,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   try {
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { slug } = await params;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { contentDisposition } from "@/lib/http/content-disposition";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import {
   fetchTeacherDocumentRaw,
   getTeacherDocument,
@@ -89,7 +89,7 @@ function errorResponse(error: unknown) {
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     const { documentId } = await context.params;
     const id = documentId.trim();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

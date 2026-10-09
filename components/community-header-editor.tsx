@@ -23,12 +23,15 @@ export function CommunityHeaderEditor({
   details,
   structureText,
   onSaved,
+  readOnly = false,
 }: {
   slug: string;
   details: Details;
   /** "One list of subjects", "4 years · 8 semesters"… — follows the layout, not editable here. */
   structureText: string;
   onSaved?: () => Promise<unknown>;
+  /** A faculty ambassador sees the name; renaming stays with the creator. */
+  readOnly?: boolean;
 }) {
   const [shown, setShown] = useState(details);
   const [draft, setDraft] = useState(details);
@@ -61,17 +64,25 @@ export function CommunityHeaderEditor({
   }
 
   /** A piece of the banner that opens the editor on its own field. */
-  const editable = (field: EditableField, label: string, children: React.ReactNode, className = "") => (
-    <button
-      type="button"
-      onClick={() => edit(field)}
-      title={`Edit ${label}`}
-      aria-label={`Edit ${label}`}
-      className={`cursor-text rounded-md decoration-white/40 decoration-dashed underline-offset-4 hover:bg-white/10 hover:underline ${focusRing} ${className}`}
-    >
-      {children}
-    </button>
-  );
+  const editable = (
+    field: EditableField,
+    label: string,
+    children: React.ReactNode,
+    className = "",
+  ) =>
+    readOnly ? (
+      <span className={className}>{children}</span>
+    ) : (
+      <button
+        type="button"
+        onClick={() => edit(field)}
+        title={`Edit ${label}`}
+        aria-label={`Edit ${label}`}
+        className={`cursor-text rounded-md decoration-white/40 decoration-dashed underline-offset-4 hover:bg-white/10 hover:underline ${focusRing} ${className}`}
+      >
+        {children}
+      </button>
+    );
 
   function cancel() {
     if (busy) return;
@@ -99,7 +110,12 @@ export function CommunityHeaderEditor({
         body: JSON.stringify(changed),
       });
       const payload = (await response.json().catch(() => ({}))) as {
-        community?: { name?: string; level?: CommunityLevel | null; university?: string; faculty?: string };
+        community?: {
+          name?: string;
+          level?: CommunityLevel | null;
+          university?: string;
+          faculty?: string;
+        };
         error?: string;
       };
       if (!response.ok || !payload.community) {
@@ -119,7 +135,11 @@ export function CommunityHeaderEditor({
         // Saved; a failed refresh of the surrounding page isn't a failed save.
       }
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Could not save the faculty details. Try again.");
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not save the faculty details. Try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -137,15 +157,17 @@ export function CommunityHeaderEditor({
           <h1 className="-mx-1 mt-2 min-w-0 truncate font-display text-3xl font-semibold tracking-[-0.04em]">
             {editable("name", "name", shown.name, "max-w-full truncate px-1 text-left")}
           </h1>
-          <button
-            type="button"
-            onClick={() => edit("name")}
-            aria-label="Edit faculty details"
-            title="Edit name and short name"
-            className={`mt-2 inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/25 text-white/75 transition hover:bg-white/10 hover:text-white ${focusRing}`}
-          >
-            <Pencil className="size-4" aria-hidden="true" />
-          </button>
+          {readOnly ? null : (
+            <button
+              type="button"
+              onClick={() => edit("name")}
+              aria-label="Edit faculty details"
+              title="Edit name and short name"
+              className={`mt-2 inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/25 text-white/75 transition hover:bg-white/10 hover:text-white ${focusRing}`}
+            >
+              <Pencil className="size-4" aria-hidden="true" />
+            </button>
+          )}
         </div>
         <p className="-mx-1 mt-2 flex flex-wrap items-center text-sm text-white/65">
           {editable("faculty", "short name", shown.faculty, "px-1")}
@@ -198,7 +220,8 @@ export function CommunityHeaderEditor({
         </label>
       </div>
       <p className="mt-2 text-xs text-white/55">
-        {shown.level} · {shown.university} · {structureText}. Level and university can&apos;t be changed.
+        {shown.level} · {shown.university} · {structureText}. Level and university can&apos;t be
+        changed.
       </p>
       {error ? (
         <p role="alert" className="mt-2 text-xs text-red-200">
@@ -211,7 +234,11 @@ export function CommunityHeaderEditor({
           disabled={busy || !draft.name.trim() || !draft.faculty.trim()}
           className={`inline-flex min-h-10 items-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-[#0b2859] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`}
         >
-          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Check className="size-4" aria-hidden="true" />}
+          {busy ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Check className="size-4" aria-hidden="true" />
+          )}
           Save
         </button>
         <button

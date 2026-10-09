@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import {
   deleteTeacherDocument,
   getTeacherDocument,
@@ -25,7 +25,7 @@ function resultJobId(result: ApiRecord) {
 }
 
 async function teacherAndDocumentId(context: RouteContext) {
-  const teacher = await getTeacherProfile();
+  const teacher = await getWorkspaceTeacher();
   const { documentId } = await context.params;
   const id = documentId.trim();
   return { teacher, id: id && id.length <= 200 ? id : "" };

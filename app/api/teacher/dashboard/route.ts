@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTeacherProfile } from "@/app/teachers/actions";
+import { listAmbassadorFacultyIds } from "@/lib/data/faculty-share";
 import { communityLevel } from "@/lib/communities";
 import { getCommunity } from "@/lib/data/communities";
 import { getCommunitySubjectWorkspace } from "@/lib/data/community-subjects";
@@ -43,14 +44,18 @@ async function getCommunityAdminOverview(
   requestedSlug: string,
 ) {
   const communityColumns =
-    "id,slug,name,university,faculty,total_years,total_semesters,contribution_threshold,created_at";
-  const queryCommunities = (columns: string) =>
-    admin
-      .from("communities")
-      .select(columns)
-      .eq("creator_id", creatorId)
-      .eq("status", "active")
-      .order("created_at", { ascending: false });
+    "id,creator_id,slug,name,university,faculty,total_years,total_semesters,contribution_threshold,created_at";
+  // Faculties this person created AND the ones they are a faculty ambassador of
+  // (user, 2026-10-09): ambassadors share the creator's subjects and files.
+  const sharedIds = await listAmbassadorFacultyIds(creatorId, admin);
+  const queryCommunities = (columns: string) => {
+    const query = admin.from("communities").select(columns).eq("status", "active");
+    return (
+      sharedIds.length
+        ? query.or(`creator_id.eq.${creatorId},id.in.(${sharedIds.join(",")})`)
+        : query.eq("creator_id", creatorId)
+    ).order("created_at", { ascending: false });
+  };
   // `level` arrives with 20260924180000_community_level.sql; without it the
   // cards guess the level from the name, as Browse does.
   let communitiesResult = await queryCommunities(`${communityColumns},level`);
@@ -64,6 +69,7 @@ async function getCommunityAdminOverview(
 
   const communities = (communitiesResult.data || []) as unknown as {
     id: string;
+    creator_id: string;
     slug: string;
     name: string;
     university: string;
@@ -122,6 +128,8 @@ async function getCommunityAdminOverview(
     memberCount: memberCounts.get(community.id) || 0,
     subjectCount: subjectCounts.get(community.id) || 0,
     createdAt: community.created_at,
+    /** Someone else's faculty this person helps run as its ambassador. */
+    shared: String(community.creator_id) !== creatorId,
   }));
   const community = requestedSlug ? communities.find((item) => item.slug === requestedSlug) : null;
   if (!community) return { managedCommunities, communityAdmin: null };

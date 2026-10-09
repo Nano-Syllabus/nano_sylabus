@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   TeacherApiError: class extends Error { constructor(message: string, readonly status: number) { super(message); } },
 }));
 
-vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile }));
+vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile, getWorkspaceTeacher: mocks.getTeacherProfile }));
 vi.mock("@/lib/teacher-app/client", () => ({ gradeTeacherPracticePaper: mocks.gradeTeacherPracticePaper, TeacherApiError: mocks.TeacherApiError }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: mocks.createSupabaseAdminClient }));
 

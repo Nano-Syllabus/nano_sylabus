@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile }));
+vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile, getWorkspaceTeacher: mocks.getTeacherProfile }));
 vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient: mocks.createSupabaseServerClient }));
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherSubjects: mocks.getTeacherSubjects,

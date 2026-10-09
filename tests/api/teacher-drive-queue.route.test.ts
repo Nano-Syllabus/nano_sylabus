@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/server", async (original) => ({ ...(await original<typeof import("next/server")>()), after: (work: () => unknown) => work() }));
 vi.mock("@/lib/teacher-index-reconcile", () => ({ reconcileDriveIndexes: vi.fn() }));
-vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile }));
+vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile, getWorkspaceTeacher: mocks.getTeacherProfile }));
 vi.mock("@/lib/data/teacher-drive-queue", () => ({
   listDriveImports: mocks.listDriveImports,
   clearFinishedDriveImports: mocks.clearFinishedDriveImports,

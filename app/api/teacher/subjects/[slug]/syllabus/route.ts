@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { askTeacherSubject, getTeacherSubjects, TeacherApiError } from "@/lib/teacher-app/client";
 import { syncTeacherSyllabusToCommunities } from "@/lib/data/community-subjects";
@@ -39,7 +39,7 @@ async function publishSyllabus(userId: string, teacherId: string, slug: string) 
 }
 
 async function teacherAndSubject(context: Context) {
-  const teacher = await getTeacherProfile();
+  const teacher = await getWorkspaceTeacher();
   if (!teacher) return { teacher: null, subject: null, slug: "" };
   const { slug } = await context.params;
   const subjects = await getTeacherSubjects(teacher.collection_sk);
@@ -65,7 +65,7 @@ export async function GET(_request: Request, context: Context) {
     // API for the subject list first, so a busy backend (2026-09-29: 21s, then a
     // 502) blanked a panel whose data was never on the backend. The row is keyed
     // on this teacher's own id, so nobody else's syllabus can be read this way.
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { slug } = await context.params;
     const admin = createSupabaseAdminClient();

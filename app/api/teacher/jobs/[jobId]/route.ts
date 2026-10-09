@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import { getTeacherJob, TeacherApiError } from "@/lib/teacher-app/client";
 
 export async function GET(
@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ jobId: string }> },
 ) {
   try {
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

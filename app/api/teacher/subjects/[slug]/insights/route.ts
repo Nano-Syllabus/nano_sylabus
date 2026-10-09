@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import {
   getTeacherCollectionCapture,
   getTeacherCollectionReadiness,
@@ -20,7 +20,7 @@ function reasonMessage(reason: unknown) {
 
 export async function GET(request: Request, { params }: RouteContext) {
   try {
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { slug } = await params;

@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
   return { getTeacherProfile: vi.fn(), getTeacherJob: vi.fn(), MockTeacherApiError };
 });
 
-vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile }));
+vi.mock("@/app/teachers/actions", () => ({ getTeacherProfile: mocks.getTeacherProfile, getWorkspaceTeacher: mocks.getTeacherProfile }));
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherJob: mocks.getTeacherJob,
   TeacherApiError: mocks.MockTeacherApiError,

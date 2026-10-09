@@ -135,6 +135,8 @@ export type TeacherDashboard = {
     memberCount: number;
     subjectCount: number;
     createdAt: string;
+    /** Another creator's faculty this person runs as one of its ambassadors. */
+    shared: boolean;
   }[];
   communityWorkspace: CommunityDetail | null;
   communitySubjectWorkspace: CommunitySubjectWorkspace | null;

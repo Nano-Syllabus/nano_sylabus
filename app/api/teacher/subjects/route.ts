@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getTeacherProfile } from "@/app/teachers/actions";
+import { getWorkspaceTeacher } from "@/app/teachers/actions";
 import { createTeacherSubject, TeacherApiError } from "@/lib/teacher-app/client";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { validSubjectName } from "@/lib/teacher-subject-name";
@@ -14,7 +14,7 @@ const subjectSetupSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const teacher = await getTeacherProfile();
+    const teacher = await getWorkspaceTeacher();
     if (!teacher) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
