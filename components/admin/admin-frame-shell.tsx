@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
@@ -35,17 +36,29 @@ const sections: Array<{ id: AdminSection; href: string; label: string; icon: typ
  * The admin workspace: a sidebar that collapses to icons (remembered per
  * browser), the page, and the toast corner every admin action reports to.
  */
+/** Which sidebar entry a path belongs to. */
+function sectionOf(pathname: string): AdminSection {
+  const match = sections
+    .filter((section) => section.href !== "/admin")
+    .find((section) => pathname === section.href || pathname.startsWith(`${section.href}/`));
+  return match?.id ?? "overview";
+}
+
+/**
+ * Mounted once by app/admin/layout.tsx, so the sidebar stays put while pages
+ * change and a page's loading state fills only the content area.
+ */
 export function AdminFrameShell({
   children,
-  active,
-  wide,
   initialCollapsed,
 }: {
   children: ReactNode;
-  active: AdminSection;
-  wide: boolean;
   initialCollapsed: boolean;
 }) {
+  const pathname = usePathname() ?? "/admin";
+  const active = sectionOf(pathname);
+  // The website editor works side by side, edge to edge.
+  const wide = /^\/admin\/sites\/[^/]+$/.test(pathname);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
 
   useEffect(() => {
@@ -63,6 +76,10 @@ export function AdminFrameShell({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // The website editor's preview iframe is an admin route too: it is the bare
+  // landing page, with no admin chrome around it.
+  if (/^\/admin\/sites\/[^/]+\/preview$/.test(pathname)) return <>{children}</>;
 
   return (
     <div className="min-h-screen bg-background text-foreground">

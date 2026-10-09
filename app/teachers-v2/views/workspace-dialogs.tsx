@@ -3,6 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, FormEvent, type ReactNode } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isTeacherSyllabusFileSupported, TEACHER_MATERIAL_FILE_ACCEPT, TEACHER_SYLLABUS_FILE_ACCEPT, TEACHER_UPLOAD_MAX_LABEL, teacherUploadSizeError } from "@/lib/teacher-upload";
 import { cn, titleCase } from "@/lib/utils";
@@ -1803,9 +1804,35 @@ export function DocumentDialog({
 
   const previewUrl = file ? text(file.previewUrl) : "";
   const mimeType = file ? text(file.mimeType) : "";
+  /** Read the document full screen; Esc comes back to the dialog first. */
+  const [focus, setFocus] = useState(false);
+  const canFocus = state === "ready" && Boolean(previewUrl);
+  const inFocus = focus && canFocus;
 
   return (
-    <Dialog title={document.name} onClose={onClose}>
+    <Dialog
+      title={document.name}
+      onClose={onClose}
+      focus={inFocus}
+      onEscape={inFocus ? () => setFocus(false) : undefined}
+      headerActions={
+        canFocus ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setFocus((current) => !current)}
+            aria-pressed={inFocus}
+          >
+            {inFocus ? (
+              <Minimize2 className="size-4" aria-hidden="true" />
+            ) : (
+              <Maximize2 className="size-4" aria-hidden="true" />
+            )}
+            {inFocus ? "Exit focus" : "Focus mode"}
+          </Button>
+        ) : null
+      }
+    >
       {state === "loading" ? (
         <div className="space-y-4" role="status" aria-label="Loading document preview">
           <div className="flex items-center gap-2">
@@ -1832,27 +1859,32 @@ export function DocumentDialog({
       ) : null}
       {state === "ready" ? (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className={cn("flex flex-wrap items-center gap-2", inFocus && "hidden")}>
             <StatusChip status={document.status} />
             <span className="text-sm text-text-muted">
               {numberValue(detail.word_count)} words ·{" "}
               {numberValue(detail.chunk_count) || document.chunks} sections
             </span>
           </div>
-          <div className="mt-5 min-h-64 overflow-hidden rounded-lg border border-border">
+          <div
+            className={cn(
+              "overflow-hidden rounded-lg border border-border",
+              inFocus ? "flex min-h-0 flex-1" : "mt-5 min-h-64",
+            )}
+          >
             {previewUrl && mimeType.startsWith("image/") ? (
               // Signed storage URLs are dynamic and intentionally bypass Next image optimization.
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={previewUrl}
                 alt={`Preview of ${document.name}`}
-                className="max-h-[58vh] w-full object-contain"
+                className={cn("w-full object-contain", inFocus ? "h-full" : "max-h-[58vh]")}
               />
             ) : previewUrl ? (
               <iframe
                 title={`Preview of ${document.name}`}
                 src={previewUrl}
-                className="h-[58vh] w-full"
+                className={cn("w-full", inFocus ? "h-full" : "h-[58vh]")}
               />
             ) : (
               <div className="flex min-h-64 items-center justify-center p-8 text-center">
@@ -1871,7 +1903,7 @@ export function DocumentDialog({
               {error}
             </p>
           ) : null}
-          <div className="mt-6 flex flex-wrap gap-2">
+          <div className={cn("mt-6 flex flex-wrap gap-2", inFocus && "hidden")}>
             {previewUrl ? (
               <a
                 href={previewUrl}

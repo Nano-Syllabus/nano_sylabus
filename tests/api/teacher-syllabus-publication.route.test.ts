@@ -187,6 +187,33 @@ describe("syllabus extraction → publication → student catalogue", () => {
     expect(mocks.challenges).not.toHaveBeenCalled();
   });
 
+  it("keeps every unit when one syllabus line is long (a real 240-character TU topic)", async () => {
+    const longLine =
+      "Operating System (Introduction, Objectives of Operating System, Types of OS, Functions of OS, Process Management, Memory Management, File Management, Device Management, Protection and Security, User Interface, Examples of Operating Systems)";
+    mocks.ask.mockResolvedValue({
+      answer: JSON.stringify([
+        { title: "Computer Software", topics: [{ name: "Types of Software" }, { name: longLine }, { name: " " }] },
+        { title: "Multimedia", topics: [{ name: "Elements of Multimedia" }] },
+      ]),
+    });
+    const response = await POST(request("POST"), context());
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.structure.map((unit: { title: string }) => unit.title)).toEqual([
+      "Computer Software",
+      "Multimedia",
+    ]);
+    // The blank topic is dropped, the long one kept whole.
+    expect(body.structure[0].topics).toEqual([{ name: "Types of Software" }, { name: longLine }]);
+  });
+
+  it("says the answer was unreadable instead of blaming indexing", async () => {
+    mocks.ask.mockResolvedValue({ answer: "Here are the units: Unit 1, Unit 2" });
+    const response = await POST(request("POST"), context());
+    expect(response.status).toBe(422);
+    expect((await response.json()).error).not.toContain("indexed");
+  });
+
   it("does not claim a complete extraction if the challenge graph is empty", async () => {
     mocks.topics.mockResolvedValue({ topics: [] });
     const response = await POST(request("POST"), context());

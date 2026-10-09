@@ -11,9 +11,14 @@ type Context = { params: Promise<{ slug: string }> };
 
 export const maxDuration = 180;
 
-const topicSchema = z.object({ name: z.string().trim().min(1).max(200) });
+// A syllabus line is often "Operating System (Introduction, Types of OS, …)" —
+// 240 characters on a real TU syllabus (2026-10-09). The old 200 cap rejected
+// the WHOLE extraction for that one line; the backend splits such lines into
+// micro-topics anyway (rag_service/subtopic_split.py).
+const NAME_MAX = 600;
+const topicSchema = z.object({ name: z.string().trim().min(1).max(NAME_MAX) });
 const chapterSchema = z.object({
-  title: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(1).max(NAME_MAX),
   topics: z.array(topicSchema).max(100),
 });
 const structureSchema = z.array(chapterSchema).min(1).max(100);
@@ -47,16 +52,38 @@ async function teacherAndSubject(context: Context) {
   return { teacher, subject, slug };
 }
 
+/**
+ * The model's units, keeping every one it can read. One odd entry (an empty
+ * topic, a line past the cap) is dropped or clipped instead of failing the
+ * extraction: "No structured units were found" for a syllabus that had eleven
+ * was the bug. `null` only when the answer is not a JSON list at all.
+ */
 function parseStructure(answer: string) {
   const fenced = answer.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
   const raw = fenced || answer.slice(answer.indexOf("["), answer.lastIndexOf("]") + 1);
   if (!raw) return null;
+  let value: unknown;
   try {
-    const parsed = structureSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? cleanStructure(parsed.data) : null;
+    value = JSON.parse(raw);
   } catch {
     return null;
   }
+  if (!Array.isArray(value)) return null;
+  const clip = (text: unknown) => (typeof text === "string" ? text.trim().slice(0, NAME_MAX).trim() : "");
+  const units = value.slice(0, 100).flatMap((unit) => {
+    if (!unit || typeof unit !== "object") return [];
+    const record = unit as { title?: unknown; topics?: unknown };
+    const title = clip(record.title);
+    if (!title) return [];
+    const topics = (Array.isArray(record.topics) ? record.topics : [])
+      .map((topic) => clip(typeof topic === "string" ? topic : (topic as { name?: unknown } | null)?.name))
+      .filter(Boolean)
+      .slice(0, 100)
+      .map((name) => ({ name }));
+    return [{ title, topics }];
+  });
+  const parsed = structureSchema.safeParse(units);
+  return parsed.success ? cleanStructure(parsed.data) : [];
 }
 
 export async function GET(_request: Request, context: Context) {
@@ -148,7 +175,12 @@ export async function POST(_request: Request, context: Context) {
     const structure = parseStructure(answer);
     if (!structure?.length) {
       return NextResponse.json(
-        { error: "No structured units were found. Make sure the syllabus file is indexed." },
+        {
+          error:
+            structure === null && answer.trim()
+              ? "The syllabus was read, but its units came back in a form that couldn't be used. Try Extract again."
+              : "No units were found in the files on this subject's Syllabus shelf. Check the syllabus file lists its units.",
+        },
         { status: 422 },
       );
     }

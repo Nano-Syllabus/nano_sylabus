@@ -710,23 +710,34 @@ export function Dialog({
   title,
   onClose,
   closeDisabled = false,
+  focus = false,
+  onEscape,
+  headerActions,
   children,
 }: {
   title: string;
   onClose: () => void;
   closeDisabled?: boolean;
+  /** Fill the whole screen (a document read in focus mode). Same tree, so an
+   *  embedded PDF keeps its page instead of reloading. */
+  focus?: boolean;
+  /** Esc, when it should do something other than close (leave focus mode). */
+  onEscape?: () => void;
+  headerActions?: ReactNode;
   children: ReactNode;
 }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !closeDisabled) onClose();
+      if (event.key !== "Escape" || closeDisabled) return;
+      if (onEscape) onEscape();
+      else onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [closeDisabled, onClose]);
+  }, [closeDisabled, onClose, onEscape]);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
+    <div className={cn("fixed inset-0 z-50 grid place-items-center", focus ? "p-0" : "p-4")}>
       <button
         type="button"
         aria-label="Close dialog"
@@ -741,13 +752,19 @@ export function Dialog({
         // The panel rises in, solid (no opacity fade, which shows the page
         // through it); the backdrop does not fade either, so it takes over
         // from DialogBackdrop seamlessly.
-        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-bg-primary shadow-xl animate-in zoom-in-[0.98] slide-in-from-bottom-2 duration-200 motion-reduce:animate-none"
+        className={cn(
+          "relative w-full border-border bg-bg-primary shadow-xl animate-in zoom-in-[0.98] slide-in-from-bottom-2 duration-200 motion-reduce:animate-none",
+          focus
+            ? "flex h-[100dvh] max-w-none flex-col overflow-hidden"
+            : "max-h-[90vh] max-w-2xl overflow-y-auto rounded-lg border",
+        )}
       >
         <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-bg-primary px-5 py-4">
           <h2 id="teacher-dialog-title" className="font-display text-xl font-semibold">
             {title}
           </h2>
           <span className="flex-1" />
+          {headerActions}
           <Button
             type="button"
             variant="outline"
@@ -758,7 +775,7 @@ export function Dialog({
             Close
           </Button>
         </header>
-        <div className="p-5">{children}</div>
+        <div className={focus ? "flex min-h-0 flex-1 flex-col p-3 sm:p-4" : "p-5"}>{children}</div>
       </section>
     </div>
   );
