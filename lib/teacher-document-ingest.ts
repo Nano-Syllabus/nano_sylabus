@@ -3,6 +3,7 @@ import http from "node:http";
 import https from "node:https";
 import { getTenantApiEnv } from "@/lib/env";
 import { teacherUploadStorageFileName } from "@/lib/teacher-upload";
+import { invalidateTeacherReads } from "@/lib/teacher-app/client";
 
 type ApiRecord = Record<string, unknown>;
 
@@ -64,7 +65,7 @@ function uploadedPath(payload: ApiRecord) {
 }
 
 /** Uploads bytes into a creator collection and waits for indexing to finish. */
-export async function ingestTeacherDocument(input: {
+async function ingestTeacherDocumentOnce(input: {
   collectionKey: string;
   fileName: string;
   mimeType: string;
@@ -110,4 +111,13 @@ export async function ingestTeacherDocument(input: {
     indexBody,
   );
   return { upload, index, collectionPath };
+}
+
+/** Uploads and indexes, then drops this server's cached reads of the collection. */
+export async function ingestTeacherDocument(input: Parameters<typeof ingestTeacherDocumentOnce>[0]) {
+  try {
+    return await ingestTeacherDocumentOnce(input);
+  } finally {
+    invalidateTeacherReads(input.collectionKey);
+  }
 }

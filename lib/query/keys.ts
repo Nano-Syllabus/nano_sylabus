@@ -135,6 +135,8 @@ export const keys = {
     workspace: (faculty = "") =>
       (faculty ? ["teacher", "workspace", faculty] : ["teacher", "workspace"]) as readonly string[],
     preferences: () => ["teacher", "preferences"] as const,
+    /** A subject's readiness/capture/weightage panel, per collection. */
+    insights: (faculty: string, slug: string) => ["teacher", "insights", faculty, slug] as const,
     job: (jobId: string) => ["teacher", "job", jobId] as const,
   },
 

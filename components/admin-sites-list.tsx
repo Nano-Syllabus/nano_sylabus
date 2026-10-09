@@ -662,8 +662,6 @@ function SiteFacultiesDialog({
 }) {
   const [name, setName] = useState(site.name);
   const [picked, setPicked] = useState<string[]>(site.facultySlugs);
-  // Opening this is asking for the faculties to show, so the switch starts on.
-  const [enabled, setEnabled] = useState(true);
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -674,10 +672,6 @@ function SiteFacultiesDialog({
   );
 
   async function save() {
-    if (enabled && !picked.length) {
-      setError("Choose at least one faculty, or turn off “Send visitors to these faculties”.");
-      return;
-    }
     if (!name.trim()) {
       setError("Give the site a name.");
       return;
@@ -693,7 +687,7 @@ function SiteFacultiesDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...(name.trim() !== site.name ? { name: name.trim() } : {}),
-          examConfig: { ...loaded.site.examConfig, facultySlugs: picked, enabled },
+          examConfig: { ...loaded.site.examConfig, facultySlugs: picked },
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -811,24 +805,10 @@ function SiteFacultiesDialog({
           Only active, public faculties are listed.
         </p>
 
-        <label className="mt-4 flex items-start gap-3 rounded-lg bg-muted/50 p-3">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(event) => {
-              setError(null);
-              setEnabled(event.target.checked);
-            }}
-            className="mt-0.5 size-4 accent-blue-600"
-          />
-          <span className="text-sm">
-            <span className="block font-medium">Send visitors to these faculties</span>
-            <span className="text-xs text-muted-foreground">
-              The site’s main buttons open these faculties. Questions, plans and prices stay in
-              Edit text → Exam, faculties &amp; checkout.
-            </span>
-          </span>
-        </label>
+        <p className="mt-3 text-xs text-muted-foreground">
+          The site’s main buttons open these faculties as soon as one is linked. Questions, plans
+          and prices are under Edit → Exam &amp; checkout.
+        </p>
 
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
 

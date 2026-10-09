@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import http from "node:http";
 import https from "node:https";
 import { getTenantApiEnv } from "@/lib/env";
-import { getTeacherSubjects, type ApiRecord as TeacherApiRecord } from "@/lib/teacher-app/client";
+import { getTeacherSubjects, invalidateTeacherReads, type ApiRecord as TeacherApiRecord } from "@/lib/teacher-app/client";
 import { TEACHER_UPLOAD_MAX_LABEL, teacherUploadStorageFileName } from "@/lib/teacher-upload";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -235,7 +235,7 @@ function sendTenantRequestOnce(
   });
 }
 
-export async function uploadAndIndex(input: {
+async function uploadAndIndexOnce(input: {
   collectionKey: string;
   fileBuffer: Buffer;
   fileName: string;
@@ -366,4 +366,13 @@ export async function savePreviewFromBuffer(input: {
     sizeBytes: input.fileBuffer.length,
     documentId: input.documentId,
   });
+}
+
+/** Uploads and indexes, then drops this server's cached reads of the collection. */
+export async function uploadAndIndex(input: Parameters<typeof uploadAndIndexOnce>[0]) {
+  try {
+    return await uploadAndIndexOnce(input);
+  } finally {
+    invalidateTeacherReads(input.collectionKey);
+  }
 }

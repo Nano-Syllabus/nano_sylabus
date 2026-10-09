@@ -3,7 +3,12 @@ import {
   updateDriveIndexState,
   type DriveImportItem,
 } from "@/lib/data/teacher-drive-queue";
-import { getTeacherJob, getTeacherDocuments, TeacherApiError } from "@/lib/teacher-app/client";
+import {
+  getTeacherJob,
+  getTeacherDocuments,
+  invalidateTeacherReads,
+  TeacherApiError,
+} from "@/lib/teacher-app/client";
 
 /** Only searchable chunks prove completion. A successful enqueue is still pending. */
 export function indexingOutcome(job: Record<string, unknown>) {
@@ -23,6 +28,8 @@ export async function reconcileDriveIndexes(collectionKey: string, teacherId: st
     try {
       const job = await getTeacherJob(collectionKey, item.jobId);
       const status = indexingOutcome(job);
+      // Finished: the collection's cached documents/readiness are out of date.
+      if (status !== "indexing") invalidateTeacherReads(collectionKey);
       await updateDriveIndexState(item, {
         status,
         indexing_started_at:
@@ -40,6 +47,8 @@ export async function reconcileDriveIndexes(collectionKey: string, teacherId: st
     } catch (error) {
       if (!(error instanceof TeacherApiError) || error.status !== 404) return; // transient outage: keep the job, expire at 24h
       // An older server may have forgotten the job. Check its actual document before retrying.
+      // Proof of indexing must be a live read, not this server's cached copy.
+      if (!documents) invalidateTeacherReads(collectionKey);
       documents ??= getTeacherDocuments(collectionKey).then(
         (reply) =>
           (Array.isArray(reply)

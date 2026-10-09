@@ -15,6 +15,11 @@ export const WORKSPACE_FACULTY_HEADER = "x-nsdi-workspace-faculty";
 let current = "";
 let installed = false;
 
+/** The shared faculty this tab is working in, "" for the caller's own collection. */
+export function currentWorkspaceFaculty() {
+  return current;
+}
+
 /** Set by the workspace when a SHARED faculty is open; "" for the caller's own. */
 export function setWorkspaceFaculty(slug: string) {
   current = slug;

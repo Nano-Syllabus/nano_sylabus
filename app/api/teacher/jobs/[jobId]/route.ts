@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getWorkspaceTeacher } from "@/app/teachers/actions";
-import { getTeacherJob, TeacherApiError } from "@/lib/teacher-app/client";
+import {
+  getTeacherJob,
+  invalidateTeacherPracticeTopics,
+  invalidateTeacherReads,
+  TeacherApiError,
+} from "@/lib/teacher-app/client";
+import { indexingOutcome } from "@/lib/teacher-index-reconcile";
 
 export async function GET(
   _request: Request,
@@ -19,6 +25,12 @@ export async function GET(
     }
 
     const job = await getTeacherJob(teacher.collection_sk, trimmed);
+    // A finished job is when a file turns "Indexed": the cached reads of the
+    // collection (documents, readiness…) are wrong from here on.
+    if (indexingOutcome(job as Record<string, unknown>) !== "indexing") {
+      invalidateTeacherReads(teacher.collection_sk);
+      invalidateTeacherPracticeTopics(teacher.collection_sk);
+    }
     return NextResponse.json({ job });
   } catch (error) {
     const apiError = error instanceof TeacherApiError ? error : null;

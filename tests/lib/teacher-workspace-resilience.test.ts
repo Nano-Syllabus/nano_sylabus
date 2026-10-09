@@ -121,6 +121,8 @@ describe("readTeacherWorkspace", () => {
   it("serves the last good read when one call fails transiently, and says it is stale", async () => {
     reply(ok);
     await client.readTeacherWorkspace("collection-secret");
+    // Past this server's read cache, so the next read goes upstream.
+    client.invalidateTeacherReads("collection-secret");
 
     // The source tree is now the one behind the burst.
     reply((path) => (path.endsWith("source-tree") ? { status: 504, body: { detail: "timeout" } } : ok(path)));
@@ -135,6 +137,7 @@ describe("readTeacherWorkspace", () => {
   it("lets a rejected key through instead of hiding it behind a snapshot", async () => {
     reply(ok);
     await client.readTeacherWorkspace("collection-secret");
+    client.invalidateTeacherReads("collection-secret");
 
     reply((path) => (path.endsWith("/me") ? { status: 401, body: { detail: "Unauthorized" } } : ok(path)));
 
@@ -147,6 +150,19 @@ describe("readTeacherWorkspace", () => {
   it("fails honestly when it has no snapshot to fall back to", async () => {
     reply(() => ({ status: 503, body: { detail: "busy" } }));
     await expect(client.readTeacherWorkspace("collection-secret")).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("answers a repeat read from this server's cache, and a write drops it", async () => {
+    reply(ok);
+    await client.readTeacherWorkspace("collection-secret");
+    const upstream = mocks.request.mock.calls.length;
+    await client.readTeacherWorkspace("collection-secret");
+    expect(mocks.request.mock.calls.length).toBe(upstream);
+
+    await client.createTeacherFolder("collection-secret", "Maths/Notes");
+    const afterWrite = mocks.request.mock.calls.length;
+    await client.readTeacherWorkspace("collection-secret");
+    expect(mocks.request.mock.calls.length).toBe(afterWrite + 4);
   });
 
   it("keeps one teacher's snapshot away from another's", async () => {

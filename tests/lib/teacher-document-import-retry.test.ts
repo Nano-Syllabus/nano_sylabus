@@ -2,7 +2,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/teacher-app/client", () => ({ getTeacherSubjects: vi.fn() }));
+vi.mock("@/lib/teacher-app/client", () => ({ getTeacherSubjects: vi.fn(), invalidateTeacherReads: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: vi.fn() }));
 
 import { isDroppedConnection, uploadAndIndex } from "@/lib/teacher-document-import";

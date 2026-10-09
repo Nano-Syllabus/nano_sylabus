@@ -5,6 +5,7 @@ import { trackApiRequest } from "@/lib/api-request-tracking";
 import { createLimiter } from "@/lib/http/limit";
 import { invalidateMemo, memo } from "@/lib/http/memo";
 import { timed } from "@/lib/dev-timing";
+import { createHash } from "node:crypto";
 
 export type ApiRecord = Record<string, unknown>;
 
@@ -418,7 +419,75 @@ async function teacherRequestOnce<T>(
   );
 }
 
+/**
+ * THE COLLECTION'S READS, CACHED ON THIS SERVER (user, 2026-10-09: "very slow").
+ *
+ * Measured on production for one creator (bsc-csit, 6 subjects): the workspace's
+ * /me, /source-tree and /documents cost 2.3-3.2s EACH, warm; every subject open
+ * adds capture/readiness/weightage at 0.7-1.6s; and half the creator routes ask
+ * for /subjects (~0.35s) before doing anything. All of it is the same few reads
+ * of a collection that only changes when someone writes to it.
+ *
+ * So the GET reads below are memoized per collection (30s fresh + 60s served
+ * while refreshing, the app's shared 30s window, docs/caching.md), and every
+ * write to the collection made through this server drops them all at once:
+ * `teacherRequest` on a write path, the multipart uploads
+ * (`invalidateTeacherReads` from lib/teacher-document-*.ts), and an indexing job
+ * that has finished (jobs route), since that is when a file turns "Indexed".
+ * Keyed on a hash of the collection key: the key is a secret and memo keys are
+ * logged on a failed refresh.
+ */
+const CACHED_READS = new Set([
+  "/v1/collection/me",
+  "/v1/collection/subjects",
+  "/v1/collection/source-tree",
+  "/v1/collection/documents",
+  "/v1/collection/capture",
+  "/v1/collection/readiness",
+  "/v1/collection/weightage",
+  "/v1/collection/usage",
+  "/api/v1/practice/chapters",
+]);
+/** What changes a collection: uploads, indexing, folders, subjects, deletes, renames, key rotation. */
+const COLLECTION_WRITE = /^\/v1\/collection\/(upload|index-|mkdir|subjects|source-tree|documents|api-key)/;
+const READ_CACHE = { ttlSeconds: 30, staleSeconds: 60 };
+
+function collectionCacheId(key: string) {
+  return `teacher-read:${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
+}
+
+/** Forget every cached read of this collection; call after anything writes to it. */
+export function invalidateTeacherReads(key: string) {
+  invalidateMemo(collectionCacheId(key));
+}
+
 async function teacherRequest<T>(
+  path: string,
+  collectionSk: string,
+  options: TeacherRequestOptions = {},
+): Promise<T> {
+  const method = options.method ?? "GET";
+  const pathname = path.split("?")[0];
+  if (method === "GET" && CACHED_READS.has(pathname)) {
+    return memo(
+      `${collectionCacheId(collectionSk)}:${path}`,
+      () => teacherRequestUncached<T>(path, collectionSk, options),
+      READ_CACHE,
+    );
+  }
+  if (method !== "GET" && COLLECTION_WRITE.test(pathname)) {
+    // Dropped either way: a write that failed half-way may still have changed it.
+    try {
+      return await teacherRequestUncached<T>(path, collectionSk, options);
+    } finally {
+      invalidateTeacherReads(collectionSk);
+      invalidateTeacherPracticeTopics(collectionSk);
+    }
+  }
+  return teacherRequestUncached<T>(path, collectionSk, options);
+}
+
+async function teacherRequestUncached<T>(
   path: string,
   collectionSk: string,
   options: TeacherRequestOptions = {},

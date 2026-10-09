@@ -110,7 +110,7 @@ export function AdminExamSettings({
       toast.success("Exam setup saved", {
         description: result.site.examConfig.enabled
           ? "The website’s main buttons open this exam’s preparation flow."
-          : "The exam flow is off, so the website’s buttons work as before.",
+          : "No faculty is linked, so the website’s buttons work as before.",
       });
     } catch (cause) {
       toast.error("Couldn’t save the exam setup", { description: messageOf(cause, "Try again.") });
@@ -164,23 +164,21 @@ export function AdminExamSettings({
       </header>
       <div className="grid gap-6 p-5 lg:grid-cols-2">
         <div className="space-y-5">
-          <label className="flex items-start gap-3 rounded-xl bg-muted/50 p-4">
-            <input
-              type="checkbox"
-              aria-label="Use this website as an exam"
-              aria-describedby={`exam-description-${slug}`}
-              checked={config.enabled}
-              onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
-              className="mt-1 size-4 accent-blue-600"
-            />
-            <span>
-              <span className="block font-medium">Use this website as an exam</span>
-              <span id={`exam-description-${slug}`} className="text-sm text-muted-foreground">
-                Give this exam one landing page and one payment page. Students can explore faculties
-                before signing in.
-              </span>
+          <div
+            className={`rounded-xl p-4 text-sm ${
+              selected.length
+                ? "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+                : "bg-amber-500/10 text-amber-800 dark:text-amber-200"
+            }`}
+          >
+            <span className="block font-medium">
+              {selected.length ? "This website is an exam" : "Link a faculty to make this website an exam"}
             </span>
-          </label>
+            <span className="text-xs opacity-80">
+              One landing page and one payment page; students explore its faculties before signing in.
+              It turns on by itself once a faculty is linked.
+            </span>
+          </div>
           <div>
             <label className="mb-2 block text-sm font-semibold">Supported faculties</label>
             <div className="mb-3 flex flex-wrap gap-3 text-sm">

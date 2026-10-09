@@ -36,6 +36,7 @@ vi.mock("@/lib/env", () => ({
 
 vi.mock("@/lib/teacher-app/client", () => ({
   getTeacherSubjects: mocks.getTeacherSubjects,
+  invalidateTeacherReads: vi.fn(),
   TeacherApiError: mocks.TeacherApiError,
 }));
 

@@ -63,7 +63,10 @@ export const DEFAULT_EXAM_QUESTIONS = [
 
 export const examConfigSchema = z
   .object({
-    enabled: z.boolean(),
+    /** Derived, not chosen: the exam flow is on whenever a faculty is linked
+     *  (user, 2026-10-09 — no more ticking a box for every site). Whatever is
+     *  stored or sent is overwritten by the transform below. */
+    enabled: z.boolean().default(true),
     facultySlugs: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/)).max(50),
     planIds: z.array(z.string().uuid()).max(12),
     /** Off = the flow skips onboarding questions and starts at the faculty list. */
@@ -85,12 +88,6 @@ export const examConfigSchema = z
     copy: copySchema,
   })
   .superRefine((config, ctx) => {
-    if (config.enabled && !config.facultySlugs.length)
-      ctx.addIssue({
-        code: "custom",
-        path: ["facultySlugs"],
-        message: "Choose at least one supported faculty.",
-      });
     if (new Set(config.facultySlugs).size !== config.facultySlugs.length)
       ctx.addIssue({
         code: "custom",
@@ -109,7 +106,8 @@ export const examConfigSchema = z
         path: ["questions"],
         message: "Question IDs must be unique.",
       });
-  });
+  })
+  .transform((config) => ({ ...config, enabled: config.facultySlugs.length > 0 }));
 
 export type ExamConfig = z.infer<typeof examConfigSchema>;
 export const DEFAULT_EXAM_CONFIG: ExamConfig = {

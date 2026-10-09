@@ -10,6 +10,9 @@ import {
   FormEvent,
   ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { keys } from "@/lib/query/keys";
+import { currentWorkspaceFaculty } from "@/lib/teacher-workspace-faculty";
 import { Button } from "@/components/ui/button";
 import {
   cleanDocumentName,
@@ -355,15 +358,21 @@ export function stringItems(value: unknown) {
 }
 
 export function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
-  const [state, setState] = useState<WorkspaceState>("loading");
-  const [data, setData] = useState<SubjectInsights | null>(null);
+  // Cache-first (docs/caching.md): the last copy paints at once, one live read
+  // replaces it. It changes only when material is indexed.
+  const queryClient = useQueryClient();
+  const insightsKey = keys.teacher.insights(currentWorkspaceFaculty(), subject.slug);
+  const cached = queryClient.getQueryData<SubjectInsights>(insightsKey) ?? null;
+  const [state, setState] = useState<WorkspaceState>(cached ? "ready" : "loading");
+  const [data, setData] = useState<SubjectInsights | null>(cached);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(
     async (refresh = false) => {
+      const hasCopy = Boolean(queryClient.getQueryData(insightsKey));
       if (refresh) setRefreshing(true);
-      else setState("loading");
+      else if (!hasCopy) setState("loading");
       setError("");
       try {
         const payload = await responsePayload(
@@ -372,7 +381,7 @@ export function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
             { headers: { Accept: "application/json" }, cache: "no-store" },
           ),
         );
-        setData({
+        const next: SubjectInsights = {
           readiness: asRecord(payload.readiness),
           capture: asRecord(payload.capture),
           weightage: asRecord(payload.weightage),
@@ -380,16 +389,21 @@ export function SubjectIntelligence({ subject }: { subject: TeacherSubject }) {
           chapters: asRecord(payload.chapters),
           usage: asRecord(payload.usage),
           partialErrors: asRecord(payload.partialErrors) as Record<string, string>,
-        });
+        };
+        setData(next);
+        if (!Object.keys(next.partialErrors).length) queryClient.setQueryData(insightsKey, next);
         setState("ready");
       } catch (caught) {
+        // A copy on screen stays on screen; only an empty panel shows the error.
+        if (!refresh && queryClient.getQueryData(insightsKey)) return;
         setError(caught instanceof Error ? caught.message : "Could not load subject intelligence.");
         setState("error");
       } finally {
         setRefreshing(false);
       }
     },
-    [subject.slug],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- insightsKey is derived from subject.slug
+    [subject.slug, queryClient],
   );
 
   useEffect(() => {
