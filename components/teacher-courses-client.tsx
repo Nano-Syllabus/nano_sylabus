@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingCard } from "@/components/loading-states";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   BookOpen,
@@ -97,9 +98,9 @@ async function apiPayload(response: Response) {
 
 function CoursesSkeleton({ compact = false }: { compact?: boolean }) {
   return (
-    <div className={cn("grid gap-4", compact ? "md:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-2")}>
+    <div aria-busy="true" aria-label="Loading courses" className={cn("grid gap-4", compact ? "md:grid-cols-2 xl:grid-cols-3" : "md:grid-cols-2")}>
       {Array.from({ length: compact ? 3 : 4 }).map((_, index) => (
-        <div key={index} className="h-44 animate-pulse rounded-lg bg-bg-tertiary" />
+        <LoadingCard key={index} />
       ))}
     </div>
   );

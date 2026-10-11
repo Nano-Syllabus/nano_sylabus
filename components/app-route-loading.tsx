@@ -1,7 +1,28 @@
 import type { ReactNode } from "react";
 import { SetAppShell } from "@/components/set-app-shell";
+import {
+  ChatLoading,
+  CollectionLoading,
+  DocumentLoading,
+  LearningProfileLoading,
+  LoadingRows,
+  SubjectLoading,
+} from "@/components/loading-states";
+import { LoadingStatus } from "@/components/ui/skeleton";
 
-type LoadingVariant = "chat" | "exams" | "subjects" | "notes" | "billing" | "settings" | "page";
+type LoadingVariant =
+  | "chat"
+  | "exams"
+  | "subjects"
+  | "notes"
+  | "billing"
+  | "settings"
+  | "classrooms"
+  | "profile"
+  | "invoices"
+  | "note"
+  | "subject"
+  | "page";
 
 const titleByVariant: Record<LoadingVariant, string> = {
   chat: "Loading chat",
@@ -10,47 +31,24 @@ const titleByVariant: Record<LoadingVariant, string> = {
   notes: "Loading notes",
   billing: "Loading billing",
   settings: "Loading settings",
+  classrooms: "Classrooms",
+  profile: "Learning profile",
+  invoices: "Invoices",
+  note: "Saved note",
+  subject: "Subject",
   page: "Loading",
 };
 
-function CardGridSkeleton() {
+function CardGridSkeleton({ variant }: { variant: "subjects" | "notes" | "exams" | "classrooms" }) {
+  const titles = { subjects: "Subjects", notes: "Notes", exams: "Exams", classrooms: "Classrooms" };
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-4 px-5 py-6 md:grid-cols-2 xl:grid-cols-3">
-      {Array.from({ length: 9 }).map((_, index) => (
-        <div
-          key={index}
-          className="rounded-2xl border border-border bg-bg-primary p-5 animate-pulse-soft motion-reduce:animate-none"
-        >
-          <div className="h-4 w-28 rounded-full bg-bg-secondary" />
-          <div className="mt-6 h-8 w-3/4 rounded-full bg-bg-secondary" />
-          <div className="mt-4 h-4 w-1/2 rounded-full bg-bg-secondary" />
-          <div className="mt-10 flex gap-3">
-            <div className="h-10 flex-1 rounded-full bg-bg-secondary" />
-            <div className="h-10 flex-1 rounded-full bg-bg-secondary" />
-          </div>
-        </div>
-      ))}
+    <div className="student-page-frame">
+      <CollectionLoading title={titles[variant]} />
     </div>
   );
 }
 
-function ChatSkeleton() {
-  return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col justify-end px-5 pb-6">
-      <div className="mb-auto pt-12 space-y-8">
-        <div className="ml-auto h-14 w-72 rounded-[2rem] bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-        <div className="space-y-3">
-          <div className="h-5 w-44 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-5 w-3/4 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-5 w-2/3 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-        </div>
-      </div>
-      <div className="h-28 rounded-3xl border border-border bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-    </div>
-  );
-}
-
-const shimmer = "rounded-full bg-border animate-pulse-soft motion-reduce:animate-none";
+const shimmer = "rounded-full loading-skeleton";
 
 /**
  * Settings, drawn with the page's own frame, cards and labels — only the values
@@ -60,7 +58,9 @@ const shimmer = "rounded-full bg-border animate-pulse-soft motion-reduce:animate
 function SettingsSkeleton() {
   const field = (label: string, width: string) => (
     <div key={label} className="flex flex-col gap-3">
-      <span className="text-xs font-medium uppercase tracking-wider text-text-secondary">{label}</span>
+      <span className="text-xs font-medium uppercase tracking-wider text-text-secondary">
+        {label}
+      </span>
       <div className="flex h-11 items-center rounded-md border border-border bg-bg-primary px-3">
         <span className={`h-3.5 ${width} ${shimmer}`} />
       </div>
@@ -84,7 +84,10 @@ function SettingsSkeleton() {
           <p className="text-sm font-medium">Color mode</p>
           <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl border border-border bg-bg-secondary p-1">
             {["System", "Light", "Dark"].map((label) => (
-              <span key={label} className="flex min-h-10 items-center justify-center text-sm text-text-secondary">
+              <span
+                key={label}
+                className="flex min-h-10 items-center justify-center text-sm text-text-secondary"
+              >
                 {label}
               </span>
             ))}
@@ -101,12 +104,14 @@ function SettingsSkeleton() {
             {field("College / institution", "w-48")}
             {field("University / academic authority", "w-44")}
             <div>
-              <p className="mb-2 text-xs font-mono-ui uppercase text-text-muted">Default language</p>
+              <p className="mb-2 text-xs font-mono-ui uppercase text-text-muted">
+                Default language
+              </p>
               <span className={`block h-9 w-52 ${shimmer}`} />
             </div>
           </div>
           <div className="flex justify-end border-t border-border bg-bg-secondary px-5 py-3">
-            <span className="h-10 w-20 rounded-md bg-border" />
+            <span className="h-10 w-20 rounded-md loading-skeleton" />
           </div>
         </>,
       )}
@@ -118,7 +123,7 @@ function SettingsSkeleton() {
             <p className="mt-1 text-sm text-text-secondary">
               This permanently removes your auth account and cascades your saved study data.
             </p>
-            <span className="mt-4 block h-10 w-36 rounded-md bg-border" />
+            <span className="mt-4 block h-10 w-36 rounded-md loading-skeleton" />
           </div>
         </div>,
         "mt-6",
@@ -141,7 +146,9 @@ function BillingSkeleton() {
           <span className="flex h-10 items-center rounded-full bg-text-primary px-6 text-sm font-semibold text-text-inverse">
             1 month
           </span>
-          <span className="flex h-10 items-center px-6 text-sm font-semibold text-text-muted">3 months</span>
+          <span className="flex h-10 items-center px-6 text-sm font-semibold text-text-muted">
+            3 months
+          </span>
         </div>
       </header>
       <section className="student-page-width mt-8 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3 lg:gap-5">
@@ -168,7 +175,7 @@ function BillingSkeleton() {
               ))}
             </div>
             <div className="mt-auto pt-7">
-              <span className="block h-10 w-full rounded-md bg-border" />
+              <span className="block h-10 w-full rounded-md loading-skeleton" />
             </div>
           </div>
         ))}
@@ -194,23 +201,40 @@ function BillingSkeleton() {
 }
 
 export function AppRouteLoading({ variant }: { variant: LoadingVariant }) {
-  const isCardPage = variant === "subjects" || variant === "notes" || variant === "exams";
+  const cardVariant =
+    variant === "subjects" || variant === "notes" || variant === "exams" || variant === "classrooms"
+      ? variant
+      : null;
 
   return (
     <>
       <SetAppShell title={titleByVariant[variant]} />
-      {variant === "chat" ? <ChatSkeleton /> : null}
-      {isCardPage ? <CardGridSkeleton /> : null}
+      {variant === "chat" ? <ChatLoading /> : null}
+      {cardVariant ? <CardGridSkeleton variant={cardVariant} /> : null}
       {variant === "settings" ? <SettingsSkeleton /> : null}
       {variant === "billing" ? <BillingSkeleton /> : null}
-      {!isCardPage && variant !== "chat" && variant !== "settings" && variant !== "billing" ? (
-        <div className="mx-auto max-w-4xl space-y-4 px-5 py-8">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-16 rounded-2xl bg-border animate-pulse-soft motion-reduce:animate-none"
-            />
-          ))}
+      {variant === "profile" ? <LearningProfileLoading /> : null}
+      {variant === "subject" ? <SubjectLoading /> : null}
+      {variant === "note" ? (
+        <div className="student-reading-frame">
+          <DocumentLoading />
+        </div>
+      ) : null}
+      {variant === "invoices" ? (
+        <main className="student-reading-frame" aria-busy="true">
+          <h1 className="type-student-page-title">Invoices</h1>
+          <LoadingStatus label="Loading your invoices" className="mt-3" />
+          <div className="mt-6 rounded-xl border border-border bg-card px-5">
+            <LoadingRows count={5} />
+          </div>
+        </main>
+      ) : null}
+      {variant === "page" ? (
+        <div aria-busy="true" className="mx-auto max-w-4xl px-5 py-8">
+          <LoadingStatus label="Loading your page" />
+          <div className="mt-5 rounded-xl border border-border bg-card px-5">
+            <LoadingRows count={6} />
+          </div>
         </div>
       ) : null}
     </>

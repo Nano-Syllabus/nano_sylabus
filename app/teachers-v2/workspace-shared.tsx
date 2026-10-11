@@ -1,5 +1,7 @@
 "use client";
 
+import { CollectionLoading, LoadingRows, SummaryLoading } from "@/components/loading-states";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect, useRef, useState, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -453,7 +455,7 @@ export function DriveImportQueue({
       >
         <div className="flex items-center justify-between px-1 pb-2">
           <span className="font-display text-sm font-semibold">Import queue</span>
-          <span className="h-3 w-24 animate-pulse rounded bg-border" />
+          <span className="h-3 w-24 loading-skeleton rounded" />
         </div>
         <div className="space-y-2">
           {[0, 1].map((row) => (
@@ -461,9 +463,9 @@ export function DriveImportQueue({
               key={row}
               className="flex items-center gap-3 rounded-lg border border-border bg-bg-primary px-3 py-3"
             >
-              <span className="size-6 shrink-0 animate-pulse rounded-full bg-border" />
-              <span className="h-3.5 flex-1 animate-pulse rounded bg-border" style={{ maxWidth: row ? "14rem" : "9rem" }} />
-              <span className="h-3 w-16 shrink-0 animate-pulse rounded bg-border" />
+              <span className="size-6 shrink-0 loading-skeleton rounded-full" />
+              <span className="h-3.5 flex-1 loading-skeleton rounded" style={{ maxWidth: row ? "14rem" : "9rem" }} />
+              <span className="h-3 w-16 shrink-0 loading-skeleton rounded" />
             </div>
           ))}
         </div>
@@ -623,20 +625,12 @@ export function DriveImportQueue({
 }
 
 export function SkeletonBlock({ className }: { className?: string }) {
-  return (
-    <div
-      aria-hidden="true"
-      className={cn(
-        "animate-pulse-soft rounded-lg bg-bg-tertiary motion-reduce:animate-none",
-        className,
-      )}
-    />
-  );
+  return <Skeleton className={className} />;
 }
 
 export function SkeletonCard({ lines = 3, className }: { lines?: number; className?: string }) {
   return (
-    <div className={cn("rounded-lg border border-border p-5", className)} aria-hidden="true">
+    <div className={cn("loading-card rounded-xl border border-border bg-card p-5", className)} aria-hidden="true">
       <div className="flex items-start gap-3">
         <SkeletonBlock className="h-10 w-10 shrink-0 rounded-full" />
         <div className="min-w-0 flex-1 space-y-3">
@@ -657,40 +651,27 @@ export function SkeletonCard({ lines = 3, className }: { lines?: number; classNa
 }
 
 export function DashboardSkeleton() {
-  return (
-    <div role="status" aria-label="Loading dashboard">
-      <div className="space-y-3">
-        <SkeletonBlock className="h-3 w-24" />
-        <SkeletonBlock className="h-10 w-72 max-w-full" />
-        <SkeletonBlock className="h-4 w-56 max-w-full" />
-      </div>
-      <SkeletonBlock className="mt-8 h-36 rounded-xl" />
-      <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, index) => (
-          <SkeletonCard key={index} lines={3} className="h-48" />
-        ))}
-      </div>
-    </div>
-  );
+  return <CollectionLoading title="Your classrooms" label="Loading classrooms" count={3} />;
 }
 
 export function ExamWorkspaceSkeleton() {
   return (
-    <div role="status" aria-label="Loading exams">
-      <div className="space-y-3">
-        <SkeletonBlock className="h-3 w-44" />
-        <SkeletonBlock className="h-10 w-80 max-w-full" />
-        <SkeletonBlock className="h-4 w-[30rem] max-w-full" />
-      </div>
-      <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+    <div aria-busy="true">
+      <h1 className="font-display text-3xl font-semibold tracking-tight">Exams</h1>
+      <p role="status" className="mt-2 text-sm text-text-muted">
+        Loading your exams
+      </p>
+      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
         <div className="space-y-5">
-          <SkeletonBlock className="h-52 rounded-xl" />
-          <SkeletonBlock className="h-80 rounded-xl" />
+          <SummaryLoading title="Exam overview" />
+          <section className="rounded-xl border border-border bg-card px-5 pt-5">
+            <h2 className="text-sm font-semibold">Your exams</h2>
+            <LoadingRows />
+          </section>
         </div>
         <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <SkeletonCard key={index} lines={2} />
-          ))}
+          <SummaryLoading title="Exam activity" />
+          <SummaryLoading title="Results" />
         </div>
       </div>
     </div>

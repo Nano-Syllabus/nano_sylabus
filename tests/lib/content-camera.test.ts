@@ -1,261 +1,291 @@
-import { readFileSync } from "node:fs";
-import { PGlite } from "@electric-sql/pglite";
+import { randomUUID } from "node:crypto";
 import sharp from "sharp";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { photoPagesToPdf } from "@/lib/browser-photo-pdf";
+import { GET, POST, DELETE } from "@/app/api/content-camera/[id]/[token]/route";
 
 const mock = vi.hoisted(() => ({
-  query: vi.fn(),
-  objects: new Map<string, Uint8Array>(),
-  remove: vi.fn(),
+  objects: new Map<string, Blob>(),
+  removed: [] as string[],
+  beforePdfRead: undefined as (() => Promise<void>) | undefined,
 }));
-
-// Execute the production manifest operations against real Postgres semantics,
-// including concurrent revision comparisons, instead of emulating row state.
-vi.mock("@/lib/supabase/admin", () => {
-  class Query {
-    op = "select";
-    values: Record<string, unknown> = {};
-    conditions: string[] = [];
-    params: unknown[] = [];
-    head = false;
-    singleRow = false;
-    ordering = "";
-    take = "";
-    select(_columns = "*", options?: { head?: boolean }) {
-      this.head = Boolean(options?.head);
-      return this;
-    }
-    insert(values: Record<string, unknown>) {
-      this.op = "insert";
-      this.values = values;
-      return this;
-    }
-    update(values: Record<string, unknown>) {
-      this.op = "update";
-      this.values = values;
-      return this;
-    }
-    delete() {
-      this.op = "delete";
-      return this;
-    }
-    where(key: string, op: string, value: unknown) {
-      this.params.push(value);
-      this.conditions.push(`${key} ${op} $${this.params.length}`);
-      return this;
-    }
-    eq(key: string, value: unknown) {
-      return this.where(key, "=", value);
-    }
-    gt(key: string, value: unknown) {
-      return this.where(key, ">", value);
-    }
-    lt(key: string, value: unknown) {
-      return this.where(key, "<", value);
-    }
-    order(key: string) {
-      this.ordering = ` order by ${key}`;
-      return this;
-    }
-    limit(value: number) {
-      this.take = ` limit ${value}`;
-      return this;
-    }
-    single() {
-      this.singleRow = true;
-      return this;
-    }
-    maybeSingle() {
-      this.singleRow = true;
-      return this;
-    }
-    async execute() {
-      const values = Object.entries(this.values);
-      const placeholders = values.map(([, value], index) => {
-        this.params.push(typeof value === "object" ? JSON.stringify(value) : value);
-        return `$${this.params.length}${values[index][0] === "pages" ? "::jsonb" : ""}`;
-      });
-      const where = this.conditions.length ? ` where ${this.conditions.join(" and ")}` : "";
-      const sql =
-        this.op === "insert"
-          ? `insert into content_camera_sessions (${values.map(([key]) => key)}) values (${placeholders}) returning *`
-          : this.op === "update"
-            ? `update content_camera_sessions set ${values.map(([key], index) => `${key}=${placeholders[index]}`)}${where} returning *`
-            : this.op === "delete"
-              ? `delete from content_camera_sessions${where} returning *`
-              : `select * from content_camera_sessions${where}${this.ordering}${this.take}`;
-      try {
-        const result = await mock.query(sql, this.params);
-        return {
-          data: this.head ? null : this.singleRow ? (result.rows[0] ?? null) : result.rows,
-          count: result.rows.length,
-          error: null,
-        };
-      } catch (error) {
-        return { data: null, error };
-      }
-    }
-    then(resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) {
-      return this.execute().then(resolve, reject);
-    }
-  }
-  return {
-    createSupabaseAdminClient: () => ({
-      from: () => new Query(),
-      get storage() {
-        throw new Error("Camera images must never use Supabase Storage");
-      },
-    }),
-  };
-});
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: () => {
+    throw new Error("Camera handoffs must never access Supabase.");
+  },
+}));
 vi.mock("@/lib/vps-storage", () => ({
   createVpsStorageClient: () => ({
     from: (bucket: string) => {
       expect(bucket).toBe("content-camera");
       return {
-        createSignedUploadUrl: async (path: string) => ({
-          data: { signedUrl: `/vps-storage/signed-upload/content-camera/${path}` },
+        upload: async (path: string, data: string) => {
+          if (mock.objects.has(path)) return { error: { statusCode: "409" } };
+          mock.objects.set(path, new Blob([data], { type: "application/json" }));
+          return { error: null };
+        },
+        download: async (path: string) => {
+          if (path.endsWith(".pdf")) await mock.beforePdfRead?.();
+          const data = mock.objects.get(path);
+          return data ? { data, error: null } : { data: null, error: { statusCode: "404" } };
+        },
+        info: async (path: string) => {
+          const data = mock.objects.get(path);
+          return data
+            ? { data: { size: data.size, mimetype: data.type }, error: null }
+            : { data: null, error: { statusCode: "404" } };
+        },
+        createSignedUploadUrl: async (path: string, seconds: number) => ({
+          data: {
+            signedUrl: `/vps-storage/signed-upload/content-camera/${path}?seconds=${seconds}`,
+          },
         }),
-        createSignedUrls: async (paths: string[]) => ({
-          data: paths.map((path) => ({ signedUrl: `/vps-storage/signed/content-camera/${path}` })),
-        }),
-        info: async (path: string) => ({
-          data: { size: mock.objects.get(path)?.length ?? 0, mimetype: "image/jpeg" },
-        }),
-        download: async (path: string) => ({
-          data: new Blob([new Uint8Array(mock.objects.get(path) ?? [])]),
-          error: null,
-        }),
-        remove: mock.remove,
+        remove: async (paths: string[]) => {
+          paths.forEach((path) => {
+            mock.objects.delete(path);
+            mock.removed.push(path);
+          });
+          return { error: null };
+        },
+        list: async (prefix: string, after = "") => {
+          const names = new Map<string, boolean>();
+          for (const path of mock.objects.keys()) {
+            if (!path.startsWith(prefix + "/")) continue;
+            const tail = path.slice(prefix.length + 1),
+              name = tail.split("/")[0];
+            if (name > after) names.set(name, tail.includes("/"));
+          }
+          return {
+            data: [...names]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .slice(0, 1000)
+              .map(([name, isDirectory]) => ({ name, isDirectory })),
+            error: null,
+          };
+        },
       };
     },
   }),
 }));
-
 import {
   cleanupContentCameras,
   closeContentCamera,
-  completeContentPhoto,
+  completeContentPdf,
   contentCameraPdf,
   contentCameraState,
   createContentCamera,
   getContentCamera,
-  prepareContentPhoto,
-  removeContentPhoto,
-  reorderContentPhotos,
+  prepareContentPdf,
 } from "@/lib/data/content-camera";
 
-let db: PGlite;
-let image: Buffer;
-const teacher = "00000000-0000-0000-0000-000000000001";
-beforeAll(async () => {
-  db = new PGlite();
-  await db.exec(`create role anon; create role authenticated; create role service_role;
-    create table teachers(id uuid primary key); insert into teachers values ('${teacher}');`);
-  await db.exec(
-    readFileSync("supabase/migrations/20261011053848_content_camera_sessions.sql", "utf8"),
-  );
-  mock.query.mockImplementation((sql, values) => db.query(sql, values));
-  image = await sharp({ create: { width: 600, height: 800, channels: 3, background: "white" } })
-    .jpeg()
-    .toBuffer();
-}, 15000);
-beforeEach(async () => {
-  await db.exec("delete from content_camera_sessions");
+beforeEach(() => {
   mock.objects.clear();
-  mock.remove.mockImplementation(async (paths: string[]) => {
-    paths.forEach((path) => mock.objects.delete(path));
-    return { error: null };
-  });
+  mock.removed.length = 0;
+  mock.beforePdfRead = undefined;
 });
-afterAll(() => db?.close());
-
-async function add(id: string, token: string) {
-  const prepared = await prepareContentPhoto(id, token, {
-    name: "photo.jpg",
-    size: image.length,
-    source: "phone",
+const root = (id: string) => `handoffs/${id}`;
+async function prepared(pageCount = 2) {
+  const opened = await createContentCamera(randomUUID(), "Physics/Notes");
+  const jpeg = new Blob(
+    [
+      new Uint8Array(
+        await sharp({ create: { width: 20, height: 30, channels: 3, background: "white" } })
+          .jpeg()
+          .toBuffer(),
+      ),
+    ],
+    { type: "image/jpeg" },
+  );
+  const pdf = photoPagesToPdf(
+    Array.from({ length: pageCount }, () => ({ blob: jpeg, width: 20, height: 30 })),
+  );
+  const reservation = await prepareContentPdf(opened.session.id, opened.token, {
+    name: "My notes",
+    size: pdf.size,
+    pageCount,
   });
-  mock.objects.set(`${id}/${prepared.pageId}.jpg`, image);
-  await completeContentPhoto(id, token, prepared.pageId);
-  return prepared.pageId;
+  const path = `${root(opened.session.id)}/${reservation.pdfId}.pdf`;
+  return { ...opened, reservation, pdf, path };
 }
-describe("content capture using private VPS files and metadata only", () => {
-  it("stores a hash, rejects forged/expired links, and refuses direct browser access to session rows", async () => {
-    const { session, token } = await createContentCamera(teacher, "Physics/Notes");
+describe("private VPS PDF handoffs", () => {
+  it("creates a hashed, expiring QR session without Supabase or image objects", async () => {
+    const { session, token } = await createContentCamera(randomUUID(), "Syllabus");
+    expect(token).toMatch(/^[a-f0-9]{64}$/);
     expect(session.token_hash).not.toBe(token);
-    await expect(getContentCamera(session.id, "a".repeat(64))).rejects.toMatchObject({
+    expect(Date.parse(session.expires_at) - Date.now()).toBeGreaterThan(119 * 60_000);
+    expect(await getContentCamera(session.id, token)).toEqual(session);
+    expect(await contentCameraState(session)).toEqual({
+      id: session.id,
+      title: "Syllabus",
+      expiresAt: session.expires_at,
+      maxPages: 50,
+      pdf: null,
+    });
+    expect([...mock.objects.keys()]).toEqual([`${root(session.id)}/session.json`]);
+    expect(await mock.objects.values().next().value!.text()).not.toContain(token);
+    await expect(getContentCamera(session.id, "0".repeat(64))).rejects.toMatchObject({
       status: 404,
     });
-    for (const role of ["anon", "authenticated"]) {
-      await db.exec(`set role ${role}`);
-      await expect(db.query("select * from content_camera_sessions")).rejects.toThrow(
-        "permission denied",
-      );
-      await db.exec("reset role");
-    }
-    await db.query(
-      "update content_camera_sessions set expires_at=now()-interval '1 minute' where id=$1",
-      [session.id],
-    );
-    await expect(getContentCamera(session.id, token)).rejects.toMatchObject({ status: 410 });
+    await expect(getContentCamera("../escape", token)).rejects.toMatchObject({ status: 404 });
   });
-  it("keeps concurrent additions, appends arrivals absent from a desktop snapshot, and builds the PDF in that order", async () => {
-    const { session, token } = await createContentCamera(teacher, "Physics/Notes");
-    const ids = await Promise.all([add(session.id, token), add(session.id, token)]);
-    const arrival = await add(session.id, token);
-    const reordered = await reorderContentPhotos(session.id, token, [...ids].reverse());
-    const state = await contentCameraState(reordered);
-    expect(state.pages.map((page) => page.id)).toEqual([...ids].reverse().concat(arrival));
-    expect(state.pages.every((page) => page.previewUrl?.startsWith("/vps-storage/"))).toBe(true);
-    expect((await contentCameraPdf(reordered, reordered.revision)).toString("latin1")).toContain(
-      "/Count 3",
-    );
-    await expect(contentCameraPdf(reordered, reordered.revision - 1)).rejects.toMatchObject({
+  it("accepts one finished phone PDF, verifies its page count, and delivers the same bytes", async () => {
+    const fixture = await prepared();
+    const { session, token, reservation, pdf, path } = fixture;
+    expect(reservation.uploadUrl).toContain(`${reservation.pdfId}.pdf`);
+    expect(reservation.uploadUrl).toContain("seconds=300");
+    await expect(completeContentPdf(session.id, token, reservation.pdfId)).rejects.toMatchObject({
       status: 409,
     });
-  });
-  it("holds PDF generation until pending photos finish, rejects invalid bytes and oversized uploads, and releases removed pages", async () => {
-    const { session, token } = await createContentCamera(teacher, "Physics/Syllabus");
+    mock.objects.set(path, pdf);
+    await completeContentPdf(session.id, token, reservation.pdfId);
+    const state = await contentCameraState(session);
+    expect(state.pdf).toMatchObject({
+      id: reservation.pdfId,
+      name: "My notes.pdf",
+      size: pdf.size,
+      pageCount: 2,
+    });
+    expect(state).not.toHaveProperty("teacher_id");
+    expect(state.pdf).not.toHaveProperty("digest");
+    expect(Buffer.from(await pdf.arrayBuffer())).toEqual(
+      await contentCameraPdf(session, reservation.pdfId),
+    );
+    await expect(completeContentPdf(session.id, token, reservation.pdfId)).resolves.toEqual(
+      session,
+    );
     await expect(
-      prepareContentPhoto(session.id, token, {
-        name: "large.jpg",
-        size: 3 * 1024 * 1024,
-        source: "phone",
-      }),
-    ).rejects.toThrow("under 2 MB");
-    const prepared = await prepareContentPhoto(session.id, token, {
-      name: "bad.jpg",
-      size: 6,
-      source: "phone",
-    });
-    mock.objects.set(`${session.id}/${prepared.pageId}.jpg`, new TextEncoder().encode("notjpg"));
-    const pending = await getContentCamera(session.id, token);
-    await expect(contentCameraPdf(pending, pending.revision)).rejects.toMatchObject({
+      prepareContentPdf(session.id, token, { name: "Second.pdf", size: 100, pageCount: 1 }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect([...mock.objects.keys()].every((path) => /\.(json|pdf)$/.test(path))).toBe(true);
+  });
+  it("blocks incorrect size, mime type, corrupt PDFs, and page-count mismatches", async () => {
+    const { session, token, reservation, pdf, path } = await prepared();
+    for (const wrong of [
+      new Blob(["not a PDF"], { type: "application/pdf" }),
+      new Blob([await pdf.arrayBuffer()], { type: "image/jpeg" }),
+      new Blob([" ".repeat(pdf.size)], { type: "application/pdf" }),
+    ]) {
+      mock.objects.set(path, wrong);
+      await expect(completeContentPdf(session.id, token, reservation.pdfId)).rejects.toThrow();
+    }
+    mock.objects.set(path, pdf);
+    const manifest = `${root(session.id)}/${reservation.pdfId}.json`;
+    const values = JSON.parse(await mock.objects.get(manifest)!.text());
+    mock.objects.set(manifest, new Blob([JSON.stringify({ ...values, pageCount: 3 })]));
+    await expect(completeContentPdf(session.id, token, reservation.pdfId)).rejects.toThrow(
+      "verified",
+    );
+  });
+  it("detects a signed-upload overwrite after the PDF has been completed", async () => {
+    const { session, token, reservation, pdf, path } = await prepared();
+    mock.objects.set(path, pdf);
+    await completeContentPdf(session.id, token, reservation.pdfId);
+    const bytes = new Uint8Array(await pdf.arrayBuffer());
+    bytes[200] ^= 1;
+    mock.objects.set(path, new Blob([bytes], { type: "application/pdf" }));
+    await expect(contentCameraPdf(session, reservation.pdfId)).rejects.toMatchObject({
       status: 409,
     });
-    await expect(completeContentPhoto(session.id, token, prepared.pageId)).rejects.toThrow(
-      "could not be opened",
-    );
-    await removeContentPhoto(session.id, token, prepared.pageId);
-    const pageId = await add(session.id, token);
-    const state = await contentCameraState(await getContentCamera(session.id, token));
-    expect(state.pendingCount).toBe(0);
-    expect(state.pages.map((page) => page.id)).toEqual([pageId]);
   });
-  it("revokes a closed QR and removes temporary files, including late uploads during expiry cleanup", async () => {
-    const { session, token } = await createContentCamera(teacher, "Physics/Notes");
-    const pageId = await add(session.id, token);
-    await closeContentCamera(session.id, token);
-    expect(mock.objects.size).toBe(0);
+  it("does not allow a late completion to reopen a closed link; closing is idempotent", async () => {
+    const { session, token, reservation, pdf, path } = await prepared();
+    mock.objects.set(path, pdf);
+    mock.beforePdfRead = () => closeContentCamera(session.id, token);
+    await expect(completeContentPdf(session.id, token, reservation.pdfId)).rejects.toMatchObject({
+      status: 410,
+    });
+    await expect(closeContentCamera(session.id, token)).resolves.toBeUndefined();
     await expect(getContentCamera(session.id, token)).rejects.toMatchObject({ status: 410 });
-    mock.objects.set(`${session.id}/${pageId}.jpg`, image);
-    await db.query(
-      "update content_camera_sessions set expires_at=now()-interval '6 minutes' where id=$1",
-      [session.id],
-    );
+    expect(mock.objects.has(`${root(session.id)}/ready.json`)).toBe(false);
+  });
+  it("revokes the QR and removes the delivered PDF on close, keeping a tombstone", async () => {
+    const { session, token, reservation, pdf, path } = await prepared();
+    mock.objects.set(path, pdf);
+    await completeContentPdf(session.id, token, reservation.pdfId);
+    await Promise.all([
+      closeContentCamera(session.id, token),
+      closeContentCamera(session.id, token),
+    ]);
+    expect(mock.objects.has(path)).toBe(false);
+    expect(mock.objects.has(`${root(session.id)}/closed.json`)).toBe(true);
+    await expect(contentCameraPdf(session, reservation.pdfId)).rejects.toMatchObject({
+      status: 410,
+    });
+  });
+  it("expires QR links and sweeps all abandoned uploads only after signed PUTs expire", async () => {
+    const { session, token, pdf, path } = await prepared();
+    mock.objects.set(path, pdf);
+    const expired = { ...session, expires_at: new Date(Date.now() - 1000).toISOString() };
+    mock.objects.set(`${root(session.id)}/session.json`, new Blob([JSON.stringify(expired)]));
+    await expect(getContentCamera(session.id, token)).rejects.toMatchObject({ status: 410 });
+    await cleanupContentCameras();
+    expect(mock.objects.has(path)).toBe(true);
+    expired.expires_at = new Date(Date.now() - 6 * 60_000).toISOString();
+    mock.objects.set(`${root(session.id)}/session.json`, new Blob([JSON.stringify(expired)]));
     await cleanupContentCameras();
     expect(mock.objects.size).toBe(0);
-    expect((await db.query("select * from content_camera_sessions")).rows).toHaveLength(0);
+  });
+  it.each([
+    { size: 51 * 1024 * 1024, pageCount: 1 },
+    { size: 100, pageCount: 0 },
+    { size: 100, pageCount: 51 },
+  ])("rejects invalid PDF limits: %j", async (input) => {
+    const { session, token } = await createContentCamera(randomUUID(), "Notes");
+    await expect(
+      prepareContentPdf(session.id, token, { name: "notes", ...input }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("phone handoff API", () => {
+  it("accepts PDF actions only and rejects the old individual-photo upload actions", async () => {
+    const { session, token } = await createContentCamera(randomUUID(), "Notes");
+    const context = { params: Promise.resolve({ id: session.id, token }) };
+    for (const action of ["prepare", "complete", "reorder", "remove"]) {
+      const response = await POST(
+        new Request("http://localhost/api/content-camera", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, name: "photo.jpg", size: 100, source: "phone" }),
+        }),
+        context,
+      );
+      expect(response.status).toBe(400);
+    }
+    const response = await POST(
+      new Request("http://localhost/api/content-camera", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "prepare-pdf", name: "Notes.pdf", size: 100, pageCount: 2 }),
+      }),
+      context,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toHaveProperty("pdfId");
+    expect(response.headers.get("Cache-Control")).toContain("no-store");
+  });
+  it("serves the verified PDF privately and denies both incorrect and revoked QR tokens", async () => {
+    const { session, token, reservation, pdf, path } = await prepared();
+    mock.objects.set(path, pdf);
+    await completeContentPdf(session.id, token, reservation.pdfId);
+    const context = { params: Promise.resolve({ id: session.id, token }) };
+    const response = await GET(
+      new Request(`http://localhost/api/content-camera?pdf=${reservation.pdfId}`),
+      context,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("application/pdf");
+    expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(Buffer.from(await pdf.arrayBuffer()));
+    const denied = await GET(new Request("http://localhost/api/content-camera"), {
+      params: Promise.resolve({ id: session.id, token: "f".repeat(64) }),
+    });
+    expect(denied.status).toBe(404);
+    expect((await DELETE(new Request("http://localhost/api/content-camera"), context)).status).toBe(
+      200,
+    );
+    expect((await GET(new Request("http://localhost/api/content-camera"), context)).status).toBe(
+      410,
+    );
   });
 });

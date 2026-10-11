@@ -1164,11 +1164,11 @@ export function RevisionDocsClient({ docs }: { docs: StudentRevisionDocs }) {
   );
 }
 
-const pulse = "animate-pulse bg-border motion-reduce:animate-none";
+const pulse = "loading-skeleton";
 const bar = `${pulse} rounded`;
 
 /** The open page while its words are on their way: the headings are known and
- *  drawn for real; the text pulses. Shared by the route skeleton and by a topic
+ *  drawn for real; unknown values use the shared loading treatment. Shared by the route skeleton and by a topic
  *  whose page is not in the browser cache yet. */
 function TopicPageSkeleton() {
   return (

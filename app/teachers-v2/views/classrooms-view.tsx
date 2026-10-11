@@ -40,7 +40,7 @@ import { UploadDialog, DocumentDialog } from "@/app/teachers-v2/views/workspace-
 // chunk of every teacher who opened the page, including the ones who never
 // share a classroom code.
 export const QRCodeSVG = dynamic(() => import("qrcode.react").then((m) => m.QRCodeSVG), {
-  loading: () => <div className="h-[180px] w-[180px] animate-pulse rounded bg-bg-tertiary" />,
+  loading: () => <div className="h-[180px] w-[180px] loading-skeleton rounded" />,
 });
 
 export function ClassroomConceptMapSVG({

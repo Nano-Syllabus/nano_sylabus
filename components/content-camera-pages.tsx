@@ -1,10 +1,10 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- temporary signed VPS previews */
+/* eslint-disable @next/next/no-img-element -- local phone photo previews */
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AnswerSheetPages } from "@/components/answer-sheet-pages";
-import type { ContentCameraState } from "@/lib/content-camera-types";
+import type { AnswerSheetPage } from "@/lib/data/challenge-answer-sheet";
 
 export function ContentCameraPages({
   pages,
@@ -12,7 +12,7 @@ export function ContentCameraPages({
   onRemove,
   onReorder,
 }: {
-  pages: ContentCameraState["pages"];
+  pages: AnswerSheetPage[];
   disabled: boolean;
   onRemove: (id: string) => void;
   onReorder: (ids: string[]) => void;
@@ -29,7 +29,7 @@ export function ContentCameraPages({
   if (!page)
     return (
       <p className="rounded-lg border-2 border-dashed border-border p-8 text-center text-sm text-text-muted">
-        Take a photo on your phone or choose images here. Each page will appear as it arrives.
+        Take a photo or choose images from your gallery to start your scan.
       </p>
     );
   return (

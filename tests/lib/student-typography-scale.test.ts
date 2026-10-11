@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const styles = readFileSync("app/globals.css", "utf8");
-const dashboard = readFileSync("components/student-daily-dashboard.tsx", "utf8");
+const dashboard = readFileSync("components/student-daily-dashboard.tsx", "utf8") + readFileSync("components/loading-states.tsx", "utf8");
 // The hub's static frame (heading, loop card, card styles) lives beside it so
 // the route skeleton can draw the same thing; the screen is both files.
 const challenges =

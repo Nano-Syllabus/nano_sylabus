@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentLoading } from "@/components/loading-states";
 import {
   ArrowLeft,
   BookOpen,
@@ -82,9 +83,8 @@ const subjectGridClass =
   "mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] sm:gap-3.5";
 const materialRowClass =
   "group flex min-h-20 w-full items-center gap-3 rounded-2xl bg-bg-secondary px-4 py-4 text-left transition-colors hover:bg-bg-secondary disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transition-none";
-/** Placeholder fill is `bg-border`: `bg-bg-secondary` vanishes inside the cards,
- *  which are that colour in the dark theme — and is the material rows' own fill. */
-const pulse = "animate-pulse bg-border motion-reduce:animate-none";
+/** Unknown values use the same loading palette as the rest of the app. */
+const pulse = "loading-skeleton";
 
 function LibraryHeader() {
   return (
@@ -837,7 +837,7 @@ export function LibraryNanoAiWorkspace({
  * What the page knows before any data — the header, the section titles, the two
  * panels and the shape of every card and row — renders for real and in place.
  * What it does not — the community's semesters and subjects, the first
- * subject's materials and topics — pulses, at the size of what replaces it. The
+ * subject's materials and topics — uses placeholders at the size of what replaces it. The
  * page opens on the first subject with its materials loading, so the resources
  * panel shows the same rows `ExplorerSkeleton` does and nothing rearranges.
  */
@@ -1019,7 +1019,7 @@ export function LibraryDocumentViewer({
             className="flex h-full flex-col items-center justify-center gap-4"
             aria-live="polite"
           >
-            <div className="h-[78%] w-[88%] max-w-3xl animate-pulse rounded-lg bg-bg-primary motion-reduce:animate-none" />
+            <DocumentLoading />
             <p className="text-sm text-text-secondary">Opening {material.name}…</p>
           </div>
         ) : null}

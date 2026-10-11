@@ -1,77 +1,22 @@
-/**
- * The route-level skeleton, shaped like the page it precedes.
- *
- * This shows for the ~500ms the page shell takes to render, and it is followed
- * by `DashboardDataSkeleton` while the dashboard query lands. Those two have to
- * agree: if this were a generic all-over pulse and the next were a structured
- * one, a student would watch the layout rearrange itself twice before any real
- * content appeared, which reads as the page loading three separate times.
- *
- * So this draws the same frame — the same header and the same two panels with
- * their real titles. What it cannot show is anything derived from the session (the student's name, their access
- * figure), because a `loading.tsx` renders before the page's own data exists.
- * Those appear one step later, and nothing moves when they do.
- */
-/**
- * `bg-border`, not `bg-bg-secondary`.
- *
- * In the dark theme `--bg-secondary` and `--card` intentionally share the
- * same near-black surface,
- * so a placeholder filled with `bg-bg-secondary` inside a card is exactly the
- * colour of the card — invisible. It only ever looked like a skeleton because
- * while the old full-page version sat on the lower page surface instead.
- *
- * `--border` is a translucent white in dark and a translucent black in light,
- * so it reads against a card and a page in both themes. It is the same token
- * the card outlines use, which are visible in exactly these places.
- */
-const shimmer = "animate-pulse rounded-full bg-border motion-reduce:animate-none";
+import { CalendarLoading, SummaryLoading } from "@/components/loading-states";
+import { LoadingStatus, Skeleton } from "@/components/ui/skeleton";
 
+/** The route fallback and dashboard query use the same panel layout. */
 export default function TodayLoading() {
   return (
-    <main
-      className="student-page-frame"
-      aria-busy="true"
-      aria-label="Loading dashboard"
-    >
-      <header className="border-b border-border pb-6">
-        <div className={`h-10 w-80 max-w-full ${shimmer}`} />
-        <div className={`mt-3 h-4 w-64 max-w-full ${shimmer}`} />
+    <main className="student-page-frame" aria-busy="true" aria-label="Loading dashboard">
+      <header className="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <h1 className="type-student-page-title">Welcome.</h1>
+        <LoadingStatus label="Loading your study day" />
       </header>
-
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-display text-lg font-semibold tracking-tight">Practice calendar</h2>
-          <div className={`mt-2 h-3 w-52 ${shimmer}`} />
-          <div className="mt-5 grid grid-cols-7 gap-2">
-            {Array.from({ length: 35 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-12 animate-pulse rounded-lg bg-border motion-reduce:animate-none"
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-display text-lg font-semibold tracking-tight">
-            Community leaderboard
-          </h2>
-          <div className={`mt-2 h-3 w-24 ${shimmer}`} />
-          <div className="mt-5 space-y-4">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <div className="size-8 shrink-0 animate-pulse rounded-full bg-border motion-reduce:animate-none" />
-                <div className="min-w-0 flex-1">
-                  <div className={`h-3 w-32 ${shimmer}`} />
-                  <div className={`mt-1.5 h-3 w-16 ${shimmer}`} />
-                </div>
-                <div className={`h-3 w-8 ${shimmer}`} />
-              </div>
-            ))}
-          </div>
-        </section>
+      <div aria-hidden="true" className="mt-5 rounded-xl border border-border bg-card p-5">
+        <Skeleton className="h-3 w-4/5" />
+        <Skeleton className="mt-3 h-3 w-1/2" />
+      </div>
+      <SummaryLoading title="Your next challenge" className="mt-5 min-h-[190px]" />
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <CalendarLoading />
+        <SummaryLoading title="Your exam day" className="min-h-[150px]" />
       </div>
     </main>
   );

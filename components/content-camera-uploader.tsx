@@ -1,118 +1,71 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Download, FileText, LoaderCircle, Smartphone, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Copy, FileText, LoaderCircle, Smartphone } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
-import { ContentCameraPages } from "@/components/content-camera-pages";
-import {
-  addCameraPhotos,
-  cameraPayload,
-  changeCamera,
-  contentCameraApi,
-  makeCameraPdf,
-} from "@/lib/content-camera-client";
+import { cameraPayload, contentCameraApi, receivedCameraPdf } from "@/lib/content-camera-client";
 import type { ContentCameraLink, ContentCameraState } from "@/lib/content-camera-types";
 
 type Opened = ContentCameraState & ContentCameraLink & { uploadPath: string };
 
-/** One shared editor on desktop and phone. Only the authenticated desktop can
- * send the resulting PDF to a creator collection. Phone links grant capture
- * access for this session only, with no account or collection credentials. */
+/** Desktop only: pairing and reviewing a finished PDF. Photos stay on the phone. */
 export function ContentCameraUploader({
   path,
-  phoneLink,
   disabled = false,
   onUpload,
   onBusyChange,
 }: {
-  path?: string;
-  phoneLink?: ContentCameraLink;
+  path: string;
   disabled?: boolean;
-  onUpload?: (file: File) => Promise<boolean>;
+  onUpload: (file: File) => Promise<boolean>;
   onBusyChange?: (busy: boolean) => void;
 }) {
   const [sheet, setSheet] = useState<ContentCameraState | null>(null);
-  const [link, setLink] = useState<ContentCameraLink | null>(phoneLink ?? null);
+  const [link, setLink] = useState<ContentCameraLink | null>(null);
   const [uploadUrl, setUploadUrl] = useState("");
   const [opening, setOpening] = useState(true);
-  const [busy, setBusy] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [ended, setEnded] = useState(false);
-  const [name, setName] = useState("scanned-content");
-  const [pdf, setPdf] = useState<{ url: string; revision: number } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [restart, setRestart] = useState(0);
-  const picker = useRef<HTMLInputElement>(null);
-  const camera = useRef<HTMLInputElement>(null);
-  const updating = useRef(false);
-  const activeLink = useRef<ContentCameraLink | null>(phoneLink ?? null);
-  const pdfUrl = useRef("");
+  const uploading = useRef(false);
   const onBusyRef = useRef(onBusyChange);
   onBusyRef.current = onBusyChange;
-  const acceptState = useCallback((state: ContentCameraState) => {
-    if (state.id !== activeLink.current?.id) return;
-    setSheet((current) => {
-      if (current && current.id === state.id && state.revision < current.revision) return current;
-      const previews = new Map(current?.pages.map((page) => [page.id, page.previewUrl]));
-      // Refresh signatures before they expire; normally retain URLs so polling
-      // doesn't cause thumbnail reloads every three seconds.
-      return {
-        ...state,
-        pages: state.pages.map((page) => {
-          const old = previews.get(page.id);
-          const expires = old
-            ? Number(new URL(old, window.location.origin).searchParams.get("expires"))
-            : 0;
-          return { ...page, previewUrl: expires > Date.now() / 1000 + 60 ? old! : page.previewUrl };
-        }),
-      };
-    });
-  }, []);
-
   useEffect(() => {
     let disposed = false;
     let owned: ContentCameraLink | null = null;
-    activeLink.current = phoneLink ?? null;
     setOpening(true);
     setEnded(false);
     setError("");
     setSheet(null);
-    const start = async () => {
+    setLink(null);
+    setUploadUrl("");
+    void (async () => {
       try {
-        if (phoneLink) {
-          const response = await fetch(contentCameraApi(phoneLink), { cache: "no-store" });
-          const state = await cameraPayload<ContentCameraState>(response);
-          if (!disposed) {
-            setLink(phoneLink);
-            acceptState(state);
-          }
-        } else {
-          const response = await fetch("/api/teacher/content-camera", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ path }),
-          });
-          const state = await cameraPayload<Opened>(response);
-          owned = { id: state.id, token: state.token };
-          if (disposed) {
-            void fetch(contentCameraApi(owned), { method: "DELETE", keepalive: true });
-            return;
-          }
-          activeLink.current = owned;
+        const state = await fetch("/api/teacher/content-camera", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path }),
+        }).then(cameraPayload<Opened>);
+        owned = { id: state.id, token: state.token };
+        if (!disposed) {
           setLink(owned);
-          // Use the browser's actual origin: Next's internal request hostname
-          // can be localhost even when the desktop was opened over the LAN.
+          setSheet(state);
           setUploadUrl(new URL(state.uploadPath, window.location.origin).toString());
-          acceptState(state);
+        } else {
+          void fetch(contentCameraApi(owned), { method: "DELETE", keepalive: true }).catch(
+            () => undefined,
+          );
         }
       } catch (cause) {
         if (!disposed)
-          setError(cause instanceof Error ? cause.message : "Could not open the camera upload.");
+          setError(cause instanceof Error ? cause.message : "Could not create your QR link.");
       } finally {
         if (!disposed) setOpening(false);
       }
-    };
-    void start();
+    })();
     return () => {
       disposed = true;
       if (owned)
@@ -120,307 +73,194 @@ export function ContentCameraUploader({
           () => undefined,
         );
     };
-  }, [path, phoneLink, restart, acceptState]);
-
-  const refresh = useCallback(async () => {
-    if (!link || updating.current || ended) return;
-    try {
-      const response = await fetch(contentCameraApi(link), { cache: "no-store" });
-      if (response.status === 410 || response.status === 404) setEnded(true);
-      acceptState(await cameraPayload<ContentCameraState>(response));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not refresh the pages.");
-    }
-  }, [link, ended, acceptState]);
+  }, [path, restart]);
   useEffect(() => {
     if (!link || ended) return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [link, refresh, ended]);
+    let disposed = false;
+    let fetching = false;
+    const refresh = async () => {
+      if (fetching || uploading.current || document.visibilityState !== "visible") return;
+      fetching = true;
+      try {
+        const response = await fetch(contentCameraApi(link), { cache: "no-store" });
+        if (disposed) return;
+        if (response.status === 410 || response.status === 404) {
+          setEnded(true);
+          return;
+        }
+        const state = await cameraPayload<ContentCameraState>(response);
+        if (!disposed) {
+          setSheet(state);
+          setError("");
+        }
+      } catch (cause) {
+        if (!disposed)
+          setError(
+            cause instanceof Error ? cause.message : "Connection interrupted. Reconnecting…",
+          );
+      } finally {
+        fetching = false;
+      }
+    };
+    const timer = window.setInterval(() => void refresh(), 3000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [link, ended]);
   useEffect(() => {
-    onBusyRef.current?.(Boolean(busy));
+    onBusyRef.current?.(busy);
+    return () => onBusyRef.current?.(false);
   }, [busy]);
-  useEffect(
-    () => () => {
-      if (pdfUrl.current) URL.revokeObjectURL(pdfUrl.current);
-      onBusyRef.current?.(false);
-    },
-    [],
-  );
-
-  const run = async (task: () => Promise<void>, label: string) => {
-    if (updating.current || disabled || ended) return;
-    updating.current = true;
-    setBusy(label);
+  const upload = async () => {
+    if (!link || !sheet?.pdf || uploading.current || disabled || ended) return;
+    uploading.current = true;
+    setBusy(true);
     setError("");
     try {
-      await task();
+      const file = await receivedCameraPdf(link, sheet.pdf);
+      if (await onUpload(file)) {
+        await fetch(contentCameraApi(link), { method: "DELETE" }).then(cameraPayload);
+        setEnded(true);
+      }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The operation failed.");
+      setError(cause instanceof Error ? cause.message : "Could not upload the PDF.");
     } finally {
-      updating.current = false;
-      setBusy("");
-      await refresh();
+      uploading.current = false;
+      setBusy(false);
     }
   };
-  const add = (files: File[]) => {
-    if (!link || !files.length) return;
-    void run(
-      () => addCameraPhotos(link, files, phoneLink ? "phone" : "desktop", setBusy),
-      "Preparing photos…",
-    );
-  };
-  const reorder = (order: string[]) => {
-    if (!link) return;
-    void run(async () => {
-      acceptState(await changeCamera(link, { action: "reorder", order }));
-    }, "Saving page order…");
-  };
-  const remove = (pageId: string) => {
-    if (!link) return;
-    void run(async () => {
-      acceptState(await changeCamera(link, { action: "remove", pageId }));
-    }, "Removing photo…");
-  };
-  const generate = (action: "preview" | "download" | "upload") => {
-    if (!link) return;
-    void run(async () => {
-      // Fetch the latest phone arrivals before taking a stable PDF snapshot.
-      const current = await fetch(contentCameraApi(link), { cache: "no-store" }).then(
-        cameraPayload<ContentCameraState>,
-      );
-      acceptState(current);
-      const file = await makeCameraPdf(link, current.revision, name);
-      if (action === "upload") {
-        setBusy("Uploading PDF and starting indexing…");
-        if (await onUpload?.(file)) {
-          await fetch(contentCameraApi(link), { method: "DELETE" }).then(cameraPayload);
-          setEnded(true);
-        }
-        return;
-      }
-      if (pdfUrl.current) URL.revokeObjectURL(pdfUrl.current);
-      const url = URL.createObjectURL(file);
-      pdfUrl.current = url;
-      setPdf({ url, revision: current.revision });
-      if (action === "download") {
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = file.name;
-        document.body.append(anchor);
-        anchor.click();
-        anchor.remove();
-      }
-    }, "Creating PDF…");
-  };
-  const locked = disabled || opening || Boolean(busy) || ended;
-  const canPdf = !locked && Boolean(sheet?.pages.length) && !sheet?.pendingCount;
-
   return (
-    <div className="space-y-4" aria-busy={opening || Boolean(busy)}>
-      <div className="flex items-start gap-3 rounded-xl border border-border bg-bg-secondary p-4">
-        <Camera className="mt-0.5 size-5 shrink-0" />
-        <div>
-          <p className="text-sm font-semibold">Scan pages into one PDF</p>
-          <p className="mt-1 text-xs leading-5 text-text-muted">
-            Take photos, drag them into order, and swipe through the preview. Up to{" "}
-            {sheet?.maxPages ?? 50} pages. Photos are temporary and stored on the VPS; no images are
-            stored in Supabase.
-          </p>
-          {phoneLink && sheet ? (
-            <p className="mt-1 break-all text-xs text-text-secondary">{sheet.title}</p>
-          ) : null}
+    <div className="space-y-4" aria-busy={opening || busy}>
+      {opening ? (
+        <div className="flex items-center justify-center gap-3 rounded-2xl border border-border p-10 text-sm">
+          <LoaderCircle className="size-5 animate-spin" />
+          Creating your phone QR link…
         </div>
-      </div>
-      {!phoneLink && uploadUrl && !ended ? (
-        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border p-4">
-          <div className="rounded-lg bg-white p-2">
-            <QRCodeSVG value={uploadUrl} size={140} level="M" />
+      ) : null}
+      {uploadUrl && !ended && !sheet?.pdf ? (
+        <div className="rounded-2xl border border-border bg-bg-secondary p-5">
+          <div className="flex flex-col items-center gap-5 sm:flex-row">
+            <div className="shrink-0 rounded-2xl bg-white p-3 shadow-sm">
+              <QRCodeSVG
+                value={uploadUrl}
+                role="img"
+                size={180}
+                level="M"
+                title="Scan to create a PDF on your phone"
+              />
+            </div>
+            <div className="min-w-0 space-y-3">
+              <p className="flex items-center gap-2 text-base font-semibold">
+                <Smartphone className="size-5" />
+                Scan with your phone
+              </p>
+              <ol className="space-y-2 text-sm text-text-secondary">
+                <li>1. Scan this QR with your phone camera.</li>
+                <li>2. Take photos or select them from your gallery.</li>
+                <li>3. Arrange pages, create the PDF, and send it here.</li>
+              </ol>
+              <p className="text-xs leading-5 text-text-muted">
+                Your phone compresses the photos and creates the PDF. Keep this dialog open; the
+                link lasts 2 hours.
+              </p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-2 text-sm font-semibold">
-              <Smartphone className="size-4" />
-              Capture with your phone
-            </p>
-            <p className="mt-1 text-xs leading-5 text-text-muted">
-              Scan the QR and photograph each page. Photos appear here within a few seconds. Keep
-              this dialog open. The link lasts two hours.
-            </p>
+          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border pt-4">
             <Button
               type="button"
               variant="outline"
-              className="mt-2"
-              onClick={() =>
-                void run(async () => {
-                  if (!navigator.clipboard)
-                    throw new Error(
-                      "Open the phone link and copy its address, or use HTTPS to copy it here.",
-                    );
+              onClick={async () => {
+                try {
                   await navigator.clipboard.writeText(uploadUrl);
-                }, "Copying link…")
-              }
-              disabled={locked}
+                  setCopied(true);
+                } catch {
+                  setError("Open the phone link below and copy its address to your phone.");
+                }
+              }}
             >
-              Copy phone link
+              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+              {copied ? "Link copied" : "Copy phone link"}
             </Button>
             <a
               href={uploadUrl}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               aria-label="Open phone camera link"
-              className="ml-3 inline-flex min-h-11 items-center text-xs underline"
+              className="text-sm underline underline-offset-4"
             >
               Open phone link
             </a>
-            {/^(localhost|127\.0\.0\.1)$/.test(new URL(uploadUrl).hostname) ? (
-              <p className="mt-2 text-xs text-text-muted">
-                For a real phone, open this desktop page using your computer’s network IP or an
-                HTTPS development URL. Both devices must be able to reach it.
-              </p>
-            ) : null}
+            <span className="flex items-center gap-2 text-xs text-text-muted" role="status">
+              <LoaderCircle className="size-3.5 animate-spin" />
+              Waiting for your PDF
+            </span>
           </div>
         </div>
       ) : null}
-      <input
-        ref={picker}
-        type="file"
-        accept="image/*"
-        multiple
-        className="sr-only"
-        aria-label="Choose page photos"
-        disabled={locked}
-        onChange={(event) => {
-          add(Array.from(event.target.files ?? []));
-          event.currentTarget.value = "";
-        }}
-      />
-      <input
-        ref={camera}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="sr-only"
-        aria-label="Take a page photo"
-        disabled={locked}
-        onChange={(event) => {
-          add(Array.from(event.target.files ?? []));
-          event.currentTarget.value = "";
-        }}
-      />
-      <div className="flex flex-wrap gap-2">
-        {phoneLink ? (
-          <Button type="button" disabled={locked} onClick={() => camera.current?.click()}>
-            <Camera className="mr-2 size-4" />
-            Take photo
-          </Button>
-        ) : null}
-        <Button
-          type="button"
-          variant="outline"
-          disabled={locked || !link}
-          onClick={() => picker.current?.click()}
-        >
-          <Upload className="mr-2 size-4" />
-          {phoneLink ? "Choose from gallery" : "Add desktop photos"}
-        </Button>
-        {sheet?.pages.length || sheet?.pendingCount ? (
-          <Button type="button" variant="outline" disabled={locked} onClick={() => remove("all")}>
-            Remove all
-          </Button>
-        ) : null}
-      </div>
-      {opening ? (
-        <p role="status" className="flex items-center gap-2 text-sm">
-          <LoaderCircle className="size-4 animate-spin" />
-          Preparing camera upload…
-        </p>
+      {sheet?.pdf && link && !ended ? (
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-border bg-bg-secondary p-4">
+            <FileText className="mt-0.5 size-5 shrink-0" />
+            <div className="min-w-0">
+              <p className="break-all text-sm font-semibold">{sheet.pdf.name}</p>
+              <p className="mt-1 text-xs text-text-muted">
+                Received from your phone · {sheet.pdf.pageCount} pages ·{" "}
+                {(sheet.pdf.size / 1024 / 1024).toFixed(2)} MB
+              </p>
+            </div>
+            <Check className="ml-auto size-5 shrink-0 text-emerald-600" />
+          </div>
+          <iframe
+            title="Scanned content PDF preview"
+            src={`${contentCameraApi(link)}?pdf=${encodeURIComponent(sheet.pdf.id)}`}
+            className="h-72 w-full rounded-xl border border-border sm:h-96"
+          />
+          <div className="flex flex-wrap gap-3">
+            <Button type="button" disabled={disabled || busy} onClick={() => void upload()}>
+              {busy ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <FileText className="size-4" />
+              )}
+              {busy ? "Uploading and indexing…" : "Upload PDF and index"}
+            </Button>
+            <a
+              href={`${contentCameraApi(link)}?pdf=${encodeURIComponent(sheet.pdf.id)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center text-sm underline underline-offset-4"
+            >
+              Open PDF
+            </a>
+          </div>
+        </div>
       ) : null}
-      {sheet ? (
-        <ContentCameraPages
-          pages={sheet.pages}
-          disabled={locked}
-          onReorder={reorder}
-          onRemove={remove}
-        />
-      ) : null}
-      {sheet?.pendingCount ? (
-        <p role="status" className="text-sm text-text-muted">
-          {sheet.pendingCount} photo{sheet.pendingCount === 1 ? " is" : "s are"} arriving…
-        </p>
-      ) : null}
-      {busy ? (
-        <p role="status" className="flex items-center gap-2 text-sm">
-          <LoaderCircle className="size-4 animate-spin" />
-          {busy}
+      {ended ? (
+        <p className="rounded-xl border border-border p-4 text-sm">
+          This QR link has ended. Start a new scan to send another PDF.
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-red-600">
           {error}
         </p>
       ) : null}
-      {ended ? (
-        <p role="status" className="text-sm">
-          This camera session has ended. Your desktop can start a new one.
-        </p>
-      ) : null}
-      {!opening && (!sheet || ended) && !phoneLink ? (
-        <Button type="button" variant="outline" onClick={() => setRestart((value) => value + 1)}>
-          {ended ? "New camera session" : "Retry camera upload"}
+      {(!opening && !link) || ended ? (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled || busy}
+          onClick={() => setRestart((value) => value + 1)}
+        >
+          Create new QR link
         </Button>
       ) : null}
-      {sheet?.pages.length ? (
-        <div className="space-y-3 rounded-xl border border-border p-4">
-          <label className="block text-sm font-medium">
-            PDF name
-            <input
-              type="text"
-              value={name}
-              disabled={locked}
-              maxLength={120}
-              onChange={(event) => setName(event.target.value)}
-              className="mt-2 block min-h-11 w-full rounded-lg border border-border bg-bg-primary px-3 text-sm"
-            />
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!canPdf}
-              onClick={() => generate("preview")}
-            >
-              <FileText className="mr-2 size-4" />
-              Preview PDF
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!canPdf}
-              onClick={() => generate("download")}
-            >
-              <Download className="mr-2 size-4" />
-              Download PDF
-            </Button>
-            {onUpload ? (
-              <Button type="button" disabled={!canPdf} onClick={() => generate("upload")}>
-                Upload PDF and index
-              </Button>
-            ) : null}
-          </div>
-          <p className="text-xs text-text-muted">
-            The PDF uses the current page order. You can keep adding photos before uploading.
-          </p>
-        </div>
-      ) : null}
-      {pdf && pdf.revision === sheet?.revision ? (
-        <iframe
-          title="Scanned content PDF preview"
-          src={pdf.url}
-          className="h-96 w-full rounded-xl border border-border"
-        />
-      ) : null}
+      <p className="text-xs leading-5 text-text-muted">
+        Photos stay on your phone. Only the finished PDF is uploaded to our file server.
+      </p>
     </div>
   );
 }

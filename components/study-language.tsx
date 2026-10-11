@@ -255,7 +255,7 @@ export function TranslatingLines({ lines = 3, className }: { lines?: number; cla
       {Array.from({ length: lines }, (_, index) => (
         <span
           key={index}
-          className="block h-3 animate-pulse rounded bg-border motion-reduce:animate-none"
+          className="block h-3 loading-skeleton rounded"
           style={{ width: index === lines - 1 ? "62%" : "100%" }}
         />
       ))}

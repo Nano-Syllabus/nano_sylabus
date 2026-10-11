@@ -163,7 +163,7 @@ function MaterialItem({ item }: { item: Material }) {
               {Array.from({ length: 4 }).map((_, index) => (
                 <div
                   key={index}
-                  className="h-10 animate-pulse rounded bg-bg-tertiary motion-reduce:animate-none"
+                  className="h-10 loading-skeleton rounded"
                 />
               ))}
             </div>
@@ -741,7 +741,7 @@ export function SubjectDetailClient({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="flex size-2 rounded-full bg-[var(--readiness-blue)] animate-pulse" />
+                <span className="flex size-2 rounded-full bg-[var(--readiness-blue)]" />
                 <h2 id="subject-readiness-title" className="font-display text-base font-semibold tracking-tight text-[var(--readiness-text)] sm:text-lg">
                   Overall Readiness
                 </h2>

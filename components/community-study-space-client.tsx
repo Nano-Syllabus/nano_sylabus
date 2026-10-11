@@ -311,7 +311,7 @@ export function CommunityStudySpaceClient({
                       {Array.from({ length: 2 }).map((_, index) => (
                         <div
                           key={index}
-                          className="h-14 rounded-lg bg-bg-tertiary motion-safe:animate-pulse"
+                          className="h-14 rounded-lg loading-skeleton"
                         />
                       ))}
                     </div>

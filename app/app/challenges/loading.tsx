@@ -15,14 +15,12 @@ import {
 import { StarterChallengeBannerSkeleton } from "@/components/starter-challenge-banner";
 
 /**
- * Only the unknown blocks pulse. The page's real text does not: shimmering a
+ * Only unknown values animate. The page's real text does not: shimmering a
  * label that is already correct is what makes a half-ready screen look broken.
  *
- * Placeholder fill is `bg-border`, never `bg-bg-secondary`: in the dark theme
- * `--bg-secondary` and `--card` are the same colour, so a `bg-bg-secondary`
- * block inside a card is invisible.
+ * Shared loading tokens provide contrast in both themes.
  */
-const pulse = "animate-pulse bg-border motion-reduce:animate-none";
+const pulse = "loading-skeleton";
 const skeleton = `${pulse} rounded`;
 
 /**
@@ -33,7 +31,7 @@ const skeleton = `${pulse} rounded`;
  * "Available challenges" — and comes from `challenge-hub-frame`, so a redesign of
  * the hub cannot leave this skeleton describing a page that no longer exists
  * (it did: "Weekly Target Progress" and "Available Daily Subtopic Challenges"
- * outlived the hub they belonged to). Only the figures and the rows pulse, and
+ * outlived the hub they belonged to). Only the figures and the rows animate, and
  * each placeholder takes the size of what replaces it, so nothing moves when the
  * data lands.
  */

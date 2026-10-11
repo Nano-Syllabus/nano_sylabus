@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatLoading } from "@/components/loading-states";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { Sparkles } from "lucide-react";
@@ -70,8 +71,7 @@ function clampButton(point: Point): Point {
 
 function snapToSide(point: Point): Point {
   const centre = point.x + BUTTON_WIDTH / 2;
-  const x =
-    centre < window.innerWidth / 2 ? EDGE_GAP : window.innerWidth - BUTTON_WIDTH - EDGE_GAP;
+  const x = centre < window.innerWidth / 2 ? EDGE_GAP : window.innerWidth - BUTTON_WIDTH - EDGE_GAP;
   return clampButton({ x, y: point.y });
 }
 
@@ -90,8 +90,7 @@ function readStoredPosition(): Point | null {
     const parsed = JSON.parse(raw) as { side?: string; top?: number };
     if (typeof parsed.top !== "number") return null;
     const y = parsed.top * window.innerHeight;
-    const x =
-      parsed.side === "left" ? EDGE_GAP : window.innerWidth - BUTTON_WIDTH - EDGE_GAP;
+    const x = parsed.side === "left" ? EDGE_GAP : window.innerWidth - BUTTON_WIDTH - EDGE_GAP;
     return clampButton({ x, y });
   } catch {
     return null;
@@ -135,14 +134,11 @@ function panelFromButton(button: Point): Point {
 
 function PanelLoading() {
   return (
-    <div role="status" aria-label="Loading NanoAI" className="flex h-full flex-col">
-      <div className="flex h-12 shrink-0 items-center border-b border-border px-4">
-        <div className="h-3.5 w-20 rounded-full bg-border animate-pulse-soft motion-reduce:animate-none" />
+    <div className="flex h-full flex-col">
+      <div className="flex h-12 shrink-0 items-center border-b border-border px-4 text-sm font-medium">
+        NanoAI
       </div>
-      <div className="flex flex-1 flex-col justify-end gap-3 p-3">
-        <div className="h-28 rounded-xl bg-border animate-pulse-soft motion-reduce:animate-none" />
-        <div className="h-[104px] rounded-[16px] bg-border animate-pulse-soft motion-reduce:animate-none" />
-      </div>
+      <ChatLoading />
     </div>
   );
 }
@@ -247,7 +243,9 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
       onNanoAiOpen(({ anchor }) => {
         const { width } = panelSize();
         const onRight = anchor.left + (anchor.right - anchor.left) / 2 >= window.innerWidth / 2;
-        setPanel(clampPanel({ x: onRight ? anchor.right - width : anchor.left, y: anchor.bottom + 8 }));
+        setPanel(
+          clampPanel({ x: onRight ? anchor.right - width : anchor.left, y: anchor.bottom + 8 }),
+        );
         setMounted(true);
         setOpen(true);
         setNudge("");
@@ -397,7 +395,10 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
               ? { right: window.innerWidth - shown.x + 10, top: shown.y + 4 }
               : { left: shown.x + BUTTON_WIDTH + 10, top: shown.y + 4 }
           }
-          className={cn(layer, "nanoai-intro fixed max-w-[240px] truncate rounded-full border border-border bg-bg-primary px-3.5 py-2 text-sm text-text-primary shadow-[0_8px_24px_rgba(0,0,0,0.16)] hover:bg-bg-secondary")}
+          className={cn(
+            layer,
+            "nanoai-intro fixed max-w-[240px] truncate rounded-full border border-border bg-bg-primary px-3.5 py-2 text-sm text-text-primary shadow-[0_8px_24px_rgba(0,0,0,0.16)] hover:bg-bg-secondary",
+          )}
         >
           Stuck on <span className="font-semibold">{nudge}</span>?
         </button>
@@ -415,7 +416,10 @@ export function NanoAiFloatingChat({ user }: { user: AppUser }) {
           onPointerDown={(event) => {
             if (isSheet || !panel) return;
             const target = event.target as HTMLElement;
-            if (!target.closest("[data-floating-drag-handle]") || target.closest("[data-no-drag]")) {
+            if (
+              !target.closest("[data-floating-drag-handle]") ||
+              target.closest("[data-no-drag]")
+            ) {
               return;
             }
             startDrag("panel", event, panel);

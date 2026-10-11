@@ -80,9 +80,9 @@ describe("practice calendar exam planning", () => {
     expect(source).not.toContain("text-[#0066ff] truncate");
   });
 
-  it("keeps calendar section headings consistent with the leaderboard", () => {
+  it("keeps loaded and loading calendar headings consistent", () => {
     const calendarSource = readFileSync("components/practice-calendar.tsx", "utf8");
-    const dashboardSource = readFileSync("components/student-daily-dashboard.tsx", "utf8");
+    const dashboardSource = readFileSync("components/loading-states.tsx", "utf8");
 
     expect(calendarSource).toContain('className="type-student-section-title"');
     expect(dashboardSource).toContain('className="type-student-section-title"');

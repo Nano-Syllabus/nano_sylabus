@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingRows } from "@/components/loading-states";
 import { FacultyTags, SiteTag, SubdomainPicker } from "@/components/admin-faculty-tags";
 import { AdminGiftPlan } from "@/components/admin-gift-plan";
 import type { ReactNode } from "react";
@@ -765,10 +766,7 @@ function StudentPanel({
               </div>
             </>
           ) : !error ? (
-            <div className="space-y-3 motion-safe:animate-pulse" aria-label="Loading">
-              <div className="h-4 w-24 rounded bg-border" />
-              <div className="h-40 rounded-lg bg-border/60" />
-            </div>
+            <div aria-busy="true" aria-label="Loading user details"><LoadingRows /></div>
           ) : null}
         </div>
       </aside>

@@ -445,7 +445,7 @@ export function ChallengeMcqPage({
           </p>
           <div className="mt-4 space-y-2">
             {[0, 1, 2, 3].map((row) => (
-              <span key={row} className="block h-11 animate-pulse rounded-lg bg-border motion-reduce:animate-none" />
+              <span key={row} className="block h-11 loading-skeleton rounded-lg" />
             ))}
           </div>
         </div>
@@ -511,6 +511,7 @@ export function ChallengeMcqPage({
                           type="button"
                           role="radio"
                           aria-checked={result?.selected === option.key}
+                          aria-busy={pending}
                           // An answer is final: the key is on screen the moment it is chosen.
                           disabled={Boolean(result) || Boolean(checking[question.id]) || submitting || expired}
                           onClick={() => void check(question.id, option.key)}
@@ -523,7 +524,6 @@ export function ChallengeMcqPage({
                                 : "border-border bg-card",
                             !result && !checking[question.id] ? "hover:border-blue-500/60" : "",
                             result && !isCorrect && !isChosenWrong ? "opacity-60" : "",
-                            pending ? "animate-pulse motion-reduce:animate-none" : "",
                           )}
                         >
                           <span
@@ -536,14 +536,16 @@ export function ChallengeMcqPage({
                                   : "border-border",
                             )}
                           >
-                            {isCorrect ? (
+                            {pending ? (
+                              <span className="loading-dots" aria-label="Checking answer"><i /><i /><i /></span>
+                            ) : isCorrect ? (
                               <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />
                             ) : isChosenWrong ? (
                               <X className="size-3.5" strokeWidth={3} aria-hidden="true" />
                             ) : (
                               option.key
                             )}
-                            {isCorrect || isChosenWrong ? <span className="sr-only">{option.key}</span> : null}
+                            {pending || isCorrect || isChosenWrong ? <span className="sr-only">{option.key}</span> : null}
                           </span>
                           <Markdown text={delimitBareMath(option.text)} className="min-w-0 flex-1 leading-6" />
                           {isCorrect ? (

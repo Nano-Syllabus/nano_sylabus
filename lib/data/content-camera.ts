@@ -1,33 +1,22 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createVpsStorageClient } from "@/lib/vps-storage";
-import { jpegInfo, jpegsToPdf } from "@/lib/photos-to-pdf";
 import {
   CONTENT_CAMERA_MAX_PAGES,
-  CONTENT_CAMERA_MAX_PHOTO_BYTES,
+  CONTENT_CAMERA_MAX_PDF_BYTES,
+  type ContentCameraPdf,
   type ContentCameraState,
 } from "@/lib/content-camera-types";
 
 export const CONTENT_CAMERA_BUCKET = "content-camera";
-type Page = {
-  id: string;
-  name: string;
-  path: string;
-  size: number;
-  digest?: string;
-  source: "phone" | "desktop";
-  status: "pending" | "ready" | "removed";
-};
 export type CameraSession = {
   id: string;
   teacher_id: string;
   token_hash: string;
   title: string;
   expires_at: string;
-  revision: number;
-  closed: boolean;
-  pages: Page[];
 };
+type PdfReservation = { id: string; name: string; size: number; pageCount: number };
+type ReadyPdf = PdfReservation & { digest: string; uploadedAt: string };
 export class ContentCameraError extends Error {
   constructor(
     message: string,
@@ -37,285 +26,219 @@ export class ContentCameraError extends Error {
   }
 }
 const bucket = () => createVpsStorageClient().from(CONTENT_CAMERA_BUCKET);
-const hash = (token: string) => createHash("sha256").update(token).digest("hex");
-const table = () => createSupabaseAdminClient().from("content_camera_sessions");
-const active = (session: CameraSession) => {
-  if (session.closed || Date.parse(session.expires_at) <= Date.now()) {
+const root = (id: string) => `handoffs/${id}`;
+const hash = (token: string | Buffer) => createHash("sha256").update(token).digest("hex");
+const uuid = (id: string) => /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id);
+async function read<T>(path: string): Promise<T | null> {
+  const { data, error } = await bucket().download(path);
+  if (error?.statusCode === "404") return null;
+  if (error || !data)
     throw new ContentCameraError(
-      "This camera link has ended. Open a new camera session on the desktop.",
-      410,
-    );
-  }
-};
-
-export async function createContentCamera(teacherId: string, title: string) {
-  const { count, error: countError } = await table()
-    .select("id", { count: "exact", head: true })
-    .eq("teacher_id", teacherId)
-    .eq("closed", false)
-    .gt("expires_at", new Date().toISOString());
-  if (countError)
-    throw new ContentCameraError(
-      "Camera uploads need the latest database migration on this deployment.",
+      "Phone uploads are temporarily unavailable. Please try again.",
       503,
     );
-  if ((count ?? 0) >= 10)
-    throw new ContentCameraError("Close an existing camera session before opening another.", 429);
-  const token = randomBytes(32).toString("hex");
-  const { data, error } = await table()
-    .insert({ teacher_id: teacherId, token_hash: hash(token), title: title.slice(0, 160) })
-    .select("*")
-    .single();
-  if (error || !data)
-    throw new ContentCameraError("Could not start the camera upload. Please try again.", 503);
-  return { session: data as CameraSession, token };
+  try {
+    return JSON.parse(await data.text()) as T;
+  } catch {
+    throw new ContentCameraError("The phone upload could not be read. Start a new QR link.", 503);
+  }
 }
-
+async function write(path: string, value: unknown) {
+  const { error } = await bucket().upload(path, JSON.stringify(value), {
+    contentType: "application/json",
+  });
+  if (error)
+    throw new ContentCameraError("Could not save the phone upload. Please try again.", 503);
+}
+async function assertActive(session: CameraSession) {
+  if (
+    Date.parse(session.expires_at) <= Date.now() ||
+    (await read(`${root(session.id)}/closed.json`))
+  )
+    throw new ContentCameraError(
+      "This QR link has ended. Open a new phone upload on your desktop.",
+      410,
+    );
+}
+export async function createContentCamera(teacherId: string, title: string) {
+  const token = randomBytes(32).toString("hex");
+  const session: CameraSession = {
+    id: randomUUID(),
+    teacher_id: teacherId,
+    token_hash: hash(token),
+    title: title.slice(0, 160),
+    expires_at: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
+  };
+  await write(`${root(session.id)}/session.json`, session);
+  return { session, token };
+}
 export async function getContentCamera(id: string, token: string, allowClosed = false) {
-  if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id) || !/^[a-f0-9]{64}$/i.test(token))
-    throw new ContentCameraError("Invalid camera link.", 404);
-  const { data, error } = await table()
-    .select("*")
-    .eq("id", id)
-    .eq("token_hash", hash(token))
-    .maybeSingle();
-  if (error) throw new ContentCameraError("Camera uploads are temporarily unavailable.", 503);
-  if (!data) throw new ContentCameraError("This camera link was not found.", 404);
-  const session = data as CameraSession;
-  if (!allowClosed) active(session);
+  if (!uuid(id) || !/^[a-f0-9]{64}$/i.test(token))
+    throw new ContentCameraError("Invalid phone upload link.", 404);
+  const session = await read<CameraSession>(`${root(id)}/session.json`);
+  if (
+    !session ||
+    session.id !== id ||
+    !/^[a-f0-9]{64}$/.test(session.token_hash) ||
+    !timingSafeEqual(Buffer.from(session.token_hash), Buffer.from(hash(token)))
+  )
+    throw new ContentCameraError("This phone upload link was not found.", 404);
+  if (!allowClosed) await assertActive(session);
   return session;
 }
-
-/** Optimistic compare-and-swap keeps simultaneous phone additions and desktop
- * arrangements from overwriting each other, across workers and deployments. */
-async function change(
-  id: string,
-  token: string,
-  update: (session: CameraSession) => Partial<CameraSession>,
-) {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const current = await getContentCamera(id, token);
-    const patch = update(current);
-    const { data, error } = await table()
-      .update({ ...patch, revision: current.revision + 1 })
-      .eq("id", id)
-      .eq("revision", current.revision)
-      .eq("closed", false)
-      .gt("expires_at", new Date().toISOString())
-      .select("*")
-      .maybeSingle();
-    if (error) throw new ContentCameraError("Could not save the pages. Please try again.", 503);
-    if (data) return data as CameraSession;
-  }
-  throw new ContentCameraError("Pages changed on another device. Please try again.", 409);
-}
-
 export async function contentCameraState(session: CameraSession): Promise<ContentCameraState> {
-  const ready = session.pages.filter((page) => page.status === "ready");
-  const remaining = Math.max(1, Math.floor((Date.parse(session.expires_at) - Date.now()) / 1000));
-  const { data } = await bucket().createSignedUrls(
-    ready.map((page) => page.path),
-    Math.min(900, remaining),
-  );
+  const pdf = await read<ReadyPdf>(`${root(session.id)}/ready.json`);
   return {
     id: session.id,
     title: session.title,
     expiresAt: session.expires_at,
-    revision: session.revision,
     maxPages: CONTENT_CAMERA_MAX_PAGES,
-    pendingCount: session.pages.filter((page) => page.status === "pending").length,
-    pages: ready.map((page, index) => ({
-      id: page.id,
-      name: page.name,
-      size: page.size,
-      mimeType: "image/jpeg",
-      source: page.source,
-      previewUrl: data[index]?.signedUrl ?? null,
-    })),
+    pdf: pdf
+      ? {
+          id: pdf.id,
+          name: pdf.name,
+          size: pdf.size,
+          pageCount: pdf.pageCount,
+          uploadedAt: pdf.uploadedAt,
+        }
+      : null,
   };
 }
-
-export async function prepareContentPhoto(
+export async function prepareContentPdf(
   id: string,
   token: string,
-  input: { name: string; size: number; source: string },
+  input: { name: string; size: number; pageCount: number },
 ) {
+  const session = await getContentCamera(id, token);
+  if (!Number.isInteger(input.size) || input.size < 1 || input.size > CONTENT_CAMERA_MAX_PDF_BYTES)
+    throw new ContentCameraError("The PDF must be under 50 MB.", 413);
   if (
-    !Number.isInteger(input.size) ||
-    input.size <= 0 ||
-    input.size > CONTENT_CAMERA_MAX_PHOTO_BYTES
-  ) {
-    throw new ContentCameraError("Compress each photo to under 2 MB before sending it.");
-  }
-  const pageId = randomUUID();
-  const storagePath = `${id}/${pageId}.jpg`;
-  const session = await change(id, token, (current) => {
-    if (
-      current.pages.filter((page) => page.status !== "removed").length >= CONTENT_CAMERA_MAX_PAGES
-    ) {
-      throw new ContentCameraError(`A PDF can contain up to ${CONTENT_CAMERA_MAX_PAGES} photos.`);
-    }
-    if (current.pages.length >= 120)
-      throw new ContentCameraError("Start a new session to add more photos.");
-    return {
-      pages: [
-        ...current.pages,
-        {
-          id: pageId,
-          path: storagePath,
-          name: input.name.replace(/[\\/\r\n]/g, "_").slice(0, 120) || "page.jpg",
-          size: input.size,
-          source: input.source === "phone" ? "phone" : "desktop",
-          status: "pending",
-        },
-      ],
-    };
-  });
+    !Number.isInteger(input.pageCount) ||
+    input.pageCount < 1 ||
+    input.pageCount > CONTENT_CAMERA_MAX_PAGES
+  )
+    throw new ContentCameraError("Choose between 1 and 50 pages.");
+  if ((await contentCameraState(session)).pdf)
+    throw new ContentCameraError(
+      "A PDF has already been sent. Start a new QR link for another PDF.",
+      409,
+    );
+  const reservation: PdfReservation = {
+    ...input,
+    id: randomUUID(),
+    name:
+      (input.name
+        .replace(/[\\/\r\n\x00-\x1f]/g, "_")
+        .replace(/\.pdf$/i, "")
+        .slice(0, 120) || "scanned-content") + ".pdf",
+  };
+  await write(`${root(id)}/${reservation.id}.json`, reservation);
   const seconds = Math.max(
     1,
     Math.min(300, Math.floor((Date.parse(session.expires_at) - Date.now()) / 1000)),
   );
-  const { data } = await bucket().createSignedUploadUrl(storagePath, seconds);
-  return { pageId, uploadUrl: data.signedUrl };
+  const { data } = await bucket().createSignedUploadUrl(
+    `${root(id)}/${reservation.id}.pdf`,
+    seconds,
+  );
+  return { pdfId: reservation.id, uploadUrl: data.signedUrl };
 }
-
-export async function completeContentPhoto(id: string, token: string, pageId: string) {
+export async function completeContentPdf(id: string, token: string, pdfId: string) {
   const session = await getContentCamera(id, token);
-  const page = session.pages.find((item) => item.id === pageId && item.status !== "removed");
-  if (!page) throw new ContentCameraError("That page was removed. Add it again.", 409);
-  if (page.status === "ready") return session;
-  const { data: info, error: infoError } = await bucket().info(page.path);
-  if (infoError || !info)
-    throw new ContentCameraError("The photo has not arrived. Retry the upload.", 409);
+  if (!uuid(pdfId)) throw new ContentCameraError("Invalid PDF upload.");
+  const ready = await read<ReadyPdf>(`${root(id)}/ready.json`);
+  if (ready) {
+    if (ready.id === pdfId) return session;
+    throw new ContentCameraError("Another PDF has already arrived. Start a new QR link.", 409);
+  }
+  const reservation = await read<PdfReservation>(`${root(id)}/${pdfId}.json`);
+  if (!reservation || reservation.id !== pdfId)
+    throw new ContentCameraError("That PDF upload was not prepared.", 404);
+  const bytes = await pdfBytes(id, reservation);
+  const start = bytes.subarray(0, 2048).toString("latin1");
+  const count = Number(start.match(/\/Type\s*\/Pages\b[^]*?\/Count\s+(\d+)/)?.[1]);
   if (
-    info.size !== page.size ||
-    info.size > CONTENT_CAMERA_MAX_PHOTO_BYTES ||
-    info.mimetype !== "image/jpeg"
-  ) {
-    throw new ContentCameraError("That upload is not the prepared JPEG photo.");
-  }
-  const { data, error } = await bucket().download(page.path);
-  if (error || !data)
-    throw new ContentCameraError("The photo could not be read. Please try again.", 502);
-  const bytes = Buffer.from(await data.arrayBuffer());
-  const digest = createHash("sha256").update(bytes).digest("hex");
-  try {
-    const shape = jpegInfo(bytes);
-    if (
-      shape.width < 1 ||
-      shape.height < 1 ||
-      shape.width > 2000 ||
-      shape.height > 2000 ||
-      ![1, 3].includes(shape.components)
-    )
-      throw new Error("size");
-  } catch {
-    throw new ContentCameraError("That photo could not be opened. Choose a JPG or take it again.");
-  }
-  return change(id, token, (current) => {
-    if (!current.pages.some((item) => item.id === pageId && item.status !== "removed"))
-      throw new ContentCameraError("That page was removed.", 409);
-    return {
-      pages: current.pages.map((item) =>
-        item.id === pageId ? { ...item, digest, status: "ready" } : item,
-      ),
-    };
+    !start.startsWith("%PDF-1.4") ||
+    !bytes.subarray(-64).toString("latin1").includes("%%EOF") ||
+    count !== reservation.pageCount
+  )
+    throw new ContentCameraError("This PDF could not be verified. Create it again on your phone.");
+  // Closure is a separate immutable marker; publishing a late PDF cannot reopen a link.
+  await assertActive(session);
+  await write(`${root(id)}/ready.json`, {
+    ...reservation,
+    digest: hash(bytes),
+    uploadedAt: new Date().toISOString(),
   });
-}
-
-export async function reorderContentPhotos(id: string, token: string, order: string[]) {
-  if (order.length > CONTENT_CAMERA_MAX_PAGES || new Set(order).size !== order.length)
-    throw new ContentCameraError("Invalid page order.");
-  return change(id, token, (current) => {
-    const ready = current.pages.filter((page) => page.status === "ready");
-    const known = new Set(ready.map((page) => page.id));
-    if (order.some((pageId) => !known.has(pageId)))
-      throw new ContentCameraError(
-        "A page was removed on another device. Refresh and try again.",
-        409,
-      );
-    const byId = new Map(ready.map((page) => [page.id, page]));
-    // Append arrivals absent from the desktop's snapshot instead of losing them.
-    return {
-      pages: [
-        ...order.map((pageId) => byId.get(pageId)!),
-        ...ready.filter((page) => !order.includes(page.id)),
-        ...current.pages.filter((page) => page.status !== "ready"),
-      ],
-    };
-  });
-}
-
-export async function removeContentPhoto(id: string, token: string, pageId: string) {
-  const session = await change(id, token, (current) => ({
-    pages: current.pages.map((page) =>
-      page.id === pageId || pageId === "all" ? { ...page, status: "removed" } : page,
-    ),
-  }));
-  const paths = session.pages.filter((page) => page.status === "removed").map((page) => page.path);
-  if (paths.length) await bucket().remove(paths);
   return session;
 }
-
+async function pdfBytes(id: string, pdf: Pick<ContentCameraPdf, "id" | "size">) {
+  const path = `${root(id)}/${pdf.id}.pdf`;
+  const { data: info, error } = await bucket().info(path);
+  if (error || !info)
+    throw new ContentCameraError("The PDF has not arrived yet. Retry the upload.", 409);
+  if (
+    info.size !== pdf.size ||
+    info.size > CONTENT_CAMERA_MAX_PDF_BYTES ||
+    info.mimetype !== "application/pdf"
+  )
+    throw new ContentCameraError("The uploaded file does not match the prepared PDF.");
+  const result = await bucket().download(path);
+  if (result.error || !result.data)
+    throw new ContentCameraError("Could not read the PDF. Please try again.", 502);
+  const bytes = Buffer.from(await result.data.arrayBuffer());
+  if (bytes.length !== pdf.size)
+    throw new ContentCameraError("The uploaded PDF changed. Start a new scan.", 409);
+  return bytes;
+}
+export async function contentCameraPdf(session: CameraSession, pdfId: string) {
+  await assertActive(session);
+  const pdf = await read<ReadyPdf>(`${root(session.id)}/ready.json`);
+  if (!pdf || pdf.id !== pdfId) throw new ContentCameraError("That PDF was not found.", 404);
+  const bytes = await pdfBytes(session.id, pdf);
+  if (hash(bytes) !== pdf.digest)
+    throw new ContentCameraError("The PDF changed after uploading. Start a new scan.", 409);
+  return bytes;
+}
 export async function closeContentCamera(id: string, token: string) {
-  const session = await getContentCamera(id, token, true);
-  const { error } = await table()
-    .update({ closed: true, revision: session.revision + 1 })
-    .eq("id", id)
-    .eq("token_hash", hash(token));
-  if (error) throw new ContentCameraError("Could not end the camera session.", 503);
-  // Keep tombstones until expiry so cleanup can remove even a signed upload
-  // that was already in flight when the session was closed.
-  if (session.pages.length) await bucket().remove(session.pages.map((page) => page.path));
-}
-
-export async function contentCameraPdf(session: CameraSession, revision: number) {
-  active(session);
-  if (revision !== session.revision || session.pages.some((page) => page.status === "pending")) {
-    throw new ContentCameraError(
-      "Pages are still arriving or have changed. Refresh before creating the PDF.",
-      409,
-    );
+  await getContentCamera(id, token, true);
+  const marker = `${root(id)}/closed.json`;
+  if (!(await read(marker))) {
+    const result = await bucket().upload(marker, JSON.stringify({ closed: true }), {
+      contentType: "application/json",
+    });
+    if (result.error && result.error.statusCode !== "409")
+      throw new ContentCameraError("Could not close this phone upload. Please try again.", 503);
   }
-  const ready = session.pages.filter((page) => page.status === "ready");
-  if (!ready.length) throw new ContentCameraError("Add at least one photo first.");
-  const photos: Buffer[] = [];
-  for (const page of ready) {
-    const { data: info } = await bucket().info(page.path);
-    if (!info || info.size !== page.size || info.size > CONTENT_CAMERA_MAX_PHOTO_BYTES) {
-      throw new ContentCameraError(
-        "A photo changed after uploading. Remove it and add it again.",
-        409,
-      );
-    }
-    const { data, error } = await bucket().download(page.path);
-    if (error || !data)
-      throw new ContentCameraError("A photo could not be read. Please try again.", 502);
-    const bytes = Buffer.from(await data.arrayBuffer());
-    if (createHash("sha256").update(bytes).digest("hex") !== page.digest) {
-      throw new ContentCameraError(
-        "A photo changed after uploading. Remove it and add it again.",
-        409,
-      );
-    }
-    photos.push(bytes);
-  }
-  return jpegsToPdf(photos);
+  const pdf = await read<ReadyPdf>(`${root(id)}/ready.json`);
+  if (pdf) await bucket().remove([`${root(id)}/${pdf.id}.pdf`]);
 }
-
-/** Run periodically, and on session creation. No Supabase Storage is involved. */
+/** VPS listing is server-only. Keep closed markers until signed PUTs have expired. */
 export async function cleanupContentCameras(limit = 20) {
-  const cutoff = new Date(Date.now() - 5 * 60_000).toISOString();
-  const { data, error } = await table()
-    .select("*")
-    .lt("expires_at", cutoff)
-    .order("expires_at")
-    .limit(limit);
-  if (error)
-    throw new ContentCameraError("Camera session cleanup could not read expired sessions.", 503);
-  for (const session of (data ?? []) as CameraSession[]) {
-    const paths = session.pages.map((page) => page.path);
-    const result = paths.length ? await bucket().remove(paths) : { error: null };
-    if (!result.error) await table().delete().eq("id", session.id).lt("expires_at", cutoff);
-  }
+  let cleaned = 0;
+  let after = "";
+  do {
+    const { data, error } = await bucket().list("handoffs", after);
+    if (error)
+      throw new ContentCameraError("Phone upload cleanup is temporarily unavailable.", 503);
+    for (const folder of data ?? []) {
+      if (!uuid(folder.name)) continue;
+      const session = await read<CameraSession>(`${root(folder.name)}/session.json`);
+      if (!session || Date.parse(session.expires_at) > Date.now() - 5 * 60_000) continue;
+      let objectAfter = "";
+      do {
+        const objects = await bucket().list(root(folder.name), objectAfter);
+        if (objects.error) break;
+        const result = await bucket().remove(
+          (objects.data ?? [])
+            .filter((file) => !file.isDirectory)
+            .map((file) => `${root(folder.name)}/${file.name}`),
+        );
+        if (result.error) break;
+        objectAfter = objects.data?.length === 1000 ? objects.data.at(-1)!.name : "";
+      } while (objectAfter);
+      if (++cleaned >= limit) return;
+    }
+    after = data?.length === 1000 ? data.at(-1)!.name : "";
+  } while (after);
 }

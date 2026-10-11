@@ -123,7 +123,7 @@ export function FacultyTokenUsage({ slug }: { slug: string }) {
           </p>
         </div>
         {state.status === "loading" ? (
-          <span className="h-8 w-28 animate-pulse rounded-md bg-border motion-reduce:animate-none" />
+          <span className="h-8 w-28 loading-skeleton rounded-md" />
         ) : (
           <p className="text-right">
             <span className="block font-display text-2xl font-semibold tabular-nums text-text-primary">

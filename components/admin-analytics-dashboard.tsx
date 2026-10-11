@@ -1,5 +1,6 @@
 "use client";
 
+import { ChartLoading } from "@/components/loading-states";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, CircleAlert, CircleCheck, Download, RefreshCw } from "lucide-react";
@@ -213,10 +214,7 @@ export function AdminAnalyticsDashboard({ pendingPayments }: { pendingPayments: 
                 />
               </>
             ) : (
-              <div className="mt-5 space-y-4 motion-safe:animate-pulse" aria-hidden="true">
-                <div className="h-7 w-48 rounded bg-border" />
-                <div className="h-48 rounded-lg bg-border/60" />
-              </div>
+              <ChartLoading />
             )}
           </section>
 
@@ -312,10 +310,10 @@ function Tile({ label, value, note }: { label: string; value: string | null; not
     <div className="rounded-xl border border-border bg-card p-4">
       <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">
-        {value ?? <span className="block h-9 w-16 rounded bg-border motion-safe:animate-pulse" />}
+        {value ?? <span className="block h-9 w-16 rounded loading-skeleton" />}
       </dd>
       <dd className="mt-1 text-xs text-muted-foreground">
-        {note ?? <span className="block h-4 w-24 rounded bg-border motion-safe:animate-pulse" />}
+        {note ?? <span className="block h-4 w-24 rounded loading-skeleton" />}
       </dd>
     </div>
   );
@@ -347,7 +345,7 @@ function Line({ label, value }: { label: string; value: string | null }) {
     <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3 last:border-b-0 sm:[&:nth-last-child(2):nth-child(odd)]:border-b-0 sm:odd:border-r">
       <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd className="text-sm font-semibold tabular-nums">
-        {value ?? <span className="block h-4 w-12 rounded bg-border motion-safe:animate-pulse" />}
+        {value ?? <span className="block h-4 w-12 rounded loading-skeleton" />}
       </dd>
     </div>
   );

@@ -52,6 +52,8 @@
   --bg-primary: #ffffff;
   --bg-secondary: #f4f4f5;
   --bg-tertiary: #e5e5e5;
+  --loading-base: #e8e9ec;
+  --loading-sheen: rgba(255, 255, 255, 0.65);
   --text-primary: #000000;
   --text-secondary: #3f3f46;
   --text-muted: #71717a;
@@ -98,6 +100,8 @@
   --bg-primary: #121214;
   --bg-secondary: #161618;
   --bg-tertiary: #222225;
+  --loading-base: #2b2c32;
+  --loading-sheen: rgba(255, 255, 255, 0.07);
   --text-primary: #f7f7f8;
   --text-secondary: #d0d0d6;
   --text-muted: #a6a6af;
@@ -768,6 +772,8 @@ img.answer-figure[data-answer-zoom]:focus-visible {
 }
 
 .exam-prep-theme {
+  --loading-base: #2b3040;
+  --loading-sheen: rgba(255, 255, 255, 0.07);
   --radius: 0.875rem;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -841,6 +847,8 @@ img.answer-figure[data-answer-zoom]:focus-visible {
 /* The public community catalogue stays light even when the signed-in app uses
    a dark preference. This page belongs to the public marketing surface. */
 .exam-prep-theme.community-catalog-light {
+  --loading-base: #e8e9ec;
+  --loading-sheen: rgba(255, 255, 255, 0.65);
   color-scheme: light;
   --background: #f7f9fc;
   --foreground: #111b33;
@@ -997,16 +1005,6 @@ img.answer-figure[data-answer-zoom]:focus-visible {
   }
 }
 
-@keyframes pulse-soft {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.55;
-  }
-}
-
 @keyframes blink {
   0%,
   100% {
@@ -1123,8 +1121,68 @@ img.answer-figure[data-answer-zoom]:focus-visible {
   animation: slide-up 0.4s ease-out both;
 }
 
-@utility animate-pulse-soft {
-  animation: pulse-soft 2.4s ease-in-out infinite;
+/* A quiet, localized sweep. Cards, navigation and readable copy never fade. */
+.loading-skeleton {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--loading-base);
+  pointer-events: none;
+}
+
+.loading-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 25%, var(--loading-sheen) 48%, transparent 72%);
+  transform: translateX(-100%);
+  animation: loading-sweep 2.8s ease-in-out infinite;
+}
+
+.loading-card:nth-child(even) .loading-skeleton::after {
+  animation-delay: 160ms;
+}
+
+.loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 12px;
+}
+
+.loading-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: loading-dot 1.6s ease-in-out infinite;
+}
+
+.loading-dots i:nth-child(2) { animation-delay: 160ms; }
+.loading-dots i:nth-child(3) { animation-delay: 320ms; }
+
+.loading-progress {
+  animation: loading-progress 1.8s ease-in-out infinite;
+}
+
+@keyframes loading-sweep {
+  0%, 15% { transform: translateX(-100%); }
+  85%, 100% { transform: translateX(100%); }
+}
+
+@keyframes loading-dot {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-2px); }
+}
+
+@keyframes loading-progress {
+  0% { transform: translateX(-150%); }
+  100% { transform: translateX(250%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-skeleton::after { animation: none; display: none; }
+  .loading-dots i, .loading-progress { animation: none; }
 }
 
 @utility animate-drift {

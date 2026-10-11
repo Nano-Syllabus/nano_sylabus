@@ -226,7 +226,7 @@ describe("the cash prize skeleton", () => {
     }
   });
 
-  it("draws the campaign and its labels for real, and pulses only the student's figures", () => {
+  it("draws the campaign and its labels for real, and animates only the student's figures", () => {
     const visible = text(html);
     for (const label of [
       "Build your streak.",
@@ -245,7 +245,7 @@ describe("the cash prize skeleton", () => {
     }
     // The header's campaign count is a constant, not the student's wheel entries.
     expect(visible).not.toMatch(/\d+ verified|\d+ active(?! campaign)|more days? to qualify/);
-    expect(html).toContain("animate-pulse bg-border");
+    expect(html).toContain("loading-skeleton");
     expect(skeleton).not.toContain("bg-bg-secondary\"");
     expect(html).toContain('aria-busy="true"');
   });

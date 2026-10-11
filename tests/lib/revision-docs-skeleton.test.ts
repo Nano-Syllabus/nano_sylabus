@@ -30,10 +30,10 @@ describe("the revision skeleton", () => {
     expect(html).not.toContain("Flashcards from your notes");
   });
 
-  it("draws the document's real headings, with only the words pulsing", () => {
+  it("draws the document's real headings, with only unknown values animated", () => {
     expect(html).toContain(">Concepts</h2>");
     expect(html).toContain(">Past questions on this topic</h2>");
-    expect(html).toContain("animate-pulse bg-border");
+    expect(html).toContain("loading-skeleton");
     expect(html).toContain('aria-busy="true"');
   });
 

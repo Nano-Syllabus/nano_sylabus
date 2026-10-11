@@ -1,8 +1,8 @@
 /**
- * Only the unknown blocks pulse. The page's real text does not: shimmering a
+ * Only unknown values animate. The page's real text does not: shimmering a
  * label that is already correct is what makes a half-ready screen look broken.
  */
-const skeleton = "animate-pulse rounded bg-border motion-reduce:animate-none";
+const skeleton = "loading-skeleton rounded";
 
 /**
  * The Community Hub's frame, drawn for real.

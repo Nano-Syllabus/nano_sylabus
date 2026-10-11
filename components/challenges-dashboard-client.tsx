@@ -336,7 +336,7 @@ function ChallengeBuildingNotice({ label, lines = 2 }: { label: string; lines?: 
         {Array.from({ length: lines }, (_, index) => (
           <div
             key={index}
-            className="h-3 animate-pulse rounded bg-border motion-reduce:animate-none"
+            className="h-3 loading-skeleton rounded"
             style={{ width: `${100 - index * 12}%` }}
           />
         ))}
@@ -2552,13 +2552,13 @@ export function ChallengesDashboardClient({
                       <p className="font-bold text-[15px] sm:text-[16px] text-text-primary truncate">
                         {subject.subjectName}
                       </p>
-                      <div className="mt-2 h-4 w-3/5 rounded-full bg-border animate-pulse-soft motion-reduce:animate-none" />
+                      <div className="mt-2 h-4 w-3/5 rounded-full loading-skeleton" />
                     </div>
-                    <div className="h-3 max-w-[340px] flex-1 rounded-full bg-border animate-pulse-soft motion-reduce:animate-none" />
+                    <div className="h-3 max-w-[340px] flex-1 rounded-full loading-skeleton" />
                   </div>
                   <div className={hubRowActionsClass}>
                     <span className="w-[88px] shrink-0" />
-                    <div className="h-9 w-[104px] shrink-0 rounded-[10px] bg-border animate-pulse-soft motion-reduce:animate-none" />
+                    <div className="h-9 w-[104px] shrink-0 rounded-[10px] loading-skeleton" />
                   </div>
                 </div>
               ))}

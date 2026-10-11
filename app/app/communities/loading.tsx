@@ -1,22 +1,9 @@
+import { CollectionLoading } from "@/components/loading-states";
+
 export default function SubjectExplorerLoading() {
   return (
-    <main
-      className="student-page-frame animate-pulse"
-      aria-label="Loading Subject Explorer"
-    >
-      <div className="h-5 w-36 rounded bg-bg-tertiary" />
-      <div className="mt-3 h-9 w-64 rounded bg-bg-tertiary" />
-      <div className="mt-10 grid gap-8 lg:grid-cols-2">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div key={index}>
-            <div className="h-6 w-28 rounded bg-bg-tertiary" />
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <div className="h-52 rounded-xl bg-bg-tertiary" />
-              <div className="h-52 rounded-xl bg-bg-tertiary" />
-            </div>
-          </div>
-        ))}
-      </div>
+    <main className="student-page-frame" aria-label="Loading Subject Explorer">
+      <CollectionLoading title="Subject Explorer" label="Loading communities and subjects" />
     </main>
   );
 }

@@ -32,7 +32,7 @@ import { CashPrizeHeader, IoeAwardCard } from "@/components/cash-prize-page-fram
  * Only the unknown blocks pulse; the fill is `bg-border`, never
  * `bg-bg-secondary`, which vanishes inside a dark-theme card.
  */
-const pulse = "animate-pulse bg-border motion-reduce:animate-none";
+const pulse = "loading-skeleton";
 const skeleton = `${pulse} rounded`;
 
 /**

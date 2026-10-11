@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentLoading } from "@/components/loading-states";
 import {
   ArrowLeft,
   ChevronDown,
@@ -161,10 +162,10 @@ function LibrarySkeleton() {
           key={index}
           className="flex items-center gap-3 rounded-lg border border-border bg-bg-primary p-3"
         >
-          <div className="h-12 w-10 shrink-0 animate-pulse rounded-md bg-bg-tertiary motion-reduce:animate-none" />
+          <div className="h-12 w-10 shrink-0 loading-skeleton rounded-md" />
           <div className="min-w-0 flex-1 space-y-2">
-            <div className="h-3 w-3/4 animate-pulse rounded-full bg-bg-tertiary motion-reduce:animate-none" />
-            <div className="h-3 w-1/3 animate-pulse rounded-full bg-bg-secondary motion-reduce:animate-none" />
+            <div className="h-3 w-3/4 loading-skeleton rounded-full" />
+            <div className="h-3 w-1/3 loading-skeleton rounded-full" />
           </div>
         </div>
       ))}
@@ -944,8 +945,7 @@ export function ChatMaterialsLibrary({
           >
             {readerState === "loading" ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6" aria-live="polite">
-                <div className="h-[72%] w-[88%] max-w-2xl animate-pulse rounded-md bg-bg-primary shadow-sm motion-reduce:animate-none" />
-                <p className="text-sm text-text-secondary">Opening PDF…</p>
+                <DocumentLoading />
               </div>
             ) : null}
 

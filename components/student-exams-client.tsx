@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingCard } from "@/components/loading-states";
 import { FileText, Image as ImageIcon, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -2220,7 +2221,7 @@ export function StudentExamsClient({
             </button>
           ) : (
             <div className="mt-5 h-2 overflow-hidden rounded-full bg-bg-secondary">
-              <div className="h-full w-2/3 animate-pulse rounded-full bg-text-primary motion-reduce:animate-none" />
+              <div className="h-full w-2/3 loading-progress rounded-full bg-text-primary" />
             </div>
           )}
         </div>
@@ -2542,10 +2543,7 @@ export function StudentExamsClient({
             aria-label="Loading practice history"
           >
             {Array.from({ length: 3 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-52 animate-pulse rounded-lg bg-bg-secondary motion-reduce:animate-none"
-              />
+              <LoadingCard key={index} />
             ))}
           </div>
         ) : null}
@@ -2806,7 +2804,7 @@ export function StudentExamsClient({
             Taken from your notes and the past papers on this subject.
           </p>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-secondary">
-            <div className="h-full w-[70%] animate-pulse rounded-full bg-text-primary motion-reduce:animate-none" />
+            <div className="h-full w-[70%] loading-progress rounded-full bg-text-primary" />
           </div>
         </Dialog>
       ) : null}
@@ -3422,7 +3420,7 @@ function MarkingView({ exam }: { exam: StudentExam }) {
       </p>
       <div className="mt-6 rounded-[14px] border border-border p-5">
         <div className="h-2 overflow-hidden rounded-full bg-bg-secondary">
-          <div className="h-full w-3/4 animate-pulse rounded-full bg-text-primary motion-reduce:animate-none" />
+          <div className="h-full w-3/4 loading-progress rounded-full bg-text-primary" />
         </div>
         <p className="mt-3 text-sm text-text-muted">
           {isMcq

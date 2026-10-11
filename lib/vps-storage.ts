@@ -9,7 +9,11 @@ type StorageResult<T> = Promise<{ data: T | null; error: StorageError | null }>;
 const PROXY_PREFIX = "/vps-storage";
 
 function objectPath(path: string) {
-  if (!path || path.includes("\\") || path.split("/").some((part) => !part || part === "." || part === "..")) {
+  if (
+    !path ||
+    path.includes("\\") ||
+    path.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
     throw new Error("Object paths must contain only relative file and directory names.");
   }
   const prefix = process.env.VPS_STORAGE_PATH_PREFIX?.trim().replace(/\/$/, "") || "";
@@ -43,7 +47,13 @@ function storagePath(kind: string, bucket: string, path: string) {
   return `${kind}/${encodeURIComponent(bucket)}/${encodedPath(path)}`;
 }
 
-function signedPath(method: "GET" | "PUT", kind: string, bucket: string, path: string, seconds: number) {
+function signedPath(
+  method: "GET" | "PUT",
+  kind: string,
+  bucket: string,
+  path: string,
+  seconds: number,
+) {
   path = objectPath(path);
   const { signingSecret } = config();
   const expires = Math.floor(Date.now() / 1000) + Math.max(1, seconds);
@@ -56,7 +66,8 @@ function signedPath(method: "GET" | "PUT", kind: string, bucket: string, path: s
 
 async function responseBody(response: http.IncomingMessage) {
   const chunks: Buffer[] = [];
-  for await (const chunk of response) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  for await (const chunk of response)
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   return Buffer.concat(chunks);
 }
 
@@ -65,42 +76,47 @@ async function request(
   kind: string,
   bucket: string,
   path: string,
-  options: { body?: Buffer; contentType?: string; upsert?: boolean } = {},
+  options: { body?: Buffer; contentType?: string; upsert?: boolean; after?: string } = {},
 ) {
   const { baseUrl, token, rejectUnauthorized } = config();
   const url = new URL(`/v1/object-storage/${storagePath(kind, bucket, objectPath(path))}`, baseUrl);
+  if (options.after) url.searchParams.set("after", options.after);
   const transport = url.protocol === "https:" ? https : http;
-  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: Buffer }>((resolve, reject) => {
-    const req = transport.request(
-      url,
-      {
-        method,
-        rejectUnauthorized,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-          ...(options.contentType ? { "Content-Type": options.contentType } : {}),
-          ...(options.upsert ? { "x-upsert": "true" } : {}),
-          ...(options.body ? { "Content-Length": String(options.body.length) } : {}),
+  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: Buffer }>(
+    (resolve, reject) => {
+      const req = transport.request(
+        url,
+        {
+          method,
+          rejectUnauthorized,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+            ...(options.contentType ? { "Content-Type": options.contentType } : {}),
+            ...(options.upsert ? { "x-upsert": "true" } : {}),
+            ...(options.body ? { "Content-Length": String(options.body.length) } : {}),
+          },
         },
-      },
-      async (response) => {
-        try {
-          resolve({
-            status: response.statusCode ?? 502,
-            headers: response.headers,
-            body: await responseBody(response),
-          });
-        } catch (error) {
-          reject(error);
-        }
-      },
-    );
-    req.setTimeout(300_000, () => req.destroy(new Error("VPS object storage request timed out.")));
-    req.on("error", reject);
-    if (options.body) req.write(options.body);
-    req.end();
-  });
+        async (response) => {
+          try {
+            resolve({
+              status: response.statusCode ?? 502,
+              headers: response.headers,
+              body: await responseBody(response),
+            });
+          } catch (error) {
+            reject(error);
+          }
+        },
+      );
+      req.setTimeout(300_000, () =>
+        req.destroy(new Error("VPS object storage request timed out.")),
+      );
+      req.on("error", reject);
+      if (options.body) req.write(options.body);
+      req.end();
+    },
+  );
 }
 
 function failure(status: number, body: Buffer): StorageError {
@@ -125,7 +141,11 @@ async function bytes(value: unknown) {
 class VpsBucket {
   constructor(private readonly bucket: string) {}
 
-  async upload(path: string, body: unknown, options: { contentType?: string; upsert?: boolean } = {}) {
+  async upload(
+    path: string,
+    body: unknown,
+    options: { contentType?: string; upsert?: boolean } = {},
+  ) {
     try {
       const payload = await bytes(body);
       const result = await request("PUT", "object", this.bucket, path, {
@@ -136,7 +156,10 @@ class VpsBucket {
       if (result.status >= 400) return { data: null, error: failure(result.status, result.body) };
       return { data: { path, fullPath: `${this.bucket}/${path}` }, error: null };
     } catch (error) {
-      return { data: null, error: { message: error instanceof Error ? error.message : "Object upload failed." } };
+      return {
+        data: null,
+        error: { message: error instanceof Error ? error.message : "Object upload failed." },
+      };
     }
   }
 
@@ -149,7 +172,10 @@ class VpsBucket {
       copy.set(result.body);
       return { data: new Blob([copy], { type }), error: null };
     } catch (error) {
-      return { data: null, error: { message: error instanceof Error ? error.message : "Object download failed." } };
+      return {
+        data: null,
+        error: { message: error instanceof Error ? error.message : "Object download failed." },
+      };
     }
   }
 
@@ -161,10 +187,29 @@ class VpsBucket {
         if (result.status >= 400) return { data: null, error: failure(result.status, result.body) };
         removed.push({ name: path });
       } catch (error) {
-        return { data: null, error: { message: error instanceof Error ? error.message : "Object deletion failed." } };
+        return {
+          data: null,
+          error: { message: error instanceof Error ? error.message : "Object deletion failed." },
+        };
       }
     }
     return { data: removed, error: null };
+  }
+
+  async list(
+    prefix: string,
+    after = "",
+  ): StorageResult<Array<{ name: string; isDirectory: boolean }>> {
+    try {
+      const result = await request("GET", "list", this.bucket, prefix, { after });
+      if (result.status >= 400) return { data: null, error: failure(result.status, result.body) };
+      return { data: JSON.parse(result.body.toString("utf8")), error: null };
+    } catch (error) {
+      return {
+        data: null,
+        error: { message: error instanceof Error ? error.message : "Object listing failed." },
+      };
+    }
   }
 
   async info(path: string) {
@@ -181,14 +226,20 @@ class VpsBucket {
         error: null,
       };
     } catch (error) {
-      return { data: null, error: { message: error instanceof Error ? error.message : "Object lookup failed." } };
+      return {
+        data: null,
+        error: { message: error instanceof Error ? error.message : "Object lookup failed." },
+      };
     }
   }
 
   async createSignedUrl(path: string, seconds: number, options?: { download?: string | boolean }) {
     let signedUrl = signedPath("GET", "signed", this.bucket, path, seconds);
     if (options?.download) {
-      const name = typeof options.download === "string" ? options.download : path.split("/").pop() || "download";
+      const name =
+        typeof options.download === "string"
+          ? options.download
+          : path.split("/").pop() || "download";
       signedUrl += `&download=${encodeURIComponent(name)}`;
     }
     return { data: { signedUrl }, error: null };
@@ -196,7 +247,11 @@ class VpsBucket {
 
   async createSignedUrls(paths: string[], seconds: number) {
     return {
-      data: paths.map((path) => ({ path, signedUrl: signedPath("GET", "signed", this.bucket, path, seconds), error: null })),
+      data: paths.map((path) => ({
+        path,
+        signedUrl: signedPath("GET", "signed", this.bucket, path, seconds),
+        error: null,
+      })),
       error: null,
     };
   }
@@ -207,7 +262,11 @@ class VpsBucket {
   }
 
   getPublicUrl(path: string) {
-    return { data: { publicUrl: `${PROXY_PREFIX}/${storagePath("public", this.bucket, objectPath(path))}` } };
+    return {
+      data: {
+        publicUrl: `${PROXY_PREFIX}/${storagePath("public", this.bucket, objectPath(path))}`,
+      },
+    };
   }
 }
 

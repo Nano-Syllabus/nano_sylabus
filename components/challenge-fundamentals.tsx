@@ -140,13 +140,10 @@ export function ChallengeFundamentals({
         aria-busy="true"
       >
         <h2 className="type-student-section-title">Fundamentals check</h2>
-        <div className="mt-4 h-4 w-4/5 animate-pulse rounded bg-border motion-reduce:animate-none" />
+        <div className="mt-4 h-4 w-4/5 loading-skeleton rounded" />
         <div className="mt-4 space-y-2">
           {[0, 1, 2, 3].map((row) => (
-            <div
-              key={row}
-              className="h-11 animate-pulse rounded-lg bg-border motion-reduce:animate-none"
-            />
+            <div key={row} className="h-11 loading-skeleton rounded-lg" />
           ))}
         </div>
       </section>
@@ -270,6 +267,7 @@ function Question({
                 type="button"
                 disabled={answered || checking !== null}
                 aria-pressed={result?.selected === option.key}
+                aria-busy={checking === option.key}
                 onClick={() => onAnswer(option.key)}
                 className={cn(
                   optionBase,
@@ -280,7 +278,6 @@ function Question({
                       : "border-border bg-bg-primary",
                   !answered && checking === null ? "hover:border-blue-500/60" : "",
                   answered && !isCorrect && !isChosenWrong ? "opacity-60" : "",
-                  checking === option.key ? "animate-pulse motion-reduce:animate-none" : "",
                 )}
               >
                 <span
@@ -293,7 +290,13 @@ function Question({
                         : "border-border text-text-secondary",
                   )}
                 >
-                  {isCorrect ? (
+                  {checking === option.key ? (
+                    <span className="loading-dots" aria-label="Checking answer">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  ) : isCorrect ? (
                     <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />
                   ) : isChosenWrong ? (
                     <X className="size-3.5" strokeWidth={3} aria-hidden="true" />
@@ -301,7 +304,7 @@ function Question({
                     option.key
                   )}
                   {/* The letter is still the option's name once an icon stands in for it. */}
-                  {isCorrect || isChosenWrong ? (
+                  {checking === option.key || isCorrect || isChosenWrong ? (
                     <span className="sr-only">{option.key}</span>
                   ) : null}
                 </span>

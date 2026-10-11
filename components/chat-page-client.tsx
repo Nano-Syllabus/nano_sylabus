@@ -1,4 +1,5 @@
 "use client";
+import { ChatLoading } from "@/components/loading-states";
 import { useRouter } from "next/navigation";
 
 import Link from "next/link";
@@ -460,34 +461,7 @@ function buildMissingSubjectMessage(subjects: string[]) {
  *  ready   fetched messages fade into the existing chat shell
  * ───────────────────────────────────────────────────────── */
 function ChatSessionLoadingSkeleton() {
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-label="Loading conversation"
-      className="mx-auto w-full max-w-[1020px] animate-fade-in py-8 motion-reduce:animate-none"
-    >
-      <span className="sr-only">Loading conversation...</span>
-      <div className="space-y-10" aria-hidden="true">
-        <div className="ml-auto flex w-[min(520px,78%)] flex-col items-end gap-2">
-          <div className="h-14 w-full rounded-[24px] bg-bg-tertiary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-3 w-16 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-        </div>
-        <div className="mr-auto w-full max-w-3xl space-y-3">
-          <div className="h-4 w-1/3 rounded-full bg-bg-tertiary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-4 w-full rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-4 w-[92%] rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-4 w-2/3 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-        </div>
-        <div className="ml-auto h-12 w-[min(360px,64%)] rounded-[24px] bg-bg-tertiary animate-pulse-soft motion-reduce:animate-none" />
-        <div className="mr-auto w-full max-w-2xl space-y-3">
-          <div className="h-4 w-1/2 rounded-full bg-bg-tertiary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-4 w-full rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-          <div className="h-4 w-4/5 rounded-full bg-bg-secondary animate-pulse-soft motion-reduce:animate-none" />
-        </div>
-      </div>
-    </div>
-  );
+  return <ChatLoading />;
 }
 
 export function ChatPageClient({

@@ -162,7 +162,7 @@ export function AdminTokenUsageCard() {
                   {typeof value === "number" ? (
                     num(value)
                   ) : (
-                    <span className="inline-block h-6 w-24 animate-pulse rounded bg-border align-middle" />
+                    <span className="inline-block h-6 w-24 loading-skeleton rounded align-middle" />
                   )}
                 </dd>
               </div>
@@ -266,8 +266,8 @@ export function AdminTokenUsageCard() {
             ) : (
               [0, 1, 2].map((index) => (
                 <li key={index} className="px-5 py-3">
-                  <div className="h-4 w-40 animate-pulse rounded bg-border" />
-                  <div className="mt-2 h-1.5 animate-pulse rounded-full bg-border" />
+                  <div className="h-4 w-40 loading-skeleton rounded" />
+                  <div className="mt-2 h-1.5 loading-skeleton rounded-full" />
                 </li>
               ))
             )}

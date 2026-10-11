@@ -1,5 +1,6 @@
 "use client";
 
+import { CreatorWorkspaceLoading } from "@/components/loading-states";
 import Image from "next/image";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -3101,7 +3102,7 @@ export function TeacherWorkspace({ teacherHandle }: { teacherHandle: string }) {
               <Card className="mb-4 p-5">
                 <p className="font-medium">Writing questions from your material…</p>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-bg-tertiary">
-                  <div className="h-full w-1/2 animate-pulse rounded-full bg-text-primary motion-reduce:animate-none" />
+                  <div className="h-full w-1/2 loading-progress rounded-full bg-text-primary" />
                 </div>
                 <p className="mt-2 text-xs text-text-muted">
                   You can leave this page while the local draft is prepared.
@@ -5585,20 +5586,5 @@ function SamplePaper() {
 }
 
 function TeacherWorkspaceSkeleton() {
-  return (
-    <div className="min-h-screen bg-bg-secondary p-5">
-      <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[256px_1fr]">
-        <div className="hidden min-h-[90vh] animate-pulse rounded-xl bg-bg-tertiary lg:block" />
-        <div className="space-y-4">
-          <div className="h-28 animate-pulse rounded-xl bg-bg-tertiary" />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="h-32 animate-pulse rounded-xl bg-bg-tertiary" />
-            ))}
-          </div>
-          <div className="h-72 animate-pulse rounded-xl bg-bg-tertiary" />
-        </div>
-      </div>
-    </div>
-  );
+  return <CreatorWorkspaceLoading />;
 }

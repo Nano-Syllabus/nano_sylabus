@@ -183,7 +183,7 @@ export function CommunityChallengeFormatSettings({ slug }: { slug: string }) {
       ) : !saved ? (
         <div className="grid gap-2 sm:grid-cols-3" aria-busy="true" aria-label="Loading">
           {[0, 1, 2].map((key) => (
-            <span key={key} className="h-20 animate-pulse rounded-lg bg-border" />
+            <span key={key} aria-hidden="true" className="rounded-lg border border-border p-3"><span className="loading-skeleton block h-3 w-20 rounded" /><span className="loading-skeleton mt-3 block h-2 w-3/4 rounded" /></span>
           ))}
         </div>
       ) : (

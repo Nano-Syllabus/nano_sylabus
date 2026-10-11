@@ -3,7 +3,7 @@ function Skeleton({ className }: { className: string }) {
   return (
     <div
       aria-hidden="true"
-      className={`animate-pulse-soft rounded-md bg-surface/70 motion-reduce:animate-none ${className}`}
+      className={`loading-skeleton rounded-md ${className}`}
     />
   );
 }
@@ -19,7 +19,7 @@ export default function PublicExamsLoading() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
           <div className="flex items-center gap-2">
             <Skeleton className="size-8 rounded-lg" />
-            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-5 w-20 sm:w-32" />
           </div>
           <div className="hidden items-center gap-7 md:flex">
             <Skeleton className="h-4 w-12" />

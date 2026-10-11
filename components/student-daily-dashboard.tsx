@@ -1,5 +1,6 @@
 "use client";
 
+import { CalendarLoading, SummaryLoading } from "@/components/loading-states";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Pencil, Plus, Quote } from "lucide-react";
@@ -356,7 +357,6 @@ function DashboardDataSkeleton({
   hasUnlimitedAccess: boolean;
   studyQuote?: string;
 }) {
-  const line = "animate-pulse rounded-full bg-border motion-reduce:animate-none";
   return (
     <main className="student-page-frame" aria-busy="true">
       {/*
@@ -376,30 +376,13 @@ function DashboardDataSkeleton({
 
       <StudyQuoteCard initialQuote={studyQuote} />
 
-      <section
-        className="mt-5 min-h-[190px] animate-pulse rounded-[24px] bg-border motion-reduce:animate-none"
-        aria-label="Loading your next challenge"
-      />
+      <SummaryLoading title="Your next challenge" className="mt-5 min-h-[190px]" />
 
       <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="type-student-section-title">Practice calendar</h2>
-          <div className={`mt-2 h-3 w-52 ${line}`} aria-hidden="true" />
-          <div className="mt-5 grid grid-cols-7 gap-2" aria-hidden="true">
-            {Array.from({ length: 35 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-12 rounded-lg bg-border animate-pulse motion-reduce:animate-none"
-              />
-            ))}
-          </div>
-        </section>
+        <CalendarLoading />
 
         {/* The exam card's footprint (it replaced the programme map). */}
-        <section
-          className="min-h-[150px] animate-pulse rounded-[20px] bg-border motion-reduce:animate-none"
-          aria-label="Loading your exam day"
-        />
+        <SummaryLoading title="Your exam day" className="min-h-[150px]" />
       </div>
       <span className="sr-only">Loading your dashboard</span>
     </main>

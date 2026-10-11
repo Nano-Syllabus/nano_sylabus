@@ -90,30 +90,32 @@ temporary local admin account and sites, and saves screenshots under `/tmp`.
 ## Phone camera content uploads
 
 In a creator subject, open **Upload syllabus**, **Add material**, or **Add past paper**,
-then choose **Phone camera**. Scan the QR on a phone (no phone login required),
-photograph pages or select gallery images, and watch the pages appear on the desktop
-within about three seconds. Keep the desktop dialog open. Drag the thumbnails using
-mouse or touch, or focus a grip and use the arrow keys to change page order. The large
-preview supports previous/next buttons and swiping. **Preview PDF** and **Download PDF**
-create a PDF in the current order; **Upload PDF and index** sends it to the selected shelf.
+then choose **Phone camera**. The desktop displays a QR code; it does not open a camera.
+Scan on your phone (no login needed). Use **Take photo** or **Choose photos**, collect up
+to 50 pages, swipe through previews, and drag thumbnails into order. Compression runs
+on the phone as photos are added. A local IndexedDB draft survives refresh until the
+link expires, subject to the browser's storage availability.
 
-The `content_camera_sessions` migration stores **metadata only** (a hashed token,
-page order, object paths, sizes and checksums). Every JPEG uploads directly through
-the signed VPS proxy into private `content-camera` objects. PDF assembly runs in
-memory; only a PDF explicitly uploaded into the shelf is retained in the existing
-VPS document storage. This flow never stores images or PDFs in Supabase Storage.
-Links expire after two hours, support up to 50 photos, and are revoked when the
-desktop dialog closes or the PDF is successfully uploaded. Photos are compressed
-on the device and temporary VPS originals are deleted on close.
+On the phone, name the document and choose **Create PDF**, preview or save it, then
+**Send PDF to desktop**. The phone creates the PDF from compressed JPEGs without sending
+individual photos. Within about three seconds the desktop shows the finished PDF.
+Choose **Upload PDF and index** to import it into the selected shelf using the existing
+creator upload flow. Sending the PDF alone does not start indexing.
 
-Apply the new `content_camera_sessions` migration to each deployment before use.
-Expired sessions are swept when a new session opens. For regular cleanup even while
-the app is idle, set `CRON_SECRET` and have your scheduler call
+All handoff metadata and the temporary finished PDF use private VPS `content-camera`
+objects. Photos remain on the phone; this flow never writes photos, PDFs, or handoff
+metadata to Supabase. Supabase still authenticates the creator's existing account.
+The historical `content_camera_sessions` table is no longer required by this flow.
+Links expire after two hours and are revoked when the desktop dialog closes or import
+succeeds. Only the final document in the existing VPS shelf is retained after import.
+
+Deploy the object-storage backend alongside the frontend to enable its private paginated
+listing endpoint and atomic create-only uploads. Expired handoffs are swept when a new
+session opens. For idle cleanup, set `CRON_SECRET` and schedule
 `GET /api/cron/content-camera-cleanup` every 15 minutes with
-`Authorization: Bearer <CRON_SECRET>`. Cleanup retains manifests until five minutes
-after expiry so uploads already in flight can also be removed. Run
-`npm run test:content-camera-ui` against the local development database to verify
-the complete phone/desktop flow with a disposable VPS collection.
+`Authorization: Bearer <CRON_SECRET>`. Manifests are kept until five minutes after expiry
+to cover signed uploads in flight. Run `npm run test:content-camera-ui` against the local
+development database to verify the complete flow using a disposable VPS collection.
 
-For phone testing, use a reachable LAN address or an HTTPS development URL on the
-desktop; a QR containing `localhost` points at the phone itself.
+For phone testing, open the desktop using a reachable LAN address or HTTPS development
+URL; a QR containing `localhost` points at the phone itself.

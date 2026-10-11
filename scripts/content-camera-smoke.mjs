@@ -8,6 +8,7 @@ import { globSync, mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
+import jsQR from "jsqr";
 import puppeteer from "puppeteer";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
@@ -33,7 +34,7 @@ const email = `${handle}@example.test`;
 const screenshots = path.join(os.tmpdir(), handle);
 mkdirSync(screenshots);
 const password = crypto.randomBytes(24).toString("base64url");
-let teacherId, userId, browser, phoneContext, upstreamCreated;
+let teacherId, userId, browser, phoneContext, upstreamCreated, opened, receivedPdfId;
 const api = async (page, resource, body, method = body ? "POST" : "GET") =>
   page.evaluate(
     async ({ resource, body, method }) => {
@@ -120,14 +121,12 @@ try {
       .single(),
   ).id;
   check(
-    await admin
-      .from("teacher_subject_profiles")
-      .insert({
-        teacher_id: teacherId,
-        subject_slug: subject.slug,
-        subject_name: subject.name,
-        folder_path: subject.folder_path,
-      }),
+    await admin.from("teacher_subject_profiles").insert({
+      teacher_id: teacherId,
+      subject_slug: subject.slug,
+      subject_name: subject.name,
+      folder_path: subject.folder_path,
+    }),
   );
   const cookies = new Map();
   const auth = createServerClient(
@@ -194,15 +193,42 @@ try {
     'a[aria-label="Open phone camera link"]',
     (anchor) => anchor.href,
   );
-  assert.equal(new URL(uploadUrl).origin, new URL(base).origin, "QR uses the browser address, including a LAN hostname");
+  assert.equal(
+    new URL(uploadUrl).origin,
+    new URL(base).origin,
+    "QR uses the browser address, including a LAN hostname",
+  );
   const segments = new URL(uploadUrl).pathname.split("/");
-  const opened = { id: segments[2], token: segments[3], uploadUrl };
+  opened = { id: segments[2], token: segments[3], uploadUrl };
   const captureApi = `/api/content-camera/${opened.id}/${opened.token}`;
+  assert.equal(
+    await desktop.$('[role="dialog"] input[capture]'),
+    null,
+    "Desktop never opens a camera",
+  );
+  const qr = await desktop.$('[role="dialog"] svg[role="img"]');
+  assert(qr, "QR code is visible");
+  const { data: qrPixels, info: qrInfo } = await sharp(await qr.screenshot())
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  assert.equal(
+    jsQR(new Uint8ClampedArray(qrPixels), qrInfo.width, qrInfo.height)?.data,
+    uploadUrl,
+    "The QR decodes to the actual phone URL",
+  );
+  await desktop.screenshot({ path: path.join(screenshots, "desktop-qr.png"), fullPage: true });
   phoneContext = await browser.createBrowserContext();
   const phone = await phoneContext.newPage();
   phone.on("pageerror", (error) => errors.push(error.message));
+  const phoneWrites = [];
+  phone.on("request", (request) => {
+    if (["PUT", "POST"].includes(request.method()))
+      phoneWrites.push({ url: request.url(), method: request.method(), body: request.postData() });
+  });
   await phone.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await phone.goto(opened.uploadUrl, { waitUntil: "networkidle2", timeout: 60000 });
+  await phone.waitForSelector('input[capture="environment"]', { timeout: 60000 });
   assert.equal(
     await phone.$eval('input[capture="environment"]', (input) => input.accept),
     "image/*",
@@ -215,54 +241,157 @@ try {
   const photos = [];
   for (const [index, background] of ["#f6d4b9", "#bbdfef", "#cbe8b1"].entries()) {
     const file = path.join(screenshots, `page-${index + 1}.jpg`);
-    await sharp({ create: { width: 700 + index * 100, height: 1000, channels: 3, background } })
+    await sharp({ create: { width: 2400 + index * 200, height: 3600, channels: 3, background } })
       .jpeg()
       .toFile(file);
     photos.push(file);
   }
   await (await phone.$('input[aria-label="Choose page photos"]')).uploadFile(...photos);
-  await desktop.waitForFunction(
-    () => document.querySelectorAll('[role="dialog"] ol li').length === 3,
+  const draft = async () =>
+    phone.evaluate(async (id) => {
+      const db = await new Promise((resolve, reject) => {
+        const r = indexedDB.open("nano-content-scans", 1);
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = reject;
+      });
+      return new Promise((resolve) => {
+        const r = db.transaction("drafts").objectStore("drafts").get(id);
+        r.onsuccess = () =>
+          resolve(
+            r.result && {
+              ids: r.result.pages.map((p) => p.id),
+              widths: r.result.pages.map((p) => p.width),
+            },
+          );
+      });
+    }, opened.id);
+  await phone.waitForFunction(
+    () =>
+      document.querySelectorAll("ol.grid li").length === 3 &&
+      !document.querySelector('input[aria-label="Choose page photos"]').disabled,
     { timeout: 60000 },
   );
   await phone.waitForFunction(
+    async (id) => {
+      const db = await new Promise((resolve) => {
+        const r = indexedDB.open("nano-content-scans", 1);
+        r.onsuccess = () => resolve(r.result);
+      });
+      return new Promise((resolve) => {
+        const r = db.transaction("drafts").objectStore("drafts").get(id);
+        r.onsuccess = () => resolve(r.result?.pages.length === 3);
+      });
+    },
+    {},
+    opened.id,
+  );
+  const original = (await draft()).ids;
+  assert.equal(phoneWrites.length, 0, "Photos and drafts never leave the phone");
+  assert.equal((await api(phone, captureApi)).pdf, null, "Desktop still waits for a finished PDF");
+  await phone.focus("button[data-grip]");
+  await phone.keyboard.press("ArrowRight");
+  await phone.waitForFunction(
+    async ({ id, expected }) => {
+      const db = await new Promise((resolve) => {
+        const r = indexedDB.open("nano-content-scans", 1);
+        r.onsuccess = () => resolve(r.result);
+      });
+      return new Promise((resolve) => {
+        const r = db.transaction("drafts").objectStore("drafts").get(id);
+        r.onsuccess = () => resolve(r.result?.pages.map((p) => p.id).join() === expected);
+      });
+    },
+    {},
+    { id: opened.id, expected: [original[1], original[0], original[2]].join() },
+  );
+  await phone.click('button[aria-label="Remove page 3"]');
+  await (await phone.$('input[capture="environment"]')).uploadFile(photos[2]);
+  await phone.waitForFunction(
     () =>
-      document.querySelectorAll("ol li").length === 3 &&
-      ![...document.querySelectorAll("button")].find(
-        (button) => button.textContent === "Preview PDF",
-      )?.disabled,
+      document.querySelectorAll("ol.grid li").length === 3 &&
+      !document.querySelector('input[capture="environment"]').disabled,
+  );
+  await phone.waitForFunction(
+    async (id) => {
+      const db = await new Promise((resolve) => {
+        const r = indexedDB.open("nano-content-scans", 1);
+        r.onsuccess = () => resolve(r.result);
+      });
+      return new Promise((resolve) => {
+        const r = db.transaction("drafts").objectStore("drafts").get(id);
+        r.onsuccess = () => resolve(r.result?.pages.length === 3);
+      });
+    },
+    {},
+    opened.id,
+  );
+  await phone.reload({ waitUntil: "networkidle2" });
+  await phone.waitForSelector("ol.grid li");
+  assert.equal(
+    await phone.$$eval("ol.grid li", (pages) => pages.length),
+    3,
+    "Phone draft survives refresh",
+  );
+  const ordered = await draft();
+  assert.deepEqual(
+    ordered.ids.slice(0, 2),
+    [original[1], original[0]],
+    "Local reorder survives refresh",
+  );
+  await phone.click('button[aria-label="Next page"]');
+  assert.equal(
+    await phone.$eval('img[alt^="Preview page"]', (image) => image.alt),
+    "Preview page 2",
+  );
+  const overflow = await phone.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth,
+  );
+  assert.equal(overflow, false, "Mobile page fits the viewport");
+  await phone.screenshot({ path: path.join(screenshots, "phone-pages.png"), fullPage: true });
+  await clickText(phone, "Create PDF");
+  await phone.waitForSelector('a[download$=".pdf"]');
+  assert.equal(phoneWrites.length, 0, "PDF assembly happens locally, without image uploads");
+  await phone.screenshot({ path: path.join(screenshots, "phone-pdf.png"), fullPage: true });
+  const phonePdf = await phone.evaluate(async () => {
+    const file = await fetch(document.querySelector('a[download$=".pdf"]').href).then((r) =>
+      r.blob(),
+    );
+    return { size: file.size, text: new TextDecoder("latin1").decode(await file.arrayBuffer()) };
+  });
+  assert(phonePdf.text.startsWith("%PDF-1.4"));
+  assert(phonePdf.text.includes("/Count 3"));
+  assert.equal(
+    Number(phonePdf.text.match(/\/Width (\d+)/)[1]),
+    ordered.widths[0],
+    "PDF embeds images in the chosen order",
+  );
+  assert(phonePdf.size < 2 * 1024 * 1024, "Three high-resolution photos create a compact PDF");
+  await clickText(phone, "Send PDF to desktop");
+  await phone.waitForFunction(
+    () => document.body.textContent.includes("PDF sent to your desktop"),
     { timeout: 60000 },
   );
   const before = await api(phone, captureApi);
+  receivedPdfId = before.pdf.id;
+  assert.equal(before.pdf.pageCount, 3);
+  assert.equal(
+    phoneWrites.filter((r) => r.method === "PUT").length,
+    1,
+    "Only one finished PDF is uploaded",
+  );
   assert(
-    before.pages.every(
-      (page) => page.source === "phone" && page.previewUrl.startsWith("/vps-storage/"),
-    ),
+    phoneWrites
+      .filter((r) => r.method === "PUT")
+      .every((r) => new URL(r.url).pathname.endsWith(".pdf")),
   );
-  const original = before.pages.map((page) => page.id);
-  await desktop.focus("button[data-grip]");
-  await desktop.keyboard.press("ArrowRight");
-  await desktop.waitForResponse(
-    (response) => response.url().endsWith(captureApi) && response.request().method() === "POST",
-    { timeout: 10000 },
-  );
-  const ordered = await api(desktop, captureApi);
-  assert.deepEqual(
-    ordered.pages.map((page) => page.id),
-    [original[1], original[0], original[2]],
-  );
-  await clickText(desktop, "Preview PDF");
-  await desktop.waitForSelector('iframe[title="Scanned content PDF preview"]');
+  await desktop.waitForSelector('iframe[title="Scanned content PDF preview"]', { timeout: 60000 });
   const result = await desktop.evaluate(async () => {
-    const bytes = new Uint8Array(
-      await (
-        await fetch(document.querySelector('iframe[title="Scanned content PDF preview"]').src)
-      ).arrayBuffer(),
-    );
+    const bytes = await fetch(
+      document.querySelector('iframe[title="Scanned content PDF preview"]').src,
+    ).then((r) => r.arrayBuffer());
     return new TextDecoder("latin1").decode(bytes);
   });
-  assert(result.startsWith("%PDF-1.4"));
-  assert(result.includes("/Count 3"));
+  assert.equal(result, phonePdf.text, "Desktop receives the exact PDF created on the phone");
   await desktop.screenshot({ path: path.join(screenshots, "desktop.png"), fullPage: true });
   await phone.screenshot({ path: path.join(screenshots, "phone.png"), fullPage: true });
   // Real signed VPS upload + existing creator indexing path, including mirror.
@@ -292,26 +421,18 @@ try {
     captureApi,
   );
   assert.equal(ended, 410, "Phone token revoked after content upload");
-  const session = check(
-    await admin.from("content_camera_sessions").select("pages,closed").eq("id", opened.id).single(),
-  );
-  assert.equal(session.closed, true);
-  assert(session.pages.every((page) => !Object.keys(page).includes("bytes")));
   assert.deepEqual(errors, []);
   console.log(
-    `Camera browser smoke passed: anonymous phone capture, desktop sync/order, three-page PDF, VPS upload/index, QR revocation. Screenshots: ${screenshots}`,
+    `Camera browser smoke passed: decoded QR, anonymous phone camera/gallery, local compression/order/draft recovery/PDF, desktop delivery, VPS upload/index, QR revocation. Screenshots: ${screenshots}`,
   );
 } finally {
   await phoneContext?.close();
   await browser?.close();
   if (teacherId) {
-    const sessions = check(
-      await admin.from("content_camera_sessions").select("id,pages").eq("teacher_id", teacherId),
-    );
     const files = check(
       await admin.from("teacher_document_files").select("storage_path").eq("teacher_id", teacherId),
     );
-    // The fixture's PDFs and photos live on the VPS, never Supabase Storage.
+    // Only PDF and handoff JSON fixture objects live on the VPS.
     const storageUrl = process.env.VPS_STORAGE_URL || process.env.TENANT_API_BASE_URL;
     const storageToken = process.env.VPS_STORAGE_TOKEN || process.env.TENANT_API_TOKEN;
     const originalBase = process.env.TENANT_API_BASE_URL;
@@ -328,10 +449,17 @@ try {
         process.env.TENANT_API_BASE_URL = originalBase;
       }
     };
-    for (const session of sessions)
-      for (const page of session.pages) await removeObject("content-camera", page.path);
+    if (opened) {
+      const objects = [
+        "session.json",
+        "closed.json",
+        "ready.json",
+        ...(receivedPdfId ? [`${receivedPdfId}.json`, `${receivedPdfId}.pdf`] : []),
+      ];
+      for (const name of objects)
+        await removeObject("content-camera", `handoffs/${opened.id}/${name}`);
+    }
     for (const file of files) await removeObject("teacher-documents", file.storage_path);
-    check(await admin.from("content_camera_sessions").delete().eq("teacher_id", teacherId));
     check(await admin.from("teacher_document_files").delete().eq("teacher_id", teacherId));
     check(await admin.from("teacher_subject_profiles").delete().eq("teacher_id", teacherId));
     check(await admin.from("teachers").delete().eq("id", teacherId));

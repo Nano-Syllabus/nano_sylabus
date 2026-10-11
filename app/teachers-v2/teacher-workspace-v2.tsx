@@ -1,5 +1,6 @@
 "use client";
 
+import { CreatorWorkspaceLoading, SummaryLoading } from "@/components/loading-states";
 import { setWorkspaceFaculty } from "@/lib/teacher-workspace-faculty";
 import { WorkspaceLink as Link } from "@/app/teachers-v2/workspace-link";
 import Image from "next/image";
@@ -591,55 +592,7 @@ function ActivityView({
 }
 
 function WorkspaceSkeleton() {
-  return (
-    <div
-      className="grid min-h-screen lg:grid-cols-[280px_1fr]"
-      role="status"
-      aria-label="Loading creator workspace"
-    >
-      <aside className="hidden border-r border-border p-6 lg:block">
-        <div className="flex items-center gap-3">
-          <SkeletonBlock className="h-11 w-11 rounded-full" />
-          <div className="space-y-2">
-            <SkeletonBlock className="h-5 w-36" />
-            <SkeletonBlock className="h-3 w-28" />
-          </div>
-        </div>
-        <div className="mt-16 space-y-3">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <SkeletonBlock key={index} className="h-12" />
-          ))}
-        </div>
-      </aside>
-      <main className="p-5 md:p-8">
-        <div className="mb-8 rounded-xl border border-border bg-bg-primary p-5">
-          <p className="font-mono-ui text-xs uppercase tracking-[0.28em] text-text-muted">
-            Creator workspace
-          </p>
-          <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight">
-            Loading your workspace…
-          </h1>
-          <p className="mt-2 text-sm text-text-secondary">
-            Fetching your subjects, courses, exams, and material.
-          </p>
-        </div>
-        <div className="flex items-start gap-4">
-          <div className="flex-1 space-y-3">
-            <SkeletonBlock className="h-3 w-32" />
-            <SkeletonBlock className="h-10 w-72 max-w-full" />
-            <SkeletonBlock className="h-4 w-56 max-w-full" />
-          </div>
-          <SkeletonBlock className="hidden h-12 w-44 sm:block" />
-        </div>
-        <SkeletonBlock className="mt-8 h-36 rounded-xl" />
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <SkeletonCard key={index} lines={2} className="h-44" />
-          ))}
-        </div>
-      </main>
-    </div>
-  );
+  return <CreatorWorkspaceLoading />;
 }
 
 /** A subject opened by link while its collection is still on its way. */
@@ -656,9 +609,9 @@ function OpeningSubject({
     return (
       <div role="status" aria-label="Opening subject" className="space-y-4">
         <SkeletonBlock className="h-4 w-28" />
-        <SkeletonBlock className="h-9 w-72" />
+        <SkeletonBlock className="h-9 w-72 max-w-full" />
         <SkeletonBlock className="h-10 w-full max-w-xl" />
-        <SkeletonBlock className="h-48" />
+        <SummaryLoading title="Subject overview" />
       </div>
     );
   }

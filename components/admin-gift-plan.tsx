@@ -1,5 +1,6 @@
 "use client";
 
+import { SummaryLoading } from "@/components/loading-states";
 import { useEffect, useState } from "react";
 
 type Options = {
@@ -55,7 +56,7 @@ export function AdminGiftPlan({ userId, onGifted }: { userId: string; onGifted: 
 
   if (error) return <p className="text-sm text-muted-foreground">{error}</p>;
   if (!options)
-    return <div className="h-24 animate-pulse rounded-lg bg-border/60" aria-label="Loading" />;
+    return <SummaryLoading title="Gift a plan" />;
   if (!options.plans.length || !options.exams.length)
     return (
       <p className="text-sm text-muted-foreground">

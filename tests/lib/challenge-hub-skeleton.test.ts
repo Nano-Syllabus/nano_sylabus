@@ -54,8 +54,8 @@ describe("the challenge hub skeleton", () => {
     }
   });
 
-  it("pulses only with a fill that shows in both themes", () => {
-    expect(skeleton).toContain("animate-pulse bg-border");
+  it("uses the shared theme-aware loading treatment", () => {
+    expect(skeleton).toContain("loading-skeleton");
     expect(skeleton).not.toContain("bg-bg-secondary animate-pulse");
   });
 
