@@ -1,9 +1,8 @@
 /**
  * Every word on the landing page, as data.
  *
- * The design lives in `components/landing-view.tsx` and never changes per
- * site; each site (nanosyllabus.com, highschool.nanosyllabus.com, …) only
- * swaps this text. `DEFAULT_LANDING_CONTENT` is the wording the page shipped
+ * The design and content belong to each site. `DEFAULT_LANDING_CONTENT`
+ * preserves the original design for existing sites and is the wording shipped
  * with, and it is also the shape every stored copy is checked against:
  * `sanitizeLandingContent` keeps only keys that exist here, so a stale or
  * hand-edited row can never break the page — missing text falls back to
@@ -13,7 +12,24 @@
  * must stay free of server-only imports.
  */
 
+export const LANDING_TEMPLATE_IDS = ["original", "editorial", "academy", "studio", "community"] as const;
+export type LandingTemplateId = (typeof LANDING_TEMPLATE_IDS)[number];
+
+export function isLandingTemplateId(value: unknown): value is LandingTemplateId {
+  return typeof value === "string" && (LANDING_TEMPLATE_IDS as readonly string[]).includes(value);
+}
+
 export type LandingContent = {
+  design: {
+    template: LandingTemplateId;
+    font: "sans" | "serif" | "mono";
+    corners: "rounded" | "square" | "pill";
+    spacing: "comfortable" | "compact" | "airy";
+    backgroundColor: string;
+    textColor: string;
+    heroImageUrl: string;
+    showDemo: boolean;
+  };
   /**
    * Not text: the site's look and its one main action. Colours are `#rrggbb`;
    * `communitySlug` sends every main button into that community's join +
@@ -116,6 +132,10 @@ export type LandingContent = {
 };
 
 export const DEFAULT_LANDING_CONTENT: LandingContent = {
+  design: {
+    template: "original", font: "sans", corners: "rounded", spacing: "comfortable",
+    backgroundColor: "#fafbf7", textColor: "#1c1e1a", heroImageUrl: "", showDemo: true,
+  },
   brand: { logoUrl: "", iconUrl: "", primaryColor: "#3049ed", accentColor: "#dcfa72", communitySlug: "" },
   seo: {
     title: "NanoSyllabus — AI Study Companion for Nepal",
@@ -339,7 +359,8 @@ export type LandingField = {
   /** `long` = a paragraph (textarea); otherwise one line. */
   long?: boolean;
   /** A non-text control; plain text when absent. */
-  kind?: "color" | "image" | "community";
+  kind?: "color" | "image" | "community" | "select" | "toggle";
+  options?: Array<{ value: string; label: string }>;
   hint?: string;
 };
 
@@ -366,6 +387,19 @@ export const LANDING_LIST_LIMITS: Record<string, { min: number; max: number }> =
 };
 
 export const LANDING_SECTIONS: LandingSection[] = [
+  {
+    key: "design", title: "Design & layout", where: "Sample, typography, spacing, and hero image", hideable: false,
+    fields: [
+      { key: "template", label: "Landing page sample", kind: "select", options: LANDING_TEMPLATE_IDS.map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) })), hint: "Changes the layout while keeping your text and branding. Use Choose sample to load a sample's styling too." },
+      { key: "font", label: "Typography", kind: "select", options: [{ value: "sans", label: "Modern sans serif" }, { value: "serif", label: "Editorial serif" }, { value: "mono", label: "Monospace" }] },
+      { key: "corners", label: "Corners", kind: "select", options: [{ value: "rounded", label: "Rounded" }, { value: "square", label: "Square" }, { value: "pill", label: "Soft & pill buttons" }] },
+      { key: "spacing", label: "Section spacing", kind: "select", options: [{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }, { value: "airy", label: "Airy" }] },
+      { key: "backgroundColor", label: "Page background", kind: "color" },
+      { key: "textColor", label: "Text colour", kind: "color" },
+      { key: "heroImageUrl", label: "Hero image", kind: "image", hint: "Upload an image or paste its HTTPS URL. Empty uses the sample's built-in visual." },
+      { key: "showDemo", label: "Show product tour", kind: "toggle" },
+    ],
+  },
   {
     key: "brand",
     title: "Brand & main button",
@@ -680,6 +714,18 @@ export function sanitizeLandingContent(value: unknown): LandingContent {
   // Only our own paths or https images: these values land in an <img src>.
   const safeImage = (value: string) =>
     /^(https:\/\/|\/(?!\/))\S+$/.test(value.trim()) ? value.trim() : "";
+  const design = content.design;
+  const defaults = DEFAULT_LANDING_CONTENT.design;
+  content.design = {
+    template: isLandingTemplateId(design.template) ? design.template : defaults.template,
+    font: ["sans", "serif", "mono"].includes(design.font) ? design.font : defaults.font,
+    corners: ["rounded", "square", "pill"].includes(design.corners) ? design.corners : defaults.corners,
+    spacing: ["comfortable", "compact", "airy"].includes(design.spacing) ? design.spacing : defaults.spacing,
+    backgroundColor: HEX_COLOR.test(design.backgroundColor) ? design.backgroundColor.toLowerCase() : defaults.backgroundColor,
+    textColor: HEX_COLOR.test(design.textColor) ? design.textColor.toLowerCase() : defaults.textColor,
+    heroImageUrl: safeImage(design.heroImageUrl),
+    showDemo: design.showDemo,
+  };
   content.brand = {
     logoUrl: safeImage(logoUrl),
     iconUrl: safeImage(iconUrl),

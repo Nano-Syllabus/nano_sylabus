@@ -4,6 +4,9 @@ import { DM_Sans, Manrope } from "next/font/google";
 import { LandingPrimaryCta, LandingSiteActions } from "@/components/landing-primary-cta";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
 import { landingColorVars, type LandingContent } from "@/lib/landing-content";
+import { landingDesignVars } from "@/lib/landing-templates";
+import { LandingTemplateView } from "@/components/landing-template-view";
+import designStyles from "@/components/landing-template-view.module.css";
 
 const dmSans = DM_Sans({ subsets: ["latin"], display: "swap" });
 const manrope = Manrope({ subsets: ["latin"], display: "swap" });
@@ -126,6 +129,9 @@ export function LandingView({
       ? `${appOrigin}/communities/${encodeURIComponent(brand.communitySlug)}/join`
       : undefined;
   const ctaProps = { joinHref, appOrigin };
+  if (content.design.template !== "original") {
+    return <LandingTemplateView content={content} joinHref={joinHref} appOrigin={appOrigin} />;
+  }
   const {
     nav,
     hero,
@@ -159,8 +165,12 @@ export function LandingView({
   ].filter((link) => link.shown);
   return (
     <div
-      style={landingColorVars(brand) as React.CSSProperties}
-      className={`${dmSans.className} min-h-screen overflow-x-hidden bg-[#fafbf7] text-[#1c1e1a] antialiased selection:bg-[var(--lp-accent)] selection:text-[#1c1e1a]`}
+      data-landing-template="original"
+      data-font={content.design.font}
+      data-corners={content.design.corners}
+      data-spacing={content.design.spacing}
+      style={{ ...landingColorVars(brand), ...landingDesignVars(content.design) } as React.CSSProperties}
+      className={`${designStyles.original} ${dmSans.className} min-h-screen overflow-x-hidden bg-[#fafbf7] text-[#1c1e1a] antialiased selection:bg-[var(--lp-accent)] selection:text-[#1c1e1a]`}
     >
       {/* ── Skip Link ── */}
       <a
@@ -191,7 +201,7 @@ export function LandingView({
           ) : null}
           <div className="flex items-center gap-3">
             {joinHref ? (
-              <LandingSiteActions joinHref={joinHref} />
+              <LandingSiteActions joinHref={joinHref}>{hero.primaryCta}</LandingSiteActions>
             ) : (
               <LandingPrimaryCta {...ctaProps} />
             )}
@@ -243,7 +253,7 @@ export function LandingView({
               <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-5">
                 {/* A faculty/exam site has one way in for new and returning students. */}
                 <LandingPrimaryCta blue size="hero" communityOnly {...ctaProps}>
-                  {joinHref ? "Continue learning" : hero.primaryCta}
+                  {hero.primaryCta}
                 </LandingPrimaryCta>
 
                 {steps.hidden ? null : (
@@ -258,8 +268,14 @@ export function LandingView({
 
             </div>
 
+            {content.design.heroImageUrl ? (
+              <div className="mx-auto mt-14 max-w-[1050px] lg:mt-20">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={content.design.heroImageUrl} alt={`${hero.titleLead} ${hero.titleHighlight}`} className="max-h-[620px] w-full object-cover" style={{ borderRadius: "var(--lp-radius)" }} />
+              </div>
+            ) : null}
             {/* Animated feature walkthrough */}
-            <div className="mx-auto mt-14 max-w-[1050px] lg:mt-20">
+            {content.design.showDemo ? <div className="mx-auto mt-14 max-w-[1050px] lg:mt-20">
               <div className="overflow-hidden rounded-[22px] border border-[#dfe4d6] bg-white p-2 shadow-[0_24px_70px_rgba(28,30,26,0.12)] sm:rounded-[30px] sm:p-3">
                 {/* 16:9 stage plus the tour's 56px chapter bar underneath */}
                 <div className="relative w-full overflow-hidden rounded-[15px] pb-[calc(56.25%+56px)] sm:rounded-[20px]">
@@ -271,7 +287,7 @@ export function LandingView({
                   />
                 </div>
               </div>
-            </div>
+            </div> : null}
           </div>
         </section>
 

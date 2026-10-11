@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, FormEvent, type ReactNode } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ContentCameraUploader } from "@/components/content-camera-uploader";
 import { isTeacherSyllabusFileSupported, TEACHER_MATERIAL_FILE_ACCEPT, TEACHER_SYLLABUS_FILE_ACCEPT, TEACHER_UPLOAD_MAX_LABEL, teacherUploadSizeError } from "@/lib/teacher-upload";
 import { cn, titleCase } from "@/lib/utils";
 import {
@@ -1298,7 +1299,9 @@ export function UploadDialog({
   /** Called when a background import lands, so the shelf can pick it up. */
   onQueueSettled?: () => void;
 }) {
-  const [source, setSource] = useState<"files" | "drive">("files");
+  const [source, setSource] = useState<"files" | "drive" | "camera">("files");
+  const [cameraOpened, setCameraOpened] = useState(false);
+  const [cameraBusy, setCameraBusy] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [link, setLink] = useState("");
   const [driveFiles, setDriveFiles] = useState<DriveCandidate[]>([]);
@@ -1431,6 +1434,8 @@ export function UploadDialog({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (source === "camera") return;
+
     if (source === "drive") {
       // A link the creator typed but never checked should import, not scold.
       if (!driveFiles.length) {
@@ -1512,7 +1517,7 @@ export function UploadDialog({
   }
 
   return (
-    <Dialog title={`Upload to ${shelf}`} onClose={onClose} closeDisabled={busy}>
+    <Dialog title={`Upload to ${shelf}`} onClose={onClose} closeDisabled={busy || cameraBusy}>
       <div className="rounded-lg border border-border bg-bg-secondary p-4">
         <p className="font-medium">{titleCase(subject.name)}</p>
         <p className="mt-1 break-all font-mono text-xs text-text-muted">
@@ -1527,6 +1532,7 @@ export function UploadDialog({
           [
             ["files", "Choose files"],
             ["drive", "Google Drive link"],
+            ["camera", "Phone camera"],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -1534,9 +1540,10 @@ export function UploadDialog({
             type="button"
             role="tab"
             aria-selected={source === value}
-            disabled={busy}
+            disabled={busy || cameraBusy}
             onClick={() => {
               setSource(value);
+              if (value === "camera") setCameraOpened(true);
               setError("");
             }}
             className={cn(
@@ -1551,6 +1558,19 @@ export function UploadDialog({
         ))}
       </div>
       <form className="mt-5" onSubmit={submit}>
+        {cameraOpened ? <div className={source === "camera" ? undefined : "hidden"}>
+          <ContentCameraUploader path={shelfRoot} disabled={busy} onBusyChange={setCameraBusy}
+            onUpload={async (file) => {
+              const { failed, warnings } = await runJobs([{ name: file.name, run: () => uploadTeacherDocument(file, shelfRoot) }], "upload");
+              if (failed.length) {
+                setError(failed.map((item) => `${item.name}: ${item.error}`).join("\n"));
+                setBusy(false);
+                return false;
+              }
+              finish(warnings, "uploaded");
+              return true;
+            }} />
+        </div> : null}
         <div className={source === "drive" ? undefined : "hidden"}>
           <label htmlFor="teacher-upload-link" className="block text-sm font-medium">
             Paste a Drive link
@@ -1703,10 +1723,10 @@ export function UploadDialog({
           </p>
         ) : null}
         <div className="mt-6 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy || cameraBusy}>
             {queuedCount ? "Done" : "Cancel"}
           </Button>
-          <Button
+          {source !== "camera" ? <Button
             type="submit"
             disabled={busy || resolving || (source === "files" ? !files.length : !link.trim())}
             aria-busy={busy}
@@ -1724,7 +1744,7 @@ export function UploadDialog({
                 : pending
                   ? `Upload ${pending} file${pending === 1 ? "" : "s"} and index`
                   : "Upload files and index"}
-          </Button>
+          </Button> : null}
         </div>
       </form>
     </Dialog>

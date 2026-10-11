@@ -3,14 +3,17 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   DEFAULT_LANDING_CONTENT,
   sanitizeLandingContent,
+  isLandingTemplateId,
   type LandingContent,
+  type LandingTemplateId,
 } from "@/lib/landing-content";
+import { createLandingTemplate } from "@/lib/landing-templates";
 import { MAIN_SITE_SLUG, RESERVED_SITE_SLUGS, isValidSiteSlug } from "@/lib/landing-site-host";
 import { readExamConfig, examConfigSchema, type ExamConfig } from "@/lib/exam-enrollment";
 
 /**
  * Landing sites: one row per subdomain (plus "main", the bare domain), each
- * holding only the page's TEXT. Two copies per row, WordPress-style:
+ * holding its design settings and content. Two copies per row:
  *
  * - `draft`   — what the admin editor saves as they type; nobody else sees it.
  * - `content` — what the live site shows; replaced only by Publish.
@@ -258,6 +261,7 @@ export async function createLandingSite(input: {
   slug: string;
   name: string;
   copyFrom?: string;
+  templateId?: LandingTemplateId;
   userId: string;
 }): Promise<LandingSiteDetail> {
   const slug = input.slug.trim().toLowerCase();
@@ -273,10 +277,16 @@ export async function createLandingSite(input: {
   }
   if (!name) throw new LandingSiteError("Give the site a name.", 400);
 
-  // A new site starts as a copy of an existing one's LIVE text (the main site
-  // by default), so it is never a blank page.
-  const source = await getLandingSite(input.copyFrom || MAIN_SITE_SLUG);
-  const content = source?.content ?? DEFAULT_LANDING_CONTENT;
+  if (input.templateId !== undefined && !isLandingTemplateId(input.templateId)) {
+    throw new LandingSiteError("Choose one of the five landing page samples.", 400);
+  }
+  if (input.templateId !== undefined && input.copyFrom) {
+    throw new LandingSiteError("Choose a sample or copy an existing site.", 400);
+  }
+  // Template and its editable fields are stored together in the existing JSON.
+  // Older clients can still copy an existing site's published content.
+  const source = input.templateId ? null : await getLandingSite(input.copyFrom || MAIN_SITE_SLUG);
+  const content = input.templateId ? createLandingTemplate(input.templateId) : source?.content ?? DEFAULT_LANDING_CONTENT;
 
   const { data, error } = await createSupabaseAdminClient()
     .from(TABLE)

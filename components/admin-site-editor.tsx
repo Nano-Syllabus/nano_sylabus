@@ -29,6 +29,8 @@ import {
   X,
 } from "lucide-react";
 import { AdminSiteDeleteDialog } from "@/components/admin-site-delete-dialog";
+import { LandingTemplateDialog } from "@/components/landing-template-picker";
+import { applyLandingTemplate, LANDING_TEMPLATES } from "@/lib/landing-templates";
 import type { CommunityChoice, LandingSiteDetail } from "@/lib/data/landing-sites";
 import {
   LANDING_LIST_LIMITS,
@@ -99,6 +101,7 @@ export function AdminSiteEditor({
   const router = useRouter();
   const [site, setSite] = useState(initialSite);
   const [draft, setDraft] = useState<LandingContent>(initialSite.draft);
+  const [samplesOpen, setSamplesOpen] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [busy, setBusy] = useState<"publish" | "status" | "name" | null>(null);
   const [tab, setTabState] = useState<EditorTab>("page");
@@ -395,6 +398,12 @@ export function AdminSiteEditor({
 
   return (
     <div className="flex flex-col gap-3 lg:h-[calc(100dvh-2rem)]">
+      {samplesOpen && <LandingTemplateDialog initialTemplate={draft.design.template} editing onClose={() => setSamplesOpen(false)} onApply={(template, keepContent) => {
+        const before = draftRef.current;
+        setDraft(applyLandingTemplate(before, template, keepContent));
+        setSamplesOpen(false);
+        toast.success("Sample applied to draft", { description: "Customise it in the editor, then publish when ready.", action: { label: "Undo", onClick: () => setDraft(before) } });
+      }} />}
       {/* Top bar: what this site is, where it stands, and the one main action */}
       <div className="sticky top-0 z-20 -mx-3 border-b border-border bg-background/95 px-3 pb-3 pt-1 backdrop-blur sm:-mx-4 sm:px-4 lg:static lg:mx-0 lg:rounded-xl lg:border lg:bg-card lg:p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -542,6 +551,10 @@ export function AdminSiteEditor({
           }`}
           aria-label="Page sections"
         >
+          <div className="flex items-center justify-between gap-2 border-b border-border p-3">
+            <div><p className="text-[11px] text-muted-foreground">Landing page sample</p><p className="text-sm font-semibold">{LANDING_TEMPLATES.find((sample) => sample.id === draft.design.template)?.name ?? "Original"}</p></div>
+            <button type="button" onClick={() => setSamplesOpen(true)} className={`${secondaryButton} min-h-9 px-2 text-xs`}><LayoutTemplate size={14} />Choose sample</button>
+          </div>
           <EditorContext.Provider value={{ slug: site.slug, communities, flashPath }}>
             {openSection ? (
               <>
@@ -1215,7 +1228,7 @@ function SectionFields({
           path={`${section.key}.${field.key}`}
           field={field}
           value={String(value[field.key] ?? "")}
-          onChange={(next) => onChange([field.key], next)}
+          onChange={(next) => onChange([field.key], field.kind === "toggle" ? next === "true" : next)}
         />
       ))}
 
@@ -1263,6 +1276,8 @@ function TextField({
   if (field.kind === "community") control = <CommunityField field={field} value={value} onChange={onChange} />;
   else if (field.kind === "image") control = <ImageField field={field} value={value} onChange={onChange} />;
   else if (field.kind === "color") control = <ColorField field={field} value={value} onChange={onChange} />;
+  else if (field.kind === "select") control = <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">{field.label}<select value={value} onChange={(event) => onChange(event.target.value)} className={`${inputClass} min-h-10`}>{field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{field.hint && <span className="font-normal">{field.hint}</span>}</label>;
+  else if (field.kind === "toggle") control = <label className="flex items-center justify-between gap-3 rounded-lg bg-muted/60 px-3 py-2 text-sm"><span>{field.label}</span><input type="checkbox" checked={value === "true"} onChange={(event) => onChange(String(event.target.checked))} className="size-4 accent-blue-600" /></label>;
   else {
     control = (
       <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
@@ -1310,7 +1325,7 @@ function CommunityField({ field, value, onChange }: FieldProps) {
 function ImageField({ field, value, onChange }: FieldProps) {
   const { slug } = useContext(EditorContext);
   const photo = field.key === "photoUrl";
-  const what = photo ? "photo" : field.key === "iconUrl" ? "card image" : "logo";
+  const what = photo ? "photo" : field.key === "iconUrl" ? "card image" : field.key === "heroImageUrl" ? "hero image" : "logo";
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1381,13 +1396,16 @@ function ImageField({ field, value, onChange }: FieldProps) {
         </div>
       </div>
       {error ? <span className="font-normal text-red-600">{error}</span> : null}
+      <input aria-label={`${field.label} URL`} value={value} onChange={(event) => onChange(event.target.value)} placeholder="https://… or /image.png" className={`${inputClass} min-h-10 font-normal`} />
       {field.hint ? <span className="font-normal">{field.hint}</span> : null}
     </div>
   );
 }
 
 function ColorField({ field, value, onChange }: FieldProps) {
-  const fallback = DEFAULT_LANDING_CONTENT.brand[field.key as keyof LandingContent["brand"]] ?? "#000000";
+  const fallback = field.key in DEFAULT_LANDING_CONTENT.design
+    ? String(DEFAULT_LANDING_CONTENT.design[field.key as keyof LandingContent["design"]])
+    : DEFAULT_LANDING_CONTENT.brand[field.key as keyof LandingContent["brand"]] ?? "#000000";
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
   const valid = /^#[0-9a-f]{6}$/i.test(value);

@@ -79,7 +79,7 @@ export function AdminFrameShell({
 
   // The website editor's preview iframe is an admin route too: it is the bare
   // landing page, with no admin chrome around it.
-  if (/^\/admin\/sites\/[^/]+\/preview$/.test(pathname)) return <>{children}</>;
+  if (/^\/admin\/sites\/[^/]+\/preview$/.test(pathname) || /^\/admin\/landing-samples\/[^/]+$/.test(pathname)) return <>{children}</>;
 
   return (
     <div className="min-h-screen bg-background text-foreground">

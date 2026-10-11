@@ -1,0 +1,215 @@
+.thumbnail {
+  height: 165px;
+  background: var(--sample-bg);
+  padding: 13px;
+  overflow: hidden;
+  color: #20241f;
+}
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 15px;
+  border-bottom: 1px solid #2222;
+  padding-bottom: 6px;
+  margin-bottom: 13px;
+  font:
+    700 8px Arial,
+    sans-serif;
+}
+.nav > span:nth-child(2) {
+  height: 2px;
+  width: 32px;
+  background: #2223;
+}
+.nav i {
+  width: 23px;
+  height: 7px;
+  background: var(--sample-primary);
+  border-radius: 2px;
+}
+.hero {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.hero strong {
+  display: block;
+  font:
+    700 13px/1.1 Arial,
+    sans-serif;
+  letter-spacing: -0.5px;
+}
+.hero em {
+  display: block;
+  color: var(--sample-primary);
+  font-style: normal;
+}
+.hero > div > b {
+  display: block;
+  width: 42px;
+  height: 9px;
+  margin-top: 8px;
+  background: var(--sample-primary);
+  border-radius: 2px;
+}
+.lines {
+  width: 70%;
+  height: 9px;
+  margin-top: 6px;
+  background: repeating-linear-gradient(
+    to bottom,
+    #2223 0px,
+    #2223 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+.visual {
+  background: white;
+  border: 1px solid #2222;
+  border-radius: 5px;
+  padding: 9px;
+  height: 65px;
+  box-shadow: 4px 5px 0 var(--sample-accent);
+}
+.visual span {
+  display: block;
+  background: var(--sample-accent);
+  height: 8px;
+  margin-bottom: 7px;
+  border-radius: 2px;
+}
+.visual span:first-child {
+  height: 10px;
+  background: var(--sample-primary);
+  width: 65%;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  margin-top: 17px;
+}
+.cards > span {
+  display: block;
+  background: #fffc;
+  border: 1px solid #2221;
+  height: 27px;
+  padding: 5px;
+  border-radius: 3px;
+}
+.cards i {
+  display: block;
+  background: var(--sample-accent);
+  height: 7px;
+  width: 7px;
+}
+.cards b {
+  display: block;
+  height: 2px;
+  background: #2223;
+  margin-top: 5px;
+}
+.thumbnail[data-template="original"] .hero {
+  display: block;
+  text-align: center;
+}
+.thumbnail[data-template="original"] .hero em {
+  background: var(--sample-accent);
+  color: #20241f;
+  display: inline;
+}
+.thumbnail[data-template="original"] .lines,
+.thumbnail[data-template="original"] .hero > div > b {
+  margin-inline: auto;
+}
+.thumbnail[data-template="original"] .visual {
+  height: 25px;
+  margin-top: 8px;
+  box-shadow: none;
+}
+.thumbnail[data-template="original"] .visual span {
+  display: none;
+}
+.thumbnail[data-template="original"] .cards {
+  margin-top: 10px;
+}
+.thumbnail[data-template="editorial"] .hero strong {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-size: 15px;
+}
+.thumbnail[data-template="editorial"] .visual {
+  border-radius: 0;
+  box-shadow: none;
+  border: 7px solid var(--sample-accent);
+}
+.thumbnail[data-template="editorial"] .cards > span {
+  border-radius: 0;
+  background: transparent;
+  border-width: 1px 0 0;
+}
+.thumbnail[data-template="academy"] .hero {
+  background: var(--sample-primary);
+  color: white;
+  padding: 9px;
+  border-radius: 4px;
+}
+.thumbnail[data-template="academy"] .hero em {
+  color: var(--sample-accent);
+}
+.thumbnail[data-template="academy"] .hero > div > b {
+  background: var(--sample-accent);
+}
+.thumbnail[data-template="academy"] .visual {
+  box-shadow: none;
+  height: 55px;
+}
+.thumbnail[data-template="academy"] .cards {
+  margin-top: 11px;
+}
+.thumbnail[data-template="studio"] .hero {
+  text-align: center;
+  display: block;
+}
+.thumbnail[data-template="studio"] .hero strong {
+  font-size: 16px;
+}
+.thumbnail[data-template="studio"] .hero > div > b,
+.thumbnail[data-template="studio"] .lines {
+  margin-inline: auto;
+}
+.thumbnail[data-template="studio"] .hero > div > b {
+  border-radius: 20px;
+}
+.thumbnail[data-template="studio"] .visual {
+  display: flex;
+  gap: 4px;
+  height: 27px;
+  margin-top: 9px;
+  box-shadow: none;
+}
+.thumbnail[data-template="studio"] .visual span {
+  height: 8px;
+  width: 33%;
+}
+.thumbnail[data-template="studio"] .cards {
+  margin-top: 9px;
+}
+.thumbnail[data-template="community"] .visual {
+  transform: rotate(6deg);
+  border-radius: 12px;
+}
+.thumbnail[data-template="community"] .cards {
+  grid-template-columns: 1fr 1fr;
+}
+.thumbnail[data-template="community"] .cards > span {
+  border-radius: 8px;
+  height: 20px;
+}
+.thumbnail[data-template="community"] .cards > span:nth-child(n + 3) {
+  display: none;
+}

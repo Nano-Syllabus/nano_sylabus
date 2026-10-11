@@ -63,3 +63,57 @@ npm run build
 Do not reintroduce app-side answer generation. If the tenant API fails, the app
 should surface a debuggable tenant/API error instead of answering from a local
 corpus or model.
+
+## Landing pages for subdomains
+
+In **Admin → Websites**, use **Browse 5 samples** or **New subdomain** to choose
+Original, Editorial, Academy, Studio, or Community. Each sample has a distinct
+layout and a full desktop/phone preview. A new site starts hidden.
+
+Open a site to customise its content, logo, colours, images, and visible sections.
+**Design & layout** controls typography, corners, section spacing, background,
+text colour, hero image, and the product tour. **Choose sample** can change the
+layout while keeping your copy, branding, destination, and uploaded hero image;
+uncheck **Keep my current text and branding** to load sample copy and colours.
+Changes autosave to the draft. Publish, then make the site live when ready.
+
+The sample and all edits persist in the existing `landing_sites` draft/content
+JSON. Existing pages retain the Original design; no database migration is needed.
+Subdomains use the existing wildcard-domain routing, including `slug.localhost:3000`
+for local development.
+
+With the development app and local Supabase running, `npm run test:landing-ui`
+checks creation, editing, autosave, template switching, publishing, subdomain
+rendering, and all five samples on desktop and phone. It creates and removes a
+temporary local admin account and sites, and saves screenshots under `/tmp`.
+
+## Phone camera content uploads
+
+In a creator subject, open **Upload syllabus**, **Add material**, or **Add past paper**,
+then choose **Phone camera**. Scan the QR on a phone (no phone login required),
+photograph pages or select gallery images, and watch the pages appear on the desktop
+within about three seconds. Keep the desktop dialog open. Drag the thumbnails using
+mouse or touch, or focus a grip and use the arrow keys to change page order. The large
+preview supports previous/next buttons and swiping. **Preview PDF** and **Download PDF**
+create a PDF in the current order; **Upload PDF and index** sends it to the selected shelf.
+
+The `content_camera_sessions` migration stores **metadata only** (a hashed token,
+page order, object paths, sizes and checksums). Every JPEG uploads directly through
+the signed VPS proxy into private `content-camera` objects. PDF assembly runs in
+memory; only a PDF explicitly uploaded into the shelf is retained in the existing
+VPS document storage. This flow never stores images or PDFs in Supabase Storage.
+Links expire after two hours, support up to 50 photos, and are revoked when the
+desktop dialog closes or the PDF is successfully uploaded. Photos are compressed
+on the device and temporary VPS originals are deleted on close.
+
+Apply the new `content_camera_sessions` migration to each deployment before use.
+Expired sessions are swept when a new session opens. For regular cleanup even while
+the app is idle, set `CRON_SECRET` and have your scheduler call
+`GET /api/cron/content-camera-cleanup` every 15 minutes with
+`Authorization: Bearer <CRON_SECRET>`. Cleanup retains manifests until five minutes
+after expiry so uploads already in flight can also be removed. Run
+`npm run test:content-camera-ui` against the local development database to verify
+the complete phone/desktop flow with a disposable VPS collection.
+
+For phone testing, use a reachable LAN address or an HTTPS development URL on the
+desktop; a QR containing `localhost` points at the phone itself.

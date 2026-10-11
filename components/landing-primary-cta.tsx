@@ -82,13 +82,13 @@ function useLandingSession(enabled = true) {
  * them in if needed, skips straight to the faculty they joined, or lets a new
  * student pick one of this site's faculties inside the app.
  */
-export function LandingSiteActions({ joinHref }: { joinHref: string }) {
+export function LandingSiteActions({ joinHref, children }: { joinHref: string; children?: React.ReactNode }) {
   return (
     <Link
       href={joinHref}
       className="inline-flex min-h-[44px] items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-[var(--lp-primary,#3049ed)] px-5 text-[13.5px] font-semibold text-white transition-all duration-200 hover:bg-[var(--lp-primary-hover,#2439d0)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-primary,#3049ed)] focus-visible:ring-offset-2"
     >
-      Continue learning
+      {children ?? "Continue learning"}
       <span aria-hidden="true" className="text-base font-bold leading-none">
         ↗
       </span>

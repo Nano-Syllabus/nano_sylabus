@@ -44,7 +44,7 @@ function textsFrom(target: Element, sectionRoot: Element | null) {
  * section's fields at the text that was clicked. Links are inert so a stray
  * click cannot navigate the preview away.
  */
-export function LandingPreview({ initialContent }: { initialContent: LandingContent }) {
+export function LandingPreview({ initialContent, editable = true, examSlug }: { initialContent: LandingContent; editable?: boolean; examSlug?: string }) {
   const [content, setContent] = useState(initialContent);
   const contentRef = useRef(content);
   contentRef.current = content;
@@ -79,8 +79,9 @@ export function LandingPreview({ initialContent }: { initialContent: LandingCont
 
     function onClick(event: MouseEvent) {
       const { element, root, key } = sectionOf(event.target);
-      if (element?.closest("a")) event.preventDefault();
-      if (!element || !key) return;
+      const link = element?.closest("a");
+      if (link && (editable || !link.getAttribute("href")?.startsWith("#"))) event.preventDefault();
+      if (!editable || !element || !key) return;
       // The logo sits in the header and footer; it belongs to Brand.
       // Images name their own field (a testimonial photo); text is matched by its words.
       const tagged = element.closest("[data-landing-path]")?.getAttribute("data-landing-path") ?? null;
@@ -92,6 +93,7 @@ export function LandingPreview({ initialContent }: { initialContent: LandingCont
     }
 
     function onOver(event: MouseEvent) {
+      if (!editable) return;
       const { element, root, key } = sectionOf(event.target);
       if (!element || !root || !key) {
         hoverTarget.current = null;
@@ -130,7 +132,7 @@ export function LandingPreview({ initialContent }: { initialContent: LandingCont
       document.documentElement.removeEventListener("mouseleave", onLeave);
       window.removeEventListener("scroll", onScroll);
     };
-  }, []);
+  }, [editable]);
 
   // Keep the selected section's outline glued to it while the page scrolls,
   // animates or re-renders with new text.
@@ -159,7 +161,7 @@ export function LandingPreview({ initialContent }: { initialContent: LandingCont
 
   return (
     <>
-      <LandingView content={content} />
+      <LandingView content={content} examSlug={examSlug} />
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[100]">
         {selectedBox ? (
           <div
@@ -189,7 +191,7 @@ export function LandingPreview({ initialContent }: { initialContent: LandingCont
           />
         ) : null}
       </div>
-      <style>{`[data-landing-section]{cursor:pointer}`}</style>
+      {editable ? <style>{`[data-landing-section]{cursor:pointer}`}</style> : null}
     </>
   );
 }

@@ -201,8 +201,8 @@ class VpsBucket {
     };
   }
 
-  async createSignedUploadUrl(path: string) {
-    const signedUrl = signedPath("PUT", "signed-upload", this.bucket, path, 60 * 60);
+  async createSignedUploadUrl(path: string, seconds = 60 * 60) {
+    const signedUrl = signedPath("PUT", "signed-upload", this.bucket, path, seconds);
     return { data: { path, token: signedUrl, signedUrl }, error: null };
   }
 

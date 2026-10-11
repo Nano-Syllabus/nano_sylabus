@@ -3,6 +3,7 @@ import { assertScopedAdmin, superAdminOnly } from "@/lib/admin-scope";
 import { landingSiteErrorResponse } from "@/lib/admin/landing-site-response";
 import { recordFacultyActivity } from "@/lib/data/faculty-activity";
 import { createLandingSite, listLandingSites } from "@/lib/data/landing-sites";
+import { isLandingTemplateId } from "@/lib/landing-content";
 
 export async function GET() {
   const access = await assertScopedAdmin();
@@ -26,10 +27,13 @@ export async function POST(request: Request) {
   if (!access.scope.all) return superAdminOnly("create a subdomain");
 
   const body = (await request.json().catch(() => null)) as
-    | { slug?: unknown; name?: unknown; copyFrom?: unknown }
+    | { slug?: unknown; name?: unknown; copyFrom?: unknown; templateId?: unknown }
     | null;
   if (!body || typeof body.slug !== "string" || typeof body.name !== "string") {
     return NextResponse.json({ error: "A subdomain and a name are required." }, { status: 400 });
+  }
+  if (body.templateId !== undefined && !isLandingTemplateId(body.templateId)) {
+    return NextResponse.json({ error: "Choose one of the five landing page samples." }, { status: 400 });
   }
 
   try {
@@ -37,6 +41,7 @@ export async function POST(request: Request) {
       slug: body.slug,
       name: body.name,
       copyFrom: typeof body.copyFrom === "string" ? body.copyFrom : undefined,
+      templateId: isLandingTemplateId(body.templateId) ? body.templateId : undefined,
       userId: access.userId,
     });
     await recordFacultyActivity({

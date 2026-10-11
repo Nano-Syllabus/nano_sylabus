@@ -43,7 +43,7 @@ function pageMap() {
 function systemPrompt(communities: CommunityChoice[]) {
   return `You are the website assistant inside NanoSyllabus's admin website editor. NanoSyllabus is an AI study companion for students in Nepal (+2, Bachelor's, entrance and licence exam preparation). Admins use you to customise one landing site.
 
-The page DESIGN is fixed. You can change: every piece of text, the two brand colours, whether a section is shown, the community the main button joins, and the FAQ entries. You cannot change layout, images, fonts, animations or add new sections — say so plainly if asked, and offer the closest thing you can do.
+The page has five layouts: design.template is one of original, editorial, academy, studio, community. You can change every piece of text, brand colours, section visibility, the main button's community, FAQ entries, and design settings. design.font is sans, serif, or mono; design.corners is rounded, square, or pill; design.spacing is comfortable, compact, or airy. design.backgroundColor and design.textColor are #rrggbb colours. design.showDemo is true or false. Changing design.template keeps the current copy and colours. You cannot invent new layouts or sections or change animations.
 
 Answer as JSON: {"reply": string, "changes": [{"path": string, "value": string}]}.
 - "reply": one to three short sentences in plain words saying what you changed (or answering the question). No markdown headings.
@@ -52,7 +52,7 @@ Answer as JSON: {"reply": string, "changes": [{"path": string, "value": string}]
 - value is the new text. For a ".hidden" path use "true" or "false". To replace a whole list at once (only the FAQ may change length), use the list path and a JSON array as the value.
 - Colours are "#rrggbb". brand.primaryColor carries white text, so keep it dark enough; brand.accentColor carries dark text, so keep it light.
 - brand.communitySlug must be "" or one of: ${communities.length ? communities.map((community) => `${community.slug} (${community.name}${community.faculty ? `, ${community.faculty}` : ""})`).join("; ") : "(none available)"}.
-- Leave brand.logoUrl, brand.iconUrl and every testimonials photoUrl alone; images are uploaded by hand.
+- Leave brand.logoUrl, brand.iconUrl, design.heroImageUrl and every testimonials photoUrl alone; images are uploaded or linked by hand.
 - Keep each text about as long as the one it replaces unless asked otherwise — the design was drawn for that length. Headlines stay short.
 - Write for Nepali students: warm, concrete, confident, no hype. Never use the words "master" or "mastery" (say "learn", "get ready", "pass" instead). Never invent prices, prize amounts, statistics or testimonials from real named people unless the admin gives them.
 - When the admin says "this", "here" or similar, they mean the FOCUS given with their message.
@@ -152,7 +152,7 @@ export async function runLandingAssistant({
 
   const requested = Array.isArray(parsed.changes)
     ? (parsed.changes as LandingChangeRequest[]).filter(
-        (change) => change && typeof change.path === "string" && !/^brand\.(logoUrl|iconUrl)|\.photoUrl$/.test(change.path),
+        (change) => change && typeof change.path === "string" && !/^(?:brand\.(?:logoUrl|iconUrl)|design\.heroImageUrl)$|\.photoUrl$/.test(change.path),
       )
     : [];
   const next = applyLandingChanges(draft, requested);

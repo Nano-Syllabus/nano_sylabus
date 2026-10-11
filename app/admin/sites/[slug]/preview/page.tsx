@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { LandingPreview } from "@/components/landing-preview";
 import { assertAdminRequest } from "@/lib/admin-access";
+import { getAdminScope, scopeAllowsSite } from "@/lib/admin-scope";
+import { MAIN_SITE_SLUG } from "@/lib/landing-site-host";
 import { getLandingSite } from "@/lib/data/landing-sites";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +22,15 @@ export default async function AdminSitePreviewPage({ params }: { params: Promise
   const access = await assertAdminRequest();
   if ("error" in access) {
     if (access.status === 401) redirect(`/login?next=${encodeURIComponent(`/admin/sites/${slug}`)}`);
-    redirect("/app/today");
+    if (access.status === 403) redirect("/app/today");
+    throw new Error("Admin access could not be verified. Please retry.");
   }
+
+  const scope = await getAdminScope(access);
+  if (!scopeAllowsSite(scope, slug)) redirect("/admin/sites");
 
   const site = await getLandingSite(slug);
   if (!site) notFound();
 
-  return <LandingPreview initialContent={site.draft} />;
+  return <LandingPreview initialContent={site.draft} examSlug={slug === MAIN_SITE_SLUG ? undefined : slug} />;
 }

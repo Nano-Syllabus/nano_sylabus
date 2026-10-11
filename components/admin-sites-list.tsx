@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Check, ExternalLink, Globe, ImagePlus, PencilLine, Plus, Search, X } from "lucide-react";
+import { Check, ExternalLink, Eye, Globe, ImagePlus, PencilLine, Plus, Search, X } from "lucide-react";
 import { messageOf, toast } from "@/components/admin/admin-toaster";
 import type {
   CommunityChoice,
@@ -13,6 +13,8 @@ import type {
 import type { SiteAdmin } from "@/lib/data/admin-users";
 import type { AdminUserSummary } from "@/lib/types";
 import { MAIN_SITE_SLUG, RESERVED_SITE_SLUGS, isValidSiteSlug } from "@/lib/landing-site-host";
+import { LandingTemplateDialog, LandingTemplatePicker } from "@/components/landing-template-picker";
+import type { LandingTemplateId } from "@/lib/landing-content";
 
 const primaryButton =
   "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50";
@@ -64,6 +66,8 @@ export function AdminSitesList({
 }) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
+  const [samplesOpen, setSamplesOpen] = useState(false);
+  const [newTemplate, setNewTemplate] = useState<LandingTemplateId>("original");
   const [admins, setAdmins] = useState(initialAdmins);
   const [assigning, setAssigning] = useState<LandingSiteSummary | null>(null);
   const [sites, setSites] = useState(initialSites);
@@ -113,6 +117,10 @@ export function AdminSitesList({
 
   return (
     <div className="mt-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-blue-600/20 bg-blue-600/5 p-4">
+        <div><h2 className="text-sm font-semibold">One subdomain. Your own landing page.</h2><p className="mt-1 text-sm text-muted-foreground">Start with one of five samples, then customise every section for your audience.</p></div>
+        <button type="button" className={secondaryButton} onClick={() => setSamplesOpen(true)}><Eye size={16} />Browse 5 samples</button>
+      </div>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="flex gap-1 overflow-x-auto rounded-lg bg-muted p-1" role="group" aria-label="Show">
           {(
@@ -252,9 +260,11 @@ export function AdminSitesList({
         <CreateSiteDialog
           sites={sites}
           rootDomain={rootDomain}
+          initialTemplate={newTemplate}
           onClose={() => setCreating(false)}
         />
       ) : null}
+      {samplesOpen && <LandingTemplateDialog initialTemplate={newTemplate} onClose={() => setSamplesOpen(false)} onApply={canCreateSites ? (template) => { setNewTemplate(template); setSamplesOpen(false); setCreating(true); } : undefined} />}
     </div>
   );
 }
@@ -1150,16 +1160,20 @@ function StatusBadge({ site }: { site: LandingSiteSummary }) {
 function CreateSiteDialog({
   sites,
   rootDomain,
+  initialTemplate,
   onClose,
 }: {
   sites: LandingSiteSummary[];
   rootDomain: string;
+  initialTemplate: LandingTemplateId;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
   const [copyFrom, setCopyFrom] = useState(MAIN_SITE_SLUG);
+  const [source, setSource] = useState<"sample" | "copy">("sample");
+  const [templateId, setTemplateId] = useState(initialTemplate);
   const [saving, setSaving] = useState(false);
 
   const cleanSlug = slug.trim().toLowerCase();
@@ -1181,7 +1195,7 @@ function CreateSiteDialog({
       const response = await fetch("/api/admin/sites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug: cleanSlug, name, copyFrom }),
+        body: JSON.stringify({ slug: cleanSlug, name, ...(source === "sample" ? { templateId } : { copyFrom }) }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Couldn’t create the site.");
@@ -1205,7 +1219,7 @@ function CreateSiteDialog({
     >
       <form
         onSubmit={submit}
-        className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl"
+        className="max-h-[90dvh] w-full max-w-3xl overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-xl"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -1213,7 +1227,7 @@ function CreateSiteDialog({
               New subdomain
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              It starts with a copy of another site’s text and stays hidden until you publish.
+              Choose a sample, customise it, and publish when you’re ready.
             </p>
           </div>
           <button
@@ -1257,7 +1271,10 @@ function CreateSiteDialog({
           </span>
         </label>
 
-        <label className="mt-4 grid gap-1.5 text-sm font-medium">
+        <div className="mt-5 flex gap-2" role="group" aria-label="Starting point">
+          {(["sample", "copy"] as const).map((option) => <button key={option} type="button" aria-pressed={source === option} onClick={() => setSource(option)} className={`${secondaryButton} ${source === option ? "border-blue-600 bg-blue-600/10 text-blue-600" : ""}`}>{option === "sample" ? "Choose a sample" : "Copy an existing site"}</button>)}
+        </div>
+        {source === "sample" ? <div className="mt-4"><LandingTemplatePicker value={templateId} onChange={setTemplateId} /></div> : <label className="mt-4 grid gap-1.5 text-sm font-medium">
           Start from the text of
           <select
             value={copyFrom}
@@ -1270,7 +1287,7 @@ function CreateSiteDialog({
               </option>
             ))}
           </select>
-        </label>
+        </label>}
 
         <div className="mt-6 flex justify-end gap-2">
           <button type="button" onClick={onClose} className={secondaryButton}>
