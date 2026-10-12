@@ -45,6 +45,16 @@ export default function ChallengesLoading() {
 
         <section className={hubMetricsClass} aria-label="Challenge summary metrics">
           <article className={hubMetricCardClass}>
+            <p className="type-student-eyebrow text-text-muted">EXAM READINESS</p>
+            <div className={`mt-2 h-7 w-16 ${skeleton}`} />
+          </article>
+
+          <article className={hubMetricCardClass}>
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">STREAK</p>
+            <div className={`mt-2 h-7 w-20 ${skeleton}`} />
+          </article>
+
+          <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               TODAY&apos;S QUOTA
             </p>
@@ -60,18 +70,9 @@ export default function ChallengesLoading() {
           </article>
 
           <article className={hubMetricCardClass}>
-            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">STREAK</p>
-            <div className={`mt-2 h-7 w-20 ${skeleton}`} />
-          </article>
-
-          <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               EXAM DAYS REMAINING
             </p>
-            <div className={`mt-2 h-7 w-16 ${skeleton}`} />
-          </article>
-          <article className={hubMetricCardClass}>
-            <p className="type-student-eyebrow text-text-muted">EXAM READINESS</p>
             <div className={`mt-2 h-7 w-16 ${skeleton}`} />
           </article>
         </section>

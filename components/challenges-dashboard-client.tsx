@@ -2413,7 +2413,28 @@ export function ChallengesDashboardClient({
           className={`${hubMetricsClass} challenge-hub-reveal challenge-hub-reveal-delay-1`}
           aria-label="Challenge summary metrics"
         >
-          {/* Card 1: Today's Quota — the same count the free plan's lock uses. */}
+          <article className={hubMetricCardClass}>
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">EXAM READINESS</p>
+            <p className="type-student-metric mt-2 text-text-primary">{Math.round(examReadiness)}%</p>
+            <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-bg-tertiary" aria-hidden="true">
+              <div className="h-full rounded-full bg-[#84cc16]" style={{ width: `${examReadiness}%` }} />
+            </div>
+            <p className="mt-2 text-xs text-text-muted">Average progress across {dashboard.subjects.length} subjects</p>
+          </article>
+
+          {/* Streak as the performance number; `currentStreak` is patched
+              locally on the day's first pass (local-updates.ts). */}
+          <article className={hubMetricCardClass}>
+            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">STREAK</p>
+            <p className="type-student-metric mt-2 text-text-primary">
+              {dashboard.currentStreak} {dashboard.currentStreak === 1 ? "day" : "days"}
+            </p>
+            <p className="mt-2 text-xs text-text-muted">
+              {dashboard.todayCompleted ? "Kept today" : "Pass a topic today to keep it"}
+            </p>
+          </article>
+
+          {/* Today's Quota — the same count the free plan's lock uses. */}
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               TODAY&apos;S QUOTA
@@ -2440,21 +2461,7 @@ export function ChallengesDashboardClient({
             </div>
           </article>
 
-          {/* Card 2: Streak as the performance number (user, 2026-10-07);
-              topics passed moved under Exam readiness. `currentStreak` is
-              patched locally on the day's first pass (local-updates.ts). */}
-          <article className={hubMetricCardClass}>
-            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">STREAK</p>
-            <p className="type-student-metric mt-2 text-text-primary">
-              {dashboard.currentStreak} {dashboard.currentStreak === 1 ? "day" : "days"}
-            </p>
-            <p className="mt-2 text-xs text-text-muted">
-              {dashboard.todayCompleted ? "Kept today" : "Pass a topic today to keep it"}
-            </p>
-          </article>
-
-          {/* Card 3: Exam countdown (user, 2026-10-02) — days to the nearest
-              exam set on Today's calendar, which the daily target divides by. */}
+          {/* Exam countdown — days to the nearest exam on Today's calendar. */}
           <article className={hubMetricCardClass}>
             <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">
               EXAM DAYS REMAINING
@@ -2476,19 +2483,6 @@ export function ChallengesDashboardClient({
                 Set your exam date
               </Link>
             )}
-          </article>
-          <article className={hubMetricCardClass}>
-            <p className="type-student-eyebrow text-[#6b7280] dark:text-text-muted">EXAM READINESS</p>
-            <p className="type-student-metric mt-2 text-text-primary">{Math.round(examReadiness)}%</p>
-            <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-bg-tertiary" aria-hidden="true">
-              <div className="h-full rounded-full bg-[#84cc16]" style={{ width: `${examReadiness}%` }} />
-            </div>
-            <p className="mt-2 text-xs text-text-muted">Average progress across {dashboard.subjects.length} subjects</p>
-            <p className="mt-1 text-xs text-text-muted">
-              {topicsPassed.total > 0
-                ? `${topicsPassed.covered} ${topicsPassed.covered === 1 ? "topic" : "topics"} passed`
-                : "Topics not mapped yet"}
-            </p>
           </article>
         </section>
 

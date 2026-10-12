@@ -42,9 +42,22 @@ describe("the challenge hub skeleton", () => {
   });
 
   it("shows for real only labels the hub itself prints", () => {
-    for (const label of ["TODAY&apos;S QUOTA", "TOPICS PASSED", "EXAM DAYS REMAINING", "Available challenges", "Micro-Topics Hub"]) {
+    for (const label of ["TODAY&apos;S QUOTA", "EXAM DAYS REMAINING", "Available challenges", "Micro-Topics Hub"]) {
       expect(skeleton).toContain(label);
       expect(hub).toContain(label);
+    }
+  });
+
+  it("keeps summary metrics in the requested order in both render paths", () => {
+    const expectedOrder = ["EXAM READINESS", "STREAK", "TODAY&apos;S QUOTA", "EXAM DAYS REMAINING"];
+    for (const source of [skeleton, hub]) {
+      const metricsStart = source.indexOf('aria-label="Challenge summary metrics"');
+      const metricsEnd = source.indexOf("</section>", metricsStart);
+      const metrics = source.slice(metricsStart, metricsEnd);
+      const positions = expectedOrder.map((label) => metrics.indexOf(label));
+
+      expect(positions.every((position) => position >= 0)).toBe(true);
+      expect(positions).toEqual([...positions].sort((left, right) => left - right));
     }
   });
 
