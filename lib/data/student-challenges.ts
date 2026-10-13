@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { isCurrentConceptReading } from "@/lib/concept-reading-version";
 import { isPlatformAdmin } from "@/lib/data/platform-admin";
 import { assertCanFinishChallenge, assertChallengeAttemptAllowed, startedToday } from "@/lib/data/challenge-daily-limit";
 import { ChallengeAccessError } from "@/lib/data/challenge-access-error";
@@ -379,6 +380,7 @@ export type StudentChallengeContent = {
   solvedWarning?: string | null;
   examWarning?: string | null;
   lesson: {
+    readingVersion?: string;
     title: string;
     content: string[];
     focus: string;
@@ -1721,6 +1723,7 @@ function lessonFromReading(learning: TeacherChallengeLearnResponse | null) {
   }
   return {
     title: learning.reading.headline || "What you need to know",
+    readingVersion: learning.reading.content_version || "",
     content: lessonParagraphs(learning.reading.content),
     focus: learning.reading.focus || "",
     bigIdea: learning.reading.big_idea || "",
@@ -2774,7 +2777,7 @@ function pooledReading(
   row: ChallengeRow,
 ): TeacherChallengeLearnResponse | null {
   const reading = snapshot.content.reading;
-  if (!reading || !String(reading.content || "").trim()) return null;
+  if (!reading || !isCurrentConceptReading(reading)) return null;
   return {
     collection: "",
     subject: String(row.subject_name || ""),

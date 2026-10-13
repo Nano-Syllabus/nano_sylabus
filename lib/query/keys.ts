@@ -22,10 +22,12 @@
  * `string[]`.
  */
 
+import { CONCEPT_READING_VERSION } from "@/lib/concept-reading-version";
+
 export const keys = {
   challenges: {
     all: () => ["student", "challenges"] as const,
-    content: (id: string) => ["student", "challenges", "content", id] as const,
+    content: (id: string) => ["student", "challenges", "content", CONCEPT_READING_VERSION, id] as const,
   },
   /** The signed-in user's own account row, language and credit balance. */
   account: {
@@ -83,8 +85,8 @@ export const keys = {
     },
     /** Revision: the navigator (per faculty) and one page per filed topic. */
     revision: {
-      docs: (community: string) => ["student", "revision", "docs", "v1", community] as const,
-      topic: (challengeId: string) => ["student", "revision", "topic", "v1", challengeId] as const,
+      docs: (community: string) => ["student", "revision", "docs", CONCEPT_READING_VERSION, community] as const,
+      topic: (challengeId: string) => ["student", "revision", "topic", CONCEPT_READING_VERSION, challengeId] as const,
     },
     challenges: {
       all: () => ["student", "challenges"] as const,

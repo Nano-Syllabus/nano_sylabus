@@ -55,6 +55,7 @@ import {
 } from "@/lib/data/student-challenges";
 import { TeacherApiError } from "@/lib/teacher-app/client";
 import { invalidateMemo } from "@/lib/http/memo";
+import { CONCEPT_READING_VERSION } from "@/lib/concept-reading-version";
 
 /**
  * The global challenge pool.
@@ -87,8 +88,9 @@ const bank = {
     source: "question_bank",
   })),
   reading: {
+    content_version: CONCEPT_READING_VERSION,
     headline: "Identifiers",
-    content: "Identifiers name things.\n\nThey follow the language's naming rules.",
+    content: 'Identifiers name things.\n\nThey follow the language\'s naming rules.\n\n```concept-activity\n{"kind":"choice","title":"Check naming","options":["Names","Values"],"answer_index":0,"explanation":"Identifiers name things."}\n```',
     focus: "Identifiers",
     sources: [],
   },
@@ -605,10 +607,8 @@ describe("the global challenge pool", () => {
       expect(content?.solvedExamples.map((example) => example.question)).toEqual(
         content?.pastQuestions?.map((question) => question.question),
       );
-      expect(content?.lesson.content).toEqual([
-        "Identifiers name things.",
-        "They follow the language's naming rules.",
-      ]);
+      expect(content?.lesson.content).toEqual(bank.reading.content.split("\n\n"));
+      expect(content?.lesson.readingVersion).toBe(CONCEPT_READING_VERSION);
       expect(content?.pooledFrom).toMatchObject({ revision: "bank-t1" });
 
       await vi.waitFor(() =>

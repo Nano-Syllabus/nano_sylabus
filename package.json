@@ -19,6 +19,7 @@
     "test:integration": "vitest run tests/integration",
     "test:landing-ui": "node --env-file=.env.development.local scripts/landing-templates-smoke.mjs",
     "test:content-camera-ui": "node --env-file=.env.development.local scripts/content-camera-smoke.mjs",
+    "test:concepts-ui": "node scripts/concepts-microbook-smoke.mjs",
     "test:tenant-api": "vitest run tests/integration/tenant-api.smoke.test.ts",
     "test:tenant-full": "vitest run tests/integration/tenant-api.full-integration.test.ts",
     "test:tenant-prompt": "vitest run tests/integration/tenant-prompt.indexed-sample.test.ts",

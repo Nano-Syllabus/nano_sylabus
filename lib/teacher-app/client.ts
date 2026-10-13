@@ -6,6 +6,7 @@ import { createLimiter } from "@/lib/http/limit";
 import { invalidateMemo, memo } from "@/lib/http/memo";
 import { timed } from "@/lib/dev-timing";
 import { createHash } from "node:crypto";
+import { isCurrentConceptReading } from "@/lib/concept-reading-version";
 
 export type ApiRecord = Record<string, unknown>;
 
@@ -33,6 +34,7 @@ export type TeacherChallengePastQuestion = {
 };
 
 export type TeacherChallengeReading = {
+  content_version?: string;
   headline: string;
   content: string;
   focus: string;
@@ -1269,15 +1271,20 @@ export const getTeacherChallengePastQuestions = (
     { method: "POST", body: input, timeoutMs: 120_000, idempotent: true, retries: 1 },
   );
 
-export const getTeacherChallengeReading = (
+export const getTeacherChallengeReading = async (
   key: string,
   input: { subject: string; topics: string[]; instruction?: string },
-) =>
-  teacherRequest<TeacherChallengeLearnResponse>("/v1/collection/challenge/learn", key, {
+) => {
+  const result = await teacherRequest<TeacherChallengeLearnResponse>("/v1/collection/challenge/learn", key, {
     method: "POST",
     body: input,
     timeoutMs: 180_000,
   });
+  if (!isCurrentConceptReading(result.reading)) {
+    throw new Error("The interactive concepts lesson could not be generated yet. Please try again shortly.");
+  }
+  return result;
+};
 
 /**
  * The micro-topic's five fundamentals MCQs, answer key included (see

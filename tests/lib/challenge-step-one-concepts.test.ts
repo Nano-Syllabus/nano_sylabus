@@ -73,7 +73,7 @@ describe("the card that waits for a reading", () => {
 
   it("asks the challenge's row, which is what has the server write it", () => {
     const sheet = readFileSync("components/concepts-reading.tsx", "utf8");
-    expect(sheet).toContain("fetch(`/api/student/challenges/${encodeURIComponent(source.id)}/content`)");
+    expect(sheet).toMatch(/fetch\(\s*`\/api\/student\/challenges\/\$\{encodeURIComponent\(source\.id\)\}\/content`\s*,?\s*\)/);
     expect(sheet).toContain("if (waiting || reading.length || error) return;");
   });
 });

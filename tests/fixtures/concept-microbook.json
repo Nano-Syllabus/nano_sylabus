@@ -1,0 +1,197 @@
+{
+  "id": "motor-microbook-fixture",
+  "title": "DC motor: construction and torque",
+  "subjectName": "Electrical Machines",
+  "introduction": "A DC motor turns electrical energy into rotation. Learn how its parts keep torque in one direction.",
+  "sections": [
+    {
+      "heading": "Construction",
+      "body": "The field system stays still. The armature rotates inside it. Brushes connect the supply to the rotating winding.",
+      "activities": [
+        {
+          "kind": "diagram",
+          "title": "Explore the construction map",
+          "prompt": "This schematic maps the parts and their functions. Select every part.",
+          "parts": [
+            {
+              "id": "yoke",
+              "label": "Yoke",
+              "description": "The steel yoke supports the poles and provides a magnetic return path.",
+              "x": 5,
+              "y": 10,
+              "width": 25,
+              "height": 20,
+              "shape": "rect"
+            },
+            {
+              "id": "field",
+              "label": "Field winding",
+              "description": "Current in the field winding creates the stationary magnetic field.",
+              "x": 38,
+              "y": 10,
+              "width": 25,
+              "height": 20,
+              "shape": "rect"
+            },
+            {
+              "id": "armature",
+              "label": "Armature",
+              "description": "The armature carries conductors that experience force in the magnetic field.",
+              "x": 38,
+              "y": 45,
+              "width": 25,
+              "height": 25,
+              "shape": "ellipse"
+            },
+            {
+              "id": "commutator",
+              "label": "Commutator",
+              "description": "Copper segments reverse current in each coil as it passes the neutral plane, maintaining the torque direction.",
+              "x": 70,
+              "y": 45,
+              "width": 25,
+              "height": 20,
+              "shape": "rect"
+            },
+            {
+              "id": "brushes",
+              "label": "Brushes",
+              "description": "Carbon brushes carry current between the stationary supply and the rotating commutator.",
+              "x": 70,
+              "y": 78,
+              "width": 25,
+              "height": 15,
+              "shape": "rect"
+            }
+          ],
+          "links": [
+            { "from_id": "field", "to_id": "armature" },
+            { "from_id": "armature", "to_id": "commutator" },
+            { "from_id": "commutator", "to_id": "brushes" }
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "From back EMF to torque",
+      "body": "Let $P$ be poles, $\\Phi$ flux per pole in Wb, $Z$ conductors, $A$ parallel paths, and $N$ speed in rpm. Armature current $I_a$ is in amperes. Neglect brush voltage drop and mechanical losses in this ideal model.",
+      "activities": [
+        {
+          "kind": "derivation",
+          "title": "Derive the torque equation",
+          "prompt": "Start with flux cutting, then connect induced EMF to converted mechanical power.",
+          "steps": [
+            {
+              "heading": "Rate of flux cutting",
+              "explanation": "A conductor cuts flux $P\\Phi$ per revolution. One revolution takes $60/N$ seconds.",
+              "formula": "e = \\frac{P\\Phi N}{60}"
+            },
+            {
+              "heading": "Conductors in series",
+              "explanation": "Each parallel path contains $Z/A$ series conductors. The armature EMF equals one path's EMF.",
+              "formula": "E_b = \\frac{P\\Phi ZN}{60A}"
+            },
+            {
+              "heading": "Converted power",
+              "explanation": "The electromagnetic power converted to rotation is $E_b I_a$. Rotational power is torque times angular speed.",
+              "formula": "E_b I_a = T\\omega, \\qquad \\omega = \\frac{2\\pi N}{60}"
+            },
+            {
+              "heading": "Substitute and cancel speed",
+              "explanation": "Substitute the EMF and angular-speed expressions. The speed terms cancel, leaving torque in N m.",
+              "formula": "T = \\frac{PZ}{2\\pi A}\\Phi I_a"
+            }
+          ]
+        },
+        {
+          "kind": "choice",
+          "title": "Why use a commutator?",
+          "prompt": "What happens to a simple DC-fed coil connected through slip rings after it passes the neutral plane?",
+          "hint": "Consider which pole each side of the coil now faces.",
+          "options": [
+            "Torque keeps the same direction.",
+            "Torque reverses direction.",
+            "Armature resistance becomes zero."
+          ],
+          "answer_index": 1,
+          "explanation": "Torque reverses because the coil sides move under opposite poles while their current directions stay unchanged. The commutator reverses coil current to keep torque in one direction; it does not remove winding resistance."
+        }
+      ]
+    },
+    {
+      "heading": "Motor lab",
+      "body": "The armature voltage balance gives $E_b = V-I_a R_a$. This model neglects brush voltage drop and assumes fixed armature resistance.",
+      "activities": [
+        {
+          "kind": "experiment",
+          "title": "Predict the back EMF",
+          "prompt": "Predict what happens to back EMF when armature current increases at fixed voltage. Move the current slider to test it.",
+          "parameters": [
+            {
+              "id": "V",
+              "label": "Supply voltage",
+              "unit": "V",
+              "min": 100,
+              "max": 240,
+              "step": 5,
+              "initial": 220
+            },
+            {
+              "id": "Ia",
+              "label": "Armature current",
+              "unit": "A",
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "initial": 10
+            },
+            {
+              "id": "Ra",
+              "label": "Armature resistance",
+              "unit": "ohm",
+              "min": 0.1,
+              "max": 2,
+              "step": 0.1,
+              "initial": 0.5
+            }
+          ],
+          "outputs": [
+            { "label": "Back EMF", "expression": "V-Ia*Ra", "unit": "V" },
+            { "label": "Copper loss", "expression": "Ia^2*Ra", "unit": "W" }
+          ],
+          "explanation": "Increasing current increases the resistive voltage drop, reducing back EMF at fixed supply voltage. Copper loss grows with current squared. The selected ranges keep back EMF positive; this ideal voltage-balance model does not predict transient speed."
+        },
+        {
+          "kind": "numeric",
+          "title": "Calculate back EMF",
+          "prompt": "A motor has a 220 V supply, 10 A armature current and 0.5 ohm armature resistance. Neglect brush voltage drop. Find the back EMF in volts.",
+          "answer": 215,
+          "tolerance": 0.01,
+          "unit": "V",
+          "explanation": "$$E_b=V-I_aR_a=220-(10)(0.5)=215\\,\\mathrm{V}$$"
+        }
+      ]
+    },
+    {
+      "heading": "Exam practice",
+      "body": "Use this generated practice question to check your explanation and derivation. The rubric gives suggested practice marks.",
+      "activities": [
+        {
+          "kind": "exam",
+          "title": "Construction and torque: long answer",
+          "prompt": "Explain the principal parts of a DC motor and derive its torque equation. State the assumptions used.",
+          "solution": "1. The stationary field winding produces magnetic flux; the yoke supports the poles and provides the return path.\n2. The rotating armature carries conductors; brushes supply it through commutator segments.\n3. A conductor cuts $P\\Phi$ flux in $60/N$ seconds; $Z/A$ conductors in series give $E_b=P\\Phi ZN/(60A)$.\n4. Use converted power $E_b I_a=T\\omega$ and $\\omega=2\\pi N/60$ to obtain $T=PZ\\Phi I_a/(2\\pi A)$. This is electromagnetic torque; shaft torque is lower when mechanical losses are included.",
+          "rubric": [
+            { "criterion": "Explain the field system, armature and their functions.", "marks": 2 },
+            { "criterion": "Explain brushes and the commutator's current reversal.", "marks": 2 },
+            { "criterion": "Derive back EMF from flux cutting and series conductors.", "marks": 2 },
+            {
+              "criterion": "Use power and angular speed to derive torque; state assumptions.",
+              "marks": 2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

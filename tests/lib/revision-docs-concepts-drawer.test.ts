@@ -123,7 +123,8 @@ describe("revision docs: the concepts reading", () => {
     // Every paragraph of the reading, in order — the same content, moved.
     expect(sheet).toContain("Mechanical Advantage is the ratio");
     expect(sheet).toContain("Machine Performance Metrics");
-    expect(sheet.indexOf("Applied Mechanics provides")).toBeLessThan(sheet.indexOf("Machine Performance Metrics"));
+    const notes = sheet.slice(sheet.indexOf('<article class="answer-paper"'));
+    expect(notes.indexOf("Applied Mechanics provides")).toBeLessThan(notes.indexOf("Machine Performance Metrics"));
     expect(sheet).toContain("Close concepts");
   });
 });

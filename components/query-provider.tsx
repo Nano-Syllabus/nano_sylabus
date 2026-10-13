@@ -1,10 +1,15 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { PersistQueryClientProvider, type Persister, type PersistedClient } from "@tanstack/react-query-persist-client";
+import {
+  PersistQueryClientProvider,
+  type Persister,
+  type PersistedClient,
+} from "@tanstack/react-query-persist-client";
 import { getQueryClient, shouldPersistQuery } from "@/lib/query/client";
 import { QueryDevtools } from "@/components/query-devtools";
 import { QueryBootReconcile } from "@/components/query-boot-reconcile";
+import { pruneCachedConceptQueries } from "@/lib/concept-reading-version";
 
 /**
  * Bumped by hand when a cached payload's SHAPE changes.
@@ -76,12 +81,15 @@ export function clearPersistedCache() {
  * Every deferred write captures its account and is discarded after sign-out or
  * an account change. Storage is first accessed from the provider's effect.
  */
-export function createAccountPersister(getStorage: () => Storage | undefined = safeStorage): Persister {
+export function createAccountPersister(
+  getStorage: () => Storage | undefined = safeStorage,
+): Persister {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let idle: number | undefined;
   const cancel = () => {
     if (timer !== undefined) clearTimeout(timer);
-    if (idle !== undefined && typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idle);
+    if (idle !== undefined && typeof window.cancelIdleCallback === "function")
+      window.cancelIdleCallback(idle);
     timer = undefined;
     idle = undefined;
   };
@@ -94,7 +102,9 @@ export function createAccountPersister(getStorage: () => Storage | undefined = s
         storage = getStorage();
         if (!storage) return;
         userId = storage.getItem(ACTIVE_USER_KEY);
-      } catch { return; }
+      } catch {
+        return;
+      }
       const epoch = persistenceEpoch;
       const save = () => {
         idle = undefined;
@@ -107,7 +117,8 @@ export function createAccountPersister(getStorage: () => Storage | undefined = s
       };
       timer = setTimeout(() => {
         timer = undefined;
-        if (typeof window.requestIdleCallback === "function") idle = window.requestIdleCallback(save, { timeout: 2000 });
+        if (typeof window.requestIdleCallback === "function")
+          idle = window.requestIdleCallback(save, { timeout: 2000 });
         else save();
       }, 1500);
     },
@@ -115,7 +126,13 @@ export function createAccountPersister(getStorage: () => Storage | undefined = s
       try {
         const storage = getStorage();
         const raw = storage?.getItem(persistedCacheKey(storage.getItem(ACTIVE_USER_KEY)));
-        return raw ? JSON.parse(raw) as PersistedClient : undefined;
+        if (!raw) return undefined;
+        const restored = pruneCachedConceptQueries(JSON.parse(raw) as PersistedClient);
+        storage?.setItem(
+          persistedCacheKey(storage.getItem(ACTIVE_USER_KEY)),
+          JSON.stringify(restored),
+        );
+        return restored;
       } catch {
         return undefined;
       }
@@ -134,12 +151,15 @@ export function createAccountPersister(getStorage: () => Storage | undefined = s
 
 export function QueryProvider({ children }: { children: ReactNode }) {
   const queryClient = getQueryClient();
-  const persistOptions = useMemo(() => ({
-    persister: createAccountPersister(),
-    maxAge: PERSIST_MAX_AGE,
-    buster: CACHE_BUSTER,
-    dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
-  }), []);
+  const persistOptions = useMemo(
+    () => ({
+      persister: createAccountPersister(),
+      maxAge: PERSIST_MAX_AGE,
+      buster: CACHE_BUSTER,
+      dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
+    }),
+    [],
+  );
 
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
