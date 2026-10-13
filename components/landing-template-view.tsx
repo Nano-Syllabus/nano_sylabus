@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { CSSProperties, ReactNode } from "react";
 import { LandingPrimaryCta, LandingSiteActions } from "@/components/landing-primary-cta";
 import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
@@ -38,10 +39,8 @@ export function LandingTemplateView({
         <img src={c.brand.logoUrl} alt="" />
       ) : (
         <>
-          <span className={styles.brandMark}>n.</span>
-          <span>
-            nano<span className={styles.brandLight}>syllabus</span>
-          </span>
+          <Image src="/nanologo.png" alt="" width={38} height={38} />
+          <span>Nano Syllabus</span>
         </>
       )}
     </Link>
@@ -67,7 +66,7 @@ export function LandingTemplateView({
   ) : (
     <div className={styles.studyBoard} aria-hidden="true">
       <div className={styles.boardHeader}>
-        <span>n.</span>
+        <Image src="/nanologo.png" alt="" width={30} height={30} />
         <span>{c.steps.headingLine1}</span>
         <span>↗</span>
       </div>

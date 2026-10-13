@@ -85,7 +85,7 @@ export function CourseCheckoutClient({ course, user }: CourseCheckoutClientProps
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary shadow-sm">
               <Sparkles className="size-4 text-primary-foreground" aria-hidden="true" />
             </span>
-            <span className="font-display text-lg font-semibold tracking-tight">nanosyllabus</span>
+            <span className="font-display text-lg font-semibold tracking-tight">Nano Syllabus</span>
           </Link>
           <div className="flex items-center gap-2 rounded-full border border-border bg-surface/80 px-3.5 py-1.5 text-xs text-muted-foreground">
             <ShieldCheck className="size-4 text-emerald-400" aria-hidden="true" />

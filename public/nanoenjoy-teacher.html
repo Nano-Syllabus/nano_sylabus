@@ -1661,7 +1661,7 @@ function shell(body, crumbs) {
     ? `<a href="#/" onclick="return leaveTeachersPortal()">Student Portal</a>`
     : `<a href="#/teachers">Teachers Portal</a>`;
   return `<div class="app"><nav class="rail">
-    <div class="brand"><img class="glyph" src="/nanologo.png" alt="NanoSyllabus"><b>NanoSyllabus</b></div>
+    <div class="brand"><img class="glyph" src="/nanologo.png" alt="Nano Syllabus"><b>Nano Syllabus</b></div>
     ${inTeachersPortal() ? `<div class="portalmark">Teachers Portal</div>` : ""}
     ${items.map(i => `<a class="navitem big ${navOn(i, h) ? "on" : ""}" href="${portalHref(i.h)}">${i.label}${
       i.n ? `<span class="n">${i.n}</span>` : ""}</a>`).join("")}
@@ -1671,7 +1671,7 @@ function shell(body, crumbs) {
     </nav><div class="main">
       <div class="topbar">
         <span class="only-m" style="align-items:center; gap:8px">
-          <img class="glyph" src="/nanologo.png" alt="NanoSyllabus" style="width:30px;height:30px;border-radius:8px;object-fit:contain"></span>
+          <img class="glyph" src="/nanologo.png" alt="Nano Syllabus" style="width:30px;height:30px;border-radius:8px;object-fit:contain"></span>
         <span class="spacer"></span>
         <div class="persona"><label for="who">${inTeachersPortal() ? "Teacher" : "Viewing as"}</label>
           <select id="who">${people.map(u =>

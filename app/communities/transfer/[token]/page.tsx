@@ -51,7 +51,7 @@ export default async function CommunityTransferPage({ params }: PageProps) {
             height={34}
             className="size-[34px] object-contain"
           />
-          <span>nanosyllabus</span>
+          <span>Nano Syllabus</span>
         </Link>
 
         <section className="mt-12 overflow-hidden rounded-3xl border border-border bg-bg-primary shadow-xl">

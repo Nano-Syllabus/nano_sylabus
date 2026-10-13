@@ -99,22 +99,10 @@
   letter-spacing: -0.055em;
   white-space: nowrap;
 }
-.brandLight {
-  font-weight: 450;
-}
 .brand img {
   max-height: 42px;
   max-width: 190px;
   width: auto;
-}
-.brandMark {
-  display: grid;
-  place-items: center;
-  height: 38px;
-  width: 38px;
-  background: var(--lp-primary);
-  color: var(--lp-accent);
-  border-radius: var(--lp-button-radius);
 }
 .hero {
   display: grid;
@@ -173,9 +161,10 @@
   font-size: 12px;
   color: var(--lp-primary);
 }
-.boardHeader > span:first-child {
-  font-size: 30px;
-  font-weight: 700;
+.boardHeader > img:first-child {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
 }
 .boardTitle {
   font-family: var(--lp-font);
@@ -685,10 +674,6 @@
   .brand {
     font-size: 18px;
     gap: 6px;
-  }
-  .brandMark {
-    width: 30px;
-    height: 30px;
   }
   .header > a:last-child {
     padding-inline: 12px;

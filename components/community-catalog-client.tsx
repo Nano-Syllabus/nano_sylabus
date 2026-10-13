@@ -1180,7 +1180,7 @@ export function CommunityCatalogClient({
       <>
       {/* Topbar matching preview (2).html */}
       <header className="ns-topbar">
-        <Link className="ns-brand" href="/" aria-label="NanoSyllabus home">
+        <Link className="ns-brand" href="/" aria-label="Nano Syllabus home">
           <Image
             className="ns-brand-mark"
             src="/nanologo.png"
@@ -1188,7 +1188,7 @@ export function CommunityCatalogClient({
             width={42}
             height={42}
           />
-          <span>NanoSyllabus</span>
+          <span>Nano Syllabus</span>
         </Link>
         {/* No Sign in here: a visitor signs in when they join a faculty. */}
         {signedIn ? (

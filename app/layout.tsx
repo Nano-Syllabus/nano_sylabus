@@ -148,10 +148,10 @@ export const metadata: Metadata = {
       "Bilingual AI study companion for Nepal's curriculum. Prepare for university, licensing, and entrance exams with guided practice, feedback, and personalized study plans.",
     images: [
       {
-        url: "/icon.png",
+        url: "/nanologo.png",
         width: 512,
         height: 512,
-        alt: "NanoSyllabus logo",
+        alt: "Nano Syllabus logo",
       },
     ],
   },
@@ -162,12 +162,12 @@ export const metadata: Metadata = {
     title: "NanoSyllabus — AI Study Companion for Nepal",
     description:
       "Bilingual AI study companion for Nepal's curriculum. Prepare for university, licensing, and entrance exams with guided practice, feedback, and personalized study plans.",
-    images: ["/icon.png"],
+    images: ["/nanologo.png"],
   },
   icons: {
-    icon: "/icon.png",
-    shortcut: "/icon.png",
-    apple: "/icon.png",
+    icon: "/nanologo.png",
+    shortcut: "/nanologo.png",
+    apple: "/nanologo.png",
   },
 };
 

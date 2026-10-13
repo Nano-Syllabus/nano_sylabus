@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_LANDING_CONTENT, landingColorVars, sanitizeLandingContent } from "@/lib/landing-content";
-import { siteSlugFromHost } from "@/lib/landing-site-host";
+import { siteAppOrigin, siteSlugFromHost } from "@/lib/landing-site-host";
 
 describe("siteSlugFromHost", () => {
   it("reads one subdomain label of the root domain", () => {
@@ -12,6 +12,19 @@ describe("siteSlugFromHost", () => {
   it("treats the bare domain, www, reserved and nested names as the main site", () => {
     for (const host of ["nanosyllabus.com", "www.nanosyllabus.com", "app.nanosyllabus.com", "a.b.nanosyllabus.com", "localhost:3000", "evil.com", null]) {
       expect(siteSlugFromHost(host)).toBeNull();
+    }
+  });
+});
+
+describe("siteAppOrigin", () => {
+  it("uses the local site subdomain during development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    try {
+      expect(siteAppOrigin("ioe", "localhost:3000", "http:")).toBe(
+        "http://ioe.localhost:3000",
+      );
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 });

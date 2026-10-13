@@ -1,9 +1,10 @@
 import { mayUseAmbassadorWorkspace } from "@/lib/data/student-ambassadors";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { DM_Sans, Plus_Jakarta_Sans } from "next/font/google";
 import { CommunityCatalogClient } from "@/components/community-catalog-client";
 import { listLiveExamSites } from "@/lib/data/landing-sites";
-import { siteOrigin } from "@/lib/landing-site-host";
+import { siteAppOrigin } from "@/lib/landing-site-host";
 import { buildCanonicalUrl } from "@/lib/site";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getVerifiedUser } from "@/lib/supabase/verified-user";
@@ -40,6 +41,7 @@ export default async function CommunitiesPage({
 }: {
   searchParams: Promise<{ create?: string }>;
 }) {
+  const requestHeaders = await headers();
   const supabase = await createSupabaseServerClient();
   // Only exam sites are listed here now (user, 2026-10-07); faculties are
   // joined through each site.
@@ -52,7 +54,14 @@ export default async function CommunitiesPage({
   return (
     <div className={`${dmSans.variable} ${jakarta.variable} min-h-screen bg-white text-[#101114]`}>
       <CommunityCatalogClient
-        examSites={sites.map((site) => ({ ...site, href: siteOrigin(site.slug) }))}
+        examSites={sites.map((site) => ({
+          ...site,
+          href: siteAppOrigin(
+            site.slug,
+            requestHeaders.get("host"),
+            "http:",
+          ),
+        }))}
         signedIn={Boolean(user)}
         initialShowCreate={params.create === "1" && (await mayUseAmbassadorWorkspace(user))}
         initialPhoneNumber={

@@ -31,15 +31,18 @@ function Brand({ logoUrl = "" }: { logoUrl?: string }) {
       href="/"
       data-landing-section="brand"
       className="inline-flex items-center text-[#1c1e1a] group"
-      aria-label="NanoSyllabus home"
+      aria-label="Nano Syllabus home"
     >
-      <span
-        className={`${manrope.className} mr-2.5 grid size-[38px] place-items-center rounded-[10px] bg-[#1c1e1a] text-[20px] font-extrabold tracking-[-0.08em] text-[var(--lp-accent)] shadow-xs group-hover:scale-105 transition-transform`}
-      >
-        n.
+      <Image
+        src="/nanologo.png"
+        alt=""
+        width={38}
+        height={38}
+        className="mr-2.5 size-[38px] object-contain transition-transform group-hover:scale-105"
+      />
+      <span className="text-[22px] font-extrabold tracking-[-0.05em] text-[#1c1e1a]">
+        Nano Syllabus
       </span>
-      <span className="text-[22px] font-extrabold tracking-[-0.05em] text-[#1c1e1a]">nano</span>
-      <span className="text-[22px] font-medium tracking-[-0.05em] text-[#1c1e1a]">syllabus</span>
     </Link>
   );
 }

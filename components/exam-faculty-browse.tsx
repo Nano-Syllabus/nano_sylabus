@@ -40,7 +40,7 @@ export function ExamFacultyBrowse({
       <header className="ns-ef-topbar">
         <Link className="ns-ef-brand" href={landingHref} aria-label="Nano Syllabus home">
           <Image src="/nanologo.png" alt="" width={42} height={42} />
-          <span>NanoSyllabus</span>
+          <span>Nano Syllabus</span>
         </Link>
         <div className="ns-ef-topbar-actions">
           {onBack ? (

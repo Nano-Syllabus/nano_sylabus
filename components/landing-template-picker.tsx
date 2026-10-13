@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Eye, Monitor, Smartphone, X } from "lucide-react";
 import type { CSSProperties } from "react";
+import Image from "next/image";
 import type { LandingTemplateId } from "@/lib/landing-content";
 import { LANDING_TEMPLATES } from "@/lib/landing-templates";
 import styles from "@/components/landing-template-picker.module.css";
@@ -98,7 +99,7 @@ export function LandingTemplatePicker({
               aria-hidden="true"
             >
               <div className={styles.nav}>
-                <span>n.</span>
+                <Image src="/nanologo.png" alt="" width={22} height={22} />
                 <span />
                 <i />
               </div>

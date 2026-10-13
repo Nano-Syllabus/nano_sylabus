@@ -38,7 +38,7 @@ export function LandingHeader({ dark = false }: { dark?: boolean }) {
             height={28}
             className="h-7 w-7 rounded-lg object-contain"
           />
-          <span className="text-[15px] font-[850] tracking-[-0.03em]">nanosyllabus</span>
+          <span className="text-[15px] font-[850] tracking-[-0.03em]">Nano Syllabus</span>
         </Link>
 
         <nav

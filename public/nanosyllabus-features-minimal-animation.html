@@ -103,21 +103,15 @@
       gap: 10px
     }
 
-    .brand-top b,
-    .app-brand b {
-      display: grid;
-      place-items: center;
+    .brand-top img,
+    .app-brand img {
       border-radius: 7px;
-      background: #182019;
-      color: #dffa7a;
-      letter-spacing: -.1em;
-      font-weight: 900
+      object-fit: contain
     }
 
-    .brand-top b {
+    .brand-top img {
       width: 26px;
-      height: 26px;
-      font-size: 18px
+      height: 26px
     }
 
     .count {
@@ -242,10 +236,9 @@
       letter-spacing: -.055em
     }
 
-    .app-brand b {
+    .app-brand img {
       height: 25px;
       width: 25px;
-      font-size: 17px
     }
 
     .nav {
@@ -1487,13 +1480,13 @@
     <div class="stage" id="stage" role="region" aria-roledescription="product tour"
       aria-label="NanoSyllabus product tour: communities, micro-topics, the challenge loop, past-question solutions, Roman Nepali, handwritten exams, Library and NanoAI, Revision, and Cash Prize">
       <div class="art" id="art">
-        <div class="brand-top"><b>n.</b> Nano Syllabus</div>
+        <div class="brand-top"><img src="/nanologo.png" alt=""> Nano Syllabus</div>
         <div class="count" id="count">01 / 09</div>
         <div class="window">
           <div class="chrome"><i></i><i></i><i></i><span class="url">nanosyllabus.com/app</span></div>
           <div class="app">
             <nav class="sidebar" aria-label="Jump to a part of the tour">
-              <div class="app-brand"><b>n.</b> Nano Syllabus</div>
+              <div class="app-brand"><img src="/nanologo.png" alt=""> Nano Syllabus</div>
               <div class="nav" data-go="1"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Micro-Topics</div>
               <div class="nav" data-go="6"><svg viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5zM8 7h8M8 11h6"/></svg>Library</div>
               <div class="nav" data-go="7"><svg viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16h16V7.5zM14 2v6h6M8 13h8M8 17h8" /></svg>Revision</div>

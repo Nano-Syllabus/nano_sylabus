@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       url: canonicalUrl,
       images: [
         {
-          url: "/icon.png",
+          url: "/nanologo.png",
           width: 512,
           height: 512,
           alt: `${titleCase(course.name)} course preview`,
