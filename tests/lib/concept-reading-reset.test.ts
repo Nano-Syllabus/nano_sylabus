@@ -51,17 +51,19 @@ describe("resetting concepts without resetting a student's challenge", () => {
     expect(resetSavedConceptReading(null)).toBeNull();
   });
 
-  it("requires the current version and an interactive activity", () => {
+  it("requires the current version and some content", () => {
     expect(
       isCurrentConceptReading({
         content_version: CONCEPT_READING_VERSION,
         content: "```concept-activity\n{}\n```",
       }),
     ).toBe(true);
-    expect(isCurrentConceptReading({ content_version: "old", content: "Old notes" })).toBe(false);
+    // A chapter whose activities call failed is still a current reading.
     expect(
       isCurrentConceptReading({ content_version: CONCEPT_READING_VERSION, content: "Plain notes" }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(isCurrentConceptReading({ content_version: "old", content: "Old notes" })).toBe(false);
+    expect(isCurrentConceptReading({ content_version: CONCEPT_READING_VERSION, content: " " })).toBe(false);
   });
 
   it("prunes old reading queries without dropping unrelated data", () => {

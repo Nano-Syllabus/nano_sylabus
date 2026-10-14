@@ -123,7 +123,7 @@ describe("revision docs: the concepts reading", () => {
     // Every paragraph of the reading, in order — the same content, moved.
     expect(sheet).toContain("Mechanical Advantage is the ratio");
     expect(sheet).toContain("Machine Performance Metrics");
-    const notes = sheet.slice(sheet.indexOf('<article class="answer-paper"'));
+    const notes = sheet.slice(sheet.indexOf("<article"));
     expect(notes.indexOf("Applied Mechanics provides")).toBeLessThan(notes.indexOf("Machine Performance Metrics"));
     expect(sheet).toContain("Close concepts");
   });
@@ -153,39 +153,32 @@ describe("the sheet's worked examples", () => {
     expect(readingBlocks(["**Worked:**"])).toEqual([{ kind: "text", text: "**Worked:**" }]);
   });
 
-  it("writes each one onto the reading's ruled sheet, labelled", () => {
+  it("draws each one as a collapsible worked example, its tip as an exam tip", () => {
     const sheet = renderToStaticMarkup(
       createElement(ConceptsDrawer, {
         source: { id: topic.challengeId, title: topic.title, subjectName: topic.subjectName, reading },
         onClose: () => {},
       }),
     );
-    expect(sheet).toContain(">Example 1</p>");
-    expect(sheet).toContain(">Example 2</p>");
-    // One sheet for the whole reading: an example is a labelled stretch of it,
-    // not a card laid on top.
-    expect(sheet.match(/class="answer-paper"/g)).toHaveLength(1);
-    expect(sheet).toContain("answer-paper-body font-revision-answer");
-    // The label is the card's now, not the text's.
+    expect(sheet.match(/>Worked example/g)).toHaveLength(2);
+    expect(sheet).toContain("<details");
+    // The labels are the sheet's now, not the text's.
     expect(sheet).not.toContain("Worked:");
+    expect(sheet).not.toContain("In the exam:");
+    expect(sheet).toContain("Exam tip.");
     expect(sheet).toContain("the mechanical advantage is 2000/50 = 40.");
-    // The face is the reader's, with the picker to change it.
-    expect(sheet).toContain("--answer-font:");
-    expect(sheet).toContain("Handwriting font");
   });
 
-  it("writes a reading with no worked example on the sheet too, with the picker", () => {
+  it("is set in the app's own type, with no ruled paper or handwriting picker", () => {
     const sheet = renderToStaticMarkup(
       createElement(ConceptsDrawer, {
         source: { id: topic.challengeId, title: topic.title, subjectName: topic.subjectName, reading: READING },
         onClose: () => {},
       }),
     );
-    // The whole reading is the note paper, every paragraph in the reader's hand.
-    expect(sheet.match(/class="answer-paper"/g)).toHaveLength(1);
-    expect(sheet.match(/answer-paper-body font-revision-answer/g)).toHaveLength(READING.length);
-    expect(sheet).toContain('--answer-font:&quot;Chillin on Sunday&quot;');
-    expect(sheet).toContain("Handwriting font");
+    expect(sheet).not.toContain("answer-paper");
+    expect(sheet).not.toContain("Handwriting font");
+    expect(sheet).toContain("Machine Performance Metrics");
   });
 });
 

@@ -2,14 +2,15 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import fixture from "@/tests/fixtures/concept-microbook.json";
-import { ConceptsDrawer, readingBlocks } from "@/components/concepts-reading";
+import { ConceptsDrawer, readingBlocks, readingChapter } from "@/components/concepts-reading";
 import {
+  blankMatches,
   evaluateConceptExpression,
   parseConceptActivity,
   conceptProgressKey,
 } from "@/lib/concept-activities";
 import { lessonParagraphsForTest } from "@/lib/data/student-challenges";
-import { readingSections, readStudyWork, observedTrend } from "@/lib/concept-study";
+import { readStudyWork, observedTrend } from "@/lib/concept-study";
 
 const reading = [
   fixture.introduction,
@@ -50,18 +51,17 @@ describe("interactive concepts: the stored reading contract", () => {
     );
     for (const kind of ["diagram", "derivation", "choice", "experiment", "numeric", "exam"])
       expect(html).toContain(`data-concept-activity="${kind}"`);
-    expect(html).toContain('aria-label="Lesson sections"');
+    expect(html).toContain('aria-label="Chapter sections"');
     expect(html).toContain("Show next step");
-    expect(html).toContain("Check answer");
-    expect(html).toContain("Show model answer");
-    expect(html).toContain("0 / 6 activities completed");
+    expect(html).toContain(">Check</button>");
+    expect(html).toContain("Model answer");
+    expect(html).toContain("0 of 6 activities");
     expect(html).not.toContain("concept-activity\n");
     expect(html).not.toContain("&quot;answer_index&quot;");
-    expect(html).toContain('class="answer-paper"');
-    expect(html).toContain("Handwriting font");
-    expect(html).toContain("Recall from your notes");
-    expect(html).toContain("Predict before experimenting");
-    expect(html).toContain("Check my choice");
+    // App typography now: no ruled paper, no handwriting picker, no recall covers.
+    expect(html).not.toContain("answer-paper");
+    expect(html).not.toContain("Handwriting font");
+    expect(html).not.toContain("Recall from your notes");
   });
 
   it("isolates malformed activities while keeping surrounding teaching", () => {
@@ -98,29 +98,61 @@ describe("interactive concepts: the stored reading contract", () => {
   });
 });
 
-describe("learning from the existing notes", () => {
-  it("groups original content for recall without changing a block", () => {
-    const original = [
-      { kind: "text", text: "Original introduction." },
-      { kind: "text", text: "### 1. Flux" },
-      { kind: "text", text: "- Keep the exact note.\n- Keep $\\Phi$ and its unit." },
-      { kind: "example", text: "Original worked example." },
-      { kind: "text", text: "### 2. Torque" },
-      { kind: "text", text: "$$T=k\\Phi I_a$$" },
-    ];
-    const snapshot = JSON.stringify(original);
-    const sections = readingSections(original, "Motor");
-    expect(sections.map((s) => [s.start, s.end, s.title])).toEqual([
-      [0, 1, "Motor"],
-      [1, 4, "1. Flux"],
-      [4, 6, "2. Torque"],
+describe("the micro-book chapter", () => {
+  const chapterReading = [
+    "**Why it matters:** DC motors drive lifts and vehicles.",
+    "**Be ready for:**\n- \"Derive the torque equation.\"\n- A numerical on back EMF.",
+    "**The idea:** Current in a field feels a force.",
+    "### 1. Back EMF",
+    "*A spinning armature generates a voltage that opposes the supply.*",
+    "- Back EMF rises with speed.",
+    "$$\nE_b = \\frac{P\\phi Z N}{60A}\n$$",
+    "**Worked:** Eb = 160 V.",
+    "**Exam tip:** Choose A from the winding type.",
+    '```concept-activity\n{"kind":"blanks","title":"Fill","blanks":[{"before":"Lap winding has A =","answer":"P"}]}\n```',
+    "### Exam practice",
+    '```concept-activity\n{"kind":"choice","title":"Wave","options":["doubles","halves"],"answer_index":0,"explanation":"A halves."}\n```',
+    "### Formulas to have in hand",
+    "- $E_b = V - I_a R_a$",
+    "### Common mistakes",
+    "- Using V instead of Eb.",
+  ];
+
+  it("reads the opening and types every piece of a section", () => {
+    const chapter = readingChapter(chapterReading);
+    expect(chapter.why).toBe("DC motors drive lifts and vehicles.");
+    expect(chapter.ready).toEqual(['"Derive the torque equation."', "A numerical on back EMF."]);
+    expect(chapter.idea).toBe("Current in a field feels a force.");
+    expect(chapter.sections.map((s) => [s.number, s.title, s.role])).toEqual([
+      [1, "Back EMF", "lesson"],
+      [null, "Exam practice", "practice"],
+      [null, "Formulas to have in hand", "formulas"],
+      [null, "Common mistakes", "mistakes"],
     ]);
-    expect(sections.flatMap((s) => original.slice(s.start, s.end))).toEqual(original);
-    expect(JSON.stringify(original)).toBe(snapshot);
-    expect(sections.every((s) => s.hasNotes)).toBe(true);
+    expect(chapter.sections[0].pieces.map((p) => p.kind)).toEqual([
+      "lead", "text", "formula", "example", "tip", "activity",
+    ]);
   });
 
-  it("adds recall to already-saved readings with no activity payload", () => {
+  it("draws the chapter: be ready for, the idea, numbered sections, tips and a progress rail", () => {
+    const html = renderToStaticMarkup(
+      createElement(ConceptsDrawer, {
+        source: { id: "motor", title: "DC motor", subjectName: "BEE", reading: chapterReading },
+        onClose() {},
+      }),
+    );
+    expect(html).toContain("Be ready for");
+    expect(html).toContain("The idea");
+    expect(html).toContain("Exam tip.");
+    expect(html).toContain("Worked example");
+    expect(html).toContain('data-concept-activity="blanks"');
+    expect(html).toContain("Check blanks");
+    expect(html).toContain("0 of 2 activities");
+    expect(html).not.toContain("**Exam tip:**");
+    expect(html.indexOf("Be ready for")).toBeLessThan(html.indexOf("Back EMF</h3>"));
+  });
+
+  it("still draws an older reading with none of the labels", () => {
     const html = renderToStaticMarkup(
       createElement(ConceptsDrawer, {
         source: {
@@ -132,13 +164,18 @@ describe("learning from the existing notes", () => {
         onClose() {},
       }),
     );
-    expect(html).toContain("Cover notes and try");
-    expect(html).toContain("Your explanation");
     expect(html).toContain("Resistance is measured in ohms.");
-    expect(html).toContain('class="answer-paper"');
     expect(html).not.toContain("data-concept-activity=");
   });
 
+  it("accepts a blank's other spellings and ignores case, spacing and markup", () => {
+    const item = { answer: "Φ", accept: ["phi", "flux per pole"] };
+    for (const typed of ["Φ", "ϕ", " PHI ", "flux per pole", "$\\Phi$"]) expect(blankMatches(typed, item)).toBe(true);
+    for (const typed of ["", "P", "flux"]) expect(blankMatches(typed, item)).toBe(false);
+  });
+});
+
+describe("learning from the existing notes", () => {
   it("restores bounded drafts and rejects corrupt browser state", () => {
     const work = readStudyWork(
       JSON.stringify({

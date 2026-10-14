@@ -82,7 +82,7 @@ async function requestScript(
     if (
       !script ||
       reply.served_from === "lane_empty" ||
-      /^(?:GEMINI_API_KEY is not configured|No response generated\.)/.test(script)
+      /^(?:(?:GEMINI|ANTHROPIC)_API_KEY is not configured|No response generated\.)/.test(script)
     ) {
       throw new Error("No hint script is available from this subject's material.");
     }

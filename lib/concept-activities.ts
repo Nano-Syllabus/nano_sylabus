@@ -84,6 +84,22 @@ export const conceptActivitySchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     ...base,
+    kind: z.literal("blanks"),
+    blanks: z
+      .array(
+        z.object({
+          before: text.default(""),
+          answer: z.string().min(1).max(80),
+          after: text.default(""),
+          accept: z.array(z.string().max(80)).max(8).default([]),
+        }),
+      )
+      .min(1)
+      .max(8),
+    explanation: text.default(""),
+  }),
+  z.object({
+    ...base,
     kind: z.literal("bits"),
     bit_width: z.number().int().min(4).max(16),
     initial: z.number().int(),
@@ -206,6 +222,21 @@ export function parseConceptActivity(payload: string): ConceptActivity | null {
   } catch {
     return null;
   }
+}
+
+/** A typed blank against its answer: case, spacing, a trailing unit-less period and
+ *  Unicode look-alikes (φ/ϕ, −/-) do not make a right answer wrong. */
+export function blankMatches(typed: string, item: { answer: string; accept: string[] }) {
+  const norm = (value: string) =>
+    value
+      .normalize("NFKC")
+      .toLowerCase()
+      .replace(/ϕ/g, "φ")
+      .replace(/[−–—]/g, "-")
+      .replace(/[\s$*{}\\]/g, "")
+      .replace(/\.$/, "");
+  const given = norm(typed);
+  return Boolean(given) && [item.answer, ...item.accept].some((answer) => norm(answer) === given);
 }
 
 /** Compact activity fences survive the existing paragraph storage/translation. */

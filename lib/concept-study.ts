@@ -28,34 +28,6 @@ export function readStudyWork(value: string | null): StudyWork {
   }
 }
 
-export type ReadingSection = { start: number; end: number; title: string; hasNotes: boolean };
-
-/** Index existing blocks without rewriting, reordering or generating any notes. */
-export function readingSections(
-  blocks: Array<{ kind: string; text?: string }>,
-  title: string,
-): ReadingSection[] {
-  const sections: ReadingSection[] = [];
-  let start = 0;
-  let currentTitle = title;
-  const append = (end: number) => {
-    if (end <= start) return;
-    const hasNotes = blocks
-      .slice(start, end)
-      .some((block) => block.text?.trim() && !/^#{1,3}\s+/.test(block.text.trim()));
-    sections.push({ start, end, title: currentTitle, hasNotes });
-  };
-  blocks.forEach((block, index) => {
-    const heading = block.kind === "text" ? /^#{1,3}\s+(.+)/.exec(block.text?.trim() || "") : null;
-    if (!heading) return;
-    append(index);
-    start = index;
-    currentTitle = heading[1].replace(/[*_`]/g, "");
-  });
-  append(blocks.length);
-  return sections;
-}
-
 export function observedTrend(
   before: number,
   after: number,

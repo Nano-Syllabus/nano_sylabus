@@ -1605,7 +1605,7 @@ export async function challengeUpstreamScope(userId: string, challengeId: string
  * is still being written, and the background pass fetches it again. Storing
  * nothing and retrying beats storing this and never retrying.
  */
-const OPERATOR_DIAGNOSTIC = /\b(?:GEMINI_API_KEY|OPENAI_API_KEY|API key)\b|\bis not configured\b/i;
+const OPERATOR_DIAGNOSTIC = /\b(?:GEMINI_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|API key)\b|\bis not configured\b/i;
 
 /** Exported under a test-only name: the hygiene rule above is worth pinning. */
 export const lessonParagraphsForTest = (content: string) => lessonParagraphs(content);

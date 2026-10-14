@@ -1,11 +1,12 @@
 import "server-only";
 
+import Anthropic from "@anthropic-ai/sdk";
 import type { CommunityChoice } from "@/lib/data/landing-sites";
 import { LANDING_LIST_LIMITS, LANDING_SECTIONS, type LandingContent } from "@/lib/landing-content";
 import { applyLandingChanges, diffLanding, type LandingChangeRequest } from "@/lib/landing-edits";
 
 /**
- * The website editor's AI assistant: Gemini reads the site's current text and
+ * The website editor's AI assistant: Claude reads the site's current text and
  * the admin's request, and answers with a short reply plus field-level
  * changes. The changes are applied here (never trusted as a whole document),
  * so the page's shape, list lengths and colours stay valid.
@@ -21,7 +22,7 @@ export type AssistantResult = {
 
 export class AssistantUnavailableError extends Error {}
 
-const MODEL = process.env.LANDING_ASSISTANT_MODEL?.trim() || process.env.GEMINI_MODEL?.trim() || "gemini-3.1-flash-lite";
+const MODEL = process.env.LANDING_ASSISTANT_MODEL?.trim() || process.env.CLAUDE_MODEL?.trim() || "claude-haiku-5-5";
 
 /** The page's editable map in plain words, so the model knows what each path is. */
 function pageMap() {
@@ -64,20 +65,37 @@ ${pageMap()}`;
 }
 
 const RESPONSE_SCHEMA = {
-  type: "OBJECT",
+  type: "object",
   properties: {
-    reply: { type: "STRING" },
+    reply: { type: "string" },
     changes: {
-      type: "ARRAY",
+      type: "array",
       items: {
-        type: "OBJECT",
-        properties: { path: { type: "STRING" }, value: { type: "STRING" } },
+        type: "object",
+        properties: { path: { type: "string" }, value: { type: "string" } },
         required: ["path", "value"],
+        additionalProperties: false,
       },
     },
   },
   required: ["reply", "changes"],
+  additionalProperties: false,
 };
+
+/** Claude wants turns that alternate and open with the user; the editor's
+ *  history can open with the assistant's greeting or repeat a role. */
+function alternatingTurns(turns: AssistantTurn[]): Anthropic.MessageParam[] {
+  const messages: Anthropic.MessageParam[] = [];
+  for (const turn of turns) {
+    const role = turn.role === "assistant" ? "assistant" : "user";
+    const text = turn.text.slice(0, 4000);
+    if (!text.trim() || (!messages.length && role === "assistant")) continue;
+    const previous = messages[messages.length - 1];
+    if (previous?.role === role) previous.content = `${previous.content as string}\n\n${text}`;
+    else messages.push({ role, content: text });
+  }
+  return messages;
+}
 
 export async function runLandingAssistant({
   draft,
@@ -90,8 +108,8 @@ export async function runLandingAssistant({
   focus: { section?: string; path?: string } | null;
   communities: CommunityChoice[];
 }): Promise<AssistantResult> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) throw new AssistantUnavailableError("The AI assistant isn’t set up: GEMINI_API_KEY is missing on the server.");
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) throw new AssistantUnavailableError("The AI assistant isn’t set up: ANTHROPIC_API_KEY is missing on the server.");
 
   const history = turns.slice(-12);
   const last = history.pop();
@@ -103,50 +121,38 @@ export async function runLandingAssistant({
       ? `FOCUS: the section ${focus.section}.`
       : "FOCUS: none (the whole page).";
 
-  const contents = [
-    ...history.map((turn) => ({
-      role: turn.role === "assistant" ? "model" : "user",
-      parts: [{ text: turn.text.slice(0, 4000) }],
-    })),
-    {
-      role: "user",
-      parts: [{ text: `CURRENT SITE TEXT (JSON):\n${JSON.stringify(draft)}\n\n${focusLine}\n\nREQUEST: ${last.text.slice(0, 4000)}` }],
-    },
-  ];
+  // The site JSON goes on the last turn whole; history turns are capped at 4,000 characters.
+  const request = `CURRENT SITE TEXT (JSON):\n${JSON.stringify(draft)}\n\n${focusLine}\n\nREQUEST: ${last.text.slice(0, 4000)}`;
+  const messages = alternatingTurns(history);
+  const previous = messages[messages.length - 1];
+  if (previous?.role === "user") previous.content = `${previous.content as string}\n\n${request}`;
+  else messages.push({ role: "user", content: request });
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt(communities) }] },
-        contents,
-        generationConfig: {
-          temperature: 0.6,
-          maxOutputTokens: 16384,
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
-      signal: AbortSignal.timeout(90_000),
-    },
-  );
-  const payload = (await response.json().catch(() => null)) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
-    error?: { message?: string };
-  } | null;
-  if (!response.ok) {
-    console.error("[landing-assistant] Gemini error", response.status, payload?.error?.message);
+  const client = new Anthropic({ apiKey, timeout: 90_000, maxRetries: 1 });
+  let message: Anthropic.Message;
+  try {
+    message = await client.messages.create({
+      model: MODEL,
+      max_tokens: 16000,
+      system: systemPrompt(communities),
+      messages,
+      thinking: { type: "disabled" },
+      output_config: { format: { type: "json_schema", schema: RESPONSE_SCHEMA } },
+    });
+  } catch (error) {
+    console.error(
+      "[landing-assistant] Claude error",
+      error instanceof Anthropic.APIError ? `${error.status} ${error.message}` : error,
+    );
     throw new Error("The AI assistant couldn’t answer just now. Try again.");
   }
 
-  const text = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+  const text = message.content.map((block) => (block.type === "text" ? block.text : "")).join("");
   let parsed: { reply?: unknown; changes?: unknown };
   try {
     parsed = JSON.parse(text);
   } catch {
-    console.error("[landing-assistant] unparseable reply", payload?.candidates?.[0]?.finishReason, text.slice(0, 300));
+    console.error("[landing-assistant] unparseable reply", message.stop_reason, text.slice(0, 300));
     throw new Error("The AI assistant’s answer was cut off. Try a smaller request.");
   }
 

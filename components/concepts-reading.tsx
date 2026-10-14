@@ -1,20 +1,12 @@
 "use client";
 
-import { BookOpen, X } from "lucide-react";
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { BookOpen, Check, X } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { trimModelFiller } from "@/lib/model-filler";
-import { AnswerFontPicker, answerFontStyle, useAnswerFont } from "@/components/answer-font-picker";
 import { Markdown } from "@/components/markdown";
-import {
-  paperLabelClass,
-  paperTextClass,
-  workedAnswerClass,
-} from "@/components/worked-example-card";
 import { cn } from "@/lib/utils";
 import { ConceptActivityCard } from "@/components/concept-activity";
-import { ConceptRecall } from "@/components/concept-recall";
-import { readingSections } from "@/lib/concept-study";
 import {
   CONCEPT_ACTIVITY_FENCE,
   conceptProgressKey,
@@ -141,11 +133,168 @@ export function readingMinutes(reading: string[]) {
   return Math.max(1, Math.round(words / 200));
 }
 
+export type ChapterPiece =
+  | { kind: "lead"; text: string }
+  | { kind: "text"; text: string }
+  | { kind: "formula"; text: string }
+  | { kind: "example"; number: number; text: string }
+  | { kind: "tip"; text: string }
+  | { kind: "activity"; activity: ConceptActivity; number: number };
+
+export type ChapterSection = {
+  /** Position among all sections; anchors and progress hang off it. */
+  index: number;
+  title: string;
+  /** The lesson's own number ("### 2. Back EMF"), when it has one. */
+  number: number | null;
+  role: "lesson" | "practice" | "formulas" | "mistakes" | "other";
+  pieces: ChapterPiece[];
+};
+
+export type Chapter = {
+  why: string;
+  ready: string[];
+  idea: string;
+  /** Anything before the first section that is not one of the three above. */
+  opening: ChapterPiece[];
+  sections: ChapterSection[];
+};
+
+const LABEL = (name: string) => new RegExp(`^(?:-\\s*)?\\*\\*${name}:?\\*\\*:?\\s*`, "i");
+const WHY = LABEL("Why it matters");
+const READY = LABEL("Be ready for");
+const IDEA = LABEL("The idea");
+const TIP = LABEL("(?:Exam tip|In the exam)");
+const DISPLAY_MATH = /^\$\$[\s\S]+\$\$$/;
+const LEAD = /^\*(?!\*)([\s\S]+)\*$/;
+
+function sectionRole(title: string): ChapterSection["role"] {
+  if (/^exam practice$/i.test(title)) return "practice";
+  if (/^formulas?\b/i.test(title)) return "formulas";
+  if (/^(?:common mistakes|where it goes wrong)$/i.test(title)) return "mistakes";
+  return /^\d+\.\s/.test(title) ? "lesson" : "other";
+}
+
+/**
+ * The reading's paragraphs as a micro-book chapter: the opening (why it matters,
+ * what to be ready for, the one idea), then its sections, each piece typed so
+ * the sheet can draw a formula as a formula and an exam tip as a tip.
+ *
+ * It reads the labels `_render_reading` in the API writes. A reading that has
+ * none of them (an older one, or one translated with its labels) still renders:
+ * unknown paragraphs are text, and text before any heading is the opening.
+ */
+export function readingChapter(reading: string[]): Chapter {
+  const chapter: Chapter = { why: "", ready: [], idea: "", opening: [], sections: [] };
+  let current: ChapterSection | null = null;
+  const push = (piece: ChapterPiece) => (current ? current.pieces.push(piece) : chapter.opening.push(piece));
+
+  for (const block of readingBlocks(reading)) {
+    if (block.kind === "activity") {
+      push(block);
+      continue;
+    }
+    if (block.kind === "example") {
+      push(block);
+      continue;
+    }
+    const text = block.text.trim();
+    const heading = /^#{1,3}\s+(.+)$/.exec(text);
+    if (heading && !text.includes("\n")) {
+      const title = heading[1].replace(/[*_`]/g, "").trim();
+      const role = sectionRole(title);
+      const numbered = /^(\d+)\.\s+(.+)$/.exec(title);
+      current = {
+        index: chapter.sections.length,
+        title: numbered ? numbered[2] : title,
+        number: numbered ? Number(numbered[1]) : null,
+        role,
+        pieces: [],
+      };
+      chapter.sections.push(current);
+      continue;
+    }
+    if (!current && WHY.test(text)) chapter.why = text.replace(WHY, "");
+    else if (!current && READY.test(text))
+      chapter.ready = text
+        .replace(READY, "")
+        .split("\n")
+        .map((line) => line.replace(/^[-*]\s*/, "").trim())
+        .filter(Boolean);
+    else if (!current && IDEA.test(text)) chapter.idea = text.replace(IDEA, "");
+    else if (TIP.test(text)) push({ kind: "tip", text: text.replace(TIP, "") });
+    else if (DISPLAY_MATH.test(text)) push({ kind: "formula", text });
+    else if (current?.role === "lesson" && LEAD.test(text) && !text.includes("\n"))
+      push({ kind: "lead", text: LEAD.exec(text)![1] });
+    else push({ kind: "text", text });
+  }
+  return chapter;
+}
+
+const callout = "rounded-xl border-l-4 px-4 py-3";
+
+function ChapterPieceView({
+  piece,
+  sourceId,
+  progressKey,
+  done,
+  onDone,
+}: {
+  piece: ChapterPiece;
+  sourceId: string;
+  progressKey: string;
+  done: number[];
+  onDone: (number: number) => void;
+}) {
+  switch (piece.kind) {
+    case "lead":
+      return <Markdown text={piece.text} className="mt-3 text-base text-text-secondary italic" />;
+    case "formula":
+      return <Markdown text={piece.text} className="my-4 text-base" />;
+    case "example":
+      return (
+        <details className="group my-4 rounded-xl border border-border bg-bg-primary">
+          <summary className="flex cursor-pointer items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-text-primary">
+            Worked example
+            <span className="text-xs font-medium text-blue-600 group-open:hidden dark:text-blue-400">Show</span>
+          </summary>
+          <Markdown text={piece.text} className="border-t border-border px-4 py-3 text-[15px]" />
+        </details>
+      );
+    case "tip":
+      return (
+        <div className={cn(callout, "my-4 border-l-amber-500 bg-amber-500/10")}>
+          <p className="text-sm text-text-primary">
+            <span className="font-semibold text-amber-800 dark:text-amber-300">Exam tip. </span>
+          </p>
+          <Markdown text={piece.text} className="text-[15px]" />
+        </div>
+      );
+    case "activity":
+      return (
+        <ConceptActivityCard
+          key={`${sourceId}-activity-${piece.number}`}
+          activity={piece.activity}
+          complete={done.includes(piece.number)}
+          storageKey={`${progressKey}:activity-${piece.number}`}
+          onComplete={() => onDone(piece.number)}
+        />
+      );
+    default:
+      return <Markdown text={bulletPointReading(piece.text)} className="mt-3 text-[15px] leading-7" />;
+  }
+}
+
 /**
  * The sheet itself, as a dialog in the full sense: Escape and the backdrop close
  * it, focus moves into it and stays there, the page behind does not scroll, and
  * focus goes back to the button that opened it — a keyboard reader must not land
  * at the top of the page after reading.
+ *
+ * Laid out as a micro-book chapter: a progress rail on the left (activities done,
+ * sections ticked when theirs are), then the chapter — why it matters, what to be
+ * ready for, the one idea, numbered sections each ending in an activity, the exam
+ * practice, the formulas and the common mistakes.
  *
  * ESCAPE IS CAUGHT FIRST AND KEPT. In a challenge's focus mode Escape also means
  * "exit the challenge", and both listen on `window`. Registered in the capture
@@ -162,101 +311,91 @@ export function ConceptsDrawer({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [answerFont, setAnswerFont] = useAnswerFont();
-  const blocks = useMemo(() => readingBlocks(source.reading), [source.reading]);
-  const sections = useMemo(() => readingSections(blocks, source.title), [blocks, source.title]);
-  const activityCount = blocks.filter((block) => block.kind === "activity").length;
-  const progressKey = conceptProgressKey(source.id, source.reading);
-  const [progress, setProgress] = useState<{
-    key: string;
-    done: number[];
-    ratings: Record<string, "review" | "ready">;
-  }>({ key: "", done: [], ratings: {} });
-  const done = progress.key === progressKey ? progress.done : [];
-  const ratings = progress.key === progressKey ? progress.ratings : {};
-  const [covered, setCovered] = useState<number[]>([]);
-  const [reviewOnly, setReviewOnly] = useState(false);
-  const [activeSection, setActiveSection] = useState(0);
-  const needsReview = (start: number, end: number) =>
-    ratings[`section-${start}`] === "review" ||
-    blocks
-      .slice(start, end)
-      .some(
-        (block) => block.kind === "activity" && ratings[`activity-${block.number}`] === "review",
-      );
-  const reviewSections = sections.filter((section) => needsReview(section.start, section.end));
   const contentRef = useRef<HTMLDivElement>(null);
   const prefix = useId();
-
-  const goToSection = (start: number) => {
-    setReviewOnly(false);
-    setCovered((current) => current.filter((n) => n !== start));
-    setActiveSection(start);
-    requestAnimationFrame(() => {
-      const element = document.getElementById(`${prefix}-section-${start}`);
-      if (!element || !contentRef.current) return;
-      contentRef.current.scrollTo({
-        top:
-          element.getBoundingClientRect().top -
-          contentRef.current.getBoundingClientRect().top +
-          contentRef.current.scrollTop -
-          20,
-        behavior: "instant",
-      });
-      element.focus({ preventScroll: true });
-    });
-  };
+  const chapter = useMemo(() => readingChapter(source.reading), [source.reading]);
+  const activityNumbers = (section: ChapterSection) =>
+    section.pieces.flatMap((piece) => (piece.kind === "activity" ? [piece.number] : []));
+  const activityCount = chapter.sections.reduce((sum, s) => sum + activityNumbers(s).length, 0) +
+    chapter.opening.filter((piece) => piece.kind === "activity").length;
+  const progressKey = conceptProgressKey(source.id, source.reading);
+  const [progress, setProgress] = useState<{ key: string; done: number[]; round: number }>({
+    key: "",
+    done: [],
+    round: 0,
+  });
+  const done = progress.key === progressKey ? progress.done : [];
+  const [active, setActive] = useState(0);
+  const navigable = chapter.sections.filter((s) => s.role === "lesson" || s.role === "practice");
 
   useEffect(() => {
     let stored: unknown;
-    let storedRatings: unknown;
     try {
       stored = JSON.parse(localStorage.getItem(progressKey) || "[]");
-      storedRatings = JSON.parse(localStorage.getItem(`${progressKey}:ratings`) || "{}");
     } catch {
       stored = [];
-      storedRatings = {};
     }
-    setProgress({
+    setProgress((current) => ({
       key: progressKey,
-      ratings:
-        storedRatings && typeof storedRatings === "object" && !Array.isArray(storedRatings)
-          ? Object.fromEntries(
-              Object.entries(storedRatings).filter(
-                ([key, value]) =>
-                  /^(section|activity)-\d+$/.test(key) && (value === "review" || value === "ready"),
-              ),
-            )
-          : {},
+      round: current.round,
       done: Array.isArray(stored)
-        ? Array.from(
-            new Set(
-              stored.filter((n): n is number => Number.isInteger(n) && n > 0 && n <= activityCount),
-            ),
-          )
+        ? Array.from(new Set(stored.filter((n): n is number => Number.isInteger(n) && n > 0 && n <= activityCount)))
         : [],
-    });
-    setCovered([]);
-    setReviewOnly(false);
+    }));
   }, [progressKey, activityCount]);
 
-  const rate = (key: string, rating: "review" | "ready", number?: number) => {
-    const next =
-      number === undefined
-        ? done
-        : rating === "ready"
-          ? Array.from(new Set([...done, number]))
-          : done.filter((n) => n !== number);
-    const nextRatings = { ...ratings, [key]: rating };
-    setProgress({ key: progressKey, done: next, ratings: nextRatings });
-    if (reviewOnly && rating === "ready") setReviewOnly(false);
+  const markDone = (number: number) => {
+    const next = Array.from(new Set([...done, number]));
+    setProgress((current) => ({ ...current, key: progressKey, done: next }));
     try {
       localStorage.setItem(progressKey, JSON.stringify(next));
-      localStorage.setItem(`${progressKey}:ratings`, JSON.stringify(nextRatings));
     } catch {
       /* Works without browser storage. */
     }
   };
+
+  const resetProgress = () => {
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key === progressKey || key.startsWith(`${progressKey}:`))) localStorage.removeItem(key);
+      }
+    } catch {
+      /* Nothing stored to clear. */
+    }
+    // A new round remounts every activity, so their own drafts start empty too.
+    setProgress((current) => ({ key: progressKey, done: [], round: current.round + 1 }));
+    contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  };
+
+  const goTo = (index: number) => {
+    setActive(index);
+    const element = document.getElementById(`${prefix}-section-${index}`);
+    const scroller = contentRef.current;
+    if (!element || !scroller) return;
+    scroller.scrollTo({
+      top: element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 16,
+      behavior: "instant",
+    });
+    element.focus({ preventScroll: true });
+  };
+
+  // The rail follows the reader: the last section whose top has scrolled past.
+  useEffect(() => {
+    const scroller = contentRef.current;
+    if (!scroller) return;
+    const onScroll = () => {
+      const top = scroller.getBoundingClientRect().top + 96;
+      let current = 0;
+      for (const section of chapter.sections) {
+        const element = document.getElementById(`${prefix}-section-${section.index}`);
+        if (element && element.getBoundingClientRect().top <= top) current = section.index;
+      }
+      setActive(current);
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, [chapter.sections, prefix]);
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -296,6 +435,22 @@ export function ConceptsDrawer({
     };
   }, [onClose]);
 
+  const percent = activityCount ? Math.round((done.length / activityCount) * 100) : 0;
+  const sectionDone = (section: ChapterSection) => {
+    const numbers = activityNumbers(section);
+    return numbers.length > 0 && numbers.every((n) => done.includes(n));
+  };
+  const piece = (p: ChapterPiece, key: string) => (
+    <ChapterPieceView
+      key={key}
+      piece={p}
+      sourceId={`${source.id}-${progress.round}`}
+      progressKey={progressKey}
+      done={done}
+      onDone={markDone}
+    />
+  );
+
   return (
     <div className="fixed inset-0 z-[70]">
       <button
@@ -313,11 +468,8 @@ export function ConceptsDrawer({
         aria-labelledby={titleId}
         className="absolute inset-y-0 right-0 flex w-full max-w-[72rem] flex-col border-l border-border bg-bg-primary shadow-2xl animate-in slide-in-from-right duration-200 motion-reduce:animate-none"
       >
-        {/* The font picker sits beside the close button on a wide sheet and on
-            its own row under the title on a phone, where beside it would
-            squeeze the title. */}
-        <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-3 border-b border-border px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:px-6">
-          <div className="min-w-0">
+        <header className="flex items-start gap-3 border-b border-border px-5 py-4 sm:px-6">
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
               Concepts{source.subjectName ? ` · ${source.subjectName}` : ""}
             </p>
@@ -325,167 +477,140 @@ export function ConceptsDrawer({
               {source.title}
             </h2>
           </div>
-          <div className="col-span-2 row-start-2 justify-self-start sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:self-center">
-            <AnswerFontPicker value={answerFont} onChange={setAnswerFont} />
-          </div>
           <button
             ref={closeRef}
             type="button"
             onClick={onClose}
             aria-label="Close concepts"
-            className="col-start-2 row-start-1 inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:col-start-3"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
             <X className="size-4" aria-hidden="true" />
           </button>
         </header>
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          {sections.length > 1 && (
+          {(navigable.length > 1 || activityCount > 0) && (
             <nav
-              aria-label="Lesson sections"
-              className="shrink-0 border-b border-border bg-bg-secondary px-4 py-3 md:w-52 md:overflow-y-auto md:border-b-0 md:border-r"
+              aria-label="Chapter sections"
+              className="shrink-0 border-b border-border bg-bg-secondary px-4 py-3 md:w-60 md:overflow-y-auto md:border-r md:border-b-0 md:py-5"
             >
               {activityCount > 0 && (
-                <div className="mb-3">
-                  <p className="mb-2 text-xs font-semibold text-text-secondary" aria-live="polite">
-                    {done.length} / {activityCount} activities completed
-                  </p>
-                  <progress
-                    className="h-1.5 w-full accent-blue-600"
-                    value={done.length}
-                    max={activityCount}
-                    aria-label="Lesson activity progress"
-                  />
+                <div className="mb-3 md:mb-5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-xs font-semibold text-text-secondary">Your progress</p>
+                    <p className="text-xs text-text-muted" aria-live="polite">
+                      {done.length} of {activityCount} activities
+                    </p>
+                  </div>
+                  <div
+                    className="mt-2 h-1.5 overflow-hidden rounded-full bg-border"
+                    role="progressbar"
+                    aria-label="Activities completed"
+                    aria-valuemin={0}
+                    aria-valuemax={activityCount}
+                    aria-valuenow={done.length}
+                  >
+                    <div className="h-full rounded-full bg-blue-600 transition-[width] duration-300" style={{ width: `${percent}%` }} />
+                  </div>
                 </div>
               )}
-              <div className="mb-3 flex flex-wrap items-center gap-2 font-sans">
+              <ol className="flex gap-1.5 overflow-x-auto md:flex-col md:overflow-visible">
+                {navigable.map((section) => {
+                  const finished = sectionDone(section);
+                  return (
+                    <li key={section.index} className="shrink-0 md:shrink">
+                      <button
+                        type="button"
+                        aria-current={active === section.index ? "location" : undefined}
+                        onClick={() => goTo(section.index)}
+                        className={cn(
+                          "flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-text-secondary hover:bg-bg-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                          active === section.index && "bg-blue-500/10 text-blue-700 dark:text-blue-300",
+                        )}
+                      >
+                        <span className="w-5 shrink-0 text-xs font-semibold tabular-nums text-text-muted">
+                          {section.number ?? "★"}
+                        </span>
+                        <span className="min-w-0 flex-1 whitespace-nowrap md:whitespace-normal">{section.title}</span>
+                        {finished && (
+                          <Check className="mt-0.5 size-3.5 shrink-0 text-green-600 dark:text-green-400" aria-label="done" />
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+              {done.length > 0 && (
                 <button
                   type="button"
-                  aria-pressed={reviewOnly}
-                  onClick={() => setReviewOnly(!reviewOnly)}
-                  className="rounded-lg border border-border px-2 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  onClick={resetProgress}
+                  className="mt-3 hidden text-xs text-text-muted underline underline-offset-2 hover:text-text-primary md:block"
                 >
-                  {reviewOnly
-                    ? "Show all sections"
-                    : `Review difficult sections${reviewSections.length ? ` (${reviewSections.length})` : ""}`}
+                  Reset progress
                 </button>
-                <p className="text-xs text-text-muted" aria-live="polite">
-                  {
-                    sections.filter((section) => ratings[`section-${section.start}`] === "ready")
-                      .length
-                  }{" "}
-                  sections self-checked
-                </p>
-              </div>
-              <div className="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
-                {sections.map((section) => (
-                  <button
-                    key={section.start}
-                    type="button"
-                    className={`shrink-0 rounded-lg px-2 py-2 text-left text-xs font-medium text-text-secondary hover:bg-bg-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:shrink ${activeSection === section.start ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : ""}`}
-                    aria-current={activeSection === section.start ? "location" : undefined}
-                    onClick={() => goToSection(section.start)}
-                  >
-                    {section.title}
-                    {needsReview(section.start, section.end) && (
-                      <span className="ml-1 text-amber-700 dark:text-amber-400"> · Revisit</span>
-                    )}
-                  </button>
-                ))}
-              </div>
+              )}
             </nav>
           )}
-          <div
-            ref={contentRef}
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6"
-          >
-            {reviewOnly && !reviewSections.length && (
-              <p
-                role="status"
-                className="mb-4 rounded-lg bg-bg-secondary p-4 text-sm text-text-secondary"
-              >
-                Nothing marked for review yet. Use the recall checks to note which sections need
-                another pass.
-              </p>
-            )}
-            <article className="answer-paper" style={answerFontStyle(answerFont)}>
-              {activityCount > 0 && sections.length <= 1 && (
-                <p className="mb-4 text-xs text-text-muted" aria-live="polite">
-                  {done.length} / {activityCount} activities completed
-                </p>
+          <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
+            <article className="mx-auto max-w-[46rem] text-text-primary">
+              {chapter.why && <Markdown text={chapter.why} className="text-base leading-7 text-text-secondary" />}
+              {chapter.ready.length > 0 && (
+                <div className="mt-5 rounded-xl border border-border bg-bg-secondary px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Be ready for</p>
+                  <ul className="mt-2 space-y-1.5">
+                    {chapter.ready.map((line, i) => (
+                      <li key={i} className="flex gap-2 text-[15px]">
+                        <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-blue-600" aria-hidden="true" />
+                        <Markdown text={line} className="flex-1 text-[15px]" />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
-              {sections.map((section, sectionIndex) => (
+              {chapter.idea && (
+                <div className={cn(callout, "mt-5 border-l-blue-600 bg-blue-500/10")}>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">The idea</p>
+                  <Markdown text={chapter.idea} className="mt-1 text-base font-medium" />
+                </div>
+              )}
+              {chapter.opening.map((p, i) => piece(p, `opening-${i}`))}
+              {chapter.sections.map((section) => (
                 <section
-                  key={`${progressKey}-${section.start}`}
-                  id={`${prefix}-section-${section.start}`}
+                  key={`${progressKey}-${progress.round}-${section.index}`}
+                  id={`${prefix}-section-${section.index}`}
                   tabIndex={-1}
-                  className="focus:outline-none"
-                  hidden={reviewOnly && !needsReview(section.start, section.end)}
-                  data-concept-section={section.start}
+                  aria-labelledby={`${prefix}-heading-${section.index}`}
+                  className="mt-10 scroll-mt-4 focus:outline-none"
+                  data-concept-section={section.role}
                 >
-                  {covered.includes(section.start) && (
-                    <p className="mb-3 rounded-lg border border-dashed border-blue-500/40 p-4 font-sans text-sm text-text-secondary">
-                      Notes covered for recall · {section.title}
-                    </p>
-                  )}
-                  <div hidden={covered.includes(section.start)}>
-                    {blocks.slice(section.start, section.end).map((block, offset) => {
-                      const index = section.start + offset;
-                      return block.kind === "activity" ? (
-                        <ConceptActivityCard
-                          key={`${source.id}-reading-${index}`}
-                          activity={block.activity}
-                          complete={done.includes(block.number)}
-                        needsReview={ratings[`activity-${block.number}`] === "review"}
-                          storageKey={`${progressKey}:activity-${block.number}`}
-                          onComplete={() => rate(`activity-${block.number}`, "ready", block.number)}
-                          onReview={() => rate(`activity-${block.number}`, "review", block.number)}
-                        />
-                      ) : block.kind === "example" ? (
-                        <Fragment key={`${source.id}-reading-${index}`}>
-                          <p className={paperLabelClass}>Example {block.number}</p>
-                          <Markdown text={block.text} className={workedAnswerClass} />
-                        </Fragment>
-                      ) : (
-                        <div
-                          key={`${source.id}-reading-${index}`}
-                          id={`${prefix}-block-${index}`}
-                          tabIndex={-1}
-                          className="focus:outline-none"
-                        >
-                          <Markdown
-                            text={bulletPointReading(block.text)}
-                            className={paperTextClass}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {section.hasNotes && (
-                    <ConceptRecall
-                      title={section.title}
-                      storageKey={`${progressKey}:section-${section.start}`}
-                      covered={covered.includes(section.start)}
-                      onCover={(cover) =>
-                        setCovered((current) =>
-                          cover
-                            ? [...current, section.start]
-                            : current.filter((n) => n !== section.start),
-                        )
-                      }
-                      onRate={(rating) => rate(`section-${section.start}`, rating)}
-                    />
-                  )}
-                  {!reviewOnly && sectionIndex < sections.length - 1 && (
-                    <button
-                      type="button"
-                      className="mb-5 rounded-lg border border-border px-3 py-2 font-sans text-sm font-semibold text-text-secondary hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                      onClick={() => goToSection(sections[sectionIndex + 1].start)}
-                    >
-                      Continue to {sections[sectionIndex + 1].title}
-                    </button>
+                  <h3
+                    id={`${prefix}-heading-${section.index}`}
+                    className="type-student-section-title flex items-baseline gap-2.5 border-b border-border pb-2 text-text-primary"
+                  >
+                    {section.number !== null && (
+                      <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white">
+                        {section.number}
+                      </span>
+                    )}
+                    {section.title}
+                  </h3>
+                  {section.role === "formulas" ? (
+                    <div className="mt-4 rounded-xl border border-border bg-bg-secondary px-4 py-2">
+                      {section.pieces.map((p, i) => piece(p, `${section.index}-${i}`))}
+                    </div>
+                  ) : section.role === "mistakes" ? (
+                    <div className={cn(callout, "mt-4 border-l-red-500 bg-red-500/5")}>
+                      {section.pieces.map((p, i) => piece(p, `${section.index}-${i}`))}
+                    </div>
+                  ) : (
+                    section.pieces.map((p, i) => piece(p, `${section.index}-${i}`))
                   )}
                 </section>
               ))}
+              {activityCount > 0 && done.length === activityCount && (
+                <p role="status" className="mt-10 rounded-xl bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-800 dark:text-green-300">
+                  Every activity in this chapter is done. You’re ready for the questions.
+                </p>
+              )}
             </article>
           </div>
         </div>

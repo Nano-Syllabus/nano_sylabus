@@ -1,5 +1,5 @@
 /** Shared by server generation, browser cache keys and the maintenance script. */
-export const CONCEPT_READING_VERSION = "interactive-ui-v9";
+export const CONCEPT_READING_VERSION = "microbook-v1";
 
 const record = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -8,10 +8,12 @@ const record = (value: unknown): Record<string, unknown> | null =>
 
 export function isCurrentConceptReading(reading: unknown) {
   const value = record(reading);
+  // The version alone: a micro-book chapter whose activities call failed is still
+  // a current reading, just one without widgets.
   return (
     value?.content_version === CONCEPT_READING_VERSION &&
     typeof value.content === "string" &&
-    value.content.includes("```concept-activity\n")
+    Boolean(value.content.trim())
   );
 }
 
