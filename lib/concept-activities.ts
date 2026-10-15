@@ -36,6 +36,24 @@ const part = z
   })
   .refine((p) => p.x + p.width <= 100 && p.y + p.height <= 100);
 
+const coordinate = z.number().finite().min(-5).max(605);
+const figureItem = z.object({
+  type: z.enum(["line", "arrow", "rect", "circle", "polyline", "text"]),
+  x1: coordinate.default(0),
+  y1: coordinate.default(0),
+  x2: coordinate.default(0),
+  y2: coordinate.default(0),
+  points: z
+    .string()
+    .max(4000)
+    .regex(/^[-\d.,\s]*$/)
+    .default(""),
+  text: z.string().max(40).default(""),
+  tone: z.enum(["ink", "accent", "blue", "muted", "fill"]).default("ink"),
+  dashed: z.boolean().default(false),
+  part: z.string().max(32).default(""),
+});
+
 export const conceptActivitySchema = z.discriminatedUnion("kind", [
   z.object({
     ...base,
@@ -62,7 +80,24 @@ export const conceptActivitySchema = z.discriminatedUnion("kind", [
     kind: z.literal("experiment"),
     parameters: z.array(parameter).min(1).max(6),
     outputs: z.array(output).min(1).max(4),
+    plot: z
+      .object({
+        x: z.string().max(32).default(""),
+        y: z.number().int().min(0).default(0),
+        x_label: text.default(""),
+        y_label: text.default(""),
+      })
+      .default({ x: "", y: 0, x_label: "", y_label: "" }),
     explanation: text.min(1),
+  }),
+  z.object({
+    ...base,
+    kind: z.literal("figure"),
+    items: z.array(figureItem).min(3).max(80),
+    figure_parts: z
+      .array(z.object({ id: identifier, label: text.min(1), description: text.default("") }))
+      .max(10),
+    explanation: text.default(""),
   }),
   z.object({
     ...base,
@@ -211,9 +246,16 @@ export function parseConceptActivity(payload: string): ConceptActivity | null {
       )
         return null;
     }
+    if (activity.kind === "figure") {
+      const ids = new Set(activity.figure_parts.map((p) => p.id));
+      if (ids.size !== activity.figure_parts.length) return null;
+      if (activity.items.some((item) => item.part && !ids.has(item.part))) return null;
+    }
     if (activity.kind === "experiment") {
       const ids = new Set(activity.parameters.map((p) => p.id));
       if (ids.size !== activity.parameters.length || ids.has("pi")) return null;
+      if (activity.plot.x && !ids.has(activity.plot.x)) return null;
+      if (activity.plot.y >= activity.outputs.length) return null;
       const values = Object.fromEntries(activity.parameters.map((p) => [p.id, p.initial]));
       if (activity.outputs.some((o) => evaluateConceptExpression(o.expression, values) === null))
         return null;

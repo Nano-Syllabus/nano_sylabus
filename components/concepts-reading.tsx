@@ -553,19 +553,8 @@ export function ConceptsDrawer({
           <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
             <article className="mx-auto max-w-[46rem] text-text-primary">
               {chapter.why && <Markdown text={chapter.why} className="text-base leading-7 text-text-secondary" />}
-              {chapter.ready.length > 0 && (
-                <div className="mt-5 rounded-xl border border-border bg-bg-secondary px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Be ready for</p>
-                  <ul className="mt-2 space-y-1.5">
-                    {chapter.ready.map((line, i) => (
-                      <li key={i} className="flex gap-2 text-[15px]">
-                        <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-blue-600" aria-hidden="true" />
-                        <Markdown text={line} className="flex-1 text-[15px]" />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {/* No "Be ready for" list: a column of exam questions before any
+                  teaching read as a quiz (user, 2026-10-15). */}
               {chapter.idea && (
                 <div className={cn(callout, "mt-5 border-l-blue-600 bg-blue-500/10")}>
                   <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">The idea</p>

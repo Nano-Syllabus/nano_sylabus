@@ -1,5 +1,5 @@
 /** Shared by server generation, browser cache keys and the maintenance script. */
-export const CONCEPT_READING_VERSION = "microbook-v1";
+export const CONCEPT_READING_VERSION = "microbook-v2";
 
 const record = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value)

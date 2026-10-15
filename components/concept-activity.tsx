@@ -7,6 +7,7 @@ import { blankMatches, type ConceptActivity } from "@/lib/concept-activities";
 import { useConceptStudy } from "@/components/use-concept-study";
 import { ConceptExperiment } from "@/components/concept-experiment";
 import { ConceptBits } from "@/components/concept-bits";
+import { ConceptFigure } from "@/components/concept-figure";
 import { cn } from "@/lib/utils";
 
 /*
@@ -510,7 +511,8 @@ const labels: Record<ConceptActivity["kind"], string> = {
   derivation: "Derive it",
   choice: "Check your understanding",
   numeric: "Work it out",
-  experiment: "Predict, then experiment",
+  experiment: "Lab",
+  figure: "Explore the figure",
   diagram: "Explore the diagram",
   exam: "Exam question",
 };
@@ -543,6 +545,7 @@ export function ConceptActivityCard(props: Props) {
       {activity.kind === "blanks" && <BlanksCheck {...props} activity={activity} />}
       {activity.kind === "derivation" && <GuidedDerivation {...props} activity={activity} />}
       {activity.kind === "experiment" && <ConceptExperiment {...props} activity={activity} />}
+      {activity.kind === "figure" && <ConceptFigure {...props} activity={activity} />}
       {activity.kind === "diagram" && <DiagramExplorer {...props} activity={activity} />}
       {activity.kind === "exam" && <ExamPractice {...props} activity={activity} />}
       {activity.kind === "bits" && <ConceptBits {...props} activity={activity} />}

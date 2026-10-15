@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import fixture from "@/tests/fixtures/concept-microbook.json";
 import { ConceptsDrawer, readingBlocks, readingChapter } from "@/components/concepts-reading";
+import { ConceptActivityCard } from "@/components/concept-activity";
+import { spreadLabels } from "@/components/concept-figure";
 import {
   blankMatches,
   evaluateConceptExpression,
@@ -134,14 +136,15 @@ describe("the micro-book chapter", () => {
     ]);
   });
 
-  it("draws the chapter: be ready for, the idea, numbered sections, tips and a progress rail", () => {
+  it("draws the chapter: the idea, numbered sections, tips and a progress rail, no question list", () => {
     const html = renderToStaticMarkup(
       createElement(ConceptsDrawer, {
         source: { id: "motor", title: "DC motor", subjectName: "BEE", reading: chapterReading },
         onClose() {},
       }),
     );
-    expect(html).toContain("Be ready for");
+    // No column of exam questions above the lesson (user, 2026-10-15).
+    expect(html).not.toContain("Be ready for");
     expect(html).toContain("The idea");
     expect(html).toContain("Exam tip.");
     expect(html).toContain("Worked example");
@@ -149,7 +152,7 @@ describe("the micro-book chapter", () => {
     expect(html).toContain("Check blanks");
     expect(html).toContain("0 of 2 activities");
     expect(html).not.toContain("**Exam tip:**");
-    expect(html.indexOf("Be ready for")).toBeLessThan(html.indexOf("Back EMF</h3>"));
+    expect(html.indexOf("The idea")).toBeLessThan(html.indexOf("Back EMF</h3>"));
   });
 
   it("still draws an older reading with none of the labels", () => {
@@ -263,3 +266,78 @@ describe("data-only experiment models", () => {
     ).toBeNull();
   });
 });
+
+describe("figures and graphs", () => {
+  const figure = {
+    kind: "figure",
+    title: "Moving a force",
+    prompt: "Tap each part.",
+    items: [
+      { type: "rect", x1: 200, y1: 150, x2: 400, y2: 170, tone: "fill", part: "body" },
+      { type: "arrow", x1: 250, y1: 60, x2: 250, y2: 150, tone: "accent", part: "force" },
+      { type: "text", x1: 260, y1: 70, text: "F = 500 N", tone: "accent", part: "force" },
+      { type: "polyline", points: "180,170 420,170", part: "ground" },
+    ],
+    figure_parts: [
+      { id: "body", label: "Rigid body", description: "The body the force acts on." },
+      { id: "force", label: "Force F", description: "500 N, downward." },
+      { id: "ground", label: "Support", description: "Holds the body." },
+    ],
+    explanation: "A force on a supported body.",
+  };
+
+  it("draws a figure from data, with every part explorable", () => {
+    const activity = parseConceptActivity(JSON.stringify(figure));
+    expect(activity?.kind).toBe("figure");
+    const html = renderToStaticMarkup(
+      createElement(ConceptActivityCard, { activity: activity!, complete: false, onComplete() {} }),
+    );
+    expect(html).toContain('data-concept-activity="figure"');
+    expect(html).toContain("<svg");
+    expect(html).toContain("F = 500 N");
+    for (const label of ["Explore Rigid body", "Explore Force F", "Explore Support"]) expect(html).toContain(label);
+    expect(html).toContain("Parts explored: 0 of 3");
+  });
+
+  it("refuses a figure part that is drawn nowhere it points", () => {
+    const bad = { ...figure, items: [...figure.items, { type: "line", x1: 0, y1: 0, x2: 10, y2: 10, part: "ghost" }] };
+    expect(parseConceptActivity(JSON.stringify(bad))).toBeNull();
+  });
+
+  it("slides overlapping labels apart and keeps them on the canvas", () => {
+    const [a, b, c] = spreadLabels([
+      { type: "text", x1: 300, y1: 50, x2: 0, y2: 0, points: "", text: "F = 300 N", tone: "accent", dashed: false, part: "" },
+      { type: "text", x1: 310, y1: 52, x2: 0, y2: 0, points: "", text: "Line of action", tone: "ink", dashed: false, part: "" },
+      { type: "text", x1: 590, y1: 200, x2: 0, y2: 0, points: "", text: "Long label at the edge", tone: "ink", dashed: false, part: "" },
+    ]);
+    expect(a.y1).toBe(50);
+    expect(b.y1).toBeGreaterThan(50 + 18);
+    expect(c.x1 + c.text.length * 18 * 0.56).toBeLessThanOrEqual(596);
+  });
+
+  it("draws a lab's graph live, with axes, the curve and the current setting", () => {
+    const lab = parseConceptActivity(
+      JSON.stringify({
+        kind: "experiment",
+        title: "Couple moment",
+        parameters: [
+          { id: "F", label: "Force", unit: "N", min: 10, max: 100, step: 5, initial: 50 },
+          { id: "d", label: "Separation", unit: "m", min: 0.1, max: 1, step: 0.05, initial: 0.4 },
+        ],
+        outputs: [{ label: "Moment M", expression: "F*d", unit: "N m" }],
+        plot: { x: "d", y: 0 },
+        explanation: "M = F d.",
+      }),
+    );
+    const html = renderToStaticMarkup(
+      createElement(ConceptActivityCard, { activity: lab!, complete: false, onComplete() {} }),
+    );
+    expect(html).toContain('aria-label="Moment M (N m) against Separation (m)"');
+    expect(html).toContain("<path");
+    expect(html).toContain("<circle");
+    expect(html).toContain("20 N m"); // 50 N x 0.4 m, shown before anything is moved
+    expect(html).toContain("Move 2 different controls");
+    expect(html).not.toContain("disabled");
+  });
+});
+

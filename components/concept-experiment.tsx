@@ -4,264 +4,246 @@ import { useId } from "react";
 import { Markdown } from "@/components/markdown";
 import { useConceptStudy } from "@/components/use-concept-study";
 import { evaluateConceptExpression, type ConceptActivity } from "@/lib/concept-activities";
-import { observedTrend } from "@/lib/concept-study";
 import type { ConceptActivityProps } from "@/components/concept-activity";
 
-const button =
-  "rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-primary hover:bg-bg-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50";
-const primary = `${button} bg-blue-600 text-white hover:bg-blue-700`;
+/*
+ * A live lab, like the micro-book's motor lab: sliders on one side, the
+ * equations' outputs and a graph that redraw as they move. The graph plots one
+ * output against one parameter across its whole range, the others held where the
+ * sliders are, with a marker at the current setting. Moving three different
+ * controls (or every control, when there are fewer) completes it.
+ */
+
 const format = (value: number | null) =>
   value === null
-    ? "Outside model range"
-    : Number(value.toPrecision(5)).toLocaleString(undefined, { maximumSignificantDigits: 5 });
-const directions = {
-  increase: "Increases",
-  decrease: "Decreases",
-  same: "Stays the same",
-} as const;
+    ? "—"
+    : Number(value.toPrecision(4)).toLocaleString(undefined, { maximumSignificantDigits: 4 });
+
+/** Round numbers for axis ticks: 1, 2 or 5 times a power of ten. */
+function ticks(min: number, max: number, count = 4) {
+  const span = max - min || Math.abs(max) || 1;
+  const raw = span / count;
+  const power = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 5, 10].map((m) => m * power).find((s) => s >= raw) ?? raw;
+  const start = Math.ceil(min / step) * step;
+  const out: number[] = [];
+  for (let v = start; v <= max + step * 1e-9 && out.length < 12; v += step)
+    out.push(Number(v.toPrecision(12)));
+  return out;
+}
+
+function Graph({
+  activity,
+  values,
+}: {
+  activity: Extract<ConceptActivity, { kind: "experiment" }>;
+  values: Record<string, number>;
+}) {
+  const parameter =
+    activity.parameters.find((p) => p.id === activity.plot.x) ?? activity.parameters[0];
+  const output = activity.outputs[activity.plot.y] ?? activity.outputs[0];
+  const samples = Array.from({ length: 81 }, (_, i) => {
+    const x = parameter.min + ((parameter.max - parameter.min) * i) / 80;
+    return { x, y: evaluateConceptExpression(output.expression, { ...values, [parameter.id]: x }) };
+  });
+  const ys = samples.flatMap((p) => (p.y === null ? [] : [p.y]));
+  if (ys.length < 2) return null;
+  let minY = Math.min(...ys, 0);
+  let maxY = Math.max(...ys);
+  if (maxY === minY) maxY = minY + 1;
+  const pad = (maxY - minY) * 0.08;
+  minY = minY < 0 ? minY - pad : minY;
+  maxY += pad;
+
+  const W = 560,
+    H = 280,
+    L = 70,
+    R = 16,
+    T = 14,
+    B = 52;
+  const X = (x: number) =>
+    L + ((x - parameter.min) / (parameter.max - parameter.min)) * (W - L - R);
+  const Y = (y: number) => T + (1 - (y - minY) / (maxY - minY)) * (H - T - B);
+  const path = samples
+    .map((p, i) =>
+      p.y === null
+        ? ""
+        : `${i === 0 || samples[i - 1].y === null ? "M" : "L"}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`,
+    )
+    .join("");
+  const nowX = values[parameter.id];
+  const nowY = evaluateConceptExpression(output.expression, values);
+  const xTitle =
+    activity.plot.x_label || `${parameter.label}${parameter.unit ? ` (${parameter.unit})` : ""}`;
+  const yTitle =
+    activity.plot.y_label || `${output.label}${output.unit ? ` (${output.unit})` : ""}`;
+
+  return (
+    <figure className="rounded-xl border border-border bg-bg-primary p-2">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={`${yTitle} against ${xTitle}`}
+        className="w-full"
+      >
+        {ticks(minY, maxY).map((v) => (
+          <g key={`y${v}`}>
+            <line x1={L} x2={W - R} y1={Y(v)} y2={Y(v)} className="stroke-border" strokeWidth="1" />
+            <text
+              x={L - 8}
+              y={Y(v)}
+              textAnchor="end"
+              dominantBaseline="middle"
+              fontSize="15"
+              className="fill-text-muted"
+            >
+              {format(v)}
+            </text>
+          </g>
+        ))}
+        {ticks(parameter.min, parameter.max).map((v) => (
+          <g key={`x${v}`}>
+            <line y1={T} y2={H - B} x1={X(v)} x2={X(v)} className="stroke-border" strokeWidth="1" />
+            <text
+              x={X(v)}
+              y={H - B + 17}
+              textAnchor="middle"
+              fontSize="15"
+              className="fill-text-muted"
+            >
+              {format(v)}
+            </text>
+          </g>
+        ))}
+        <line x1={L} x2={L} y1={T} y2={H - B} className="stroke-text-muted" />
+        <line x1={L} x2={W - R} y1={H - B} y2={H - B} className="stroke-text-muted" />
+        <path
+          d={path}
+          fill="none"
+          strokeWidth="3"
+          strokeLinejoin="round"
+          className="stroke-red-600 dark:stroke-red-400"
+        />
+        {nowY !== null && (
+          <>
+            <line
+              x1={X(nowX)}
+              x2={X(nowX)}
+              y1={Y(nowY)}
+              y2={H - B}
+              strokeDasharray="3 4"
+              className="stroke-blue-600 dark:stroke-blue-400"
+            />
+            <circle
+              cx={X(nowX)}
+              cy={Y(nowY)}
+              r="6.5"
+              strokeWidth="2.5"
+              className="fill-blue-600 stroke-bg-primary dark:fill-blue-400"
+            />
+          </>
+        )}
+        <text
+          x={(L + W - R) / 2}
+          y={H - 8}
+          textAnchor="middle"
+          fontSize="16"
+          fontWeight="600"
+          className="fill-text-secondary"
+        >
+          {xTitle}
+        </text>
+        <text
+          x={18}
+          y={(T + H - B) / 2}
+          transform={`rotate(-90 18 ${(T + H - B) / 2})`}
+          textAnchor="middle"
+          fontSize="16"
+          fontWeight="600"
+          className="fill-text-secondary"
+        >
+          {yTitle}
+        </text>
+      </svg>
+    </figure>
+  );
+}
 
 export function ConceptExperiment({
   activity,
   storageKey,
   onComplete,
-  onReview,
 }: ConceptActivityProps & { activity: Extract<ConceptActivity, { kind: "experiment" }> }) {
   const [work, update] = useConceptStudy(storageKey);
   const prefix = useId();
-  const initial = Object.fromEntries(activity.parameters.map((p) => [p.id, p.initial]));
   const values = Object.fromEntries(
     activity.parameters.map((p) => [
       p.id,
       Math.max(p.min, Math.min(p.max, work.values[p.id] ?? p.initial)),
     ]),
   );
-  const parameter =
-    activity.parameters.find((p) => p.id === work.parameter) || activity.parameters[0];
-  const output = activity.outputs[0];
-  const baseline = Object.fromEntries(
-    activity.parameters.map((p) => [p.id, work.baseline[p.id] ?? values[p.id]]),
-  );
-  const before = evaluateConceptExpression(output.expression, baseline);
-  const current = evaluateConceptExpression(output.expression, values);
-  const trend =
-    before === null || current === null
-      ? null
-      : observedTrend(before, current, baseline[parameter.id], values[parameter.id]);
-  const samples = Array.from({ length: 41 }, (_, i) => {
-    const x = parameter.min + ((parameter.max - parameter.min) * i) / 40;
-    return { x, y: evaluateConceptExpression(output.expression, { ...values, [parameter.id]: x }) };
-  });
-  const ys = samples.flatMap((p) => (p.y === null ? [] : [p.y]));
-  const minY = Math.min(...ys),
-    maxY = Math.max(...ys),
-    range = maxY - minY || 1;
-  const points = samples
-    .map((p, i) =>
-      p.y === null
-        ? ""
-        : `${i === 0 || samples[i - 1].y === null ? "M" : "L"}${40 + i * 10},${180 - ((p.y - minY) / range) * 140}`,
-    )
-    .join(" ");
+  const needed = Math.min(3, activity.parameters.length);
+  const moved = work.seen.filter((id) => activity.parameters.some((p) => p.id === id));
+
   return (
     <>
-      <label
-        htmlFor={`${prefix}-parameter`}
-        className="mb-2 block text-sm font-semibold text-text-primary"
-      >
-        Choose what to investigate
-      </label>
-      <select
-        id={`${prefix}-parameter`}
-        className="mb-4 w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary"
-        value={parameter.id}
-        onChange={(event) =>
-          update({
-            parameter: event.target.value,
-            committed: false,
-            correct: null,
-            prediction: null,
-            baseline: {},
-          })
-        }
-      >
-        {activity.parameters.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.label}
-          </option>
-        ))}
-      </select>
-      <fieldset className="mb-4 rounded-xl border border-blue-500/30 bg-bg-primary p-4">
-        <legend className="px-1 text-sm font-semibold text-text-primary">
-          Predict before experimenting
-        </legend>
-        <p className="mb-3 text-sm text-text-secondary">
-          As {parameter.label.toLowerCase()} increases, what happens to {output.label.toLowerCase()}
-          ? Hold the other values constant.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(directions).map(([direction, label]) => (
-            <button
-              key={direction}
-              type="button"
-              disabled={work.committed}
-              className={`${button} ${work.prediction === direction ? "border-blue-500 bg-blue-500/10" : ""}`}
-              aria-pressed={work.prediction === direction}
-              onClick={() => update({ prediction: direction as keyof typeof directions })}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {!work.committed ? (
-          <button
-            type="button"
-            disabled={!work.prediction}
-            className={`${primary} mt-3`}
-            onClick={() => update({ committed: true, baseline: values, correct: null })}
+      <div className="grid gap-5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <Graph activity={activity} values={values} />
+        <div>
+          <div className="space-y-4">
+            {activity.parameters.map((p) => (
+              <div key={p.id}>
+                <label
+                  htmlFor={`${prefix}-${p.id}`}
+                  className="flex justify-between gap-2 text-sm font-semibold text-text-primary"
+                >
+                  <span>{p.label}</span>
+                  <output className="tabular-nums">
+                    {format(values[p.id])} {p.unit}
+                  </output>
+                </label>
+                <input
+                  id={`${prefix}-${p.id}`}
+                  type="range"
+                  min={p.min}
+                  max={p.max}
+                  step={p.step}
+                  value={values[p.id]}
+                  className="mt-2 w-full accent-red-600"
+                  onChange={(event) => {
+                    const seen = Array.from(new Set([...moved, p.id]));
+                    update({ values: { ...values, [p.id]: Number(event.target.value) }, seen });
+                    if (seen.length >= needed) onComplete();
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+          <dl
+            aria-live="polite"
+            className="mt-4 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 rounded-xl bg-bg-primary px-4 py-3 text-sm"
           >
-            Record prediction
-          </button>
-        ) : (
-          <p className="mt-3 text-sm text-text-secondary">
-            Prediction recorded: <strong>{work.prediction && directions[work.prediction]}</strong>.
-            Move the {parameter.label.toLowerCase()} slider to test it.
-          </p>
-        )}
-      </fieldset>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div className="space-y-4">
-          {activity.parameters.map((p) => (
-            <div key={p.id}>
-              <label
-                htmlFor={`${prefix}-${p.id}`}
-                className="flex justify-between gap-2 text-sm font-semibold text-text-primary"
-              >
-                <span>{p.label}</span>
-                <span>
-                  {format(values[p.id])} {p.unit}
-                </span>
-              </label>
-              <input
-                id={`${prefix}-${p.id}`}
-                type="range"
-                min={p.min}
-                max={p.max}
-                step={p.step}
-                value={values[p.id]}
-                disabled={work.committed ? p.id !== parameter.id : true}
-                className="mt-2 w-full accent-blue-600 disabled:opacity-40"
-                onChange={(event) =>
-                  update({
-                    values: { ...values, [p.id]: Number(event.target.value) },
-                    correct: null,
-                  })
-                }
-              />
-            </div>
-          ))}
+            {activity.outputs.map((o) => (
+              <div key={o.label} className="contents">
+                <dt className="text-text-secondary">{o.label}</dt>
+                <dd className="text-right font-semibold tabular-nums text-text-primary">
+                  {format(evaluateConceptExpression(o.expression, values))} {o.unit}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
-        <dl aria-live="polite" className="space-y-3 rounded-xl bg-bg-primary p-4">
-          {activity.outputs.map((o) => (
-            <div key={o.label}>
-              <dt className="text-xs text-text-secondary">{o.label}</dt>
-              <dd className="mt-1 text-xl font-semibold tabular-nums text-text-primary">
-                {format(evaluateConceptExpression(o.expression, values))} {o.unit}
-              </dd>
-            </div>
-          ))}
-        </dl>
       </div>
-      {work.committed && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={primary}
-            disabled={!trend}
-            onClick={() => {
-              const correct = work.prediction === trend;
-              update({ correct, attempts: work.attempts + 1 });
-              if (correct) onComplete();
-              else onReview?.();
-            }}
-          >
-            Compare prediction
-          </button>
-          <button
-            type="button"
-            className={button}
-            onClick={() =>
-              update({
-                committed: false,
-                prediction: null,
-                correct: null,
-                baseline: {},
-                values: initial,
-              })
-            }
-          >
-            Try a new prediction
-          </button>
-        </div>
-      )}
-      {work.correct !== null && (
-        <div aria-live="polite" className="mt-4 rounded-xl border border-border bg-bg-primary p-4">
-          <p
-            className={`text-sm font-semibold ${work.correct ? "text-green-700 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}`}
-          >
-            {work.correct
-              ? "Your prediction matches the observation."
-              : "The observation differs from your prediction. Revisit the relation and test again."}
-          </p>
-          <p className="mt-2 text-sm text-text-secondary">
-            {parameter.label}: {format(baseline[parameter.id])} → {format(values[parameter.id])}{" "}
-            {parameter.unit}. {output.label}: {format(before)} → {format(current)} {output.unit}.
-          </p>
-          <Markdown text={activity.explanation} />
-        </div>
-      )}
-      {work.correct !== null && ys.length > 1 && (
-        <figure className="mt-4 rounded-xl border border-border bg-bg-primary p-3">
-          <svg
-            viewBox="0 0 480 220"
-            role="img"
-            aria-label={`${output.label} against ${parameter.label}, other values held constant`}
-            className="w-full text-blue-600 dark:text-blue-400"
-          >
-            <path d="M40 30V180H450" fill="none" stroke="currentColor" opacity=".35" />
-            <path d={points} fill="none" stroke="currentColor" strokeWidth="2.5" />
-            {current !== null && (
-              <circle
-                cx={
-                  40 +
-                  ((values[parameter.id] - parameter.min) / (parameter.max - parameter.min)) * 400
-                }
-                cy={180 - ((current - minY) / range) * 140}
-                r="5"
-                fill="currentColor"
-              />
-            )}
-            <g fill="currentColor" fontSize="11">
-              <text x="40" y="200">
-                {format(parameter.min)}
-              </text>
-              <text x="415" y="200">
-                {format(parameter.max)}
-              </text>
-              <text x="40" y="22">
-                {output.label}: {format(minY)} – {format(maxY)} {output.unit}
-              </text>
-            </g>
-          </svg>
-          <figcaption className="text-center text-xs text-text-muted">
-            {parameter.label} ({parameter.unit || "value"}) · other values held constant
-          </figcaption>
-        </figure>
-      )}
-      <details className="mt-3 text-sm">
-        <summary className="cursor-pointer font-semibold text-text-secondary">
-          Model assumptions and explanation
+      <p className="mt-3 text-xs text-text-muted" aria-live="polite">
+        {moved.length >= needed
+          ? "Done. Keep experimenting as long as you like."
+          : `Move ${needed === 1 ? "the control" : `${needed} different controls`} to complete this activity (${moved.length} of ${needed}).`}
+      </p>
+      <details className="mt-2 text-sm">
+        <summary className="cursor-pointer font-semibold text-blue-600 dark:text-blue-400">
+          What the lab shows
         </summary>
-        <Markdown text={activity.explanation} />
+        <Markdown text={activity.explanation} className="mt-2" />
       </details>
     </>
   );
