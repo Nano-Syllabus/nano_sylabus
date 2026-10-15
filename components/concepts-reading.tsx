@@ -458,6 +458,13 @@ export function ConceptsDrawer({
   }, [onClose]);
 
   const percent = activityCount ? Math.round((done.length / activityCount) * 100) : 0;
+  // The video's quiz checkpoints: the lesson's own quick questions, so an answer
+  // in the video counts here too.
+  const checkpoints = lessons.flatMap((section) =>
+    section.pieces.flatMap((p) =>
+      p.kind === "activity" && p.activity.kind === "choice" ? [{ number: p.number, activity: p.activity }] : [],
+    ),
+  );
   const sectionDone = (section: ChapterSection) => {
     const numbers = activityNumbers(section);
     return numbers.length > 0 && numbers.every((n) => done.includes(n));
@@ -553,7 +560,11 @@ export function ConceptsDrawer({
             <article className="mb-col">
               <h1>{source.title}</h1>
               {chapter.why && <Markdown text={chapter.why} className="mb-lead text-[17px] leading-[1.65]" />}
-              <ConceptExplainerVideo challengeId={source.id} />
+              <ConceptExplainerVideo
+                challengeId={source.id}
+                checkpoints={checkpoints}
+                onAnswered={markDone}
+              />
               {/* No "Be ready for" list: a column of exam questions before any
                   teaching read as a quiz (user, 2026-10-15). */}
               {chapter.idea && (

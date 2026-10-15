@@ -26,10 +26,13 @@ describe("the topic explainer's brief", () => {
     expect(notes).not.toContain("second example");
     expect(notes).not.toContain("concept-activity");
     expect(notes).toContain("90-second explainer");
+    expect(notes).toContain("pause and predict");
   });
 
   it("fits the renderer's 2,000-character notes field", () => {
     const long = Array.from({ length: 200 }, (_, i) => `### ${i + 1}. ${"A long heading ".repeat(4)}`);
-    expect(explainerNotes(long).length).toBeLessThanOrEqual(2000);
+    const notes = explainerNotes(long);
+    expect(notes.length).toBeLessThanOrEqual(2000);
+    expect(notes).toContain("pause and predict"); // the brief survives the cap
   });
 });
