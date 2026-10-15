@@ -369,3 +369,13 @@ details.mb-sol > div {
 .mb svg text {
   font-family: var(--font-mb-sans), system-ui, sans-serif;
 }
+
+/* The topic's animated explainer, above the chapter. */
+.mb-video {
+  margin: 1.3rem 0;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--mb-line);
+  border-left: 6px solid var(--mb-accent);
+  border-radius: 4px;
+  background: var(--mb-card);
+}

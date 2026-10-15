@@ -1324,7 +1324,9 @@ export const requestTeacherExplainerAnimation = (
     subject: string;
     notes: string;
     seconds: number;
-    style: "card";
+    /** card: one payload per scene (short explainers); board: one diagram built
+     *  up scene by scene (a whole topic). */
+    style: "card" | "board";
     /** A memory video (renderer `memory` mode): the length is the planner's
      *  pick up to `seconds`, and it ends on a still recall card. */
     memory?: boolean;

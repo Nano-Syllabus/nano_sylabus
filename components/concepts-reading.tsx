@@ -7,6 +7,7 @@ import { trimModelFiller } from "@/lib/model-filler";
 import { Markdown } from "@/components/markdown";
 import { cn } from "@/lib/utils";
 import { ConceptActivityCard } from "@/components/concept-activity";
+import { ConceptExplainerVideo } from "@/components/concept-explainer-video";
 import "@/components/microbook.css";
 import {
   CONCEPT_ACTIVITY_FENCE,
@@ -552,6 +553,7 @@ export function ConceptsDrawer({
             <article className="mb-col">
               <h1>{source.title}</h1>
               {chapter.why && <Markdown text={chapter.why} className="mb-lead text-[17px] leading-[1.65]" />}
+              <ConceptExplainerVideo challengeId={source.id} />
               {/* No "Be ready for" list: a column of exam questions before any
                   teaching read as a quiz (user, 2026-10-15). */}
               {chapter.idea && (
