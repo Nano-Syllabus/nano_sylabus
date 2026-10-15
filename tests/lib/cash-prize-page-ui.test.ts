@@ -12,7 +12,6 @@ const campaign = readFileSync("components/cash-prize-campaign.tsx", "utf8");
 const frame = readFileSync("components/cash-prize-campaign-frame.tsx", "utf8");
 const skeleton = readFileSync("app/app/cash-prize/loading.tsx", "utf8");
 const sidebar = readFileSync("components/app-sidebar.tsx", "utf8");
-const appNav = readFileSync("components/app-nav.tsx", "utf8");
 
 function campaignState(overrides: Partial<WeeklyCampaignState> = {}): WeeklyCampaignState {
   return {
@@ -39,23 +38,16 @@ const text = (html: string) =>
     .replace(/\s+/g, " ");
 
 describe("student cash prize page", () => {
-  it("links the cash prize campaign from the student sidebar", () => {
-    expect(sidebar).toContain('href: "/app/cash-prize"');
-    expect(sidebar).toContain('label: "Cash Prize"');
-    expect(sidebar.indexOf('label: "Revision"')).toBeLessThan(
-      sidebar.indexOf('label: "Cash Prize"'),
-    );
-    expect(sidebar.indexOf('label: "Cash Prize"')).toBeLessThan(
-      sidebar.indexOf('label: "Pricing"'),
-    );
-    expect(appNav.indexOf('label: "Revision"')).toBeLessThan(appNav.indexOf('label: "Cash Prize"'));
-    // Performance follows Revision, before the community and reward surfaces.
-    expect(appNav.indexOf('label: "Revision"')).toBeLessThan(appNav.indexOf('label: "Performance"'));
-    expect(appNav.indexOf('label: "Performance"')).toBeLessThan(appNav.indexOf('label: "Community"'));
-    expect(appNav.indexOf('label: "Community"')).toBeLessThan(appNav.indexOf('label: "Cash Prize"'));
-    // The sidebar's Revision and Cash Prize come from its NAV array, so source
-    // order says nothing there: Performance and Community are rendered from
-    // inside that map, directly after Revision.
+  it("places Cash Prize and Pricing in the sidebar user menu", () => {
+    const primaryNav = sidebar.slice(sidebar.indexOf("const NAV = ["), sidebar.indexOf("] as const;"));
+    const userMenu = sidebar.slice(sidebar.indexOf("{/* ── User Profile ── */}"));
+
+    expect(primaryNav).not.toContain("/app/cash-prize");
+    expect(primaryNav).not.toContain("/app/billing");
+    expect(userMenu).toContain('href="/app/cash-prize"');
+    expect(userMenu).toContain('href={upgradeHref || "/app/billing"}');
+    expect(userMenu.indexOf("Cash Prize")).toBeLessThan(userMenu.indexOf("Pricing"));
+    expect(userMenu.indexOf("Pricing")).toBeLessThan(userMenu.indexOf('href="/app/settings"'));
     expect(sidebar.indexOf('item.href === "/app/notes"')).toBeLessThan(
       sidebar.indexOf('href="/app/today"'),
     );
@@ -63,7 +55,6 @@ describe("student cash prize page", () => {
       sidebar.indexOf('href="/app/community"'),
     );
     expect(sidebar.indexOf('href="/app/challenges"')).toBeLessThan(sidebar.indexOf('href="/app/community"'));
-    expect(appNav.indexOf('label: "Cash Prize"')).toBeLessThan(appNav.indexOf('label: "Pricing"'));
   });
 
   it("keeps the page header and the IOE award around the campaign", () => {

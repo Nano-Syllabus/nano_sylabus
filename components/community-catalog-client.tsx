@@ -515,7 +515,12 @@ export function CommunityCatalogClient({
         }
 
         .ns-results { min-width: 0; }
-        .ns-browse-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+        .ns-browse-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 18px;
+          margin-inline: 24px;
+        }
 
         .ns-fc {
           position: relative;
@@ -1161,7 +1166,7 @@ export function CommunityCatalogClient({
           .ns-hero h1 { font-size: clamp(2.25rem, 9vw, 3rem); }
           .ns-hero p { margin-bottom: 20px; }
           .ns-hero-art { display: none; }
-          .ns-browse-grid { grid-template-columns: 1fr; gap: 14px; }
+          .ns-browse-grid { grid-template-columns: 1fr; gap: 14px; margin-inline: 16px; }
           .ns-fc-inner { padding: 20px; }
           .ns-fc-title { font-size: 20px; }
         }
@@ -1172,7 +1177,7 @@ export function CommunityCatalogClient({
           .ns-hero { padding: 28px 22px; }
           .ns-hero h1 { font-size: 2.25rem; }
           .ns-hero p { font-size: 1rem; }
-          .ns-browse-grid { grid-template-columns: 1fr; }
+          .ns-browse-grid { grid-template-columns: 1fr; margin-inline: 10px; }
           .ns-fc-bottom { flex-wrap: wrap; }
         }
       `}</style>
@@ -1212,7 +1217,7 @@ export function CommunityCatalogClient({
         ) : null}
       </header>
 
-      {/* Hero Section */}
+      {/*
       <section className="ns-hero" aria-labelledby="hero-title">
         <div>
           <h1 id="hero-title">Study better together.</h1>
@@ -1234,6 +1239,7 @@ export function CommunityCatalogClient({
           </svg>
         </div>
       </section>
+      */}
       </>
       )}
 

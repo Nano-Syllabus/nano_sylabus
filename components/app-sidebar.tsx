@@ -82,48 +82,6 @@ const NAV = [
       </svg>
     ),
   },
-  {
-    href: "/app/cash-prize",
-    label: "Cash Prize",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M8 21h8" />
-        <path d="M12 17v4" />
-        <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
-        <path d="M7 6H4v2a4 4 0 0 0 4 4" />
-        <path d="M17 6h3v2a4 4 0 0 1-4 4" />
-      </svg>
-    ),
-  },
-  {
-    href: "/app/billing",
-    label: "Pricing",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12 2v20" />
-        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" />
-      </svg>
-    ),
-  },
 ] as const;
 
 async function readActionError(response: Response, fallback: string) {
@@ -901,6 +859,61 @@ export function AppSidebar({
                 Platform analytics
               </Link>
             )}
+
+            <Link
+              href="/app/cash-prize"
+              onClick={() => {
+                setIsProfileMenuOpen(false);
+                onCloseMobile?.();
+              }}
+              onPointerEnter={() => router.prefetch("/app/cash-prize")}
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M8 21h8" />
+                <path d="M12 17v4" />
+                <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+                <path d="M7 6H4v2a4 4 0 0 0 4 4" />
+                <path d="M17 6h3v2a4 4 0 0 1-4 4" />
+              </svg>
+              Cash Prize
+            </Link>
+
+            <Link
+              href={upgradeHref || "/app/billing"}
+              onClick={() => {
+                setIsProfileMenuOpen(false);
+                onCloseMobile?.();
+              }}
+              onPointerEnter={() => router.prefetch(upgradeHref || "/app/billing")}
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 2v20" />
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+              Pricing
+            </Link>
 
             <Link
               href="/app/settings"
