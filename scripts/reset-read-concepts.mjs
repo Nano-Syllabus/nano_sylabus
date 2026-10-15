@@ -43,14 +43,21 @@ const [challenges, pool, teachers] = await Promise.all([
   ),
   rows("teachers", "id,handle"),
 ]);
+// A reading already written to the current shape is kept: clearing it would only
+// pay to write the same chapter again. Everything older (or failed) is cleared.
+const current = (r) =>
+  r.content?.lesson?.readingVersion === CONCEPT_READING_VERSION && !r.content?.readingError;
 const affected = challenges.filter(
   (r) =>
     r.content?.provider === "collection-challenge-v1" &&
+    !current(r) &&
     (r.content?.lesson?.content?.length ||
       r.content?.romanNepali?.reading?.length ||
       r.content?.readingError),
 );
-const pooled = pool.filter((r) => r.content?.reading);
+const pooled = pool.filter(
+  (r) => r.content?.reading && r.content.reading.content_version !== CONCEPT_READING_VERSION,
+);
 const collections = teachers.map(
   (r) =>
     `${String(r.handle)
@@ -116,11 +123,11 @@ for (const row of pooled) {
   else counts.conflicts++;
 }
 // Read back the actual database, not the write responses.
-const [current, currentPool] = await Promise.all([
+const [after, currentPool] = await Promise.all([
   rows("student_challenges", "id,content,status"),
   rows("challenge_topic_pool", "id,content,status"),
 ]);
-const remainingOldStudentReadings = current.filter(
+const remainingOldStudentReadings = after.filter(
   (r) =>
     r.content?.lesson?.content?.length &&
     r.content.lesson.readingVersion !== CONCEPT_READING_VERSION,
@@ -133,7 +140,7 @@ const report = {
   remainingOldStudentReadings,
   remainingOldPooledReadings,
   studentHistoryPreserved:
-    JSON.stringify(current.map((r) => [r.id, r.status])) ===
+    JSON.stringify(after.map((r) => [r.id, r.status])) ===
     JSON.stringify(challenges.map((r) => [r.id, r.status])),
 };
 await save("report.json", report);
