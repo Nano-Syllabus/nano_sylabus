@@ -84,7 +84,7 @@ function ChoiceCheck({
                 if (isAnswer) onComplete();
               }}
               className={cn(
-                "flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-default",
+                "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-[15px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-default",
                 answered && isAnswer && correct
                   ? "border-green-600 bg-green-500/10 dark:border-green-400"
                   : chosen
@@ -92,10 +92,10 @@ function ChoiceCheck({
                     : "border-border bg-bg-primary hover:bg-bg-tertiary",
               )}
             >
-              <span className="mt-0.5 font-semibold text-text-muted">
+              <span className="font-semibold text-text-muted">
                 {String.fromCharCode(65 + index)}
               </span>
-              <Markdown text={option} className="flex-1" />
+              <Markdown text={option} className="flex-1 [&_p]:m-0" />
               {chosen && (correct ? (
                 <Check className="mt-0.5 size-4 shrink-0 text-green-600 dark:text-green-400" aria-hidden="true" />
               ) : (
@@ -506,40 +506,44 @@ function ExamPractice({
 }
 
 const labels: Record<ConceptActivity["kind"], string> = {
-  bits: "Build the bits",
-  blanks: "Fill the blanks",
-  derivation: "Derive it",
-  choice: "Check your understanding",
-  numeric: "Work it out",
+  bits: "Bits",
+  blanks: "Fill in",
+  derivation: "Derive",
+  choice: "Check",
+  numeric: "Numerical",
   experiment: "Lab",
-  figure: "Explore the figure",
-  diagram: "Explore the diagram",
-  exam: "Exam question",
+  figure: "Figure",
+  diagram: "Diagram",
+  exam: "Exam",
 };
 
-export function ConceptActivityCard(props: Props) {
-  const { activity, complete } = props;
+export function ConceptActivityCard(
+  props: Props & {
+    /** "2.1": section 2, its first activity. */
+    code?: string;
+    /** pa = figure or lab, ca = check, ex = exam practice (the edge colour). */
+    tone?: "pa" | "ca" | "ex";
+  },
+) {
+  const { activity, complete, code, tone = "pa" } = props;
   const heading = useId();
   return (
     <section
       aria-labelledby={heading}
-      className="my-6 rounded-xl border border-border bg-bg-secondary p-4 sm:p-5"
+      className={cn("mb-act", tone, complete && "is-done")}
       data-concept-activity={activity.kind}
     >
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-          Activity · {labels[activity.kind]}
-        </p>
-        {complete && (
-          <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
-            <Check className="size-3.5" aria-hidden="true" /> Done
-          </span>
-        )}
+      <div className="mb-act-head">
+        <span className="mb-act-id">
+          {labels[activity.kind]}
+          {code ? ` ${code}` : ""}
+        </span>
+        <h4 id={heading} className="mb-act-title">
+          {activity.title}
+        </h4>
+        {complete && <span className="mb-act-state">✓ Complete</span>}
       </div>
-      <h4 id={heading} className="type-student-card-title text-text-primary">
-        {activity.title}
-      </h4>
-      {activity.prompt && <Markdown text={activity.prompt} className="mt-2 mb-4 text-[15px]" />}
+      {activity.prompt && <Markdown text={activity.prompt} className="mb-3 text-[16px] leading-[1.6]" />}
       {activity.kind === "choice" && <ChoiceCheck {...props} activity={activity} />}
       {activity.kind === "numeric" && <NumericCheck {...props} activity={activity} />}
       {activity.kind === "blanks" && <BlanksCheck {...props} activity={activity} />}

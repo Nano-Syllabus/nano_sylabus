@@ -1,0 +1,371 @@
+/*
+ * The concepts reader's own look, ported from the micro-book it is modelled on
+ * (~/Downloads/ece-microbook-nepal.html): grid paper, a serif reading face with
+ * grotesk headings, sections split by a strong rule, activities with a coloured
+ * edge, exam tips on an accent bar, a dashed revision card.
+ *
+ * Everything is scoped under `.mb`. The app's colour tokens (--bg-primary,
+ * --text-primary, --border, ...) are re-pointed at the micro-book palette inside
+ * it, so the shared widgets (options, sliders, figures) take the same look
+ * without being rewritten. Light and dark follow the app's [data-theme].
+ */
+
+.mb {
+  --mb-paper: #ecf0f5;
+  --mb-grid: rgba(20, 33, 61, 0.05);
+  --mb-card: #fbfcfe;
+  --mb-ink: #14213d;
+  --mb-muted: #4f5d78;
+  --mb-line: #c5cedb;
+  --mb-tint: #e2e8f1;
+  --mb-accent: #b3203a;
+  --mb-accent-soft: #f6dde2;
+  --mb-blue: #1f4e9c;
+  --mb-blue-soft: #dce6f6;
+  --mb-ok: #17734a;
+  --mb-ok-soft: #d9f0e4;
+
+  --bg-primary: var(--mb-card);
+  --bg-secondary: var(--mb-tint);
+  --bg-tertiary: var(--mb-tint);
+  --text-primary: var(--mb-ink);
+  --text-secondary: var(--mb-ink);
+  --text-muted: var(--mb-muted);
+  --border: var(--mb-line);
+
+  color: var(--mb-ink);
+  background-color: var(--mb-paper);
+  background-image:
+    linear-gradient(var(--mb-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mb-grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+  font-family: var(--font-mb-serif), Georgia, serif;
+}
+
+[data-theme="dark"] .mb {
+  --mb-paper: #0e1524;
+  --mb-grid: rgba(190, 205, 235, 0.045);
+  --mb-card: #162036;
+  --mb-ink: #e6ecf7;
+  --mb-muted: #9daac4;
+  --mb-line: #2b3a57;
+  --mb-tint: #1d2a45;
+  --mb-accent: #ff7488;
+  --mb-accent-soft: #3a1f2a;
+  --mb-blue: #8db2f5;
+  --mb-blue-soft: #1b2c4d;
+  --mb-ok: #5ad39b;
+  --mb-ok-soft: #14352a;
+}
+
+/* UI text (labels, buttons, headings) is the grotesk; reading text the serif. */
+.mb :is(h1, h2, h3, h4, h5, button, input, select, summary, label, output, dt, dd, .mb-ui, .mb-brand, .mb-count) {
+  font-family: var(--font-mb-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ── frame ─────────────────────────────────────────────────────────────── */
+
+.mb-top {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem clamp(1rem, 3vw, 1.75rem);
+  border-bottom: 1px solid var(--mb-line);
+  background: var(--mb-card);
+}
+.mb-top .mb-crumb {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mb-accent);
+}
+.mb-top h2 {
+  margin: 0.1rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.mb-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1.5px solid var(--mb-line);
+  border-radius: 6px;
+  color: var(--mb-ink);
+  background: transparent;
+}
+.mb-close:hover {
+  background: var(--mb-tint);
+}
+
+.mb-side {
+  background: var(--mb-card);
+  border-right: 1px solid var(--mb-line);
+  padding: 1.2rem 1rem 1.5rem;
+}
+.mb-brand strong {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.mb-brand span {
+  color: var(--mb-muted);
+  font-size: 0.9rem;
+}
+.mb-bar {
+  height: 6px;
+  margin-top: 0.9rem;
+  background: var(--mb-tint);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.mb-bar i {
+  display: block;
+  height: 100%;
+  background: var(--mb-accent);
+  transition: width 0.3s;
+}
+.mb-count {
+  margin: 0.35rem 0 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--mb-muted);
+}
+.mb-nav a,
+.mb-nav button {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-left: 4px solid transparent;
+  border-radius: 0 6px 6px 0;
+  background: none;
+  color: var(--mb-ink);
+  text-align: left;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.mb-nav button:hover {
+  background: var(--mb-tint);
+}
+.mb-nav button[aria-current="location"] {
+  border-left-color: var(--mb-accent);
+  background: var(--mb-tint);
+}
+.mb-nav .mb-n {
+  min-width: 1.6rem;
+  color: var(--mb-accent);
+}
+.mb-nav .mb-done {
+  margin-left: auto;
+  color: var(--mb-ok);
+}
+.mb-link {
+  margin-top: 0.8rem;
+  padding: 0.3rem 0;
+  border: 0;
+  background: none;
+  color: var(--mb-muted);
+  font-size: 0.88rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ── chapter ───────────────────────────────────────────────────────────── */
+
+.mb-col {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 2rem clamp(1rem, 4vw, 3rem) 5rem;
+  font-size: 17px;
+  line-height: 1.65;
+}
+.mb-col h1 {
+  margin: 0 0 0.6rem;
+  font-size: clamp(1.7rem, 3.6vw, 2.35rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.mb-lead {
+  color: var(--mb-muted);
+  max-width: 68ch;
+}
+.mb-rem {
+  margin: 1.3rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 5px solid var(--mb-blue);
+  border-radius: 0 4px 4px 0;
+  background: var(--mb-blue-soft);
+}
+.mb-rem strong,
+.mb-tip strong {
+  font-family: var(--font-mb-sans), system-ui, sans-serif;
+}
+.mb-sec {
+  margin-top: 2.6rem;
+  padding-top: 1.3rem;
+  border-top: 2px solid var(--mb-ink);
+  scroll-margin-top: 1rem;
+}
+.mb-sec > h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.45rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.mb-sec-n {
+  display: inline-block;
+  min-width: 2.4rem;
+  color: var(--mb-accent);
+}
+.mb-intuition {
+  margin: 0.4rem 0 0.8rem;
+  font-style: italic;
+  color: var(--mb-muted);
+}
+.mb-col .mb-text ul {
+  margin: 0.6rem 0;
+  padding-left: 1.3rem;
+  list-style: disc;
+}
+.mb-col .mb-text li {
+  margin: 0.35rem 0;
+}
+.mb-col .mb-text strong {
+  font-weight: 650;
+}
+.mb-eq {
+  margin: 0.9rem 0;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--mb-line);
+  border-radius: 4px;
+  background: var(--mb-card);
+  overflow-x: auto;
+}
+.mb-eq .math-block {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+details.mb-sol {
+  margin: 0.8rem 0;
+  font-size: 0.97rem;
+}
+details.mb-sol > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--mb-blue);
+}
+details.mb-sol > div {
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.9rem;
+  border-left: 3px solid var(--mb-line);
+}
+.mb-tip {
+  margin: 1.1rem 0;
+  padding: 0.7rem 1rem;
+  border-left: 5px solid var(--mb-accent);
+  border-radius: 0 4px 4px 0;
+  background: var(--mb-accent-soft);
+}
+
+/* ── activities ────────────────────────────────────────────────────────── */
+
+.mb-act {
+  --kc: var(--mb-blue);
+  margin: 1.5rem 0;
+  padding: 1rem 1.2rem 1.2rem;
+  border: 1px solid var(--mb-line);
+  border-left: 6px solid var(--kc);
+  border-radius: 4px;
+  background: var(--mb-card);
+  font-size: 16px;
+}
+.mb-act.ca {
+  --kc: var(--mb-ok);
+}
+.mb-act.ex {
+  --kc: var(--mb-accent);
+}
+.mb-act.is-done {
+  border-color: var(--mb-ok);
+  border-left-color: var(--kc);
+}
+.mb-act-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.7rem;
+  margin: 0 0 0.7rem;
+  font-family: var(--font-mb-sans), system-ui, sans-serif;
+}
+.mb-act-id {
+  font-weight: 700;
+  color: var(--kc);
+}
+.mb-act-title {
+  font-weight: 600;
+}
+.mb-act-state {
+  margin-left: auto;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--mb-ok);
+}
+/* The shared widgets' rounded app cards read as plain panels here. */
+.mb-act :is(.rounded-xl, .rounded-lg) {
+  border-radius: 6px;
+}
+
+/* ── revision card ─────────────────────────────────────────────────────── */
+
+.mb-sheet {
+  margin: 2.4rem 0 0;
+  padding: 1rem 1.2rem;
+  border: 2px dashed var(--mb-muted);
+  border-radius: 4px;
+  background: var(--mb-card);
+}
+.mb-sheet h4 {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.mb-sheet h5 {
+  margin: 0.8rem 0 0.2rem;
+  font-family: var(--font-mb-sans), system-ui, sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mb-muted);
+}
+.mb-done-note {
+  margin-top: 2rem;
+  padding: 0.8rem 1rem;
+  border-left: 5px solid var(--mb-ok);
+  background: var(--mb-ok-soft);
+  font-family: var(--font-mb-sans), system-ui, sans-serif;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Figures and graphs label in the grotesk, as the micro-book's diagrams do. */
+.mb svg text {
+  font-family: var(--font-mb-sans), system-ui, sans-serif;
+}
