@@ -312,7 +312,7 @@ describe("figures and graphs", () => {
     ]);
     expect(a.y1).toBe(50);
     expect(b.y1).toBeGreaterThan(50 + 18);
-    expect(c.x1 + c.text.length * 18 * 0.56).toBeLessThanOrEqual(596);
+    expect(c.x1 + c.text.length * 18 * 0.62).toBeLessThanOrEqual(598);
   });
 
   it("draws a lab's graph live, with axes, the curve and the current setting", () => {
@@ -332,7 +332,11 @@ describe("figures and graphs", () => {
     const html = renderToStaticMarkup(
       createElement(ConceptActivityCard, { activity: lab!, complete: false, onComplete() {} }),
     );
-    expect(html).toContain('aria-label="Moment M (N m) against Separation (m)"');
+    expect(html).toContain('aria-label="Moment M (N m) against Separation (m). Drag along the graph');
+    // The graph is a control: switch the axis between sliders, drag to set the value.
+    expect(html).toContain('aria-label="Plot against"');
+    expect(html).toContain("Drag along the graph to change separation");
+    expect(html).toContain("Back to the starting values");
     expect(html).toContain("<path");
     expect(html).toContain("<circle");
     expect(html).toContain("20 N m"); // 50 N x 0.4 m, shown before anything is moved

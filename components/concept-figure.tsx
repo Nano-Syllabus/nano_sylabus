@@ -6,6 +6,7 @@ import { useConceptStudy } from "@/components/use-concept-study";
 import type { ConceptActivityProps } from "@/components/concept-activity";
 import type { ConceptActivity } from "@/lib/concept-activities";
 import { cn } from "@/lib/utils";
+import { svgSubscripts } from "@/lib/label-subscripts";
 
 type Figure = Extract<ConceptActivity, { kind: "figure" }>;
 type Item = Figure["items"][number];
@@ -34,32 +35,82 @@ const fillTone: Record<Item["tone"], string> = {
 
 const LABEL_SIZE = 18;
 
+type Box = { x: number; y: number; w: number; h: number };
+
+/** The straight segments an element draws, which a label must not sit on. */
+function segments(item: Item): Array<[number, number, number, number]> {
+  if (item.type === "line" || item.type === "arrow") return [[item.x1, item.y1, item.x2, item.y2]];
+  if (item.type === "rect") {
+    const [l, r] = [Math.min(item.x1, item.x2), Math.max(item.x1, item.x2)];
+    const [t, b] = [Math.min(item.y1, item.y2), Math.max(item.y1, item.y2)];
+    return [[l, t, r, t], [r, t, r, b], [r, b, l, b], [l, b, l, t]];
+  }
+  if (item.type === "circle") {
+    return Array.from({ length: 12 }, (_, i) => {
+      const a = (i / 12) * 2 * Math.PI;
+      const c = ((i + 1) / 12) * 2 * Math.PI;
+      return [item.x1 + item.x2 * Math.cos(a), item.y1 + item.x2 * Math.sin(a), item.x1 + item.x2 * Math.cos(c), item.y1 + item.x2 * Math.sin(c)];
+    });
+  }
+  if (item.type === "polyline") {
+    const pts = item.points.trim().split(/\s+/).map((pt) => pt.split(",").map(Number));
+    return pts.slice(1).map((p, i) => [pts[i][0], pts[i][1], p[0], p[1]]);
+  }
+  return [];
+}
+
+function crosses(box: Box, [x1, y1, x2, y2]: [number, number, number, number]) {
+  // Sample along the segment: plenty for label-sized boxes on a 600 px canvas.
+  for (let t = 0; t <= 1; t += 1 / 24) {
+    const x = x1 + (x2 - x1) * t;
+    const y = y1 + (y2 - y1) * t;
+    if (x > box.x - 3 && x < box.x + box.w + 3 && y > box.y - 3 && y < box.y + box.h + 3) return true;
+  }
+  return false;
+}
+
 /**
- * Labels the model placed on top of each other are nudged apart: each one, in
- * drawing order, slides down a line at a time until its box clears every label
- * before it. Width is estimated from the character count; good enough to stop
- * "F = 300 N" being printed through "Line of action".
+ * Labels moved off whatever they were printed on. For each label, in drawing
+ * order, the first nearby position (as placed, then above, below, right, left,
+ * then further out) that clears every line, shape and earlier label wins; if
+ * none does, the label stays where the model put it. Width is estimated from the
+ * character count, which is plenty to stop "rigid body" sitting on an arrow.
  */
 export function spreadLabels(items: Item[]): Item[] {
-  const placed: Array<{ x: number; y: number; w: number; h: number }> = [];
-  const box = (item: Item, y: number) => ({
-    x: item.x1,
-    y: y - LABEL_SIZE * 0.6,
-    w: item.text.length * LABEL_SIZE * 0.56,
-    h: LABEL_SIZE * 1.2,
+  const obstacles = items.flatMap(segments);
+  const placed: Box[] = [];
+  const boxAt = (item: Item, x: number, y: number): Box => ({
+    x,
+    y: y - LABEL_SIZE * 0.62,
+    w: item.text.length * LABEL_SIZE * 0.62,
+    h: LABEL_SIZE * 1.15,
   });
-  const hits = (a: { x: number; y: number; w: number; h: number }) =>
-    placed.some((b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h);
+  const clear = (box: Box) =>
+    box.x >= 2 &&
+    box.x + box.w <= 598 &&
+    box.y >= 2 &&
+    box.y + box.h <= 358 &&
+    !obstacles.some((segment) => crosses(box, segment)) &&
+    !placed.some((b) => box.x < b.x + b.w && b.x < box.x + box.w && box.y < b.y + b.h && b.y < box.y + box.h);
+  // Candidate nudges, nearest first: up to 100 px sideways, three lines up or down.
+  const offsets: Array<[number, number]> = [];
+  for (const dx of [0, 20, -20, 40, -40, 70, -70, 100, -100])
+    for (const dy of [0, -1, 1, -2, 2, -3, 3].map((k) => k * LABEL_SIZE * 1.1)) offsets.push([dx, dy]);
+  offsets.sort((a, b) => Math.hypot(a[0], a[1] * 1.3) - Math.hypot(b[0], b[1] * 1.3));
+
   return items.map((item) => {
     if (item.type !== "text") return item;
-    let y = item.y1;
-    for (let tries = 0; tries < 6 && hits(box(item, y)); tries++) y += LABEL_SIZE * 1.2;
-    y = Math.min(y, 350);
-    // Keep a label on the canvas: one that would run off the right edge starts earlier.
-    const x = Math.max(4, Math.min(item.x1, 596 - item.text.length * LABEL_SIZE * 0.56));
-    const moved = { ...item, x1: x, y1: y };
-    placed.push(box(moved, y));
-    return moved;
+    const width = item.text.length * LABEL_SIZE * 0.62;
+    const x0 = Math.max(4, Math.min(item.x1, 596 - width));
+    for (const [dx, dy] of offsets) {
+      const box = boxAt(item, x0 + dx, item.y1 + dy);
+      if (clear(box)) {
+        placed.push(box);
+        return { ...item, x1: x0 + dx, y1: item.y1 + dy };
+      }
+    }
+    placed.push(boxAt(item, x0, item.y1));
+    return { ...item, x1: x0 };
   });
 }
 
@@ -164,7 +215,7 @@ function Shape({ item, selected }: { item: Item; selected: boolean }) {
           strokeWidth="4"
           strokeLinejoin="round"
         >
-          {item.text}
+          {svgSubscripts(item.text)}
         </text>
       );
   }

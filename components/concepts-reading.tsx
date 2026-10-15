@@ -7,6 +7,7 @@ import { trimModelFiller } from "@/lib/model-filler";
 import { Markdown } from "@/components/markdown";
 import { cn } from "@/lib/utils";
 import { ConceptActivityCard } from "@/components/concept-activity";
+import "@/components/microbook.css";
 import {
   CONCEPT_ACTIVITY_FENCE,
   conceptProgressKey,
@@ -231,16 +232,20 @@ export function readingChapter(reading: string[]): Chapter {
   return chapter;
 }
 
-const callout = "rounded-xl border-l-4 px-4 py-3";
+const VISUAL_KINDS = new Set(["figure", "experiment", "diagram", "bits"]);
 
 function ChapterPieceView({
   piece,
+  code,
+  tone,
   sourceId,
   progressKey,
   done,
   onDone,
 }: {
   piece: ChapterPiece;
+  code?: string;
+  tone?: "pa" | "ca" | "ex";
   sourceId: string;
   progressKey: string;
   done: number[];
@@ -248,26 +253,26 @@ function ChapterPieceView({
 }) {
   switch (piece.kind) {
     case "lead":
-      return <Markdown text={piece.text} className="mt-3 text-base text-text-secondary italic" />;
+      return <Markdown text={piece.text} className="mb-intuition text-[17px] leading-[1.65]" />;
     case "formula":
-      return <Markdown text={piece.text} className="my-4 text-base" />;
+      return (
+        <div className="mb-eq">
+          <Markdown text={piece.text} className="text-[17px]" />
+        </div>
+      );
     case "example":
       return (
-        <details className="group my-4 rounded-xl border border-border bg-bg-primary">
-          <summary className="flex cursor-pointer items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-text-primary">
-            Worked example
-            <span className="text-xs font-medium text-blue-600 group-open:hidden dark:text-blue-400">Show</span>
-          </summary>
-          <Markdown text={piece.text} className="border-t border-border px-4 py-3 text-[15px]" />
+        <details className="mb-sol">
+          <summary>Worked example</summary>
+          <div>
+            <Markdown text={piece.text} className="text-[16px] leading-[1.65]" />
+          </div>
         </details>
       );
     case "tip":
       return (
-        <div className={cn(callout, "my-4 border-l-amber-500 bg-amber-500/10")}>
-          <p className="text-sm text-text-primary">
-            <span className="font-semibold text-amber-800 dark:text-amber-300">Exam tip. </span>
-          </p>
-          <Markdown text={piece.text} className="text-[15px]" />
+        <div className="mb-tip">
+          <Markdown text={`**Exam tip.** ${piece.text}`} className="text-[16px] leading-[1.6]" />
         </div>
       );
     case "activity":
@@ -275,26 +280,31 @@ function ChapterPieceView({
         <ConceptActivityCard
           key={`${sourceId}-activity-${piece.number}`}
           activity={piece.activity}
+          code={code}
+          tone={tone}
           complete={done.includes(piece.number)}
           storageKey={`${progressKey}:activity-${piece.number}`}
           onComplete={() => onDone(piece.number)}
         />
       );
     default:
-      return <Markdown text={bulletPointReading(piece.text)} className="mt-3 text-[15px] leading-7" />;
+      return (
+        <div className="mb-text">
+          <Markdown text={bulletPointReading(piece.text)} className="text-[17px] leading-[1.65]" />
+        </div>
+      );
   }
 }
 
 /**
- * The sheet itself, as a dialog in the full sense: Escape and the backdrop close
- * it, focus moves into it and stays there, the page behind does not scroll, and
- * focus goes back to the button that opened it — a keyboard reader must not land
- * at the top of the page after reading.
+ * The sheet itself, full screen, laid out like the micro-book it is modelled on
+ * (see components/microbook.css): a sticky progress rail, then the chapter on
+ * grid paper — why it matters, the one idea, numbered sections each with its
+ * figure or graph and a check, the exam practice, and a revision card.
  *
- * Laid out as a micro-book chapter: a progress rail on the left (activities done,
- * sections ticked when theirs are), then the chapter — why it matters, what to be
- * ready for, the one idea, numbered sections each ending in an activity, the exam
- * practice, the formulas and the common mistakes.
+ * It is a dialog in the full sense: Escape closes it, focus moves into it and
+ * stays there, the page behind does not scroll, and focus goes back to the
+ * button that opened it.
  *
  * ESCAPE IS CAUGHT FIRST AND KEPT. In a challenge's focus mode Escape also means
  * "exit the challenge", and both listen on `window`. Registered in the capture
@@ -316,7 +326,8 @@ export function ConceptsDrawer({
   const chapter = useMemo(() => readingChapter(source.reading), [source.reading]);
   const activityNumbers = (section: ChapterSection) =>
     section.pieces.flatMap((piece) => (piece.kind === "activity" ? [piece.number] : []));
-  const activityCount = chapter.sections.reduce((sum, s) => sum + activityNumbers(s).length, 0) +
+  const activityCount =
+    chapter.sections.reduce((sum, s) => sum + activityNumbers(s).length, 0) +
     chapter.opening.filter((piece) => piece.kind === "activity").length;
   const progressKey = conceptProgressKey(source.id, source.reading);
   const [progress, setProgress] = useState<{ key: string; done: number[]; round: number }>({
@@ -326,7 +337,15 @@ export function ConceptsDrawer({
   });
   const done = progress.key === progressKey ? progress.done : [];
   const [active, setActive] = useState(0);
-  const navigable = chapter.sections.filter((s) => s.role === "lesson" || s.role === "practice");
+
+  // Lessons are numbered by the reading; the exam practice takes the next number.
+  const lessons = chapter.sections.filter((s) => s.role === "lesson");
+  const lastNumber = lessons.reduce((max, s) => Math.max(max, s.number ?? 0), 0);
+  const numberOf = (s: ChapterSection) =>
+    s.role === "practice" ? lastNumber + 1 : s.role === "lesson" ? s.number : null;
+  const body = chapter.sections.filter((s) => s.role !== "formulas" && s.role !== "mistakes");
+  const revision = chapter.sections.filter((s) => s.role === "formulas" || s.role === "mistakes");
+  const navigable = body.filter((s) => s.role === "lesson" || s.role === "practice");
 
   useEffect(() => {
     let stored: unknown;
@@ -339,7 +358,9 @@ export function ConceptsDrawer({
       key: progressKey,
       round: current.round,
       done: Array.isArray(stored)
-        ? Array.from(new Set(stored.filter((n): n is number => Number.isInteger(n) && n > 0 && n <= activityCount)))
+        ? Array.from(
+            new Set(stored.filter((n): n is number => Number.isInteger(n) && n > 0 && n <= activityCount)),
+          )
         : [],
     }));
   }, [progressKey, activityCount]);
@@ -374,7 +395,7 @@ export function ConceptsDrawer({
     const scroller = contentRef.current;
     if (!element || !scroller) return;
     scroller.scrollTo({
-      top: element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 16,
+      top: element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 8,
       behavior: "instant",
     });
     element.focus({ preventScroll: true });
@@ -385,7 +406,7 @@ export function ConceptsDrawer({
     const scroller = contentRef.current;
     if (!scroller) return;
     const onScroll = () => {
-      const top = scroller.getBoundingClientRect().top + 96;
+      const top = scroller.getBoundingClientRect().top + 120;
       let current = 0;
       for (const section of chapter.sections) {
         const element = document.getElementById(`${prefix}-section-${section.index}`);
@@ -440,164 +461,135 @@ export function ConceptsDrawer({
     const numbers = activityNumbers(section);
     return numbers.length > 0 && numbers.every((n) => done.includes(n));
   };
-  const piece = (p: ChapterPiece, key: string) => (
-    <ChapterPieceView
-      key={key}
-      piece={p}
-      sourceId={`${source.id}-${progress.round}`}
-      progressKey={progressKey}
-      done={done}
-      onDone={markDone}
-    />
-  );
+  const renderPieces = (section: ChapterSection | null, pieces: ChapterPiece[], keyBase: string) => {
+    const n = section ? numberOf(section) : null;
+    let order = 0;
+    return pieces.map((p, i) => {
+      const isActivity = p.kind === "activity";
+      if (isActivity) order += 1;
+      const tone: "pa" | "ca" | "ex" =
+        section?.role === "practice" ? "ex" : isActivity && VISUAL_KINDS.has(p.activity.kind) ? "pa" : "ca";
+      return (
+        <ChapterPieceView
+          key={`${keyBase}-${i}`}
+          piece={p}
+          code={isActivity && n !== null ? `${n}.${order}` : undefined}
+          tone={tone}
+          sourceId={`${source.id}-${progress.round}`}
+          progressKey={progressKey}
+          done={done}
+          onDone={markDone}
+        />
+      );
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-[70]">
-      <button
-        type="button"
-        tabIndex={-1}
-        aria-label="Close concepts"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40 animate-in fade-in duration-200 motion-reduce:animate-none"
-      />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         data-nanoai-context="Concepts sheet open on screen"
         aria-labelledby={titleId}
-        className="absolute inset-y-0 right-0 flex w-full max-w-[72rem] flex-col border-l border-border bg-bg-primary shadow-2xl animate-in slide-in-from-right duration-200 motion-reduce:animate-none"
+        className="mb absolute inset-0 flex flex-col animate-in fade-in duration-150 motion-reduce:animate-none"
       >
-        <header className="flex items-start gap-3 border-b border-border px-5 py-4 sm:px-6">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-              Concepts{source.subjectName ? ` · ${source.subjectName}` : ""}
-            </p>
-            <h2 id={titleId} className="type-student-card-title mt-1 text-text-primary">
+        <header className="mb-top">
+          <div className="min-w-0">
+            <p className="mb-crumb mb-ui">Concepts{source.subjectName ? ` · ${source.subjectName}` : ""}</p>
+            <h2 id={titleId} className="truncate">
               {source.title}
             </h2>
           </div>
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={onClose}
-            aria-label="Close concepts"
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-          >
+          <button ref={closeRef} type="button" onClick={onClose} aria-label="Close concepts" className="mb-close">
             <X className="size-4" aria-hidden="true" />
           </button>
         </header>
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-[17.5rem_minmax(0,1fr)]">
           {(navigable.length > 1 || activityCount > 0) && (
-            <nav
-              aria-label="Chapter sections"
-              className="shrink-0 border-b border-border bg-bg-secondary px-4 py-3 md:w-60 md:overflow-y-auto md:border-r md:border-b-0 md:py-5"
-            >
+            <aside aria-label="Chapter progress" className="mb-side shrink-0 border-b md:overflow-y-auto md:border-b-0">
+              <div className="mb-brand hidden md:block">
+                <strong>{source.subjectName || "Concepts"}</strong>
+                <span>Interactive micro-topic</span>
+              </div>
               {activityCount > 0 && (
-                <div className="mb-3 md:mb-5">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-xs font-semibold text-text-secondary">Your progress</p>
-                    <p className="text-xs text-text-muted" aria-live="polite">
-                      {done.length} of {activityCount} activities
-                    </p>
+                <>
+                  <div className="mb-bar" aria-hidden="true">
+                    <i style={{ width: `${percent}%` }} />
                   </div>
-                  <div
-                    className="mt-2 h-1.5 overflow-hidden rounded-full bg-border"
-                    role="progressbar"
-                    aria-label="Activities completed"
-                    aria-valuemin={0}
-                    aria-valuemax={activityCount}
-                    aria-valuenow={done.length}
-                  >
-                    <div className="h-full rounded-full bg-blue-600 transition-[width] duration-300" style={{ width: `${percent}%` }} />
-                  </div>
-                </div>
+                  <p className="mb-count mb-ui" aria-live="polite">
+                    {done.length} of {activityCount} activities complete
+                  </p>
+                </>
               )}
-              <ol className="flex gap-1.5 overflow-x-auto md:flex-col md:overflow-visible">
-                {navigable.map((section) => {
-                  const finished = sectionDone(section);
-                  return (
+              <nav aria-label="Chapter sections" className="mb-nav">
+                <ol className="flex gap-1 overflow-x-auto md:block md:overflow-visible">
+                  {navigable.map((section) => (
                     <li key={section.index} className="shrink-0 md:shrink">
                       <button
                         type="button"
                         aria-current={active === section.index ? "location" : undefined}
                         onClick={() => goTo(section.index)}
-                        className={cn(
-                          "flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-text-secondary hover:bg-bg-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
-                          active === section.index && "bg-blue-500/10 text-blue-700 dark:text-blue-300",
-                        )}
                       >
-                        <span className="w-5 shrink-0 text-xs font-semibold tabular-nums text-text-muted">
-                          {section.number ?? "★"}
-                        </span>
-                        <span className="min-w-0 flex-1 whitespace-nowrap md:whitespace-normal">{section.title}</span>
-                        {finished && (
-                          <Check className="mt-0.5 size-3.5 shrink-0 text-green-600 dark:text-green-400" aria-label="done" />
+                        <span className="mb-n">{numberOf(section)}</span>
+                        <span className="whitespace-nowrap md:whitespace-normal">{section.title}</span>
+                        {sectionDone(section) && (
+                          <Check className="mb-done mt-0.5 size-4 shrink-0" aria-label="done" />
                         )}
                       </button>
                     </li>
-                  );
-                })}
-              </ol>
+                  ))}
+                </ol>
+              </nav>
               {done.length > 0 && (
-                <button
-                  type="button"
-                  onClick={resetProgress}
-                  className="mt-3 hidden text-xs text-text-muted underline underline-offset-2 hover:text-text-primary md:block"
-                >
+                <button type="button" onClick={resetProgress} className="mb-link hidden md:block">
                   Reset progress
                 </button>
               )}
-            </nav>
+            </aside>
           )}
-          <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8">
-            <article className="mx-auto max-w-[46rem] text-text-primary">
-              {chapter.why && <Markdown text={chapter.why} className="text-base leading-7 text-text-secondary" />}
+          <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <article className="mb-col">
+              <h1>{source.title}</h1>
+              {chapter.why && <Markdown text={chapter.why} className="mb-lead text-[17px] leading-[1.65]" />}
               {/* No "Be ready for" list: a column of exam questions before any
                   teaching read as a quiz (user, 2026-10-15). */}
               {chapter.idea && (
-                <div className={cn(callout, "mt-5 border-l-blue-600 bg-blue-500/10")}>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">The idea</p>
-                  <Markdown text={chapter.idea} className="mt-1 text-base font-medium" />
+                <div className="mb-rem">
+                  <Markdown text={`**The idea.** ${chapter.idea}`} className="text-[17px] leading-[1.6]" />
                 </div>
               )}
-              {chapter.opening.map((p, i) => piece(p, `opening-${i}`))}
-              {chapter.sections.map((section) => (
+              {renderPieces(null, chapter.opening, "opening")}
+              {body.map((section) => (
                 <section
                   key={`${progressKey}-${progress.round}-${section.index}`}
                   id={`${prefix}-section-${section.index}`}
                   tabIndex={-1}
                   aria-labelledby={`${prefix}-heading-${section.index}`}
-                  className="mt-10 scroll-mt-4 focus:outline-none"
+                  className="mb-sec focus:outline-none"
                   data-concept-section={section.role}
                 >
-                  <h3
-                    id={`${prefix}-heading-${section.index}`}
-                    className="type-student-section-title flex items-baseline gap-2.5 border-b border-border pb-2 text-text-primary"
-                  >
-                    {section.number !== null && (
-                      <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white">
-                        {section.number}
-                      </span>
-                    )}
+                  <h3 id={`${prefix}-heading-${section.index}`}>
+                    {numberOf(section) !== null && <span className="mb-sec-n">{numberOf(section)}</span>}
                     {section.title}
                   </h3>
-                  {section.role === "formulas" ? (
-                    <div className="mt-4 rounded-xl border border-border bg-bg-secondary px-4 py-2">
-                      {section.pieces.map((p, i) => piece(p, `${section.index}-${i}`))}
-                    </div>
-                  ) : section.role === "mistakes" ? (
-                    <div className={cn(callout, "mt-4 border-l-red-500 bg-red-500/5")}>
-                      {section.pieces.map((p, i) => piece(p, `${section.index}-${i}`))}
-                    </div>
-                  ) : (
-                    section.pieces.map((p, i) => piece(p, `${section.index}-${i}`))
-                  )}
+                  {renderPieces(section, section.pieces, `${section.index}`)}
                 </section>
               ))}
+              {revision.length > 0 && (
+                <aside className="mb-sheet" data-concept-section="revision" aria-label="Revision card">
+                  <h4>Revision card</h4>
+                  {revision.map((section) => (
+                    <div key={section.index} className="mb-text">
+                      <h5>{section.role === "formulas" ? "Formulas" : "Common mistakes"}</h5>
+                      {renderPieces(section, section.pieces, `rev-${section.index}`)}
+                    </div>
+                  ))}
+                </aside>
+              )}
               {activityCount > 0 && done.length === activityCount && (
-                <p role="status" className="mt-10 rounded-xl bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-800 dark:text-green-300">
-                  Every activity in this chapter is done. You’re ready for the questions.
+                <p role="status" className="mb-done-note">
+                  Every activity in this chapter is complete. You’re ready for the questions.
                 </p>
               )}
             </article>

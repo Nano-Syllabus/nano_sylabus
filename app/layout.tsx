@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Mono, Inter, Outfit, Poppins } from "next/font/google";
+import { DM_Mono, Familjen_Grotesk, Inter, Outfit, Poppins, Source_Serif_4 } from "next/font/google";
 import { ReactNode } from "react";
 import { DevPerfHud } from "@/components/dev-perf-hud";
 import { QueryProvider } from "@/components/query-provider";
@@ -37,6 +37,24 @@ const dmMono = DM_Mono({
   display: "swap",
   // App-only face: fetched when a page uses it, not preloaded on every page
   // (the public landing never does, and the preload competed with its first paint).
+  preload: false,
+});
+
+// The concepts reader's micro-book faces (components/microbook.css). Variable
+// fonts, so no weight list (a weight list breaks Turbopack's next/font). Fetched
+// only when the reader opens, never preloaded.
+const microbookSerif = Source_Serif_4({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-mb-serif",
+  display: "swap",
+  preload: false,
+});
+
+const microbookSans = Familjen_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-mb-sans",
+  display: "swap",
   preload: false,
 });
 
@@ -237,7 +255,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       */}
       <body
         suppressHydrationWarning
-        className={`${outfit.variable} ${inter.variable} ${poppins.variable} ${dmMono.variable} font-sans antialiased`}
+        className={`${outfit.variable} ${inter.variable} ${poppins.variable} ${dmMono.variable} ${microbookSerif.variable} ${microbookSans.variable} font-sans antialiased`}
       >
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         {process.env.NODE_ENV === "development" ? (
