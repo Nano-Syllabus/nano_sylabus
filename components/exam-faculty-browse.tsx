@@ -35,6 +35,24 @@ export function ExamFacultyBrowse({
   onBack?: () => void;
   backLabel: string;
 }) {
+  const featuredCount =
+    faculties.length === 4 ? 1 : faculties.length >= 5 ? 2 : 0;
+  const featuredFaculties = faculties.slice(0, featuredCount);
+  const remainingFaculties = faculties.slice(featuredCount);
+  const remainingCount = Math.min(remainingFaculties.length, 3);
+  const renderFaculty = (faculty: ExamFaculty) => (
+    <ExamFacultyCard
+      key={faculty.id}
+      slug={faculty.slug}
+      name={faculty.name}
+      faculty={faculty.faculty}
+      university={faculty.university}
+      subjects={faculty.subjects}
+      selected={selectedSlug === faculty.slug}
+      onJoin={() => onSelect(faculty.slug)}
+    />
+  );
+
   return (
     <main className="ns-ef-page">
       <header className="ns-ef-topbar">
@@ -64,38 +82,19 @@ export function ExamFacultyBrowse({
           <h1 id="ns-ef-title">{title}</h1>
           <p>{description}</p>
         </div>
-        <div className="ns-ef-hero-art" aria-hidden="true">
-          <svg
-            viewBox="0 0 120 120"
-            fill="none"
-            stroke="#101114"
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="60" cy="36" r="13" />
-            <circle cx="29" cy="45" r="10" />
-            <circle cx="91" cy="45" r="10" />
-            <path d="M37 89V76c0-14 10-24 23-24s23 10 23 24v13H37ZM11 83V70c0-10 8-18 18-18 5 0 9 2 12 5M109 83V70c0-10-8-18-18-18-5 0-9 2-12 5" />
-          </svg>
-        </div>
       </section>
 
       <section className="ns-ef-browse" aria-label="Faculties">
-        <div className="ns-ef-grid">
-          {faculties.map((faculty) => (
-            <ExamFacultyCard
-              key={faculty.id}
-              slug={faculty.slug}
-              name={faculty.name}
-              faculty={faculty.faculty}
-              university={faculty.university}
-              subjects={faculty.subjects}
-              selected={selectedSlug === faculty.slug}
-              onJoin={() => onSelect(faculty.slug)}
-            />
-          ))}
-        </div>
+        {featuredCount ? (
+          <div className={`ns-ef-featured-grid ns-ef-featured-grid--${featuredCount}`}>
+            {featuredFaculties.map((faculty) => renderFaculty(faculty))}
+          </div>
+        ) : null}
+        {remainingFaculties.length ? (
+          <div className={`ns-ef-grid ns-ef-grid--count-${remainingCount}`}>
+            {remainingFaculties.map(renderFaculty)}
+          </div>
+        ) : null}
       </section>
 
       <div className="ns-ef-continue">
@@ -114,7 +113,7 @@ export function ExamFacultyBrowse({
       </div>
 
       <style>{`
-        .ns-ef-page { width: min(1440px, calc(100% - 64px)); min-height: 100vh; margin: 0 auto; padding-bottom: 56px; background: #fff; color: #101114; -webkit-font-smoothing: antialiased; }
+        .ns-ef-page { width: min(1440px, calc(100% - 64px)); min-height: 100vh; margin: 0 auto; padding-bottom: clamp(32px, 5vw, 56px); background: #fff; color: #101114; -webkit-font-smoothing: antialiased; }
         .ns-ef-topbar { height: 80px; display: flex; align-items: center; justify-content: space-between; }
         .ns-ef-brand { display: inline-flex; align-items: center; gap: 12px; color: #101114; text-decoration: none; font-size: 1.375rem; font-weight: 600; letter-spacing: -.04em; }
         .ns-ef-brand img { width: 42px; height: 42px; }
@@ -126,30 +125,42 @@ export function ExamFacultyBrowse({
         .ns-ef-login:hover { border-color: #2563eb; }
         .ns-ef-login:focus-visible { outline: 3px solid #9aafff; outline-offset: 3px; }
         @media (max-width: 520px) { .ns-ef-topbar-actions { gap: 10px; } .ns-ef-login { padding: 0 10px; } .ns-ef-login-hint { display: none; } }
-        .ns-ef-hero { min-height: 190px; padding: 36px 50px; display: grid; grid-template-columns: minmax(0, 1fr) 170px; align-items: center; gap: 32px; overflow: hidden; border-radius: 15px; background: #dcfa72; }
-        .ns-ef-hero h1 { margin: 0; max-width: 800px; font-size: clamp(2.25rem, 3.2vw, 3.25rem); line-height: 1; letter-spacing: -.045em; font-weight: 600; }
-        .ns-ef-hero p { margin: 14px 0 0; max-width: 640px; color: #313329; font-size: 1.125rem; line-height: 1.5; letter-spacing: -.01em; }
-        .ns-ef-hero-art { width: 140px; aspect-ratio: 1; justify-self: end; display: grid; place-items: center; border-radius: 28px; background: #fff; }
-        .ns-ef-hero-art svg { width: 90px; height: 90px; }
-        .ns-ef-browse { margin-top: 30px; color: #171c27; }
-        .ns-ef-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-        .ns-ef-continue { display: flex; justify-content: center; margin-top: 36px; }
+        .ns-ef-hero { padding: clamp(32px, 5vw, 64px) 20px clamp(24px, 3vw, 40px); text-align: center; }
+        .ns-ef-hero h1 { margin: 0 auto; max-width: 800px; font-size: clamp(2rem, 4vw, 3rem); line-height: 1.08; letter-spacing: -.045em; font-weight: 600; }
+        .ns-ef-hero p { margin: 12px auto 0; max-width: 640px; color: #667083; font-size: clamp(.95rem, 1.4vw, 1.0625rem); line-height: 1.55; letter-spacing: -.01em; }
+        .ns-ef-browse { width: 100%; max-width: 1253px; margin: clamp(20px, 3vw, 30px) auto 0; color: #171c27; }
+        .ns-ef-featured-grid, .ns-ef-grid { display: grid; gap: clamp(14px, 1.5vw, 24px); }
+        .ns-ef-featured-grid { margin: 0 auto clamp(14px, 1.5vw, 24px); }
+        .ns-ef-featured-grid > .ns-fc, .ns-ef-grid > .ns-fc { width: 100%; min-width: 0; }
+        .ns-ef-featured-grid--1 { width: min(33.333%, 420px); grid-template-columns: minmax(0, 1fr); }
+        .ns-ef-featured-grid--2 { width: min(72%, 900px); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ns-ef-grid--count-1 { width: min(33.333%, 420px); margin: 0 auto; grid-template-columns: minmax(0, 1fr); }
+        .ns-ef-grid--count-2 { width: min(72%, 900px); margin: 0 auto; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ns-ef-grid--count-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .ns-ef-continue { display: flex; justify-content: center; margin-top: clamp(24px, 3vw, 36px); }
         .ns-ef-cta { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 26px; border: 0; border-radius: 10px; background: #3049ed; color: #fff; font-size: 14px; font-weight: 800; cursor: pointer; transition: background .2s; }
         .ns-ef-cta:hover:not(:disabled) { background: #2439d0; }
         .ns-ef-cta:disabled { opacity: .45; cursor: not-allowed; }
         .ns-ef-cta svg { width: 16px; height: 16px; }
         .ns-ef-cta:focus-visible, .ns-ef-back:focus-visible { outline: 3px solid #9aafff; outline-offset: 3px; }
-        @media (max-width: 1100px) { .ns-ef-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 1100px) {
+          .ns-ef-featured-grid--1, .ns-ef-grid--count-1 { width: min(42%, 420px); }
+          .ns-ef-featured-grid--2, .ns-ef-grid--count-2 { width: min(88%, 900px); }
+        }
         @media (max-width: 800px) {
-          .ns-ef-page { width: min(100% - 28px, 720px); }
+          .ns-ef-page { width: min(calc(100% - 28px), 720px); }
           .ns-ef-topbar { height: 70px; }
-          .ns-ef-hero { min-height: auto; grid-template-columns: 1fr; padding: 28px; }
-          .ns-ef-hero-art { display: none; }
-          .ns-ef-grid { gap: 14px; }
+          .ns-ef-hero { padding: 36px 12px 26px; }
+          .ns-ef-featured-grid, .ns-ef-grid { gap: 14px; }
+          .ns-ef-featured-grid--1, .ns-ef-featured-grid--2,
+          .ns-ef-grid--count-1, .ns-ef-grid--count-2, .ns-ef-grid--count-3 {
+            width: min(100%, 420px);
+            grid-template-columns: 1fr;
+          }
         }
         @media (max-width: 560px) {
-          .ns-ef-page { width: min(100% - 20px, 520px); }
-          .ns-ef-hero { padding: 24px 20px; }
+          .ns-ef-page { width: min(calc(100% - 20px), 520px); }
+          .ns-ef-hero { padding: 30px 8px 22px; }
           .ns-ef-cta { width: 100%; justify-content: center; }
         }
       `}</style>

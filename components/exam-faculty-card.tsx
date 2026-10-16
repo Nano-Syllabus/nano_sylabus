@@ -108,9 +108,9 @@ export function ExamFacultyCard({
             className="ns-fc-open"
             onClick={onJoin}
             aria-pressed={selected}
-            aria-label={selected ? `${name} is your faculty` : `Join ${name}`}
+            aria-label={selected ? `${name} is your faculty` : `Select ${name}`}
           >
-            {selected ? "Selected" : "Join"}
+            {selected ? "Selected" : "Select"}
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -125,7 +125,7 @@ export function ExamFacultyCard({
       </div>
 
       <style>{`
-        .ns-fc { position: relative; min-height: 270px; overflow: hidden; border: 1px solid #e6e9f0; border-radius: 22px; background: #fff; box-shadow: 0 3px 8px rgba(22,34,71,.025); transition: transform .25s, box-shadow .25s, border-color .25s; text-align: left; }
+        .ns-fc { position: relative; display: flex; min-width: 0; min-height: clamp(290px, 24vw, 340px); box-sizing: border-box; overflow: hidden; border: 1px solid #e6e9f0; border-radius: 22px; background: #fff; box-shadow: 0 3px 8px rgba(22,34,71,.025); transition: transform .25s, box-shadow .25s, border-color .25s; text-align: left; }
         .ns-fc:hover { transform: translateY(-4px); box-shadow: 0 18px 38px rgba(31,46,91,.09); border-color: #cbd4fa; }
         .ns-fc--selected { border-color: #3158e9; box-shadow: 0 0 0 1px #3158e9, 0 18px 38px rgba(31,46,91,.09); }
         .ns-fc::before { content: ""; position: absolute; inset: 0 0 auto; height: 94px; background: var(--wash); }
@@ -135,27 +135,29 @@ export function ExamFacultyCard({
         .ns-fc--purple { --wash: #f3efff; --arc: #ded3fa; --halo: #ede7fb; --accent: #7454c5; }
         .ns-fc--amber { --wash: #fff4e7; --arc: #f6dfba; --halo: #fff0dc; --accent: #b46b1d; }
         .ns-fc--rose { --wash: #fff0f2; --arc: #f8d7dd; --halo: #ffebef; --accent: #c04d68; }
-        .ns-fc-inner { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 270px; padding: 24px 25px 23px; }
-        .ns-fc-top { height: 74px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+        .ns-fc-inner { position: relative; z-index: 1; display: flex; flex: 1; flex-direction: column; min-width: 0; box-sizing: border-box; padding: clamp(18px, 2vw, 25px); }
+        .ns-fc-top { min-height: 62px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
         .ns-fc-monogram { display: grid; place-items: center; width: 55px; height: 55px; border: 1px solid rgba(255,255,255,.85); border-radius: 17px; background: #fff; box-shadow: 0 7px 18px rgba(31,46,91,.08); color: var(--accent); font-size: 17px; font-weight: 800; letter-spacing: -.04em; }
         .ns-fc-tag { padding: 7px 11px; border: 1px solid rgba(255,255,255,.9); border-radius: 999px; background: rgba(255,255,255,.74); color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; backdrop-filter: blur(5px); }
-        .ns-fc-title { margin: 4px 0 5px; font-size: 22px; font-weight: 800; line-height: 1.26; letter-spacing: -.04em; overflow-wrap: anywhere; color: #111; }
+        .ns-fc-title { margin: 4px 0 5px; font-size: clamp(18px, 1.5vw, 22px); font-weight: 800; line-height: 1.26; letter-spacing: -.04em; overflow-wrap: anywhere; color: #111; }
         .ns-fc-badge { display: inline-flex; align-items: center; margin-left: 8px; padding: 5px 9px; border-radius: 999px; background: #e9f7ef; color: #23804e; font-size: 11px; font-weight: 800; letter-spacing: 0; vertical-align: 4px; }
-        .ns-fc-subtitle { margin: 0; font-size: 14px; line-height: 1.45; color: #667083; }
-        .ns-fc-meta { display: flex; flex-wrap: wrap; gap: 8px 15px; margin-top: 22px; font-size: 13px; color: #616b7d; }
+        .ns-fc-subtitle { margin: 0; overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; color: #667083; }
+        .ns-fc-meta { display: flex; flex-wrap: wrap; gap: 8px 15px; margin-top: clamp(12px, 1.5vw, 18px); font-size: 13px; color: #616b7d; }
         .ns-fc-meta span { display: inline-flex; align-items: center; gap: 6px; }
         .ns-fc-meta svg { color: #8290a9; }
         .ns-fc-meta strong { color: #384354; font-weight: 700; }
-        .ns-fc-subjects { margin-top: 12px; font-size: 13px; color: #384354; }
+        .ns-fc-subjects { margin-top: 10px; font-size: 13px; color: #384354; }
         .ns-fc-subjects summary { cursor: pointer; font-weight: 700; color: var(--accent); }
-        .ns-fc-subjects ul { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+        .ns-fc-subjects ul { max-height: 74px; overflow-y: auto; margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 5px; }
         .ns-fc-subjects li { display: flex; align-items: center; gap: 6px; }
-        .ns-fc-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 21px; }
+        .ns-fc-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 14px; }
         .ns-fc-open { display: inline-flex; align-items: center; gap: 9px; padding: 10px 13px; border: 0; border-radius: 10px; background: #212b48; color: #fff; font-size: 13px; font-weight: 800; white-space: nowrap; cursor: pointer; transition: background .2s, transform .2s; }
         .ns-fc-open:hover { background: #3158f4; transform: translateX(2px); }
         .ns-fc--selected .ns-fc-open { background: #3158e9; }
         .ns-fc-open svg { width: 16px; height: 16px; }
         .ns-fc-open:focus-visible { outline: 3px solid #9aafff; outline-offset: 3px; }
+        @media (max-width: 800px) { .ns-fc { min-height: 280px; } }
+        @media (max-width: 560px) { .ns-fc { min-height: 270px; } }
       `}</style>
     </article>
   );

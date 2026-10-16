@@ -74,10 +74,11 @@ describe("the exam's student journey", () => {
     expect(html).not.toContain("1 / 3");
   });
 
-  it("lists only the exam's faculties as joinable cards, with Continue held until one is chosen", () => {
+  it("lists only the exam's faculties as selectable cards, with Continue held until one is chosen", () => {
     const html = render({ exam: exam({ askQuestions: false, questions: [] }) });
-    expect(html).toContain('aria-label="Join BCT License"');
-    expect(html).toContain('aria-label="Join BEI"');
+    expect(html).toContain('aria-label="Select BCT License"');
+    expect(html).toContain('aria-label="Select BEI"');
+    expect(html).toContain(">Select<svg");
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Choose your faculty/);
   });
 
