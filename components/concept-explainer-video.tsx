@@ -48,6 +48,9 @@ export function ConceptExplainerVideo({
   waiting = false,
   onVideo,
   endAction,
+  featured = false,
+  onReady,
+  onWatched,
 }: {
   challengeId: string;
   checkpoints?: VideoCheckpoint[];
@@ -65,6 +68,16 @@ export function ConceptExplainerVideo({
   onVideo?: (video: HTMLVideoElement | null) => void;
   /** Stage only: the end card's way on. The video never takes it by itself. */
   endAction?: { label: string; onClick: () => void };
+  /**
+   * The Concepts sheet's lead (user, 2026-10-16): asked for on open, large, and
+   * playing by itself — but ONLY a finished video is ever shown. Anything short
+   * of that (being made, failed, no reading) renders nothing at all.
+   */
+  featured?: boolean;
+  /** Featured: whether a finished video is on screen. */
+  onReady?: (ready: boolean) => void;
+  /** The video was played to its end. */
+  onWatched?: () => void;
 }) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const timer = useRef<number>(0);
@@ -151,11 +164,14 @@ export function ConceptExplainerVideo({
   // it from; once per challenge, so an error waits for "Try again".
   const autoAsked = useRef("");
   useEffect(() => {
-    if (!stage || waiting || autoAsked.current === challengeId) return;
+    if (!(stage || featured) || waiting || autoAsked.current === challengeId) return;
     autoAsked.current = challengeId;
     void ask();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per challenge
-  }, [stage, waiting, challengeId]);
+  }, [stage, featured, waiting, challengeId]);
+  useEffect(() => {
+    onReady?.(state.kind === "ready");
+  }, [onReady, state.kind]);
 
   if (state.kind === "ready") {
     return (
@@ -166,10 +182,14 @@ export function ConceptExplainerVideo({
         onAnswered={onAnswered}
         onVideo={onVideo}
         endAction={endAction}
-        stage={stage}
+        stage={stage || featured}
+        onWatched={onWatched}
       />
     );
   }
+
+  // Featured: no card, no spinner — the sheet simply opens on the reading.
+  if (featured) return null;
 
   if (stage) {
     const busy = waiting || state.kind === "idle" || state.kind === "asking" || state.kind === "preparing";
@@ -262,6 +282,7 @@ function QuizVideo({
   onVideo,
   endAction,
   stage = false,
+  onWatched,
 }: {
   video: string;
   poster: string | null;
@@ -270,6 +291,7 @@ function QuizVideo({
   onVideo?: (video: HTMLVideoElement | null) => void;
   endAction?: { label: string; onClick: () => void };
   stage?: boolean;
+  onWatched?: () => void;
 }) {
   const [ended, setEnded] = useState(false);
   const ref = useRef<HTMLVideoElement>(null);
@@ -321,14 +343,18 @@ function QuizVideo({
   const right = Object.values(results).filter(Boolean).length;
 
   return (
-    <figure className="mb-video">
+    // On a stage (the player, the sheet's lead) the video is the frame: no card.
+    <figure className={stage ? "m-0" : "mb-video"}>
       <div className="relative">
         <video
           ref={ref}
           src={video}
           poster={poster ?? undefined}
           controls={asking === null && !ended}
-          onEnded={() => setEnded(true)}
+          onEnded={() => {
+            setEnded(true);
+            onWatched?.();
+          }}
           onPlay={() => setEnded(false)}
           autoPlay
           playsInline

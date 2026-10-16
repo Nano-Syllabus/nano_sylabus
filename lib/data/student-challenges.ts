@@ -1709,6 +1709,24 @@ function contentWithExam(
  * The worked examples and the exam are built behind the response by
  * `runChallengeContentCompletion`, which returns here through `contentStatus`.
  */
+/**
+ * Queue the topic's explainer video the moment its reading is filed, so the
+ * video is made before anyone opens the topic (user, 2026-10-16: "it should have
+ * video already ready there"). Content-addressed upstream, so every student of
+ * the topic shares the one render. Never throws: a video is never worth a
+ * failed reading. Imported lazily — concept-explainer imports this module.
+ */
+async function prepareExplainer(userId: string, challengeId: string) {
+  try {
+    const { requestConceptExplainer } = await import("@/lib/data/concept-explainer");
+    await requestConceptExplainer(userId, challengeId, "background");
+  } catch (error) {
+    console.info(
+      `[challenge ${challengeId}] explainer not queued: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 /** The reading as the screen stores it. `null` while the tail is still building. */
 function lessonFromReading(learning: TeacherChallengeLearnResponse | null) {
   if (!learning) {
@@ -2268,6 +2286,7 @@ export async function warmStudentChallenge(
       .eq("user_id", userId)
       // As below: a row the student has started since the read is theirs.
       .eq("status", "assigned");
+    if (!writeError) await prepareExplainer(userId, challengeId);
     return writeError ? "failed" : "warmed";
   }
   if (options.poolOnly) return "skipped";
@@ -2289,6 +2308,7 @@ export async function warmStudentChallenge(
       // now a started challenge with its own clock running.
       .eq("status", "assigned");
     if (writeError) throw writeError;
+    await prepareExplainer(userId, challengeId);
     return "warmed";
   } catch {
     // A warm-up that fails costs nothing: Start builds the lesson the old way.
@@ -2533,6 +2553,7 @@ export async function prepareStudentChallenge(
     if (row.updated_at) write = write.eq("updated_at", String(row.updated_at));
     const { error: writeError } = await write;
     if (writeError) throw writeError;
+    await prepareExplainer(userId, challengeId);
     return "prepared";
   } catch {
     return "failed";
@@ -3346,7 +3367,8 @@ async function attachChallengeReading(
   // reading is the one to lose, not their write. `updated_at` is deliberately
   // not bumped — nothing the student is looking at has changed.
   if (row.updated_at) write = write.eq("updated_at", String(row.updated_at));
-  await write;
+  const { error: writeError } = await write;
+  if (!writeError) await prepareExplainer(userId, challengeId);
 }
 
 /**

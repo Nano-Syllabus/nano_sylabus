@@ -338,6 +338,31 @@ export function ConceptsDrawer({
   });
   const done = progress.key === progressKey ? progress.done : [];
   const [active, setActive] = useState(0);
+  /**
+   * MUST WATCH (user, 2026-10-16): when the topic's video exists the sheet opens
+   * on it, large and playing, and the reading under it stays shut until it has
+   * been played to the end once (remembered per topic in this browser). No
+   * finished video, no lock: the sheet is the reading, as before.
+   */
+  const watchKey = `concept-video-watched:${source.id}`;
+  const [videoReady, setVideoReady] = useState(false);
+  const [watched, setWatched] = useState(true);
+  useEffect(() => {
+    try {
+      setWatched(localStorage.getItem(watchKey) === "1");
+    } catch {
+      setWatched(false);
+    }
+  }, [watchKey]);
+  const markWatched = useCallback(() => {
+    setWatched(true);
+    try {
+      localStorage.setItem(watchKey, "1");
+    } catch {
+      /* Storage is optional. */
+    }
+  }, [watchKey]);
+  const locked = videoReady && !watched;
 
   // Lessons are numbered by the reading; the exam practice takes the next number.
   const lessons = chapter.sections.filter((s) => s.role === "lesson");
@@ -557,14 +582,25 @@ export function ConceptsDrawer({
             </aside>
           )}
           <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <article className="mb-col">
-              <h1>{source.title}</h1>
-              {chapter.why && <Markdown text={chapter.why} className="mb-lead text-[17px] leading-[1.65]" />}
+            {/* The video first and wide — wider than the reading column. */}
+            <div className={cn("mx-auto w-full max-w-[1180px] px-4 sm:px-8", videoReady && "pt-6")}>
               <ConceptExplainerVideo
+                featured
                 challengeId={source.id}
                 checkpoints={checkpoints}
                 onAnswered={markDone}
+                onReady={setVideoReady}
+                onWatched={markWatched}
               />
+            </div>
+            <div className="relative">
+            <article
+              className={cn("mb-col", locked && "max-h-[42vh] select-none overflow-hidden opacity-40 blur-[2px]")}
+              inert={locked}
+              aria-hidden={locked || undefined}
+            >
+              <h1>{source.title}</h1>
+              {chapter.why && <Markdown text={chapter.why} className="mb-lead text-[17px] leading-[1.65]" />}
               {/* No "Be ready for" list: a column of exam questions before any
                   teaching read as a quiz (user, 2026-10-15). */}
               {chapter.idea && (
@@ -606,6 +642,14 @@ export function ConceptsDrawer({
                 </p>
               )}
             </article>
+            {locked ? (
+              <div className="absolute inset-x-0 top-0 flex justify-center px-4 pt-8">
+                <p role="status" className="mb-ui rounded-full border border-[var(--mb-line)] bg-[var(--mb-card)] px-4 py-2 text-sm font-semibold shadow">
+                  🔒 Watch the video to the end — the reading opens after it.
+                </p>
+              </div>
+            ) : null}
+            </div>
           </div>
         </div>
       </div>
