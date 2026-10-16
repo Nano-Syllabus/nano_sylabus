@@ -587,6 +587,7 @@ export function ConceptsDrawer({
               <ConceptExplainerVideo
                 featured
                 challengeId={source.id}
+                reading={source.reading}
                 checkpoints={checkpoints}
                 onAnswered={markDone}
                 onReady={setVideoReady}

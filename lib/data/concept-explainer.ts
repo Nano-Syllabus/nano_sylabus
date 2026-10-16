@@ -24,13 +24,15 @@ export type ConceptExplainer = {
   /** `/api/media/<hash>/animation.mp4`, through this app's media proxy. */
   video: string | null;
   poster: string | null;
+  /** The narration's timed cues — what the interactive video syncs its chapters to. */
+  captions: string | null;
   error: string;
 };
 
 function toExplainer(reply: {
   spec_hash: string;
   status: string;
-  derivatives: Partial<Record<"poster" | "gif" | "mp4", string>>;
+  derivatives: Partial<Record<"poster" | "gif" | "mp4" | "captions", string>>;
   error: string;
 }): ConceptExplainer {
   const hash = reply.spec_hash;
@@ -39,6 +41,7 @@ function toExplainer(reply: {
     status: reply.status,
     video: reply.derivatives?.mp4 ? `/api/media/${hash}/animation.mp4` : null,
     poster: reply.derivatives?.poster ? `/api/media/${hash}/poster.png` : null,
+    captions: reply.derivatives?.captions ? `/api/media/${hash}/captions.srt` : null,
     error: reply.error || "",
   };
 }

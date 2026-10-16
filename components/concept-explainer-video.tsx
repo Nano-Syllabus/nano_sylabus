@@ -2,6 +2,7 @@
 
 import { Check, ChevronRight, Loader2, PlayCircle, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { InteractiveVideo } from "@/components/interactive-video";
 import { Markdown } from "@/components/markdown";
 import type { ConceptActivity } from "@/lib/concept-activities";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,7 @@ type State =
   | { kind: "idle" }
   | { kind: "asking" }
   | { kind: "preparing"; hash: string; since: number }
-  | { kind: "ready"; video: string; poster: string | null }
+  | { kind: "ready"; video: string; poster: string | null; captions: string | null }
   | { kind: "error"; message: string };
 
 type Reply = {
@@ -32,6 +33,7 @@ type Reply = {
     status: string;
     video: string | null;
     poster: string | null;
+    captions?: string | null;
     error: string;
   };
   error?: string;
@@ -51,6 +53,7 @@ export function ConceptExplainerVideo({
   featured = false,
   onReady,
   onWatched,
+  reading,
 }: {
   challengeId: string;
   checkpoints?: VideoCheckpoint[];
@@ -78,6 +81,9 @@ export function ConceptExplainerVideo({
   onReady?: (ready: boolean) => void;
   /** The video was played to its end. */
   onWatched?: () => void;
+  /** The topic's reading: given, the video plays as the interactive module —
+   *  chapters from its sections, each ending on that section's hands-on piece. */
+  reading?: string[];
 }) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const timer = useRef<number>(0);
@@ -93,7 +99,7 @@ export function ConceptExplainerVideo({
         const response = await fetch(`/api/media/${state.hash}`, { cache: "no-store" });
         const job = (await response.json().catch(() => ({}))) as {
           status?: string;
-          derivatives?: { mp4?: string; poster?: string };
+          derivatives?: { mp4?: string; poster?: string; captions?: string };
           error?: string;
         };
         if (cancelled) return;
@@ -102,6 +108,7 @@ export function ConceptExplainerVideo({
             kind: "ready",
             video: `/api/media/${state.hash}/animation.mp4`,
             poster: job.derivatives.poster ? `/api/media/${state.hash}/poster.png` : null,
+            captions: job.derivatives.captions ? `/api/media/${state.hash}/captions.srt` : null,
           });
           return;
         }
@@ -153,7 +160,12 @@ export function ConceptExplainerVideo({
         return;
       }
       if (explainer.video)
-        setState({ kind: "ready", video: explainer.video, poster: explainer.poster });
+        setState({
+          kind: "ready",
+          video: explainer.video,
+          poster: explainer.poster,
+          captions: explainer.captions ?? null,
+        });
       else setState({ kind: "preparing", hash: explainer.hash, since: Date.now() });
     } catch {
       setState({ kind: "error", message: "Couldn't reach NanoSyllabus. Try again." });
@@ -172,6 +184,22 @@ export function ConceptExplainerVideo({
   useEffect(() => {
     onReady?.(state.kind === "ready");
   }, [onReady, state.kind]);
+
+  if (state.kind === "ready" && reading?.length) {
+    return (
+      <InteractiveVideo
+        challengeId={challengeId}
+        video={state.video}
+        poster={state.poster}
+        captions={state.captions}
+        reading={reading}
+        stage={stage || featured}
+        onVideo={onVideo}
+        endAction={endAction}
+        onWatched={onWatched}
+      />
+    );
+  }
 
   if (state.kind === "ready") {
     return (

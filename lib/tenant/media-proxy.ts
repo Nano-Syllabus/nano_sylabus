@@ -40,7 +40,7 @@ import { agentFor, transportFor } from "@/lib/http-agents";
  *  figures drawn before the TikZ path was removed. */
 const FIGURE_NAME = /^[0-9a-f]{1,64}(?:\.m)?(?:\.png)?$/;
 /** The three files one animation can have, exactly as `derivatives` names them. */
-const ANIMATION_ASSETS = new Set(["poster.png", "animation.gif", "animation.mp4"]);
+const ANIMATION_ASSETS = new Set(["poster.png", "animation.gif", "animation.mp4", "captions.srt"]);
 const SPEC_HASH = /^[0-9a-f]{1,64}$/;
 
 /**

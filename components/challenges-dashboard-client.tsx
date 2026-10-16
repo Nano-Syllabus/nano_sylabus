@@ -1175,6 +1175,7 @@ function ChallengeDetail({
                 stage
                 challengeId={challenge.id}
                 waiting={readingWaiting}
+                reading={reading}
                 checkpoints={videoCheckpoints}
                 onVideo={stageVideo.bind}
                 endAction={{ label: "Next: Lab", onClick: goNextStage }}
