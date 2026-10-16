@@ -93,11 +93,15 @@ describe("a subject's coverage bar", () => {
 describe("the challenge screen, pared back", () => {
   const hub = readFileSync("components/challenges-dashboard-client.tsx", "utf8");
 
-  it("has no Learn / Practice step rail — Previous and Start practising move between them", () => {
+  it("walks a micro-topic as a player — Explanation, Lab, Exam — left only by Next (user, 2026-10-16)", () => {
     expect(hub).not.toContain('aria-label="Challenge progress"');
-    expect(hub).not.toContain("Step {activeStep} of");
+    expect(hub).toContain("<MicroTopicStepBar");
+    expect(hub).toContain("<ConceptExplainerVideo");
+    expect(hub).toContain("<LabStage");
+    expect(hub).toContain("<ExamIntro");
     expect(hub).toContain("← Previous");
-    expect(hub).toContain('"Start practising →"');
+    expect(hub).toContain('"Next: Lab →"');
+    expect(hub).toContain('"Next: Exam →"');
   });
 
   it("gives focus mode a top bar: Exit left, the topic centred, the clock right", () => {

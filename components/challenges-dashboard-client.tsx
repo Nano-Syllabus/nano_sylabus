@@ -37,6 +37,17 @@ import { AppShellContext } from "@/components/app-shell-context";
 import { ChallengeMcqPage } from "@/components/challenge-mcq-page";
 import { SubjectCompleteCelebration } from "@/components/subject-complete-celebration";
 import { AwaitedConceptsCard, ConceptsCard } from "@/components/concepts-reading";
+import { ConceptExplainerVideo } from "@/components/concept-explainer-video";
+import {
+  ExamIntro,
+  LabStage,
+  MICRO_TOPIC_STAGES,
+  MicroTopicStepBar,
+  readingCheckpoints,
+  useStageVideo,
+  type MicroTopicStage,
+  type StageMedia,
+} from "@/components/micro-topic-player";
 import {
   StudyLanguageSwitch,
   inStudyLanguage,
@@ -414,6 +425,22 @@ function ChallengeDetail({
   const [focusMode, setFocusMode] = useState(true);
   const [activeStep, setActiveStep] = useState<ChallengeStep>(() => incomingStep);
   /**
+   * THE PLAYER (user, 2026-10-16): Explanation → Lab → Exam, left only by Next.
+   * Step one of the record (`activeStep` 1) is the first two of these; the exam
+   * is `activeStep` 2, or, on an MCQ page, `mcqExam`. `reached` is how far the
+   * student has got this sitting, so a chip behind them opens and one ahead
+   * does not; a finished or already-reviewed challenge has reached the end.
+   */
+  const [lessonStage, setLessonStage] = useState<"explain" | "lab">("explain");
+  const [mcqExam, setMcqExam] = useState(false);
+  const [examOpen, setExamOpen] = useState(false);
+  /** What is playing on the lab or exam step (the video has its own hook). */
+  const [sceneMedia, setSceneMedia] = useState<StageMedia | null>(null);
+  const [reached, setReached] = useState(() =>
+    challenge.status === "completed" || challenge.examplesReviewed ? 2 : 0,
+  );
+  const stageVideo = useStageVideo();
+  /**
    * Practice is three screens, one at a time: the questions, the upload, the
    * result. No step indicator — the footer moves between them. A finished
    * challenge lands on its result.
@@ -481,6 +508,11 @@ function ChallengeDetail({
         solvedExamples: content?.solvedExamples,
       }),
     [content?.pastQuestions, content?.solvedExamples],
+  );
+  /** Where the explainer stops to ask: the reading's own quick questions. */
+  const videoCheckpoints = useMemo(
+    () => readingCheckpoints(content?.lesson?.content ?? []),
+    [content?.lesson?.content],
   );
 
   useEffect(() => {
@@ -601,6 +633,11 @@ function ChallengeDetail({
     if (previousChallengeIdRef.current === challenge.id) return;
     previousChallengeIdRef.current = challenge.id;
     setActiveStep(incomingStep);
+    setLessonStage("explain");
+    setMcqExam(false);
+    setExamOpen(false);
+    setSceneMedia(null);
+    setReached(challenge.status === "completed" || challenge.examplesReviewed ? 2 : 0);
     setPracticeStage(isCompletedChallenge ? "result" : "questions");
     setAnswerSheet(null);
     setChoices({});
@@ -900,11 +937,70 @@ function ChallengeDetail({
     }).catch(() => undefined);
   };
 
-  const goBack = () => {
-    if (activeStep === 1) return;
-    if (practiceStage === "questions") setActiveStep(1);
-    else setPracticeStage("questions");
+  const stage: MicroTopicStage = (mcqPage ? mcqExam : activeStep === 2) ? "exam" : lessonStage;
+  const stageIndex = MICRO_TOPIC_STAGES.findIndex((item) => item.id === stage);
+  const reading = content.lesson?.content ?? [];
+  const readingWaiting = !reading.length;
+  const enterExam = () => {
+    setReached(2);
+    if (mcqPage) setMcqExam(true);
+    else void goNext();
   };
+  /** Next: the only way forward. The lab hands over to the exam only once the
+   *  worked examples exist — the same gate "Start practising" had. */
+  const goNextStage = () => {
+    if (stage === "explain") {
+      setLessonStage("lab");
+      setReached((r) => Math.max(r, 1));
+    } else if (stage === "lab" && !(buildingRest && !mcqPage)) enterExam();
+  };
+  const leaveExam = (to: "explain" | "lab") => {
+    setLessonStage(to);
+    if (mcqPage) setMcqExam(false);
+    else setActiveStep(1);
+  };
+  const goPreviousStage = () => {
+    if (stage === "lab") setLessonStage("explain");
+    else if (stage === "exam") {
+      if (!mcqPage && practiceStage !== "questions") setPracticeStage("questions");
+      else leaveExam("lab");
+    }
+  };
+  const jumpToStage = (to: MicroTopicStage) => {
+    if (to === "exam") enterExam();
+    else if (stage === "exam") leaveExam(to);
+    else setLessonStage(to);
+  };
+  /** The paper waits behind a play-style cover until it is opened. */
+  const examCover =
+    stage === "exam" &&
+    !examOpen &&
+    challenge.status !== "completed" &&
+    (mcqPage || practiceStage === "questions");
+  const stageProgress =
+    stage === "explain"
+      ? stageVideo.media.progress
+      : stage === "lab"
+        ? (sceneMedia?.progress ?? 0)
+        : challenge.status === "completed"
+          ? 1
+          : examCover
+            ? (sceneMedia?.progress ?? 0) * 0.25
+            : mcqPage
+              ? 0.5
+            : practiceStage === "questions"
+              ? 0.34
+              : practiceStage === "upload"
+                ? 0.67
+                : 1;
+  const nextStageLabel =
+    stage === "explain"
+      ? "Next: Lab →"
+      : savingStep
+        ? "Saving…"
+        : buildingRest && !mcqPage
+          ? "Working the past questions…"
+          : "Next: Exam →";
 
   const resultEvaluation = evaluation ?? challenge.latestAttempt?.evaluation ?? null;
   const resultPercentage =
@@ -1068,10 +1164,74 @@ function ChallengeDetail({
             </>
           ) : null}
 
+          {/* The player: the step's own screen — the video, the played lab,
+              or the exam's played intro — full width, then the control row
+              under it, as on the landing tour. Each step plays; only Next
+              leaves it. */}
+          {stage === "explain" ? (
+            <div className="mt-5">
+              <ConceptExplainerVideo
+                key={challenge.id}
+                stage
+                challengeId={challenge.id}
+                waiting={readingWaiting}
+                checkpoints={videoCheckpoints}
+                onVideo={stageVideo.bind}
+                endAction={{ label: "Next: Lab", onClick: goNextStage }}
+              />
+            </div>
+          ) : stage === "lab" ? (
+            <div className="mt-5">
+              <LabStage
+                challengeId={challenge.id}
+                reading={reading}
+                waiting={readingWaiting && !content.readingError}
+                onMedia={setSceneMedia}
+              />
+            </div>
+          ) : examCover ? (
+            <div className="mt-5">
+              <ExamIntro
+                key={challenge.id}
+                topic={challenge.topicTitle || challenge.title}
+                facts={
+                  content.examQuestions.length
+                    ? `${content.examQuestions.length} question${content.examQuestions.length === 1 ? "" : "s"} · ${displayNumber(
+                        content.examQuestions.reduce((sum, question) => sum + (Number(question.marks) || 0), 0),
+                      )} marks`
+                    : ""
+                }
+                how={
+                  mcqPage
+                    ? "Pick one answer for each question. Each one is marked as you pick it."
+                    : choiceQuestions.length
+                      ? "Pick the multiple-choice answers on screen, and write the rest on paper."
+                      : "Write your answers on paper, then upload a photo of them."
+                }
+                onStart={() => setExamOpen(true)}
+                onMedia={setSceneMedia}
+              />
+            </div>
+          ) : null}
+          <div className="mt-3">
+            <MicroTopicStepBar
+              stage={stage}
+              reached={reached}
+              progress={stageProgress}
+              onPrevious={goPreviousStage}
+              onNext={goNextStage}
+              onJump={jumpToStage}
+              nextDisabled={stage === "lab" && !mcqPage && (buildingRest || savingStep !== null)}
+              nextTitle={nextStageLabel.replace(" →", "")}
+              media={stage === "explain" ? stageVideo.media : stage === "lab" || examCover ? sceneMedia : null}
+            />
+          </div>
+
+          {stage === "lab" || examCover ? null : (
           <section
             className={`mt-6 bg-card p-5 sm:p-8 ${focusMode ? "rounded-xl" : "rounded-2xl border border-border"}`}
           >
-            {mcqPage ? (
+            {mcqPage && stage === "explain" ? (
               <div>
                 <StudyLanguageSwitch
                   className="mb-4"
@@ -1104,6 +1264,9 @@ function ChallengeDetail({
                     }
                   />
                 ) : null}
+              </div>
+            ) : mcqPage ? (
+              <div>
                 <ChallengeMcqPage
                   challenge={challenge}
                   building={buildingRest}
@@ -1763,6 +1926,7 @@ function ChallengeDetail({
               </div>
             ) : null}
           </section>
+          )}
 
           {noNextAvailable ? (
             <SubjectCompleteCelebration
@@ -1792,8 +1956,8 @@ function ChallengeDetail({
           >
             <button
               type="button"
-              disabled={activeStep === 1 || submitting || savingStep !== null}
-              onClick={goBack}
+              disabled={stage === "explain" || submitting || savingStep !== null}
+              onClick={goPreviousStage}
               className={`${focusButtonClass} border border-border bg-card text-text-primary`}
             >
               ← Previous
@@ -1805,17 +1969,13 @@ function ChallengeDetail({
                    While they are still being built the student has not seen them,
                    so the step cannot be left yet — the same gate main put on the
                    old step three, moved to where that section now lives. */
-                disabled={savingStep !== null || submitting || buildingRest}
-                onClick={() => void goNext()}
+                disabled={savingStep !== null || submitting || (stage === "lab" && buildingRest)}
+                onClick={goNextStage}
                 className={`${focusButtonClass} bg-blue-600 text-white`}
               >
-                {savingStep
-                  ? "Saving…"
-                  : buildingRest
-                    ? "Working the past questions…"
-                    : "Start practising →"}
+                {nextStageLabel}
               </button>
-            ) : practiceStage === "questions" && challenge.status !== "completed" && allChoice ? (
+            ) : examCover ? null : practiceStage === "questions" && challenge.status !== "completed" && allChoice ? (
               <button
                 type="button"
                 aria-busy={submitting}

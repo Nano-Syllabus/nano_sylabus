@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Loader2, PlayCircle, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, PlayCircle, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "@/components/markdown";
 import type { ConceptActivity } from "@/lib/concept-activities";
@@ -44,11 +44,27 @@ export function ConceptExplainerVideo({
   challengeId,
   checkpoints = [],
   onAnswered,
+  stage = false,
+  waiting = false,
+  onVideo,
+  endAction,
 }: {
   challengeId: string;
   checkpoints?: VideoCheckpoint[];
   /** A checkpoint answered correctly: complete the matching chapter activity. */
   onAnswered?: (number: number) => void;
+  /**
+   * The micro-topic player's first step: the video is the screen, so it is
+   * asked for on mount (no Play card) and every state before it is ready is a
+   * 16:9 placeholder where the picture will be.
+   */
+  stage?: boolean;
+  /** Stage only: the reading the video is made from is still being written. */
+  waiting?: boolean;
+  /** The playing element, for controls outside the video (the step bar). */
+  onVideo?: (video: HTMLVideoElement | null) => void;
+  /** Stage only: the end card's way on. The video never takes it by itself. */
+  endAction?: { label: string; onClick: () => void };
 }) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const timer = useRef<number>(0);
@@ -131,6 +147,16 @@ export function ConceptExplainerVideo({
     }
   };
 
+  // On the stage the video is asked for as soon as there is a reading to make
+  // it from; once per challenge, so an error waits for "Try again".
+  const autoAsked = useRef("");
+  useEffect(() => {
+    if (!stage || waiting || autoAsked.current === challengeId) return;
+    autoAsked.current = challengeId;
+    void ask();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per challenge
+  }, [stage, waiting, challengeId]);
+
   if (state.kind === "ready") {
     return (
       <QuizVideo
@@ -138,7 +164,55 @@ export function ConceptExplainerVideo({
         poster={state.poster}
         checkpoints={checkpoints.slice(0, 3)}
         onAnswered={onAnswered}
+        onVideo={onVideo}
+        endAction={endAction}
+        stage={stage}
       />
+    );
+  }
+
+  if (stage) {
+    const busy = waiting || state.kind === "idle" || state.kind === "asking" || state.kind === "preparing";
+    return (
+      <div className="relative flex aspect-video w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-xl bg-[#0f172a] p-6 text-center text-white">
+        {busy ? (
+          <Loader2 className="size-9 animate-spin text-white/80 motion-reduce:animate-none" aria-hidden="true" />
+        ) : (
+          <PlayCircle className="size-12 text-white/80" strokeWidth={1.4} aria-hidden="true" />
+        )}
+        <p aria-live="polite" className="text-base font-semibold sm:text-lg">
+          {waiting
+            ? "Writing this topic’s lesson…"
+            : state.kind === "preparing"
+              ? "Animating this topic for the first time"
+              : state.kind === "error"
+                ? state.message
+                : "Getting the explainer ready…"}
+        </p>
+        <p className="max-w-md text-sm text-white/70">
+          {waiting
+            ? "The video is made from it, so it starts right after."
+            : state.kind === "preparing"
+              ? "It takes about a minute, and it is instant for everyone after you."
+              : state.kind === "error"
+                ? "You can still go on to the lab and the exam with Next."
+                : "The idea, each part built up, and a worked example."}
+        </p>
+        {state.kind === "error" && !waiting ? (
+          <button
+            type="button"
+            onClick={() => void ask()}
+            className="mt-1 inline-flex min-h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            Try again
+          </button>
+        ) : null}
+        <span className="absolute bottom-3 right-4 flex items-center gap-1.5 opacity-80" aria-hidden="true">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/nano_logo.png" alt="" className="size-6" />
+          <span className="text-lg leading-none">🗣️</span>
+        </span>
+      </div>
     );
   }
 
@@ -185,13 +259,24 @@ function QuizVideo({
   poster,
   checkpoints,
   onAnswered,
+  onVideo,
+  endAction,
+  stage = false,
 }: {
   video: string;
   poster: string | null;
   checkpoints: VideoCheckpoint[];
   onAnswered?: (number: number) => void;
+  onVideo?: (video: HTMLVideoElement | null) => void;
+  endAction?: { label: string; onClick: () => void };
+  stage?: boolean;
 }) {
+  const [ended, setEnded] = useState(false);
   const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    onVideo?.(ref.current);
+    return () => onVideo?.(null);
+  }, [onVideo]);
   const panelRef = useRef<HTMLDivElement>(null);
   const [duration, setDuration] = useState(0);
   const [asking, setAsking] = useState<number | null>(null);
@@ -242,7 +327,9 @@ function QuizVideo({
           ref={ref}
           src={video}
           poster={poster ?? undefined}
-          controls={asking === null}
+          controls={asking === null && !ended}
+          onEnded={() => setEnded(true)}
+          onPlay={() => setEnded(false)}
           autoPlay
           playsInline
           preload="metadata"
@@ -253,8 +340,38 @@ function QuizVideo({
             const at = ref.current?.currentTime ?? 0;
             setPassed((p) => p.filter((i) => times[i] < at));
           }}
-          className="aspect-video w-full rounded-[4px] bg-black"
+          className={cn("aspect-video w-full bg-black", stage ? "rounded-xl" : "rounded-[4px]")}
         />
+        {ended && endAction && asking === null ? (
+          // The end card: the chapter is over, and only Next moves on.
+          <div className={cn("absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#0f172a]/90 p-6 text-center text-white", stage ? "rounded-xl" : "rounded-[4px]")}>
+            <p className="text-lg font-semibold sm:text-2xl">That’s the idea. Now try it yourself.</p>
+            <p className="max-w-md text-sm text-white/75">Next is the lab: change the values and watch what happens.</p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const el = ref.current;
+                  if (!el) return;
+                  el.currentTime = 0;
+                  setPassed([]);
+                  void el.play();
+                }}
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/30 px-4 text-sm font-semibold text-white hover:bg-white/10"
+              >
+                <RotateCcw className="size-4" aria-hidden="true" /> Watch again
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={endAction.onClick}
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                {endAction.label} <ChevronRight className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        ) : null}
         {current && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[4px] bg-black/55">
             <span className="mb-ui rounded-full bg-bg-primary px-3 py-1 text-sm font-semibold shadow">
