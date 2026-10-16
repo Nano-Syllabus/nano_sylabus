@@ -27,7 +27,9 @@ export function LandingPrimaryCta({
   /** Where the app lives when this page is served from a subdomain ("" = here). */
   appOrigin?: string;
 }) {
-  const isLoggedIn = useLandingSession(!communityOnly);
+  const isLoggedIn = useLandingSession();
+  const label =
+    isLoggedIn && children === "Find your faculty" ? "Enter your faculty" : children;
 
   const sizeClass =
     size === "hero"
@@ -49,9 +51,9 @@ export function LandingPrimaryCta({
     >
       <span>
         {joins
-          ? (children ?? "Start Learning")
+          ? (label ?? "Start Learning")
           : communityOnly
-          ? (children ?? "Find your program")
+          ? (label ?? "Find your program")
           : isLoggedIn
             ? "Continue learning"
             : (children ?? "Start Learning")}
@@ -83,12 +85,16 @@ function useLandingSession(enabled = true) {
  * student pick one of this site's faculties inside the app.
  */
 export function LandingSiteActions({ joinHref, children }: { joinHref: string; children?: React.ReactNode }) {
+  const isLoggedIn = useLandingSession();
+  const label =
+    isLoggedIn && children === "Find your faculty" ? "Enter your faculty" : children;
+
   return (
     <Link
       href={joinHref}
       className="inline-flex min-h-[44px] items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-[var(--lp-primary,#3049ed)] px-5 text-[13.5px] font-semibold text-white transition-all duration-200 hover:bg-[var(--lp-primary-hover,#2439d0)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-primary,#3049ed)] focus-visible:ring-offset-2"
     >
-      {children ?? "Continue learning"}
+      {label ?? "Continue learning"}
       <span aria-hidden="true" className="text-base font-bold leading-none">
         ↗
       </span>

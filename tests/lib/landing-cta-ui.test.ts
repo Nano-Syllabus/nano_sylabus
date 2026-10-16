@@ -30,6 +30,11 @@ describe("landing page calls to action", () => {
     expect(landingSource).not.toContain("Get Started");
   });
 
+  it("shows signed-in visitors an enter-your-faculty label", () => {
+    expect(primaryCtaSource).toContain('isLoggedIn && children === "Find your faculty" ? "Enter your faculty" : children');
+    expect(primaryCtaSource).toContain("const isLoggedIn = useLandingSession();");
+  });
+
   it("uses the navbar's signed-in destination for every primary landing CTA", () => {
     expect(landingSource.match(/<LandingPrimaryCta\b/g)).toHaveLength(4);
     expect(landingSource).not.toContain('<Cta href="/flow"');
