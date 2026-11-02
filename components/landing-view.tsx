@@ -11,7 +11,7 @@ import designStyles from "@/components/landing-template-view.module.css";
 const dmSans = DM_Sans({ subsets: ["latin"], display: "swap" });
 const manrope = Manrope({ subsets: ["latin"], display: "swap" });
 
-function Brand({ logoUrl = "" }: { logoUrl?: string }) {
+export function Brand({ logoUrl = "" }: { logoUrl?: string }) {
   if (logoUrl) {
     return (
       <Link
@@ -47,7 +47,7 @@ function Brand({ logoUrl = "" }: { logoUrl?: string }) {
   );
 }
 
-function Cta({
+export function Cta({
   href,
   children,
   blue = false,

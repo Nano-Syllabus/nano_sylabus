@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LandingView } from "@/components/landing-view";
+import { MainLandingView } from "@/components/main-landing-view";
 import { getPublishedLandingSite } from "@/lib/data/landing-sites";
 import { MAIN_SITE_SLUG } from "@/lib/landing-site-host";
 import { buildCanonicalUrl } from "@/lib/site";
@@ -26,6 +27,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function LandingPage() {
   const site = await getPublishedLandingSite(MAIN_SITE_SLUG);
   const exam = site?.examConfig.enabled ? await getEnrollmentExam(MAIN_SITE_SLUG) : null;
+  // An exam run from the main site needs its join door, which only LandingView has.
+  if (!exam) return <MainLandingView />;
   return (
     <LandingView
       content={site?.content ?? DEFAULT_LANDING_CONTENT}
