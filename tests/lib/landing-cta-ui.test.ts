@@ -10,7 +10,7 @@ const primaryCtaSource = readFileSync("components/landing-primary-cta.tsx", "utf
 describe("landing page calls to action", () => {
   it("sends every main button into the site's community join when one is set", () => {
     expect(landingSource).toContain("/communities/${encodeURIComponent(brand.communitySlug)}/join");
-    expect(landingSource.match(/<LandingPrimaryCta\b[^>]*\{\.\.\.ctaProps\}/g)).toHaveLength(4);
+    expect(landingSource.match(/<LandingPrimaryCta\b[^>]*\{\.\.\.ctaProps\}/g)).toHaveLength(3);
     expect(primaryCtaSource).toContain("href={joins ? joinHref! : `${appOrigin}${defaultHref}`}");
   });
 
@@ -36,9 +36,16 @@ describe("landing page calls to action", () => {
   });
 
   it("uses the navbar's signed-in destination for every primary landing CTA", () => {
-    expect(landingSource.match(/<LandingPrimaryCta\b/g)).toHaveLength(4);
+    expect(landingSource.match(/<LandingPrimaryCta\b/g)).toHaveLength(3);
     expect(landingSource).not.toContain('<Cta href="/flow"');
     expect(primaryCtaSource).toContain('isLoggedIn ? "/app" : "/communities"');
+  });
+
+  it("sends the main site's header to the free demo and its hero to a booked call", () => {
+    expect(landingSource).toContain("<Cta href={FREE_DEMO_URL} size=\"nav\" newTab>");
+    expect(landingSource).toContain("Try Free Demo");
+    expect(landingSource).toContain("<Cta href={BOOK_CALL_URL} blue size=\"hero\"");
+    expect(landingSource).toContain("Book a call");
   });
 
   it("routes the footer app link to the community page", () => {

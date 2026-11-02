@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { DM_Sans, Manrope } from "next/font/google";
 import { LandingPrimaryCta, LandingSiteActions } from "@/components/landing-primary-cta";
-import { DISCORD_STUDY_ROOM_URL } from "@/lib/product-links";
+import { BOOK_CALL_URL, DISCORD_STUDY_ROOM_URL, FREE_DEMO_URL } from "@/lib/product-links";
 import { landingColorVars, type LandingContent } from "@/lib/landing-content";
 import { landingDesignVars } from "@/lib/landing-templates";
 import { LandingTemplateView } from "@/components/landing-template-view";
@@ -54,6 +54,7 @@ function Cta({
   lime = false,
   size = "default",
   className = "",
+  newTab = false,
 }: {
   href: string;
   children: React.ReactNode;
@@ -61,6 +62,7 @@ function Cta({
   lime?: boolean;
   size?: "default" | "hero" | "nav";
   className?: string;
+  newTab?: boolean;
 }) {
   const sizeClass =
     size === "hero"
@@ -81,6 +83,7 @@ function Cta({
   return (
     <Link
       href={href}
+      {...(newTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
       className={`inline-flex items-center justify-center gap-2.5 rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${sizeClass} ${colorClass} ${className}`}
     >
       <span>{children}</span>
@@ -206,7 +209,9 @@ export function LandingView({
             {joinHref ? (
               <LandingSiteActions joinHref={joinHref}>{hero.primaryCta}</LandingSiteActions>
             ) : (
-              <LandingPrimaryCta {...ctaProps} />
+              <Cta href={FREE_DEMO_URL} size="nav" newTab>
+                Try Free Demo
+              </Cta>
             )}
           </div>
         </div>
@@ -255,9 +260,15 @@ export function LandingView({
 
               <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-5">
                 {/* A faculty/exam site has one way in for new and returning students. */}
-                <LandingPrimaryCta blue size="hero" communityOnly {...ctaProps}>
-                  {hero.primaryCta}
-                </LandingPrimaryCta>
+                {joinHref ? (
+                  <LandingPrimaryCta blue size="hero" communityOnly {...ctaProps}>
+                    {hero.primaryCta}
+                  </LandingPrimaryCta>
+                ) : (
+                  <Cta href={BOOK_CALL_URL} blue size="hero" newTab={BOOK_CALL_URL.startsWith("http")}>
+                    Book a call
+                  </Cta>
+                )}
 
                 {steps.hidden ? null : (
                   <a
