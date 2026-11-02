@@ -48,9 +48,10 @@ describe("landing page calls to action", () => {
     expect(landingSource).toContain("Book a call");
   });
 
-  it("routes the footer app link to the community page", () => {
-    // Main site → community page; an exam site sends it through its one door.
-    expect(landingSource).toContain("href={joinHref ?? `${appOrigin}/app/community`}");
+  it("routes the footer link to a booked call", () => {
+    // Main site → Book a call; an exam site sends it through its one door.
+    expect(landingSource).toContain("href={joinHref ?? BOOK_CALL_URL}");
+    expect(landingSource).toContain('{joinHref ? footer.appLink : "Book a call"}');
     expect(landingSource).not.toContain('href="/app/today"');
   });
 });

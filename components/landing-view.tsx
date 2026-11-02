@@ -1087,10 +1087,13 @@ export function LandingView({
           <Brand logoUrl={brand.logoUrl} />
           <p className="text-xs text-[#5b5e55]">{footer.tagline}</p>
           <Link
-            href={joinHref ?? `${appOrigin}/app/community`}
+            href={joinHref ?? BOOK_CALL_URL}
+            {...(!joinHref && BOOK_CALL_URL.startsWith("http")
+              ? { target: "_blank", rel: "noopener noreferrer" }
+              : {})}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1c1e1a] hover:text-[var(--lp-primary)] transition-colors underline underline-offset-4"
           >
-            <span>{footer.appLink}</span>
+            <span>{joinHref ? footer.appLink : "Book a call"}</span>
             <span aria-hidden="true">↗</span>
           </Link>
         </div>
