@@ -288,18 +288,19 @@ export function LandingView({
                 <img src={content.design.heroImageUrl} alt={`${hero.titleLead} ${hero.titleHighlight}`} className="max-h-[620px] w-full object-cover" style={{ borderRadius: "var(--lp-radius)" }} />
               </div>
             ) : null}
-            {/* Animated feature walkthrough */}
+            {/* Product demo video: nothing downloads until the visitor presses play */}
             {content.design.showDemo ? <div className="mx-auto mt-14 max-w-[1050px] lg:mt-20">
               <div className="overflow-hidden rounded-[22px] border border-[#dfe4d6] bg-white p-2 shadow-[0_24px_70px_rgba(28,30,26,0.12)] sm:rounded-[30px] sm:p-3">
-                {/* 16:9 stage plus the tour's 56px chapter bar underneath */}
-                <div className="relative w-full overflow-hidden rounded-[15px] pb-[calc(56.25%+56px)] sm:rounded-[20px]">
-                  <iframe
-                    src="/nanosyllabus-features-minimal-animation.html?capture"
-                    title={hero.demoCaption}
-                    className="absolute inset-0 block h-full w-full border-0"
-                    loading="lazy"
-                  />
-                </div>
+                <video
+                  src="/demo-video/nanosyllabus-demo.mp4"
+                  poster="/demo-video/nanosyllabus-demo-poster.jpg"
+                  title={hero.demoCaption}
+                  aria-label={hero.demoCaption}
+                  controls
+                  playsInline
+                  preload="none"
+                  className="block aspect-video w-full rounded-[15px] bg-[#f4f6f1] sm:rounded-[20px]"
+                />
               </div>
             </div> : null}
           </div>
