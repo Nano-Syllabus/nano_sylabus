@@ -7,7 +7,7 @@ import { DM_Sans, Plus_Jakarta_Sans } from "next/font/google";
 // No `weight` list: DM Sans is variable, and the static-weight request makes Google
 // serve `/l/font?kit=…&skey=…` files whose `&` breaks Turbopack's font loader.
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" });
-const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], weight: ["700", "800"], variable: "--font-jakarta" });
+const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta" });
 
 const loadCatalog = () => import("@/components/community-catalog-client");
 

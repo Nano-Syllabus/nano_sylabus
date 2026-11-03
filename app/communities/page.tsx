@@ -17,7 +17,6 @@ export const dynamic = "force-dynamic";
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" });
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  weight: ["700", "800"],
   variable: "--font-jakarta",
 });
 
